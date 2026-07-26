@@ -11,7 +11,8 @@ python demo.py --config configs/toy_smoke.yaml --checkpoint <path>
 pytest
 ```
 
-`configs/tiny_overfit.yaml` is the deterministic minimum debugging run.
+`configs/toy_smoke.yaml` is the minimum executable smoke.
+`configs/tiny_overfit.yaml` is the deterministic CPU convergence/debug run
+(about one minute on the validated host).
 `configs/toy_mps.yaml` selects MPS automatically when the installed PyTorch and
 host expose it, otherwise `auto` falls back to CPU.
-

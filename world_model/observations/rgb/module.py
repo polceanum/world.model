@@ -47,6 +47,7 @@ class RGBObservationConfig:
     appearance_dim: int = 32
     roi_size: int = 20
     roi_hidden_dim: int = 96
+    fast_depth_residual_enabled: bool = False
     roi_uncertainty_scale: float = 2.5
     default_world_radius: float = 0.15
     proposal_threshold: float = 0.25
@@ -268,6 +269,19 @@ class RGBObservationModule(ObservationModule):
             previous_object_features=previous_features,
             valid_mask=predicted.valid_mask,
         )
+        values = output.values
+        if not self.config.fast_depth_residual_enabled:
+            # Depth is substantially less observable from a small residual
+            # crop than centre offset.  Keep the analytic predicted depth until
+            # a trained checkpoint passes a held-out per-mode improvement gate.
+            values = torch.cat(
+                (
+                    values[..., :3],
+                    predicted.values[..., 3:4],
+                    values[..., 4:],
+                ),
+                dim=-1,
+            )
         batch, objects, _ = output.values.shape
         world_from_camera = predicted.auxiliary["world_from_camera"][:, 0]
         intrinsics = predicted.auxiliary["intrinsics"][:, 0]
@@ -277,13 +291,13 @@ class RGBObservationModule(ObservationModule):
             self.config.measurement_log_variance_max,
         )
         world_position = backproject_rgb_measurements(
-            output.values,
+            values,
             world_from_camera,
             intrinsics,
             image_size,
         )
         world_position_log_variance = backproject_rgb_log_variance(
-            output.values,
+            values,
             measurement_log_variance,
             world_from_camera,
             intrinsics,
@@ -306,7 +320,7 @@ class RGBObservationModule(ObservationModule):
             modality=self.modality_name,
             sensor_id=packets[0].sensor_id,
             timestamp=image.new_full((batch,), timestamp),
-            values=output.values,
+            values=values,
             log_variance=measurement_log_variance,
             existence_logits=existence_logits,
             measurement_mask=predicted.valid_mask.clone(),

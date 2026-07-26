@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import random
 import re
 import time
 from collections.abc import Iterator, Mapping
@@ -141,6 +142,54 @@ def _result_metrics(
     return metrics
 
 
+def measurement_pretrain_frame_index(
+    step: int,
+    *,
+    loader_batches: int,
+    total_frames: int,
+    fixed_dataset: bool,
+) -> int:
+    """Choose an RGB pretraining frame without coupling batches to parity.
+
+    For a fixed dataset, every batch sees frame 0 before every batch sees frame
+    1, and so on.  The previous ``step % total_frames`` rule coupled loader
+    position and frame parity, so some episodes could never see half of their
+    frames.  Streaming/shuffled datasets retain independently sampled frames.
+    """
+
+    if loader_batches <= 0 or total_frames <= 0:
+        raise ValueError("loader_batches and total_frames must be positive")
+    if fixed_dataset:
+        return (step // loader_batches) % total_frames
+    return random.randrange(total_frames)
+
+
+def _mean_batch_results(results: list[TrainingBatchResult]) -> TrainingBatchResult:
+    if not results:
+        raise ValueError("cannot average an empty validation result list")
+    phase = results[0].phase
+    if any(result.phase != phase for result in results):
+        raise ValueError("validation results must share a phase")
+    term_names = set(results[0].loss_terms)
+    if any(set(result.loss_terms) != term_names for result in results):
+        raise ValueError("validation results must share loss terms")
+    metric_names = set(results[0].metrics)
+    if any(set(result.metrics) != metric_names for result in results):
+        raise ValueError("validation results must share metrics")
+    return TrainingBatchResult(
+        total_loss=torch.stack([result.total_loss for result in results]).mean(),
+        loss_terms={
+            name: torch.stack([result.loss_terms[name] for result in results]).mean()
+            for name in sorted(term_names)
+        },
+        metrics={
+            name: float(sum(result.metrics[name] for result in results) / len(results))
+            for name in sorted(metric_names)
+        },
+        phase=phase,
+    )
+
+
 @torch.no_grad()
 def _validation_step(
     model: OnlineWorldModel,
@@ -164,11 +213,31 @@ def _validation_step(
             include_measurement_supervision=True,
         )
     else:
-        result = pretrain_rgb_measurements(
-            model,
-            batch,
-            config,
-            frame_index=0,
+        total_frames = int(batch["rgb"].shape[1])
+        frame_count = min(
+            total_frames,
+            config.training.measurement_validation_frames,
+        )
+        if frame_count == total_frames:
+            frame_indices = list(range(total_frames))
+        else:
+            frame_indices = (
+                torch.linspace(0, total_frames - 1, frame_count)
+                .round()
+                .to(dtype=torch.int64)
+                .unique(sorted=True)
+                .tolist()
+            )
+        result = _mean_batch_results(
+            [
+                pretrain_rgb_measurements(
+                    model,
+                    batch,
+                    config,
+                    frame_index=int(frame_index),
+                )
+                for frame_index in frame_indices
+            ]
         )
     model.train()
     return result
@@ -295,7 +364,14 @@ def train_from_config(
         if best_rollout_validated:
             best_rollout = float(resume_metrics["best_rollout_loss"])
         if best_measurement_validated:
-            best_measurement = float(resume_metrics["best_measurement_loss"])
+            localization_metric = resume_metrics.get("best_measurement_world_position_mae_m")
+            if localization_metric is None:
+                # Older checkpoints selected on the summed (possibly negative)
+                # measurement objective.  Keep them loadable, but require a new
+                # calibrated localization validation before calling one best.
+                best_measurement_validated = False
+            else:
+                best_measurement = float(localization_metric)
         resumed_from = str(Path(resume_path).expanduser().resolve())
         if start_step > config.training.steps:
             raise ValueError(
@@ -311,12 +387,39 @@ def train_from_config(
     started = time.perf_counter()
 
     for step in range(start_step, config.training.steps):
+        if (
+            step == config.training.rgb_pretrain_steps
+            and best_measurement_validated
+            and best_measurement_path.is_file()
+        ):
+            # Enter the downstream stage from the best calibrated perception
+            # state, not merely the final pretraining iterate.  Heteroscedastic
+            # objectives can improve NLL while physical localization regresses.
+            load_checkpoint(
+                best_measurement_path,
+                model=model,
+                optimizer=optimizer,
+                map_location=device,
+                restore_rng=False,
+                expected_config=config,
+            )
+            print(
+                "restored best RGB localization checkpoint for closed-loop handoff "
+                f"(world_mae={best_measurement:.6f}m)",
+                flush=True,
+            )
         raw_batch, train_iterator = _next_batch(train_loader, train_iterator)
         _check_batch_major(raw_batch)
         batch = move_batch_to_device(raw_batch, device)
         optimizer.zero_grad(set_to_none=True)
         if step < config.training.rgb_pretrain_steps:
-            frame_index = step % int(batch["rgb"].shape[1])
+            target_learning_rate = config.training.learning_rate
+            frame_index = measurement_pretrain_frame_index(
+                step,
+                loader_batches=len(train_loader),
+                total_frames=int(batch["rgb"].shape[1]),
+                fixed_dataset=config.training.fixed_dataset,
+            )
             result = pretrain_rgb_measurements(
                 model,
                 batch,
@@ -324,6 +427,9 @@ def train_from_config(
                 frame_index=frame_index,
             )
         else:
+            target_learning_rate = (
+                config.training.learning_rate * config.training.closed_loop_learning_rate_scale
+            )
             total_frames = int(batch["rgb"].shape[1])
             window_steps = min(total_frames, config.training.tbptt_steps)
             possible_starts = max(1, total_frames - window_steps + 1)
@@ -337,6 +443,8 @@ def train_from_config(
                 apply_perturbations=True,
                 include_measurement_supervision=True,
             )
+        for parameter_group in optimizer.param_groups:
+            parameter_group["lr"] = target_learning_rate
         if not bool(torch.isfinite(result.total_loss)):
             raise FloatingPointError(f"nonfinite {result.phase} loss at optimiser step {step}")
         result.total_loss.backward()
@@ -375,6 +483,7 @@ def train_from_config(
 
         should_validate = config.training.eval_every > 0 and (
             completed_step % config.training.eval_every == 0
+            or completed_step == config.training.rgb_pretrain_steps
             or completed_step == config.training.steps
         )
         if should_validate:
@@ -420,7 +529,10 @@ def train_from_config(
                             "best_rollout_validated": 1.0,
                             "best_measurement_validated": float(best_measurement_validated),
                             **(
-                                {"best_measurement_loss": best_measurement}
+                                {
+                                    "best_measurement_loss": best_measurement,
+                                    "best_measurement_world_position_mae_m": best_measurement,
+                                }
                                 if best_measurement_validated
                                 else {}
                             ),
@@ -428,7 +540,11 @@ def train_from_config(
                         device=str(device),
                     )
             elif validation.phase == "rgb_pretrain" and "measurement" in validation.loss_terms:
-                measurement_metric = float(validation.loss_terms["measurement"].detach().cpu())
+                measurement_metric = validation.metrics.get("rgb_world_position_mae_m")
+                if measurement_metric is None:
+                    raise RuntimeError(
+                        "RGB pretraining validation did not report world localization MAE"
+                    )
                 if math.isfinite(measurement_metric) and measurement_metric < best_measurement:
                     best_measurement = measurement_metric
                     best_measurement_validated = True
@@ -440,8 +556,12 @@ def train_from_config(
                         step=completed_step,
                         metrics={
                             "validation_total_loss": float(validation.total_loss.detach().cpu()),
-                            "validation_measurement_loss": best_measurement,
+                            "validation_measurement_loss": float(
+                                validation.loss_terms["measurement"].detach().cpu()
+                            ),
+                            "validation_world_position_mae_m": best_measurement,
                             "best_measurement_loss": best_measurement,
+                            "best_measurement_world_position_mae_m": best_measurement,
                             "best_measurement_validated": 1.0,
                             "best_rollout_validated": float(best_rollout_validated),
                             **(
@@ -469,6 +589,7 @@ def train_from_config(
                 checkpoint_metrics["best_rollout_loss"] = best_rollout
             if best_measurement_validated:
                 checkpoint_metrics["best_measurement_loss"] = best_measurement
+                checkpoint_metrics["best_measurement_world_position_mae_m"] = best_measurement
             save_checkpoint(
                 last_path,
                 model=model,
@@ -490,6 +611,7 @@ def train_from_config(
             selection_metrics["best_rollout_loss"] = best_rollout
         if best_measurement_validated:
             selection_metrics["best_measurement_loss"] = best_measurement
+            selection_metrics["best_measurement_world_position_mae_m"] = best_measurement
         save_checkpoint(
             last_path,
             model=model,
@@ -529,6 +651,9 @@ def train_from_config(
         "best_measurement_validated": best_measurement_validated,
         "best_rollout_loss": best_rollout if best_rollout_validated else None,
         "best_measurement_loss": (best_measurement if best_measurement_validated else None),
+        "best_measurement_world_position_mae_m": (
+            best_measurement if best_measurement_validated else None
+        ),
         "completed_steps": config.training.steps,
         "rgb_pretrain_steps": min(config.training.steps, config.training.rgb_pretrain_steps),
         "closed_loop_steps": max(0, config.training.steps - config.training.rgb_pretrain_steps),

@@ -186,6 +186,7 @@ class OnlineWorldModel(nn.Module):
                     appearance_dim=state_config.appearance_dim,
                     roi_size=rgb_config.roi_size,
                     roi_hidden_dim=config.model.filter.hidden_dim,
+                    fast_depth_residual_enabled=(rgb_config.fast_depth_residual_enabled),
                     roi_uncertainty_scale=rgb_config.roi_uncertainty_scale,
                     default_world_radius=(sum(config.simulator.radius_range) / 2.0),
                     proposal_threshold=rgb_config.existence_threshold,

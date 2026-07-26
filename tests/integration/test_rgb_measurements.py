@@ -183,6 +183,69 @@ def test_grid_sample_roi_path_and_projector_shapes() -> None:
     assert predicted.rois.shape == (1, 2, 4)
 
 
+def test_fast_roi_depth_residual_is_gated_until_explicitly_enabled() -> None:
+    intrinsics, world_from_camera = _calibration()
+    belief = BeliefFactory(max_objects=1, geometry_dim=1, appearance_dim=8).create(
+        intrinsics=intrinsics.unsqueeze(0),
+        world_from_camera=world_from_camera.unsqueeze(0),
+    )
+    belief = belief.replace(
+        objects=belief.objects.replace(
+            active=torch.tensor([[True]]),
+            object_id=torch.tensor([[2]]),
+            position=torch.tensor([[[0.0, 0.0, 3.0]]]),
+        )
+    )
+    packet = ObservationPacket(
+        modality="rgb",
+        sensor_id="camera",
+        timestamp=0.05,
+        payload=torch.zeros(1, 3, 32, 32),
+        calibration={
+            "intrinsics": intrinsics.unsqueeze(0),
+            "world_from_camera": world_from_camera.unsqueeze(0),
+        },
+        frame_id="camera:camera",
+    )
+
+    def measure(enabled: bool) -> tuple[torch.Tensor, torch.Tensor]:
+        module = RGBObservationModule(
+            RGBObservationConfig(
+                max_objects=1,
+                backbone_channels=(8, 16, 24, 32),
+                feature_dim=16,
+                appearance_dim=8,
+                roi_size=8,
+                roi_hidden_dim=16,
+                fast_depth_residual_enabled=enabled,
+            )
+        )
+        with torch.no_grad():
+            module.roi_updater.delta_head.bias[3] = 2.0
+        predicted = module.project(
+            belief,
+            SensorContext(
+                sensor_id=packet.sensor_id,
+                timestamp=packet.timestamp,
+                calibration=packet.calibration,
+                frame_id=packet.frame_id,
+                image_size=(32, 32),
+            ),
+        )
+        measured, _ = module.encode_measurements(
+            [packet],
+            belief,
+            predicted,
+            None,
+        )
+        return predicted.values[..., 3], measured.values[..., 3]
+
+    gated_prediction, gated_measurement = measure(False)
+    enabled_prediction, enabled_measurement = measure(True)
+    torch.testing.assert_close(gated_measurement, gated_prediction)
+    assert not torch.allclose(enabled_measurement, enabled_prediction)
+
+
 def test_offscreen_object_is_invalid_and_cannot_be_roi_associated() -> None:
     intrinsics, world_from_camera = _calibration()
     belief = BeliefFactory(max_objects=1, geometry_dim=1, appearance_dim=8).create()

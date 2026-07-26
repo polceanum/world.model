@@ -38,11 +38,14 @@ global/ROI RGB measurements, association and innovation, fast correction,
 occlusion-aware lifecycle, observability-gated parameter updates, training,
 held-out evaluation, and demo export.
 
-This is implementation evidence, not a completed research milestone. The short
-deterministic checkpoint beats constant velocity at the tested forecast
-horizons and recovers part of an injected perturbation, but it fails the
-distance-gated localization and collision targets. See
-[`project/STATUS.md`](project/STATUS.md) for exact metrics and limitations.
+This is implementation evidence, not a completed research milestone. The
+current deterministic RGB checkpoint reaches 75% distance-gated localization
+over eight held-out episodes and reduces 0.5-second RMSE from 0.491 m for
+constant velocity to 0.162 m. Ordinary global/fast corrections improve the
+held-out demo. Collision prediction remains unlearned, wider perturbation
+recovery is narrowly below its recommended gate, and the full MPS schedule has
+not run. See [`project/STATUS.md`](project/STATUS.md) for exact commands,
+metrics, and limitations.
 
 ## Quick start
 
@@ -58,7 +61,7 @@ python demo.py --config configs/toy_mps.yaml --checkpoint <path>
 pytest
 ```
 
-For a deterministic minimal run:
+For the deterministic convergence/debug run:
 
 ```bash
 python train.py --config configs/tiny_overfit.yaml --run-name tiny-debug

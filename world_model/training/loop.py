@@ -186,6 +186,64 @@ def supervised_measurement_losses(
     return losses
 
 
+@torch.no_grad()
+def measurement_localization_metrics(
+    measurements: MeasurementSet,
+    batch: Mapping[str, Any],
+    frame_index: int,
+    *,
+    existence_threshold: float,
+    distance_threshold_m: float = 0.5,
+) -> dict[str, float]:
+    """Report calibrated proposal accuracy in sensor and world coordinates.
+
+    The training objective contains differently scaled terms and a Gaussian NLL
+    that may legitimately be negative.  Those values are useful optimisation
+    diagnostics, but they are not a truthful checkpoint-selection proxy for
+    localization.  This metric uses the same transparent Hungarian alignment
+    and the calibrated RGB backprojection used by the runtime.
+    """
+
+    target_values, target_mask, _ = _target_measurement_values(batch, frame_index)
+    aligned, matched, target_indices = match_measurements_to_targets(
+        measurements.values,
+        target_values,
+        target_mask,
+        existence_logits=measurements.existence_logits,
+    )
+    if not matched.any():
+        return {
+            "rgb_centre_mae_normalized": math.inf,
+            "rgb_inverse_depth_mae": math.inf,
+            "rgb_world_position_mae_m": math.inf,
+            "rgb_detection_recall_at_0_5m": 0.0,
+            "rgb_detection_precision_at_0_5m": 0.0,
+        }
+    predicted_world = measurements.auxiliary.get("world_position")
+    if not isinstance(predicted_world, Tensor):
+        raise ValueError("RGB measurements require auxiliary.world_position")
+    target_world = gather_target_slots(
+        batch["objects"]["position"][:, frame_index],
+        target_indices,
+    )
+    world_error = torch.linalg.vector_norm(predicted_world - target_world, dim=-1)
+    sensor_error = (measurements.values - aligned).abs()
+    confident = measurements.measurement_mask & (
+        measurements.existence_logits.sigmoid() >= existence_threshold
+    )
+    close = matched & (world_error <= distance_threshold_m)
+    true_positive = (close & confident).sum()
+    target_count = target_mask.sum().clamp_min(1)
+    proposal_count = confident.sum().clamp_min(1)
+    return {
+        "rgb_centre_mae_normalized": float(sensor_error[..., :2][matched].mean().cpu()),
+        "rgb_inverse_depth_mae": float(sensor_error[..., 3][matched].mean().cpu()),
+        "rgb_world_position_mae_m": float(world_error[matched].mean().cpu()),
+        "rgb_detection_recall_at_0_5m": float((true_positive / target_count).cpu()),
+        "rgb_detection_precision_at_0_5m": float((true_positive / proposal_count).cpu()),
+    }
+
+
 def _observation_context(
     packet: ObservationPacket,
     config: OrpheusConfig,
@@ -229,6 +287,14 @@ def pretrain_rgb_measurements(
     terms = {"measurement": measurement}
     total = weighted_total(terms, config.training.loss_weights)
     metrics = {name: float(value.detach().cpu()) for name, value in details.items()}
+    metrics.update(
+        measurement_localization_metrics(
+            measurements,
+            batch,
+            frame_index,
+            existence_threshold=config.model.rgb.existence_threshold,
+        )
+    )
     metrics["proposals_above_birth_threshold"] = float(
         (measurements.existence_logits.sigmoid().detach() >= config.model.rgb.existence_threshold)
         .sum()
@@ -692,6 +758,7 @@ __all__ = [
     "gather_target_slots",
     "make_rgb_packet",
     "match_belief_to_targets",
+    "measurement_localization_metrics",
     "move_batch_to_device",
     "pretrain_rgb_measurements",
     "run_closed_loop_batch",

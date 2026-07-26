@@ -46,3 +46,12 @@ def test_oracle_cannot_hide_in_rgb_evaluation(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="RGB-only"):
         load_config(bad)
+
+
+@pytest.mark.parametrize("scale", [0.0, -0.1, 1.1])
+def test_closed_loop_learning_rate_scale_is_bounded(scale: float) -> None:
+    with pytest.raises(ValueError, match="closed_loop_learning_rate_scale"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.closed_loop_learning_rate_scale={scale}"],
+        )

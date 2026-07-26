@@ -82,6 +82,7 @@ class RGBConfig:
     proposal_queries: int = 10
     global_every_steps: int = 12
     roi_size: int = 20
+    fast_depth_residual_enabled: bool = False
     roi_uncertainty_scale: float = 2.5
     global_uncertainty_threshold: float = 4.0
     surprise_threshold: float = 8.0
@@ -169,6 +170,7 @@ class TrainingConfig:
     batch_size: int = 4
     steps: int = 1000
     learning_rate: float = 3e-4
+    closed_loop_learning_rate_scale: float = 0.1
     weight_decay: float = 1e-4
     tbptt_steps: int = 24
     grad_clip_norm: float = 1.0
@@ -180,6 +182,7 @@ class TrainingConfig:
     num_workers: int = 0
     fixed_dataset: bool = False
     rgb_pretrain_steps: int = 100
+    measurement_validation_frames: int = 8
     perturbation_probability: float = 0.25
     perturbation_position_std: float = 0.12
     horizon_weights: tuple[float, ...] = (1.0, 1.0, 1.2, 1.5, 1.5)
@@ -310,8 +313,14 @@ class OrpheusConfig:
             )
         if self.training.batch_size <= 0 or self.training.steps < 0:
             raise ValueError("training batch_size must be positive and steps nonnegative")
+        if self.training.learning_rate <= 0:
+            raise ValueError("training.learning_rate must be positive")
+        if not 0 < self.training.closed_loop_learning_rate_scale <= 1:
+            raise ValueError("training.closed_loop_learning_rate_scale must lie in (0, 1]")
         if self.training.tbptt_steps <= 0:
             raise ValueError("training.tbptt_steps must be positive")
+        if self.training.measurement_validation_frames <= 0:
+            raise ValueError("training.measurement_validation_frames must be positive")
 
     def to_dict(self) -> dict[str, Any]:
         """Return a YAML-safe resolved representation."""

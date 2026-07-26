@@ -29,13 +29,23 @@
 - [x] Run Ruff, Pytest, CLI smoke, MPS-specific, checkpoint-compatibility, and
   checkpoint-round-trip checks.
 - [x] Synchronise README, status, design decisions, and changelog with evidence.
+- [x] Decouple deterministic measurement frames from loader-batch parity so
+  every fixed episode receives every configured frame.
+- [x] Select perception checkpoints by multi-frame calibrated world-position
+  MAE and restore the best localized state before closed-loop handoff.
+- [x] Apply a separately configured 10x closed-loop learning-rate reduction,
+  including after optimizer-state resume.
+- [x] Gate the demonstrably harmful fast inverse-depth residual while retaining
+  fast centre/appearance updates and the ordinary ROI runtime path.
+- [x] Reach positive ordinary current/future demo correction and nonzero
+  distance-gated held-out RGB localization.
 
 ## Milestone 1 research acceptance — not yet achieved
 
-- [ ] Reach nonzero distance-gated RGB detection recall/precision on held-out
-  episodes.
-- [ ] Exceed the recommended 20% injected-perturbation recovery improvement
-  (current short run: 6.52%).
+- [x] Reach nonzero distance-gated RGB detection recall/precision on held-out
+  episodes (59.375% on the two-episode protocol; 75% over eight episodes).
+- [ ] Sustain the recommended 20% injected-perturbation recovery improvement
+  on the wider test protocol (27.71% on two episodes; 19.59% on eight).
 - [ ] Learn useful collision prediction (current collision F1: 0).
 - [ ] Demonstrate calibrated uncertainty expansion/recovery through held-out
   rendered occlusions.
@@ -43,6 +53,10 @@
   beyond merely executing the observability/update gates.
 - [ ] Make the ROI path measurably cheaper than the global path at the target
   scale or explain the intended compute tradeoff with profiling.
+- [ ] Train fast inverse-depth residuals on belief-slot-aligned cached
+  sequences and enable them only after per-mode current/future improvement.
+- [ ] Add temporal RGB velocity/event evidence so collision impulses are
+  assimilated instead of only propagated by oracle-correct dynamics.
 - [ ] Run the full 3,000-step `configs/toy_mps.yaml` schedule and a materially
   larger held-out test split.
 - [ ] Export physics-violation diagnostics, collision-conditioned metrics,

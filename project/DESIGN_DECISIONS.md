@@ -156,3 +156,41 @@
   and report actual runtime gates/update counts.
 - **Consequence:** Identifier heads train and update, but useful parameter
   convergence remains an empirical requirement rather than a claimed result.
+
+## ADR-017 — Physical localization gates the closed-loop curriculum
+
+- **Date:** 2026-07-26
+- **Status:** accepted after convergence diagnosis
+- **Context:** Summed RGB measurement loss was dominated by a negative Gaussian
+  NLL. The selected 12-step detector had nearly image-independent vertical
+  centres and about 0.97 m held-out proposal error despite a favourable scalar
+  objective. Fixed loader position also coupled each episode to only even or
+  odd frame indices.
+- **Decision:** Fixed datasets sweep a frame only after every loader batch has
+  seen the preceding frame. Measurement validation aggregates configured
+  frames and ranks checkpoints by calibrated backprojected world-position MAE.
+  Closed-loop training restores that checkpoint and uses a separately
+  configured lower learning rate.
+- **Consequences:** The tiny profile now trains 64 measurement steps across all
+  frames of eight episodes, then six RGB-only closed-loop steps at 0.1x
+  learning rate. Checkpoint metadata records the physical localization score;
+  negative NLL remains an optimization/calibration diagnostic, not a claim of
+  accurate perception.
+
+## ADR-018 — Fast depth residuals require reliability evidence
+
+- **Date:** 2026-07-26
+- **Status:** accepted as a safety gate
+- **Context:** The earlier ROI inverse-depth delta doubled the signed depth
+  error on both train and held-out episodes. Zeroing only that component
+  changed ordinary fast corrections from harmful to beneficial; zeroing centre
+  deltas made results worse.
+- **Decision:** Keep the global/ROI architecture and fast centre, size, colour,
+  existence, appearance, and uncertainty outputs, but default
+  `fast_depth_residual_enabled` to false. The ROI measurement retains the
+  analytic predicted inverse depth until a trained residual passes an explicit
+  held-out per-mode current/future improvement gate.
+- **Consequences:** The runtime still exercises fast ROI measurements on
+  ordinary frames and no history is re-encoded. Learning the fast depth delta
+  is deferred to belief-slot-aligned cached-sequence supervision; the gate is
+  not presented as a solved depth estimator.

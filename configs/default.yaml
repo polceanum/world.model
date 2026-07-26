@@ -55,6 +55,7 @@ model:
     proposal_queries: 10
     global_every_steps: 12
     roi_size: 20
+    fast_depth_residual_enabled: false
     roi_uncertainty_scale: 2.5
     global_uncertainty_threshold: 4.0
     surprise_threshold: 8.0
@@ -111,6 +112,7 @@ training:
   batch_size: 4
   steps: 1000
   learning_rate: 0.0003
+  closed_loop_learning_rate_scale: 0.1
   weight_decay: 0.0001
   tbptt_steps: 24
   grad_clip_norm: 1.0
@@ -122,6 +124,7 @@ training:
   num_workers: 0
   fixed_dataset: false
   rgb_pretrain_steps: 100
+  measurement_validation_frames: 8
   perturbation_probability: 0.25
   perturbation_position_std: 0.12
   horizon_weights: [1.0, 1.0, 1.2, 1.5, 1.5]

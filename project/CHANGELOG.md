@@ -57,21 +57,40 @@
   observability, gate, and update diagnostics.
 - Made demo overlays use the measurements actually scheduled by runtime and
   aligned every forecast with available ground-truth time.
+- Fixed deterministic pretraining frame selection so every fixed episode sees
+  every frame instead of being permanently coupled to even/odd frame indices.
+- Added multi-frame calibrated RGB localization metrics and changed perception
+  checkpoint selection from summed NLL to world-position MAE.
+- Restored the best physically localized perception checkpoint at the
+  closed-loop boundary and added a configurable 0.1x phase learning-rate
+  handoff that also applies after resume.
+- Added a reliability gate for the fast inverse-depth delta after diagnosis
+  showed that component doubled signed depth error; fast centre and other ROI
+  residuals remain active.
+- Expanded the deterministic tiny profile to 64 measurement plus six
+  closed-loop steps across eight fixed training and four validation episodes.
+- Added regression tests for complete fixed-frame coverage, learning-rate
+  bounds, and the fast-depth gate.
 
 ### Evidence
 
 - Deterministic CPU run:
-  `runs/milestone1-tiny-overfit-cpu-v4-final`.
+  `runs/convergence-tiny-cpu-v1`.
 - Held-out report:
-  `runs/milestone1-tiny-overfit-cpu-v4-final/evaluation/best-test-final`.
+  `runs/convergence-tiny-cpu-v1/evaluation/best-test`.
+- Wider eight-episode held-out report:
+  `runs/convergence-tiny-cpu-v1/evaluation/best-test-8episodes`.
 - Demo:
-  `demo_outputs/milestone1-tiny-overfit-cpu-v4-final`.
+  `demo_outputs/convergence-tiny-cpu-v1`.
 - Reduced real MPS training:
   `runs/milestone1-mps-smoke-final`.
 - Reduced two-step run of the full-size `toy_mps` architecture:
   `runs/milestone1-toy-mps-scaled-smoke`.
 
-The evidence is deliberately not recorded as Milestone 1 acceptance:
-distance-gated detection and collision F1 are zero, perturbation recovery is
-6.52%, parameter convergence is not measurable under the localization gate,
-and the demo correction worsens error on average.
+The new RGB result has 75% distance-gated recall/precision over eight held-out
+episodes, 0.162259 m 0.5-second forecast RMSE versus 0.491278 m for constant
+velocity, zero gated ID switches, and positive ordinary demo corrections.
+Milestone 1 acceptance is still not claimed: collision F1 is zero, wider
+perturbation recovery is 19.59% versus the recommended 20%, parameter
+convergence and held-out occlusion recovery remain incomplete, and the full
+MPS schedule has not run.

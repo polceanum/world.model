@@ -32,6 +32,7 @@ model:
     proposal_queries: 14
     global_every_steps: 10
     roi_size: 24
+    fast_depth_residual_enabled: false
   dynamics:
     hidden_dim: 160
     max_substep: 0.005555555555555556
@@ -46,6 +47,7 @@ training:
   batch_size: 4
   steps: 10000
   learning_rate: 0.00025
+  closed_loop_learning_rate_scale: 0.1
   weight_decay: 0.0001
   tbptt_steps: 24
   checkpoint_every: 500
@@ -53,6 +55,7 @@ training:
   train_episodes: 2048
   validation_episodes: 64
   rgb_pretrain_steps: 1000
+  measurement_validation_frames: 8
 evaluation:
   horizons_seconds: [0.1, 0.25, 0.5, 1.0, 2.0]
   episodes: 64
