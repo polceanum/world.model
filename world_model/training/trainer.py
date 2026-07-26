@@ -164,6 +164,21 @@ def measurement_pretrain_frame_index(
     return random.randrange(total_frames)
 
 
+def set_global_perception_trainable(
+    model: OnlineWorldModel,
+    *,
+    trainable: bool,
+) -> None:
+    """Freeze or unfreeze full-frame RGB discovery without disabling fast ROI."""
+
+    module = model.observation_modules["rgb"]
+    for component_name in ("backbone", "global_detector"):
+        component = getattr(module, component_name, None)
+        if component is None:
+            raise TypeError(f"RGB module is missing {component_name}")
+        component.requires_grad_(trainable)
+
+
 def _mean_batch_results(results: list[TrainingBatchResult]) -> TrainingBatchResult:
     if not results:
         raise ValueError("cannot average an empty validation result list")
@@ -411,6 +426,15 @@ def train_from_config(
         raw_batch, train_iterator = _next_batch(train_loader, train_iterator)
         _check_batch_major(raw_batch)
         batch = move_batch_to_device(raw_batch, device)
+        global_perception_trainable = (
+            step
+            < config.training.rgb_pretrain_steps
+            + config.training.closed_loop_global_trainable_steps
+        )
+        set_global_perception_trainable(
+            model,
+            trainable=global_perception_trainable,
+        )
         optimizer.zero_grad(set_to_none=True)
         if step < config.training.rgb_pretrain_steps:
             target_learning_rate = config.training.learning_rate
@@ -464,6 +488,7 @@ def train_from_config(
             learning_rate=learning_rate,
             gradient_norm=float(gradient_norm_tensor.detach().cpu()),
         )
+        last_metrics["global_perception_trainable"] = float(global_perception_trainable)
         should_log = (
             completed_step % max(1, config.training.log_every) == 0
             or completed_step == config.training.steps

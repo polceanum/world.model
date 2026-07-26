@@ -28,7 +28,14 @@ from world_model.observations import (
     SensorContext,
 )
 from world_model.runtime import OnlineWorldModel
-from world_model.training.losses import gaussian_nll, masked_huber, weighted_total
+from world_model.training.event_windows import observation_window_query_plan
+from world_model.training.losses import (
+    balanced_binary_cross_entropy,
+    gaussian_nll,
+    masked_huber,
+    posterior_improvement_hinge,
+    weighted_total,
+)
 from world_model.training.matching import match_measurements_to_targets
 from world_model.training.perturbations import perturb_belief
 from world_model.utils.config import OrpheusConfig
@@ -179,6 +186,64 @@ def supervised_measurement_losses(
     masks = {
         "matched": matched,
         "existence": matched,
+    }
+    losses = module.training_losses(outputs, targets, masks)
+    if not losses:
+        raise RuntimeError("RGB observation module returned no training losses")
+    return losses
+
+
+def supervised_slot_measurement_losses(
+    module: torch.nn.Module,
+    measurements: MeasurementSet,
+    batch: Mapping[str, Any],
+    frame_index: int,
+    *,
+    target_indices: Tensor,
+    matched_slots: Tensor,
+) -> dict[str, Tensor]:
+    """Supervise prior-conditioned RGB measurements in persistent slot order.
+
+    Fast ROI measurements are conditioned on one particular belief object per
+    output slot.  Their targets must therefore follow the belief-to-target
+    assignment rather than being freely rematched according to the current
+    measurement values.
+    """
+
+    slot_shape = measurements.values.shape[:2]
+    if target_indices.shape != slot_shape or matched_slots.shape != slot_shape:
+        raise ValueError("target_indices and matched_slots must match measurement [B,M] axes")
+    if matched_slots.dtype != torch.bool:
+        raise TypeError("matched_slots must be torch.bool")
+
+    target_values, target_mask, visibility = _target_measurement_values(batch, frame_index)
+    aligned = gather_target_slots(target_values, target_indices)
+    aligned_target_mask = (
+        gather_target_slots(target_mask.unsqueeze(-1), target_indices).squeeze(-1).bool()
+    )
+    aligned_visibility = gather_target_slots(
+        visibility.unsqueeze(-1),
+        target_indices,
+    ).squeeze(-1)
+    supervised = matched_slots & aligned_target_mask & measurements.measurement_mask
+
+    outputs = {
+        "values": measurements.values,
+        "log_variance": measurements.log_variance,
+        "existence_logits": measurements.existence_logits,
+    }
+    visibility_logits = measurements.auxiliary.get("visibility_logits")
+    if visibility_logits is None:
+        visibility_logits = measurements.auxiliary.get("visibility_logit")
+    if visibility_logits is not None:
+        outputs["visibility_logits"] = visibility_logits
+    targets = {
+        "values": aligned,
+        "visibility": aligned_visibility,
+    }
+    masks = {
+        "matched": supervised,
+        "existence": supervised,
     }
     losses = module.training_losses(outputs, targets, masks)
     if not losses:
@@ -456,7 +521,7 @@ def _rollout_losses(
     matched: Tensor,
 ) -> dict[str, Tensor]:
     total_frames = int(batch["rgb"].shape[1])
-    frame_offsets, query_seconds, horizon_weights = _valid_rollout_offsets(
+    frame_offsets, _, horizon_weights = _valid_rollout_offsets(
         config,
         frame_index,
         total_frames,
@@ -468,7 +533,22 @@ def _rollout_losses(
             "rollout_velocity": reference.sum() * 0,
             "event_collision": reference.sum() * 0,
         }
-    trajectory = model.dynamics.rollout(belief, query_seconds, return_events=True)
+    event_query_plan = observation_window_query_plan(
+        frame_offsets,
+        frame_rate=config.simulator.frame_rate,
+    )
+    trajectory = model.dynamics.rollout(
+        belief,
+        event_query_plan.query_seconds,
+        return_events=True,
+    )
+    target_positions = event_query_plan.select_target_endpoints(trajectory.positions)
+    target_velocities = event_query_plan.select_target_endpoints(trajectory.velocities)
+    target_event_logits = (
+        None
+        if trajectory.event_logits is None
+        else event_query_plan.select_target_endpoints(trajectory.event_logits)
+    )
     position_losses: list[Tensor] = []
     velocity_losses: list[Tensor] = []
     event_losses: list[Tensor] = []
@@ -494,19 +574,19 @@ def _rollout_losses(
         )
         position_losses.append(
             masked_huber(
-                trajectory.positions[:, query_index],
+                target_positions[:, query_index],
                 target_position,
                 valid,
             )
         )
         velocity_losses.append(
             masked_huber(
-                trajectory.velocities[:, query_index],
+                target_velocities[:, query_index],
                 target_velocity,
                 valid,
             )
         )
-        if trajectory.event_logits is not None:
+        if target_event_logits is not None:
             event_target = (
                 gather_target_slots(
                     batch["events"]["collision"][:, target_index].unsqueeze(-1),
@@ -515,10 +595,19 @@ def _rollout_losses(
                 .squeeze(-1)
                 .to(reference.dtype)
             )
-            event_scores = trajectory.event_logits[:, query_index, :, MotionMode.COLLISION]
+            # Event labels at ``target_index`` cover exactly the simulator
+            # interval from the preceding observation through this frame.
+            # The expanded rollout query plan makes this endpoint logit cover
+            # the same interval, independent of the other forecast horizons.
+            event_scores = target_event_logits[:, query_index, :, MotionMode.COLLISION]
             if valid.any():
                 event_losses.append(
-                    F.binary_cross_entropy_with_logits(event_scores[valid], event_target[valid])
+                    balanced_binary_cross_entropy(
+                        event_scores,
+                        event_target,
+                        valid,
+                        maximum_positive_weight=(config.training.collision_positive_weight_max),
+                    )
                 )
                 event_weights.append(horizon_weights[query_index])
 
@@ -551,7 +640,13 @@ def _group_closed_loop_terms(
         "parameter": total("parameter_drag", "parameter_restitution"),
         "existence": details.get("existence_belief", reference.sum() * 0),
         "uncertainty": details.get("uncertainty_position_nll", reference.sum() * 0),
-        "correction": details.get("correction_magnitude", reference.sum() * 0),
+        # Retain the specification's small correction-sparsity regulariser,
+        # but pair it with explicit guards against harmful posterior updates.
+        "correction": total(
+            "correction_magnitude",
+            "correction_current",
+            "correction_future",
+        ),
     }
 
 
@@ -587,16 +682,18 @@ def run_closed_loop_batch(
 
     model.reset(batch_size=batch_size)
     detail_lists: dict[str, list[Tensor]] = {}
-    correction_improvements: list[float] = []
+    current_correction_improvements: list[float] = []
+    future_correction_improvements: list[float] = []
     perturbed_updates = 0
     matched_count = 0
-    fast_path_supervised = False
+    fast_supervised_frames = 0
 
     def add(name: str, value: Tensor) -> None:
         detail_lists.setdefault(name, []).append(value)
 
     for frame_index in range(window_start, window_stop):
         packet = make_rgb_packet(batch, frame_index)
+        prior_belief: WorldBelief | None = None
         prior_rollout = None
         frame_offsets: list[int] = []
         query_seconds: list[float] = []
@@ -618,6 +715,7 @@ def run_closed_loop_batch(
                 model.state.belief = source_belief
                 perturbed_updates += 1
             prior = model.dynamics.predict(source_belief, requested - source_belief.timestamp)
+            prior_belief = prior
             frame_offsets, query_seconds, _ = _valid_rollout_offsets(
                 config,
                 frame_index,
@@ -625,7 +723,7 @@ def run_closed_loop_batch(
             )
             if frame_offsets:
                 prior_rollout = model.dynamics.rollout(prior, query_seconds, return_events=False)
-            if include_measurement_supervision and not fast_path_supervised:
+            if include_measurement_supervision:
                 module = model.observation_modules["rgb"]
                 predicted = module.project(
                     prior,
@@ -643,13 +741,43 @@ def run_closed_loop_batch(
                         [packet],
                         prior,
                         predicted,
-                        None,
+                        model.state.caches.get(packet.sensor_id),
                     )
-                    fast_supervised = supervised_measurement_losses(
+                    belief_target_indices, belief_matched_slots = match_belief_to_targets(
+                        prior,
+                        batch["objects"]["position"][:, frame_index],
+                        batch["objects"]["active"][:, frame_index].bool(),
+                    )
+                    valid_belief_indices = predicted.belief_indices >= 0
+                    target_indices = (
+                        gather_target_slots(
+                            belief_target_indices.unsqueeze(-1),
+                            predicted.belief_indices,
+                        )
+                        .squeeze(-1)
+                        .to(torch.int64)
+                    )
+                    target_indices = torch.where(
+                        valid_belief_indices,
+                        target_indices,
+                        torch.full_like(target_indices, -1),
+                    )
+                    matched_slots = (
+                        gather_target_slots(
+                            belief_matched_slots.unsqueeze(-1),
+                            predicted.belief_indices,
+                        )
+                        .squeeze(-1)
+                        .bool()
+                        & valid_belief_indices
+                    )
+                    fast_supervised = supervised_slot_measurement_losses(
                         module,
                         fast_measurements,
                         batch,
                         frame_index,
+                        target_indices=target_indices,
+                        matched_slots=matched_slots,
                     )
                     add(
                         "measurement",
@@ -657,13 +785,45 @@ def run_closed_loop_batch(
                     )
                     for name, value in fast_supervised.items():
                         add(f"fast_{name}", value)
-                    fast_path_supervised = True
+                    fast_supervised_frames += 1
 
         belief = model.ingest(packet)
         current, indices, matched = _belief_state_losses(belief, batch, frame_index)
         matched_count += int(matched.sum().detach().cpu())
         for name, value in current.items():
             add(name, value)
+        if prior_belief is not None:
+            aligned_position = gather_target_slots(
+                batch["objects"]["position"][:, frame_index],
+                indices,
+            )
+            correction_valid = matched & prior_belief.objects.active
+            prior_current_error = torch.linalg.vector_norm(
+                prior_belief.objects.position - aligned_position,
+                dim=-1,
+            )
+            posterior_current_error = torch.linalg.vector_norm(
+                belief.objects.position - aligned_position,
+                dim=-1,
+            )
+            add(
+                "correction_current",
+                posterior_improvement_hinge(
+                    posterior_current_error,
+                    prior_current_error,
+                    correction_valid,
+                ),
+            )
+            if correction_valid.any():
+                current_correction_improvements.append(
+                    float(
+                        (prior_current_error - posterior_current_error)
+                        .masked_select(correction_valid)
+                        .mean()
+                        .detach()
+                        .cpu()
+                    )
+                )
         rollout = _rollout_losses(
             model,
             belief,
@@ -679,6 +839,7 @@ def run_closed_loop_batch(
         if prior_rollout is not None and frame_offsets:
             posterior_rollout = model.dynamics.rollout(belief, query_seconds, return_events=False)
             deltas: list[Tensor] = []
+            correction_losses: list[Tensor] = []
             for query_index, frame_offset in enumerate(frame_offsets):
                 target_index = frame_index + frame_offset
                 target_position = gather_target_slots(
@@ -692,7 +853,7 @@ def run_closed_loop_batch(
                     .squeeze(-1)
                     .bool()
                 )
-                valid = matched & future_active
+                valid = matched & future_active & prior_belief.objects.active
                 if valid.any():
                     prior_error = torch.linalg.vector_norm(
                         prior_rollout.positions[:, query_index] - target_position,
@@ -703,8 +864,18 @@ def run_closed_loop_batch(
                         dim=-1,
                     )
                     deltas.append((prior_error - posterior_error).masked_select(valid).mean())
+                    correction_losses.append(
+                        posterior_improvement_hinge(
+                            posterior_error,
+                            prior_error,
+                            valid,
+                        )
+                    )
             if deltas:
-                correction_improvements.append(float(torch.stack(deltas).mean().detach().cpu()))
+                future_correction_improvements.append(
+                    float(torch.stack(deltas).mean().detach().cpu())
+                )
+                add("correction_future", torch.stack(correction_losses).mean())
 
         diagnostics = model.updater.last_diagnostics
         if diagnostics is not None and diagnostics.correction_norm.numel() > 0:
@@ -737,10 +908,21 @@ def run_closed_loop_batch(
         {
             "matched_object_frames": float(matched_count),
             "perturbed_updates": float(perturbed_updates),
-            "fast_path_supervised": float(fast_path_supervised),
+            "fast_path_supervised": float(fast_supervised_frames > 0),
+            "fast_supervised_frames": float(fast_supervised_frames),
+            "current_correction_improvement_m": (
+                float(sum(current_correction_improvements) / len(current_correction_improvements))
+                if current_correction_improvements
+                else math.nan
+            ),
+            "future_correction_improvement_m": (
+                float(sum(future_correction_improvements) / len(future_correction_improvements))
+                if future_correction_improvements
+                else math.nan
+            ),
             "correction_improvement_m": (
-                float(sum(correction_improvements) / len(correction_improvements))
-                if correction_improvements
+                float(sum(future_correction_improvements) / len(future_correction_improvements))
+                if future_correction_improvements
                 else math.nan
             ),
         }
@@ -763,4 +945,5 @@ __all__ = [
     "pretrain_rgb_measurements",
     "run_closed_loop_batch",
     "supervised_measurement_losses",
+    "supervised_slot_measurement_losses",
 ]

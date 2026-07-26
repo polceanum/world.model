@@ -194,3 +194,83 @@
   ordinary frames and no history is re-encoded. Learning the fast depth delta
   is deferred to belief-slot-aligned cached-sequence supervision; the gate is
   not presented as a solved depth estimator.
+
+## ADR-019 — Protect calibrated discovery during downstream convergence
+
+- **Date:** 2026-07-26
+- **Status:** accepted after controlled continuation
+- **Context:** Extending unrestricted closed-loop training from the step-70
+  checkpoint produced a lower sampled validation loss but degraded eight-test
+  current MAE from 0.182494 m to 0.236864 m and 0.5-second RMSE from 0.162259 m
+  to 0.269230 m.
+- **Decision:** Keep the RGB backbone/global detector trainable only for an
+  explicit `closed_loop_global_trainable_steps` adaptation window, then freeze
+  them while the ROI updater, filter, dynamics, and identifier continue
+  training. Fast ROI supervision is applied on every usable frame and follows
+  the belief-slot-to-target assignment rather than rematching conditioned
+  outputs.
+- **Evidence:** A 24-step frozen continuation preserved 75.39% distance-gated
+  detection, improved current MAE to 0.178773 m, and improved 0.5-second RMSE
+  to 0.161387 m over eight held-out episodes.
+- **Consequences:** Longer profiles can configure a larger joint-adaptation
+  window. Freezing is a convergence safeguard, not a claim that global
+  perception is complete.
+
+## ADR-020 — Event logits have explicit interval semantics
+
+- **Date:** 2026-07-26
+- **Status:** accepted
+- **Context:** Simulator frame labels mean that a collision occurred anywhere
+  in the preceding observation interval. Dynamics previously returned only
+  the final internal-substep event mode, and multi-horizon rollout segments did
+  not match those label windows.
+- **Decision:** Persistent `motion_mode_logits` remain instantaneous endpoint
+  state. `RolloutStep.event_logits[..., COLLISION]` instead means occurrence
+  anywhere in that rollout segment and max-aggregates internal substeps.
+  Training/evaluation insert exact `{h-dt_obs, h}` boundaries and select only
+  the endpoint logit for each frame label. Zero-duration segments explicitly
+  contain no collision occurrence.
+- **Evidence:** Focused dynamics tests force a collision before the final
+  internal substep and verify that the segment retains it. On the unchanged
+  RGB checkpoint, the exact-window implementation changed held-out F1 from 0
+  to 0.0556 without changing weights. A separate scratch oracle-state
+  diagnostic was consistent with the corrected semantics but is not retained
+  as acceptance evidence.
+- **Consequences:** Event accuracy is now measured against the right contract,
+  but remains an open learning problem rather than being repaired by metric
+  relabeling.
+
+## ADR-021 — Correction regularization cannot reward harmful posteriors
+
+- **Date:** 2026-07-26
+- **Status:** accepted
+- **Context:** A correction-magnitude penalty alone encourages zero updates,
+  even when evidence should repair state. The specification also requires
+  sparsity so the filter cannot reconstruct state gratuitously each frame.
+- **Decision:** Retain the small correction-sparsity term and add supervised
+  hinge losses on current and future posterior error relative to a detached
+  prior. The prior is detached so dynamics cannot satisfy the relative
+  objective by making its incoming prediction worse.
+- **Consequences:** Logs separately report correction magnitude, current
+  improvement, and future improvement. Absolute state/rollout losses and the
+  sparsity term remain active.
+
+## ADR-022 — Acceptance metrics must measure temporal direction
+
+- **Date:** 2026-07-26
+- **Status:** accepted
+- **Context:** Pooled visible/occluded uncertainty and parameter MAE on frames
+  where an update gate fired do not prove uncertainty growth/recovery or that
+  an online parameter update moved toward truth.
+- **Decision:** Occlusion evaluation anchors a target to a persistent
+  prediction ID on a reliable visible frame, follows that ID without a
+  localization gate while fully hidden, and reports paired peak growth,
+  identity survival, and reobservation contraction only after a complete
+  visible-hidden-visible transition. Parameter evaluation snapshots physical
+  values before ingest and reports signed before/after error change only when
+  persistent identity, distance gating, runtime update gating, and
+  evaluation-only informative event/motion evidence all agree.
+- **Consequences:** Missing transitions produce explicit zero counts and null
+  rates. Update counts can no longer be presented as identification progress;
+  the current tiny checkpoint is truthfully measured as making
+  numerically negligible drag/restitution changes.

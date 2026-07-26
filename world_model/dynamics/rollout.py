@@ -13,6 +13,13 @@ from world_model.belief import BeliefTrajectory, WorldBelief
 
 @dataclass
 class RolloutStep:
+    """One prediction segment.
+
+    ``belief.objects.motion_mode_logits`` describes the state at the segment
+    endpoint. The collision channel in ``event_logits`` records collision
+    occurrence anywhere between the previous and current query timestamps.
+    """
+
     belief: WorldBelief
     event_logits: Tensor
     auxiliary: dict[str, Tensor]

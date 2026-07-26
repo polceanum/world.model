@@ -24,6 +24,33 @@ def _active_belief(batch_size: int = 1, max_objects: int = 2):
     )
 
 
+def _pair_collision_belief(batch_size: int = 1):
+    belief = BeliefFactory(max_objects=2).create(batch_size=batch_size)
+    objects = belief.objects.clone()
+    objects.active[:] = True
+    objects.object_id[:] = torch.tensor([0, 1])
+    objects.position[:, 0] = torch.tensor([-0.15, 1.0, 0.0])
+    objects.position[:, 1] = torch.tensor([0.15, 1.0, 0.0])
+    objects.velocity[:, 0, 0] = 1.0
+    objects.velocity[:, 1, 0] = -1.0
+    objects.geometry[..., 0] = 0.1
+    objects.log_drag.fill_(-16.0)
+    return replace(
+        belief,
+        objects=objects,
+        gravity=torch.zeros_like(belief.gravity),
+        next_object_id=torch.full((batch_size,), 2, dtype=torch.int64),
+    )
+
+
+def _deterministic_collision_model(belief):
+    model = DynamicsModel.from_belief(belief, max_substep=0.01)
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.zero_()
+    return model
+
+
 def test_isolated_gravity_trajectory() -> None:
     belief = _active_belief()
     integrated = AnalyticKinematics()(
@@ -126,6 +153,45 @@ def test_per_batch_zero_dt_is_an_exact_identity() -> None:
     )
     assert predicted.timestamp[0] == belief.timestamp[0]
     assert predicted.timestamp[1] > belief.timestamp[1]
+
+
+def test_rollout_collision_logits_cover_each_prediction_segment() -> None:
+    belief = _pair_collision_belief()
+    model = _deterministic_collision_model(belief)
+
+    trajectory = model.rollout(belief, [0.06, 0.10])
+
+    collision = MotionMode.COLLISION
+    assert (trajectory.event_logits[0, 0, :, collision] > 0).all()
+    assert (trajectory.event_logits[0, 1, :, collision] < 0).all()
+    assert trajectory.auxiliary["pair_collision"][0, 0, 0, 1]
+    assert not trajectory.auxiliary["pair_collision"][0, 1].any()
+    assert trajectory.auxiliary["pair_impulse"][0, 0, 0, 1] > 0
+    assert trajectory.motion_mode_logits[0, 0, 0].argmax() == MotionMode.FREE
+    assert trajectory.motion_mode_logits[0, 1, 0].argmax() == MotionMode.FREE
+
+
+def test_rollout_zero_duration_segment_masks_collision_occurrence_per_batch() -> None:
+    belief = _pair_collision_belief(batch_size=2)
+    objects = belief.objects.clone()
+    objects.motion_mode_logits[0, :, MotionMode.FREE] = -4.0
+    objects.motion_mode_logits[0, :, MotionMode.COLLISION] = 8.0
+    belief = replace(belief, objects=objects)
+    model = _deterministic_collision_model(belief)
+
+    trajectory = model.rollout(belief, torch.tensor([[0.0], [0.06]]))
+
+    collision = MotionMode.COLLISION
+    assert (trajectory.event_logits[0, 0, :, collision] < 0).all()
+    assert not trajectory.auxiliary["pair_collision"][0, 0].any()
+    assert trajectory.auxiliary["pair_impulse"][0, 0].count_nonzero() == 0
+    torch.testing.assert_close(trajectory.positions[0, 0], belief.objects.position[0])
+    torch.testing.assert_close(
+        trajectory.motion_mode_logits[0, 0],
+        belief.objects.motion_mode_logits[0],
+    )
+    assert (trajectory.event_logits[1, 0, :, collision] > 0).all()
+    assert trajectory.auxiliary["pair_collision"][1, 0, 0, 1]
 
 
 def test_rollout_rejects_unsorted_or_negative_offsets() -> None:

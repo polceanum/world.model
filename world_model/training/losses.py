@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import torch
 import torch.nn.functional as F
 from torch import Tensor
 
@@ -27,6 +28,65 @@ def gaussian_nll(
     log_variance = log_variance.clamp(-12.0, 8.0)
     term = 0.5 * ((mean - target).square() * (-log_variance).exp() + log_variance)
     return masked_mean(term, mask)
+
+
+def posterior_improvement_hinge(
+    posterior_error: Tensor,
+    prior_error: Tensor,
+    mask: Tensor,
+    *,
+    margin: float = 0.0,
+) -> Tensor:
+    """Penalise corrections that fail to improve on the incoming prior.
+
+    The prior is a fixed reference for this objective. Detaching it prevents
+    the model from satisfying the relative loss by deliberately making its
+    pre-observation prediction worse. A positive margin requests a minimum
+    improvement while retaining the absolute posterior state/rollout losses.
+    """
+
+    if margin < 0:
+        raise ValueError("posterior improvement margin must be nonnegative")
+    if posterior_error.shape != prior_error.shape:
+        raise ValueError("posterior and prior errors must have matching shapes")
+    return masked_mean(
+        F.relu(posterior_error - prior_error.detach() + float(margin)),
+        mask,
+    )
+
+
+def balanced_binary_cross_entropy(
+    logits: Tensor,
+    target: Tensor,
+    mask: Tensor,
+    *,
+    maximum_positive_weight: float = 10.0,
+) -> Tensor:
+    """BCE with a bounded, batch-observed weight for rare positive events."""
+
+    if logits.shape != target.shape or logits.shape != mask.shape:
+        raise ValueError("logits, target, and mask must have matching shapes")
+    if maximum_positive_weight < 1:
+        raise ValueError("maximum_positive_weight must be at least one")
+    selected_logits = logits.masked_select(mask)
+    selected_target = target.to(logits.dtype).masked_select(mask)
+    if selected_logits.numel() == 0:
+        return logits.sum() * 0
+    positive_count = selected_target.sum()
+    negative_count = selected_target.numel() - positive_count
+    positive_weight = torch.where(
+        positive_count > 0,
+        (negative_count / positive_count.clamp_min(1)).clamp(
+            min=1.0,
+            max=float(maximum_positive_weight),
+        ),
+        positive_count.new_ones(()),
+    )
+    return F.binary_cross_entropy_with_logits(
+        selected_logits,
+        selected_target,
+        pos_weight=positive_weight,
+    )
 
 
 def state_losses(

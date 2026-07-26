@@ -20,7 +20,18 @@ heteroscedastic NLL can be negative without implying usable localization.
 At the phase boundary the trainer restores the best localized measurement
 checkpoint and applies `closed_loop_learning_rate_scale` (0.1 in current
 profiles) to protect perception while downstream filter/dynamics objectives
-begin. The tiny convergence profile uses 64 measurement steps and six
-closed-loop steps. Fast inverse-depth deltas remain gated at the analytic prior
-until a separately trained ROI checkpoint passes held-out per-mode correction
-tests.
+begin. Global discovery/backbone parameters remain trainable for
+`closed_loop_global_trainable_steps`, then freeze while the ROI updater,
+filter, dynamics, and identifier continue learning. Fast ROI losses follow the
+persistent belief-slot assignment on every usable frame.
+
+Collision logits describe occurrence over exact observation windows. Training
+expands each requested horizon into `[h-dt_obs, h]` query boundaries, aggregates
+internal-substep impacts, and applies bounded positive weighting through
+`collision_positive_weight_max`. Correction training retains a small sparsity
+term and adds current/future improvement hinges against a detached prior.
+
+The tiny convergence profile uses 64 measurement steps and six jointly
+trainable closed-loop steps. Fast inverse-depth deltas remain gated at the
+analytic prior until a separately trained ROI checkpoint passes held-out
+per-mode correction tests.

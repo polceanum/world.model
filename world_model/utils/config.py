@@ -171,6 +171,7 @@ class TrainingConfig:
     steps: int = 1000
     learning_rate: float = 3e-4
     closed_loop_learning_rate_scale: float = 0.1
+    closed_loop_global_trainable_steps: int = 50
     weight_decay: float = 1e-4
     tbptt_steps: int = 24
     grad_clip_norm: float = 1.0
@@ -185,6 +186,7 @@ class TrainingConfig:
     measurement_validation_frames: int = 8
     perturbation_probability: float = 0.25
     perturbation_position_std: float = 0.12
+    collision_positive_weight_max: float = 10.0
     horizon_weights: tuple[float, ...] = (1.0, 1.0, 1.2, 1.5, 1.5)
     loss_weights: dict[str, float] = field(
         default_factory=lambda: {
@@ -317,10 +319,14 @@ class OrpheusConfig:
             raise ValueError("training.learning_rate must be positive")
         if not 0 < self.training.closed_loop_learning_rate_scale <= 1:
             raise ValueError("training.closed_loop_learning_rate_scale must lie in (0, 1]")
+        if self.training.closed_loop_global_trainable_steps < 0:
+            raise ValueError("training.closed_loop_global_trainable_steps must be nonnegative")
         if self.training.tbptt_steps <= 0:
             raise ValueError("training.tbptt_steps must be positive")
         if self.training.measurement_validation_frames <= 0:
             raise ValueError("training.measurement_validation_frames must be positive")
+        if self.training.collision_positive_weight_max < 1:
+            raise ValueError("training.collision_positive_weight_max must be at least one")
 
     def to_dict(self) -> dict[str, Any]:
         """Return a YAML-safe resolved representation."""

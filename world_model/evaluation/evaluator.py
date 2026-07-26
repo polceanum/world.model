@@ -18,10 +18,18 @@ from world_model.belief import MotionMode
 from world_model.datasets import SyntheticSphereDataset, collate_episodes
 from world_model.evaluation.baselines import baseline_bundle
 from world_model.evaluation.latency import synchronize
+from world_model.evaluation.occlusion_metrics import (
+    OcclusionTransitionAccumulator,
+)
+from world_model.evaluation.parameter_metrics import OnlineParameterUpdateAccumulator
 from world_model.evaluation.reports import write_evaluation_report
 from world_model.identification import ParameterUpdateDiagnostics
 from world_model.runtime import OnlineWorldModel
 from world_model.training.checkpointing import load_checkpoint
+from world_model.training.event_windows import (
+    ObservationWindowQueryPlan,
+    observation_window_query_plan,
+)
 from world_model.training.loop import (
     gather_target_slots,
     make_rgb_packet,
@@ -415,6 +423,15 @@ def _horizon_key(seconds: float) -> str:
     return f"{seconds:.3f}s"
 
 
+def _collision_logits_for_observation_windows(
+    event_logits: Tensor,
+    query_plan: ObservationWindowQueryPlan,
+) -> Tensor:
+    """Return collision logits aligned to each target frame's label window."""
+
+    return query_plan.select_target_endpoints(event_logits)[..., MotionMode.COLLISION]
+
+
 def _distance_gate_matches(
     prediction: Tensor,
     aligned_target: Tensor,
@@ -496,8 +513,10 @@ def evaluate_checkpoint(
     events = _BinaryAccumulator()
     calibration = _CalibrationAccumulator()
     parameters = _ParameterAccumulator()
+    directional_parameters = OnlineParameterUpdateAccumulator()
     identifier_metrics = _IdentifierAccumulator()
     tracking = _TrackingAccumulator()
+    occlusion_transitions = OcclusionTransitionAccumulator()
     global_latencies: list[float] = []
     fast_latencies: list[float] = []
     rollout_latencies: list[float] = []
@@ -565,6 +584,14 @@ def evaluate_checkpoint(
                         )
                         perturbation_updates += batch_size
 
+                pre_ingest_parameters: dict[str, Tensor] | None = None
+                if model.belief is not None:
+                    pre_ingest_parameters = {
+                        "restitution": model.belief.objects.restitution.clone(),
+                        "drag": model.belief.objects.drag.clone(),
+                        "active": model.belief.objects.active.clone(),
+                        "object_id": model.belief.objects.object_id.clone(),
+                    }
                 synchronize(device)
                 update_started = time.perf_counter()
                 belief = model.ingest(packet)
@@ -610,6 +637,17 @@ def evaluate_checkpoint(
                     target_indices,
                 ).squeeze(-1)
                 position_std = (0.5 * belief.objects.fast_log_variance[..., :3]).exp().mean(dim=-1)
+                occlusion_transitions.update_frame(
+                    predicted_ids=belief.objects.object_id,
+                    predicted_active=belief.objects.active,
+                    position_std_m=position_std,
+                    target_ids=batch["objects"]["id"][:, frame_index],
+                    target_active=target_active,
+                    target_visible_fraction=batch["objects"]["visible_fraction"][:, frame_index],
+                    matched_target_indices=target_indices,
+                    reliable_visible_matches=distance_gated_matched,
+                    episode_offset=evaluated_episodes,
+                )
                 visible_mask = distance_gated_matched & (visible_fraction >= 0.5)
                 occluded_mask = distance_gated_matched & (visible_fraction <= 0.05)
                 if visible_mask.any():
@@ -705,15 +743,99 @@ def evaluate_checkpoint(
                             target,
                             distance_gated_matched & runtime_updated,
                         )
+                    if pre_ingest_parameters is not None:
+                        same_persistent_slot = (
+                            pre_ingest_parameters["active"]
+                            & belief.objects.active
+                            & (pre_ingest_parameters["object_id"] == belief.objects.object_id)
+                        )
+                        collision_informative = gather_target_slots(
+                            batch["events"]["collision"][:, frame_index].unsqueeze(-1),
+                            target_indices,
+                        ).squeeze(-1)
+                        free_steps = model.observability.config.minimum_free_steps
+                        free_window_start = frame_index - free_steps + 1
+                        drag_informative_target = torch.zeros_like(target_active)
+                        if free_window_start >= 0:
+                            active_history = batch["objects"]["active"][
+                                :, free_window_start : frame_index + 1
+                            ].bool()
+                            contact_history = batch["events"]["contact"][
+                                :, free_window_start : frame_index + 1
+                            ].bool()
+                            collision_history = batch["events"]["collision"][
+                                :, free_window_start : frame_index + 1
+                            ].bool()
+                            actuation_history = batch["events"]["externally_actuated"][
+                                :, free_window_start : frame_index + 1
+                            ].bool()
+                            speed = torch.linalg.vector_norm(
+                                batch["objects"]["velocity"][:, frame_index],
+                                dim=-1,
+                            )
+                            drag_informative_target = (
+                                active_history.all(dim=1)
+                                & ~contact_history.any(dim=1)
+                                & ~collision_history.any(dim=1)
+                                & ~actuation_history.any(dim=1)
+                                & (speed >= config.model.identification.drag_speed_threshold)
+                                & (batch["objects"]["visible_fraction"][:, frame_index] >= 0.5)
+                            )
+                        drag_informative = gather_target_slots(
+                            drag_informative_target.unsqueeze(-1),
+                            target_indices,
+                        ).squeeze(-1)
+                        common_directional_mask = distance_gated_matched & same_persistent_slot
+                        directional_parameters.update(
+                            "restitution",
+                            pre_ingest_parameters["restitution"],
+                            belief.objects.restitution,
+                            aligned_restitution,
+                            common_directional_mask
+                            & identifier_diagnostics.update_count[..., 1].bool()
+                            & collision_informative,
+                        )
+                        directional_parameters.update(
+                            "drag",
+                            pre_ingest_parameters["drag"],
+                            belief.objects.drag,
+                            aligned_drag,
+                            common_directional_mask
+                            & identifier_diagnostics.update_count[..., 2].bool()
+                            & drag_informative,
+                        )
 
                 run_forecast = frame_index % anchor_stride == 0 or frame_index == perturbation_frame
                 frame_offsets, query_seconds = _future_queries(config, frame_index, total_frames)
                 if run_forecast and query_seconds:
+                    event_query_plan = observation_window_query_plan(
+                        frame_offsets,
+                        frame_rate=config.simulator.frame_rate,
+                    )
                     synchronize(device)
                     rollout_started = time.perf_counter()
-                    trajectory = model.dynamics.rollout(belief, query_seconds, return_events=True)
+                    trajectory = model.dynamics.rollout(
+                        belief,
+                        event_query_plan.query_seconds,
+                        return_events=True,
+                    )
                     synchronize(device)
                     rollout_latencies.append((time.perf_counter() - rollout_started) * 1000.0)
+                    model_positions = event_query_plan.select_target_endpoints(trajectory.positions)
+                    model_log_variance = event_query_plan.select_target_endpoints(
+                        trajectory.fast_log_variance
+                    )
+                    model_active_mask = event_query_plan.select_target_endpoints(
+                        trajectory.active_mask
+                    )
+                    model_collision_logits = (
+                        None
+                        if trajectory.event_logits is None
+                        else _collision_logits_for_observation_windows(
+                            trajectory.event_logits,
+                            event_query_plan,
+                        )
+                    )
                     oracle_drag = gather_target_slots(
                         batch["objects"]["drag"][:, frame_index],
                         target_indices,
@@ -756,13 +878,10 @@ def evaluate_checkpoint(
                         forecast_active_count[horizon] = forecast_active_count.get(
                             horizon, 0
                         ) + int(
-                            (common_valid & trajectory.active_mask[:, query_index])
-                            .sum()
-                            .detach()
-                            .cpu()
+                            (common_valid & model_active_mask[:, query_index]).sum().detach().cpu()
                         )
                         forecast_errors.setdefault(("model", horizon), _ErrorAccumulator()).update(
-                            trajectory.positions[:, query_index],
+                            model_positions[:, query_index],
                             future_target,
                             common_valid,
                         )
@@ -776,23 +895,22 @@ def evaluate_checkpoint(
                                 common_valid,
                             )
                         calibration.update(
-                            trajectory.positions[:, query_index],
-                            trajectory.fast_log_variance[:, query_index, :, :3],
+                            model_positions[:, query_index],
+                            model_log_variance[:, query_index, :, :3],
                             future_target,
                             common_valid,
                         )
-                        if trajectory.event_logits is not None:
+                        if model_collision_logits is not None:
+                            # The selected endpoint logit covers exactly
+                            # [target_frame - 1, target_frame], matching the
+                            # simulator event label rather than a horizon
+                            # prefix or gap between requested horizons.
                             collision_target = gather_target_slots(
                                 batch["events"]["collision"][:, target_frame].unsqueeze(-1),
                                 target_indices,
                             ).squeeze(-1)
                             events.update(
-                                trajectory.event_logits[
-                                    :,
-                                    query_index,
-                                    :,
-                                    MotionMode.COLLISION,
-                                ],
+                                model_collision_logits[:, query_index],
                                 collision_target,
                                 common_valid,
                             )
@@ -858,8 +976,11 @@ def evaluate_checkpoint(
     metrics.update(events.metrics("collision"))
     metrics.update(calibration.metrics())
     metrics.update(parameters.metrics())
+    directional_parameter_metrics = directional_parameters.metrics()
+    metrics.update(directional_parameter_metrics)
     metrics.update(identifier_metrics.metrics())
     metrics.update(tracking.metrics())
+    metrics.update(occlusion_transitions.metrics())
     detection_threshold_label = f"{_CURRENT_DETECTION_DISTANCE_THRESHOLD_M:.3f}m"
     metrics.update(
         {
@@ -942,6 +1063,12 @@ def evaluate_checkpoint(
             "No current assignment met the 0.5 m detection-distance gate; "
             "distance-gated detection and identity metrics have no true positives."
         )
+    if occlusion_transitions.metrics()["occlusion_qualifying_sequence_count"] == 0.0:
+        limitations.append(
+            "No reliably anchored visible-to-fully-occluded-to-visible target "
+            "sequence occurred; sequence-aware occlusion identity and uncertainty "
+            "rates are null."
+        )
     zero_update_parameters = [
         name
         for name in ("restitution", "drag")
@@ -953,6 +1080,18 @@ def evaluate_checkpoint(
             "1e-3 gate threshold for "
             + ", ".join(zero_update_parameters)
             + "; updated-parameter MAE is unavailable for those parameters."
+        )
+    no_informative_directional_updates = [
+        name
+        for name in ("restitution", "drag")
+        if directional_parameter_metrics[f"informative_{name}_update_count"] == 0.0
+    ]
+    if no_informative_directional_updates:
+        limitations.append(
+            "No persistent, distance-gated runtime identifier update coincided "
+            "with ground-truth informative evidence for "
+            + ", ".join(no_informative_directional_updates)
+            + "; directional before/after parameter metrics are unavailable."
         )
     metadata = {
         "checkpoint": str(checkpoint),
@@ -966,8 +1105,18 @@ def evaluate_checkpoint(
         "oracle_runtime_input_used": False,
         "simulator_state_usage": "metrics_and_baselines_only",
         "parameter_metric_mask_source": "runtime_identifier_diagnostics",
+        "directional_parameter_metric_mask_source": (
+            "persistent_distance_gated_runtime_update_and_evaluation_only_"
+            "ground_truth_informative_evidence"
+        ),
         "current_detection_distance_threshold_m": (_CURRENT_DETECTION_DISTANCE_THRESHOLD_M),
         "identity_metric_match_source": "distance_gated_current_detection",
+        "occlusion_visible_fraction_threshold": (occlusion_transitions.visible_fraction_threshold),
+        "occlusion_fully_hidden_fraction_threshold": (
+            occlusion_transitions.fully_occluded_fraction_threshold
+        ),
+        "occlusion_tracking_key": "pre_occlusion_target_to_persistent_prediction_id",
+        "occlusion_hidden_tracking_localization_gate_m": None,
     }
     json_path, markdown_path = write_evaluation_report(
         output,

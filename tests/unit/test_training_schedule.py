@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import pytest
+from torch import nn
 
-from world_model.training.trainer import measurement_pretrain_frame_index
+from world_model.runtime import OnlineWorldModel
+from world_model.training.trainer import (
+    measurement_pretrain_frame_index,
+    set_global_perception_trainable,
+)
+from world_model.utils.config import load_config
 
 
 def test_fixed_pretraining_sweeps_every_frame_for_every_loader_batch() -> None:
@@ -48,3 +54,19 @@ def test_streaming_pretraining_samples_a_valid_frame() -> None:
     }
     assert sampled
     assert sampled <= set(range(7))
+
+
+def test_global_perception_freeze_leaves_fast_roi_trainable() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+    rgb = model.observation_modules["rgb"]
+
+    set_global_perception_trainable(model, trainable=False)
+
+    assert not any(parameter.requires_grad for parameter in rgb.backbone.parameters())
+    assert not any(parameter.requires_grad for parameter in rgb.global_detector.parameters())
+    assert all(parameter.requires_grad for parameter in rgb.roi_updater.parameters())
+    assert isinstance(rgb.roi_updater, nn.Module)
+
+    set_global_perception_trainable(model, trainable=True)
+    assert all(parameter.requires_grad for parameter in rgb.backbone.parameters())
+    assert all(parameter.requires_grad for parameter in rgb.global_detector.parameters())

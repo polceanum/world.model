@@ -10,7 +10,12 @@ from typing import Any
 import torch
 from torch import Tensor, nn
 
-from world_model.belief import BeliefTrajectory, ObjectBeliefTensor, WorldBelief
+from world_model.belief import (
+    BeliefTrajectory,
+    MotionMode,
+    ObjectBeliefTensor,
+    WorldBelief,
+)
 from world_model.dynamics.analytic import AnalyticKinematics
 from world_model.dynamics.contacts import ContactPlane, SphereContactResolver
 from world_model.dynamics.events import EventModel
@@ -346,6 +351,10 @@ class DynamicsModel(nn.Module):
     def _zero_step(belief: WorldBelief) -> RolloutStep:
         objects = belief.objects
         batch, count = objects.active.shape
+        event_logits = objects.motion_mode_logits.clone()
+        # A zero-duration segment contains no event, even if the source belief
+        # is instantaneously in COLLISION mode.
+        event_logits[..., MotionMode.COLLISION] = -4.0
         auxiliary = {
             "pair_contact": torch.zeros(
                 batch,
@@ -376,7 +385,7 @@ class DynamicsModel(nn.Module):
         }
         return RolloutStep(
             belief=belief.clone(),
-            event_logits=objects.motion_mode_logits.clone(),
+            event_logits=event_logits,
             auxiliary=auxiliary,
         )
 
@@ -398,6 +407,11 @@ class DynamicsModel(nn.Module):
         )
         sub_dt = elapsed / substeps
         result: RolloutStep | None = None
+        interval_collision_logits: Tensor | None = None
+        interval_pair_collision: Tensor | None = None
+        interval_ground_collision: Tensor | None = None
+        interval_pair_impulse: Tensor | None = None
+        interval_max_penetration: Tensor | None = None
         for _ in range(substeps):
             result = self._substep(
                 output,
@@ -405,13 +419,63 @@ class DynamicsModel(nn.Module):
                 external_acceleration=external_acceleration,
             )
             output = result.belief
+            event_valid = (sub_dt > 0).unsqueeze(-1) & output.objects.active
+            collision_logits = torch.where(
+                event_valid,
+                result.event_logits[..., MotionMode.COLLISION],
+                result.event_logits.new_full((), -4.0),
+            )
+            if interval_collision_logits is None:
+                interval_collision_logits = collision_logits
+                interval_pair_collision = result.auxiliary["pair_collision"]
+                interval_ground_collision = result.auxiliary["ground_collision"]
+                interval_pair_impulse = result.auxiliary["pair_impulse"]
+                interval_max_penetration = result.auxiliary["max_penetration"]
+            else:
+                interval_collision_logits = torch.maximum(
+                    interval_collision_logits,
+                    collision_logits,
+                )
+                interval_pair_collision = (
+                    interval_pair_collision | result.auxiliary["pair_collision"]
+                )
+                interval_ground_collision = (
+                    interval_ground_collision | result.auxiliary["ground_collision"]
+                )
+                interval_pair_impulse = torch.maximum(
+                    interval_pair_impulse,
+                    result.auxiliary["pair_impulse"],
+                )
+                interval_max_penetration = torch.maximum(
+                    interval_max_penetration,
+                    result.auxiliary["max_penetration"],
+                )
         assert result is not None
+        assert interval_collision_logits is not None
+        assert interval_pair_collision is not None
+        assert interval_ground_collision is not None
+        assert interval_pair_impulse is not None
+        assert interval_max_penetration is not None
         # Avoid accumulated timestamp roundoff from many substeps.
         final_belief = replace(output, timestamp=belief.timestamp + elapsed)
+        # Motion modes on the belief describe the endpoint. Rollout event
+        # logits instead describe whether a collision occurred anywhere in
+        # this prediction segment.
+        event_logits = result.event_logits.clone()
+        event_logits[..., MotionMode.COLLISION] = interval_collision_logits
+        auxiliary = dict(result.auxiliary)
+        auxiliary.update(
+            {
+                "pair_collision": interval_pair_collision,
+                "ground_collision": interval_ground_collision,
+                "pair_impulse": interval_pair_impulse,
+                "max_penetration": interval_max_penetration,
+            }
+        )
         return RolloutStep(
             belief=final_belief,
-            event_logits=result.event_logits,
-            auxiliary=result.auxiliary,
+            event_logits=event_logits,
+            auxiliary=auxiliary,
         )
 
     def predict(

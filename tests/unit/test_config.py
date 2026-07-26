@@ -55,3 +55,19 @@ def test_closed_loop_learning_rate_scale_is_bounded(scale: float) -> None:
             CONFIG_DIR / "tiny_overfit.yaml",
             overrides=[f"training.closed_loop_learning_rate_scale={scale}"],
         )
+
+
+def test_closed_loop_global_trainable_steps_is_nonnegative() -> None:
+    with pytest.raises(ValueError, match="closed_loop_global_trainable_steps"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=["training.closed_loop_global_trainable_steps=-1"],
+        )
+
+
+def test_collision_positive_weight_is_at_least_one() -> None:
+    with pytest.raises(ValueError, match="collision_positive_weight_max"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=["training.collision_positive_weight_max=0.5"],
+        )

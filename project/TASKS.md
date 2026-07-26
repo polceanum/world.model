@@ -39,6 +39,18 @@
   fast centre/appearance updates and the ordinary ROI runtime path.
 - [x] Reach positive ordinary current/future demo correction and nonzero
   distance-gated held-out RGB localization.
+- [x] Freeze global RGB discovery after a configurable closed-loop adaptation
+  window; verify continued ROI/filter/dynamics training without localization
+  drift.
+- [x] Supervise fast ROI measurements on every usable frame in persistent
+  belief-slot order rather than rematching conditioned outputs.
+- [x] Aggregate collision occurrence across internal physics substeps and
+  align training/evaluation logits to exact preceding observation windows.
+- [x] Add bounded rare-positive collision weighting and explicit
+  prior-to-posterior current/future improvement guards.
+- [x] Report sequence-aware occlusion identity/uncertainty transitions and
+  directional before/after drag/restitution update metrics with explicit
+  zero-sample/null behavior.
 
 ## Milestone 1 research acceptance — not yet achieved
 
@@ -46,21 +58,25 @@
   episodes (59.375% on the two-episode protocol; 75% over eight episodes).
 - [ ] Sustain the recommended 20% injected-perturbation recovery improvement
   on the wider test protocol (27.71% on two episodes; 19.59% on eight).
-- [ ] Learn useful collision prediction (current collision F1: 0).
+- [ ] Learn useful collision prediction (best exact-window collision F1:
+  0.0556; semantics are fixed but skill remains far below the 0.75 target).
 - [ ] Demonstrate calibrated uncertainty expansion/recovery through held-out
   rendered occlusions.
 - [ ] Demonstrate distance-gated drag and restitution convergence from RGB,
   beyond merely executing the observability/update gates.
 - [ ] Make the ROI path measurably cheaper than the global path at the target
   scale or explain the intended compute tradeoff with profiling.
-- [ ] Train fast inverse-depth residuals on belief-slot-aligned cached
-  sequences and enable them only after per-mode current/future improvement.
+- [ ] Train and validate fast inverse-depth residuals on the now
+  belief-slot-aligned cached sequences; enable them only after per-mode
+  current/future improvement.
 - [ ] Add temporal RGB velocity/event evidence so collision impulses are
   assimilated instead of only propagated by oracle-correct dynamics.
 - [ ] Run the full 3,000-step `configs/toy_mps.yaml` schedule and a materially
   larger held-out test split.
-- [ ] Export physics-violation diagnostics, collision-conditioned metrics,
-  occlusion survival metrics, and representative failure plots.
+- [x] Export sequence-aware occlusion survival/uncertainty metrics with
+  explicit zero-sample behavior.
+- [ ] Export physics-violation diagnostics, collision-conditioned metrics, and
+  representative failure plots.
 
 ## Deferred architecture
 

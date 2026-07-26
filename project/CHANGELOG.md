@@ -71,6 +71,24 @@
   closed-loop steps across eight fixed training and four validation episodes.
 - Added regression tests for complete fixed-frame coverage, learning-rate
   bounds, and the fast-depth gate.
+- Added a configurable closed-loop global-perception adaptation window; the
+  backbone/global detector freeze afterward while ROI/filter/dynamics training
+  continues.
+- Changed fast ROI supervision from one freely rematched frame to every usable
+  prior frame with targets aligned through persistent belief slots.
+- Defined rollout collision logits as per-segment occurrence, aggregated
+  impacts across all internal substeps, and aligned training/evaluation to
+  exact preceding observation windows.
+- Added bounded rare-positive collision BCE weighting and tests for exact
+  event-window query geometry.
+- Supplemented correction sparsity with current/future posterior-improvement
+  hinges against a detached prior and separate diagnostics.
+- Added visible-to-occluded-to-visible uncertainty/identity metrics that track
+  the established persistent ID while hidden rather than requiring a current
+  localization match.
+- Added informative before/after restitution and drag metrics, including signed
+  error reduction and physical update magnitude; these expose the current
+  identifier's numerically negligible updates.
 
 ### Evidence
 
@@ -80,17 +98,33 @@
   `runs/convergence-tiny-cpu-v1/evaluation/best-test`.
 - Wider eight-episode held-out report:
   `runs/convergence-tiny-cpu-v1/evaluation/best-test-8episodes`.
+- Frozen-perception continuation and corrected-event evaluation:
+  `runs/accuracy-closed-frozen-94/evaluation/last-test-8episodes-exact-events`.
+- Exact-window semantics-only report:
+  `runs/accuracy-events-v2/evaluation/pretrain-checkpoint-test-8episodes`.
+- Negative balanced-event continuation:
+  `runs/accuracy-events-balanced-102/evaluation/best-test-8episodes`.
 - Demo:
   `demo_outputs/convergence-tiny-cpu-v1`.
+- Frozen-continuation demo:
+  `demo_outputs/accuracy-closed-frozen-94`.
 - Reduced real MPS training:
   `runs/milestone1-mps-smoke-final`.
 - Reduced two-step run of the full-size `toy_mps` architecture:
   `runs/milestone1-toy-mps-scaled-smoke`.
+- Final 12-step public CPU smoke:
+  `runs/accuracy-final-smoke`.
 
-The new RGB result has 75% distance-gated recall/precision over eight held-out
-episodes, 0.162259 m 0.5-second forecast RMSE versus 0.491278 m for constant
-velocity, zero gated ID switches, and positive ordinary demo corrections.
-Milestone 1 acceptance is still not claimed: collision F1 is zero, wider
-perturbation recovery is 19.59% versus the recommended 20%, parameter
-convergence and held-out occlusion recovery remain incomplete, and the full
-MPS schedule has not run.
+The frozen continuation reaches 75.39% distance-gated recall/precision over
+eight held-out episodes, 0.161387 m 0.5-second forecast RMSE versus 0.490275 m
+for constant velocity, zero gated ID switches, and positive perturbation
+recovery. Milestone 1 acceptance is still not claimed: best exact-window
+collision F1 is only 0.0556, wider perturbation recovery is about 19.5% versus
+the recommended 20%, parameter convergence and held-out occlusion recovery
+remain incomplete, and the full MPS schedule has not run.
+
+The continuation and event-loss comparisons repeatedly inspect the same eight
+fixed test episodes and are therefore exploratory. Step 72 remains selected by
+validation loss; any preference for step-94 `last.pt` requires confirmation on
+a fresh, larger held-out seed set. Run and demo artifact directories are local
+and gitignored.
