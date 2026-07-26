@@ -1,0 +1,4967 @@
+# Project Orpheus
+
+## Authoritative Technical Specification and Codex Build Directive
+
+**Status:** Initial authoritative specification  
+**Version:** 1.0  
+**Date:** 26 July 2026  
+**Intended location in repository:** `/PROJECT_SPEC.md`  
+**Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
+**Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
+**Long-term modality policy:** arbitrary asynchronous modalities through stable observation-module contracts
+
+---
+
+## 0. How to use this document
+
+This file is both:
+
+1. the permanent technical specification for the repository; and
+2. the detailed build directive for Codex or another coding agent working from an empty repository.
+
+Place this file in the repository root as `PROJECT_SPEC.md`. Create an `AGENTS.md` that instructs every coding agent to read `PROJECT_SPEC.md`, `project/STATUS.md`, `project/TASKS.md`, and `project/DESIGN_DECISIONS.md` before changing code.
+
+The specification defines the intended system, public interfaces, implementation sequence, training strategy, evaluation criteria, and engineering constraints. It should prevent the project from drifting into a sequence of disconnected prototypes.
+
+### Specification precedence
+
+When implementation choices conflict, use this order:
+
+1. correctness and explicit acceptance criteria in this specification;
+2. stable public interfaces and tensor/data contracts in this specification;
+3. documented design decisions in `project/DESIGN_DECISIONS.md`;
+4. simplicity and maintainability;
+5. runtime performance;
+6. implementation convenience.
+
+A coding agent may refine internal implementations, but it must not silently remove the following architectural properties:
+
+- persistent world belief;
+- causal online predict–observe–correct operation;
+- modality-independent core state;
+- explicit timestamps and asynchronous observations;
+- uncertainty-aware updates;
+- separation of fast state from slow physical parameters;
+- object persistence and data association;
+- hybrid structured and learned dynamics;
+- long-horizon rollout training;
+- recovery from imperfect beliefs rather than pure teacher forcing;
+- simple local training and evaluation commands;
+- a path from Apple MPS to CUDA without architectural redesign.
+
+### Exact short instruction to give Codex
+
+After placing this file at the repository root, give Codex this instruction:
+
+> Read `PROJECT_SPEC.md` in full before writing code. Treat it as the authoritative specification. Start from the empty repository and implement the complete first vertical slice described under “Implementation programme” and “Milestone 1 definition of done,” not merely a scaffold. Create and maintain all repository memory files required by the specification. Use the existing conda environment `orpheus`; do not reinstall or replace PyTorch. Keep the user-facing workflow to `python train.py`, `python evaluate.py`, and `python demo.py` with YAML configuration. Run tests and the toy end-to-end validation locally. Record decisions, current status, commands run, known limitations, and next tasks in the repository. Do not stop at placeholder classes, pseudocode, or an oracle-only demonstration.
+
+---
+
+# Part I — Purpose, context, and commitments
+
+## 1. Mission
+
+Build a modular online multimodal physical world model that continuously estimates a persistent, uncertainty-aware state of the physical world, predicts its future evolution, and cheaply revises those predictions as new ground-truth observations arrive.
+
+The system is not fundamentally a video generator. It is not fundamentally an audio model, skeleton model, or robot-state predictor. It models a latent world; sensor-specific modules translate between observations and the shared world belief.
+
+The intended online loop is:
+
+\[
+\text{predict world}
+\rightarrow
+\text{predict measurements}
+\rightarrow
+\text{receive observations}
+\rightarrow
+\text{associate}
+\rightarrow
+\text{compute innovation}
+\rightarrow
+\text{correct belief}
+\rightarrow
+\text{predict again}.
+\]
+
+The key product is a continuously updated `WorldBelief`, not a generated frame sequence.
+
+## 2. Original research motivation
+
+The architecture was motivated partly by a spectral trajectory-generation idea: rather than autoregressively predicting each future state, infer a compact description of a complete temporal process and evaluate that process at future times.
+
+The paper **“Spectral Diffusion for Protein Dynamics”** (Phipps et al., arXiv:2607.04134, 2026) generates temporal DCT spectral volumes and transforms them back into whole protein trajectories. Its central useful inductive bias is that slow and fast temporal behaviour can be exposed in an ordered frequency representation, allowing a model to generate temporally coherent windows without feeding every generated frame back into the model.
+
+For Project Orpheus, the important adaptation is not to copy a fixed-window protein diffusion model. It is to transform the idea into online amortised system identification:
+
+\[
+\text{observed prefix}
+\xrightarrow{\text{inference}}
+\text{compact dynamical programme}
+\xrightarrow{\text{deterministic evolution}}
+\text{future world trajectory}.
+\]
+
+A fixed DCT vector is a **trajectory code**: it reconstructs one finite window. The project instead needs a **dynamical state**: a sufficient statistic that can be updated causally and evolved beyond a fixed window.
+
+Therefore the online core will use stable continuous/modal state—closely related to spectral and Koopman representations—combined with explicit kinematics, learned interactions, discrete events, and online filtering. A direct DCT/window predictor may be implemented later as a baseline, but it is not the persistent online state.
+
+Reference:
+
+- Hew Phipps, Matteo Cagiada, Santiago D. Villalba, Charlotte M. Deane. “Spectral Diffusion for Protein Dynamics.” arXiv:2607.04134, 2026. https://arxiv.org/abs/2607.04134
+
+## 3. Non-negotiable design principles
+
+### 3.1 Predict the world, not a sensor
+
+The shared state describes objects, agents, geometry, motion, interactions, physical parameters, uncertainty, and coordinate frames. RGB, audio, skeletons, depth, IMU, and future sensors are observation sources.
+
+Sensor embeddings may be cached inside modality modules. They must not become the only representation of world state.
+
+### 3.2 Persistent belief, not repeated clip encoding
+
+The system maintains state continuously. It does not re-encode the entire observation history on every step.
+
+A more expensive initialisation or recovery pass is permitted. Normal operation must use incremental prediction and correction.
+
+### 3.3 Cheap updates on incoming ground truth
+
+Most adaptation is a state update, not a network-weight update.
+
+Every incoming observation should update:
+
+- current object state;
+- uncertainty;
+- event/motion mode;
+- visibility and existence;
+- gradually, identifiable slow physical parameters.
+
+Large network weights remain fixed during normal online inference. Optional parameter-efficient test-time adaptation belongs to future work and must not be required for the initial loop.
+
+### 3.4 Hybrid dynamics
+
+Known mathematical structure should be explicit:
+
+- timestamps;
+- coordinate transforms;
+- position/velocity integration;
+- quaternion or Lie-group orientation integration;
+- gravity;
+- simple damping;
+- equal-and-opposite pairwise impulses where applicable;
+- bounded/stable modal evolution.
+
+Learned components model:
+
+- residual forces;
+- contact and event probabilities;
+- impulse corrections;
+- unmodelled interactions;
+- uncertainty growth;
+- belief corrections.
+
+### 3.5 Object-centric persistent state
+
+Physical entities have persistent identity. The world belief is a typed object/graph state, not an undifferentiated temporal token sequence.
+
+The architecture must support object creation, occlusion, reappearance, and removal. It must preserve data association as an explicit subsystem.
+
+### 3.6 Multimodal by construction
+
+Every observation carries its own timestamp. Modalities may arrive at different rates and be absent on arbitrary steps.
+
+Adding a modality must not require changes to the belief, dynamics, or runtime scheduler beyond registering a conforming observation module and, where necessary, adding a modality-specific projector.
+
+### 3.7 Uncertainty is part of state
+
+The model must know when it is uncertain. Uncertainty affects association, correction gain, object lifecycle decisions, parameter updates, and prediction intervals.
+
+The initial implementation may use diagonal Gaussian uncertainty for tractability. The public contracts must permit low-rank, full, ensemble, or mixture representations later.
+
+### 3.8 The toy validation is a scale reduction, not a different architecture
+
+The first runnable system may use:
+
+- low-resolution synthetic RGB;
+- a small maximum object count;
+- a small CNN;
+- diagonal uncertainty;
+- a small graph network;
+- one belief hypothesis;
+- simple rigid bodies.
+
+It must still execute the actual target loop: discovery, association, persistent belief, dynamics, prediction, innovation, correction, uncertainty, event handling, and online slow-parameter updates.
+
+### 3.9 Stable interfaces over endless redesign
+
+The core contracts in this document should be frozen early. Individual neural architectures can improve behind them.
+
+A change to a backbone should not require changing the world belief. A change from RGB to skeleton observations should not require changing dynamics. A change from diagonal to low-rank covariance should not require changing the public runtime API.
+
+### 3.10 Straightforward operations
+
+The normal workflow is:
+
+```bash
+conda activate orpheus
+pip install -e ".[dev]"
+python train.py --config configs/toy_mps.yaml
+python evaluate.py --config configs/toy_mps.yaml --checkpoint runs/<run>/checkpoints/best.pt
+python demo.py --config configs/toy_mps.yaml --checkpoint runs/<run>/checkpoints/best.pt
+pytest
+```
+
+No web service, authentication system, API tokens, job server, experiment database, Docker requirement, Kubernetes layer, or distributed orchestration is needed for the first implementation.
+
+## 4. Scope
+
+### 4.1 Initial scope
+
+The first end-to-end implementation targets synthetic multi-object rigid-body scenes observed through RGB:
+
+- 3D sphere dynamics in a bounded scene, projected into a small RGB image;
+- gravity;
+- sphere–sphere and sphere–plane collisions;
+- drag/friction-like effects;
+- variable restitution and mass;
+- partial and complete occlusion;
+- a moving calibrated camera;
+- object entrance/existence events where practical;
+- online future rollout and correction.
+
+The simulator provides exact states and events for supervision and evaluation. Runtime inference consumes RGB and calibration, not simulator state. An optional state/oracle observation module is allowed only for unit tests, debugging, and dynamics ablation.
+
+### 4.2 Deliberate initial exclusions
+
+The first milestone does not need:
+
+- photorealistic rendering;
+- unrestricted real-world object discovery;
+- humans or deformable bodies;
+- fluids, fracture, or topology change;
+- arbitrary natural audio;
+- large-language interfaces;
+- planning or control;
+- multi-GPU training;
+- full differentiable rendering;
+- online backpropagation through large networks;
+- a production service API.
+
+The architecture must leave clean extension points for these areas.
+
+### 4.3 Long-term scope
+
+Without changing the core loop, the repository should support:
+
+- depth, stereo, optical flow, LiDAR, event cameras;
+- microphones and acoustic event observations;
+- human or robot skeletons;
+- motion capture;
+- IMU and proprioception;
+- multiple cameras;
+- articulated and deformable object state;
+- real video and robotics datasets;
+- counterfactual interventions;
+- planning over belief trajectories;
+- large-scale CUDA training.
+
+## 5. Definitions
+
+**Observation:** raw or preprocessed sensor data with a timestamp, calibration, coordinate frame, confidence, and modality identifier.
+
+**Measurement:** structured evidence extracted from an observation, such as an object centroid, depth, joint coordinate, angular rate, impact event, or learned feature with uncertainty.
+
+**World state:** a hypothetical exact state of the scene at a time.
+
+**World belief:** a probability-bearing estimate of world state maintained by the model.
+
+**Prior:** belief after dynamics prediction and before assimilating the latest observation.
+
+**Posterior:** corrected belief after assimilating observations.
+
+**Innovation:** discrepancy between an observed measurement and the measurement predicted from the prior.
+
+**Dynamical programme:** compact state and parameters that determine a coherent future evolution when passed through the dynamics model.
+
+**Fast state:** variables that can change every timestep, such as pose, velocity, contact mode, and visibility.
+
+**Slow parameters:** properties inferred from accumulated evidence, such as drag, restitution, mass ratio, friction, geometry, or material code.
+
+**Measurement projector:** modality-specific function mapping a world belief to expected sensor-space measurements.
+
+**Observation encoder:** modality-specific function mapping raw observations and prior predictions to structured measurements.
+
+**Association:** matching measurements to persistent object identities or declaring births, misses, and ambiguous assignments.
+
+**Event:** a discrete dynamics transition such as impact, contact, attachment, release, sleep, external actuation, creation, or removal.
+
+---
+
+# Part II — Formal system model
+
+## 6. Probabilistic formulation
+
+Let the latent world state at timestamp \(t\) be \(S_t\), slow parameters be \(\Theta_t\), discrete event/mode variables be \(M_t\), and all observations received up to \(t\) be \(O_{\le t}\).
+
+The desired belief is:
+
+\[
+B_t =
+p(S_t,\Theta_t,M_t \mid O_{\le t}).
+\]
+
+The initial implementation approximates this distribution using:
+
+- a mean state;
+- diagonal log variances;
+- categorical mode probabilities;
+- existence probabilities;
+- optionally one or more weighted hypotheses.
+
+For a time interval \(\Delta t\), prediction is:
+
+\[
+B^-_{t+\Delta t}
+=
+\mathcal{F}_{\psi}
+\left(B_t,\Delta t,u_{t:t+\Delta t}\right),
+\]
+
+where \(\mathcal{F}_{\psi}\) combines explicit integration and learned residual/event models.
+
+For modality \(m\), the expected measurement is:
+
+\[
+\hat Y^{(m)}_{t}
+=
+\mathcal{H}^{(m)}_{\phi}
+\left(B^-_t,C^{(m)}_t\right),
+\]
+
+where \(C^{(m)}_t\) includes calibration and frame information.
+
+The observation encoder produces:
+
+\[
+Y^{(m)}_t, R^{(m)}_t =
+\mathcal{E}^{(m)}_{\eta}
+\left(O^{(m)}_t,\hat Y^{(m)}_t,\text{cache}^{(m)}\right),
+\]
+
+where \(R^{(m)}_t\) is measurement uncertainty.
+
+After association \(A_t^{(m)}\), innovation is:
+
+\[
+r_t^{(m)}
+=
+Y_t^{(m)}
+-
+\hat Y_t^{(m)}.
+\]
+
+Correction is:
+
+\[
+B_t
+=
+\mathcal{U}_{\omega}
+\left(B^-_t,
+      Y_t^{(m)},
+      \hat Y_t^{(m)},
+      r_t^{(m)},
+      R_t^{(m)},
+      A_t^{(m)}\right).
+\]
+
+If multiple modalities arrive at the same timestamp, they may be assimilated sequentially in a deterministic configured order or jointly after association. The first implementation should use sequential updates because it is simpler and naturally supports asynchronous events.
+
+## 7. Dynamical programme formulation
+
+For object \(i\), define fast state:
+
+\[
+x_{i,t} =
+\left[
+p_{i,t},
+v_{i,t},
+q_{i,t},
+\omega_{i,t},
+h_{i,t}^{\text{mode}}
+\right],
+\]
+
+where:
+
+- \(p\): position;
+- \(v\): linear velocity;
+- \(q\): orientation quaternion;
+- \(\omega\): angular velocity;
+- \(h^{\text{mode}}\): compact stable modal state.
+
+Define slow parameters:
+
+\[
+\theta_{i,t} =
+\left[
+\log m_i,
+\operatorname{logit} e_i,
+\log c^{\text{drag}}_i,
+\operatorname{logit}\mu_i,
+g_i,
+a_i,
+d_i
+\right],
+\]
+
+where:
+
+- \(m\): mass or mass ratio;
+- \(e\): restitution;
+- \(c^{\text{drag}}\): drag/damping;
+- \(\mu\): friction-like coefficient;
+- \(g_i\): geometry code or known geometry parameters;
+- \(a_i\): appearance code;
+- \(d_i\): learned residual dynamics code.
+
+The initial toy implementation may mask orientation and angular velocity losses for spherical objects while keeping the fields in contracts.
+
+### 7.1 Analytic free-motion component
+
+For substep \(\delta t\):
+
+\[
+a_i^{\text{base}}
+=
+g
+-
+c_i^{\text{drag}} v_i
++
+a_i^{\text{external}},
+\]
+
+\[
+v_i'
+=
+v_i+\delta t\,a_i^{\text{base}},
+\]
+
+\[
+p_i'
+=
+p_i+\delta t\,v_i'.
+\]
+
+Orientation integration uses a unit quaternion:
+
+\[
+q_i'
+=
+\operatorname{normalize}
+\left(
+q_i \otimes
+\exp_q\left(\tfrac12\delta t\,\omega_i\right)
+\right).
+\]
+
+The code must renormalise quaternions and test norm stability.
+
+### 7.2 Stable modal component
+
+A fixed finite-window DCT is awkward for online updates. Instead maintain \(K\) stable rotation–decay modes. For each mode \(k\):
+
+\[
+z_{i,k,t}\in\mathbb{R}^{2d_m}.
+\]
+
+For each paired mode dimension:
+
+\[
+z_{i,k,t+\delta t}
+=
+\rho_{i,k}^{\delta t}
+\begin{bmatrix}
+\cos(\omega_{i,k}\delta t) & -\sin(\omega_{i,k}\delta t)\\
+\sin(\omega_{i,k}\delta t) & \cos(\omega_{i,k}\delta t)
+\end{bmatrix}
+z_{i,k,t}.
+\]
+
+Parameterise:
+
+\[
+\rho_{i,k}=\exp(-\operatorname{softplus}(\alpha_{i,k}))
+\]
+
+for non-growing modes. Permit explicitly configured integrator/constant modes separately so sustained translation is not forced to decay.
+
+A learned readout maps modes to bounded residual acceleration or latent dynamics features:
+
+\[
+a_i^{\text{modal}}
+=
+W_{\text{modal}} z_{i,t}.
+\]
+
+This preserves the spectral idea—compact coherent modes with explicit phase and frequency—while permitting causal correction and arbitrary-horizon evaluation.
+
+### 7.3 Interaction graph
+
+At each dynamics substep, construct candidate edges \(i\rightarrow j\) using geometry, distance, uncertainty-expanded bounds, and optionally learned interaction likelihood.
+
+An edge feature includes:
+
+\[
+e_{ij} =
+[
+p_j-p_i,\;
+v_j-v_i,\;
+\|p_j-p_i\|,\;
+r_i,\;
+r_j,\;
+\theta_i,\;
+\theta_j,\;
+P_i,\;
+P_j,\;
+m_i^{\text{mode}},\;
+m_j^{\text{mode}}
+].
+\]
+
+A small message network predicts:
+
+- contact probability;
+- event logits;
+- residual force/acceleration;
+- impulse magnitude or correction;
+- uncertainty contribution.
+
+Messages are aggregated symmetrically. Where an impulse interpretation applies, enforce equal-and-opposite pairwise action in the update rather than allowing two unrelated force outputs.
+
+### 7.4 Event dynamics
+
+The continuous state is conditioned on an explicit categorical mode. Initial event types:
+
+- `FREE`;
+- `GROUND_CONTACT`;
+- `PAIR_CONTACT`;
+- `COLLISION`;
+- `ROLLING`;
+- `SLIDING`;
+- `SLEEPING`;
+- `OCCLUDED` (observation mode, not physical force mode);
+- `EXTERNALLY_ACTUATED`;
+- `CREATED`;
+- `REMOVED`.
+
+The toy milestone needs at least `FREE`, `GROUND_CONTACT`, `PAIR_CONTACT/COLLISION`, `SLEEPING`, and `OCCLUDED`.
+
+A collision transition can apply a structured jump:
+
+\[
+x_{t^+}
+=
+J_\psi(x_{t^-},e_{ij},\theta_i,\theta_j).
+\]
+
+For spheres, use analytic collision normal \(n\) and a predicted or parameter-derived scalar impulse \(j\):
+
+\[
+v_i^+ = v_i^- - \frac{j}{m_i}n,
+\qquad
+v_j^+ = v_j^- + \frac{j}{m_j}n.
+\]
+
+The learned model may predict a bounded correction to the analytic impulse, not unconstrained post-collision velocities.
+
+## 8. Online filtering formulation
+
+The filter maintains mean and uncertainty. The initial version uses diagonal variance in a canonical state vector.
+
+### 8.1 Prediction
+
+For state mean:
+
+\[
+\mu_t^- = F_\psi(\mu_{t-1},\Delta t).
+\]
+
+For diagonal variance:
+
+\[
+\sigma_t^{-2}
+=
+\operatorname{diagApprox}
+\left(A_t P_{t-1}A_t^\top\right)
++
+Q_\psi(B_{t-1},\Delta t),
+\]
+
+where \(A_t\) may be an analytic or automatic-differentiation local Jacobian for simple kinematics. To keep the first implementation straightforward, closed-form variance propagation may be used for position/velocity and a learned non-negative process-noise increment for the remaining dimensions.
+
+### 8.2 Measurement update
+
+For directly comparable dimensions, use an analytic diagonal Kalman proposal:
+
+\[
+K =
+\frac{\sigma^{-2}}
+{\sigma^{-2}+R}.
+\]
+
+\[
+\mu^{\text{base}}
+=
+\mu^- + K\odot r.
+\]
+
+\[
+\sigma_{\text{base}}^2
+=
+(1-K)\odot\sigma^{-2}.
+\]
+
+A small learned corrector then outputs a bounded residual update:
+
+\[
+\Delta\mu,\Delta\log\sigma^2,g
+=
+U_\omega[
+\mu^-,
+\log\sigma^{-2},
+Y,
+\hat Y,
+r,
+\log R,
+\text{visibility},
+\text{mode},
+\text{modality embedding}
+].
+\]
+
+\[
+\mu^+
+=
+\mu^{\text{base}}
++
+g\odot\Delta\mu.
+\]
+
+The gate \(g=\operatorname{sigmoid}(\cdot)\) prevents arbitrary resets. Updates must be masked so a modality changes only supported state components unless the learned coupling is explicitly documented.
+
+### 8.3 Slow-parameter update
+
+Slow parameters are updated using persistent, structured residual evidence rather than one frame:
+
+\[
+h^{\theta}_{i,t}
+=
+\operatorname{GRU}_\theta
+(h^{\theta}_{i,t-1},
+[r_t,\Delta r_t,\text{event},\text{observability features}]).
+\]
+
+\[
+\theta_{i,t}
+=
+\operatorname{projectBounds}
+\left(
+\theta_{i,t-1}
++
+g^\theta_{i,t}\odot\Delta\theta_{i,t}
+\right).
+\]
+
+The gate must be small by default and event-dependent. Examples:
+
+- restitution updates only after identifiable impacts;
+- mass ratio updates only after interactions with observable momentum exchange;
+- drag updates during sufficiently long free-flight segments;
+- friction updates during observable surface contact/sliding;
+- geometry updates only when visible.
+
+### 8.4 Recovery and reinitialisation
+
+A large innovation should not always be absorbed as continuous noise. The filter must classify likely causes:
+
+- normal measurement noise;
+- missed or incorrect association;
+- discrete physical event;
+- camera/calibration discontinuity;
+- new object;
+- model failure.
+
+When confidence falls below configured thresholds, schedule a slow/global observation pass. Reinitialisation should be local to affected objects whenever possible.
+
+## 9. Multiple hypotheses
+
+The public state must allow:
+
+\[
+\mathcal B_t =
+\{(w_t^h,B_t^h)\}_{h=1}^H.
+\]
+
+The first default configuration may use \(H=1\). The data structures and runtime should not assume this forever.
+
+Future branches may represent:
+
+- collision versus near miss;
+- continued occlusion versus object removal;
+- alternative depth interpretations;
+- ambiguous identity assignments;
+- alternate external actions.
+
+Hypothesis likelihood is based on predicted measurement likelihood. Pruning, merging, and branching should be isolated in `belief/hypotheses.py`, not scattered across modalities.
+
+---
+
+# Part III — Canonical data and tensor contracts
+
+## 10. General conventions
+
+### 10.1 Batch, time, object order
+
+Use explicit named comments and validation for dimensions:
+
+- `B`: batch;
+- `T`: time;
+- `N`: maximum objects;
+- `D`: feature/state dimension;
+- `M`: measurements;
+- `K`: modal components;
+- `H`: hypotheses.
+
+Public dataclasses store tensors in batch-major form. Sequence training tensors generally use `[B, T, ...]`. Online runtime beliefs generally use `[B, N, ...]`.
+
+Do not silently infer whether a dimension is time or objects.
+
+### 10.2 Numeric conventions
+
+- floating state: `torch.float32`;
+- categorical indices: `torch.int64`;
+- masks: `torch.bool`;
+- timestamps: float seconds in a monotonic timebase;
+- quaternions: scalar-last `[x,y,z,w]` or scalar-first, chosen once and documented; use scalar-last for this project;
+- angles: radians;
+- positions: metres in world frame;
+- linear velocity: metres/second;
+- angular velocity: radians/second;
+- mass: kilograms or dimensionless mass ratio, documented per dataset;
+- image coordinates: normalised `[-1,1]` in projectors; raw pixels only at IO boundaries;
+- covariance: variance, not standard deviation, internally represented as clamped log variance.
+
+### 10.3 Coordinate frames
+
+Every geometric observation and belief must identify a frame:
+
+- `world`;
+- `camera:<sensor_id>`;
+- `object:<object_id>`;
+- `body:<agent_id>`;
+- arbitrary calibrated frames.
+
+Transforms use homogeneous \(4\times4\) matrices or a typed `RigidTransform` with translation and quaternion. The transform convention must be tested. Prefer `T_target_from_source`.
+
+### 10.4 Padding and masks
+
+The model supports variable object counts using fixed `N_max` tensors plus masks in the first implementation.
+
+Never treat padded objects as real objects. All losses, graph edges, attention, association, and metrics must mask them.
+
+## 11. Required dataclasses
+
+The following examples define intent. Exact import organisation may vary, but fields and semantics should remain.
+
+### 11.1 `ObservationPacket`
+
+```python
+@dataclass(frozen=True)
+class ObservationPacket:
+    modality: str
+    sensor_id: str
+    timestamp: float
+    payload: Any
+    calibration: Mapping[str, Tensor | float | int | str]
+    frame_id: str
+    confidence: float = 1.0
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+```
+
+Requirements:
+
+- immutable at runtime;
+- payload validation delegated to modality;
+- timestamp must be finite;
+- no assumption of synchronous modalities;
+- calibration version may be included in metadata.
+
+### 11.2 `MeasurementSet`
+
+```python
+@dataclass
+class MeasurementSet:
+    modality: str
+    sensor_id: str
+    timestamp: Tensor                 # [B]
+    values: Tensor                    # [B, M, Dm]
+    log_variance: Tensor              # [B, M, Dm] or broadcastable
+    existence_logits: Tensor          # [B, M]
+    measurement_mask: Tensor          # [B, M]
+    appearance: Tensor | None         # [B, M, Da]
+    class_logits: Tensor | None
+    frame_id: str
+    supported_state_fields: tuple[str, ...]
+    auxiliary: dict[str, Tensor]
+```
+
+Measurements are unordered proposals until association.
+
+### 11.3 `ObjectBeliefTensor`
+
+```python
+@dataclass
+class ObjectBeliefTensor:
+    object_id: Tensor                 # [B, N], int64; -1 for padding
+    active: Tensor                    # [B, N], bool
+    existence_logit: Tensor           # [B, N]
+
+    position: Tensor                  # [B, N, 3]
+    velocity: Tensor                  # [B, N, 3]
+    orientation: Tensor               # [B, N, 4]
+    angular_velocity: Tensor          # [B, N, 3]
+
+    geometry: Tensor                  # [B, N, Dg]
+    appearance: Tensor                # [B, N, Da]
+    residual_dynamics: Tensor         # [B, N, Dd]
+
+    modal_state: Tensor               # [B, N, K, 2, Dm]
+    modal_frequency: Tensor           # [B, N, K, Dm]
+    modal_decay_raw: Tensor           # [B, N, K, Dm]
+
+    log_mass: Tensor                  # [B, N, 1]
+    restitution_logit: Tensor         # [B, N, 1]
+    log_drag: Tensor                  # [B, N, 1]
+    friction_logit: Tensor            # [B, N, 1]
+
+    motion_mode_logits: Tensor        # [B, N, Cmode]
+    visibility_logit: Tensor          # [B, N]
+    age_steps: Tensor                 # [B, N]
+    missed_steps: Tensor              # [B, N]
+
+    fast_log_variance: Tensor         # [B, N, Dfast]
+    slow_log_variance: Tensor         # [B, N, Dslow]
+
+    parameter_memory: Tensor          # [B, N, Dh]
+```
+
+The code must provide packing/unpacking maps for `Dfast` and `Dslow`, with unit tests.
+
+### 11.4 `CameraBelief`
+
+```python
+@dataclass
+class CameraBelief:
+    world_from_camera: Tensor         # [B, 4, 4]
+    linear_velocity: Tensor           # [B, 3]
+    angular_velocity: Tensor          # [B, 3]
+    intrinsics: Tensor                # [B, 3, 3]
+    log_variance: Tensor              # [B, Dcamera]
+    calibrated: Tensor                # [B], bool
+```
+
+For the first synthetic milestone, camera calibration may be treated as known while camera pose is provided or estimated in a configurable mode. The contracts should support camera belief updates later.
+
+### 11.5 `WorldBelief`
+
+```python
+@dataclass
+class WorldBelief:
+    timestamp: Tensor                 # [B]
+    objects: ObjectBeliefTensor
+    camera: CameraBelief
+    gravity: Tensor                   # [B, 3]
+    global_code: Tensor               # [B, Dglobal]
+    global_log_variance: Tensor       # [B, Dglobal_var]
+    next_object_id: Tensor            # [B]
+    active_modalities: tuple[str, ...]
+    metadata: dict[str, Any]
+```
+
+### 11.6 `AssociationResult`
+
+```python
+@dataclass
+class AssociationResult:
+    belief_indices: Tensor            # [B, P]
+    measurement_indices: Tensor       # [B, P]
+    pair_mask: Tensor                 # [B, P]
+    pair_cost: Tensor                 # [B, P]
+    unmatched_beliefs: Tensor         # [B, N]
+    unmatched_measurements: Tensor    # [B, M]
+    ambiguous: Tensor                 # [B, P]
+```
+
+### 11.7 `BeliefTrajectory`
+
+```python
+@dataclass
+class BeliefTrajectory:
+    timestamps: Tensor                # [B, T]
+    positions: Tensor                 # [B, T, N, 3]
+    velocities: Tensor                # [B, T, N, 3]
+    orientations: Tensor              # [B, T, N, 4]
+    motion_mode_logits: Tensor        # [B, T, N, Cmode]
+    fast_log_variance: Tensor         # [B, T, N, Dfast]
+    active_mask: Tensor               # [B, T, N]
+    event_logits: Tensor | None
+    auxiliary: dict[str, Tensor]
+```
+
+## 12. Invariants
+
+Implement runtime validators enabled in tests and optionally debug mode:
+
+- active objects have nonnegative IDs;
+- padded objects have ID `-1`;
+- object IDs are unique within each batch element;
+- timestamps never move backward in the online runtime;
+- quaternion norms are close to one;
+- log variances are finite and clamped;
+- positions and velocities contain no NaN/Inf;
+- probabilities/logits use masks correctly;
+- association does not assign a measurement or belief twice;
+- dynamics rollout does not mutate the input belief;
+- observation modules do not mutate raw packets;
+- the world belief is modality-independent;
+- device and dtype remain consistent.
+
+
+# Part IV — Multimodal observation architecture
+
+## 13. Observation-module contract
+
+The core runtime must not contain modality-specific branches such as `if rgb`, `if audio`, or `if skeleton` outside registration/configuration. Each modality implements a shared protocol.
+
+A practical abstract interface:
+
+```python
+class ObservationModule(nn.Module, Protocol):
+    modality_name: str
+
+    def validate_packet(
+        self,
+        packet: ObservationPacket,
+    ) -> None:
+        """Raise a useful error for invalid payload/calibration."""
+
+    def initialise_measurements(
+        self,
+        packets: Sequence[ObservationPacket],
+        context: "ObservationContext",
+    ) -> MeasurementSet:
+        """Global/slow path used when no reliable prior exists."""
+
+    def encode_measurements(
+        self,
+        packets: Sequence[ObservationPacket],
+        prior: WorldBelief,
+        predicted: "PredictedMeasurements",
+        cache: "ModalityCache | None",
+    ) -> tuple[MeasurementSet, "ModalityCache"]:
+        """Fast residual-driven path used during normal online operation."""
+
+    def project(
+        self,
+        belief: WorldBelief,
+        sensor_context: "SensorContext",
+    ) -> "PredictedMeasurements":
+        """Map prior belief into expected modality-space measurements."""
+
+    def innovation(
+        self,
+        measured: MeasurementSet,
+        predicted: "PredictedMeasurements",
+        association: AssociationResult,
+    ) -> "InnovationSet":
+        """Compute typed residuals, including wrapped/angular residuals."""
+
+    def measurement_likelihood(
+        self,
+        innovation: "InnovationSet",
+    ) -> Tensor:
+        """Return log likelihood or compatible association score."""
+
+    def training_losses(
+        self,
+        outputs: Mapping[str, Tensor],
+        targets: Mapping[str, Tensor],
+        masks: Mapping[str, Tensor],
+    ) -> Mapping[str, Tensor]:
+        """Return modality-specific supervised/self-supervised losses."""
+```
+
+The exact Python typing can use an abstract base class instead of a `Protocol`, but the responsibilities must remain separated.
+
+### 13.1 Context objects
+
+`ObservationContext` should include:
+
+- timestamp;
+- known camera/sensor calibration;
+- maximum object count;
+- optional predicted regions;
+- device/dtype;
+- training/evaluation flag.
+
+`PredictedMeasurements` should include:
+
+- predicted values;
+- predicted measurement covariance;
+- projected object IDs;
+- visibility probability;
+- projected spatial support/ROI;
+- modality-specific auxiliary predictions;
+- valid mask.
+
+`InnovationSet` should include:
+
+- residual values;
+- whitened residual;
+- innovation norm;
+- pair mapping;
+- masks;
+- modality embedding/index;
+- event/surprise features.
+
+### 13.2 Registry
+
+Create an explicit registry:
+
+```python
+OBSERVATION_MODULES: dict[str, type[ObservationModule]]
+```
+
+Registration may use a simple decorator or configuration map. Avoid a complex plugin packaging system initially. Loading a configured modality should require no edits to runtime logic.
+
+### 13.3 Modality availability
+
+The world model may run with:
+
+- one modality;
+- any subset of registered modalities;
+- modalities that start or stop mid-episode;
+- unequal rates;
+- delayed observations if configured.
+
+When no observation arrives, dynamics prediction still advances the belief and uncertainty.
+
+### 13.4 Sensor-specific state
+
+Persistent sensor caches belong to the modality runtime, not the `WorldBelief`, unless the cached quantity is itself a physical world estimate.
+
+Examples that belong in modality cache:
+
+- previous image feature pyramid;
+- audio STFT overlap buffer;
+- event-camera voxel accumulation;
+- ROI feature cache.
+
+Examples that belong in world belief:
+
+- camera pose;
+- acoustic source position;
+- human joint pose;
+- object appearance code used for association;
+- calibrated sensor transform uncertainty.
+
+## 14. Asynchronous scheduling
+
+The runtime is event-driven by observation timestamps.
+
+### 14.1 Event loop
+
+For each incoming `ObservationPacket` or same-timestamp packet group:
+
+1. validate timestamp;
+2. propagate belief from current timestamp to packet timestamp;
+3. project expected measurement for that sensor;
+4. choose fast or slow observation path;
+5. encode measurements;
+6. associate;
+7. compute innovation;
+8. classify surprise/event;
+9. correct fast state;
+10. update lifecycle;
+11. update slow parameters if observable;
+12. cache diagnostics;
+13. optionally produce a future rollout.
+
+Pseudocode:
+
+```python
+def ingest(packet_group: Sequence[ObservationPacket]) -> WorldBelief:
+    t = common_or_min_timestamp(packet_group)
+    prior = dynamics.predict(current_belief, t - current_belief.timestamp)
+
+    posterior = prior
+    for packet in deterministic_modality_order(packet_group):
+        module = registry[packet.modality]
+        predicted = module.project(posterior, context_for(packet))
+        measurements, cache = module.encode_measurements(
+            [packet], posterior, predicted, cache_for(packet.sensor_id)
+        )
+        association = associator.match(posterior, measurements, predicted)
+        innovation = module.innovation(measurements, predicted, association)
+        posterior = updater.correct(
+            posterior, measurements, predicted, association, innovation
+        )
+        posterior = lifecycle.update(posterior, measurements, association)
+        posterior = identifier.update(
+            posterior, innovation, association, observability(packet, posterior)
+        )
+
+    current_belief = posterior.with_timestamp(t)
+    return current_belief
+```
+
+### 14.2 Same-timestamp fusion
+
+Default deterministic order for the eventual multimodal system:
+
+1. high-rate ego-motion/proprioception such as IMU;
+2. direct structured pose/depth measurements;
+3. RGB/object measurements;
+4. audio/event evidence;
+5. derived or semantic observations.
+
+This order must be configurable. Tests should verify that same-timestamp order is deterministic.
+
+### 14.3 Delayed observations
+
+The first milestone may reject observations older than the current belief timestamp with a clear error. Preserve an interface for fixed-lag smoothing later. Do not implement an elaborate out-of-sequence filter initially.
+
+## 15. RGB observation module
+
+RGB is the first non-oracle modality. It should be deliberately small but architecturally real.
+
+### 15.1 Two-path design
+
+#### Slow/global path
+
+Run:
+
+- at initialisation;
+- when no prior exists;
+- on a configured cadence;
+- when uncertainty or unexplained residual exceeds a threshold;
+- when object birth is suspected;
+- after association failure.
+
+Responsibilities:
+
+- extract a full-frame feature pyramid;
+- propose object measurements;
+- estimate existence;
+- estimate image-space centre and apparent size;
+- estimate depth or camera-space position;
+- produce appearance embeddings;
+- optionally produce coarse masks;
+- detect unexplained objects.
+
+#### Fast/residual path
+
+Run on every ordinary frame:
+
+- project each active object's expected image support;
+- enlarge ROI according to uncertainty;
+- crop or ROI-sample current feature maps;
+- combine current crop with predicted soft mask/support, expected centre/size, previous cached feature, and optional frame-difference/flow features;
+- predict a measurement correction and measurement uncertainty.
+
+The fast path answers: “How does the observation differ from the prior prediction?” It should not rediscover the whole scene.
+
+### 15.2 Initial RGB network
+
+Use a lightweight pure-PyTorch CNN so the repository does not depend on a large pretrained model for the toy milestone.
+
+Suggested global backbone:
+
+- input: `[B, 3, H, W]`;
+- four convolutional stages;
+- channels approximately `[32, 64, 96, 128]`;
+- stride 2 in stages 2–4;
+- GroupNorm or LayerNorm rather than BatchNorm, because local batch sizes may be small;
+- SiLU/GELU activations;
+- optional feature pyramid projection to a common 64–96 channels.
+
+Suggested global proposal head:
+
+- `N_query = N_max + N_birth_extra` learned object queries;
+- 2–3 small cross-attention layers over flattened low-resolution features, or a simpler spatial soft-argmax/heatmap detector;
+- outputs per query:
+  - existence logit;
+  - normalised centre `(u,v)`;
+  - log apparent radius/size;
+  - depth or inverse depth;
+  - measurement log variance;
+  - appearance embedding;
+  - optional mask coefficients.
+
+A tiny DETR-like head is acceptable, but do not add a large transformer library. Implement a small `nn.MultiheadAttention` block if used.
+
+Suggested fast ROI updater:
+
+- `roi_align` equivalent implemented using `torch.nn.functional.grid_sample`, avoiding a hard dependency on compiled torchvision operators;
+- ROI output around `16x16` or `24x24`;
+- input channels include:
+  - RGB crop features;
+  - predicted soft support mask;
+  - normalised coordinate channels;
+  - optional previous-frame crop feature;
+  - optional simple temporal difference;
+- 3–4 small conv layers plus MLP;
+- outputs:
+  - delta centre;
+  - delta log apparent size;
+  - delta inverse depth;
+  - existence/visibility correction;
+  - appearance update gate;
+  - log measurement variance;
+  - innovation/event features.
+
+### 15.3 Toy scene geometry inference
+
+For spherical objects with known or estimated physical radius \(r_w\), calibrated focal length \(f\), and observed pixel radius \(r_p\), an analytic depth proposal is:
+
+\[
+z \approx \frac{f r_w}{r_p}.
+\]
+
+Use this as a structured initial proposal. A learned bounded residual may correct rendering/perspective errors.
+
+Back-project centre to camera coordinates:
+
+\[
+x = \frac{(u-c_x)z}{f_x},
+\qquad
+y = \frac{(v-c_y)z}{f_y}.
+\]
+
+Transform into world frame using camera calibration/belief.
+
+If geometry radius is uncertain, propagate that uncertainty into depth. Do not allow the network to hide every ambiguity in an unconstrained world-state decoder.
+
+### 15.4 Measurement vector for initial RGB module
+
+Recommended canonical measurement per proposal:
+
+\[
+y^{rgb}
+=
+[u,\;v,\;\log r_p,\;\operatorname{invdepth},\;c_r,\;c_g,\;c_b],
+\]
+
+plus:
+
+- existence logit;
+- visibility logit;
+- appearance embedding;
+- optional coarse mask;
+- diagonal log variance for geometric dimensions.
+
+Colour values are only association cues in the toy data; they must not be treated as object IDs.
+
+### 15.5 Predicted RGB measurements
+
+The initial projector does not need to render photorealistic RGB. It predicts:
+
+- projected centre;
+- expected apparent radius;
+- expected inverse depth;
+- expected visibility/depth order;
+- expected soft silhouette/support;
+- expected appearance embedding;
+- covariance in measurement coordinates.
+
+This is sufficient for innovation-based filtering.
+
+### 15.6 RGB losses
+
+At proposal stage, use Hungarian matching to simulator objects during training. Losses:
+
+- focal or BCE existence loss;
+- L1/Huber centre loss;
+- Huber log-size and inverse-depth loss;
+- Gaussian NLL using predicted measurement variance;
+- contrastive or cosine appearance consistency;
+- optional Dice/BCE mask loss;
+- visibility BCE;
+- calibration regulariser.
+
+At fast-update stage, train both measurement accuracy and downstream posterior/future improvement.
+
+### 15.7 Initialisation
+
+Use several initial frames when available, but do not require a fixed clip forever.
+
+A practical initialisation procedure:
+
+1. run global detector on first frame;
+2. create provisional object beliefs;
+3. on subsequent 2–4 frames, run prediction–association–correction;
+4. estimate velocity from filtered position differences;
+5. initialise slow parameters to priors with high uncertainty;
+6. initialise modal states near zero;
+7. mark the belief as `initialised` once enough state dimensions are observable.
+
+The public API may expose `initialize(packets)` for convenience, but internally it should call the same `ingest` loop.
+
+## 16. State/oracle observation module
+
+Implement a small `StateObservationModule` for:
+
+- dynamics/filter unit tests;
+- debugging;
+- isolating perception from dynamics;
+- establishing upper bounds;
+- training curriculum diagnostics.
+
+It consumes simulator-derived noisy state measurements and projects directly from belief state.
+
+Rules:
+
+- it is not the main demo;
+- acceptance of the project requires RGB mode;
+- no core runtime path may depend on it;
+- it must be clearly labelled `debug_oracle`;
+- configs must make accidental use visible in logs and evaluation reports.
+
+## 17. Future modality specifications
+
+Do not implement all of these initially. Define documentation and stubs only when they are useful; avoid empty production classes. The core contracts must support them.
+
+### 17.1 Depth
+
+Measurements:
+
+- per-object depth;
+- point clusters;
+- depth silhouettes;
+- surface normals;
+- uncertainty.
+
+Projector:
+
+- expected depth support and order;
+- object surfaces or coarse geometry.
+
+Depth should strongly update position/geometry, weakly update appearance, and not directly alter unrelated dynamics parameters.
+
+### 17.2 Skeleton/body pose
+
+Measurements:
+
+- named joints;
+- confidence per joint;
+- joint covariance;
+- bone lengths or kinematic constraints;
+- root pose;
+- optional contact labels.
+
+World extension:
+
+- `ArticulatedBelief` composed of persistent parts/joints;
+- kinematic graph;
+- joint angles/velocities;
+- actuator/action latent.
+
+A skeleton stream can be the sole modality. The core dynamics should treat it as structured object/part measurements.
+
+### 17.3 Audio
+
+Raw audio rates are much higher than world update rates. The audio module should maintain its own overlap buffer and emit timestamped acoustic measurements/events, not one world update per PCM sample.
+
+Measurements may include:
+
+- impact/event probability and time;
+- source-direction estimate;
+- source embedding;
+- fundamental/modal frequency estimates;
+- energy envelope;
+- event uncertainty.
+
+Projector may predict:
+
+- event time distributions;
+- source identity likelihood;
+- coarse acoustic embedding conditioned on contact/material/event state.
+
+Audio can reveal hidden collisions and material properties. It should update event state, source association, and slow material/restitution parameters more strongly than object position unless localisation is available.
+
+### 17.4 IMU
+
+Measurements:
+
+- angular velocity;
+- specific force;
+- optionally magnetometer;
+- sensor covariance.
+
+Projector uses camera/body motion belief. IMU should be assimilated at high rate and is especially useful for ego-motion.
+
+### 17.5 Optical flow
+
+Measurements:
+
+- sparse or dense flow;
+- confidence;
+- object-aligned flow summaries.
+
+Projector derives expected image motion from object/camera state. Flow provides velocity evidence even when appearance detection is weak.
+
+### 17.6 LiDAR/point clouds
+
+Measurements:
+
+- point sets or object clusters;
+- pose/shape proposals;
+- covariance.
+
+Use set/point encoders inside the modality module. Do not move raw point tokens into the persistent world state.
+
+### 17.7 Event cameras
+
+The module accumulates events over short windows and emits motion/edge measurements with exact timestamps or micro-batches. The world scheduler remains event-driven.
+
+## 18. Cross-modal consistency
+
+When multiple modalities are available, train and evaluate consistency through the shared belief rather than forcing direct feature alignment everywhere.
+
+Examples:
+
+- a visible impact should cause a high predicted audio-event probability;
+- an audio impact during visual occlusion should increase collision/event posterior;
+- skeleton hand contact and RGB object motion should agree on interaction timing;
+- IMU camera motion and RGB optical flow should agree;
+- depth and monocular projected size should agree within uncertainty.
+
+Potential loss:
+
+\[
+\mathcal L_{\text{cross}}
+=
+\sum_{m\ne n}
+D\left(
+Y^{(m)}_{\text{observed}},
+H^{(m)}(U_n(B,Y^{(n)}))
+\right),
+\]
+
+meaning that assimilating modality \(n\) should improve predictions in modality \(m\) when they describe the same event.
+
+Do not implement a large all-to-all cross-modal transformer as the first fusion mechanism. The shared belief is the primary fusion bottleneck.
+
+---
+
+# Part V — Perception, association, and lifecycle
+
+## 19. Residual-driven perception in detail
+
+The perception design should minimise repeated work and focus compute where the current belief is uncertain.
+
+### 19.1 Predicted regions
+
+For each object, project its mean and uncertainty to image space. Expand the ROI by a configurable number of standard deviations:
+
+\[
+R_i =
+\operatorname{bbox}
+\left(
+H(\mu_i)
+\pm
+\kappa\sqrt{\operatorname{diag}(J_i P_i J_i^\top)}
+\right).
+\]
+
+Clamp ROIs to valid image bounds. Objects with high uncertainty receive larger ROIs.
+
+### 19.2 Cached features
+
+The RGB module may cache:
+
+- previous feature pyramid;
+- per-object pooled appearance feature;
+- previous ROI coordinates;
+- previous projected support;
+- previous observation timestamp.
+
+Invalidate caches on:
+
+- device/config changes;
+- global reinitialisation;
+- large camera discontinuity;
+- object death;
+- sequence boundary.
+
+Cache use must be optional and testable against a no-cache path.
+
+### 19.3 Surprise map
+
+Compute a coarse full-frame surprise signal even on the fast path:
+
+- predicted soft silhouettes or occupancy;
+- current low-resolution objectness/feature map;
+- discrepancy map;
+- unexplained high-confidence regions.
+
+Use it to trigger global discovery and to avoid tunnel vision when objects enter outside predicted ROIs.
+
+### 19.4 Observation scheduling
+
+A simple scheduler chooses:
+
+- `FAST_ROI`;
+- `GLOBAL_DISCOVERY`;
+- `RECOVERY`;
+- `SKIP` for a modality.
+
+Inputs:
+
+- time since last global pass;
+- maximum object covariance;
+- unexplained surprise;
+- association failures;
+- birth probability;
+- user-configured compute budget.
+
+Initially implement deterministic thresholds. A learned active-perception policy is future work.
+
+## 20. Data association
+
+Association is explicit and independent of the RGB network.
+
+### 20.1 Cost matrix
+
+For prior object \(i\) and measurement \(j\):
+
+\[
+C_{ij}
+=
+w_g C_{ij}^{\text{geometry}}
++
+w_a C_{ij}^{\text{appearance}}
++
+w_m C_{ij}^{\text{motion}}
++
+w_c C_{ij}^{\text{class}}
++
+w_e C_{ij}^{\text{existence}}.
+\]
+
+Suggested components:
+
+- geometry: Mahalanobis distance in measurement space;
+- appearance: \(1-\) cosine similarity;
+- motion: discrepancy between expected and measured velocity/flow;
+- class: negative compatible class probability;
+- existence: penalty for low measurement confidence.
+
+Gate impossible pairs before Hungarian assignment:
+
+\[
+C_{ij}=\infty
+\quad\text{if}\quad
+r_{ij}^\top S_{ij}^{-1}r_{ij}>\tau.
+\]
+
+Use `scipy.optimize.linear_sum_assignment` for the initial CPU association because object counts are small. Keep tensors transferred minimally. A batched GPU matcher is unnecessary initially.
+
+### 20.2 Ambiguity
+
+Record ambiguity when the best and second-best costs are close. The first implementation can retain the best assignment but:
+
+- reduce correction confidence;
+- avoid aggressive appearance/slow-parameter updates;
+- log ambiguity;
+- optionally trigger a global pass.
+
+This creates a clean path to multiple-hypothesis association later.
+
+### 20.3 Birth
+
+An unmatched high-confidence measurement becomes a tentative object.
+
+Lifecycle:
+
+1. `TENTATIVE`;
+2. confirmed after `birth_confirmations` consistent detections;
+3. assigned a permanent monotonic ID;
+4. initial covariance reflects measurement uncertainty;
+5. initial velocity covariance is high unless multiple measurements establish velocity.
+
+For the toy simulator, objects may all exist from frame one initially. Still implement the lifecycle rather than hard-coding fixed identities.
+
+### 20.4 Miss and occlusion
+
+An unmatched belief is not immediately removed.
+
+- increment `missed_steps`;
+- lower visibility;
+- propagate dynamics and uncertainty;
+- retain identity through configured occlusion duration;
+- distinguish projected out-of-view from unexplained disappearance;
+- do not update appearance or slow parameters from a miss.
+
+### 20.5 Death/removal
+
+Deactivate an object when:
+
+- existence probability falls below threshold for enough time;
+- it exits the known scene bounds with consistent motion;
+- a configured removal event is observed;
+- maximum miss duration is exceeded.
+
+Do not recycle IDs within an episode.
+
+### 20.6 Merge/split
+
+The initial sphere scene does not require physical merge/split. The interfaces should permit a measurement to be marked `compound` or ambiguous. Do not invent a complex merge/split system before it is needed.
+
+## 21. Object identity and appearance
+
+Appearance exists to aid association and sensor prediction, not to become the physical state.
+
+Use an appearance embedding with:
+
+- L2 normalisation;
+- uncertainty or update gate;
+- exponential moving average after confident associations;
+- no update during occlusion/ambiguity;
+- optional supervised colour/texture reconstruction in toy scenes.
+
+Object identity must not be encoded solely as a one-hot colour. Randomise colours and repeat similar colours in harder validation subsets.
+
+## 22. Camera motion
+
+The initial simulator includes camera motion to avoid learning image-space dynamics as world physics.
+
+Two supported configurations:
+
+1. **known camera pose**: calibration and world-from-camera transform are provided to the RGB module;
+2. **estimated camera pose**: future extension or optional milestone using visual/IMU measurements.
+
+Milestone 1 may use known camera pose, but all measurements must still pass through explicit coordinate transforms. Never silently assume a static camera.
+
+The training data should include:
+
+- translations;
+- gentle rotations/orbits;
+- focal length/zoom variation only if calibration supplies it;
+- held-out trajectories.
+
+## 23. Measurement-space prediction versus pixel generation
+
+The core model predicts structured measurements, not future RGB pixels.
+
+Benefits:
+
+- dynamics errors remain interpretable;
+- the renderer cannot conceal incorrect state;
+- training is cheaper;
+- modality modules remain replaceable;
+- online correction uses well-defined residuals.
+
+An optional visualisation renderer can draw predicted objects into frames. A learned photorealistic decoder is not required for Milestone 1.
+
+
+# Part VI — Dynamics architecture
+
+## 24. Required dynamics-module separation
+
+Use the following layers:
+
+1. `AnalyticKinematics`: deterministic timestamp-aware integration;
+2. `ModalDynamics`: stable continuous latent modes;
+3. `InteractionGraph`: pairwise and global learned residuals;
+4. `EventModel`: contact/event probabilities and structured jumps;
+5. `UncertaintyDynamics`: process noise and variance propagation;
+6. `RolloutEngine`: substeps, event ordering, output sampling.
+
+Do not implement a single opaque `DynamicsMLP` that maps packed state to next packed state.
+
+## 25. Analytic kinematics
+
+### 25.1 Time handling
+
+Every call accepts a real \(\Delta t\), not an integer frame count. Support irregular observation intervals.
+
+For stability, split long intervals:
+
+```python
+num_substeps = ceil(dt / max_substep)
+sub_dt = dt / num_substeps
+```
+
+The default toy simulator and model may use 30 Hz observations with dynamics substeps around 1/120 s.
+
+### 25.2 Gravity
+
+Store gravity in `WorldBelief`. It may be known initially and later estimated globally.
+
+Apply gravity only to objects whose mode allows it. Sleeping/contact modes may use constrained handling.
+
+### 25.3 Drag and damping
+
+Use a stable exponential form where practical:
+
+\[
+v(t+\Delta t)
+=
+v(t)\exp(-c\Delta t)
++
+\frac{g}{c}(1-\exp(-c\Delta t))
+\]
+
+for positive \(c\), with a numerically safe small-\(c\) branch. A simpler semi-implicit Euler implementation is acceptable initially if tested over the configured range.
+
+### 25.4 Orientation
+
+Even if toy spheres do not expose orientation, implement:
+
+- quaternion multiplication;
+- exponential-map update;
+- normalisation;
+- geodesic orientation loss;
+- tests for zero and small angular velocity.
+
+This avoids redesign when non-spherical bodies are added.
+
+### 25.5 Boundaries
+
+The model knows coarse scene boundary geometry through global/environment state or configured planes. It should not hard-code image boundaries as physical walls.
+
+For initial sphere–plane contacts:
+
+- compute signed distance;
+- derive normal;
+- predict contact/event;
+- apply restitution and tangential damping/friction;
+- correct penetration conservatively.
+
+## 26. Modal dynamics design
+
+### 26.1 Purpose
+
+The modal bank captures coherent residual temporal structure that is awkward to express as simple position/velocity integration:
+
+- oscillation;
+- damping;
+- periodic actuation;
+- slowly varying latent forces;
+- deformable modes in future extensions;
+- model residuals that should remain temporally coherent.
+
+It should not replace explicit position and velocity.
+
+### 26.2 State
+
+For each object:
+
+- `K_modal`: default 4 in toy;
+- per mode paired state `[2, D_modal]`;
+- positive frequency, bounded to a configured range;
+- nonnegative decay;
+- readout to residual acceleration and optional event/context features.
+
+Initialisation:
+
+- state near zero;
+- frequencies drawn or predicted from object code;
+- decay biased toward stable;
+- readout weights small.
+
+### 26.3 Update
+
+Implement the rotation–decay transform analytically and vectorised. Avoid constructing large dense matrices.
+
+For state components \(x,y\):
+
+```python
+angle = frequency * dt
+decay = exp(-softplus(decay_raw) * dt)
+x_new = decay * (cos(angle) * x - sin(angle) * y)
+y_new = decay * (sin(angle) * x + cos(angle) * y)
+```
+
+### 26.4 Correction
+
+The belief updater may correct modal phase/amplitude when persistent innovation indicates a coherent mismatch. Use strong regularisation so a single noisy frame does not arbitrarily rewrite all modes.
+
+### 26.5 Stability tests
+
+Test:
+
+- no growth for positive decay;
+- exact identity at `dt=0`;
+- approximate composition:
+  \(F(F(z,dt_1),dt_2)\approx F(z,dt_1+dt_2)\);
+- gradients finite on CPU, MPS, and CUDA where available;
+- long rollout remains finite.
+
+## 27. Interaction graph
+
+### 27.1 Graph construction
+
+For small `N_max`, use a dense pair mask and vectorised pairwise differences. Avoid an external graph library.
+
+Candidate edge mask:
+
+- both objects active;
+- `i != j`;
+- distance below configured interaction radius plus uncertainty margin;
+- optionally top-k nearest neighbours.
+
+For `N<=10`, dense \(N^2\) is simple and cheap.
+
+### 27.2 Edge network
+
+Suggested toy architecture:
+
+- input edge feature 32–96 dimensions;
+- 2–3 layer MLP, hidden 64–128;
+- LayerNorm;
+- SiLU;
+- outputs:
+  - contact logit;
+  - collision logit;
+  - scalar normal impulse residual;
+  - tangential damping/friction residual;
+  - residual force vector in an invariant local basis;
+  - edge process-noise contribution.
+
+Use relative vectors and scalar invariants. Avoid feeding absolute world position to pairwise networks except through clearly justified environment features.
+
+### 27.3 Symmetry and conservation bias
+
+For pairwise interaction:
+
+- compute one unordered pair output where practical;
+- apply equal and opposite force/impulse;
+- divide by learned/estimated mass;
+- use normal/tangent basis from relative geometry;
+- ensure swapping object order produces consistent transformed output.
+
+Add tests for permutation equivariance and action–reaction symmetry.
+
+### 27.4 Node/global network
+
+Aggregate edge messages with masked sum or mean. A small node MLP combines:
+
+- self state;
+- modal readout;
+- aggregated messages;
+- global/environment code;
+- current mode;
+- uncertainty.
+
+It outputs bounded residual acceleration and mode transition features.
+
+### 27.5 Ground/environment node
+
+Represent the ground and known static boundaries as explicit environment contacts or special fixed nodes, rather than arbitrary hidden bias. For the initial implementation, a dedicated sphere–plane contact path is simpler than adding all planes as graph nodes, but keep the interface compatible.
+
+## 28. Collision/event model
+
+### 28.1 Event probability
+
+Predict event logits before applying a jump. Supervise against simulator contact/event labels.
+
+Features:
+
+- signed gap;
+- relative normal velocity;
+- tangential velocity;
+- radius/geometry;
+- restitution/friction beliefs;
+- uncertainty;
+- previous mode;
+- residual/surprise history.
+
+### 28.2 Analytic impulse proposal
+
+For a collision normal \(n\), relative normal velocity:
+
+\[
+v_{rel,n}
+=
+(v_j-v_i)\cdot n.
+\]
+
+For approaching bodies, analytic impulse magnitude:
+
+\[
+j_{\text{analytic}}
+=
+-\frac{(1+e)v_{rel,n}}
+{1/m_i+1/m_j}.
+\]
+
+Use estimated restitution and mass. Clamp to nonnegative and apply only when event/contact conditions hold.
+
+The network predicts:
+
+- a bounded multiplicative factor;
+- a bounded additive residual;
+- event confidence.
+
+For example:
+
+\[
+j =
+\operatorname{softplus}
+\left(
+j_{\text{analytic}}(1+0.25\tanh a)
++
+0.1\,\operatorname{softplus}(b)
+\right).
+\]
+
+Exact scales belong in config and should be normalised by dataset units.
+
+### 28.3 Penetration handling
+
+Prediction errors can create overlap. Use a small positional projection along the normal, split by inverse mass, with a maximum correction per substep. Do not train a network to tolerate arbitrarily deep penetration.
+
+Log penetration statistics as a physics diagnostic.
+
+### 28.4 Event timing
+
+A fixed substep model is sufficient initially. Future continuous collision detection may refine event time. Use small enough substeps that the toy model does not tunnel through objects.
+
+### 28.5 Sleeping
+
+An object can enter sleeping mode if:
+
+- speed below threshold;
+- near ground/contact;
+- no significant force/event for a configured duration.
+
+Wake it on collision, external force, or high innovation.
+
+## 29. Uncertainty dynamics
+
+### 29.1 Process noise
+
+Process-noise increment should be nonnegative and depend on:
+
+- elapsed time;
+- speed;
+- event/contact likelihood;
+- occlusion duration;
+- interaction density;
+- residual dynamics magnitude;
+- model confidence.
+
+Parameterise with `softplus` and clamp.
+
+### 29.2 Variance propagation
+
+At minimum, propagate position/velocity uncertainty using:
+
+\[
+\operatorname{Var}(p')
+\approx
+\operatorname{Var}(p)
++
+\Delta t^2\operatorname{Var}(v)
++
+Q_p,
+\]
+
+\[
+\operatorname{Var}(v')
+\approx
+\operatorname{Var}(v)
++
+Q_v.
+\]
+
+Include covariance cross terms only when the representation is upgraded beyond diagonal.
+
+### 29.3 Event uncertainty
+
+Around ambiguous collision timing, uncertainty should expand rather than outputting an overconfident average. Event entropy can add process noise.
+
+### 29.4 Calibration constraints
+
+Clamp log variance to a configured finite range. Penalise both overconfidence and pathological inflation through Gaussian NLL and calibration metrics.
+
+## 30. Rollout engine
+
+### 30.1 Interface
+
+```python
+class DynamicsModel(nn.Module):
+    def predict(
+        self,
+        belief: WorldBelief,
+        dt: Tensor | float,
+    ) -> WorldBelief:
+        ...
+
+    def rollout(
+        self,
+        belief: WorldBelief,
+        query_times: Tensor,
+        *,
+        return_events: bool = True,
+    ) -> BeliefTrajectory:
+        ...
+```
+
+`rollout` must not mutate `belief`.
+
+### 30.2 Arbitrary query times
+
+The model should return predictions at arbitrary sorted future times. Internally substep as needed. This allows:
+
+- irregular sensor updates;
+- random-access future queries;
+- coarse-to-fine planning;
+- fair evaluation across frame rates.
+
+### 30.3 Receding horizon
+
+The runtime does not store one fixed DCT trajectory as truth. It stores the current belief and regenerates a cheap future trajectory when requested.
+
+After a new observation, future rollout starts from the corrected posterior. No full history re-encoding is required.
+
+### 30.4 Rollout cache
+
+A future optimisation may cache deterministic rollouts and invalidate only affected objects after correction. Do not implement complex partial invalidation in Milestone 1. Keep a clear cache boundary.
+
+## 31. Dynamics baselines
+
+Implement simple baselines for evaluation, not as competing repository architectures:
+
+- static position;
+- constant velocity;
+- analytic gravity/drag without learned interactions;
+- oracle-parameter analytic dynamics;
+- optionally fixed-window DCT predictor later.
+
+All baselines should consume the same dataset/evaluation contracts.
+
+---
+
+# Part VII — Online system identification
+
+## 32. Purpose
+
+System identification estimates slowly changing or constant physical properties from prediction residuals. It is distinct from correcting instantaneous pose/velocity.
+
+A one-frame position error usually provides strong evidence about state, weak evidence about drag, and almost no evidence about mass. The updater must encode this distinction.
+
+## 33. Parameter beliefs
+
+Initial toy parameters:
+
+- object radius/geometry;
+- log mass or mass ratio;
+- restitution;
+- drag;
+- ground friction/tangential damping.
+
+For each parameter maintain:
+
+- constrained mean;
+- log variance;
+- prior;
+- observability score;
+- last-update timestamp;
+- update count.
+
+Parameter transformations:
+
+- mass, drag, radius: `exp` or `softplus`;
+- restitution, friction: sigmoid into configured bounds;
+- unconstrained latent codes: direct with norm regularisation.
+
+## 34. Identifiability and observability
+
+Do not report a parameter as learned when the episode does not identify it.
+
+Examples:
+
+- absolute mass is not observable from isolated ballistic motion under mass-independent gravity;
+- restitution is primarily observable from impacts;
+- friction is observable during sliding/contact;
+- drag needs sustained motion relative to medium;
+- geometry/depth are confounded in monocular images without size priors or motion cues.
+
+Implement per-parameter observability gates:
+
+```python
+@dataclass
+class Observability:
+    mass_ratio: Tensor
+    restitution: Tensor
+    drag: Tensor
+    friction: Tensor
+    geometry: Tensor
+```
+
+Gates derive from events, visibility, motion magnitude, association confidence, and measurement geometry.
+
+Evaluation should condition parameter metrics on adequate observability.
+
+## 35. Parameter updater
+
+Use a small recurrent accumulator per object:
+
+- input: whitened innovations, derivative/EMA of innovations, event logits/labels during training, current state, current parameter belief, observability;
+- recurrent state: `parameter_memory`;
+- output: bounded parameter delta, variance delta, evidence gate.
+
+A GRU cell with hidden dimension 32–64 is enough.
+
+Update rule:
+
+```python
+raw_delta, raw_var_delta, evidence = updater(features, memory)
+gate = sigmoid(evidence) * observability
+theta_new = project_bounds(theta + slow_lr * gate * tanh(raw_delta))
+logvar_new = clamp(logvar + gate * tanh(raw_var_delta), min_lv, max_lv)
+```
+
+The online update is part of inference and uses no gradient step.
+
+## 36. Optional local optimisation
+
+After the learned updater works, an optional small differentiable optimiser may refine a few parameters over a recent fixed window:
+
+\[
+\theta^\star
+=
+\arg\min_\theta
+\sum_{\tau=t-W}^{t}
+\left\|
+Y_\tau-H(F_\theta(B_{t-W},\tau))
+\right\|_{R^{-1}}^2
++
+\lambda\|\theta-\theta_{\text{prior}}\|^2.
+\]
+
+Constraints:
+
+- only small parameter vectors;
+- fixed small iteration count;
+- disabled by default on the MPS toy path;
+- no optimisation of full network weights;
+- benchmark the cost and improvement.
+
+Do not block Milestone 1 on Gauss–Newton or second-order methods.
+
+## 37. Parameter-supervision strategy
+
+Synthetic data provides exact parameters. Use:
+
+- direct parameter regression/NLL;
+- downstream rollout loss;
+- consistency across prefixes of the same episode;
+- intervention/generalisation tests.
+
+Prefix consistency:
+
+\[
+\mathcal L_{\theta\text{-consistency}}
+=
+\|\hat\theta_{0:t_1}-\hat\theta_{0:t_2}\|^2
+\]
+
+for parameters expected to remain constant, weighted by posterior confidence and observability.
+
+## 38. Counterfactual validation
+
+A true system-identification representation should support changed conditions.
+
+Evaluate by:
+
+1. infer object state/parameters from a prefix;
+2. replace gravity, initial velocity, restitution, or scene boundary;
+3. roll out;
+4. compare with simulator counterfactual.
+
+This is stronger evidence than reconstructing the original trajectory.
+
+The first implementation may include a small counterfactual evaluation script after the main online loop works.
+
+---
+
+# Part VIII — Belief correction and surprise handling
+
+## 39. Fast-state corrector
+
+### 39.1 Inputs
+
+Per associated object/measurement pair:
+
+- prior packed fast state;
+- prior log variance;
+- measured vector;
+- predicted measurement;
+- raw innovation;
+- whitened innovation;
+- measurement log variance;
+- visibility/existence;
+- motion-mode probabilities;
+- time since last observation;
+- modality embedding;
+- association cost/ambiguity;
+- event features.
+
+### 39.2 Outputs
+
+- corrected state residual;
+- posterior log-variance residual;
+- state-component gate;
+- event-mode logit residual;
+- visibility/existence update;
+- optional modal-state correction.
+
+### 39.3 Structure
+
+Use an MLP or small gated residual block. Do not use a large sequence transformer for one update.
+
+Suggested hidden size 128, 3 layers, LayerNorm/SiLU.
+
+### 39.4 State constraints
+
+After correction:
+
+- normalise quaternion;
+- clamp reasonable parameter/state ranges from config;
+- resolve severe physical penetration;
+- ensure finite variances;
+- apply masks.
+
+### 39.5 Correction sparsity
+
+Penalise unnecessary large corrections:
+
+\[
+\mathcal L_{\text{correction}}
+=
+\sum_d
+\frac{|\Delta\mu_d|}
+{\sqrt{\sigma_d^{-2}+\epsilon}}.
+\]
+
+This encourages the dynamics to explain predictable motion while allowing correction when evidence demands it.
+
+## 40. Innovation classification
+
+A small classifier labels innovation cause probabilities:
+
+- `NOISE`;
+- `STATE_DRIFT`;
+- `PHYSICAL_EVENT`;
+- `ASSOCIATION_ERROR`;
+- `NEW_OBJECT`;
+- `CAMERA_OR_SENSOR_SHIFT`;
+- `UNKNOWN_MODEL_ERROR`.
+
+Toy supervision can derive some labels from simulator events and injected corruptions. The classifier controls:
+
+- whether to update state;
+- whether to update slow parameters;
+- whether to trigger discovery;
+- whether to increase uncertainty;
+- whether to reject association.
+
+Avoid making this classifier a hard single point of failure; use probabilities/gates.
+
+## 41. Robust updates
+
+Use robust innovation clipping or Huber-like influence. A single bad detection must not catastrophically move the belief.
+
+Possible robust factor:
+
+\[
+w(r)=\min\left(1,\frac{c}{\|r_{\text{white}}\|+\epsilon}\right).
+\]
+
+The model may learn a confidence gate, but keep a deterministic cap as a safety measure.
+
+## 42. Unmatched measurements and beliefs
+
+### 42.1 Unmatched measurements
+
+Send to lifecycle birth logic and surprise map. Do not force association.
+
+### 42.2 Unmatched beliefs
+
+Apply missed-observation update:
+
+- lower visibility;
+- slightly lower existence depending on projected visibility;
+- increase uncertainty;
+- keep dynamics prediction;
+- schedule global search if expected visible.
+
+### 42.3 Occluded objects
+
+If depth ordering/projected overlap predicts occlusion, a miss should not strongly reduce existence. This is a core reason to use a world-space model.
+
+## 43. Smoothing
+
+Normal runtime is filtering, not retrospective smoothing. A fixed-lag smoother can be a future module for training labels or offline evaluation. Do not mix future observations into online metrics.
+
+---
+
+# Part IX — Uncertainty and hypothesis quality
+
+## 44. Initial uncertainty representation
+
+Use diagonal Gaussian variance for:
+
+- position;
+- velocity;
+- orientation tangent approximation;
+- angular velocity;
+- selected modal components;
+- slow parameters;
+- camera state if estimated.
+
+Use categorical distributions for:
+
+- motion mode;
+- existence;
+- visibility;
+- event.
+
+Document that quaternion uncertainty is an approximation in the first version.
+
+## 45. Likelihoods
+
+Use Gaussian NLL for continuous targets:
+
+\[
+\mathcal L_{\text{NLL}}
+=
+\frac12
+\left[
+\frac{(y-\mu)^2}{\sigma^2}
++
+\log\sigma^2
+\right].
+\]
+
+Clamp variance and average only over valid masks.
+
+Use BCE/focal loss for existence/visibility/events and cross entropy for mutually exclusive modes.
+
+## 46. Calibration metrics
+
+Report:
+
+- empirical coverage at 50%, 80%, 95%;
+- expected calibration error for categorical events;
+- NLL;
+- sharpness/average predicted standard deviation;
+- error versus predicted uncertainty correlation;
+- calibration by horizon;
+- calibration under occlusion and collision separately.
+
+A model with lower RMSE but severe overconfidence is not considered strictly better.
+
+## 47. Hypothesis interface
+
+`HypothesisSet` should support:
+
+```python
+@dataclass
+class HypothesisSet:
+    beliefs: list[WorldBelief]
+    log_weights: Tensor
+```
+
+Default `H=1`. Later:
+
+- branch on ambiguous associations/events;
+- reweight using measurement likelihood;
+- prune low weights;
+- merge close beliefs.
+
+Do not contaminate basic tensor contracts with an extra hypothesis dimension prematurely; wrap beliefs at the runtime level.
+
+
+# Part X — Training methodology
+
+## 48. Training objective
+
+Train the complete causal loop, not isolated one-step modules only.
+
+A training episode alternates:
+
+\[
+\text{observe}
+\rightarrow
+\text{predict}
+\rightarrow
+\text{observe}
+\rightarrow
+\text{correct}
+\rightarrow
+\text{roll out}
+\rightarrow
+\cdots
+\]
+
+The model must encounter its own imperfect beliefs during training.
+
+## 49. Episode structure
+
+For each sampled synthetic episode:
+
+1. generate simulator trajectory, RGB frames, calibration, states, parameters, identities, visibility, and events;
+2. select an initial observation prefix;
+3. initialise belief using RGB global path;
+4. run online updates over a sequence;
+5. at random update points, request future rollouts of random horizons;
+6. compute posterior, rollout, event, association, parameter, and calibration losses;
+7. backpropagate through a bounded unroll window;
+8. detach belief/history between truncated windows while preserving numerical state.
+
+Suggested first config:
+
+- simulator frames: 64–96;
+- image size: 96×96;
+- frame rate: 30 Hz;
+- objects: 3–6 initially, random up to 8 in validation;
+- initialisation observations: 3–5;
+- training unroll: 16–32 updates;
+- rollout query horizons: 0.1, 0.25, 0.5, 1.0, and optionally 2.0 seconds;
+- batch size on MPS: start 4–8 and make configurable.
+
+## 50. Training stages within one architecture
+
+A curriculum may alter data difficulty and which losses are enabled, but must not replace the model with disposable architectures.
+
+### Stage A — Component sanity and oracle-assisted debugging
+
+Purpose:
+
+- verify dynamics, filter, tensor contracts, and losses;
+- use state/oracle measurements;
+- no claim of final success.
+
+Duration should be short. The code remains part of tests/baselines.
+
+### Stage B — RGB measurement pretraining
+
+Train global and fast RGB measurement heads using simulator labels.
+
+- random single frames and short pairs;
+- object proposal matching;
+- measurement uncertainty;
+- appearance consistency;
+- visibility/masks.
+
+This may run independently to stabilise perception, but the same module is used end-to-end.
+
+### Stage C — Oracle-to-RGB mixed online training
+
+Run complete loop while randomly selecting oracle or RGB measurements with an annealed oracle probability. This is a training technique, not a separate runtime architecture.
+
+- start with enough oracle observations to stabilise dynamics/filter learning;
+- reduce oracle probability toward zero;
+- final validation is RGB-only.
+
+### Stage D — Full RGB closed-loop training
+
+All online corrections use RGB. Continue to supervise latent states, events, and parameters from simulator ground truth.
+
+### Stage E — Harder distribution
+
+Increase within the same simulator/config family:
+
+- more objects;
+- more similar appearances;
+- longer occlusions;
+- stronger camera motion;
+- parameter ranges;
+- irregular frame drops;
+- longer horizons;
+- mild sensor noise.
+
+The project must not stop at Stage A or B.
+
+## 51. Perturbation/recovery training
+
+At random times, corrupt the belief before an observation:
+
+- position offset;
+- velocity offset;
+- depth error;
+- covariance miscalibration;
+- wrong event mode;
+- missed collision;
+- parameter bias;
+- appearance drift;
+- simulated association ambiguity;
+- camera pose perturbation where supported.
+
+Then reveal a correct RGB observation and train the system to recover.
+
+Perturbation magnitudes should be sampled relative to state scales and curriculum difficulty.
+
+Key downstream loss:
+
+\[
+\mathcal L_{\text{recovery-future}}
+=
+\sum_{\tau\in\mathcal H}
+w_\tau
+d\left(
+\hat S_{t+\tau}^{\text{post-correction}},
+S_{t+\tau}^{*}
+\right).
+\]
+
+This prevents the updater from merely matching the current frame while damaging velocity or parameters.
+
+## 52. Teacher forcing policy
+
+Ground-truth states are supervision, not ordinary inputs.
+
+During full closed-loop training:
+
+- dynamics starts from model posterior;
+- next correction consumes RGB-derived measurements;
+- ground truth is used for losses and optional scheduled debug/oracle measurement;
+- do not reset belief to exact state every frame.
+
+Use teacher forcing only for targeted component pretraining or an explicitly logged curriculum mode.
+
+## 53. Losses
+
+Define a `LossTerms` mapping and log every component separately.
+
+### 53.1 Current posterior state loss
+
+\[
+\mathcal L_{\text{state}}
+=
+\lambda_p \operatorname{Huber}(\hat p,p^*)
++
+\lambda_v \operatorname{Huber}(\hat v,v^*)
++
+\lambda_q d_{SO(3)}(\hat q,q^*)^2
++
+\lambda_\omega \operatorname{Huber}(\hat\omega,\omega^*).
+\]
+
+Mask unsupported sphere orientation terms in toy data.
+
+### 53.2 Future rollout loss
+
+For query horizons:
+
+\[
+\mathcal L_{\text{rollout}}
+=
+\sum_{\tau}
+w_\tau
+\left[
+\lambda_p d_p(\hat p_{t+\tau},p^*_{t+\tau})
++
+\lambda_v d_v(\hat v_{t+\tau},v^*_{t+\tau})
+\right].
+\]
+
+Use increasing or balanced horizon weights rather than letting numerous short steps dominate.
+
+### 53.3 Measurement loss
+
+Global/fast RGB measurement losses described earlier, including Gaussian NLL.
+
+### 53.4 Event loss
+
+- focal/BCE collision/contact event loss;
+- mode cross entropy;
+- event-time tolerance metric/loss if events are frame-aligned;
+- higher weight for rare collisions.
+
+### 53.5 Parameter loss
+
+\[
+\mathcal L_{\text{param}}
+=
+\sum_k
+o_k
+\left[
+\frac{(\hat\theta_k-\theta_k^*)^2}{\sigma_k^2}
++
+\log\sigma_k^2
+\right],
+\]
+
+where \(o_k\) is observability.
+
+### 53.6 Existence/visibility loss
+
+BCE or focal loss with lifecycle masks.
+
+### 53.7 Association/appearance loss
+
+- Hungarian proposal supervision;
+- contrastive appearance embedding;
+- optional pairwise association classification;
+- no direct loss on arbitrary persistent numeric IDs.
+
+### 53.8 Uncertainty loss
+
+- Gaussian NLL;
+- categorical calibration regularisation if needed;
+- variance floor/ceiling penalties;
+- optional coverage penalty.
+
+### 53.9 Physics regularisers
+
+Use only where assumptions apply:
+
+- penetration penalty;
+- pairwise action–reaction consistency;
+- quaternion norm;
+- modal stability;
+- energy/momentum consistency around isolated elastic collisions;
+- bounded acceleration/impulse;
+- sleep/contact consistency.
+
+Do not enforce global energy conservation in scenes with drag, inelastic contact, or external actuation.
+
+### 53.10 Correction penalty
+
+Penalise unjustified large state and parameter corrections, scaled by uncertainty and observability.
+
+### 53.11 Programme consistency
+
+Different prefixes of the same episode should infer compatible slow parameters and dynamics codes:
+
+\[
+\mathcal L_{\text{programme}}
+=
+\sum_{t_1<t_2}
+\|\theta_{t_1}-\operatorname{stopgrad}(\theta_{t_2})\|^2
+\]
+
+where the later estimate is adequately observable/confident.
+
+### 53.12 Total loss
+
+Example:
+
+\[
+\mathcal L =
+w_s\mathcal L_{\text{state}}
++w_r\mathcal L_{\text{rollout}}
++w_m\mathcal L_{\text{measurement}}
++w_e\mathcal L_{\text{event}}
++w_\theta\mathcal L_{\text{param}}
++w_x\mathcal L_{\text{exist}}
++w_a\mathcal L_{\text{association}}
++w_u\mathcal L_{\text{uncertainty}}
++w_p\mathcal L_{\text{physics}}
++w_c\mathcal L_{\text{correction}}
++w_g\mathcal L_{\text{programme}}.
+\]
+
+All weights live in YAML and are printed in run metadata.
+
+## 54. Matching ground truth to beliefs
+
+Because persistent belief order is not ground-truth order, metrics/losses should match active beliefs to simulator objects by known association during training or by Hungarian state distance during evaluation.
+
+Never compute object-wise loss by assuming slot index equality after the first frame.
+
+## 55. Optimisation
+
+Initial default:
+
+- `AdamW`;
+- learning rate around `3e-4` for small modules, configurable;
+- weight decay `1e-4` or lower;
+- gradient clipping, default global norm 1.0;
+- warmup plus cosine decay optional but simple;
+- no exotic optimiser dependency.
+
+Parameter groups may use a lower learning rate for perception if pretrained, but avoid many groups initially.
+
+## 56. Mixed precision and compilation
+
+- MPS: float32 by default; do not assume AMP support/benefit;
+- CUDA: optional autocast and `GradScaler` from config;
+- CPU: float32;
+- `torch.compile`: optional and off by default until correctness is established;
+- log device and precision.
+
+## 57. Truncated backpropagation
+
+Long online sequences can exceed memory. Use configurable truncated BPTT:
+
+1. carry numerical `WorldBelief`;
+2. after `tbptt_steps`, detach all tensors through a recursive utility;
+3. retain object IDs, lifecycle counters, and values;
+4. continue online operation.
+
+Test that detaching does not alter values or masks.
+
+## 58. Gradient safety
+
+- check finite total loss;
+- optionally log per-module gradient norms;
+- skip/update safely on nonfinite gradients with a clear warning and counter;
+- do not silently continue indefinitely;
+- clamp high-risk quantities such as inverse depth, variance, mass, and modal frequency.
+
+## 59. Checkpointing
+
+Each checkpoint contains:
+
+- model state;
+- optimiser state;
+- scheduler state;
+- global step/epoch;
+- full resolved config;
+- random number generator states where practical;
+- metric summary;
+- specification version;
+- git commit hash and dirty status;
+- data/simulator version;
+- device/precision metadata.
+
+Save:
+
+- `last.pt`;
+- `best_rollout.pt`;
+- optionally periodic numbered checkpoints.
+
+Use atomic temp-file rename to avoid corrupt checkpoints.
+
+## 60. Reproducibility
+
+Seed:
+
+- Python `random`;
+- NumPy;
+- PyTorch CPU;
+- CUDA when available;
+- simulator episode generator.
+
+MPS/CUDA exact bitwise determinism may not always be possible. Record reproducibility mode and provide a CPU deterministic smoke test.
+
+## 61. Logging
+
+Use:
+
+- console progress;
+- JSONL metrics in run directory;
+- optional TensorBoard through PyTorch's writer;
+- saved resolved YAML;
+- saved evaluation JSON;
+- generated plots/videos.
+
+Do not introduce an external tracking service or require API keys.
+
+Log at minimum:
+
+- total and component losses;
+- current/posterior state errors;
+- rollout errors by horizon;
+- correction improvement;
+- event metrics;
+- parameter error;
+- uncertainty/NLL;
+- object count/association statistics;
+- penetration/physics diagnostics;
+- timing and memory;
+- learning rate;
+- gradient norm.
+
+---
+
+# Part XI — Synthetic validation environment
+
+## 62. Why this environment
+
+The first validation must be:
+
+- cheap enough for a MacBook Pro with MPS;
+- rich enough to exercise the final architecture;
+- deterministic and fully labelled;
+- genuinely online and visual;
+- scalable to cloud training without data-contract changes.
+
+The chosen environment is a vectorised synthetic 3D sphere world rendered as small RGB frames.
+
+This avoids building a general-purpose rigid-body engine while still including:
+
+- 3D state;
+- perspective projection;
+- depth ambiguity and occlusion;
+- collisions and discontinuities;
+- camera movement;
+- unknown dynamics parameters;
+- data association;
+- belief correction.
+
+## 63. Simulator state
+
+For each object:
+
+- persistent simulator ID;
+- position `[3]`;
+- velocity `[3]`;
+- radius;
+- mass;
+- restitution;
+- drag;
+- surface friction/tangential damping;
+- RGB albedo/texture code;
+- active/existence;
+- sleep state.
+
+Global:
+
+- gravity;
+- bounded box or floor/side planes;
+- camera trajectory and intrinsics;
+- lighting parameters;
+- simulator timestep;
+- episode seed.
+
+## 64. Physics
+
+### 64.1 Integration
+
+Use a stable semi-implicit Euler at a high substep rate, e.g. 120–240 Hz.
+
+### 64.2 Sphere–sphere collision
+
+Use analytic contact detection and impulse resolution. Include:
+
+- restitution;
+- inverse-mass position correction;
+- optional tangential impulse/friction;
+- event labels and exact/approximate contact time.
+
+### 64.3 Sphere–plane collision
+
+Ground and optional walls. Include restitution and tangential damping.
+
+### 64.4 Drag
+
+Apply linear or exponential drag.
+
+### 64.5 External events
+
+Optionally inject rare impulses at labelled times in harder configs. This tests surprise/event handling.
+
+### 64.6 Simulator/model mismatch
+
+The model should not simply share all simulator equations and parameters. Introduce mild mismatch:
+
+- simulator may use slightly different drag integration;
+- random tangential friction;
+- small external perturbations;
+- rendering noise.
+
+The explicit model still provides structure, while learned residuals have work to do.
+
+## 65. Rendering
+
+Implement a lightweight renderer with NumPy/PyTorch/Pillow or pure PyTorch operations.
+
+Required:
+
+- perspective projection;
+- depth sorting;
+- circles/discs with apparent size;
+- simple Lambertian-like shading or radial gradient;
+- background/floor cue;
+- soft or anti-aliased edges where practical;
+- occlusion;
+- camera movement;
+- RGB output `[3,H,W]` in `[0,1]`.
+
+Optional:
+
+- cast blob shadows to improve depth cues;
+- simple textures/markers;
+- low-level noise and colour jitter.
+
+The renderer does not need to be differentiable because ground-truth states supervise measurement and dynamics modules. The model's measurement projector is differentiable.
+
+## 66. Camera
+
+Sample calibrated camera trajectories:
+
+- fixed;
+- linear translation;
+- orbit around scene;
+- gentle rotation;
+- combinations.
+
+Provide intrinsics and extrinsics to the runtime in Milestone 1.
+
+Ensure objects remain visible enough for learnability while still creating partial/full occlusions.
+
+## 67. Data generation
+
+Support two modes:
+
+1. on-the-fly generation from deterministic episode seeds;
+2. optional cached `.pt`/`.npz` shards for speed and reproducibility.
+
+Start with on-the-fly or a small pre-generated validation set. Avoid a complex dataset service.
+
+Each episode record:
+
+```python
+{
+    "rgb": Tensor[T, 3, H, W],
+    "timestamps": Tensor[T],
+    "camera": {...},
+    "objects": {
+        "id": Tensor[T, N],
+        "active": Tensor[T, N],
+        "position": Tensor[T, N, 3],
+        "velocity": Tensor[T, N, 3],
+        "radius": Tensor[T, N, 1],
+        "mass": Tensor[T, N, 1],
+        "restitution": Tensor[T, N, 1],
+        "drag": Tensor[T, N, 1],
+        "friction": Tensor[T, N, 1],
+        "visible_fraction": Tensor[T, N],
+    },
+    "events": {...},
+    "seed": int,
+}
+```
+
+Pad to `N_max` with masks.
+
+## 68. Dataset splits
+
+Use seed ranges or explicit manifests, not random split at runtime.
+
+Ensure test distributions include:
+
+- held-out initial states;
+- held-out parameter combinations;
+- held-out camera trajectories;
+- longer horizons;
+- optionally out-of-range but reasonable restitution/drag values.
+
+Keep one in-distribution validation split and one compositional/OOD split.
+
+## 69. Difficulty configurations
+
+### `toy_smoke.yaml`
+
+- 64×64;
+- 2–3 objects;
+- fixed camera;
+- short sequences;
+- fast CPU/MPS smoke test.
+
+### `toy_mps.yaml`
+
+- 96×96;
+- 3–6 objects;
+- camera movement;
+- occlusion;
+- variable mass/restitution/drag;
+- 64–96 frames;
+- small model.
+
+### `toy_hard.yaml`
+
+- 128×128;
+- 4–10 objects;
+- similar colours;
+- stronger occlusion;
+- irregular dropped frames;
+- longer horizons;
+- external impulses;
+- CUDA recommended.
+
+All use the same model classes and data contracts.
+
+## 70. Toy perception labels
+
+Provide:
+
+- projected centre;
+- apparent radius;
+- inverse depth;
+- visible fraction;
+- coarse segmentation mask;
+- object colour/appearance;
+- existence;
+- ground-truth association.
+
+These labels pretrain and evaluate measurement extraction. RGB-only runtime must not receive ground-truth IDs or states.
+
+## 71. Required demonstrations
+
+The demo must visualise, for a held-out RGB episode:
+
+- current RGB frame;
+- measured object proposals;
+- prior projected positions/support;
+- posterior projected positions;
+- ground-truth object positions;
+- future rollout before correction;
+- future rollout after correction;
+- uncertainty ellipses/bands where practical;
+- detected/predicted collision events;
+- parameter estimates over time;
+- per-step error and correction improvement.
+
+Export a GIF or MP4 if dependencies permit; PNG sequences are an acceptable fallback.
+
+---
+
+# Part XII — Evaluation
+
+## 72. Core evaluation questions
+
+1. Does the model maintain correct identities?
+2. Does it predict future state better than simple baselines?
+3. Does correction improve the future forecast?
+4. Does uncertainty reflect actual error?
+5. Does it handle occlusion and collisions?
+6. Does it infer observable physical parameters?
+7. Is the online update cheap?
+8. Does irregular timing work?
+9. Does the same architecture run on MPS and CUDA?
+
+## 73. Metrics
+
+### 73.1 State
+
+- position RMSE/MAE by horizon;
+- velocity RMSE;
+- orientation geodesic error when applicable;
+- depth error;
+- error during visible versus occluded intervals.
+
+Normalise and also report physical units.
+
+### 73.2 Forecast improvement
+
+For each correction time:
+
+\[
+\Delta E_h =
+E_h(\text{prior rollout})-
+E_h(\text{posterior rollout}).
+\]
+
+Report:
+
+- mean \(\Delta E_h\);
+- percentage of updates with positive improvement;
+- improvement by horizon;
+- improvement after injected perturbation;
+- improvement after collision/occlusion.
+
+This is a primary project metric.
+
+### 73.3 Baselines
+
+Compare against:
+
+- static;
+- constant velocity;
+- analytic gravity/drag with default parameters;
+- analytic dynamics with oracle parameters;
+- oracle-measurement version of the model.
+
+### 73.4 Events
+
+- contact/collision precision, recall, F1;
+- event timing error;
+- false event rate;
+- mode accuracy/confusion matrix.
+
+### 73.5 Tracking
+
+- identity switches;
+- IDF1-like score;
+- object recall/precision;
+- birth confirmation latency;
+- survival through occlusion;
+- false births/deaths.
+
+For toy ground truth, implement simplified transparent metrics rather than importing a large MOT package.
+
+### 73.6 Parameters
+
+- MAE/NLL for restitution, drag, radius, friction, and mass ratio;
+- convergence versus number of informative events;
+- metrics conditioned on observability;
+- calibration.
+
+### 73.7 Physics diagnostics
+
+- maximum/mean penetration;
+- action–reaction residual;
+- quaternion norm;
+- rollout divergence/NaN rate;
+- energy/momentum error on specially configured conservative scenes.
+
+### 73.8 Uncertainty
+
+Calibration metrics from Part IX, by horizon and condition.
+
+### 73.9 Performance
+
+At batch size 1:
+
+- RGB global pass latency;
+- RGB fast path latency;
+- association latency;
+- predict/correct latency;
+- 1 s and 2 s rollout latency;
+- peak allocated memory where available.
+
+Report on current hardware rather than fabricating a target. Aspirational toy goal: a normal fast update and short rollout suitable for interactive use on Apple Silicon, with global discovery allowed to be slower.
+
+## 74. Milestone 1 quantitative acceptance
+
+The exact achievable numbers depend on training budget, but the implementation is not complete until it demonstrates all of the following on a held-out synthetic RGB set:
+
+- end-to-end RGB operation with no oracle measurement input;
+- persistent IDs and lifecycle functioning;
+- no NaNs in a long evaluation run;
+- corrected rollouts improve mean future position error relative to prior rollouts after injected perturbations;
+- learned model beats constant-velocity baseline at collision-containing horizons;
+- uncertainty grows during occlusion and contracts after reliable observation;
+- event metrics are materially above chance;
+- parameter estimates move toward ground truth when informative events occur;
+- commands run on MPS in the `orpheus` environment;
+- all unit/integration tests pass;
+- demo output clearly shows prior versus posterior improvement.
+
+Recommended target gates, adjustable only with documented evidence:
+
+- at least 20% reduction in 1-second rollout RMSE after correction on perturbation episodes;
+- at least 15% lower 1-second position RMSE than constant velocity on collision episodes;
+- collision F1 at least 0.75 in the base toy distribution;
+- ID switch rate below 2% of object-frame associations in the base distribution;
+- 90% uncertainty interval empirical coverage between 80% and 98%.
+
+Do not tune only to these numbers; report full curves and failure cases.
+
+## 75. Evaluation protocol
+
+- fixed test seeds;
+- no training on test episodes;
+- RGB-only and oracle-ablation reports clearly separated;
+- evaluate best checkpoint and last checkpoint;
+- save config/checkpoint hash;
+- output JSON and human-readable Markdown summary;
+- generate plots by horizon;
+- include at least a few failure visualisations.
+
+---
+
+# Part XIII — Public runtime API
+
+## 76. Minimal user-facing API
+
+```python
+model = OnlineWorldModel.from_config(config)
+model.reset(batch_size=1)
+
+belief = model.ingest(observation_packet)
+future = model.predict(query_times=[0.1, 0.5, 1.0, 2.0])
+```
+
+Convenience:
+
+```python
+belief = model.initialize(initial_packets)
+belief, future = model.step(packet, prediction_horizon=2.0)
+```
+
+The lower-level `ingest` API is authoritative.
+
+## 77. `OnlineWorldModel`
+
+Suggested structure:
+
+```python
+class OnlineWorldModel(nn.Module):
+    def __init__(
+        self,
+        observation_modules: Mapping[str, ObservationModule],
+        dynamics: DynamicsModel,
+        associator: Associator,
+        updater: BeliefUpdater,
+        lifecycle: ObjectLifecycle,
+        identifier: ParameterIdentifier,
+        scheduler: ObservationScheduler,
+        belief_factory: BeliefFactory,
+    ) -> None:
+        ...
+
+    def reset(self, batch_size: int = 1) -> None:
+        ...
+
+    def initialize(
+        self,
+        packets: Sequence[ObservationPacket],
+    ) -> WorldBelief:
+        ...
+
+    def ingest(
+        self,
+        packets: ObservationPacket | Sequence[ObservationPacket],
+    ) -> WorldBelief:
+        ...
+
+    def predict(
+        self,
+        query_times: Sequence[float] | Tensor,
+    ) -> BeliefTrajectory:
+        ...
+
+    @property
+    def belief(self) -> WorldBelief | None:
+        ...
+```
+
+Normal runtime state is explicit and resettable. Avoid global singletons.
+
+## 78. Training API
+
+The trainer should operate on a functional sequence runner rather than depending on the stateful singleton used by demos. Reuse the same module logic.
+
+Suggested:
+
+```python
+outputs = sequence_model.run_episode(
+    batch,
+    mode="closed_loop_rgb",
+    rollout_queries=queries,
+    perturbation_policy=policy,
+)
+losses = loss_computer(outputs, batch)
+```
+
+## 79. CLI
+
+### `train.py`
+
+```bash
+python train.py \
+  --config configs/toy_mps.yaml \
+  --run-name baseline
+```
+
+Optional flags:
+
+- `--resume PATH`;
+- `--device auto|mps|cuda|cpu`;
+- `--seed`;
+- `--set key=value` for a small number of dotted overrides, if implemented simply.
+
+### `evaluate.py`
+
+```bash
+python evaluate.py \
+  --config configs/toy_mps.yaml \
+  --checkpoint runs/baseline/checkpoints/best_rollout.pt \
+  --split test \
+  --output runs/baseline/evaluation
+```
+
+### `demo.py`
+
+```bash
+python demo.py \
+  --config configs/toy_mps.yaml \
+  --checkpoint ... \
+  --seed 123 \
+  --output demo_outputs/seed_123
+```
+
+### Additional developer scripts
+
+Place under `scripts/`, not root:
+
+- generate/cache dataset;
+- inspect episode;
+- benchmark latency;
+- validate config;
+- export demo animation.
+
+## 80. Configuration
+
+Use plain YAML loaded into typed dataclasses. Avoid Hydra/OmegaConf.
+
+Requirements:
+
+- defaults and validation;
+- resolved config saved;
+- unknown keys raise errors;
+- paths resolved relative to repo/config location clearly;
+- no arbitrary code execution in YAML.
+
+Example top-level:
+
+```yaml
+project:
+  name: orpheus
+  seed: 42
+  output_dir: runs
+
+device:
+  preference: auto
+  cuda_amp: true
+  mps_float32: true
+
+simulator:
+  type: sphere_world
+  image_size: [96, 96]
+  frame_rate: 30
+  physics_rate: 120
+  sequence_frames: 72
+  min_objects: 3
+  max_objects: 6
+
+model:
+  max_objects: 8
+  state:
+    geometry_dim: 8
+    appearance_dim: 32
+    residual_dynamics_dim: 16
+    modal_count: 4
+    modal_dim: 3
+  rgb:
+    backbone_channels: [32, 64, 96, 128]
+    global_every_steps: 15
+    roi_size: 20
+  dynamics:
+    max_substep: 0.008333333
+    hidden_dim: 96
+  filter:
+    hidden_dim: 128
+
+training:
+  batch_size: 6
+  steps: 30000
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  tbptt_steps: 24
+  grad_clip_norm: 1.0
+  checkpoint_every: 1000
+  eval_every: 1000
+
+evaluation:
+  horizons_seconds: [0.1, 0.25, 0.5, 1.0, 2.0]
+```
+
+Provide complete configs in the repository; this excerpt is illustrative.
+
+
+# Part XIV — Repository architecture
+
+## 81. Required repository tree
+
+Create the following from the empty repository. Small deviations are acceptable only when documented and clearly improve cohesion.
+
+```text
+.
+├── AGENTS.md
+├── PROJECT_SPEC.md
+├── README.md
+├── LICENSE
+├── pyproject.toml
+├── requirements.txt
+├── train.py
+├── evaluate.py
+├── demo.py
+│
+├── configs/
+│   ├── default.yaml
+│   ├── toy_smoke.yaml
+│   ├── toy_mps.yaml
+│   ├── toy_hard.yaml
+│   └── cloud_single_gpu.yaml
+│
+├── world_model/
+│   ├── __init__.py
+│   ├── py.typed
+│   │
+│   ├── belief/
+│   │   ├── __init__.py
+│   │   ├── object_belief.py
+│   │   ├── world_belief.py
+│   │   ├── camera_belief.py
+│   │   ├── packing.py
+│   │   ├── hypotheses.py
+│   │   ├── lifecycle.py
+│   │   └── validation.py
+│   │
+│   ├── observations/
+│   │   ├── __init__.py
+│   │   ├── base.py
+│   │   ├── registry.py
+│   │   ├── packets.py
+│   │   ├── measurements.py
+│   │   ├── context.py
+│   │   ├── state/
+│   │   │   ├── __init__.py
+│   │   │   └── module.py
+│   │   └── rgb/
+│   │       ├── __init__.py
+│   │       ├── backbone.py
+│   │       ├── global_detector.py
+│   │       ├── roi_updater.py
+│   │       ├── projector.py
+│   │       ├── module.py
+│   │       ├── cache.py
+│   │       └── losses.py
+│   │
+│   ├── fusion/
+│   │   ├── __init__.py
+│   │   ├── association.py
+│   │   ├── costs.py
+│   │   ├── innovation.py
+│   │   ├── scheduler.py
+│   │   └── surprise.py
+│   │
+│   ├── filtering/
+│   │   ├── __init__.py
+│   │   ├── prediction.py
+│   │   ├── correction.py
+│   │   ├── analytic_update.py
+│   │   ├── learned_update.py
+│   │   └── uncertainty.py
+│   │
+│   ├── dynamics/
+│   │   ├── __init__.py
+│   │   ├── model.py
+│   │   ├── analytic.py
+│   │   ├── quaternion.py
+│   │   ├── modal.py
+│   │   ├── graph.py
+│   │   ├── contacts.py
+│   │   ├── events.py
+│   │   ├── uncertainty.py
+│   │   └── rollout.py
+│   │
+│   ├── identification/
+│   │   ├── __init__.py
+│   │   ├── parameters.py
+│   │   ├── observability.py
+│   │   ├── recurrent_updater.py
+│   │   └── local_optimiser.py
+│   │
+│   ├── runtime/
+│   │   ├── __init__.py
+│   │   ├── online_world_model.py
+│   │   ├── sequence_runner.py
+│   │   ├── state.py
+│   │   └── diagnostics.py
+│   │
+│   ├── simulator/
+│   │   ├── __init__.py
+│   │   ├── sphere_world.py
+│   │   ├── physics.py
+│   │   ├── collisions.py
+│   │   ├── camera.py
+│   │   ├── renderer.py
+│   │   ├── episode.py
+│   │   └── labels.py
+│   │
+│   ├── datasets/
+│   │   ├── __init__.py
+│   │   ├── synthetic.py
+│   │   ├── collate.py
+│   │   ├── splits.py
+│   │   └── caching.py
+│   │
+│   ├── training/
+│   │   ├── __init__.py
+│   │   ├── trainer.py
+│   │   ├── loop.py
+│   │   ├── losses.py
+│   │   ├── matching.py
+│   │   ├── perturbations.py
+│   │   ├── curriculum.py
+│   │   ├── checkpointing.py
+│   │   └── logging.py
+│   │
+│   ├── evaluation/
+│   │   ├── __init__.py
+│   │   ├── evaluator.py
+│   │   ├── baselines.py
+│   │   ├── state_metrics.py
+│   │   ├── tracking_metrics.py
+│   │   ├── event_metrics.py
+│   │   ├── calibration.py
+│   │   ├── latency.py
+│   │   └── reports.py
+│   │
+│   ├── visualisation/
+│   │   ├── __init__.py
+│   │   ├── frames.py
+│   │   ├── trajectories.py
+│   │   ├── uncertainty.py
+│   │   ├── animation.py
+│   │   └── plots.py
+│   │
+│   └── utils/
+│       ├── __init__.py
+│       ├── config.py
+│       ├── device.py
+│       ├── seeds.py
+│       ├── tensors.py
+│       ├── transforms.py
+│       ├── io.py
+│       ├── profiling.py
+│       └── version.py
+│
+├── tests/
+│   ├── conftest.py
+│   ├── unit/
+│   │   ├── test_belief_invariants.py
+│   │   ├── test_packing.py
+│   │   ├── test_quaternion.py
+│   │   ├── test_modal_dynamics.py
+│   │   ├── test_analytic_dynamics.py
+│   │   ├── test_collisions.py
+│   │   ├── test_association.py
+│   │   ├── test_filter_update.py
+│   │   ├── test_observability.py
+│   │   ├── test_config.py
+│   │   └── test_device.py
+│   ├── integration/
+│   │   ├── test_simulator_episode.py
+│   │   ├── test_oracle_online_loop.py
+│   │   ├── test_rgb_measurements.py
+│   │   ├── test_rgb_online_loop.py
+│   │   ├── test_checkpoint_roundtrip.py
+│   │   └── test_cli_smoke.py
+│   └── regression/
+│       └── test_fixed_seed_metrics.py
+│
+├── scripts/
+│   ├── generate_dataset.py
+│   ├── inspect_episode.py
+│   ├── benchmark.py
+│   ├── validate_config.py
+│   └── render_demo.py
+│
+├── project/
+│   ├── PROJECT_VISION.md
+│   ├── ARCHITECTURE.md
+│   ├── SYSTEM_OVERVIEW.md
+│   ├── WORLD_BELIEF.md
+│   ├── MULTIMODAL_DESIGN.md
+│   ├── FILTERING.md
+│   ├── DYNAMICS.md
+│   ├── DATA_CONTRACTS.md
+│   ├── TRAINING.md
+│   ├── DATASETS.md
+│   ├── EVALUATION.md
+│   ├── DESIGN_DECISIONS.md
+│   ├── ROADMAP.md
+│   ├── TASKS.md
+│   ├── STATUS.md
+│   ├── RESEARCH_NOTES.md
+│   ├── CHANGELOG.md
+│   └── CODING_GUIDELINES.md
+│
+└── docs/
+    ├── getting_started.md
+    ├── extending_modalities.md
+    ├── toy_world.md
+    └── troubleshooting.md
+```
+
+Do not create empty files solely to satisfy the tree. Populate required documentation and implement the modules needed for the current milestone. Future-only modality packages should be documented rather than filled with meaningless stubs.
+
+## 82. Root files
+
+### `AGENTS.md`
+
+Must tell coding agents:
+
+- read `PROJECT_SPEC.md`;
+- inspect `project/STATUS.md`, `TASKS.md`, `DESIGN_DECISIONS.md`, and `CHANGELOG.md`;
+- preserve public contracts;
+- update tests and docs;
+- run relevant commands;
+- record exact unfinished work;
+- do not replace the architecture with a simpler clip predictor;
+- do not use oracle state in the claimed RGB result;
+- do not add heavy infrastructure without documented need.
+
+### `README.md`
+
+Concise entry point:
+
+- what Orpheus is;
+- current implemented status, not aspirational claims;
+- quick start;
+- commands;
+- diagram;
+- links to spec and docs;
+- current toy results once available;
+- known limitations.
+
+### `LICENSE`
+
+Choose a permissive license unless the user specifies otherwise. Apache-2.0 is a reasonable default because it includes explicit patent terms. Record the choice in design decisions.
+
+### `requirements.txt`
+
+Keep runtime dependencies straightforward. Do not list/replace PyTorch if the environment already has a custom compiled installation; in `pyproject.toml`, make PyTorch an optional/external documented prerequisite or use a broad dependency only if it will not force reinstall.
+
+Likely dependencies:
+
+- `numpy`;
+- `scipy`;
+- `PyYAML`;
+- `Pillow`;
+- `matplotlib`;
+- `tqdm`;
+- optional `tensorboard`.
+
+Development:
+
+- `pytest`;
+- `pytest-cov`;
+- `ruff`;
+- `mypy` or `pyright` if chosen.
+
+Avoid mandatory OpenCV, torchvision compiled ops, graph libraries, Hydra, Lightning, Ray, W&B, or MLflow initially.
+
+### `pyproject.toml`
+
+Configure:
+
+- package metadata;
+- Python version, e.g. 3.11+ if environment supports it;
+- setuptools;
+- ruff;
+- pytest;
+- type checking;
+- optional `dev` extras;
+- console scripts only if useful, while retaining root scripts.
+
+## 83. Project memory files
+
+These files are not ceremonial. They prevent agent drift.
+
+### `project/STATUS.md`
+
+Always state:
+
+- what works now;
+- last validated commands;
+- latest checkpoint/result paths if committed only as references;
+- current blockers;
+- known failures;
+- next concrete task;
+- hardware/environment used;
+- date.
+
+### `project/TASKS.md`
+
+Use checkboxes grouped by current milestone. Each task should be verifiable. Keep deferred ideas separate.
+
+### `project/DESIGN_DECISIONS.md`
+
+Use ADR-like entries:
+
+- ID/date;
+- context;
+- decision;
+- alternatives considered;
+- consequences;
+- status.
+
+Initial decisions should include:
+
+- persistent belief;
+- multimodal observation contracts;
+- measurement-space prediction;
+- synthetic RGB first;
+- stable modal rather than fixed DCT state;
+- hybrid physics;
+- diagonal uncertainty initially;
+- no Lightning/Hydra;
+- known camera pose in Milestone 1;
+- Apache-2.0 or selected licence.
+
+### `project/CHANGELOG.md`
+
+Record user-visible/research-significant changes. Do not duplicate every commit.
+
+### `project/RESEARCH_NOTES.md`
+
+Capture hypotheses, experiments, findings, and failure analysis. Clearly label speculation versus evidence.
+
+### `project/ROADMAP.md`
+
+Milestones and acceptance criteria, not a wish list.
+
+### `project/DATA_CONTRACTS.md`
+
+Mirror canonical dataclasses/tensor shapes and update when contracts change.
+
+## 84. Module dependency direction
+
+Preferred dependency direction:
+
+```text
+utils / typed data
+        ↓
+belief + observation contracts
+        ↓
+dynamics / filtering / fusion / identification
+        ↓
+runtime sequence orchestration
+        ↓
+training / evaluation / demos
+```
+
+Simulator/datasets may depend on common typed data and utilities, but core runtime must not import training code.
+
+Avoid circular imports by:
+
+- placing shared dataclasses in low-level packages;
+- using `TYPE_CHECKING`;
+- passing interfaces rather than importing concrete modules.
+
+## 85. Public versus internal API
+
+Public:
+
+- configuration loader;
+- `ObservationPacket`;
+- `WorldBelief`;
+- `BeliefTrajectory`;
+- `OnlineWorldModel`;
+- observation-module registration;
+- training/evaluation CLI.
+
+Internal details may change:
+
+- exact CNN layers;
+- graph MLP shape;
+- matching cost implementation;
+- recurrent updater hidden structure.
+
+Mark exports deliberately in `__init__.py`.
+
+---
+
+# Part XV — Implementation programme
+
+## 86. General execution rule
+
+Build one integrated vertical system. Do not spend months on isolated toy architectures, but do use small, testable steps inside the same architecture.
+
+Codex should continue until the first vertical slice is runnable, tested, and documented. A repository containing only folder structure, dataclass placeholders, or pseudocode is not a valid result.
+
+## 87. Phase 0 — Repository and executable skeleton
+
+Deliver:
+
+- root files;
+- package installation;
+- configs;
+- device selection;
+- typed config loader;
+- project memory docs;
+- test harness;
+- `train.py`, `evaluate.py`, `demo.py` that parse config and fail only with meaningful unimplemented status during the first commit.
+
+Then proceed immediately; do not stop here.
+
+Acceptance:
+
+- `pip install -e ".[dev]"` succeeds without replacing custom PyTorch;
+- `pytest` runs;
+- config validation works;
+- `python train.py --config configs/toy_smoke.yaml --dry-run` prints resolved plan.
+
+## 88. Phase 1 — Simulator, labels, and baselines
+
+Implement:
+
+- vectorised sphere world;
+- deterministic seeds;
+- camera and renderer;
+- exact labels/events;
+- dataset/collate;
+- static/constant velocity/analytic baselines;
+- inspection visualisation.
+
+Acceptance:
+
+- fixed seed regression test;
+- collision momentum/restitution tests;
+- rendered episode inspection;
+- shapes/masks valid;
+- evaluation baselines run.
+
+## 89. Phase 2 — Belief, analytic/modal dynamics, and oracle filter
+
+Implement:
+
+- canonical belief dataclasses;
+- packing/validation;
+- analytic dynamics;
+- modal bank;
+- event/contact model initial structured implementation;
+- uncertainty propagation;
+- state/oracle observation module;
+- association/lifecycle;
+- learned/analytic correction;
+- online sequence runner.
+
+Acceptance:
+
+- oracle noisy measurements initialise and update belief;
+- rollout works at arbitrary query times;
+- injected state perturbation is corrected;
+- posterior rollout improves over prior;
+- collision handling stable;
+- all unit/integration tests pass.
+
+This is a debugging checkpoint, not the claimed final milestone.
+
+## 90. Phase 3 — RGB global measurements
+
+Implement:
+
+- lightweight backbone;
+- proposal head;
+- Hungarian supervised training;
+- measurement projector;
+- measurement uncertainty;
+- RGB pretraining mode;
+- visual diagnostics.
+
+Acceptance:
+
+- held-out measurement accuracy substantially better than naive centre guessing;
+- proposal recall/precision and depth error reported;
+- uncertainty finite/calibrated at a basic level;
+- no simulator state used as runtime input.
+
+## 91. Phase 4 — RGB fast residual updater and association
+
+Implement:
+
+- projected ROIs;
+- `grid_sample` ROI extraction;
+- cached features;
+- fast measurement corrections;
+- appearance association;
+- global scheduler/surprise;
+- occlusion handling;
+- lifecycle.
+
+Acceptance:
+
+- IDs persist through synthetic occlusion;
+- fast path produces valid measurements;
+- global path recovers from loss;
+- runtime diagnostics distinguish fast/global passes.
+
+## 92. Phase 5 — Full closed-loop training
+
+Implement:
+
+- episode unroll;
+- truncated BPTT;
+- perturbation/recovery;
+- rollout queries;
+- complete losses;
+- checkpoint/resume;
+- JSONL/TensorBoard logging;
+- RGB-only curriculum endpoint.
+
+Acceptance:
+
+- train command runs on MPS;
+- loss decreases on smoke overfit;
+- closed-loop RGB evaluation runs;
+- correction improves future prediction;
+- baseline comparisons saved;
+- checkpoint roundtrip exact enough.
+
+## 93. Phase 6 — Online parameter identification
+
+Implement:
+
+- parameter beliefs;
+- observability gates;
+- recurrent updater;
+- supervised and rollout parameter losses;
+- plots.
+
+Acceptance:
+
+- restitution estimates improve after collisions;
+- drag estimates improve during free motion;
+- unobservable parameters retain high uncertainty rather than false certainty;
+- future rollout improves versus fixed default parameters.
+
+If Phase 6 is too large for the first coding pass, the interfaces and a working bounded simple updater must still be present, with the full recurrent refinement next in `TASKS.md`. The user specifically wants online adaptation, so do not omit parameter update entirely.
+
+## 94. Phase 7 — Evaluation and demo completion
+
+Implement:
+
+- complete evaluator;
+- calibration;
+- tracking/events;
+- latency benchmark;
+- prior/posterior demo;
+- Markdown report;
+- failure examples.
+
+Acceptance: Milestone 1 definition below.
+
+## 95. Milestone 1 definition of done
+
+Milestone 1 is complete only when:
+
+1. the repository installs in the `orpheus` environment without reinstalling PyTorch;
+2. unit and integration tests pass;
+3. `toy_smoke` can overfit a tiny fixed dataset;
+4. `toy_mps` trains with MPS;
+5. evaluation uses RGB-only observations;
+6. the model maintains a persistent belief and object IDs;
+7. it produces prior and posterior future rollouts;
+8. a new frame cheaply corrects state without re-encoding history or updating model weights;
+9. posterior future prediction improves on held-out perturbation episodes;
+10. collisions, occlusion, uncertainty, and camera motion are exercised;
+11. at least restitution and drag have online update paths;
+12. metrics compare against baselines;
+13. demo artefacts visibly show operation;
+14. `README.md`, project status, decisions, tasks, and changelog match reality;
+15. no core module is a placeholder.
+
+## 96. Milestone 2 — Stronger dynamics and hypotheses
+
+After Milestone 1, improve without redesign:
+
+- branch/merge hypotheses;
+- continuous collision timing;
+- richer object geometry;
+- stronger graph equivariance;
+- learned camera update;
+- fixed-lag smoothing;
+- DCT/window spectral baseline;
+- longer horizons.
+
+## 97. Milestone 3 — Second modality
+
+Choose one based on product direction:
+
+- audio for hidden impacts/material inference;
+- skeleton for human/object interaction;
+- IMU for ego-motion;
+- depth for geometry.
+
+Adding it should validate the observation contract and shared-belief fusion. Do not build all modalities at once.
+
+## 98. Milestone 4 — Real data
+
+Integrate strong pretrained perception or calibrated datasets behind the RGB module. Preserve core state/dynamics/filter interfaces.
+
+Potential approach:
+
+- use externally produced detections/masks/depth as structured observation modules first;
+- then fine-tune end-to-end where feasible;
+- explicitly model domain mismatch and uncertainty.
+
+---
+
+# Part XVI — Testing strategy
+
+## 99. Unit testing
+
+Every mathematical component needs focused tests.
+
+### 99.1 Geometry
+
+- transform inversion/composition;
+- camera projection/back-projection;
+- quaternion identity/composition;
+- finite small-angle gradients.
+
+### 99.2 Modal dynamics
+
+Tests listed in Part VI.
+
+### 99.3 Physics
+
+- isolated gravity trajectory;
+- drag decay;
+- elastic equal-mass collision;
+- inelastic collision;
+- sphere–plane bounce;
+- no impulse for separating bodies;
+- bounded penetration correction;
+- permutation symmetry.
+
+### 99.4 Belief
+
+- shape/mask invariants;
+- pack/unpack roundtrip;
+- clone/detach/device transfer;
+- no mutation during rollout;
+- ID uniqueness.
+
+### 99.5 Association
+
+- obvious matches;
+- gated impossible match;
+- unmatched births;
+- ambiguous pair;
+- no duplicate assignment.
+
+### 99.6 Filter
+
+- zero innovation leaves mean approximately unchanged;
+- low measurement noise causes stronger correction;
+- high measurement noise causes weaker correction;
+- posterior variance contracts;
+- missed observation expands uncertainty;
+- robust clipping rejects extreme outlier.
+
+### 99.7 Parameter observability
+
+- restitution gate near zero without collision;
+- drag gate active with sufficient free motion;
+- mass ratio gate active only with interaction;
+- no update during ambiguous association.
+
+## 100. Integration tests
+
+Use tiny deterministic models/data:
+
+- simulator → RGB → measurements;
+- oracle online loop;
+- RGB global initialisation;
+- RGB fast update;
+- prior/posterior rollout;
+- checkpoint save/load;
+- one training step;
+- one evaluation episode;
+- CLI subprocess smoke.
+
+Keep CI tests under a reasonable CPU runtime. Mark longer MPS/CUDA tests separately.
+
+## 101. Regression tests
+
+Store a small set of expected metric ranges rather than exact neural outputs. For deterministic simulator physics, exact arrays are acceptable.
+
+Do not commit large checkpoints. A tiny random/fixed checkpoint may be used only if truly necessary.
+
+## 102. Overfit test
+
+Provide a command/config that overfits 8–32 deterministic episodes. This is a required debugging tool.
+
+Success:
+
+- proposal loss falls;
+- state/rollout loss falls;
+- no identity collapse;
+- demo visibly matches.
+
+## 103. Device tests
+
+- CPU always;
+- MPS when available;
+- CUDA when available.
+
+Use `pytest.mark` and clear skips. Avoid unsupported MPS operations or provide explicit CPU fallback for small association only.
+
+---
+
+# Part XVII — Performance and scaling
+
+## 104. Apple MPS considerations
+
+The `orpheus` conda environment already contains compiled PyTorch with MPS. Do not run a command that uninstalls/reinstalls it.
+
+Recommendations:
+
+- pure PyTorch operations;
+- avoid compiled third-party ops;
+- float32;
+- modest batch/image sizes;
+- `num_workers=0` or low initially if macOS multiprocessing causes friction;
+- profile memory;
+- avoid Python loops over pixels;
+- vectorise pairwise object interactions;
+- association may run on CPU because `N` is small;
+- use `grid_sample` for ROIs;
+- make checkpoint writing infrequent enough not to dominate.
+
+Implement `select_device("auto")`:
+
+1. CUDA if available and requested/preferred;
+2. MPS if available;
+3. CPU.
+
+Log actual selected device.
+
+## 105. Straightforward cloud CUDA path
+
+A cloud user should be able to:
+
+```bash
+git clone ...
+cd ...
+python -m venv .venv
+source .venv/bin/activate
+# install the appropriate CUDA PyTorch separately
+pip install -e ".[dev]"
+python train.py --config configs/cloud_single_gpu.yaml
+```
+
+The first cloud path is one CUDA GPU. No API tokens are required by this repository.
+
+## 106. Multi-GPU future path
+
+Do not implement distributed training until a single GPU is a bottleneck. Prepare by:
+
+- avoiding global mutable training state;
+- keeping batch dimension explicit;
+- checkpointing rank-independently;
+- using deterministic sampler interfaces;
+- separating model and trainer.
+
+When needed, use standard `torchrun` + `DistributedDataParallel`, not a new orchestration framework.
+
+## 107. Dataset scaling
+
+On-the-fly simulation may become CPU-bound. Future options:
+
+- pre-generated shards;
+- parallel episode workers;
+- memory-mapped tensors;
+- GPU simulator;
+- mixed real/synthetic manifests.
+
+Preserve the episode data contract.
+
+## 108. Profiling
+
+Provide `scripts/benchmark.py` with:
+
+- warmup;
+- synchronisation for MPS/CUDA where supported;
+- per-component timings;
+- batch size and object count sweep;
+- JSON output.
+
+Optimise after measuring. Fast path should avoid global processing every frame.
+
+## 109. Complexity expectations
+
+For small object count:
+
+- graph dynamics: \(O(N^2)\), acceptable for \(N\le 10\);
+- ROI perception: approximately \(O(N)\);
+- global RGB: depends on image pixels, run intermittently;
+- association: \(O(N^3)\) Hungarian on CPU, negligible at small N.
+
+For larger scenes, later use spatial indexing, sparse edges, and hierarchical belief. Do not prematurely add them.
+
+---
+
+# Part XVIII — Engineering standards
+
+## 110. Code style
+
+- type hints on public functions and complex internals;
+- docstrings explain semantics, frames, shapes, and units;
+- descriptive names;
+- functions small enough to test;
+- composition over inheritance;
+- dataclasses for structured data;
+- no wildcard imports;
+- no hidden global device;
+- explicit masks;
+- assertions/validators in debug/tests.
+
+Use Ruff formatting/linting or equivalent, configured in `pyproject.toml`.
+
+## 111. Error handling
+
+Raise actionable errors:
+
+- unknown config key;
+- nonmonotonic timestamp;
+- missing calibration;
+- unsupported modality;
+- shape mismatch;
+- checkpoint/config incompatibility;
+- unavailable requested device.
+
+Do not silently change behaviour.
+
+## 112. Comments and documentation
+
+Comments should explain why, invariants, or numerical considerations—not restate obvious code.
+
+Every public class should link conceptually to the relevant project document.
+
+## 113. Dependency policy
+
+A dependency needs:
+
+- clear benefit;
+- maintenance/portability check;
+- entry in design decisions if substantial;
+- no hidden service/API requirement.
+
+Prefer standard library, NumPy/SciPy, and PyTorch.
+
+## 114. Security and data policy
+
+The initial project is local research software. Still:
+
+- do not execute config content as code;
+- avoid unsafe pickle loading from untrusted sources; checkpoint loading is trusted/local and documented;
+- do not download models/data automatically without explicit command;
+- do not embed secrets;
+- no telemetry;
+- sanitise output paths.
+
+## 115. Git discipline
+
+Codex should:
+
+- make coherent commits if instructed/allowed;
+- avoid committing generated runs/checkpoints/datasets;
+- create `.gitignore`;
+- keep docs synchronised;
+- not rewrite user changes;
+- report exact tests run.
+
+Suggested `.gitignore`:
+
+- Python caches;
+- environments;
+- `runs/`;
+- `data/cache/`;
+- checkpoints;
+- generated demos;
+- editor/OS files.
+
+## 116. Compatibility
+
+Record supported Python/PyTorch versions after inspecting `orpheus`. Do not assume exact versions before checking.
+
+Use feature detection for optional device functionality.
+
+## 117. No fake completeness
+
+Do not:
+
+- return random tensors from “implemented” modules;
+- hide oracle inputs in RGB configs;
+- claim online system identification if parameters are directly copied from labels;
+- report training metrics from the training set as held-out results;
+- leave `pass`/`NotImplementedError` in Milestone 1 paths;
+- create dozens of empty modality classes;
+- generate only a README and scaffold.
+
+---
+
+# Part XIX — Failure modes and mitigations
+
+## 118. Perception dominates the project
+
+Risk: object discovery becomes an open-ended computer-vision effort.
+
+Mitigation:
+
+- synthetic supervised RGB measurements;
+- simple shapes;
+- explicit measurement contract;
+- optional oracle debugging;
+- later replace RGB module with stronger pretrained perception without changing core.
+
+## 119. Decoder hides bad physics
+
+Risk: a powerful renderer creates plausible frames despite wrong state.
+
+Mitigation:
+
+- primary state/measurement losses;
+- no photorealistic decoder in Milestone 1;
+- intervention/counterfactual evaluation.
+
+## 120. Smooth dynamics smear collisions
+
+Risk: modal/ODE models average impulses.
+
+Mitigation:
+
+- explicit event logits;
+- structured jump map;
+- small substeps;
+- event loss;
+- piecewise rollout.
+
+## 121. Autoregressive drift
+
+Risk: recursive state errors accumulate.
+
+Mitigation:
+
+- structured analytic dynamics;
+- stable modal state;
+- long rollout losses;
+- recurrent filtering with ground-truth observations;
+- calibrated uncertainty;
+- no frame-by-frame pixel generation.
+
+## 122. Deterministic future averages ambiguity
+
+Risk: one belief averages collision/no-collision futures.
+
+Mitigation:
+
+- uncertainty;
+- event probabilities;
+- `HypothesisSet` interface;
+- later branching;
+- evaluate ambiguous subsets.
+
+## 123. Parameter hallucination
+
+Risk: model confidently infers unobservable mass/friction.
+
+Mitigation:
+
+- observability gates;
+- parameter priors/variance;
+- conditional metrics;
+- no update during ambiguity;
+- counterfactual tests.
+
+## 124. Filter learns to reset state
+
+Risk: correction network ignores dynamics and reconstructs state each frame.
+
+Mitigation:
+
+- gated residual update;
+- correction penalty;
+- ROI residual input;
+- missing-observation training;
+- long-horizon posterior loss;
+- ablation of correction magnitude.
+
+## 125. Dynamics learns dataset shortcuts
+
+Risk: colour or camera pixels predict physical parameters.
+
+Mitigation:
+
+- randomise appearance independently;
+- repeated/similar colours;
+- held-out combinations;
+- explicit geometry/physics factors;
+- counterfactual changes.
+
+## 126. MPS unsupported operations
+
+Risk: development stalls on platform issues.
+
+Mitigation:
+
+- pure PyTorch;
+- no compiled ROI/graph ops;
+- CPU fallback for Hungarian;
+- device smoke tests early;
+- document any fallback.
+
+## 127. Endless architectural iteration
+
+Risk: repeated redesign without integrated result.
+
+Mitigation:
+
+- freeze contracts;
+- implement phases in this specification;
+- use design decisions;
+- define acceptance metrics;
+- improve internals behind interfaces;
+- maintain status/tasks;
+- do not chase all modalities before RGB loop works.
+
+## 128. Toy overfitting
+
+Risk: system only works on coloured spheres.
+
+Mitigation:
+
+- use toy as architecture validation, not scientific conclusion;
+- OOD parameter/camera splits;
+- similar colours;
+- camera movement;
+- occlusion;
+- plugin boundary;
+- next milestone must test a second modality or real perception source.
+
+---
+
+# Part XX — Research hypotheses and required ablations
+
+## 129. Primary hypotheses
+
+H1. A persistent predict–correct belief model updates more cheaply and maintains better long-horizon state than re-encoding a full sliding clip.
+
+H2. Stable modal state plus analytic kinematics reduces long-horizon drift relative to an unconstrained recurrent transition.
+
+H3. Explicit event jumps improve collision prediction relative to smooth residual dynamics alone.
+
+H4. Residual ROI perception achieves comparable correction quality to repeated global encoding at lower online cost.
+
+H5. Separating fast-state correction and slow-parameter identification improves stability and parameter interpretability.
+
+H6. Uncertainty-aware association/correction improves occlusion recovery and avoids catastrophic updates.
+
+## 130. Required ablations after base model works
+
+- no modal state;
+- no learned residual dynamics;
+- no explicit event jump;
+- full/global RGB every frame versus ROI fast path;
+- learned corrector versus analytic-only update;
+- no uncertainty features;
+- no slow-parameter updater;
+- re-encode short clip baseline if feasible;
+- constant velocity and analytic baselines.
+
+Do not block initial implementation on every ablation, but design evaluation to add them straightforwardly.
+
+## 131. Spectral baseline
+
+A later `WindowSpectralPredictor` may:
+
+- encode an observation prefix;
+- predict DCT or continuous Fourier coefficients for a fixed future state window;
+- reconstruct whole trajectory non-autoregressively;
+- compare fixed-window accuracy, compute, and extrapolation against online modal belief.
+
+This baseline tests the original paper-inspired idea. It must not replace the online filter because it is awkward to update with each new observation and tied to a horizon.
+
+## 132. Novelty framing
+
+The broad ingredients—state-space filtering, object-centric models, Koopman/modal dynamics, graph interactions, and system identification—have precedents. The potential contribution lies in their specific integration:
+
+- online multimodal residual assimilation;
+- compact deterministic dynamical programmes;
+- explicit object/parameter uncertainty;
+- cheap receding-horizon revision;
+- event-aware hybrid modal physics;
+- sensor-independent shared belief;
+- counterfactual/online identification evaluation.
+
+Do not make novelty claims in README before empirical evidence and literature review.
+
+---
+
+# Part XXI — Future extensions
+
+## 133. Richer geometry
+
+- cuboids/meshes;
+- SE(3)-equivariant geometry;
+- signed distance fields;
+- part-based objects;
+- learned shape uncertainty.
+
+## 134. Articulated systems
+
+- skeleton/kinematic tree state;
+- joint limits;
+- actuator/action latent;
+- contacts between parts and objects;
+- human manipulation.
+
+## 135. Deformable modal state
+
+The modal bank naturally extends to deformation coordinates. Separate rigid pose from object-local modes. Add geometry projector and material parameters.
+
+## 136. Audio
+
+Implement impact event/source measurements first, not waveform synthesis. Later attach a differentiable/learned acoustic renderer if useful.
+
+## 137. Reservoir/ESN dynamics
+
+A reservoir or echo-state module may be evaluated as a bounded residual temporal memory behind the `DynamicsModel` interface. It should not replace explicit state/physics without evidence.
+
+## 138. 3D spatial attention
+
+For many objects/parts, use geometry-aware attention or equivariant graph networks. The belief already supplies coordinates and frames.
+
+## 139. Planning and control
+
+A planner can roll out interventions/actions through the belief dynamics. Keep action input reserved in dynamics signatures, even if unused initially.
+
+## 140. Semantic hierarchy
+
+Future beliefs may contain:
+
+- scenes/rooms;
+- objects;
+- parts;
+- agents;
+- relations;
+- latent goals.
+
+Do not conflate this with initial metric physical state.
+
+## 141. Real-world adaptation
+
+- pretrained segmentation/tracking/depth modules as observation providers;
+- self-supervised measurement consistency;
+- domain randomisation;
+- calibration;
+- small labelled captured datasets;
+- uncertainty-aware fallback.
+
+---
+
+# Part XXII — Exact Codex operating directive
+
+## 142. Initial behaviour
+
+When given this file in an empty repository, Codex must:
+
+1. read it completely;
+2. inspect the actual Python/PyTorch/MPS environment without replacing PyTorch;
+3. create `AGENTS.md` and project memory files;
+4. write a concise implementation plan into `project/TASKS.md`;
+5. record initial decisions;
+6. build through the integrated phases;
+7. run tests frequently;
+8. keep docs accurate;
+9. implement a working vertical slice, not merely explain what should be done.
+
+Do not ask the user to choose low-level options already resolved here. Make reasonable implementation choices consistent with the specification and document them.
+
+## 143. Prioritisation
+
+When time or context is constrained, prioritise in this order:
+
+1. simulator/data correctness;
+2. belief contracts/invariants;
+3. analytic dynamics and online loop;
+4. oracle debug validation;
+5. RGB measurement path;
+6. RGB closed-loop correction;
+7. training/evaluation/checkpointing;
+8. parameter identification;
+9. performance polish;
+10. future extensions.
+
+Return a truthful status if not every phase is complete, but leave the repository runnable and record exact continuation tasks.
+
+## 144. Required evidence before declaring success
+
+Codex should include in its final report:
+
+- files created/changed;
+- architectural summary;
+- exact commands run;
+- test results;
+- training/evaluation run summary;
+- demo output paths;
+- observed metrics, clearly labelled;
+- known limitations;
+- next tasks from `project/TASKS.md`.
+
+No fabricated results.
+
+## 145. Documentation update rule
+
+For each significant feature:
+
+- update relevant architecture/design document;
+- update tasks/status;
+- add/change tests;
+- update changelog if user-visible;
+- then report completion.
+
+Documentation need not literally precede every line of code, but it must be synchronised in the same work unit.
+
+## 146. Simplicity constraints
+
+Do not introduce:
+
+- REST/GraphQL;
+- authentication;
+- tokens;
+- cloud SDK;
+- database;
+- Docker/Kubernetes requirement;
+- Lightning/Hydra;
+- external experiment tracking;
+- automatic paid-resource provisioning.
+
+A simple local PyTorch repository is the goal.
+
+## 147. Anti-drift checks
+
+Before completing a work session, verify:
+
+- Is `WorldBelief` still the persistent source of truth?
+- Can a new modality be added without editing dynamics?
+- Does the runtime use timestamps?
+- Does a new frame correct the belief without weight training?
+- Are slow parameters updated more conservatively than fast state?
+- Are uncertainty and masks propagated?
+- Is RGB-only evaluation truly RGB-only?
+- Does the toy use the same core runtime as future systems?
+- Do train/evaluate/demo remain simple?
+- Are docs truthful?
+
+---
+
+# Part XXIII — Appendix A: Core pseudocode
+
+## 148. Online step
+
+```python
+def ingest_packets(
+    state: RuntimeState,
+    packets: Sequence[ObservationPacket],
+) -> tuple[RuntimeState, WorldBelief]:
+    packets = validate_and_sort_packets(packets)
+
+    for timestamp, group in group_by_timestamp(packets):
+        if state.belief is None:
+            state.belief = initialise_from_group(group, state)
+            continue
+
+        dt = timestamp - float(state.belief.timestamp.item())
+        if dt < 0:
+            raise OutOfSequenceObservationError(...)
+
+        prior = state.dynamics.predict(state.belief, dt)
+        posterior = prior
+
+        for packet in order_group(group, state.config.fusion.order):
+            module = state.observation_modules[packet.modality]
+            sensor_context = build_sensor_context(packet, posterior)
+
+            predicted = module.project(posterior, sensor_context)
+            mode = state.scheduler.choose(
+                packet=packet,
+                belief=posterior,
+                predicted=predicted,
+                diagnostics=state.diagnostics,
+            )
+
+            measurements, new_cache = module.observe(
+                packet=packet,
+                prior=posterior,
+                predicted=predicted,
+                cache=state.caches.get(packet.sensor_id),
+                mode=mode,
+            )
+            state.caches[packet.sensor_id] = new_cache
+
+            association = state.associator.match(
+                posterior, measurements, predicted
+            )
+            innovation = module.innovation(
+                measurements, predicted, association
+            )
+
+            cause = state.surprise_classifier(
+                posterior, innovation, association
+            )
+
+            posterior = state.updater.correct(
+                prior=posterior,
+                measured=measurements,
+                predicted=predicted,
+                association=association,
+                innovation=innovation,
+                cause=cause,
+            )
+
+            posterior = state.lifecycle.apply(
+                posterior, measurements, association, predicted
+            )
+
+            observable = state.observability(
+                posterior, innovation, association, cause
+            )
+            posterior = state.identifier.update(
+                posterior, innovation, association, observable
+            )
+
+            state.diagnostics.record(...)
+
+        state.belief = posterior.with_timestamp(timestamp)
+
+    return state, state.belief
+```
+
+## 149. Training unroll
+
+```python
+def run_training_episode(batch, model, config):
+    belief = None
+    outputs = []
+
+    for t in range(batch.num_steps):
+        packets = make_rgb_packets(batch, t)
+
+        if belief is not None:
+            belief = maybe_perturb(belief, batch, t, config)
+
+        belief, diagnostics = model.functional_ingest(
+            belief=belief,
+            packets=packets,
+            caches=...,
+            training=True,
+        )
+
+        query_times = sample_rollout_queries(t, batch, config)
+        trajectory = model.dynamics.rollout(belief, query_times)
+
+        outputs.append({
+            "belief": belief,
+            "trajectory": trajectory,
+            "diagnostics": diagnostics,
+        })
+
+        if (t + 1) % config.training.tbptt_steps == 0:
+            belief = detach_world_belief(belief)
+            detach_caches(...)
+
+    losses = loss_computer(outputs, batch)
+    return losses, outputs
+```
+
+## 150. Pair interaction
+
+```python
+def pairwise_interactions(objects, active_mask, dt):
+    rel_pos = objects.position[:, None, :, :] - objects.position[:, :, None, :]
+    rel_vel = objects.velocity[:, None, :, :] - objects.velocity[:, :, None, :]
+
+    distance = safe_norm(rel_pos, dim=-1)
+    normal = rel_pos / distance.clamp_min(eps).unsqueeze(-1)
+
+    pair_mask = (
+        active_mask[:, :, None]
+        & active_mask[:, None, :]
+        & ~identity_mask
+        & candidate_distance_gate(...)
+    )
+
+    features = build_edge_features(...)
+    edge_outputs = edge_network(features)
+
+    analytic_impulse = compute_analytic_impulse(...)
+    impulse = bounded_residual_impulse(analytic_impulse, edge_outputs)
+
+    # Apply each unordered pair once to ensure equal/opposite action.
+    delta_v = scatter_pair_impulses(impulse, normal, inverse_mass, pair_mask)
+
+    return delta_v, edge_outputs.event_logits, edge_outputs.process_noise
+```
+
+---
+
+# Part XXIV — Appendix B: Configuration validation
+
+## 151. Required validation examples
+
+Reject:
+
+- `max_objects < simulator.max_objects`;
+- nonpositive frame/physics rate;
+- `max_substep` larger than observation timestep without explicit allowance;
+- invalid restitution/friction bounds;
+- image dimensions not positive;
+- `modal_count < 0`;
+- unsupported device;
+- RGB modality enabled without camera calibration mode;
+- evaluation horizons outside generated episode length;
+- oracle input enabled in an RGB-only evaluation config;
+- checkpoint config incompatibility.
+
+Warn:
+
+- batch likely too large for MPS based on simple heuristic;
+- global discovery cadence too long relative to object entry;
+- no collision events expected for parameter identification;
+- parameter loss enabled for unobservable parameter in current simulator config.
+
+---
+
+# Part XXV — Appendix C: Suggested initial resolved model sizes
+
+## 152. Smoke
+
+- image 64×64;
+- 3 object max;
+- backbone 16/32/48/64;
+- appearance 16;
+- graph hidden 48;
+- filter hidden 64;
+- modes 2×2;
+- batch 2;
+- sequence 24;
+- rollout 0.5 s.
+
+## 153. MPS
+
+- image 96×96;
+- 8 belief slots;
+- 3–6 objects;
+- backbone 32/64/96/128;
+- appearance 32;
+- geometry 8;
+- residual dynamics 16;
+- graph hidden 96;
+- filter hidden 128;
+- 4 modes, modal dimension 3;
+- batch 4–8;
+- sequence 64–96;
+- TBPTT 24;
+- rollout up to 2 s.
+
+## 154. Cloud single GPU
+
+- image 128–192;
+- 12–20 slots;
+- backbone 48/96/160/256 or pretrained adapter;
+- graph/filter hidden 192–256;
+- batch scaled to memory;
+- longer sequences;
+- AMP;
+- more difficult simulator or real-data measurements.
+
+Changing these sizes must not change dataclass semantics or runtime flow.
+
+---
+
+# Part XXVI — Appendix D: Completion checklist
+
+## 155. Repository
+
+- [ ] `PROJECT_SPEC.md` present.
+- [ ] `AGENTS.md` points to it.
+- [ ] package installs.
+- [ ] configs validated.
+- [ ] project memory populated.
+- [ ] `.gitignore` and license present.
+
+## 156. Simulator
+
+- [ ] deterministic sphere physics.
+- [ ] collisions tested.
+- [ ] camera/rendering.
+- [ ] exact labels/events.
+- [ ] train/val/test manifests.
+
+## 157. Belief/runtime
+
+- [ ] persistent IDs.
+- [ ] timestamps.
+- [ ] uncertainty.
+- [ ] lifecycle.
+- [ ] arbitrary-time rollout.
+- [ ] no mutation bugs.
+
+## 158. Dynamics
+
+- [ ] analytic kinematics.
+- [ ] stable modal bank.
+- [ ] interaction graph.
+- [ ] event jumps.
+- [ ] process noise.
+- [ ] physics diagnostics.
+
+## 159. Observations
+
+- [ ] oracle debug module.
+- [ ] RGB global module.
+- [ ] RGB fast residual module.
+- [ ] projector.
+- [ ] association.
+- [ ] surprise/global scheduling.
+
+## 160. Training
+
+- [ ] closed-loop unroll.
+- [ ] perturbation recovery.
+- [ ] future losses.
+- [ ] checkpoints/resume.
+- [ ] MPS run.
+- [ ] overfit test.
+
+## 161. Identification
+
+- [ ] bounded parameter beliefs.
+- [ ] observability gates.
+- [ ] online restitution/drag update.
+- [ ] uncertainty/plots.
+
+## 162. Evaluation/demo
+
+- [ ] baselines.
+- [ ] prior/posterior improvement.
+- [ ] tracking/events.
+- [ ] calibration.
+- [ ] latency.
+- [ ] held-out RGB-only report.
+- [ ] visual demo.
+
+---
+
+# Closing directive
+
+Project Orpheus should emerge from the first serious implementation as a small but real online world-model system:
+
+- it observes a physical scene;
+- maintains persistent object beliefs;
+- predicts dynamics using structured and learned components;
+- expresses uncertainty;
+- detects discontinuous events;
+- receives another observation;
+- updates state and gradually updates physical parameters;
+- immediately revises the future;
+- supports future modalities through a stable contract.
+
+The first synthetic scene is not the destination. It is the minimum fully instrumented environment in which the architecture can be proven before spending money on large GPU training. The project should therefore be simple to operate, strict about interfaces and evidence, and ambitious about the problem structure from the first commit.

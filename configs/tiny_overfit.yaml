@@ -1,0 +1,68 @@
+project:
+  name: orpheus-tiny-overfit
+  seed: 3
+  output_dir: runs
+  deterministic: true
+device:
+  preference: cpu
+  cuda_amp: false
+  compile: false
+simulator:
+  image_size: [48, 48]
+  frame_rate: 20
+  physics_rate: 120
+  sequence_frames: 16
+  min_objects: 2
+  max_objects: 2
+  camera_motion: fixed
+  render_noise_std: 0.0
+model:
+  max_objects: 3
+  state:
+    geometry_dim: 4
+    appearance_dim: 12
+    residual_dynamics_dim: 6
+    modal_count: 2
+    modal_dim: 2
+    parameter_memory_dim: 24
+    global_dim: 6
+  rgb:
+    backbone_channels: [12, 20, 28, 40]
+    feature_dim: 32
+    proposal_queries: 3
+    global_every_steps: 4
+    roi_size: 12
+  dynamics:
+    hidden_dim: 40
+    max_substep: 0.008333333333333333
+  filter:
+    hidden_dim: 48
+  identification:
+    hidden_dim: 24
+runtime:
+  modality: rgb
+  enable_debug_oracle: false
+training:
+  batch_size: 2
+  steps: 24
+  learning_rate: 0.002
+  weight_decay: 0.0
+  tbptt_steps: 6
+  checkpoint_every: 12
+  eval_every: 12
+  log_every: 1
+  train_episodes: 4
+  validation_episodes: 2
+  fixed_dataset: true
+  rgb_pretrain_steps: 12
+  perturbation_probability: 0.25
+  horizon_weights: [1.0, 1.5, 2.0]
+evaluation:
+  horizons_seconds: [0.1, 0.25, 0.5]
+  episodes: 2
+  rgb_only: true
+demo:
+  seed: 200000
+  max_frames: 16
+  future_horizon_seconds: 0.5
+  fps: 10

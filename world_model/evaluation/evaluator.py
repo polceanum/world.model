@@ -1,0 +1,993 @@
+"""Held-out RGB-only evaluation with transparent physical baselines."""
+
+from __future__ import annotations
+
+import hashlib
+import math
+import statistics
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import torch
+from torch import Tensor
+from torch.utils.data import DataLoader
+
+from world_model.belief import MotionMode
+from world_model.datasets import SyntheticSphereDataset, collate_episodes
+from world_model.evaluation.baselines import baseline_bundle
+from world_model.evaluation.latency import synchronize
+from world_model.evaluation.reports import write_evaluation_report
+from world_model.identification import ParameterUpdateDiagnostics
+from world_model.runtime import OnlineWorldModel
+from world_model.training.checkpointing import load_checkpoint
+from world_model.training.loop import (
+    gather_target_slots,
+    make_rgb_packet,
+    match_belief_to_targets,
+    move_batch_to_device,
+)
+from world_model.training.perturbations import perturb_belief
+from world_model.utils.config import OrpheusConfig
+from world_model.utils.device import DeviceInfo, select_device
+from world_model.utils.seeds import seed_everything
+
+_IDENTIFIER_PARAMETERS = ("mass", "restitution", "drag", "friction", "radius")
+_CURRENT_DETECTION_DISTANCE_THRESHOLD_M = 0.5
+
+
+@dataclass
+class _ErrorAccumulator:
+    squared_sum: float = 0.0
+    absolute_sum: float = 0.0
+    count: int = 0
+
+    def update(self, prediction: Tensor, target: Tensor, mask: Tensor) -> None:
+        expanded = mask
+        while expanded.ndim < prediction.ndim:
+            expanded = expanded.unsqueeze(-1)
+        values = (prediction - target).masked_select(expanded.expand_as(prediction))
+        if values.numel() == 0:
+            return
+        detached = values.detach().float().cpu()
+        self.squared_sum += float(detached.square().sum())
+        self.absolute_sum += float(detached.abs().sum())
+        self.count += int(detached.numel())
+
+    def metrics(self, prefix: str) -> dict[str, float | None]:
+        if self.count == 0:
+            return {
+                f"{prefix}_position_rmse_m": None,
+                f"{prefix}_position_mae_m": None,
+                f"{prefix}_position_coordinate_count": 0.0,
+            }
+        return {
+            f"{prefix}_position_rmse_m": math.sqrt(self.squared_sum / self.count),
+            f"{prefix}_position_mae_m": self.absolute_sum / self.count,
+            f"{prefix}_position_coordinate_count": float(self.count),
+        }
+
+
+@dataclass
+class _CorrectionAccumulator:
+    prior_error_sum: float = 0.0
+    posterior_error_sum: float = 0.0
+    positive: int = 0
+    count: int = 0
+
+    def update(
+        self,
+        prior: Tensor,
+        posterior: Tensor,
+        target: Tensor,
+        mask: Tensor,
+    ) -> None:
+        prior_error = torch.linalg.vector_norm(prior - target, dim=-1)
+        posterior_error = torch.linalg.vector_norm(posterior - target, dim=-1)
+        prior_values = prior_error.masked_select(mask).detach().float().cpu()
+        posterior_values = posterior_error.masked_select(mask).detach().float().cpu()
+        if prior_values.numel() == 0:
+            return
+        delta = prior_values - posterior_values
+        self.prior_error_sum += float(prior_values.sum())
+        self.posterior_error_sum += float(posterior_values.sum())
+        self.positive += int((delta > 0).sum())
+        self.count += int(delta.numel())
+
+    def metrics(self) -> dict[str, float | None]:
+        if self.count == 0:
+            return {
+                "perturbation_prior_position_error_m": None,
+                "perturbation_posterior_position_error_m": None,
+                "perturbation_correction_improvement_m": None,
+                "perturbation_correction_improvement_fraction": None,
+                "perturbation_positive_correction_rate": None,
+                "perturbation_evaluated_object_horizons": 0.0,
+            }
+        prior = self.prior_error_sum / self.count
+        posterior = self.posterior_error_sum / self.count
+        improvement = prior - posterior
+        return {
+            "perturbation_prior_position_error_m": prior,
+            "perturbation_posterior_position_error_m": posterior,
+            "perturbation_correction_improvement_m": improvement,
+            "perturbation_correction_improvement_fraction": (improvement / max(prior, 1.0e-8)),
+            "perturbation_positive_correction_rate": self.positive / self.count,
+            "perturbation_evaluated_object_horizons": float(self.count),
+        }
+
+
+@dataclass
+class _BinaryAccumulator:
+    true_positive: int = 0
+    false_positive: int = 0
+    false_negative: int = 0
+    true_negative: int = 0
+
+    def update(
+        self,
+        logits: Tensor,
+        target: Tensor,
+        mask: Tensor,
+        *,
+        threshold: float = 0.5,
+    ) -> None:
+        probability = logits.sigmoid().masked_select(mask).detach().cpu()
+        truth = target.bool().masked_select(mask).detach().cpu()
+        if probability.numel() == 0:
+            return
+        prediction = probability >= threshold
+        self.true_positive += int((prediction & truth).sum())
+        self.false_positive += int((prediction & ~truth).sum())
+        self.false_negative += int((~prediction & truth).sum())
+        self.true_negative += int((~prediction & ~truth).sum())
+
+    def metrics(self, prefix: str) -> dict[str, float | None]:
+        evaluated = (
+            self.true_positive + self.false_positive + self.false_negative + self.true_negative
+        )
+        if evaluated == 0:
+            return {
+                f"{prefix}_precision": None,
+                f"{prefix}_recall": None,
+                f"{prefix}_f1": None,
+                f"{prefix}_false_positive_rate": None,
+                f"{prefix}_evaluated": 0.0,
+            }
+        precision_denominator = self.true_positive + self.false_positive
+        recall_denominator = self.true_positive + self.false_negative
+        precision = self.true_positive / precision_denominator if precision_denominator else 0.0
+        recall = self.true_positive / recall_denominator if recall_denominator else 0.0
+        f1 = 2.0 * precision * recall / (precision + recall) if precision + recall else 0.0
+        false_positive_denominator = self.false_positive + self.true_negative
+        return {
+            f"{prefix}_precision": precision,
+            f"{prefix}_recall": recall,
+            f"{prefix}_f1": f1,
+            f"{prefix}_false_positive_rate": (
+                self.false_positive / false_positive_denominator
+                if false_positive_denominator
+                else 0.0
+            ),
+            f"{prefix}_evaluated": float(evaluated),
+        }
+
+
+@dataclass
+class _CalibrationAccumulator:
+    error: list[Tensor] = field(default_factory=list)
+    standard_deviation: list[Tensor] = field(default_factory=list)
+
+    def update(
+        self,
+        mean: Tensor,
+        log_variance: Tensor,
+        target: Tensor,
+        mask: Tensor,
+    ) -> None:
+        expanded = mask
+        while expanded.ndim < mean.ndim:
+            expanded = expanded.unsqueeze(-1)
+        expanded = expanded.expand_as(mean)
+        error = (mean - target).masked_select(expanded)
+        standard_deviation = (0.5 * log_variance.clamp(-12.0, 8.0)).exp().masked_select(expanded)
+        if error.numel() > 0:
+            self.error.append(error.detach().float().cpu())
+            self.standard_deviation.append(standard_deviation.detach().float().cpu())
+
+    def metrics(self) -> dict[str, float | None]:
+        if not self.error:
+            return {
+                "forecast_gaussian_nll": None,
+                "forecast_sharpness_std": None,
+                "forecast_coverage_50": None,
+                "forecast_coverage_80": None,
+                "forecast_coverage_90": None,
+                "forecast_coverage_95": None,
+            }
+        error = torch.cat(self.error)
+        std = torch.cat(self.standard_deviation).clamp_min(1.0e-8)
+        variance = std.square()
+        nll = 0.5 * (error.square() / variance + variance.log() + math.log(2.0 * math.pi))
+        z = error.abs() / std
+        quantiles = {
+            50: 0.67448975,
+            80: 1.28155157,
+            90: 1.64485363,
+            95: 1.95996398,
+        }
+        metrics: dict[str, float | None] = {
+            "forecast_gaussian_nll": float(nll.mean()),
+            "forecast_sharpness_std": float(std.mean()),
+        }
+        for level, quantile in quantiles.items():
+            metrics[f"forecast_coverage_{level}"] = float((z <= quantile).float().mean())
+        return metrics
+
+
+@dataclass
+class _ParameterAccumulator:
+    absolute_sum: dict[tuple[str, str], float] = field(default_factory=dict)
+    count: dict[tuple[str, str], int] = field(default_factory=dict)
+
+    def update(
+        self,
+        scope: str,
+        name: str,
+        prediction: Tensor,
+        target: Tensor,
+        mask: Tensor,
+    ) -> None:
+        if scope not in {"observable", "updated"}:
+            raise ValueError(f"unknown parameter metric scope: {scope}")
+        expanded = mask
+        while expanded.ndim < prediction.ndim:
+            expanded = expanded.unsqueeze(-1)
+        values = (prediction - target).abs().masked_select(expanded.expand_as(prediction))
+        if values.numel() == 0:
+            return
+        key = (scope, name)
+        self.absolute_sum[key] = self.absolute_sum.get(key, 0.0) + float(
+            values.detach().float().cpu().sum()
+        )
+        self.count[key] = self.count.get(key, 0) + int(values.numel())
+
+    def metrics(self) -> dict[str, float | None]:
+        results: dict[str, float | None] = {}
+        for scope in ("observable", "updated"):
+            for name in _IDENTIFIER_PARAMETERS:
+                key = (scope, name)
+                count = self.count.get(key, 0)
+                results[f"{scope}_{name}_mae"] = (
+                    self.absolute_sum.get(key, 0.0) / count if count else None
+                )
+                results[f"{scope}_{name}_count"] = float(count)
+        return results
+
+
+@dataclass
+class _IdentifierAccumulator:
+    observability_sum: dict[str, float] = field(default_factory=dict)
+    observability_max: dict[str, float] = field(default_factory=dict)
+    gate_sum: dict[str, float] = field(default_factory=dict)
+    gate_max: dict[str, float] = field(default_factory=dict)
+    active_count: dict[str, int] = field(default_factory=dict)
+    update_count: dict[str, int] = field(default_factory=dict)
+    diagnostic_steps: int = 0
+
+    def update(
+        self,
+        diagnostics: ParameterUpdateDiagnostics,
+        active: Tensor,
+    ) -> None:
+        expected_shape = (*active.shape, len(_IDENTIFIER_PARAMETERS))
+        for name, value in (
+            ("observability", diagnostics.observability),
+            ("gate", diagnostics.gate),
+            ("update_count", diagnostics.update_count),
+        ):
+            if value.shape != expected_shape:
+                raise ValueError(
+                    f"identifier {name} must have shape {expected_shape}, got {value.shape}"
+                )
+        self.diagnostic_steps += 1
+        for parameter_index, parameter_name in enumerate(_IDENTIFIER_PARAMETERS):
+            observability = diagnostics.observability[..., parameter_index].masked_select(active)
+            gate = diagnostics.gate[..., parameter_index].masked_select(active)
+            updates = diagnostics.update_count[..., parameter_index].masked_select(active)
+            if observability.numel() == 0:
+                continue
+            detached_observability = observability.detach().float().cpu()
+            detached_gate = gate.detach().float().cpu()
+            self.observability_sum[parameter_name] = self.observability_sum.get(
+                parameter_name, 0.0
+            ) + float(detached_observability.sum())
+            self.observability_max[parameter_name] = max(
+                self.observability_max.get(parameter_name, 0.0),
+                float(detached_observability.max()),
+            )
+            self.gate_sum[parameter_name] = self.gate_sum.get(parameter_name, 0.0) + float(
+                detached_gate.sum()
+            )
+            self.gate_max[parameter_name] = max(
+                self.gate_max.get(parameter_name, 0.0),
+                float(detached_gate.max()),
+            )
+            self.active_count[parameter_name] = self.active_count.get(parameter_name, 0) + int(
+                detached_gate.numel()
+            )
+            self.update_count[parameter_name] = self.update_count.get(parameter_name, 0) + int(
+                updates.detach().cpu().sum()
+            )
+
+    def metrics(self) -> dict[str, float | None]:
+        results: dict[str, float | None] = {
+            "identifier_diagnostic_step_count": float(self.diagnostic_steps)
+        }
+        for name in _IDENTIFIER_PARAMETERS:
+            count = self.active_count.get(name, 0)
+            results[f"identifier_{name}_active_object_frame_count"] = float(count)
+            results[f"identifier_{name}_observability_mean"] = (
+                self.observability_sum.get(name, 0.0) / count if count else None
+            )
+            results[f"identifier_{name}_observability_max"] = (
+                self.observability_max.get(name) if count else None
+            )
+            results[f"identifier_{name}_gate_mean"] = (
+                self.gate_sum.get(name, 0.0) / count if count else None
+            )
+            results[f"identifier_{name}_gate_max"] = self.gate_max.get(name) if count else None
+            results[f"identifier_{name}_update_count"] = float(self.update_count.get(name, 0))
+        return results
+
+
+@dataclass
+class _TrackingAccumulator:
+    last_prediction: dict[tuple[int, int], int] = field(default_factory=dict)
+    switches: int = 0
+    associations: int = 0
+
+    def update(
+        self,
+        predicted_ids: Tensor,
+        target_ids: Tensor,
+        target_indices: Tensor,
+        matched: Tensor,
+        *,
+        episode_offset: int,
+    ) -> None:
+        batch = predicted_ids.shape[0]
+        for batch_index in range(batch):
+            for belief_slot in (
+                torch.nonzero(matched[batch_index], as_tuple=False).flatten().tolist()
+            ):
+                target_slot = int(target_indices[batch_index, belief_slot].detach().cpu())
+                if target_slot < 0:
+                    continue
+                target_id = int(target_ids[batch_index, target_slot].detach().cpu())
+                predicted_id = int(predicted_ids[batch_index, belief_slot].detach().cpu())
+                if target_id < 0 or predicted_id < 0:
+                    continue
+                key = (episode_offset + batch_index, target_id)
+                previous = self.last_prediction.get(key)
+                if previous is not None and previous != predicted_id:
+                    self.switches += 1
+                self.last_prediction[key] = predicted_id
+                self.associations += 1
+
+    def metrics(self) -> dict[str, float | None]:
+        return {
+            "distance_gated_identity_switches": float(self.switches),
+            "distance_gated_object_frame_associations": float(self.associations),
+            "distance_gated_identity_switch_rate": (
+                self.switches / self.associations if self.associations else None
+            ),
+        }
+
+
+def _checkpoint_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _future_queries(
+    config: OrpheusConfig,
+    frame_index: int,
+    total_frames: int,
+) -> tuple[list[int], list[float]]:
+    offsets: list[int] = []
+    seconds: list[float] = []
+    for horizon in config.evaluation.horizons_seconds:
+        offset = max(1, int(round(horizon * config.simulator.frame_rate)))
+        if frame_index + offset >= total_frames or offset in offsets:
+            continue
+        offsets.append(offset)
+        seconds.append(offset / config.simulator.frame_rate)
+    ordering = sorted(range(len(offsets)), key=offsets.__getitem__)
+    return [offsets[index] for index in ordering], [seconds[index] for index in ordering]
+
+
+def _horizon_key(seconds: float) -> str:
+    return f"{seconds:.3f}s"
+
+
+def _distance_gate_matches(
+    prediction: Tensor,
+    aligned_target: Tensor,
+    assignment_mask: Tensor,
+    *,
+    threshold_m: float,
+) -> Tensor:
+    if threshold_m <= 0:
+        raise ValueError("detection distance threshold must be positive")
+    if prediction.shape != aligned_target.shape or prediction.shape[-1] != 3:
+        raise ValueError("detection positions must share shape [B,N,3]")
+    if assignment_mask.shape != prediction.shape[:-1]:
+        raise ValueError("assignment mask must have shape [B,N]")
+    distance = torch.linalg.vector_norm(prediction - aligned_target, dim=-1)
+    return assignment_mask & torch.isfinite(distance) & (distance <= threshold_m)
+
+
+def _mean_or_none(values: list[float]) -> float | None:
+    return statistics.mean(values) if values else None
+
+
+def evaluate_checkpoint(
+    config: OrpheusConfig,
+    checkpoint_path: str | Path,
+    *,
+    split: str = "test",
+    output_dir: str | Path | None = None,
+    device_info: DeviceInfo | None = None,
+) -> dict[str, Any]:
+    """Evaluate a trusted local checkpoint on held-out RGB episodes.
+
+    Simulator state and parameters are used for metrics and the explicitly
+    labelled oracle-parameter analytic baseline only.  Every model correction
+    consumes RGB plus known camera calibration.
+    """
+
+    config.validate()
+    if not config.evaluation.rgb_only:
+        raise ValueError("Milestone 1 evaluation must set evaluation.rgb_only=true")
+    if config.runtime.modality != "rgb" or config.runtime.enable_debug_oracle:
+        raise ValueError("held-out RGB evaluation forbids debug_oracle runtime input")
+    checkpoint = Path(checkpoint_path).expanduser().resolve()
+    resolved_device = device_info or select_device(config.device.preference)
+    device = resolved_device.device
+    seed_everything(
+        config.project.seed + 50_000,
+        deterministic=config.project.deterministic,
+    )
+    model = OnlineWorldModel.from_config(config, device=device)
+    payload = load_checkpoint(
+        checkpoint,
+        model=model,
+        map_location=device,
+        expected_config=config,
+    )
+    model.eval()
+
+    dataset = SyntheticSphereDataset(
+        config,
+        split=split,
+        num_episodes=config.evaluation.episodes,
+        memory_cache=True,
+    )
+    loader = DataLoader(
+        dataset,
+        batch_size=min(
+            config.training.batch_size,
+            max(1, config.evaluation.episodes),
+        ),
+        shuffle=False,
+        num_workers=config.training.num_workers,
+        collate_fn=collate_episodes,
+        drop_last=False,
+    )
+
+    current_error = _ErrorAccumulator()
+    forecast_errors: dict[tuple[str, str], _ErrorAccumulator] = {}
+    correction = _CorrectionAccumulator()
+    events = _BinaryAccumulator()
+    calibration = _CalibrationAccumulator()
+    parameters = _ParameterAccumulator()
+    identifier_metrics = _IdentifierAccumulator()
+    tracking = _TrackingAccumulator()
+    global_latencies: list[float] = []
+    fast_latencies: list[float] = []
+    rollout_latencies: list[float] = []
+    uncertainty_visible: list[float] = []
+    uncertainty_occluded: list[float] = []
+    uncertainty_contraction: list[float] = []
+    nonfinite_outputs = 0
+    evaluated_episodes = 0
+    perturbation_updates = 0
+    target_object_frames = 0
+    predicted_object_frames = 0
+    matched_object_frames = 0
+    distance_gated_matched_object_frames = 0
+    forecast_target_count: dict[str, int] = {}
+    forecast_tracked_count: dict[str, int] = {}
+    forecast_active_count: dict[str, int] = {}
+
+    with torch.no_grad():
+        for raw_batch in loader:
+            batch = move_batch_to_device(raw_batch, device)
+            rgb = batch["rgb"]
+            if rgb.ndim != 5:
+                raise ValueError("evaluation DataLoader must emit [B,T,3,H,W]")
+            batch_size, total_frames = rgb.shape[:2]
+            model.reset(batch_size=batch_size)
+            perturbation_frame = max(1, total_frames // 3)
+            anchor_stride = max(1, total_frames // 8)
+            diagnostic_offset = 0
+
+            for frame_index in range(total_frames):
+                packet = make_rgb_packet(batch, frame_index)
+                prior_rollout = None
+                prior_variance = None
+                perturb_offsets: list[int] = []
+                perturb_seconds: list[float] = []
+                if model.belief is not None and frame_index == perturbation_frame:
+                    source_belief = perturb_belief(
+                        model.belief,
+                        position_std=config.evaluation.perturbation_position_std,
+                        velocity_std=config.evaluation.perturbation_velocity_std,
+                        covariance_log_bias=0.5,
+                    )
+                    # Perturb the carried posterior, not the already
+                    # timestamp-advanced prior.  Runtime ingest must retain
+                    # the positive dt used by velocity-aware correction.
+                    model.state.belief = source_belief
+                    requested = source_belief.timestamp.new_full(
+                        source_belief.timestamp.shape, packet.timestamp
+                    )
+                    prior = model.dynamics.predict(
+                        source_belief,
+                        requested - source_belief.timestamp,
+                    )
+                    perturb_offsets, perturb_seconds = _future_queries(
+                        config, frame_index, total_frames
+                    )
+                    if perturb_seconds:
+                        prior_rollout = model.dynamics.rollout(
+                            prior,
+                            perturb_seconds,
+                            return_events=False,
+                        )
+                        prior_variance = (
+                            prior.objects.fast_log_variance[..., :3].exp().mean(dim=-1).sqrt()
+                        )
+                        perturbation_updates += batch_size
+
+                synchronize(device)
+                update_started = time.perf_counter()
+                belief = model.ingest(packet)
+                synchronize(device)
+                update_elapsed_ms = (time.perf_counter() - update_started) * 1000.0
+                if model.diagnostics.oracle_used:
+                    raise RuntimeError(
+                        "oracle diagnostics detected during claimed RGB-only evaluation"
+                    )
+                target_position = batch["objects"]["position"][:, frame_index]
+                target_active = batch["objects"]["active"][:, frame_index].bool()
+                target_indices, matched = match_belief_to_targets(
+                    belief, target_position, target_active
+                )
+                target_object_frames += int(target_active.sum().detach().cpu())
+                predicted_object_frames += int(belief.objects.active.sum().detach().cpu())
+                matched_object_frames += int(matched.sum().detach().cpu())
+                aligned_position = gather_target_slots(target_position, target_indices)
+                distance_gated_matched = _distance_gate_matches(
+                    belief.objects.position,
+                    aligned_position,
+                    matched,
+                    threshold_m=_CURRENT_DETECTION_DISTANCE_THRESHOLD_M,
+                )
+                distance_gated_matched_object_frames += int(
+                    distance_gated_matched.sum().detach().cpu()
+                )
+                current_error.update(
+                    belief.objects.position,
+                    aligned_position,
+                    matched,
+                )
+                tracking.update(
+                    belief.objects.object_id,
+                    batch["objects"]["id"][:, frame_index],
+                    target_indices,
+                    distance_gated_matched,
+                    episode_offset=evaluated_episodes,
+                )
+
+                visible_fraction = gather_target_slots(
+                    batch["objects"]["visible_fraction"][:, frame_index].unsqueeze(-1),
+                    target_indices,
+                ).squeeze(-1)
+                position_std = (0.5 * belief.objects.fast_log_variance[..., :3]).exp().mean(dim=-1)
+                visible_mask = distance_gated_matched & (visible_fraction >= 0.5)
+                occluded_mask = distance_gated_matched & (visible_fraction <= 0.05)
+                if visible_mask.any():
+                    uncertainty_visible.extend(
+                        position_std.masked_select(visible_mask).detach().float().cpu().tolist()
+                    )
+                if occluded_mask.any():
+                    uncertainty_occluded.extend(
+                        position_std.masked_select(occluded_mask).detach().float().cpu().tolist()
+                    )
+                if prior_variance is not None:
+                    valid = matched & belief.objects.active
+                    if valid.any():
+                        posterior_variance = (
+                            belief.objects.fast_log_variance[..., :3].exp().mean(dim=-1).sqrt()
+                        )
+                        uncertainty_contraction.extend(
+                            (prior_variance - posterior_variance)
+                            .masked_select(valid)
+                            .detach()
+                            .float()
+                            .cpu()
+                            .tolist()
+                        )
+
+                aligned_radius = gather_target_slots(
+                    batch["objects"]["radius"][:, frame_index],
+                    target_indices,
+                )
+                aligned_mass = gather_target_slots(
+                    batch["objects"]["mass"][:, frame_index],
+                    target_indices,
+                )
+                aligned_restitution = gather_target_slots(
+                    batch["objects"]["restitution"][:, frame_index],
+                    target_indices,
+                )
+                aligned_drag = gather_target_slots(
+                    batch["objects"]["drag"][:, frame_index],
+                    target_indices,
+                )
+                aligned_friction = gather_target_slots(
+                    batch["objects"]["friction"][:, frame_index],
+                    target_indices,
+                )
+                identifier_diagnostics = (
+                    model.identifier.last_diagnostics if model.identifier is not None else None
+                )
+                if identifier_diagnostics is not None:
+                    identifier_metrics.update(
+                        identifier_diagnostics,
+                        belief.objects.active,
+                    )
+                    predictions = (
+                        belief.objects.mass,
+                        belief.objects.restitution,
+                        belief.objects.drag,
+                        belief.objects.friction,
+                        belief.objects.radius,
+                    )
+                    targets = (
+                        aligned_mass,
+                        aligned_restitution,
+                        aligned_drag,
+                        aligned_friction,
+                        aligned_radius,
+                    )
+                    for parameter_index, (parameter_name, prediction, target) in enumerate(
+                        zip(
+                            _IDENTIFIER_PARAMETERS,
+                            predictions,
+                            targets,
+                            strict=True,
+                        )
+                    ):
+                        runtime_observable = (
+                            identifier_diagnostics.observability[..., parameter_index] > 0.0
+                        )
+                        runtime_updated = identifier_diagnostics.update_count[
+                            ..., parameter_index
+                        ].bool()
+                        parameters.update(
+                            "observable",
+                            parameter_name,
+                            prediction,
+                            target,
+                            distance_gated_matched & runtime_observable,
+                        )
+                        parameters.update(
+                            "updated",
+                            parameter_name,
+                            prediction,
+                            target,
+                            distance_gated_matched & runtime_updated,
+                        )
+
+                run_forecast = frame_index % anchor_stride == 0 or frame_index == perturbation_frame
+                frame_offsets, query_seconds = _future_queries(config, frame_index, total_frames)
+                if run_forecast and query_seconds:
+                    synchronize(device)
+                    rollout_started = time.perf_counter()
+                    trajectory = model.dynamics.rollout(belief, query_seconds, return_events=True)
+                    synchronize(device)
+                    rollout_latencies.append((time.perf_counter() - rollout_started) * 1000.0)
+                    oracle_drag = gather_target_slots(
+                        batch["objects"]["drag"][:, frame_index],
+                        target_indices,
+                    )
+                    query_tensor = (
+                        belief.timestamp.new_tensor(query_seconds)
+                        .unsqueeze(0)
+                        .expand(batch_size, -1)
+                    )
+                    baselines = baseline_bundle(
+                        belief.objects.position,
+                        belief.objects.velocity,
+                        query_tensor,
+                        gravity=belief.gravity,
+                        default_drag=sum(config.simulator.drag_range) / 2.0,
+                        oracle_drag=oracle_drag,
+                    )
+                    for query_index, frame_offset in enumerate(frame_offsets):
+                        target_frame = frame_index + frame_offset
+                        future_target = gather_target_slots(
+                            batch["objects"]["position"][:, target_frame],
+                            target_indices,
+                        )
+                        future_active = (
+                            gather_target_slots(
+                                batch["objects"]["active"][:, target_frame].unsqueeze(-1),
+                                target_indices,
+                            )
+                            .squeeze(-1)
+                            .bool()
+                        )
+                        horizon = _horizon_key(query_seconds[query_index])
+                        common_valid = matched & future_active
+                        forecast_target_count[horizon] = forecast_target_count.get(
+                            horizon, 0
+                        ) + int(batch["objects"]["active"][:, target_frame].sum().detach().cpu())
+                        forecast_tracked_count[horizon] = forecast_tracked_count.get(
+                            horizon, 0
+                        ) + int(common_valid.sum().detach().cpu())
+                        forecast_active_count[horizon] = forecast_active_count.get(
+                            horizon, 0
+                        ) + int(
+                            (common_valid & trajectory.active_mask[:, query_index])
+                            .sum()
+                            .detach()
+                            .cpu()
+                        )
+                        forecast_errors.setdefault(("model", horizon), _ErrorAccumulator()).update(
+                            trajectory.positions[:, query_index],
+                            future_target,
+                            common_valid,
+                        )
+                        for baseline_name, positions in baselines.items():
+                            forecast_errors.setdefault(
+                                (baseline_name, horizon),
+                                _ErrorAccumulator(),
+                            ).update(
+                                positions[:, query_index],
+                                future_target,
+                                common_valid,
+                            )
+                        calibration.update(
+                            trajectory.positions[:, query_index],
+                            trajectory.fast_log_variance[:, query_index, :, :3],
+                            future_target,
+                            common_valid,
+                        )
+                        if trajectory.event_logits is not None:
+                            collision_target = gather_target_slots(
+                                batch["events"]["collision"][:, target_frame].unsqueeze(-1),
+                                target_indices,
+                            ).squeeze(-1)
+                            events.update(
+                                trajectory.event_logits[
+                                    :,
+                                    query_index,
+                                    :,
+                                    MotionMode.COLLISION,
+                                ],
+                                collision_target,
+                                common_valid,
+                            )
+                    if not bool(
+                        torch.isfinite(trajectory.positions).all()
+                        and torch.isfinite(trajectory.fast_log_variance).all()
+                    ):
+                        nonfinite_outputs += 1
+
+                if (
+                    prior_rollout is not None
+                    and perturb_seconds
+                    and query_seconds == perturb_seconds
+                ):
+                    posterior_rollout = model.dynamics.rollout(
+                        belief, perturb_seconds, return_events=False
+                    )
+                    for query_index, frame_offset in enumerate(perturb_offsets):
+                        target_frame = frame_index + frame_offset
+                        future_target = gather_target_slots(
+                            batch["objects"]["position"][:, target_frame],
+                            target_indices,
+                        )
+                        future_active = (
+                            gather_target_slots(
+                                batch["objects"]["active"][:, target_frame].unsqueeze(-1),
+                                target_indices,
+                            )
+                            .squeeze(-1)
+                            .bool()
+                        )
+                        valid = matched & future_active
+                        correction.update(
+                            prior_rollout.positions[:, query_index],
+                            posterior_rollout.positions[:, query_index],
+                            future_target,
+                            valid,
+                        )
+
+                if not bool(
+                    torch.isfinite(belief.objects.position).all()
+                    and torch.isfinite(belief.objects.fast_log_variance).all()
+                ):
+                    nonfinite_outputs += 1
+
+                new_diagnostics = model.diagnostics.records[diagnostic_offset:]
+                diagnostic_offset = len(model.diagnostics.records)
+                for diagnostic in new_diagnostics:
+                    if diagnostic.observation_mode in {
+                        "GLOBAL_DISCOVERY",
+                        "RECOVERY",
+                    }:
+                        global_latencies.append(update_elapsed_ms)
+                    elif diagnostic.observation_mode == "FAST_ROI":
+                        fast_latencies.append(update_elapsed_ms)
+            evaluated_episodes += batch_size
+
+    metrics: dict[str, Any] = {}
+    metrics.update(current_error.metrics("posterior_current"))
+    for (method, horizon), accumulator in sorted(forecast_errors.items()):
+        metrics.update(accumulator.metrics(f"{method}@{horizon}"))
+    metrics.update(correction.metrics())
+    metrics.update(events.metrics("collision"))
+    metrics.update(calibration.metrics())
+    metrics.update(parameters.metrics())
+    metrics.update(identifier_metrics.metrics())
+    metrics.update(tracking.metrics())
+    detection_threshold_label = f"{_CURRENT_DETECTION_DISTANCE_THRESHOLD_M:.3f}m"
+    metrics.update(
+        {
+            "current_assignment_target_coverage": (
+                matched_object_frames / target_object_frames if target_object_frames else None
+            ),
+            "current_assignment_prediction_coverage": (
+                matched_object_frames / predicted_object_frames if predicted_object_frames else None
+            ),
+            f"current_detection_recall@{detection_threshold_label}": (
+                distance_gated_matched_object_frames / target_object_frames
+                if target_object_frames
+                else None
+            ),
+            f"current_detection_precision@{detection_threshold_label}": (
+                distance_gated_matched_object_frames / predicted_object_frames
+                if predicted_object_frames
+                else None
+            ),
+            "target_object_frames": float(target_object_frames),
+            "predicted_object_frames": float(predicted_object_frames),
+            "assignment_matched_object_frames": float(matched_object_frames),
+            f"distance_gated_matched_object_frames@{detection_threshold_label}": float(
+                distance_gated_matched_object_frames
+            ),
+        }
+    )
+    for horizon, target_count in sorted(forecast_target_count.items()):
+        tracked_count = forecast_tracked_count.get(horizon, 0)
+        active_count = forecast_active_count.get(horizon, 0)
+        metrics[f"forecast_target_coverage@{horizon}"] = (
+            active_count / target_count if target_count else None
+        )
+        metrics[f"tracked_forecast_active_coverage@{horizon}"] = (
+            active_count / tracked_count if tracked_count else None
+        )
+        metrics[f"model_dropped_forecast_count@{horizon}"] = float(tracked_count - active_count)
+    metrics.update(
+        {
+            "rgb_global_update_latency_mean_ms": _mean_or_none(global_latencies),
+            "rgb_fast_update_latency_mean_ms": _mean_or_none(fast_latencies),
+            "future_rollout_latency_mean_ms": _mean_or_none(rollout_latencies),
+            "visible_position_std_mean_m": _mean_or_none(uncertainty_visible),
+            "occluded_position_std_mean_m": _mean_or_none(uncertainty_occluded),
+            "post_observation_std_contraction_mean_m": _mean_or_none(uncertainty_contraction),
+            "nonfinite_output_count": float(nonfinite_outputs),
+            "evaluated_episodes": float(evaluated_episodes),
+            "injected_perturbation_batch_updates": float(perturbation_updates),
+        }
+    )
+
+    output = (
+        Path(output_dir).expanduser().resolve()
+        if output_dir is not None
+        else checkpoint.parent.parent / "evaluation" / split
+    )
+    limitations = [
+        (
+            "Evaluation uses the synthetic sphere-world split and does not "
+            "establish real-video generalisation."
+        ),
+        (
+            "The analytic_oracle_parameter baseline reads simulator drag only "
+            "for comparison; the evaluated model runtime receives RGB and "
+            "known calibration only."
+        ),
+        (
+            "Object alignment for metrics uses held-out simulator positions; "
+            "alignment is never fed back into the runtime. Ungated Hungarian "
+            "assignments are retained for forecast/baseline error comparability "
+            "and are reported only as assignment coverage."
+        ),
+    ]
+    if correction.count == 0:
+        limitations.append(
+            "No active matched object/horizon was available for perturbation correction metrics."
+        )
+    if distance_gated_matched_object_frames == 0:
+        limitations.append(
+            "No current assignment met the 0.5 m detection-distance gate; "
+            "distance-gated detection and identity metrics have no true positives."
+        )
+    zero_update_parameters = [
+        name
+        for name in ("restitution", "drag")
+        if identifier_metrics.update_count.get(name, 0) == 0
+    ]
+    if zero_update_parameters:
+        limitations.append(
+            "The RGB runtime produced zero identifier updates above the "
+            "1e-3 gate threshold for "
+            + ", ".join(zero_update_parameters)
+            + "; updated-parameter MAE is unavailable for those parameters."
+        )
+    metadata = {
+        "checkpoint": str(checkpoint),
+        "checkpoint_sha256": _checkpoint_sha256(checkpoint),
+        "checkpoint_step": int(payload["step"]),
+        "split": split,
+        "episodes": evaluated_episodes,
+        "device": str(device),
+        "precision": resolved_device.precision,
+        "rgb_only": True,
+        "oracle_runtime_input_used": False,
+        "simulator_state_usage": "metrics_and_baselines_only",
+        "parameter_metric_mask_source": "runtime_identifier_diagnostics",
+        "current_detection_distance_threshold_m": (_CURRENT_DETECTION_DISTANCE_THRESHOLD_M),
+        "identity_metric_match_source": "distance_gated_current_detection",
+    }
+    json_path, markdown_path = write_evaluation_report(
+        output,
+        metadata=metadata,
+        metrics=metrics,
+        limitations=limitations,
+    )
+    return {
+        "output_directory": str(output),
+        "json_report": str(json_path),
+        "markdown_report": str(markdown_path),
+        "checkpoint": str(checkpoint),
+        "checkpoint_step": int(payload["step"]),
+        "split": split,
+        "device": str(device),
+        "rgb_only": True,
+        "oracle_runtime_input_used": False,
+        "metrics": metrics,
+        "limitations": limitations,
+    }
+
+
+__all__ = ["evaluate_checkpoint"]

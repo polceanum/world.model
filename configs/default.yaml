@@ -1,0 +1,151 @@
+project:
+  name: orpheus
+  seed: 42
+  output_dir: runs
+  deterministic: false
+
+device:
+  preference: auto
+  cuda_amp: true
+  mps_float32: true
+  compile: false
+
+simulator:
+  type: sphere_world
+  image_size: [96, 96]
+  frame_rate: 30
+  physics_rate: 120
+  sequence_frames: 72
+  min_objects: 3
+  max_objects: 6
+  world_bounds: [[-2.25, 2.25], [0.0, 3.25], [-1.5, 1.5]]
+  radius_range: [0.16, 0.28]
+  mass_range: [0.6, 1.8]
+  restitution_range: [0.45, 0.9]
+  drag_range: [0.01, 0.16]
+  friction_range: [0.05, 0.35]
+  gravity: [0.0, -9.81, 0.0]
+  camera_motion: orbit
+  known_camera_pose: true
+  render_noise_std: 0.01
+  external_impulse_probability: 0.0
+  split_train_start: 0
+  split_validation_start: 100000
+  split_test_start: 200000
+  split_ood_start: 300000
+
+model:
+  max_objects: 8
+  state:
+    geometry_dim: 8
+    appearance_dim: 32
+    residual_dynamics_dim: 16
+    modal_count: 4
+    modal_dim: 3
+    parameter_memory_dim: 48
+    global_dim: 16
+    fast_log_variance_min: -12.0
+    fast_log_variance_max: 6.0
+    slow_log_variance_min: -12.0
+    slow_log_variance_max: 8.0
+  rgb:
+    enabled: true
+    backbone_channels: [32, 64, 96, 128]
+    feature_dim: 96
+    proposal_queries: 10
+    global_every_steps: 12
+    roi_size: 20
+    roi_uncertainty_scale: 2.5
+    global_uncertainty_threshold: 4.0
+    surprise_threshold: 8.0
+    existence_threshold: 0.45
+    measurement_log_variance_min: -9.0
+    measurement_log_variance_max: 4.0
+  dynamics:
+    max_substep: 0.008333333333333333
+    hidden_dim: 96
+    interaction_radius: 1.0
+    process_noise_position: 0.0001
+    process_noise_velocity: 0.002
+    modal_acceleration_scale: 0.25
+    residual_acceleration_scale: 0.5
+    penetration_slop: 0.001
+    max_penetration_correction: 0.08
+    sleep_speed: 0.05
+    allow_large_substep: false
+  filter:
+    hidden_dim: 128
+    robust_clip: 5.0
+    min_log_variance: -12.0
+    max_log_variance: 8.0
+    learned_residual_scale: 0.15
+    missed_variance_growth: 0.08
+  association:
+    geometry_weight: 1.0
+    appearance_weight: 0.25
+    existence_weight: 0.05
+    mahalanobis_gate: 16.0
+    maximum_cost: 25.0
+    ambiguity_margin: 0.02
+  lifecycle:
+    birth_confidence: 0.55
+    birth_confirmations: 1
+    max_missed_steps: 12
+    existence_decay: 0.35
+    occlusion_existence_decay: 0.04
+  identification:
+    enabled: true
+    hidden_dim: 48
+    slow_learning_rate: 0.04
+    drag_speed_threshold: 0.25
+    restitution_event_threshold: 0.4
+    ambiguity_gate: 0.2
+
+runtime:
+  modality: rgb
+  enable_debug_oracle: false
+  strict_timestamps: true
+  modality_order: [debug_oracle, rgb]
+
+training:
+  batch_size: 4
+  steps: 1000
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  tbptt_steps: 24
+  grad_clip_norm: 1.0
+  checkpoint_every: 100
+  eval_every: 100
+  log_every: 10
+  train_episodes: 256
+  validation_episodes: 16
+  num_workers: 0
+  fixed_dataset: false
+  rgb_pretrain_steps: 100
+  perturbation_probability: 0.25
+  perturbation_position_std: 0.12
+  horizon_weights: [1.0, 1.0, 1.2, 1.5, 1.5]
+  loss_weights:
+    measurement: 1.0
+    state: 1.0
+    rollout: 1.0
+    event: 0.2
+    parameter: 0.1
+    existence: 0.2
+    uncertainty: 0.05
+    correction: 0.02
+
+evaluation:
+  horizons_seconds: [0.1, 0.25, 0.5, 1.0, 2.0]
+  episodes: 16
+  rgb_only: true
+  perturbation_position_std: 0.15
+  perturbation_velocity_std: 0.25
+  confidence_level: 0.9
+  benchmark_warmup: 2
+
+demo:
+  seed: 200000
+  max_frames: 48
+  future_horizon_seconds: 1.0
+  fps: 12

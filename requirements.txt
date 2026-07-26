@@ -1,0 +1,9 @@
+# Install the appropriate PyTorch build separately. The local `orpheus`
+# environment already provides a custom build with MPS support.
+numpy>=1.24
+scipy>=1.10
+PyYAML>=6
+Pillow>=10
+matplotlib>=3.7
+tqdm>=4.65
+

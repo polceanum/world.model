@@ -1,0 +1,64 @@
+project:
+  name: orpheus-toy-hard
+  seed: 84
+  output_dir: runs
+device:
+  preference: auto
+  cuda_amp: true
+  compile: false
+simulator:
+  image_size: [128, 128]
+  frame_rate: 30
+  physics_rate: 180
+  sequence_frames: 96
+  min_objects: 4
+  max_objects: 10
+  camera_motion: combined
+  render_noise_std: 0.025
+  external_impulse_probability: 0.02
+model:
+  max_objects: 12
+  state:
+    geometry_dim: 10
+    appearance_dim: 40
+    residual_dynamics_dim: 24
+    modal_count: 6
+    modal_dim: 4
+    parameter_memory_dim: 64
+    global_dim: 24
+  rgb:
+    backbone_channels: [40, 80, 128, 192]
+    feature_dim: 128
+    proposal_queries: 14
+    global_every_steps: 10
+    roi_size: 24
+  dynamics:
+    hidden_dim: 160
+    max_substep: 0.005555555555555556
+  filter:
+    hidden_dim: 192
+  identification:
+    hidden_dim: 64
+runtime:
+  modality: rgb
+  enable_debug_oracle: false
+training:
+  batch_size: 4
+  steps: 10000
+  learning_rate: 0.00025
+  weight_decay: 0.0001
+  tbptt_steps: 24
+  checkpoint_every: 500
+  eval_every: 500
+  train_episodes: 2048
+  validation_episodes: 64
+  rgb_pretrain_steps: 1000
+evaluation:
+  horizons_seconds: [0.1, 0.25, 0.5, 1.0, 2.0]
+  episodes: 64
+  rgb_only: true
+demo:
+  seed: 200000
+  max_frames: 72
+  future_horizon_seconds: 2.0
+  fps: 15

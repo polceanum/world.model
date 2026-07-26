@@ -1,0 +1,68 @@
+project:
+  name: orpheus-toy-smoke
+  seed: 7
+  output_dir: runs
+  deterministic: true
+device:
+  preference: auto
+  cuda_amp: false
+  mps_float32: true
+  compile: false
+simulator:
+  image_size: [64, 64]
+  frame_rate: 20
+  physics_rate: 120
+  sequence_frames: 24
+  min_objects: 2
+  max_objects: 3
+  camera_motion: fixed
+  render_noise_std: 0.0
+model:
+  max_objects: 4
+  state:
+    geometry_dim: 6
+    appearance_dim: 16
+    residual_dynamics_dim: 8
+    modal_count: 2
+    modal_dim: 2
+    parameter_memory_dim: 32
+    global_dim: 8
+  rgb:
+    backbone_channels: [16, 32, 48, 64]
+    feature_dim: 48
+    proposal_queries: 5
+    global_every_steps: 6
+    roi_size: 16
+  dynamics:
+    hidden_dim: 48
+    max_substep: 0.008333333333333333
+  filter:
+    hidden_dim: 64
+  identification:
+    hidden_dim: 32
+runtime:
+  modality: rgb
+  enable_debug_oracle: false
+training:
+  batch_size: 2
+  steps: 12
+  learning_rate: 0.001
+  tbptt_steps: 8
+  checkpoint_every: 6
+  eval_every: 6
+  log_every: 1
+  train_episodes: 8
+  validation_episodes: 2
+  fixed_dataset: true
+  rgb_pretrain_steps: 4
+  perturbation_probability: 0.3
+  horizon_weights: [1.0, 1.2, 1.5, 1.5]
+evaluation:
+  horizons_seconds: [0.1, 0.25, 0.5, 1.0]
+  episodes: 2
+  rgb_only: true
+demo:
+  seed: 200000
+  max_frames: 20
+  future_horizon_seconds: 0.5
+  fps: 10

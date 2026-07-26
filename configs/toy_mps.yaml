@@ -1,0 +1,67 @@
+project:
+  name: orpheus-toy-mps
+  seed: 42
+  output_dir: runs
+device:
+  preference: auto
+  cuda_amp: false
+  mps_float32: true
+  compile: false
+simulator:
+  image_size: [96, 96]
+  frame_rate: 30
+  physics_rate: 120
+  sequence_frames: 72
+  min_objects: 3
+  max_objects: 6
+  camera_motion: orbit
+  render_noise_std: 0.01
+model:
+  max_objects: 8
+  state:
+    geometry_dim: 8
+    appearance_dim: 32
+    residual_dynamics_dim: 16
+    modal_count: 4
+    modal_dim: 3
+    parameter_memory_dim: 48
+    global_dim: 16
+  rgb:
+    backbone_channels: [32, 64, 96, 128]
+    feature_dim: 96
+    proposal_queries: 10
+    global_every_steps: 12
+    roi_size: 20
+  dynamics:
+    hidden_dim: 96
+    max_substep: 0.008333333333333333
+  filter:
+    hidden_dim: 128
+  identification:
+    hidden_dim: 48
+runtime:
+  modality: rgb
+  enable_debug_oracle: false
+training:
+  batch_size: 4
+  steps: 3000
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  tbptt_steps: 24
+  grad_clip_norm: 1.0
+  checkpoint_every: 250
+  eval_every: 250
+  log_every: 10
+  train_episodes: 512
+  validation_episodes: 24
+  rgb_pretrain_steps: 400
+  perturbation_probability: 0.25
+evaluation:
+  horizons_seconds: [0.1, 0.25, 0.5, 1.0, 2.0]
+  episodes: 24
+  rgb_only: true
+demo:
+  seed: 200000
+  max_frames: 60
+  future_horizon_seconds: 2.0
+  fps: 15

@@ -1,0 +1,64 @@
+project:
+  name: orpheus-cloud-single-gpu
+  seed: 42
+  output_dir: runs
+device:
+  preference: cuda
+  cuda_amp: true
+  compile: false
+simulator:
+  image_size: [128, 128]
+  frame_rate: 30
+  physics_rate: 180
+  sequence_frames: 96
+  min_objects: 4
+  max_objects: 10
+  camera_motion: combined
+  render_noise_std: 0.02
+model:
+  max_objects: 12
+  state:
+    geometry_dim: 12
+    appearance_dim: 48
+    residual_dynamics_dim: 24
+    modal_count: 6
+    modal_dim: 4
+    parameter_memory_dim: 64
+    global_dim: 24
+  rgb:
+    backbone_channels: [48, 96, 160, 256]
+    feature_dim: 160
+    proposal_queries: 14
+    global_every_steps: 12
+    roi_size: 24
+  dynamics:
+    hidden_dim: 192
+    max_substep: 0.005555555555555556
+  filter:
+    hidden_dim: 256
+  identification:
+    hidden_dim: 64
+runtime:
+  modality: rgb
+  enable_debug_oracle: false
+training:
+  batch_size: 16
+  steps: 30000
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  tbptt_steps: 32
+  checkpoint_every: 1000
+  eval_every: 1000
+  train_episodes: 8192
+  validation_episodes: 128
+  num_workers: 4
+  rgb_pretrain_steps: 3000
+evaluation:
+  horizons_seconds: [0.1, 0.25, 0.5, 1.0, 2.0]
+  episodes: 128
+  rgb_only: true
+demo:
+  seed: 200000
+  max_frames: 72
+  future_horizon_seconds: 2.0
+  fps: 15
