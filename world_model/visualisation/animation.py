@@ -20,6 +20,7 @@ from world_model.observations import ObservationPacket
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
 from world_model.training.checkpointing import load_checkpoint
+from world_model.utils.artifacts import timestamped_artifact_path
 from world_model.utils.config import OrpheusConfig
 from world_model.utils.device import DeviceInfo
 from world_model.visualisation.frames import normalized_to_pixels, overlay_points
@@ -494,7 +495,7 @@ def create_demo(
 
     if not config.evaluation.rgb_only or config.runtime.enable_debug_oracle:
         raise ValueError("The primary demo requires RGB-only configuration")
-    output = Path(output_dir or f"demo_outputs/seed_{config.demo.seed}")
+    output = timestamped_artifact_path(output_dir or f"demo_outputs/seed_{config.demo.seed}")
     frame_dir = output / "frames"
     frame_dir.mkdir(parents=True, exist_ok=True)
     model = OnlineWorldModel.from_config(config, device=device_info.device)

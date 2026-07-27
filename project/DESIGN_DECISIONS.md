@@ -579,3 +579,23 @@
 - **Consequences:** Scenario support is shipped as validated infrastructure,
   while checkpoint limitations remain truthful. Finite execution across a
   regime is not presented as accurate generalization.
+
+## ADR-037 — Generated artifact directories sort newest by timestamp
+
+- **Date:** 2026-07-27
+- **Status:** accepted
+- **Context:** Training runs, repeated evaluations, and RGB demos used
+  inconsistent suffix timestamps or unversioned names. This made the newest
+  GIF difficult to identify and allowed repeated evaluation output to reuse a
+  directory.
+- **Decision:** Prefix every newly created training, evaluation, and demo
+  directory basename with a UTC `YYYYMMDD-HHMMSS-` timestamp, including
+  caller-supplied labels. Treat an existing prefix as idempotent. A resume
+  without a new run name continues in the checkpoint's original run
+  directory. Keep research runs in place because reports and checkpoint
+  provenance cite them; move superseded demos into a recoverable timestamped
+  `demo_outputs/archive/`.
+- **Consequences:** Lexicographic folder order is chronological and every CLI
+  reports its actual generated path. Existing research evidence remains valid.
+  Timestamp resolution is one second, so callers launching identical labels
+  within the same second must provide distinct labels.

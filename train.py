@@ -13,7 +13,10 @@ from world_model.utils.device import select_device
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True, help="Path to a YAML configuration")
-    parser.add_argument("--run-name", help="Run directory name (defaults to timestamped name)")
+    parser.add_argument(
+        "--run-name",
+        help="Run label; the directory receives a sortable UTC timestamp prefix",
+    )
     parser.add_argument("--resume", help="Trusted local checkpoint to resume")
     parser.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"])
     parser.add_argument("--seed", type=int)

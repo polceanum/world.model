@@ -15,7 +15,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", required=True)
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--seed", type=int)
-    parser.add_argument("--output")
+    parser.add_argument(
+        "--output",
+        help="Output directory label/path; its basename receives a UTC timestamp prefix",
+    )
     parser.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"])
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     return parser.parse_args()

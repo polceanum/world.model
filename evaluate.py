@@ -33,7 +33,10 @@ def parse_args() -> argparse.Namespace:
             "it must begin after the checkpoint's trainer-validation manifest."
         ),
     )
-    parser.add_argument("--output")
+    parser.add_argument(
+        "--output",
+        help="Output directory label/path; its basename receives a UTC timestamp prefix",
+    )
     parser.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"])
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     return parser.parse_args()

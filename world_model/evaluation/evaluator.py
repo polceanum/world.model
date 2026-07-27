@@ -51,6 +51,7 @@ from world_model.training.loop import (
     move_batch_to_device,
 )
 from world_model.training.perturbations import perturb_belief
+from world_model.utils.artifacts import timestamped_artifact_path
 from world_model.utils.config import OrpheusConfig
 from world_model.utils.device import DeviceInfo, select_device
 from world_model.utils.seeds import seed_everything
@@ -1146,7 +1147,7 @@ def evaluate_checkpoint(
         }
     )
 
-    output = (
+    requested_output = (
         Path(output_dir).expanduser().resolve()
         if output_dir is not None
         else checkpoint.parent.parent
@@ -1157,6 +1158,7 @@ def evaluate_checkpoint(
             else f"{split}-{resolved_seed_protocol.name}"
         )
     )
+    output = timestamped_artifact_path(requested_output)
     limitations = [
         (
             "Evaluation uses the synthetic sphere-world split and does not "

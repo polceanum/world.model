@@ -27,6 +27,7 @@ from world_model.training.loop import (
     run_closed_loop_batch,
     select_closed_loop_window,
 )
+from world_model.utils.artifacts import timestamped_artifact_path
 from world_model.utils.config import OrpheusConfig, save_resolved_config
 from world_model.utils.device import DeviceInfo, select_device
 from world_model.utils.io import atomic_write_text
@@ -54,9 +55,8 @@ def _output_root(config: OrpheusConfig) -> Path:
 
 
 def _new_run_name(config: OrpheusConfig) -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     project = re.sub(r"[^A-Za-z0-9._-]+", "-", config.project.name).strip("-")
-    return f"{project or 'orpheus'}-{stamp}"
+    return timestamped_artifact_path(project or "orpheus").name
 
 
 def _resolve_run_directory(
@@ -69,7 +69,9 @@ def _resolve_run_directory(
         checkpoint = Path(resume_path).expanduser().resolve()
         if checkpoint.parent.name == "checkpoints":
             return checkpoint.parent.parent
-    selected = run_name or _new_run_name(config)
+    selected = (
+        timestamped_artifact_path(run_name).name if run_name is not None else _new_run_name(config)
+    )
     if not _SAFE_RUN_NAME.fullmatch(selected):
         raise ValueError(
             "run_name must contain only letters, digits, '.', '_', and '-' "

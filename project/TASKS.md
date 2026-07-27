@@ -97,6 +97,8 @@
 - [x] Stabilise demo axes, margins, and legends; retain historical posterior
   forecasts with fading alpha; show matched endpoint error; and reserve
   scoring-only lookahead so the displayed horizon remains fixed.
+- [x] Prefix new train/evaluation/demo artifact folders with sortable UTC
+  timestamps and recoverably archive superseded demos.
 
 ## Milestone 1 research acceptance — not yet achieved
 

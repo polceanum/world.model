@@ -109,6 +109,12 @@ For the deterministic convergence/debug run:
 python train.py --config configs/tiny_overfit.yaml --run-name tiny-debug
 ```
 
+Generated training, evaluation, and demo directory basenames begin with a UTC
+`YYYYMMDD-HHMMSS-` timestamp, so ordinary filename sorting puts the newest
+artifact last. Explicit `--run-name` and `--output` values are treated as
+human-readable labels; the command's JSON result contains the actual path.
+Superseded demos are retained under `demo_outputs/archive/`.
+
 PyTorch 2.10.0 in the existing environment is MPS-enabled. A reduced explicit
 MPS training smoke has exercised both global RGB and differentiable fast ROI
 backward paths. The full 3,000-step `toy_mps` protocol remains an overnight

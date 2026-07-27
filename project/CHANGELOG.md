@@ -63,6 +63,10 @@
 - Stable demo world bounds, manual legends, recency-faded absolute forecast
   history, matched future endpoints, per-frame absolute errors, and
   scoring-only lookahead that keeps the displayed horizon fixed.
+- Sortable UTC timestamp prefixes for all newly generated training,
+  evaluation, and demo directory names, including explicit CLI labels.
+- A recoverable `demo_outputs/archive/` containing the eight superseded demo
+  sets; the current RGB-only demo remains directly under `demo_outputs/`.
 
 ### Changed after integration audit
 
@@ -159,9 +163,9 @@
 - Negative balanced-event continuation:
   `runs/accuracy-events-balanced-102/evaluation/best-test-8episodes`.
 - Demo:
-  `demo_outputs/convergence-tiny-cpu-v1`.
+  `demo_outputs/archive/20260726-223129-convergence-tiny-cpu-v1`.
 - Frozen-continuation demo:
-  `demo_outputs/accuracy-closed-frozen-94`.
+  `demo_outputs/archive/20260726-232939-accuracy-closed-frozen-94`.
 - Reduced real MPS training:
   `runs/milestone1-mps-smoke-final`.
 - Reduced two-step run of the full-size `toy_mps` architecture:
@@ -186,13 +190,13 @@
 - Promoted accuracy-v4 continuation, paired validation, and final test:
   `runs/accuracy-closed-structured-v4`.
 - Promoted accuracy-v4 RGB-only demo:
-  `demo_outputs/accuracy-closed-structured-v4`.
+  `demo_outputs/archive/20260727-102411-accuracy-closed-structured-v4`.
 - Fresh 32-frame one-second baseline and rejected continuation reports:
   `runs/accuracy-multistep-v1`,
   `runs/accuracy-multistep-balanced-v4`, and
   `runs/accuracy-multistep-long-v5`.
 - Stable full-horizon forecast-history demo:
-  `demo_outputs/accuracy-v4-forecast-history`.
+  `demo_outputs/archive/20260727-125455-accuracy-v4-forecast-history`.
 
 The earlier frozen continuation reached 75.39% distance-gated
 recall/precision over eight held-out episodes, 0.161387 m 0.5-second forecast
@@ -276,7 +280,7 @@ On 2026-07-27 the misleading XY/GIF overlay was corrected: ground-truth past
 and current horizon are no longer drawn on top of each other, identities use
 stable colours and labels, and start/end/time-direction markers make the
 two-sphere collision trace explicit. The final regenerated artifact is
-`demo_outputs/accuracy-v6-blended-velocity/online_correction.gif`.
+`demo_outputs/20260727-162848-accuracy-v6-blended-velocity/online_correction.gif`.
 
 The same investigation fixed the model's near-zero camera-lateral velocity
 gain with bounded persistent-ID temporal evidence restricted to young tracks.

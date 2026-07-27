@@ -379,10 +379,10 @@ comparisons, mean current prior/posterior error was
 `0.981901`. Ground truth is used only for the overlay and scores recorded in
 the summary. Real artifacts:
 
-- `demo_outputs/accuracy-v4-forecast-history/online_correction.gif`
-- `demo_outputs/accuracy-v4-forecast-history/parameter_estimates.png`
-- `demo_outputs/accuracy-v4-forecast-history/summary.json`
-- `demo_outputs/accuracy-v4-forecast-history/frames/`
+- `demo_outputs/archive/20260727-125455-accuracy-v4-forecast-history/online_correction.gif`
+- `demo_outputs/archive/20260727-125455-accuracy-v4-forecast-history/parameter_estimates.png`
+- `demo_outputs/archive/20260727-125455-accuracy-v4-forecast-history/summary.json`
+- `demo_outputs/archive/20260727-125455-accuracy-v4-forecast-history/frames/`
 
 ### Superseded and rejected experiments
 
@@ -607,10 +607,10 @@ conda run --no-capture-output -n orpheus python demo.py \
 It uses four global and 12 fast ROI updates. Mean ordinary current/future
 prior-to-posterior improvements are +0.008432 m / +0.011079 m:
 
-- `demo_outputs/accuracy-closed-frozen-94/online_correction.gif`
-- `demo_outputs/accuracy-closed-frozen-94/parameter_estimates.png`
-- `demo_outputs/accuracy-closed-frozen-94/summary.json`
-- `demo_outputs/accuracy-closed-frozen-94/frames/`
+- `demo_outputs/archive/20260726-232939-accuracy-closed-frozen-94/online_correction.gif`
+- `demo_outputs/archive/20260726-232939-accuracy-closed-frozen-94/parameter_estimates.png`
+- `demo_outputs/archive/20260726-232939-accuracy-closed-frozen-94/summary.json`
+- `demo_outputs/archive/20260726-232939-accuracy-closed-frozen-94/frames/`
 
 Applying only the corrected event semantics to the unchanged step-70
 checkpoint raised collision F1 from 0 to 0.055556 without changing weights.
@@ -757,10 +757,10 @@ The held-out 16-frame RGB-only demo used four global and 12 fast ROI updates.
 Mean ordinary prior-to-posterior improvement is now positive:
 +0.007777 m for current state and +0.010584 m for future error. Artifacts:
 
-- `demo_outputs/convergence-tiny-cpu-v1/online_correction.gif`
-- `demo_outputs/convergence-tiny-cpu-v1/parameter_estimates.png`
-- `demo_outputs/convergence-tiny-cpu-v1/summary.json`
-- `demo_outputs/convergence-tiny-cpu-v1/frames/`
+- `demo_outputs/archive/20260726-223129-convergence-tiny-cpu-v1/online_correction.gif`
+- `demo_outputs/archive/20260726-223129-convergence-tiny-cpu-v1/parameter_estimates.png`
+- `demo_outputs/archive/20260726-223129-convergence-tiny-cpu-v1/summary.json`
+- `demo_outputs/archive/20260726-223129-convergence-tiny-cpu-v1/frames/`
 
 ## MPS evidence
 
@@ -949,7 +949,8 @@ two-frame RGB slopes, and raw three-frame slopes all failed the wider physical
 gate.
 
 The regenerated RGB-only demo is
-`demo_outputs/accuracy-v6-blended-velocity/online_correction.gif`, with
+`demo_outputs/20260727-162848-accuracy-v6-blended-velocity/online_correction.gif`,
+with
 `summary.json`, 32 PNG frames, and `parameter_estimates.png` in the same
 directory. It uses seed `200000`, a fixed 1.0-second displayed horizon and 20
 undisplayed lookahead frames. Mean current posterior error was `0.194245 m`;
@@ -1080,3 +1081,48 @@ PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
 
 Results: Ruff passed; `203 passed, 3 skipped in 62.17 s`. The skips are the
 existing MPS-conditional tests because MPS was unavailable to this process.
+
+## Sortable artifact cleanup (2026-07-27)
+
+New training, evaluation, and demo artifact directory basenames are prefixed
+with a UTC `YYYYMMDD-HHMMSS-` timestamp. This also applies to explicit
+`--run-name` and `--output` labels; already-prefixed names are unchanged, and
+resuming without a new run name continues in the checkpoint's existing
+directory. The CLI JSON result is the source of truth for the generated path.
+
+The latest RGB-only demo is now directly visible at:
+
+- `demo_outputs/20260727-162848-accuracy-v6-blended-velocity/online_correction.gif`
+- `demo_outputs/20260727-162848-accuracy-v6-blended-velocity/summary.json`
+- `demo_outputs/20260727-162848-accuracy-v6-blended-velocity/parameter_estimates.png`
+- `demo_outputs/20260727-162848-accuracy-v6-blended-velocity/frames/`
+
+Eight superseded demo sets were moved, not deleted, under
+`demo_outputs/archive/`, retaining timestamp-first names derived from their
+existing filesystem times. Historical `runs/` directories were deliberately
+left in place because checkpoint and report paths are cited throughout the
+research record.
+
+Commands and outcomes:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff format .
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
+```
+
+Results: all 156 Python files were already formatted; Ruff passed; `206 passed,
+3 skipped in 61.17 s`. The skips are the existing MPS-conditional tests.
+
+```bash
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-artifact-pycache PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+git diff --check
+```
+
+Results: compileall and diff checks passed. The process used macOS,
+Python `3.10.20`, and PyTorch `2.10.0`; MPS is built but unavailable to this
+process, so validation ran on CPU. The latest GIF still has SHA-256
+`74f6cf96fd0cd12723f7c1a255ab44ab9f15e8206909b8a51fc21c6f16cfe690`,
+confirming that cleanup changed its location, not its contents.

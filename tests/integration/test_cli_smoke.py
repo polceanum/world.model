@@ -91,7 +91,9 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         "--set",
         "training.steps=1",
     )
-    run_directory = tmp_path / "runs" / "cli-smoke"
+    run_directories = list((tmp_path / "runs").glob("*-cli-smoke"))
+    assert len(run_directories) == 1
+    run_directory = run_directories[0]
     checkpoint = run_directory / "checkpoints" / "last.pt"
     assert checkpoint.is_file()
     assert not (run_directory / "checkpoints" / "best_rollout.pt").exists()
@@ -155,7 +157,7 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         "--set",
         "training.steps=3",
     )
-    evaluation_directory = run_directory / "evaluation" / "test"
+    requested_evaluation_directory = run_directory / "evaluation" / "test"
     _run(
         "evaluate.py",
         "--config",
@@ -165,8 +167,11 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         "--split",
         "test",
         "--output",
-        str(evaluation_directory),
+        str(requested_evaluation_directory),
     )
+    evaluation_directories = list(requested_evaluation_directory.parent.glob("*-test"))
+    assert len(evaluation_directories) == 1
+    evaluation_directory = evaluation_directories[0]
     report = json.loads((evaluation_directory / "evaluation.json").read_text(encoding="utf-8"))
     assert report["metadata"]["checkpoint_step"] == 3
     assert report["metadata"]["rgb_only"] is True
