@@ -1,8 +1,10 @@
 from pathlib import Path
 
 import pytest
+import torch
 
 from world_model.datasets.splits import SPLIT_SEED_RANGES
+from world_model.observations.rgb.structured_centres import structured_disc_centres
 from world_model.utils.config import load_config
 
 CONFIG_DIR = Path(__file__).parents[2] / "configs"
@@ -35,6 +37,7 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
     assert not default.model.rgb.temporal_velocity_enabled
     assert default.model.rgb.temporal_velocity_history_size == 3
     assert default.model.rgb.temporal_velocity_variance_ceiling is None
+    assert default.model.rgb.structured_disc_center_enabled
 
     enabled = load_config(
         CONFIG_DIR / "toy_smoke.yaml",
@@ -115,3 +118,61 @@ def test_collision_positive_weight_is_at_least_one() -> None:
             CONFIG_DIR / "tiny_overfit.yaml",
             overrides=["training.collision_positive_weight_max=0.5"],
         )
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("structured_disc_threshold", 0.0),
+        ("structured_disc_min_pixels", 0),
+        ("structured_disc_max_assignment_distance", 0.0),
+        ("structured_disc_center_std_pixels", 0.0),
+    ],
+)
+def test_structured_rgb_controls_are_bounded(
+    key: str,
+    value: float | int,
+) -> None:
+    with pytest.raises(ValueError, match=key):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=[f"model.rgb.{key}={value}"],
+        )
+
+
+def test_measurement_loss_weights_are_nonnegative() -> None:
+    with pytest.raises(ValueError, match="measurement_loss_weights"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=["training.measurement_loss_weights={rgb_world_position: -1.0}"],
+        )
+
+
+@pytest.mark.parametrize("profile_name", ["toy_hard.yaml", "cloud_single_gpu.yaml"])
+def test_noisy_profiles_use_noise_robust_structured_rgb_threshold(
+    profile_name: str,
+) -> None:
+    config = load_config(CONFIG_DIR / profile_name)
+    rgb_config = config.model.rgb
+    assert rgb_config.structured_disc_center_enabled
+    assert rgb_config.structured_disc_threshold == pytest.approx(0.08)
+
+    generator = torch.Generator().manual_seed(20260727)
+    height, width = config.simulator.image_size
+    image = (
+        torch.full((2, 3, height, width), 0.2)
+        + config.simulator.render_noise_std
+        * torch.randn((2, 3, height, width), generator=generator)
+    ).clamp(0.0, 1.0)
+    proposal_centres = torch.zeros((2, rgb_config.proposal_queries, 2))
+    output = structured_disc_centres(
+        image,
+        proposal_centres,
+        threshold=rgb_config.structured_disc_threshold,
+        minimum_pixels=rgb_config.structured_disc_min_pixels,
+        maximum_assignment_distance=rgb_config.structured_disc_max_assignment_distance,
+    )
+
+    # Renderer-strength Gaussian noise may form an occasional tiny connected
+    # cluster, but must not consume a meaningful fraction of proposal slots.
+    assert int(output.component_count.max()) <= 2

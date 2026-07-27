@@ -125,7 +125,7 @@ def test_checkpoint_roundtrip_preserves_trained_state(tmp_path):
         validate_checkpoint_config(payload, incompatible)
 
 
-def test_temporal_rgb_operational_controls_preserve_checkpoint_compatibility() -> None:
+def test_rgb_runtime_controls_are_semantic_with_legacy_defaults() -> None:
     config = _small_config()
     payload = {"config": config.to_dict()}
     legacy_payload = deepcopy(payload)
@@ -137,6 +137,11 @@ def test_temporal_rgb_operational_controls_preserve_checkpoint_compatibility() -
         "temporal_velocity_variance_scale",
         "temporal_velocity_variance_floor",
         "temporal_velocity_variance_ceiling",
+        "structured_disc_center_enabled",
+        "structured_disc_threshold",
+        "structured_disc_min_pixels",
+        "structured_disc_max_assignment_distance",
+        "structured_disc_center_std_pixels",
     ):
         legacy_rgb.pop(field_name)
 
@@ -152,12 +157,31 @@ def test_temporal_rgb_operational_controls_preserve_checkpoint_compatibility() -
                 temporal_velocity_variance_scale=2.0,
                 temporal_velocity_variance_floor=0.5,
                 temporal_velocity_variance_ceiling=4.0,
+                structured_disc_center_enabled=True,
+                structured_disc_threshold=0.06,
+                structured_disc_min_pixels=6,
+                structured_disc_max_assignment_distance=0.5,
+                structured_disc_center_std_pixels=1.0,
             ),
         ),
     )
     enabled.validate()
-    validate_checkpoint_config(payload, enabled)
-    validate_checkpoint_config(legacy_payload, enabled)
+    validate_checkpoint_config(payload, config)
+    legacy_compatible = replace(
+        config,
+        model=replace(
+            config.model,
+            rgb=replace(config.model.rgb, structured_disc_center_enabled=False),
+        ),
+    )
+    legacy_compatible.validate()
+    validate_checkpoint_config(legacy_payload, legacy_compatible)
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(legacy_payload, config)
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(payload, enabled)
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(legacy_payload, enabled)
 
     architecture_change = replace(
         enabled,

@@ -25,6 +25,14 @@ def parse_args() -> argparse.Namespace:
             "selection on seeds disjoint from trainer validation and test."
         ),
     )
+    parser.add_argument(
+        "--seed-offset",
+        type=int,
+        help=(
+            "Explicit offset inside the selected split. For fresh_validation "
+            "it must begin after the checkpoint's trainer-validation manifest."
+        ),
+    )
     parser.add_argument("--output")
     parser.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"])
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
@@ -46,6 +54,7 @@ def main() -> int:
         checkpoint_path=args.checkpoint,
         split=args.split,
         seed_protocol=args.seed_protocol,
+        seed_offset=args.seed_offset,
         output_dir=args.output,
         device_info=device,
     )

@@ -56,6 +56,7 @@ model:
     global_every_steps: 12
     roi_size: 20
     fast_depth_residual_enabled: false
+    structured_disc_center_enabled: true
     roi_uncertainty_scale: 2.5
     global_uncertainty_threshold: 4.0
     surprise_threshold: 8.0
@@ -128,12 +129,26 @@ training:
   measurement_validation_frames: 8
   perturbation_probability: 0.25
   perturbation_position_std: 0.12
+  perturbation_velocity_std: 0.20
+  collision_window_probability: 0.50
   collision_positive_weight_max: 10.0
   horizon_weights: [1.0, 1.0, 1.2, 1.5, 1.5]
+  measurement_loss_weights:
+    rgb_existence: 1.0
+    rgb_geometry: 1.0
+    rgb_colour: 0.25
+    rgb_nll: 0.05
+    rgb_visibility: 0.25
+    rgb_appearance: 0.25
+    rgb_raw_centre: 2.0
+    rgb_world_position: 8.0
+    rgb_world_position_nll: 0.05
   loss_weights:
     measurement: 1.0
-    state: 1.0
-    rollout: 1.0
+    state_position: 2.0
+    state_velocity: 0.25
+    rollout_position: 4.0
+    rollout_velocity: 0.1
     event: 0.2
     parameter: 0.1
     existence: 0.2

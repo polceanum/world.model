@@ -286,9 +286,13 @@
   validation` begins immediately after the checkpoint's recorded
   `training.validation_episodes`. Reports persist every seed and assert that
   this manifest overlaps neither trainer validation nor the reserved test
-  range. Collision-conditioned forecasts use simulator collision labels only
-  as an evaluation mask over `(anchor, target]`, with identical masks for the
-  model and every baseline.
+  range. `--seed-offset` can select a later explicit block, but fresh
+  validation rejects offsets that overlap trainer validation. Standard
+  validation/test evaluation also accepts an explicit offset so paired
+  comparisons never depend on implicit checkpoint provenance.
+  Collision-conditioned forecasts use simulator collision labels only as an
+  evaluation mask over `(anchor, target]`, with identical masks for the model
+  and every baseline.
 - **Evidence:** The step-72 comparison used seeds `100004–100019`; metadata
   records no trainer-validation or test overlap.
 - **Consequences:** These episodes are suitable for checkpoint selection, not
@@ -339,3 +343,102 @@
   now has the intended semantics. The unchanged step-72 checkpoint's fresh
   collision F1 remained `0.042553`, so this correctness fix is not presented
   as an accuracy gain by itself.
+
+## ADR-026 — Synthetic structured RGB localization is an optional measurement prior
+
+- **Date:** 2026-07-27
+- **Status:** accepted for synthetic sphere profiles
+- **Context:** The learned proposal head localized horizontal image position
+  reasonably but collapsed much of the vertical motion. The specification
+  explicitly permits structured sphere geometry in the RGB adapter, while
+  forbidding simulator state at runtime.
+- **Decision:** Global discovery may refine learned proposal centres using
+  only the current RGB frame: estimate the row-wise background by a robust
+  median, threshold foreground evidence, split connected silhouettes at
+  distance-transform peaks, compute photometric centroids, and align those
+  centroids to learned proposal slots with Hungarian assignment. Ordinary
+  updates use a separate projected-ROI RGB centroid refinement; they do not
+  run global connected-component discovery. Both paths retain the original
+  learned centre in `auxiliary.raw_centre`, and training applies a direct raw
+  centre loss so the structured forward measurement cannot starve the learned
+  heads of localization gradients.
+- **Scope:** The dataclass default remains disabled for future real-video
+  adapters. Current synthetic sphere YAML profiles enable it. Noise-free,
+  default, and `toy_mps` profiles use threshold `0.04`; `toy_hard` and cloud
+  profiles use the measured noise-robust threshold `0.08`.
+- **Evidence:** On RGB frames from seeds `100004–100019`, peak splitting
+  increased matched global centroids from `455/512` to `507/512`, with mean
+  normalized centre error `0.0014439`. A separate `toy_mps` diagnostic matched
+  all `57/57` visible objects on sampled frames. At threshold `0.04`,
+  `toy_hard` noise produced hundreds of false basins; threshold `0.08`
+  restored the expected ten components in the sampled hard/cloud scenes.
+- **Consequences:** This is a transparent RGB-only toy prior, not evidence of
+  general real-video perception. Structured controls alter measurement means
+  and variances and are therefore checkpoint semantics. Missing legacy fields
+  normalize to their historical defaults; a checkpoint cannot silently
+  enable or retune structured/temporal measurement behavior.
+
+## ADR-027 — Optimize and select measurement and rollout quality in physical units
+
+- **Date:** 2026-07-27
+- **Status:** accepted
+- **Context:** The old RGB loss could be dominated by a negative
+  heteroscedastic NLL, and the old aggregate rollout loss was dominated by
+  velocity because metres and metres/second were averaged without an explicit
+  tradeoff. Tiny validation improvements as small as a few millionths then
+  selected checkpoints that regressed held-out position and recovery.
+- **Decision:** Supervise calibrated RGB world position with Huber and
+  Gaussian-NLL terms, apply explicit per-measurement weights, and expose raw
+  learned-centre supervision separately from the structured forward
+  measurement. Closed-loop objectives keep position and velocity terms
+  separate for current state and rollout. `best_rollout.pt` is selected by
+  rollout-position loss with a `1e-5` minimum improvement; aggregate aliases
+  remain only for backward-compatible logging/configuration.
+- **Consequences:** Loss magnitude is no longer presented as localization
+  accuracy. `best_measurement.pt` is selected by metric world-position MAE,
+  while rollout selection prioritizes the physical forecast quantity used for
+  promotion. Uncertainty NLL remains active at a deliberately smaller weight.
+
+## ADR-028 — Closed-loop windows require causal context and representative validation
+
+- **Date:** 2026-07-27
+- **Status:** accepted
+- **Context:** Previous validation consumed one rotating batch and only the
+  first TBPTT frames. Mid-episode train windows started from a cold reset, and
+  uniform short windows provided weak collision coverage.
+- **Decision:** Every checkpoint validation evaluates every configured
+  validation episode and the complete causal episode. A sampled mid-episode
+  training window first ingests its RGB prefix under `no_grad`, detaches the
+  resulting persistent belief/caches/history, and then backpropagates only
+  through the selected TBPTT span. Half of windows preferentially contain a
+  collision when labels are available; labels choose a training span only and
+  never enter runtime. Position and velocity perturbation magnitudes are
+  explicit independent configuration values.
+- **Consequences:** Validation values are comparable across checkpoints and
+  measure the same persistent online loop used by evaluation. The extra
+  validation and causal prefix work costs more compute but removes the
+  alternating-seed and cold-start biases that invalidated earlier tiny
+  selection.
+
+## ADR-029 — Promotion requires paired physical evidence, not scalar tuning
+
+- **Date:** 2026-07-27
+- **Status:** accepted after accuracy-v4 continuation
+- **Context:** A checkpoint may improve forecast dynamics while showing tiny
+  mixed changes in current position, velocity, recovery, or coverage. Event
+  threshold sweeps can also appear attractive without fixing mis-timed or
+  structurally wrong state.
+- **Decision:** Promote a closed-loop checkpoint only when its physical gains
+  repeat on paired selection and confirmation manifests. Do not retune the
+  collision threshold when positive/negative logits are saturated, and do not
+  replace learned depth with an analytic radius rule unless it passes the same
+  metric-space confirmation protocol.
+- **Evidence:** Step 648 improved all forecast horizons on both manifests and
+  confirmation collision F1 `0.594203 → 0.608059`; its final-test F1 was
+  `0.640000`. No threshold improved the saturated event logits. Mean-radius
+  depth produced about `0.795 m` error versus `0.148 m` learned, and a
+  photometric-radius variant failed confirmation.
+- **Consequences:** Step 648 supersedes step 584 despite tiny mixed secondary
+  tradeoffs, which remain reported. Collision threshold stays `0.5`, learned
+  depth stays active, and a two-frame anisotropic velocity slope remains an
+  unimplemented research option rather than a promoted inference heuristic.

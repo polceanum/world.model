@@ -153,6 +153,39 @@ def gather_target_slots(target: Tensor, indices: Tensor) -> Tensor:
     return torch.where(unmatched, torch.zeros_like(gathered), gathered)
 
 
+def _add_world_position_supervision(
+    outputs: dict[str, Tensor],
+    targets: dict[str, Tensor],
+    measurements: MeasurementSet,
+    batch: Mapping[str, Any],
+    frame_index: int,
+    target_indices: Tensor,
+) -> None:
+    """Attach calibrated metric-space supervision when the RGB module emits it."""
+
+    world_position = measurements.auxiliary.get("world_position")
+    if world_position is None:
+        return
+    if not isinstance(world_position, Tensor):
+        raise TypeError("measurements.auxiliary.world_position must be a Tensor")
+    target_objects = batch.get("objects")
+    if not isinstance(target_objects, Mapping):
+        raise ValueError("metric RGB supervision requires batch.objects")
+    target_position = target_objects.get("position")
+    if not isinstance(target_position, Tensor):
+        raise ValueError("metric RGB supervision requires batch.objects.position")
+    outputs["world_position"] = world_position
+    targets["world_position"] = gather_target_slots(
+        target_position[:, frame_index],
+        target_indices,
+    )
+    world_log_variance = measurements.auxiliary.get("world_position_log_variance")
+    if world_log_variance is not None:
+        if not isinstance(world_log_variance, Tensor):
+            raise TypeError("measurements.auxiliary.world_position_log_variance must be a Tensor")
+        outputs["world_position_log_variance"] = world_log_variance
+
+
 def supervised_measurement_losses(
     module: torch.nn.Module,
     measurements: MeasurementSet,
@@ -174,6 +207,11 @@ def supervised_measurement_losses(
         "log_variance": measurements.log_variance,
         "existence_logits": measurements.existence_logits,
     }
+    raw_centre = measurements.auxiliary.get("raw_centre")
+    if raw_centre is not None:
+        if not isinstance(raw_centre, Tensor):
+            raise TypeError("measurements.auxiliary.raw_centre must be a Tensor")
+        outputs["raw_centre"] = raw_centre
     visibility_logits = measurements.auxiliary.get("visibility_logits")
     if visibility_logits is None:
         visibility_logits = measurements.auxiliary.get("visibility_logit")
@@ -183,6 +221,14 @@ def supervised_measurement_losses(
         "values": aligned,
         "visibility": aligned_visibility,
     }
+    _add_world_position_supervision(
+        outputs,
+        targets,
+        measurements,
+        batch,
+        frame_index,
+        target_indices,
+    )
     masks = {
         "matched": matched,
         "existence": matched,
@@ -232,6 +278,11 @@ def supervised_slot_measurement_losses(
         "log_variance": measurements.log_variance,
         "existence_logits": measurements.existence_logits,
     }
+    raw_centre = measurements.auxiliary.get("raw_centre")
+    if raw_centre is not None:
+        if not isinstance(raw_centre, Tensor):
+            raise TypeError("measurements.auxiliary.raw_centre must be a Tensor")
+        outputs["raw_centre"] = raw_centre
     visibility_logits = measurements.auxiliary.get("visibility_logits")
     if visibility_logits is None:
         visibility_logits = measurements.auxiliary.get("visibility_logit")
@@ -241,6 +292,14 @@ def supervised_slot_measurement_losses(
         "values": aligned,
         "visibility": aligned_visibility,
     }
+    _add_world_position_supervision(
+        outputs,
+        targets,
+        measurements,
+        batch,
+        frame_index,
+        target_indices,
+    )
     masks = {
         "matched": supervised,
         "existence": supervised,
@@ -348,7 +407,10 @@ def pretrain_rgb_measurements(
         _observation_context(packet, config, training=True),
     )
     details = supervised_measurement_losses(module, measurements, batch, frame_index)
-    measurement = torch.stack(tuple(details.values())).sum()
+    measurement = _weighted_measurement_total(
+        details,
+        config.training.measurement_loss_weights,
+    )
     terms = {"measurement": measurement}
     total = weighted_total(terms, config.training.loss_weights)
     metrics = {name: float(value.detach().cpu()) for name, value in details.items()}
@@ -422,6 +484,24 @@ def _mean_losses(losses: list[Tensor], reference: Tensor) -> Tensor:
     if not losses:
         return reference.sum() * 0
     return torch.stack(losses).mean()
+
+
+def _weighted_measurement_total(
+    losses: Mapping[str, Tensor],
+    weights: Mapping[str, float],
+) -> Tensor:
+    """Combine RGB supervision without letting heteroscedastic NLL dominate.
+
+    Unknown future diagnostic terms retain unit weight.  Explicit weights make
+    the metric localization objective materially stronger while preserving
+    uncertainty NLL as a bounded calibration signal.
+    """
+
+    if not losses:
+        raise ValueError("measurement loss mapping cannot be empty")
+    return torch.stack(
+        [value * float(weights.get(name, 1.0)) for name, value in losses.items()]
+    ).sum()
 
 
 def _valid_rollout_offsets(
@@ -632,9 +712,17 @@ def _group_closed_loop_terms(
         selected = [details[name] for name in names if name in details]
         return _mean_losses(selected, reference)
 
+    state_position = details.get("state_position", reference.sum() * 0)
+    state_velocity = details.get("state_velocity", reference.sum() * 0)
+    rollout_position = details.get("rollout_position", reference.sum() * 0)
+    rollout_velocity = details.get("rollout_velocity", reference.sum() * 0)
     return {
         "measurement": details.get("measurement", reference.sum() * 0),
+        "state_position": state_position,
+        "state_velocity": state_velocity,
         "state": total("state_position", "state_velocity"),
+        "rollout_position": rollout_position,
+        "rollout_velocity": rollout_velocity,
         "rollout": total("rollout_position", "rollout_velocity"),
         "event": details.get("event_collision", reference.sum() * 0),
         "parameter": total("parameter_drag", "parameter_restitution"),
@@ -648,6 +736,117 @@ def _group_closed_loop_terms(
             "correction_future",
         ),
     }
+
+
+def _weighted_closed_loop_total(
+    terms: dict[str, Tensor],
+    weights: dict[str, float],
+) -> Tensor:
+    """Weight physical loss components without double-counting aliases.
+
+    ``state`` and ``rollout`` remain backward-compatible aggregate terms for
+    existing configs, logs, and checkpoints.  When a config supplies an exact
+    component weight such as ``state_position`` or ``rollout_velocity``, the
+    two physical components replace their aggregate for optimisation.  This
+    makes position/velocity trade-offs explicit while keeping old profiles
+    numerically unchanged.
+    """
+
+    aggregate_families = {
+        "state": ("state_position", "state_velocity"),
+        "rollout": ("rollout_position", "rollout_velocity"),
+    }
+    selected: dict[str, Tensor] = {
+        name: value
+        for name, value in terms.items()
+        if name
+        not in {component for components in aggregate_families.values() for component in components}
+        and name not in aggregate_families
+    }
+    for aggregate, components in aggregate_families.items():
+        if any(component in weights for component in components):
+            for component in components:
+                selected[component] = terms[component]
+        else:
+            selected[aggregate] = terms[aggregate]
+    return weighted_total(selected, weights)
+
+
+def select_closed_loop_window(
+    batch: Mapping[str, Any],
+    window_steps: int,
+    *,
+    event_condition_probability: float = 0.5,
+) -> int:
+    """Sample a valid TBPTT window, preferentially covering collision frames.
+
+    The returned start is stochastic under the trainer's seeded Python RNG.
+    When collision labels are available, half of windows by default place a
+    randomly selected collision inside the trainable span.  Labels select only
+    the loss window; they are never passed to the RGB runtime.
+    """
+
+    rgb = batch.get("rgb")
+    if not isinstance(rgb, Tensor) or rgb.ndim != 5:
+        raise ValueError("closed-loop batch must contain rgb [B,T,3,H,W]")
+    total_frames = int(rgb.shape[1])
+    if not 0 < window_steps <= total_frames:
+        raise ValueError("window_steps must lie in [1, episode_frames]")
+    if not 0.0 <= event_condition_probability <= 1.0:
+        raise ValueError("event_condition_probability must lie in [0, 1]")
+    maximum_start = total_frames - window_steps
+    if maximum_start == 0:
+        return 0
+
+    events = batch.get("events")
+    collision = events.get("collision") if isinstance(events, Mapping) else None
+    collision_frames: list[int] = []
+    if isinstance(collision, Tensor):
+        if collision.ndim < 2 or tuple(collision.shape[:2]) != tuple(rgb.shape[:2]):
+            raise ValueError("events.collision must begin with batch/time axes [B,T]")
+        collision_by_frame = (
+            collision.bool()
+            .reshape(
+                collision.shape[0],
+                collision.shape[1],
+                -1,
+            )
+            .any(dim=(0, 2))
+        )
+        collision_frames = (
+            torch.nonzero(collision_by_frame, as_tuple=False).flatten().detach().cpu().tolist()
+        )
+    if collision_frames and random.random() < event_condition_probability:
+        event_frame = int(random.choice(collision_frames))
+        minimum_start = max(0, event_frame - window_steps + 1)
+        maximum_event_start = min(maximum_start, event_frame)
+        if event_frame > 0:
+            maximum_event_start = min(maximum_event_start, event_frame - 1)
+        if minimum_start <= maximum_event_start:
+            return random.randint(minimum_start, maximum_event_start)
+    return random.randint(0, maximum_start)
+
+
+def _burn_in_causal_prefix(
+    model: OnlineWorldModel,
+    batch: Mapping[str, Any],
+    window_start: int,
+) -> None:
+    """Advance the real RGB filter to a mid-episode loss window.
+
+    Prefix frames update the persistent belief, lifecycle, modality caches,
+    association state, and scheduler exactly as online inference would.  They
+    are deliberately outside the autograd graph; the selected TBPTT window
+    starts from their detached numerical posterior instead of a cold reset.
+    """
+
+    if window_start < 0:
+        raise ValueError("window_start must be nonnegative")
+    with torch.no_grad():
+        for frame_index in range(window_start):
+            model.ingest(make_rgb_packet(batch, frame_index))
+    if window_start:
+        model.detach_state()
 
 
 def run_closed_loop_batch(
@@ -681,6 +880,7 @@ def run_closed_loop_batch(
         raise ValueError("closed-loop window lies outside the episode")
 
     model.reset(batch_size=batch_size)
+    _burn_in_causal_prefix(model, batch, window_start)
     detail_lists: dict[str, list[Tensor]] = {}
     current_correction_improvements: list[float] = []
     future_correction_improvements: list[float] = []
@@ -706,7 +906,7 @@ def run_closed_loop_batch(
                 source_belief = perturb_belief(
                     source_belief,
                     position_std=config.training.perturbation_position_std,
-                    velocity_std=0.5 * config.training.perturbation_position_std,
+                    velocity_std=config.training.perturbation_velocity_std,
                     covariance_log_bias=0.25,
                 )
                 # Preserve the previous timestamp.  ``ingest`` remains the
@@ -781,7 +981,10 @@ def run_closed_loop_batch(
                     )
                     add(
                         "measurement",
-                        torch.stack(tuple(fast_supervised.values())).sum(),
+                        _weighted_measurement_total(
+                            fast_supervised,
+                            config.training.measurement_loss_weights,
+                        ),
                     )
                     for name, value in fast_supervised.items():
                         add(f"fast_{name}", value)
@@ -890,7 +1093,13 @@ def run_closed_loop_batch(
                 _observation_context(packet, config, training=True),
             )
             supervised = supervised_measurement_losses(module, measurements, batch, frame_index)
-            add("measurement", torch.stack(tuple(supervised.values())).sum())
+            add(
+                "measurement",
+                _weighted_measurement_total(
+                    supervised,
+                    config.training.measurement_loss_weights,
+                ),
+            )
             for name, value in supervised.items():
                 add(name, value)
 
@@ -902,7 +1111,7 @@ def run_closed_loop_batch(
     reference = rgb
     details = {name: _mean_losses(values, reference) for name, values in detail_lists.items()}
     terms = _group_closed_loop_terms(details, reference)
-    total = weighted_total(terms, config.training.loss_weights)
+    total = _weighted_closed_loop_total(terms, config.training.loss_weights)
     metrics = {name: float(value.detach().cpu()) for name, value in details.items()}
     metrics.update(
         {
@@ -944,6 +1153,7 @@ __all__ = [
     "move_batch_to_device",
     "pretrain_rgb_measurements",
     "run_closed_loop_batch",
+    "select_closed_loop_window",
     "supervised_measurement_losses",
     "supervised_slot_measurement_losses",
 ]

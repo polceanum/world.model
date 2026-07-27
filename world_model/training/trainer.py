@@ -25,6 +25,7 @@ from world_model.training.loop import (
     move_batch_to_device,
     pretrain_rgb_measurements,
     run_closed_loop_batch,
+    select_closed_loop_window,
 )
 from world_model.utils.config import OrpheusConfig, save_resolved_config
 from world_model.utils.device import DeviceInfo, select_device
@@ -32,6 +33,7 @@ from world_model.utils.io import atomic_write_text
 from world_model.utils.seeds import seed_everything
 
 _SAFE_RUN_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_ROLLOUT_SELECTION_MIN_DELTA = 1.0e-5
 
 
 def _repository_root(config: OrpheusConfig) -> Path:
@@ -179,9 +181,20 @@ def set_global_perception_trainable(
         component.requires_grad_(trainable)
 
 
-def _mean_batch_results(results: list[TrainingBatchResult]) -> TrainingBatchResult:
+def _mean_batch_results(
+    results: list[TrainingBatchResult],
+    *,
+    weights: list[float] | None = None,
+) -> TrainingBatchResult:
     if not results:
         raise ValueError("cannot average an empty validation result list")
+    if weights is None:
+        weights = [1.0] * len(results)
+    if len(weights) != len(results):
+        raise ValueError("validation result weights must match the result count")
+    if any(not math.isfinite(weight) or weight <= 0 for weight in weights):
+        raise ValueError("validation result weights must be finite and positive")
+    total_weight = float(sum(weights))
     phase = results[0].phase
     if any(result.phase != phase for result in results):
         raise ValueError("validation results must share a phase")
@@ -192,13 +205,35 @@ def _mean_batch_results(results: list[TrainingBatchResult]) -> TrainingBatchResu
     if any(set(result.metrics) != metric_names for result in results):
         raise ValueError("validation results must share metrics")
     return TrainingBatchResult(
-        total_loss=torch.stack([result.total_loss for result in results]).mean(),
+        total_loss=(
+            torch.stack(
+                [
+                    result.total_loss * float(weight)
+                    for result, weight in zip(results, weights, strict=True)
+                ]
+            ).sum()
+            / total_weight
+        ),
         loss_terms={
-            name: torch.stack([result.loss_terms[name] for result in results]).mean()
+            name: (
+                torch.stack(
+                    [
+                        result.loss_terms[name] * float(weight)
+                        for result, weight in zip(results, weights, strict=True)
+                    ]
+                ).sum()
+                / total_weight
+            )
             for name in sorted(term_names)
         },
         metrics={
-            name: float(sum(result.metrics[name] for result in results) / len(results))
+            name: float(
+                sum(
+                    result.metrics[name] * float(weight)
+                    for result, weight in zip(results, weights, strict=True)
+                )
+                / total_weight
+            )
             for name in sorted(metric_names)
         },
         phase=phase,
@@ -213,49 +248,77 @@ def _validation_step(
     *,
     closed_loop: bool,
 ) -> TrainingBatchResult:
+    was_training = model.training
     model.eval()
-    if closed_loop:
-        result = run_closed_loop_batch(
-            model,
-            batch,
-            config,
-            window_start=0,
-            window_steps=min(
-                int(batch["rgb"].shape[1]),
-                config.training.tbptt_steps,
-            ),
-            apply_perturbations=False,
-            include_measurement_supervision=True,
-        )
-    else:
-        total_frames = int(batch["rgb"].shape[1])
-        frame_count = min(
-            total_frames,
-            config.training.measurement_validation_frames,
-        )
-        if frame_count == total_frames:
-            frame_indices = list(range(total_frames))
-        else:
-            frame_indices = (
-                torch.linspace(0, total_frames - 1, frame_count)
-                .round()
-                .to(dtype=torch.int64)
-                .unique(sorted=True)
-                .tolist()
+    try:
+        if closed_loop:
+            result = run_closed_loop_batch(
+                model,
+                batch,
+                config,
+                window_start=0,
+                window_steps=int(batch["rgb"].shape[1]),
+                apply_perturbations=False,
+                include_measurement_supervision=True,
             )
-        result = _mean_batch_results(
-            [
-                pretrain_rgb_measurements(
-                    model,
-                    batch,
-                    config,
-                    frame_index=int(frame_index),
+        else:
+            total_frames = int(batch["rgb"].shape[1])
+            frame_count = min(
+                total_frames,
+                config.training.measurement_validation_frames,
+            )
+            if frame_count == total_frames:
+                frame_indices = list(range(total_frames))
+            else:
+                frame_indices = (
+                    torch.linspace(0, total_frames - 1, frame_count)
+                    .round()
+                    .to(dtype=torch.int64)
+                    .unique(sorted=True)
+                    .tolist()
                 )
-                for frame_index in frame_indices
-            ]
-        )
-    model.train()
+            result = _mean_batch_results(
+                [
+                    pretrain_rgb_measurements(
+                        model,
+                        batch,
+                        config,
+                        frame_index=int(frame_index),
+                    )
+                    for frame_index in frame_indices
+                ]
+            )
+    finally:
+        model.train(was_training)
     return result
+
+
+@torch.no_grad()
+def _validation_loader_result(
+    model: OnlineWorldModel,
+    loader: DataLoader[dict[str, Any]],
+    config: OrpheusConfig,
+    *,
+    device: torch.device,
+    closed_loop: bool,
+) -> TrainingBatchResult:
+    """Evaluate every configured validation episode exactly once."""
+
+    results: list[TrainingBatchResult] = []
+    batch_sizes: list[float] = []
+    for raw_batch in loader:
+        _check_batch_major(raw_batch)
+        batch = move_batch_to_device(raw_batch, device)
+        results.append(
+            _validation_step(
+                model,
+                batch,
+                config,
+                closed_loop=closed_loop,
+            )
+        )
+        batch_sizes.append(float(batch["rgb"].shape[0]))
+    return _mean_batch_results(results, weights=batch_sizes)
 
 
 def _write_run_metadata(
@@ -346,8 +409,6 @@ def train_from_config(
         shuffle=False,
     )
     train_iterator = iter(train_loader)
-    validation_iterator = iter(validation_loader)
-
     model = OnlineWorldModel.from_config(config, device=device)
     model.train()
     optimizer = torch.optim.AdamW(
@@ -377,7 +438,14 @@ def train_from_config(
             float(resume_metrics.get("best_measurement_validated", 0.0))
         )
         if best_rollout_validated:
-            best_rollout = float(resume_metrics["best_rollout_loss"])
+            position_metric = resume_metrics.get("best_rollout_position_loss")
+            if position_metric is None:
+                # Older checkpoints selected on an unnormalised mean of metres
+                # and metres/second. Keep them loadable, but require a new
+                # physical-position validation before retaining "best" status.
+                best_rollout_validated = False
+            else:
+                best_rollout = float(position_metric)
         if best_measurement_validated:
             localization_metric = resume_metrics.get("best_measurement_world_position_mae_m")
             if localization_metric is None:
@@ -456,8 +524,11 @@ def train_from_config(
             )
             total_frames = int(batch["rgb"].shape[1])
             window_steps = min(total_frames, config.training.tbptt_steps)
-            possible_starts = max(1, total_frames - window_steps + 1)
-            window_start = (step - config.training.rgb_pretrain_steps) % possible_starts
+            window_start = select_closed_loop_window(
+                batch,
+                window_steps,
+                event_condition_probability=(config.training.collision_window_probability),
+            )
             result = run_closed_loop_batch(
                 model,
                 batch,
@@ -512,15 +583,11 @@ def train_from_config(
             or completed_step == config.training.steps
         )
         if should_validate:
-            raw_validation, validation_iterator = _next_batch(
-                validation_loader, validation_iterator
-            )
-            _check_batch_major(raw_validation)
-            validation_batch = move_batch_to_device(raw_validation, device)
-            validation = _validation_step(
+            validation = _validation_loader_result(
                 model,
-                validation_batch,
+                validation_loader,
                 config,
+                device=device,
                 closed_loop=completed_step > config.training.rgb_pretrain_steps,
             )
             validation_metrics = _result_metrics(
@@ -536,10 +603,16 @@ def train_from_config(
                 completed_step > config.training.rgb_pretrain_steps
                 and validation.phase == "closed_loop_rgb"
             )
-            if is_closed_loop_validation and "rollout" in validation.loss_terms:
-                rollout_metric = float(validation.loss_terms["rollout"].detach().cpu())
-                if math.isfinite(rollout_metric) and rollout_metric < best_rollout:
-                    best_rollout = rollout_metric
+            if is_closed_loop_validation and "rollout_position" in validation.loss_terms:
+                rollout_position_metric = float(
+                    validation.loss_terms["rollout_position"].detach().cpu()
+                )
+                improved = math.isfinite(rollout_position_metric) and (
+                    not math.isfinite(best_rollout)
+                    or rollout_position_metric < best_rollout - _ROLLOUT_SELECTION_MIN_DELTA
+                )
+                if improved:
+                    best_rollout = rollout_position_metric
                     best_rollout_validated = True
                     save_checkpoint(
                         best_rollout_path,
@@ -549,8 +622,12 @@ def train_from_config(
                         step=completed_step,
                         metrics={
                             "validation_total_loss": float(validation.total_loss.detach().cpu()),
-                            "validation_rollout_loss": best_rollout,
+                            "validation_rollout_loss": float(
+                                validation.loss_terms["rollout"].detach().cpu()
+                            ),
+                            "validation_rollout_position_loss": best_rollout,
                             "best_rollout_loss": best_rollout,
+                            "best_rollout_position_loss": best_rollout,
                             "best_rollout_validated": 1.0,
                             "best_measurement_validated": float(best_measurement_validated),
                             **(
@@ -590,7 +667,10 @@ def train_from_config(
                             "best_measurement_validated": 1.0,
                             "best_rollout_validated": float(best_rollout_validated),
                             **(
-                                {"best_rollout_loss": best_rollout}
+                                {
+                                    "best_rollout_loss": best_rollout,
+                                    "best_rollout_position_loss": best_rollout,
+                                }
                                 if best_rollout_validated
                                 else {}
                             ),
@@ -612,6 +692,7 @@ def train_from_config(
             checkpoint_metrics["best_measurement_validated"] = float(best_measurement_validated)
             if best_rollout_validated:
                 checkpoint_metrics["best_rollout_loss"] = best_rollout
+                checkpoint_metrics["best_rollout_position_loss"] = best_rollout
             if best_measurement_validated:
                 checkpoint_metrics["best_measurement_loss"] = best_measurement
                 checkpoint_metrics["best_measurement_world_position_mae_m"] = best_measurement
@@ -634,6 +715,7 @@ def train_from_config(
         }
         if best_rollout_validated:
             selection_metrics["best_rollout_loss"] = best_rollout
+            selection_metrics["best_rollout_position_loss"] = best_rollout
         if best_measurement_validated:
             selection_metrics["best_measurement_loss"] = best_measurement
             selection_metrics["best_measurement_world_position_mae_m"] = best_measurement
@@ -675,6 +757,7 @@ def train_from_config(
         "best_rollout_validated": best_rollout_validated,
         "best_measurement_validated": best_measurement_validated,
         "best_rollout_loss": best_rollout if best_rollout_validated else None,
+        "best_rollout_position_loss": (best_rollout if best_rollout_validated else None),
         "best_measurement_loss": (best_measurement if best_measurement_validated else None),
         "best_measurement_world_position_mae_m": (
             best_measurement if best_measurement_validated else None

@@ -47,6 +47,17 @@
 - An opt-in bounded persistent-ID RGB temporal position history, causal
   least-squares velocity measurement, and post-association velocity-only
   correction with explicit uncertainty and availability diagnostics.
+- Optional RGB-only structured sphere localization: robust row-background
+  subtraction, foreground components, touching-disc distance-peak splitting,
+  photometric centroids, global proposal alignment, and projected-ROI local
+  refinement.
+- Direct raw learned-centre supervision so a structured forward measurement
+  does not hide detector/ROI localization error during training.
+- Calibrated metric world-position RGB Huber/NLL losses with explicit
+  per-term weights.
+- Collision-conditioned TBPTT window sampling with causal RGB prefix burn-in.
+- Explicit `evaluate.py --seed-offset` support for reproducible paired
+  selection and confirmation manifests.
 
 ### Changed after integration audit
 
@@ -104,6 +115,22 @@
 - Excluded invalid graph edges and diagonals from learned event max-pooling, so
   a valid negative residual can suppress rather than be clamped by stored
   zeros.
+- Changed checkpoint validation to treat structured and temporal RGB controls
+  as measurement/fusion semantics. Legacy checkpoints missing those fields
+  normalize to historical defaults rather than silently adopting requested
+  non-default behavior.
+- Changed checkpoint validation from one rotating batch/short prefix to every
+  configured validation episode and a complete causal unroll.
+- Split current-state and rollout position/velocity objectives and changed
+  best-rollout selection to physical position loss with a meaningful minimum
+  delta.
+- Added independent position/velocity perturbation magnitudes and representative
+  collision-window sampling.
+- Enabled synthetic structured centers in sphere profiles, with a measured
+  `0.08` foreground threshold and noise regression for `toy_hard`/cloud.
+- Continued the selected step-584 perception state for 64 causal closed-loop
+  RGB updates and promoted validation-selected step 648 after paired ROI-local
+  selection/confirmation forecast and collision evidence.
 
 ### Evidence
 
@@ -133,20 +160,34 @@
   `runs/temporal-rgb-evidence`.
 - Negative 22-step temporal continuation and paired fresh validation reports:
   `runs/temporal-continuation-94`.
+- Structured-center step-72 selection report:
+  `runs/accuracy-structured-peak-v2/baseline-step72-fresh32`.
+- Successful controlled RGB depth fine-tune:
+  `runs/accuracy-depth-finetune-v1`.
+- Paired 32-episode candidate selection report:
+  `runs/accuracy-structured-peak-v2/depth-finetune-best-fresh32`.
+- Untouched 32-episode candidate confirmation and paired step-72 baseline:
+  `runs/accuracy-structured-peak-v2/depth-finetune-best-confirm32` and
+  `runs/accuracy-structured-peak-v2/baseline-step72-confirm32`.
+- Rejected scratch training report:
+  `runs/accuracy-structured-peak-v2/scratch-best-fresh32`.
+- Promoted accuracy-v4 continuation, paired validation, and final test:
+  `runs/accuracy-closed-structured-v4`.
+- Promoted accuracy-v4 RGB-only demo:
+  `demo_outputs/accuracy-closed-structured-v4`.
 
-The frozen continuation reaches 75.39% distance-gated recall/precision over
-eight held-out episodes, 0.161387 m 0.5-second forecast RMSE versus 0.490275 m
-for constant velocity, zero gated ID switches, and positive perturbation
-recovery. Milestone 1 acceptance is still not claimed: the unchanged promoted
-checkpoint reaches only 0.042553 collision F1 on fresh validation, parameter
-convergence and held-out occlusion recovery remain incomplete, and the full
-MPS schedule has not run.
+The earlier frozen continuation reached 75.39% distance-gated
+recall/precision over eight held-out episodes, 0.161387 m 0.5-second forecast
+RMSE versus 0.490275 m for constant velocity, zero gated ID switches, and
+positive perturbation recovery. At that stage, collision F1 was only 0.042553
+on fresh validation. This is historical evidence; the current step-648 result
+is recorded below.
 
-The continuation and event-loss comparisons repeatedly inspect the same eight
-fixed test episodes and are therefore exploratory. Step 72 remains selected by
-validation loss; any preference for step-94 `last.pt` requires confirmation on
-a fresh, larger held-out seed set. Run and demo artifact directories are local
-and gitignored.
+The continuation and event-loss comparisons repeatedly inspected the same
+eight fixed test episodes and were therefore exploratory. Step 72 remained
+selected at that stage; it was later superseded by the paired step-584 and
+step-648 validation protocol. Run and demo artifact directories are local and
+gitignored.
 
 The new fresh-validation protocol evaluated the unchanged selected step-72
 checkpoint on seeds `100004–100019`: current position MAE was `0.186991 m`,
@@ -157,3 +198,49 @@ perturbation recovery under every tested history/variance setting, so it
 remains disabled. The temporal continuation reached F1 `0.121622` but was
 also rejected because position MAE rose to `0.196397 m`, 0.5-second RMSE to
 `0.184454 m`, and perturbation recovery fell to `11.84%`.
+
+The RGB-only structured localization and controlled step-584 measurement
+fine-tune were evaluated on explicit disjoint manifests. On validation seeds
+`100064–100095`, the step-584 checkpoint reached current position MAE/RMSE
+`0.085103 / 0.110556 m`, recovery `48.28%`, and collision F1 `0.622222`;
+the paired step-72 baseline had RMSE `0.131311 m`, recovery `42.27%`, and F1
+`0.568182`. Those reports used the older full-frame ordinary refinement.
+
+After ordinary structured measurement was restricted to projected ROIs,
+accuracy-v3 model choices were frozen before a reserved standard-test run on
+seeds `200064–200095`. That then-final source/checkpoint pair reached position
+MAE/RMSE
+`0.090847 / 0.118600 m`, velocity RMSE `0.812524 m/s`,
+0.10/0.25/0.50-second forecast RMSE
+`0.141520 / 0.181431 / 0.237585 m`, perturbation recovery `45.72%`,
+collision F1 `0.597122`, 100% distance-gated detection, zero ID switches,
+86.62% nominal-90% coverage, and no dropped/non-finite forecasts. Report:
+`runs/accuracy-roi-local-v3/final-test32/report.md`.
+
+The longer scratch run at
+`runs/accuracy-structured-physical-v1` was explicitly rejected: on its
+selection manifest it produced position MAE/RMSE
+`0.273908 / 0.422225 m`, 0.50-second RMSE `0.525709 m`, recovery `18.80%`,
+collision F1 `0.316940`, and detection recall/precision
+`66.60% / 55.22%`. A 2 cm anticipatory collision-hazard experiment was also
+removed after F1 fell from `0.622222` to `0.594406` on the untouched
+confirmation block.
+
+A later 256-update measurement continuation with the completed raw-centre
+objective did not beat the inherited validation MAE and degraded as high as
+`0.291207 m`; `runs/accuracy-final-perception-v3` is retained as a rejected
+experiment rather than promoted.
+
+Accuracy-v4 supersedes the step-584 promotion. The step-648 checkpoint
+(`9b943f60128a2bd15298847d8c7de4dd3166646f3644720a3149155e57d85bcd`)
+was selected at full-validation rollout-position loss `0.0119829765`. On paired
+confirmation it improved all three forecast horizons and collision F1
+`0.594203 → 0.608059`, with small mixed current/velocity/recovery tradeoffs.
+The frozen final test reached position MAE/RMSE
+`0.089336 / 0.116908 m`, velocity RMSE `0.792257 m/s`,
+0.1/0.25/0.5-second RMSE `0.138279 / 0.177703 / 0.232862 m`, recovery
+`45.30%`, collision precision/recall/F1
+`0.765217 / 0.550000 / 0.640000`, 100% detection, zero ID switches, and no
+dropped/non-finite forecasts. An exhaustive threshold probe was negative
+because logits were saturated; mean-radius and photometric analytic-depth
+probes were also rejected.

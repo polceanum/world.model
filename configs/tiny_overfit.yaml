@@ -33,6 +33,7 @@ model:
     global_every_steps: 4
     roi_size: 12
     fast_depth_residual_enabled: false
+    structured_disc_center_enabled: true
   dynamics:
     hidden_dim: 40
     max_substep: 0.008333333333333333
@@ -60,6 +61,9 @@ training:
   rgb_pretrain_steps: 64
   measurement_validation_frames: 16
   perturbation_probability: 0.25
+  perturbation_position_std: 0.12
+  perturbation_velocity_std: 0.20
+  collision_window_probability: 0.50
   collision_positive_weight_max: 10.0
   horizon_weights: [1.0, 1.5, 2.0]
 evaluation:

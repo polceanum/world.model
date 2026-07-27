@@ -39,6 +39,10 @@ from world_model.observations.rgb.projector import (
     calibration_tensors,
 )
 from world_model.observations.rgb.roi_updater import FastROIUpdater
+from world_model.observations.rgb.structured_centres import (
+    structured_disc_centres,
+    structured_disc_centres_in_rois,
+)
 from world_model.observations.rgb.temporal import RGBTemporalPositionHistory
 
 if TYPE_CHECKING:
@@ -62,6 +66,11 @@ class RGBObservationConfig:
     temporal_velocity_variance_scale: float = 1.0
     temporal_velocity_variance_floor: float = 0.25
     temporal_velocity_variance_ceiling: float | None = None
+    structured_disc_center_enabled: bool = False
+    structured_disc_threshold: float = 0.04
+    structured_disc_min_pixels: int = 4
+    structured_disc_max_assignment_distance: float = 0.75
+    structured_disc_center_std_pixels: float = 0.75
     roi_uncertainty_scale: float = 2.5
     default_world_radius: float = 0.15
     proposal_threshold: float = 0.25
@@ -89,6 +98,22 @@ class RGBObservationConfig:
                 "temporal_velocity_variance_ceiling must be finite and no "
                 "smaller than temporal_velocity_variance_floor"
             )
+        if not math.isfinite(self.structured_disc_threshold) or not (
+            0 < self.structured_disc_threshold < 2
+        ):
+            raise ValueError("structured_disc_threshold must lie in (0, 2)")
+        if self.structured_disc_min_pixels <= 0:
+            raise ValueError("structured_disc_min_pixels must be positive")
+        if (
+            not math.isfinite(self.structured_disc_max_assignment_distance)
+            or self.structured_disc_max_assignment_distance <= 0
+        ):
+            raise ValueError("structured_disc_max_assignment_distance must be finite and positive")
+        if (
+            not math.isfinite(self.structured_disc_center_std_pixels)
+            or self.structured_disc_center_std_pixels <= 0
+        ):
+            raise ValueError("structured_disc_center_std_pixels must be finite and positive")
 
 
 def _packet_batch(packets: Sequence[ObservationPacket]) -> tuple[Tensor, float]:
@@ -193,6 +218,32 @@ class RGBObservationModule(ObservationModule):
             device=image.device,
             dtype=image.dtype,
         )
+        centre = output.centre
+        raw_centre = output.centre
+        structured_valid = torch.zeros(
+            output.centre.shape[:2],
+            device=image.device,
+            dtype=torch.bool,
+        )
+        structured_count = torch.zeros(
+            batch,
+            device=image.device,
+            dtype=torch.int64,
+        )
+        if self.config.structured_disc_center_enabled:
+            structured = structured_disc_centres(
+                image,
+                output.centre,
+                threshold=self.config.structured_disc_threshold,
+                minimum_pixels=self.config.structured_disc_min_pixels,
+                maximum_assignment_distance=(self.config.structured_disc_max_assignment_distance),
+            )
+            # The RGB component operation is detached.  This straight-through
+            # residual retains gradients for the learned discovery head while
+            # using the directly observed pixel centroid in the forward pass.
+            centre = output.centre + (structured.centres - output.centre).detach()
+            structured_valid = structured.valid_mask
+            structured_count = structured.component_count
         inverse_depth = self._structured_inverse_depth(
             output.log_radius,
             intrinsics,
@@ -202,7 +253,7 @@ class RGBObservationModule(ObservationModule):
         )
         values = torch.cat(
             (
-                output.centre,
+                centre,
                 output.log_radius,
                 inverse_depth.unsqueeze(-1),
                 output.colour,
@@ -213,6 +264,25 @@ class RGBObservationModule(ObservationModule):
             self.config.measurement_log_variance_min,
             self.config.measurement_log_variance_max,
         )
+        if self.config.structured_disc_center_enabled:
+            height, width = image_size
+            pixel_std = self.config.structured_disc_center_std_pixels
+            centre_variance = image.new_tensor(
+                (
+                    (2.0 * pixel_std / max(width - 1, 1)) ** 2,
+                    (2.0 * pixel_std / max(height - 1, 1)) ** 2,
+                )
+            )
+            structured_log_variance = centre_variance.log().view(1, 1, 2)
+            centre_log_variance = torch.where(
+                structured_valid.unsqueeze(-1),
+                structured_log_variance,
+                measurement_log_variance[..., :2],
+            )
+            measurement_log_variance = torch.cat(
+                (centre_log_variance, measurement_log_variance[..., 2:]),
+                dim=-1,
+            )
         world_position = backproject_rgb_measurements(
             values,
             world_from_camera,
@@ -271,6 +341,9 @@ class RGBObservationModule(ObservationModule):
                 "visibility_logits": output.visibility_logits,
                 "query_features": output.query_features,
                 "attention": output.attention,
+                "raw_centre": raw_centre,
+                "structured_centre_valid": structured_valid,
+                "structured_component_count": structured_count,
             },
         )
         result.validate()
@@ -327,6 +400,7 @@ class RGBObservationModule(ObservationModule):
             valid_mask=predicted.valid_mask,
         )
         values = output.values
+        raw_centre = output.values[..., :2]
         if not self.config.fast_depth_residual_enabled:
             # Depth is substantially less observable from a small residual
             # crop than centre offset.  Keep the analytic predicted depth until
@@ -339,6 +413,31 @@ class RGBObservationModule(ObservationModule):
                 ),
                 dim=-1,
             )
+        structured_valid = torch.zeros(
+            values.shape[:2],
+            device=image.device,
+            dtype=torch.bool,
+        )
+        structured_count = torch.zeros(
+            values.shape[0],
+            device=image.device,
+            dtype=torch.int64,
+        )
+        if self.config.structured_disc_center_enabled:
+            structured = structured_disc_centres_in_rois(
+                image,
+                predicted.values[..., :2],
+                predicted.rois,
+                valid_mask=predicted.valid_mask,
+                output_size=max(self.config.roi_size, 16),
+                threshold=self.config.structured_disc_threshold,
+                minimum_pixels=self.config.structured_disc_min_pixels,
+                maximum_assignment_distance=(self.config.structured_disc_max_assignment_distance),
+            )
+            centre = values[..., :2] + (structured.centres - values[..., :2]).detach()
+            values = torch.cat((centre, values[..., 2:]), dim=-1)
+            structured_valid = structured.valid_mask
+            structured_count = structured.valid_mask.sum(dim=-1)
         batch, objects, _ = output.values.shape
         world_from_camera = predicted.auxiliary["world_from_camera"][:, 0]
         intrinsics = predicted.auxiliary["intrinsics"][:, 0]
@@ -347,6 +446,25 @@ class RGBObservationModule(ObservationModule):
             self.config.measurement_log_variance_min,
             self.config.measurement_log_variance_max,
         )
+        if self.config.structured_disc_center_enabled:
+            height, width = image_size
+            pixel_std = self.config.structured_disc_center_std_pixels
+            centre_variance = image.new_tensor(
+                (
+                    (2.0 * pixel_std / max(width - 1, 1)) ** 2,
+                    (2.0 * pixel_std / max(height - 1, 1)) ** 2,
+                )
+            )
+            structured_log_variance = centre_variance.log().view(1, 1, 2)
+            centre_log_variance = torch.where(
+                structured_valid.unsqueeze(-1),
+                structured_log_variance,
+                measurement_log_variance[..., :2],
+            )
+            measurement_log_variance = torch.cat(
+                (centre_log_variance, measurement_log_variance[..., 2:]),
+                dim=-1,
+            )
         world_position = backproject_rgb_measurements(
             values,
             world_from_camera,
@@ -389,6 +507,9 @@ class RGBObservationModule(ObservationModule):
             "visibility_logits": output.visibility_logits,
             "event_features": output.event_features,
             "appearance_gate": output.appearance_gate,
+            "raw_centre": raw_centre,
+            "structured_centre_valid": structured_valid,
+            "structured_component_count": structured_count,
         }
         measurement = MeasurementSet(
             modality=self.modality_name,

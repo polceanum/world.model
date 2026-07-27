@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from world_model.utils.config import OrpheusConfig
+from world_model.utils.config import OrpheusConfig, RGBConfig
 from world_model.utils.version import SPECIFICATION_VERSION, __version__
 
 _SIMULATOR_COMPATIBILITY_FIELDS = (
@@ -28,18 +28,30 @@ _SIMULATOR_COMPATIBILITY_FIELDS = (
     "known_camera_pose",
 )
 
-_RGB_OPERATIONAL_COMPATIBILITY_FIELDS = (
+_RGB_LEGACY_DEFAULT_FIELDS = (
     "temporal_velocity_enabled",
     "temporal_velocity_history_size",
     "temporal_velocity_min_dt",
     "temporal_velocity_variance_scale",
     "temporal_velocity_variance_floor",
     "temporal_velocity_variance_ceiling",
+    "structured_disc_center_enabled",
+    "structured_disc_threshold",
+    "structured_disc_min_pixels",
+    "structured_disc_max_assignment_distance",
+    "structured_disc_center_std_pixels",
 )
 
 
 def _model_checkpoint_semantics(value: object) -> object:
-    """Remove weight-free RGB runtime controls from compatibility equality."""
+    """Normalize fields absent from legacy checkpoints to their old defaults.
+
+    RGB controls that alter measurement means, variances, or supported state
+    fields are runtime semantics even when they add no trainable parameters.
+    They therefore remain in the compatibility comparison.  Only genuinely
+    missing legacy fields are filled with the defaults that those checkpoints
+    used.
+    """
 
     if not isinstance(value, Mapping):
         return value
@@ -47,8 +59,9 @@ def _model_checkpoint_semantics(value: object) -> object:
     rgb = model.get("rgb")
     if isinstance(rgb, Mapping):
         normalized_rgb = dict(rgb)
-        for field_name in _RGB_OPERATIONAL_COMPATIBILITY_FIELDS:
-            normalized_rgb.pop(field_name, None)
+        defaults = RGBConfig()
+        for field_name in _RGB_LEGACY_DEFAULT_FIELDS:
+            normalized_rgb.setdefault(field_name, getattr(defaults, field_name))
         model["rgb"] = normalized_rgb
     return model
 

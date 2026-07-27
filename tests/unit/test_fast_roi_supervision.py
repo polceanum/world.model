@@ -12,6 +12,7 @@ from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
 from world_model.training.loop import (
     run_closed_loop_batch,
+    supervised_measurement_losses,
     supervised_slot_measurement_losses,
 )
 from world_model.utils.config import load_config
@@ -63,14 +64,33 @@ def _batch() -> dict[str, Any]:
                 [[[0.9, 0.6]]],
                 dtype=torch.float32,
             ),
-        }
+        },
+        "objects": {
+            "position": torch.tensor(
+                [[[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]]],
+                dtype=torch.float32,
+            ),
+        },
     }
 
 
-def _measurements(values: Tensor, *, mask: Tensor | None = None) -> MeasurementSet:
+def _measurements(
+    values: Tensor,
+    *,
+    mask: Tensor | None = None,
+    world_position: Tensor | None = None,
+    world_position_log_variance: Tensor | None = None,
+) -> MeasurementSet:
     batch, measurements, dimensions = values.shape
     if mask is None:
         mask = torch.ones((batch, measurements), dtype=torch.bool)
+    auxiliary = {
+        "visibility_logits": torch.zeros((batch, measurements)),
+    }
+    if world_position is not None:
+        auxiliary["world_position"] = world_position
+    if world_position_log_variance is not None:
+        auxiliary["world_position_log_variance"] = world_position_log_variance
     return MeasurementSet(
         modality="rgb",
         sensor_id="camera0",
@@ -83,9 +103,7 @@ def _measurements(values: Tensor, *, mask: Tensor | None = None) -> MeasurementS
         class_logits=None,
         frame_id="camera:camera0",
         supported_state_fields=("position",),
-        auxiliary={
-            "visibility_logits": torch.zeros((batch, measurements)),
-        },
+        auxiliary=auxiliary,
     )
 
 
@@ -120,6 +138,79 @@ def test_fast_roi_targets_follow_belief_slot_assignment_not_measurement_order() 
     assert float(losses["recorded_error"]) > 0.0
 
 
+def test_fast_roi_passes_aligned_metric_world_supervision() -> None:
+    batch = _batch()
+    world_position = torch.tensor(
+        [[[40.0, 50.0, 60.0], [10.0, 20.0, 30.0]]],
+    )
+    world_log_variance = torch.full_like(world_position, -2.0)
+    measurements = _measurements(
+        torch.zeros((1, 2, 7)),
+        world_position=world_position,
+        world_position_log_variance=world_log_variance,
+    )
+    module = _RecordingLossModule()
+
+    supervised_slot_measurement_losses(
+        module,
+        measurements,
+        batch,
+        frame_index=0,
+        target_indices=torch.tensor([[1, 0]], dtype=torch.int64),
+        matched_slots=torch.tensor([[True, True]]),
+    )
+
+    torch.testing.assert_close(module.outputs["world_position"], world_position)
+    torch.testing.assert_close(
+        module.outputs["world_position_log_variance"],
+        world_log_variance,
+    )
+    torch.testing.assert_close(
+        module.targets["world_position"],
+        batch["objects"]["position"][:, 0].flip(1),
+    )
+
+
+def test_global_proposals_pass_hungarian_aligned_metric_world_supervision() -> None:
+    batch = _batch()
+    target_values = torch.cat(
+        (
+            batch["labels"]["projected_center"][:, 0],
+            batch["labels"]["log_apparent_radius_normalized"][:, 0].unsqueeze(-1),
+            batch["labels"]["inverse_depth"][:, 0].unsqueeze(-1),
+            batch["labels"]["albedo"][:, 0],
+        ),
+        dim=-1,
+    )
+    world_position = torch.tensor(
+        [[[40.0, 50.0, 60.0], [10.0, 20.0, 30.0]]],
+    )
+    world_log_variance = torch.full_like(world_position, -1.0)
+    measurements = _measurements(
+        target_values.flip(1),
+        world_position=world_position,
+        world_position_log_variance=world_log_variance,
+    )
+    module = _RecordingLossModule()
+
+    supervised_measurement_losses(
+        module,
+        measurements,
+        batch,
+        frame_index=0,
+    )
+
+    torch.testing.assert_close(module.outputs["world_position"], world_position)
+    torch.testing.assert_close(
+        module.outputs["world_position_log_variance"],
+        world_log_variance,
+    )
+    torch.testing.assert_close(
+        module.targets["world_position"],
+        batch["objects"]["position"][:, 0].flip(1),
+    )
+
+
 def test_fast_roi_supervision_masks_unusable_or_unmatched_slots() -> None:
     batch = _batch()
     batch["labels"]["visible"][0, 0, 1] = False
@@ -146,7 +237,7 @@ def test_fast_roi_supervision_masks_unusable_or_unmatched_slots() -> None:
     )
 
 
-def test_closed_loop_supervises_every_frame_with_a_usable_prior() -> None:
+def _closed_loop_config() -> Any:
     config = load_config("configs/tiny_overfit.yaml")
     config = replace(
         config,
@@ -185,6 +276,11 @@ def test_closed_loop_supervises_every_frame_with_a_usable_prior() -> None:
         ),
     )
     config.validate()
+    return config
+
+
+def test_closed_loop_supervises_every_frame_with_a_usable_prior() -> None:
+    config = _closed_loop_config()
     batch = collate_episodes([generate_episode(config, seed=7)])
     model = OnlineWorldModel.from_config(config, device="cpu")
 
@@ -199,3 +295,25 @@ def test_closed_loop_supervises_every_frame_with_a_usable_prior() -> None:
 
     assert result.metrics["fast_path_supervised"] == 1.0
     assert result.metrics["fast_supervised_frames"] == 3.0
+
+
+def test_mid_episode_window_burns_in_the_causal_prefix() -> None:
+    config = _closed_loop_config()
+    batch = collate_episodes([generate_episode(config, seed=7)])
+    model = OnlineWorldModel.from_config(config, device="cpu")
+
+    result = run_closed_loop_batch(
+        model,
+        batch,
+        config,
+        window_start=2,
+        window_steps=2,
+        apply_perturbations=False,
+        include_measurement_supervision=True,
+    )
+
+    # Both trainable frames have a belief derived from frames 0..1. A cold
+    # reset at frame 2 would leave only the final frame eligible for ROI loss.
+    assert result.metrics["fast_supervised_frames"] == 2.0
+    assert model.belief is not None
+    torch.testing.assert_close(model.belief.timestamp, batch["timestamps"][:, -1])

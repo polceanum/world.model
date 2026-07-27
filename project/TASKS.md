@@ -62,22 +62,53 @@
   localization/forecast metrics.
 - [x] Exclude invalid graph edges and diagonals when pooling learned event
   residuals, so valid negative collision evidence is not clamped to zero.
+- [x] Add RGB-only structured disc localization with touching-silhouette peak
+  splitting for global discovery and a projected-ROI refinement for ordinary
+  updates.
+- [x] Keep raw learned RGB centres explicitly supervised when a structured
+  forward measurement is active.
+- [x] Add calibrated metric-space RGB position supervision and explicit
+  measurement-term weights.
+- [x] Validate every configured validation episode through a complete causal
+  online unroll.
+- [x] Add causal prefix burn-in and collision-conditioned sampling for
+  mid-episode TBPTT windows.
+- [x] Separate state/rollout position and velocity objectives and select
+  rollout checkpoints by physical position loss.
+- [x] Add explicit evaluation seed offsets for paired selection and
+  confirmation manifests.
+- [x] Harden structured RGB thresholds for noisy `toy_hard` and cloud
+  profiles with a deterministic noise regression.
+- [x] Treat structured and temporal RGB measurement controls as checkpoint
+  semantics while normalizing absent legacy fields to their old defaults.
+- [x] Continue the selected perception state through 64 causal closed-loop RGB
+  updates and promote step 648 only after paired ROI-local
+  selection/confirmation forecast evidence.
+- [x] Probe collision thresholds exhaustively and retain `0.5` after saturated
+  logits showed the residual failure is structural rather than a threshold
+  choice.
+- [x] Reject mean-radius and photometric analytic depth replacements after
+  metric-space and confirmation checks failed.
 
 ## Milestone 1 research acceptance — not yet achieved
 
 - [x] Reach nonzero distance-gated RGB detection recall/precision on held-out
-  episodes (59.375% on the two-episode protocol; 75% over eight episodes).
-- [ ] Sustain the recommended 20% injected-perturbation recovery improvement
-  on the wider test protocol (27.71% on two episodes; 19.59% on eight).
+  episodes (100% recall and precision over the final 32-episode reserved-test
+  block with ROI-local ordinary updates).
+- [x] Sustain the recommended 20% injected-perturbation recovery improvement
+  on a wider protocol (45.30% over the promoted final 32-episode reserved-test
+  block).
 - [ ] Learn useful collision prediction (the promoted checkpoint reaches
-  0.0426 fresh-validation F1 and 0.0556 on the older exploratory test;
-  semantics are fixed but skill remains far below the 0.75 target).
+  0.6400 F1 on the final reserved-test block, materially above the old 0.0426
+  result but still below the 0.75 target).
 - [ ] Demonstrate calibrated uncertainty expansion/recovery through held-out
   rendered occlusions.
 - [ ] Demonstrate distance-gated drag and restitution convergence from RGB,
   beyond merely executing the observability/update gates.
 - [ ] Make the ROI path measurably cheaper than the global path at the target
-  scale or explain the intended compute tradeoff with profiling.
+  scale. Full-frame discovery has been removed from ordinary updates and the
+  local centroid operation costs about 3.94 ms for eight 20x20 ROIs, but total
+  tiny-profile fast/global latency remains 50.54 / 48.74 ms.
 - [ ] Train and validate fast inverse-depth residuals on the now
   belief-slot-aligned cached sequences; enable them only after per-mode
   current/future improvement.
@@ -102,3 +133,7 @@
 - [ ] A second modality and real calibrated video adapter.
 - [ ] Correlation-aware temporal measurement covariance or learned confidence
   gating that improves velocity without degrading localization.
+- [ ] Evaluate a two-frame anisotropic position-slope velocity measurement;
+  it is a future opportunity, not an implemented/promoted path.
+- [ ] Replace the synthetic disc prior with a learned or externally structured
+  real-video adapter without changing the measurement/belief contracts.

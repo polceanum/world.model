@@ -90,6 +90,11 @@ class RGBConfig:
     temporal_velocity_variance_scale: float = 1.0
     temporal_velocity_variance_floor: float = 0.25
     temporal_velocity_variance_ceiling: float | None = None
+    structured_disc_center_enabled: bool = False
+    structured_disc_threshold: float = 0.04
+    structured_disc_min_pixels: int = 4
+    structured_disc_max_assignment_distance: float = 0.75
+    structured_disc_center_std_pixels: float = 0.75
     roi_uncertainty_scale: float = 2.5
     global_uncertainty_threshold: float = 4.0
     surprise_threshold: float = 8.0
@@ -193,13 +198,30 @@ class TrainingConfig:
     measurement_validation_frames: int = 8
     perturbation_probability: float = 0.25
     perturbation_position_std: float = 0.12
+    perturbation_velocity_std: float = 0.20
+    collision_window_probability: float = 0.50
     collision_positive_weight_max: float = 10.0
     horizon_weights: tuple[float, ...] = (1.0, 1.0, 1.2, 1.5, 1.5)
+    measurement_loss_weights: dict[str, float] = field(
+        default_factory=lambda: {
+            "rgb_existence": 1.0,
+            "rgb_geometry": 1.0,
+            "rgb_colour": 0.25,
+            "rgb_nll": 0.05,
+            "rgb_visibility": 0.25,
+            "rgb_appearance": 0.25,
+            "rgb_raw_centre": 2.0,
+            "rgb_world_position": 8.0,
+            "rgb_world_position_nll": 0.05,
+        }
+    )
     loss_weights: dict[str, float] = field(
         default_factory=lambda: {
             "measurement": 1.0,
-            "state": 1.0,
-            "rollout": 1.0,
+            "state_position": 2.0,
+            "state_velocity": 0.25,
+            "rollout_position": 4.0,
+            "rollout_velocity": 0.1,
             "event": 0.2,
             "parameter": 0.1,
             "existence": 0.2,
@@ -295,6 +317,27 @@ class OrpheusConfig:
                 "model.rgb.temporal_velocity_variance_ceiling must be finite "
                 "and no smaller than temporal_velocity_variance_floor"
             )
+        if (
+            not math.isfinite(model.rgb.structured_disc_threshold)
+            or not 0 < model.rgb.structured_disc_threshold < 2
+        ):
+            raise ValueError("model.rgb.structured_disc_threshold must lie in (0, 2)")
+        if model.rgb.structured_disc_min_pixels <= 0:
+            raise ValueError("model.rgb.structured_disc_min_pixels must be positive")
+        if (
+            not math.isfinite(model.rgb.structured_disc_max_assignment_distance)
+            or model.rgb.structured_disc_max_assignment_distance <= 0
+        ):
+            raise ValueError(
+                "model.rgb.structured_disc_max_assignment_distance must be finite and positive"
+            )
+        if (
+            not math.isfinite(model.rgb.structured_disc_center_std_pixels)
+            or model.rgb.structured_disc_center_std_pixels <= 0
+        ):
+            raise ValueError(
+                "model.rgb.structured_disc_center_std_pixels must be finite and positive"
+            )
         if not (
             0.0 <= model.lifecycle.occlusion_existence_decay <= model.lifecycle.existence_decay
         ):
@@ -344,6 +387,13 @@ class OrpheusConfig:
             raise ValueError("training.horizon_weights must match evaluation.horizons_seconds")
         if any(weight <= 0 for weight in self.training.horizon_weights):
             raise ValueError("training horizon weights must be positive")
+        if not self.training.measurement_loss_weights or any(
+            not math.isfinite(weight) or weight < 0
+            for weight in self.training.measurement_loss_weights.values()
+        ):
+            raise ValueError(
+                "training.measurement_loss_weights must be nonempty, finite, and nonnegative"
+            )
         episode_duration = (simulator.sequence_frames - 1) / simulator.frame_rate
         if max(self.evaluation.horizons_seconds) > episode_duration + 1e-9:
             raise ValueError(
@@ -362,6 +412,20 @@ class OrpheusConfig:
             raise ValueError("training.tbptt_steps must be positive")
         if self.training.measurement_validation_frames <= 0:
             raise ValueError("training.measurement_validation_frames must be positive")
+        if not 0 <= self.training.perturbation_probability <= 1:
+            raise ValueError("training.perturbation_probability must lie in [0, 1]")
+        if (
+            not math.isfinite(self.training.perturbation_position_std)
+            or self.training.perturbation_position_std <= 0
+        ):
+            raise ValueError("training.perturbation_position_std must be finite and positive")
+        if (
+            not math.isfinite(self.training.perturbation_velocity_std)
+            or self.training.perturbation_velocity_std <= 0
+        ):
+            raise ValueError("training.perturbation_velocity_std must be finite and positive")
+        if not 0 <= self.training.collision_window_probability <= 1:
+            raise ValueError("training.collision_window_probability must lie in [0, 1]")
         if self.training.collision_positive_weight_max < 1:
             raise ValueError("training.collision_positive_weight_max must be at least one")
 

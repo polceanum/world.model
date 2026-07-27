@@ -473,6 +473,7 @@ def evaluate_checkpoint(
     *,
     split: str = "test",
     seed_protocol: str = STANDARD_SEED_PROTOCOL,
+    seed_offset: int | None = None,
     output_dir: str | Path | None = None,
     device_info: DeviceInfo | None = None,
 ) -> dict[str, Any]:
@@ -521,6 +522,7 @@ def evaluate_checkpoint(
         split=split,
         episode_count=config.evaluation.episodes,
         training_validation_episodes=checkpoint_validation_episodes,
+        seed_offset=seed_offset,
     )
     dataset = SyntheticSphereDataset(
         config,

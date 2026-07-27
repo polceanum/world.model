@@ -10,7 +10,7 @@ rollouts.
 RGB + calibration + timestamp
              │
              ▼
-global discovery / residual ROI measurement
+global discovery / ROI-local residual measurement
              │
              ▼
 associate → innovate → correct → identify
@@ -40,17 +40,33 @@ held-out evaluation, and demo export. Evaluation now supports explicit
 fresh-validation seed manifests, current velocity/correction evidence, and
 collision-conditioned model/baseline errors.
 
-This is implementation evidence, not a completed research milestone. The
-current deterministic RGB checkpoint reaches 75.39% distance-gated localization
-over eight held-out episodes and reduces 0.5-second RMSE from 0.491 m for
-constant velocity to 0.161 m. Ordinary global/fast corrections improve the
-held-out demo. Collision window semantics are now correct, but measured event
-skill remains weak (the promoted checkpoint scores 0.0426 F1 on fresh
-validation and 0.0556 on the older exploratory test); wider untouched-test
-perturbation recovery is narrowly below its recommended gate, and the full MPS
-schedule has not run.
-See [`project/STATUS.md`](project/STATUS.md) for exact commands, metrics, and
-limitations.
+Accuracy-v3 added an optional, RGB-only structured centre measurement for the
+synthetic disc world. It estimates the row-wise background from pixels, labels
+foreground components, separates touching discs with distance-transform peaks,
+and assigns centres to learned proposals with Hungarian matching. This is a
+synthetic-world image prior, not simulator-state input; the modality-independent
+belief and online filter contracts are unchanged. The sphere profiles enable
+it, with a stricter `0.08` foreground threshold in the noisy `toy_hard` and
+`cloud_single_gpu` profiles.
+
+Accuracy-v4 continues the selected perception state for 64 causal closed-loop
+RGB updates and promotes the validation-selected step-648 rollout checkpoint.
+On paired confirmation seeds it improves every forecast horizon and collision
+F1 over step 584, with tiny mixed current-state, velocity, and perturbation
+tradeoffs.
+
+This remains implementation evidence, not a completed research milestone. The
+frozen step-648 checkpoint was evaluated on 32 reserved-test episodes, seeds
+`200064–200095`. It measured `0.0893 / 0.1169 m` current position MAE/RMSE,
+`0.7923 m/s` velocity RMSE, `0.1383 / 0.1777 / 0.2329 m` forecast RMSE at
+0.1/0.25/0.5 seconds, `45.30%` perturbation recovery, collision F1 `0.6400`,
+100% distance-gated detection, zero ID switches, and 90% forecast coverage of
+`86.95%`. RGB-only runtime used four global and 12 ROI-local updates in the
+demo and improved current/future error after observations. Collision F1
+remains below the recommended `0.75` gate, useful online physical-parameter
+identification is not established, and the full MPS schedule has not run. See
+[`project/STATUS.md`](project/STATUS.md) for exact commands, current metrics,
+and limitations.
 
 A bounded three-sample, persistent-ID RGB motion history is implemented as an
 opt-in experiment. On 16 fresh validation episodes it improved velocity RMSE
@@ -80,8 +96,12 @@ python evaluate.py \
   --checkpoint <path> \
   --split validation \
   --seed-protocol fresh_validation \
+  --seed-offset 64 \
   --set evaluation.episodes=16
 ```
+
+Use one disjoint validation offset for candidate selection and a later untouched
+offset for confirmation; do not select checkpoints on the reserved test split.
 
 For the deterministic convergence/debug run:
 

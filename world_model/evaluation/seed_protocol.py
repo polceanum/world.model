@@ -54,6 +54,7 @@ def make_evaluation_seed_protocol(
     split: str,
     episode_count: int,
     training_validation_episodes: int,
+    seed_offset: int | None = None,
 ) -> EvaluationSeedProtocol:
     """Resolve a fixed evaluation manifest without silently reusing test seeds.
 
@@ -73,6 +74,8 @@ def make_evaluation_seed_protocol(
         raise ValueError("evaluation episode_count must be positive")
     if training_validation_episodes < 0:
         raise ValueError("training_validation_episodes must be nonnegative")
+    if seed_offset is not None and seed_offset < 0:
+        raise ValueError("evaluation seed_offset must be nonnegative")
 
     if name == FRESH_VALIDATION_SEED_PROTOCOL:
         if canonical_split != "validation":
@@ -80,10 +83,15 @@ def make_evaluation_seed_protocol(
                 "fresh_validation seed protocol requires split='validation'; "
                 "test seeds must not be used for checkpoint selection"
             )
-        seed_offset = training_validation_episodes
+        if seed_offset is None:
+            seed_offset = training_validation_episodes
+        elif seed_offset < training_validation_episodes:
+            raise ValueError(
+                "fresh validation seed_offset must not overlap trainer validation episodes"
+            )
         intended_use = "checkpoint_selection_validation"
     else:
-        seed_offset = 0
+        seed_offset = 0 if seed_offset is None else seed_offset
         intended_use = f"standard_{canonical_split}_evaluation"
 
     manifest = make_seed_manifest(

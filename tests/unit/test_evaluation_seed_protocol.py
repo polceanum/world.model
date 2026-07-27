@@ -37,6 +37,31 @@ def test_fresh_validation_rejects_test_split_for_model_selection() -> None:
         )
 
 
+def test_explicit_fresh_validation_offset_supports_fair_checkpoint_comparison() -> None:
+    protocol = make_evaluation_seed_protocol(
+        name=FRESH_VALIDATION_SEED_PROTOCOL,
+        split="validation",
+        episode_count=4,
+        training_validation_episodes=8,
+        seed_offset=32,
+    )
+
+    assert protocol.seed_offset == 32
+    assert protocol.manifest.seeds == (100_032, 100_033, 100_034, 100_035)
+    assert not protocol.overlaps_training_validation
+
+
+def test_explicit_fresh_validation_offset_cannot_overlap_training_validation() -> None:
+    with pytest.raises(ValueError, match="must not overlap"):
+        make_evaluation_seed_protocol(
+            name=FRESH_VALIDATION_SEED_PROTOCOL,
+            split="validation",
+            episode_count=4,
+            training_validation_episodes=8,
+            seed_offset=7,
+        )
+
+
 def test_standard_test_protocol_preserves_existing_seed_manifest() -> None:
     protocol = make_evaluation_seed_protocol(
         name=STANDARD_SEED_PROTOCOL,

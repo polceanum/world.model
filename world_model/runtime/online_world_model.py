@@ -195,6 +195,15 @@ class OnlineWorldModel(nn.Module):
                     temporal_velocity_variance_ceiling=(
                         rgb_config.temporal_velocity_variance_ceiling
                     ),
+                    structured_disc_center_enabled=(rgb_config.structured_disc_center_enabled),
+                    structured_disc_threshold=rgb_config.structured_disc_threshold,
+                    structured_disc_min_pixels=rgb_config.structured_disc_min_pixels,
+                    structured_disc_max_assignment_distance=(
+                        rgb_config.structured_disc_max_assignment_distance
+                    ),
+                    structured_disc_center_std_pixels=(
+                        rgb_config.structured_disc_center_std_pixels
+                    ),
                     roi_uncertainty_scale=rgb_config.roi_uncertainty_scale,
                     default_world_radius=(sum(config.simulator.radius_range) / 2.0),
                     proposal_threshold=rgb_config.existence_threshold,

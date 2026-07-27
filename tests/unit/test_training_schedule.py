@@ -1,10 +1,23 @@
 from __future__ import annotations
 
+import random
+from dataclasses import replace
+
 import pytest
+import torch
 from torch import nn
 
 from world_model.runtime import OnlineWorldModel
+from world_model.training.loop import (
+    TrainingBatchResult,
+    _group_closed_loop_terms,
+    _weighted_closed_loop_total,
+    _weighted_measurement_total,
+    select_closed_loop_window,
+)
 from world_model.training.trainer import (
+    _validation_loader_result,
+    _validation_step,
     measurement_pretrain_frame_index,
     set_global_perception_trainable,
 )
@@ -70,3 +83,190 @@ def test_global_perception_freeze_leaves_fast_roi_trainable() -> None:
     set_global_perception_trainable(model, trainable=True)
     assert all(parameter.requires_grad for parameter in rgb.backbone.parameters())
     assert all(parameter.requires_grad for parameter in rgb.global_detector.parameters())
+
+
+def test_closed_loop_terms_expose_physical_components_without_double_counting() -> None:
+    reference = torch.zeros(())
+    terms = _group_closed_loop_terms(
+        {
+            "state_position": torch.tensor(1.0),
+            "state_velocity": torch.tensor(3.0),
+            "rollout_position": torch.tensor(2.0),
+            "rollout_velocity": torch.tensor(6.0),
+        },
+        reference,
+    )
+
+    assert terms["state_position"].item() == 1.0
+    assert terms["state_velocity"].item() == 3.0
+    assert terms["state"].item() == 2.0
+    assert terms["rollout_position"].item() == 2.0
+    assert terms["rollout_velocity"].item() == 6.0
+    assert terms["rollout"].item() == 4.0
+    torch.testing.assert_close(
+        _weighted_closed_loop_total(
+            terms,
+            {"state": 2.0, "rollout": 3.0},
+        ),
+        torch.tensor(16.0),
+    )
+    torch.testing.assert_close(
+        _weighted_closed_loop_total(
+            terms,
+            {
+                "state": 100.0,
+                "state_position": 5.0,
+                "state_velocity": 0.5,
+                "rollout_position": 2.0,
+                "rollout_velocity": 0.25,
+            },
+        ),
+        torch.tensor(12.0),
+    )
+
+
+def test_measurement_weights_keep_metric_position_primary() -> None:
+    losses = {
+        "rgb_world_position": torch.tensor(0.2),
+        "rgb_raw_centre": torch.tensor(0.1),
+        "rgb_nll": torch.tensor(-3.0),
+        "future_term": torch.tensor(0.1),
+    }
+
+    total = _weighted_measurement_total(
+        losses,
+        {
+            "rgb_world_position": 8.0,
+            "rgb_raw_centre": 2.0,
+            "rgb_nll": 0.05,
+        },
+    )
+
+    torch.testing.assert_close(total, torch.tensor(1.75))
+
+
+def test_closed_loop_window_can_be_conditioned_on_collision() -> None:
+    batch = {
+        "rgb": torch.zeros((2, 10, 3, 8, 8)),
+        "events": {
+            "collision": torch.zeros((2, 10, 3), dtype=torch.bool),
+        },
+    }
+    batch["events"]["collision"][1, 7, 2] = True
+    random.seed(11)
+
+    start = select_closed_loop_window(
+        batch,
+        4,
+        event_condition_probability=1.0,
+    )
+
+    assert 0 <= start <= 6
+    assert start <= 7 < start + 4
+
+
+class _ModeOnlyModel:
+    def __init__(self) -> None:
+        self.training = True
+
+    def eval(self) -> _ModeOnlyModel:
+        self.training = False
+        return self
+
+    def train(self, mode: bool = True) -> _ModeOnlyModel:
+        self.training = mode
+        return self
+
+
+def _result(value: float) -> TrainingBatchResult:
+    scalar = torch.tensor(value)
+    return TrainingBatchResult(
+        total_loss=scalar,
+        loss_terms={"rollout": scalar},
+        metrics={"value": value},
+        phase="closed_loop_rgb",
+    )
+
+
+def test_closed_loop_validation_uses_the_full_episode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, int | bool] = {}
+
+    def fake_closed_loop(
+        model: object,
+        batch: object,
+        config: object,
+        **kwargs: int | bool,
+    ) -> TrainingBatchResult:
+        del model, batch, config
+        observed.update(kwargs)
+        return _result(1.0)
+
+    monkeypatch.setattr(
+        "world_model.training.trainer.run_closed_loop_batch",
+        fake_closed_loop,
+    )
+    config = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        config,
+        training=replace(config.training, tbptt_steps=3),
+    )
+    model = _ModeOnlyModel()
+    batch = {
+        "rgb": torch.zeros((2, 9, 3, 8, 8)),
+        "timestamps": torch.zeros((2, 9)),
+    }
+
+    _validation_step(model, batch, config, closed_loop=True)  # type: ignore[arg-type]
+
+    assert observed["window_start"] == 0
+    assert observed["window_steps"] == 9
+    assert observed["apply_perturbations"] is False
+    assert model.training
+
+
+def test_validation_aggregates_every_loader_batch_by_episode_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[int] = []
+
+    def fake_validation(
+        model: object,
+        batch: dict[str, torch.Tensor],
+        config: object,
+        *,
+        closed_loop: bool,
+    ) -> TrainingBatchResult:
+        del model, config
+        assert closed_loop
+        seen.append(int(batch["rgb"].shape[0]))
+        return _result(float(batch["rgb"][0, 0, 0, 0, 0]))
+
+    monkeypatch.setattr(
+        "world_model.training.trainer._validation_step",
+        fake_validation,
+    )
+    loader = [
+        {
+            "rgb": torch.ones((2, 3, 3, 8, 8)),
+            "timestamps": torch.zeros((2, 3)),
+        },
+        {
+            "rgb": torch.full((1, 3, 3, 8, 8), 4.0),
+            "timestamps": torch.zeros((1, 3)),
+        },
+    ]
+
+    result = _validation_loader_result(
+        _ModeOnlyModel(),  # type: ignore[arg-type]
+        loader,  # type: ignore[arg-type]
+        load_config("configs/tiny_overfit.yaml"),
+        device=torch.device("cpu"),
+        closed_loop=True,
+    )
+
+    assert seen == [2, 1]
+    torch.testing.assert_close(result.total_loss, torch.tensor(2.0))
+    torch.testing.assert_close(result.loss_terms["rollout"], torch.tensor(2.0))
+    assert result.metrics["value"] == 2.0

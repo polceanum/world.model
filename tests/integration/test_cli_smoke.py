@@ -125,6 +125,11 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
     assert best_rollout_payload["step"] == 2
     assert best_rollout_payload["metrics"]["best_rollout_validated"] == 1.0
     assert "validation_rollout_loss" in best_rollout_payload["metrics"]
+    assert (
+        best_rollout_payload["metrics"]["best_rollout_loss"]
+        == best_rollout_payload["metrics"]["best_rollout_position_loss"]
+        == best_rollout_payload["metrics"]["validation_rollout_position_loss"]
+    )
     training_records = [
         json.loads(line)
         for line in (run_directory / "metrics.jsonl").read_text(encoding="utf-8").splitlines()

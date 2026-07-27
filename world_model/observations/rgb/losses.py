@@ -53,6 +53,37 @@ def rgb_measurement_losses(
         "rgb_colour": colour,
         "rgb_nll": nll,
     }
+    raw_centre = outputs.get("raw_centre")
+    if raw_centre is not None:
+        if raw_centre.shape != predicted[..., :2].shape:
+            raise ValueError("raw_centre must match the first two measurement dimensions")
+        losses["rgb_raw_centre"] = (
+            F.smooth_l1_loss(raw_centre[matched], target[..., :2][matched])
+            if matched.any()
+            else raw_centre.sum() * 0
+        )
+    if "world_position" in outputs and "world_position" in targets:
+        predicted_world = outputs["world_position"]
+        target_world = targets["world_position"]
+        if predicted_world.shape != target_world.shape:
+            raise ValueError("world_position output and target shapes must match")
+        if matched.any():
+            losses["rgb_world_position"] = F.smooth_l1_loss(
+                predicted_world[matched],
+                target_world[matched],
+            )
+        else:
+            losses["rgb_world_position"] = predicted_world.sum() * 0
+        if "world_position_log_variance" in outputs:
+            world_log_variance = outputs["world_position_log_variance"].clamp(-12.0, 8.0)
+            if world_log_variance.shape != predicted_world.shape:
+                raise ValueError("world_position_log_variance must match world_position")
+            losses["rgb_world_position_nll"] = gaussian_nll(
+                predicted_world,
+                target_world,
+                world_log_variance,
+                matched,
+            )
     if "visibility_logits" in outputs and "visibility" in targets:
         losses["rgb_visibility"] = (
             F.binary_cross_entropy_with_logits(

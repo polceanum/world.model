@@ -2,9 +2,10 @@
 
 **Date:** 2026-07-27
 **Specification:** `PROJECT_SPEC.md` 1.0  
-**Current state:** runnable RGB-only Milestone 1 vertical slice with converged
-tiny localization/forecasting, explicit fresh-seed/velocity evidence, and
-corrected event semantics; collision/event accuracy acceptance remains open
+**Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
+synthetic-disc localization, ROI-local online correction, explicit
+selection/confirmation/test manifests, and corrected event semantics;
+collision, occlusion, identification, and full-MPS acceptance remain open
 
 ## What works
 
@@ -18,15 +19,27 @@ corrected event semantics; collision/event accuracy acceptance remains open
 - Dynamics combine analytic kinematics, bounded modal state, structured
   interactions, explicit event jumps, learned residuals, and uncertainty
   propagation.
-- RGB includes intermittent global discovery and ordinary residual ROI
-  updates. The fast path remains active (12 of 16 demo updates), but its
-  inverse-depth residual is reliability-gated at the analytic prior until a
-  trained checkpoint proves positive held-out metric-space improvement.
+- RGB includes intermittent learned global discovery, an optional transparent
+  RGB-only structured disc-centre proposal, and ordinary residual ROI updates.
+  Global structured discovery uses row-background subtraction, connected
+  components, touching-disc peak splitting, and proposal alignment. Ordinary
+  structured refinement samples only projected ROIs and never invokes the
+  global SciPy/Hungarian path. The fast path remains active (12 of 16 demo
+  updates), while its inverse-depth residual is reliability-gated at the
+  analytic prior until a trained checkpoint proves positive held-out
+  metric-space improvement.
 - Fixed-dataset RGB pretraining now sweeps every frame for every loader batch,
   rather than coupling episode batches to only even or odd frames.
-- Measurement validation spans configured frames and selects
+- Measurement validation spans configured frames across every validation
+  episode and selects
   `best_measurement.pt` by calibrated backprojected world-position MAE rather
   than the summed, possibly negative Gaussian NLL objective.
+- Structured forward centres preserve the raw detector/ROI centre as explicit
+  gradient-bearing auxiliary evidence. A separate raw-centre target prevents
+  the accurate image heuristic from hiding detector error during training.
+- RGB supervision includes calibrated metric-space world-position Huber/NLL
+  terms with explicit weights; closed-loop position and velocity terms are
+  separately weighted.
 - Closed-loop training restores the best localized perception checkpoint and
   applies a configurable 10x learning-rate reduction. Resume reapplies the
   correct phase learning rate after loading optimizer state.
@@ -37,6 +50,10 @@ corrected event semantics; collision/event accuracy acceptance remains open
 - Fast ROI outputs are supervised at every usable prior frame in persistent
   belief-slot order; they are not incorrectly rematched by their own current
   output values.
+- Mid-episode TBPTT windows ingest their complete RGB prefix causally under
+  `no_grad`, detach the resulting persistent state, and preferentially sample
+  collision-bearing spans. Closed-loop validation evaluates all configured
+  episodes through their complete causal sequence.
 - Collision occurrence is aggregated over every internal physics substep in a
   rollout segment while persistent motion-mode logits remain instantaneous.
   Training and evaluation insert exact `[h-dt_obs, h]` query boundaries so
@@ -47,9 +64,10 @@ corrected event semantics; collision/event accuracy acceptance remains open
   to improve over a detached prior. Rare collision positives receive a
   bounded, explicitly configured BCE weight.
 - Evaluation can derive a deterministic fresh-validation manifest from
-  checkpoint provenance, persist its exact seeds/non-overlap status, report
-  current and ordinary-correction velocity metrics, and compare model and
-  baselines on identical future-collision masks.
+  checkpoint provenance or accept an explicit `--seed-offset`, persist exact
+  seeds/non-overlap status, report current and ordinary-correction velocity
+  metrics, and compare model and baselines on identical future-collision
+  masks.
 - RGB has a separate bounded persistent-ID temporal position history with
   explicit timestamps and uncertainty. It can provide a cheap causal
   velocity-only correction without new weights or history re-encoding, but is
@@ -65,7 +83,7 @@ corrected event semantics; collision/event accuracy acceptance remains open
 - Python: 3.10.20
 - Process architecture: x86_64
 - PyTorch: 2.10.0, installed build preserved unchanged
-- MPS: compiled, but unavailable to the current final-validation process;
+- MPS: compiled, but unavailable to this launcher process;
   earlier recorded real forward/backward optimizer steps completed on `mps`
 - CUDA: unavailable
 - Precision: float32
@@ -75,7 +93,237 @@ hardware-conditional tests skip. Earlier direct runs exercised the same
 MPS-specific paths successfully; the preserved run evidence is described
 below.
 
-## Current converged CPU evidence
+## Accuracy-v4 promoted CPU evidence
+
+This is the current result. Accuracy-v3 step 584 is the initialization and
+paired baseline, not the promoted checkpoint. Older step-70/72/94 experiments
+later in this document remain historical evidence.
+
+### RGB-only structured-centre diagnostics
+
+The optional synthetic-disc prior consumes RGB pixels only. Global discovery
+uses row-median background subtraction, connected components,
+distance-transform peaks for touching discs, and Hungarian alignment to
+learned proposals. On fresh-validation seeds `100004–100019`, labels used only
+for scoring found:
+
+- `507 / 512` target centres matched;
+- mean normalized centre error `0.0014439`;
+- maximum normalized centre error `0.0304`.
+
+A sample from the default/MPS-sized profile matched `57 / 57` visible targets
+with mean/max normalized error `0.000855 / 0.004479`. The noisier `toy_hard`
+and `cloud_single_gpu` profiles use the regression-tested foreground threshold
+`0.08`, rather than the ordinary `0.04`.
+
+The ordinary fast path does not repeat global discovery. It samples only the
+projected object ROIs, estimates local foreground, and grows the component
+nearest each prior centre. Its isolated RGB diagnostic matched `256 / 256`
+visible targets with mean normalized centre error `0.0184`. The isolated CPU
+microbenchmark was approximately `3.94 ms` for eight 20x20 ROIs. This is a
+primitive benchmark, not the complete online-update latency reported below.
+
+### Promoted checkpoint and closed-loop continuation
+
+The promoted checkpoint is:
+
+- path:
+  `runs/accuracy-closed-structured-v4/checkpoints/best_rollout.pt`;
+- step: `648`;
+- SHA-256:
+  `9b943f60128a2bd15298847d8c7de4dd3166646f3644720a3149155e57d85bcd`.
+
+It is a controlled 64-update causal closed-loop RGB continuation from the
+selected step-584 perception state. The first command was:
+
+```bash
+conda run --no-capture-output -n orpheus python train.py \
+  --config configs/tiny_overfit.yaml \
+  --run-name accuracy-closed-structured-v4 \
+  --resume runs/accuracy-depth-finetune-v1/checkpoints/best_measurement.pt \
+  --device cpu \
+  --seed 17 \
+  --set training.steps=648 \
+  --set training.rgb_pretrain_steps=584 \
+  --set training.train_episodes=64 \
+  --set training.validation_episodes=32 \
+  --set training.batch_size=2 \
+  --set training.fixed_dataset=true \
+  --set training.learning_rate=0.0002 \
+  --set training.weight_decay=0.0001 \
+  --set training.eval_every=16 \
+  --set training.checkpoint_every=16 \
+  --set training.log_every=4 \
+  --set training.measurement_validation_frames=16
+```
+
+The first segment was intentionally stopped after the selected step-608
+validation to avoid redundant full-validation work. The exact resume command
+was:
+
+```bash
+conda run --no-capture-output -n orpheus python train.py \
+  --config configs/tiny_overfit.yaml \
+  --run-name accuracy-closed-structured-v4 \
+  --resume runs/accuracy-closed-structured-v4/checkpoints/best_rollout.pt \
+  --device cpu \
+  --seed 17 \
+  --set training.steps=648 \
+  --set training.rgb_pretrain_steps=584 \
+  --set training.train_episodes=64 \
+  --set training.validation_episodes=32 \
+  --set training.batch_size=2 \
+  --set training.fixed_dataset=true \
+  --set training.learning_rate=0.0002 \
+  --set training.weight_decay=0.0001 \
+  --set training.eval_every=1000 \
+  --set training.checkpoint_every=20 \
+  --set training.log_every=4 \
+  --set training.measurement_validation_frames=16
+```
+
+It completed step 648 in `699.7628 s`; no inaccurate sum with the earlier
+segment is claimed. Full validation selected rollout-position loss
+`0.0119829765`.
+
+### Selection and confirmation
+
+Step 648 and its step-584 initialization used the same ROI-local manifests:
+
+| Evidence | Seeds | Step | Current MAE/RMSE (m) | Velocity RMSE (m/s) | 0.1/0.25/0.5 s RMSE (m) | Recovery | F1 | Coverage 90 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| selection baseline | `100032–100063` | 584 | `0.098112 / 0.127250` | `0.780543` | `0.150932 / 0.190620 / 0.248704` | `43.99%` | `0.588235` | `85.75%` |
+| selection candidate | `100032–100063` | 648 | `0.093674 / 0.122592` | `0.793015` | `0.145440 / 0.185183 / 0.242517` | `44.29%` | `0.585938` | `85.88%` |
+| confirmation baseline | `100064–100095` | 584 | `0.083808 / 0.109239` | `0.730034` | `0.134093 / 0.174492 / 0.231253` | `48.28%` | `0.594203` | `86.81%` |
+| confirmation candidate | `100064–100095` | 648 | `0.083282 / 0.109426` | `0.731623` | `0.132424 / 0.171900 / 0.226994` | `47.82%` | `0.608059` | `86.76%` |
+
+Both candidates retained 100% distance-gated detection and zero ID switches.
+Step 648 was promoted because the forecast improvement repeated at every
+horizon on selection and confirmation, while confirmation collision F1 also
+increased. The tiny mixed current-position, velocity, recovery, and coverage
+changes are reported rather than hidden.
+
+Reports:
+
+- `runs/accuracy-closed-structured-v4/evaluation/select32/report.md`
+- `runs/accuracy-closed-structured-v4/evaluation/confirm32/report.md`
+- step-584 selection baseline:
+  `runs/accuracy-roi-local-v3/depth-finetune-select32/report.md`
+
+### Final reserved RGB-only test
+
+The final source/checkpoint pair was evaluated once on standard test seeds
+`200064–200095`:
+
+```bash
+conda run --no-capture-output -n orpheus python evaluate.py \
+  --config configs/tiny_overfit.yaml \
+  --checkpoint runs/accuracy-closed-structured-v4/checkpoints/best_rollout.pt \
+  --split test \
+  --seed-protocol standard \
+  --seed-offset 64 \
+  --device cpu \
+  --set evaluation.episodes=32 \
+  --output runs/accuracy-closed-structured-v4/evaluation/final-test32
+```
+
+Observed over 32 RGB-only episodes:
+
+- current position MAE/RMSE:
+  `0.0893355713 / 0.1169080874 m`;
+- current velocity RMSE: `0.7922569746 m/s`;
+- model position RMSE at 0.10/0.25/0.50 seconds:
+  `0.1382787450 / 0.1777031324 / 0.2328615442 m`;
+- constant-velocity RMSE at the same horizons:
+  `0.1557861172 / 0.3349483002 / 0.4719492865 m`;
+- collision-conditioned model RMSE reduction versus constant velocity:
+  `0.309652802 / 0.543772525 / 0.506596258`;
+- injected-perturbation recovery: `0.452961913` (`45.30%`), positive on
+  `97.92%` of evaluated horizons;
+- collision precision/recall/F1:
+  `0.765217 / 0.550000 / 0.640000`, false-positive rate `0.0255682`;
+- distance-gated detection recall/precision: `1.0 / 1.0`;
+- distance-gated ID switches: `0`;
+- nominal-90% forecast coverage: `86.9518%`;
+- zero dropped forecasts and zero non-finite outputs;
+- mean CPU global/fast/rollout latency:
+  `48.742 / 50.544 / 225.309 ms`.
+
+The runtime used no oracle input. Evaluator-only simulator labels aligned
+metrics and transparent baselines. There was no qualifying
+visible-to-fully-occluded-to-visible sequence in these short episodes, so
+sequence occlusion metrics are correctly null. Online identification executed,
+but updates remained tiny: mean absolute informative drag/restitution updates
+were `7.67e-7 / 1.74e-7`, with signed error changes
+`+7.48e-8 / -1.28e-7`.
+
+Report and machine-readable metrics:
+
+- `runs/accuracy-closed-structured-v4/evaluation/final-test32/report.md`
+- `runs/accuracy-closed-structured-v4/evaluation/final-test32/evaluation.json`
+
+### Current RGB-only demo
+
+```bash
+conda run --no-capture-output -n orpheus python demo.py \
+  --config configs/tiny_overfit.yaml \
+  --checkpoint runs/accuracy-closed-structured-v4/checkpoints/best_rollout.pt \
+  --device cpu \
+  --output demo_outputs/accuracy-closed-structured-v4
+```
+
+The 16-frame demo used four global and 12 ROI-local updates with no oracle
+input. Mean ordinary current/future prior-to-posterior improvements were
+`+0.02041067 / +0.02171345 m`; maximum predicted collision probability was
+`0.981899`. Real artifacts:
+
+- `demo_outputs/accuracy-closed-structured-v4/online_correction.gif`
+- `demo_outputs/accuracy-closed-structured-v4/parameter_estimates.png`
+- `demo_outputs/accuracy-closed-structured-v4/summary.json`
+- `demo_outputs/accuracy-closed-structured-v4/frames/`
+
+### Superseded and rejected experiments
+
+- Step 584 remains the accuracy-v3 initialization and paired baseline. Its
+  prior frozen test reached position RMSE `0.118600 m`, velocity RMSE
+  `0.812524 m/s`, 0.5-second RMSE `0.237585 m`, recovery `45.72%`, and
+  collision F1 `0.597122`; step 648 supersedes it.
+
+- The 1,120-step from-scratch run
+  `runs/accuracy-structured-physical-v1` was rejected. On selection seeds its
+  current MAE/RMSE was `0.273908 / 0.422225 m`, 0.5-second RMSE
+  `0.525709 m`, perturbation recovery `18.80%`, collision F1 `0.316940`,
+  and detection recall/precision `66.60% / 55.22%`.
+- A 2 cm collision-hazard lookahead was removed after confirmation F1 fell
+  from `0.622222` to `0.594406` without changing physical trajectories.
+- A later 256-update measurement continuation with the completed raw-centre
+  objective did not beat inherited validation MAE and degraded as high as
+  `0.291207 m`. `runs/accuracy-final-perception-v3` is retained as a rejected
+  run, not a promoted checkpoint.
+- Exhaustive collision-threshold validation found probabilities saturated near
+  `0.018 / 0.998`; no threshold improved F1, so `0.5` remains unchanged and
+  state/timing structure remains the target.
+- Mean-radius analytic depth was rejected (`0.795 m` error versus `0.148 m`
+  learned), and a photometric-radius alternative failed confirmation. Neither
+  diagnostic changed runtime.
+
+### Public smoke workflow
+
+```bash
+conda run --no-capture-output -n orpheus python train.py \
+  --config configs/toy_smoke.yaml \
+  --run-name accuracy-v3-smoke \
+  --device cpu
+```
+
+This completed 12 finite CPU optimizer steps in `194.0503 s` (four perception,
+eight closed-loop), wrote both selected checkpoints plus `last.pt`, exercised
+ROI-local supervision, and used no oracle runtime input. Its
+`1006.558 m` validation measurement MAE is intentionally highly inaccurate:
+four perception updates cannot train this model. This run is wiring evidence
+only. Artifacts are under `runs/accuracy-v3-smoke/`.
+
+## Historical CPU convergence evidence (superseded)
 
 Training command:
 
@@ -289,11 +537,10 @@ over the safer position checkpoint.
 
 The step-70, step-94, and balanced-event comparisons repeatedly inspect the
 same fixed eight test episodes. They are exploratory diagnostics, not an
-independent model-selection protocol. Step 72 remains the validation-selected
-checkpoint; the small apparent test improvement of `last.pt` requires
-confirmation on a fresh, larger held-out seed set.
+independent model-selection protocol. Step 72 was the validation-selected
+checkpoint at that stage; accuracy-v3 has since superseded it.
 
-## Fresh validation, velocity evidence, and temporal ablation
+## Historical step-72 validation and temporal ablation
 
 The evaluator now reserves an explicit checkpoint-selection block after the
 trainer's validation episodes:
@@ -381,7 +628,8 @@ improved velocity RMSE to `1.277519 m/s` and collision F1 to `0.121622`, but
 position MAE worsened to `0.196397 m`, 0.10/0.25/0.50-second RMSE to
 `0.243738 / 0.207295 / 0.184454 m`, and perturbation recovery to `11.843%`.
 Disabling temporal inference on the same weights was also worse. This run is a
-truthful negative result and step 72 remains the promoted checkpoint.
+truthful negative result and was not promoted. Step 72 was retained at that
+stage and has since been superseded by the step-584 accuracy-v3 checkpoint.
 
 Artifacts:
 
@@ -447,89 +695,74 @@ Full suite:
 conda run --no-capture-output -n orpheus pytest
 ```
 
-Passed: 148 tests with three MPS-unavailable skips in 34.46 s.
+Result: **178 passed, 3 skipped in 35.81 s**. The three skips are the
+hardware-conditional MPS tests; this launcher process reports MPS unavailable.
 
 Lint and formatting:
 
 ```bash
-conda run -n orpheus ruff check .
-conda run -n orpheus ruff format --check .
+conda run --no-capture-output -n orpheus ruff check .
+conda run --no-capture-output -n orpheus ruff format --check .
 ```
 
-Passed: all checks clean; 150 Python files formatted.
+Results: **passed**. Ruff reported all checks clean and all 153 Python files
+already formatted.
 
 Bytecode compilation:
 
 ```bash
-PYTHONPYCACHEPREFIX=/private/tmp/orpheus-final-pycache PYTHONPATH=. \
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-accuracy-v4-pycache PYTHONPATH=. \
   conda run --no-capture-output -n orpheus python -m compileall -q \
   world_model train.py evaluate.py demo.py scripts tests
 ```
 
-Passed.
-
-Final public smoke workflow:
-
-```bash
-conda run --no-capture-output -n orpheus python train.py \
-  --config configs/toy_smoke.yaml \
-  --run-name accuracy-final-smoke
-```
-
-Passed: 12 finite CPU optimizer steps in 186.092 s (four RGB pretraining,
-eight full closed-loop), both best checkpoints and `last.pt` were written, the
-fast path received supervision on seven frames in the final batch, global
-perception was frozen after its configured adaptation window, and
-`oracle_runtime_input_used` was false. This intentionally tiny smoke is a
-wiring check, not an accuracy result. Artifacts are under
-`runs/accuracy-final-smoke/`.
+Result: **passed**.
 
 Default MPS plan:
 
 ```bash
-conda run -n orpheus python train.py \
+conda run --no-capture-output -n orpheus python train.py \
   --config configs/toy_mps.yaml --dry-run
 ```
 
-Passed with PyTorch 2.10.0, 96x96 images, 72 frames, RGB-only runtime, and the
-configured 3,000-step schedule. It selected `cpu` because MPS was unavailable
-to this final-validation process.
+Result: **passed**. It resolved PyTorch 2.10.0, RGB-only 96x96 input, 72
+frames, and the configured 3,000-step schedule. It selected CPU because MPS
+was unavailable to this process.
+
+Whitespace/error check:
+
+```bash
+git diff --check
+```
+
+Result: **passed**.
 
 ## Known limitations and open acceptance gates
 
-- Collision semantics are now correct and F1 is nonzero, but accuracy remains
-  poor (fresh-validation F1: 0.042553 versus the recommended 0.75). The
-  rejected temporal continuation reached 0.121622 while materially worsening
-  state/forecast/recovery metrics, so it is not a promoted accuracy result.
-  Focused exact-state tests and a non-persisted scratch oracle diagnostic point
-  to RGB state accuracy and event uncertainty—not loss of collisions between
-  internal substeps—as the limiting factors.
-- Fresh-validation perturbation reduction is 20.09%, but it has now been used
-  during model development and needs confirmation on a new untouched manifest.
-  The older wider test result was 19.59%, narrowly below the recommended 20%
-  gate.
-- Global vertical-centre predictions remain less image-dependent than target
-  motion. More varied measurement training and explicit component losses are
-  still warranted.
+- Collision semantics are correct, but final-test precision/recall/F1
+  `0.765217 / 0.550000 / 0.640000` remains below the recommended `0.75` F1
+  gate. Recall is the larger failure.
+- Current velocity RMSE remains weak at `0.792257 m/s`. The experimental
+  overlapping-frame temporal update is disabled because it improved velocity
+  while regressing aggregate physical accuracy.
+- Nominal-90% forecast coverage is `86.9518%`, so the diagonal filter is
+  overconfident despite strong point accuracy. Explicit temporal/cross-modal
+  correlation handling is absent.
+- Online drag/restitution identification executes behind observability gates,
+  but mean update magnitudes remain around `1e-7` and useful parameter
+  convergence is not established.
+- The final 32 short episodes contain no qualifying
+  visible-to-fully-occluded-to-visible sequence. Occlusion uncertainty
+  expansion and reobservation contraction remain supported by focused tests,
+  not end-to-end final-test evidence.
+- At this tiny CPU scale, full fast ROI updates (`50.544 ms`) are not faster
+  than global updates (`48.742 ms`), despite the isolated structured ROI
+  primitive taking only about `3.94 ms` for eight crops.
+- The full 3,000-step `toy_mps` schedule remains unrun. Existing MPS results
+  establish compatibility only, not convergence or throughput.
 - Fast inverse-depth residual learning is safely disabled, not solved. It must
   be trained with belief-slot-aligned cached sequences and enabled only after a
   held-out per-mode correction gate passes.
-- Repeated correlated RGB measurements can still make the diagonal filter
-  overconfident. Fresh-validation 90% coverage is 97.75%, but explicit
-  correlation handling remains absent. The new temporal velocity measurement
-  is disabled by default because treating overlapping three-frame estimates as
-  independent improves velocity RMSE while degrading aggregate closed-loop
-  accuracy.
-- Directional before/after metrics confirm that physical parameter updates are
-  currently numerically tiny. On fresh validation, restitution and drag signed
-  error reduction are slightly negative (`-3.67e-8` over 13 informative
-  updates and `-6.95e-8` over 104, respectively). Useful identification is not
-  established.
-- The evaluated short sequences contain no usable held-out distance-gated
-  occlusion interval; rendered occlusion recovery remains supported mainly by
-  focused geometry/lifecycle tests.
-- At this tiny scale fast ROI latency (42.83 ms) is not lower than global
-  latency (38.97 ms).
 - Max-aggregating substep collision logits preserves thresholded
   "occurred anywhere" semantics, but is not a calibrated probability-of-union
   calculation.
@@ -545,17 +778,22 @@ to this final-validation process.
 
 ## Next concrete tasks
 
-1. Add correlation-aware temporal RGB velocity uncertainty, an innovation/
-   observability gate, and a validation-selected probabilistic collision head;
-   the current independent diagonal update and exact-window event-balanced
-   loss did not generalize.
-2. Train fast ROI updates on belief-slot-aligned cached sequences with
-   teacher-forced/jittered valid ROIs, then validate and enable the depth
-   residual through a per-mode improvement gate.
-3. Add correlation-aware measurement uncertainty and evaluate the implemented
-   expansion/recovery metrics on an occlusion-rich held-out split.
-4. Add physics-violation metrics and saved collision/forecast failure plots.
-5. Run the full `toy_mps` schedule and a larger event/occlusion-balanced split.
+1. Improve velocity estimation and collision recall together, using
+   correlation-aware causal motion evidence. A two-frame anisotropic
+   position-slope is an unimplemented opportunity, not a current feature.
+   Train a validation-selected probabilistic event head without sacrificing
+   the promoted point/forecast accuracy; threshold tuning cannot fix the
+   saturated structural errors.
+2. Calibrate repeated RGB uncertainty to restore nominal coverage, then test
+   expansion/recovery on an occlusion-rich held-out split.
+3. Profile and optimize the complete ROI update, then train inverse-depth
+   residuals on belief-slot-aligned jittered/cached sequences and enable them
+   only after a held-out per-mode correction gate passes.
+4. Make drag/restitution identification numerically effective under explicit
+   observability, and report parameter convergence on an event-rich split.
+5. Add physics-violation metrics and saved collision/forecast failure plots.
+6. Run the full `toy_mps` schedule when MPS is available and compare CPU/MPS
+   throughput without changing the runtime/data contracts.
 
 All `runs/` and `demo_outputs/` paths above are real local artifacts but are
 gitignored by design; checkpoints and generated media are not published in the

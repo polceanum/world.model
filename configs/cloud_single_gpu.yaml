@@ -32,6 +32,8 @@ model:
     global_every_steps: 12
     roi_size: 24
     fast_depth_residual_enabled: false
+    structured_disc_center_enabled: true
+    structured_disc_threshold: 0.08
   dynamics:
     hidden_dim: 192
     max_substep: 0.005555555555555556
