@@ -109,6 +109,36 @@
 - [x] Consolidate the accepted checkpoint/evidence and remove 64 superseded
   run directories at the user's request.
 
+## Predictive-abstraction modernization — in progress
+
+- [x] Amend `PROJECT_SPEC.md` and agent instructions so compact executable
+  predictive abstractions, rather than sensor reconstruction, are the scaling
+  unit.
+- [x] Add an explicit registry for implemented abstraction families.
+- [x] Route ordinary free motion to a point-trajectory abstraction and refine
+  contact-like modes to rigid-sphere execution without discarding belief
+  geometry or parameters.
+- [x] Add reversible scene, camera, entity-kinematic, dynamical-programme, and
+  lifecycle belief tokens with persistent IDs, masks, and abstraction kinds.
+- [x] Expose derived abstraction assignments and tokens from
+  `OnlineWorldModel` without adding checkpoint parameters or a second state.
+- [ ] Add learned token projections and a small object-interaction transformer
+  that predicts bounded belief residual/event proposals.
+- [ ] Train the transformer first as an auxiliary masked/future latent
+  predictor; do not let it alter runtime state until it beats the structured
+  baseline on held-out position, event, calibration, and complexity gates.
+- [ ] Replace the mode-only router with evidence-driven model selection using
+  predictive likelihood, calibration, correction cost, and abstraction
+  complexity.
+- [ ] Let abstraction assignments prune execution only after a
+  proximity/uncertainty gate proves that free point trajectories refine before
+  imminent contacts; the current hybrid dynamics remains authoritative.
+- [ ] Add multi-hypothesis depth/size abstractions so monocular ambiguity is
+  represented rather than collapsed.
+- [ ] Connect a pretrained/foundation video feature provider behind the RGB
+  measurement contract, retaining a local/offline and checkpoint-compatible
+  path.
+
 ## Milestone 1 research acceptance — not yet achieved
 
 - [x] Reach nonzero distance-gated RGB detection recall/precision on held-out

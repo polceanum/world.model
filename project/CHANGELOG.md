@@ -71,6 +71,13 @@
   presets, expanding the mixed curriculum from four regimes to seven.
 - Camera-Jacobian projection of posterior world covariance for correctly
   oriented image-space uncertainty ellipses with an explicit legend entry.
+- Predictive-abstraction contracts and documentation: an explicit registry,
+  point-trajectory versus rigid-sphere routing, and a parameter-free,
+  reversible belief-token sequence containing scene, camera, entity
+  kinematic, dynamical-programme, and lifecycle tokens.
+- Runtime accessors for current abstraction assignments and transformer-ready
+  belief tokens. Both are derived on demand from `WorldBelief` and add no
+  checkpoint parameters.
 
 ### Changed after integration audit
 

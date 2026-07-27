@@ -29,4 +29,11 @@ Working rules:
   tracking, or heavy infrastructure without a documented architectural need.
 - Preserve user work. If it conflicts with the specification, record the
   conflict in `project/DESIGN_DECISIONS.md` and make the smallest correction.
-
+- Preserve predictive abstractions as first-class executable state. Prefer the
+  simplest representation that predicts within calibrated uncertainty (for
+  example, a point trajectory for a freely moving ball) and refine it only
+  when interactions require richer geometry or dynamics.
+- Foundation models, transformers, and generative decoders may extract,
+  complete, or propose abstractions. They must not replace `WorldBelief` with
+  an opaque sensor latent or make generated pixels the primary evidence of
+  physical correctness.

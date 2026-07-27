@@ -20,6 +20,13 @@ analytic + gated learned correction
           ▼
 persistent WorldBelief
           │
+          ├── derived predictive-abstraction router
+          │       ├── point trajectory for free motion
+          │       └── rigid sphere for contact execution
+          │
+          ├── reversible typed belief tokens
+          │       └── scene / camera / kinematic / programme / lifecycle
+          │
           ▼
 analytic kinematics + stable modes + interactions + event jumps + uncertainty
           │
@@ -93,3 +100,19 @@ checkpoint's trainer-validation episodes by default; `--seed-offset` can select
 a later disjoint range for a one-time confirmation. Both are asserted disjoint
 from the test range. Simulator collision state may condition evaluation metrics
 over a future window, but is never passed into the runtime.
+
+The abstraction and token layers are derived from `WorldBelief` on demand.
+They do not cache physical state and add no parameters to existing
+checkpoints. The initial router selects the lowest-complexity executable
+operator supported by current evidence: point-trajectory execution in free
+motion and rigid-sphere execution for contact-like modes. Full geometry and
+slow parameters remain in the belief, making refinement lossless.
+This first assignment is inspectable but does not yet prune the hybrid
+dynamics path: free objects still run cheap contact-candidate detection so
+they can refine before an imminent impact.
+
+`WorldBeliefTokenizer` is a reversible bridge to future attention-based
+models. It gives entity tokens stable IDs, types, masks, and abstraction kinds
+instead of asking a transformer to infer the schema from one opaque vector.
+Learned token projections, residual updates, generative hypotheses, and
+evidence-driven routing remain subsequent work.

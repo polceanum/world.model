@@ -11,6 +11,12 @@ from typing import TYPE_CHECKING
 import torch
 from torch import Tensor, nn
 
+from world_model.abstractions import (
+    AbstractionAssignment,
+    PredictiveAbstractionRouter,
+    PredictiveTokenBatch,
+    WorldBeliefTokenizer,
+)
 from world_model.belief import (
     BeliefFactory,
     BeliefTrajectory,
@@ -133,6 +139,8 @@ class OnlineWorldModel(nn.Module):
         self.state = RuntimeState()
         self.diagnostics = RuntimeDiagnostics()
         self._last_measurements: MeasurementSet | None = None
+        self.abstraction_router = PredictiveAbstractionRouter()
+        self.belief_tokenizer = WorldBeliefTokenizer(self.abstraction_router)
 
     @classmethod
     def from_config(
@@ -321,6 +329,25 @@ class OnlineWorldModel(nn.Module):
         """Detached measurements from the most recent scheduled observation."""
 
         return self._last_measurements
+
+    def predictive_abstractions(self) -> AbstractionAssignment:
+        """Return the current derived executable abstraction per entity.
+
+        ``WorldBelief`` remains authoritative; this method never caches a
+        second copy of physical state.
+        """
+
+        if self.state.belief is None:
+            raise RuntimeError("OnlineWorldModel must ingest an observation first")
+        return self.abstraction_router.route(self.state.belief)
+
+    def predictive_tokens(self) -> PredictiveTokenBatch:
+        """Return a reversible LLM-style typed token view of the current belief."""
+
+        if self.state.belief is None:
+            raise RuntimeError("OnlineWorldModel must ingest an observation first")
+        assignment = self.predictive_abstractions()
+        return self.belief_tokenizer.encode(self.state.belief, assignment)
 
     def reset(self, batch_size: int = 1) -> None:
         if batch_size <= 0:

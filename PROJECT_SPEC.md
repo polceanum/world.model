@@ -2,9 +2,9 @@
 
 ## Authoritative Technical Specification and Codex Build Directive
 
-**Status:** Initial authoritative specification  
-**Version:** 1.0  
-**Date:** 26 July 2026  
+**Status:** Living authoritative specification
+**Version:** 1.1
+**Date:** 26 July 2026; predictive-abstraction amendment 27 July 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -212,6 +212,52 @@ pytest
 
 No web service, authentication system, API tokens, job server, experiment database, Docker requirement, Kubernetes layer, or distributed orchestration is needed for the first implementation.
 
+### 3.11 Predictive abstractions are the scaling unit
+
+The system should extract the smallest persistent representation that is
+sufficient for useful prediction, rather than preserving sensor detail by
+default.  A freely moving ball may be represented by identity, a point,
+velocity, uncertainty, and a trajectory model.  When contact becomes relevant,
+the same entity may refine to a sphere with geometry, mass, restitution, and a
+contact operator.  The richer representation must not erase the cheaper one or
+create a second source of truth.
+
+Predictive abstractions must be:
+
+- **executable:** they name the state and operator needed to roll forward;
+- **persistent:** identity and inferred properties survive between observations;
+- **minimal:** use the least-complex implemented model that explains observations
+  within calibrated uncertainty;
+- **refinable:** entities may move between point, rigid-body, articulated,
+  field, or learned-residual representations as evidence and tasks require;
+- **compositional:** relations and events connect entities without fusing them
+  into an opaque scene vector;
+- **correctable:** every abstraction projects expected measurements so new
+  observations can produce innovation and revise the belief;
+- **hybrid:** explicit state is accompanied by bounded learned residual tokens
+  for information that the current schema does not yet explain.
+
+Modern foundation models, transformers, and generative objectives are
+perception and inference tools behind this contract.  They may propose
+entities, abstraction families, relations, residual tokens, or multiple future
+hypotheses.  They do not replace `WorldBelief` with an opaque video latent, and
+photorealistic generation is never sufficient evidence of correct physical
+prediction.
+
+The first implemented abstraction families are:
+
+1. `POINT_TRAJECTORY` for free motion using position, velocity, uncertainty,
+   and analytic/modal evolution; and
+2. `RIGID_SPHERE` when contact modes require radius and structured impulse
+   dynamics.
+
+All sphere properties remain stored in `WorldBelief` during cheap point
+execution so refinement is lossless.  Abstraction assignments and LLM-style
+tokens are derived views, never independently cached physical truth.
+The first mode-based assignment is inspectable but must not prune cheap
+contact-candidate detection; execution pruning requires a validated
+proximity/uncertainty gate that refines before an imminent interaction.
+
 ## 4. Scope
 
 ### 4.1 Initial scope
@@ -293,6 +339,17 @@ Without changing the core loop, the repository should support:
 **Association:** matching measurements to persistent object identities or declaring births, misses, and ambiguous assignments.
 
 **Event:** a discrete dynamics transition such as impact, contact, attachment, release, sleep, external actuation, creation, or removal.
+
+**Predictive abstraction:** the smallest typed state and executable evolution
+operator that explains an entity or process within calibrated uncertainty.
+
+**Residual token:** a bounded learned feature carried beside explicit state for
+appearance, semantics, or dynamics not yet captured by the selected
+abstraction.
+
+**Belief token:** a typed, reversible view of scene, camera, entity state,
+dynamical programme, or lifecycle information derived from `WorldBelief` for
+attention-based processing.
 
 ---
 
@@ -916,6 +973,35 @@ class BeliefTrajectory:
     event_logits: Tensor | None
     auxiliary: dict[str, Tensor]
 ```
+
+### 11.8 Predictive abstraction contracts
+
+`AbstractionAssignment` stores a model-family kind, selection confidence,
+complexity cost, refinement reason, and active mask for each `[B,N]` entity
+slot.  Selection confidence is distinct from physical-state uncertainty.
+
+`PredictiveTokenBatch` is a reversible derived view:
+
+```python
+@dataclass
+class PredictiveTokenBatch:
+    values: Tensor                    # [B,L,Dtoken]
+    valid_mask: Tensor                # [B,L]
+    token_type: Tensor                # [L]
+    object_slot: Tensor               # [L], -1 for scene/camera
+    object_id: Tensor                 # [B,L]
+    abstraction_kind: Tensor          # [B,L]
+    timestamp: Tensor                 # [B]
+    next_object_id: Tensor            # [B]
+    camera_calibrated: Tensor         # [B]
+```
+
+The initial token vocabulary is `SCENE`, `CAMERA`, `ENTITY_KINEMATIC`,
+`ENTITY_PROGRAM`, and `ENTITY_LIFECYCLE`.  Tokenization must round-trip the
+explicit belief exactly for a matching schema.  A future learned projection or
+causal transformer may consume these tokens, but transformer outputs must be
+decoded into typed proposals and assimilated through the existing
+predict–observe–associate–innovate–correct loop.
 
 ## 12. Invariants
 
@@ -3408,6 +3494,13 @@ Create the following from the empty repository. Small deviations are acceptable 
 │   ├── __init__.py
 │   ├── py.typed
 │   │
+│   ├── abstractions/
+│   │   ├── __init__.py
+│   │   ├── contracts.py
+│   │   ├── registry.py
+│   │   ├── router.py
+│   │   └── tokenizer.py
+│   │
 │   ├── belief/
 │   │   ├── __init__.py
 │   │   ├── object_belief.py
@@ -3969,6 +4062,8 @@ Milestone 1 is complete only when:
 
 After Milestone 1, improve without redesign:
 
+- typed predictive-abstraction registry and reversible belief-token layer;
+- evidence-driven abstraction selection and learned residual-token processing;
 - branch/merge hypotheses;
 - continuous collision timing;
 - richer object geometry;
@@ -4640,6 +4735,10 @@ A simple local PyTorch repository is the goal.
 Before completing a work session, verify:
 
 - Is `WorldBelief` still the persistent source of truth?
+- Are learned/generative latents subordinate to explicit executable
+  abstractions, with a reversible path back to typed belief proposals?
+- Does the system use the simplest abstraction that passes predictive and
+  uncertainty gates, rather than increasing model complexity by default?
 - Can a new modality be added without editing dynamics?
 - Does the runtime use timestamps?
 - Does a new frame correct the belief without weight training?

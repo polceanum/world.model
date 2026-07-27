@@ -10,3 +10,9 @@ slow parameter evidence only when observable.
 re-generated from the corrected posterior and do not require history replay or
 network-weight updates.
 
+The same belief can be viewed through a predictive-abstraction router. Free
+motion currently selects a cheap point trajectory; contact-like modes refine
+the entity to rigid-sphere execution. A reversible typed token adapter exposes
+scene, camera, kinematic, programme, and lifecycle information for future
+attention-based models. These are derived interfaces, not alternate runtime
+state.

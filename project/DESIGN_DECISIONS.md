@@ -628,3 +628,32 @@
   scale/height ambiguity is not claimed solved. Per the user's explicit
   cleanup request, superseded run directories were deleted after the accepted
   checkpoint and compact evidence were consolidated into one timestamped run.
+
+## ADR-039 — Predictive abstractions mediate foundation-model scaling
+
+- **Date:** 2026-07-27
+- **Status:** accepted; first contract increment implemented
+- **Context:** Scaling to realistic video with a monolithic video generator or
+  opaque transformer state would discard the useful compression already
+  demonstrated by representing a ball as a persistent point and trajectory.
+  Conversely, fixing every entity permanently to the sphere schema cannot
+  express articulated, field-like, or unknown processes.
+- **Decision:** Make the smallest executable predictive abstraction the unit
+  of scaling. `WorldBelief` remains authoritative and retains explicit state,
+  uncertainty, identity, geometry, slow parameters, and residual codes.
+  Abstraction assignments select an execution family as a derived view. The
+  first router uses `POINT_TRAJECTORY` for free motion and refines to
+  `RIGID_SPHERE` for contact-like modes. Add a reversible typed belief-token
+  interface for future foundation encoders and transformers.
+- **Alternatives considered:** replace the runtime with autoregressive video
+  generation; store a transformer KV cache as the only state; create a fixed
+  universal rigid-body ontology; add future abstraction names without
+  executors.
+- **Consequences:** existing checkpoints and runtime behavior are unchanged;
+  the new router/tokenizer contain no learned parameters and never cache a
+  second physical state. The router initially reports a recommended execution
+  family but does not prune the existing hybrid contact-candidate path, because
+  mode-only routing could miss an imminent collision. Future learned residuals,
+  routing, generative hypotheses, actions, and language must produce typed
+  proposals and pass structured prediction/calibration/complexity gates before
+  assimilation.

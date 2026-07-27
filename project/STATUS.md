@@ -1236,3 +1236,57 @@ Results: one Python file was reformatted and 155 were unchanged, Ruff passed,
 the existing MPS-conditional tests because MPS was unavailable to this
 process. The new GIF SHA-256 is
 `a164b44e0d581d37373f34346d447450ceb8a568ad13a438f1841773677628d4`.
+
+## Predictive-abstraction foundation (2026-07-27)
+
+`PROJECT_SPEC.md` is now version 1.1 and makes the smallest useful executable
+predictive abstraction the scaling unit. Foundation perception, transformers,
+and generative objectives may extract entities, residual information, model
+families, or future hypotheses, but `WorldBelief` remains authoritative and
+generated pixels are not accepted as evidence of correct physical state.
+
+The first source increment adds `world_model/abstractions/`:
+
+- an explicit registry containing implemented `POINT_TRAJECTORY` and
+  `RIGID_SPHERE` families;
+- a deterministic router that labels free-motion entities as cheap point
+  trajectories and contact-like modes as rigid spheres;
+- an `AbstractionAssignment` with kind, routing confidence, complexity cost,
+  reason, and active mask;
+- a parameter-free `WorldBeliefTokenizer` producing typed scene, camera,
+  entity-kinematic, dynamical-programme, and lifecycle tokens; and
+- exact decoding back into the matching belief schema, including identity,
+  masks, fast/slow state, uncertainty, modal state, camera, and lifecycle.
+
+`OnlineWorldModel.predictive_abstractions()` and
+`OnlineWorldModel.predictive_tokens()` expose these derived views. They do not
+cache a second physical state and introduce no model parameters or checkpoint
+keys. The current router is inspectable infrastructure, not a trained result:
+it does not yet prune the existing hybrid dynamics path because mode-only
+routing could miss a not-yet-labelled imminent collision. A validated
+proximity/uncertainty refinement gate and evidence-driven selection must
+precede assignment-controlled execution.
+
+Focused validation:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus \
+  pytest tests/unit/test_predictive_abstractions.py \
+  tests/unit/test_belief_invariants.py tests/unit/test_packing.py
+```
+
+Result: `14 passed in 1.29 s`.
+
+Full source validation:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff format .
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
+```
+
+Results: all 162 Python files were already formatted, Ruff passed, and
+`213 passed, 3 skipped in 62.23 s`. The skips remain the MPS-conditional tests
+because this subprocess reports MPS unavailable. No training or held-out
+evaluation was run for this parameter-free contract increment, so the selected
+checkpoint and recorded accuracy metrics are unchanged.

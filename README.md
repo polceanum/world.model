@@ -6,6 +6,12 @@ sensor measurements, associates observations, computes innovation, corrects the
 posterior, updates observable slow parameters, and immediately revises future
 rollouts.
 
+Its scaling principle is predictive abstraction: retain the smallest
+executable representation that predicts well. A freely moving ball can be a
+point with a trajectory; contact can refine the same persistent entity into a
+rigid sphere. Learned foundation-model features and residual tokens may enrich
+that state, but `WorldBelief` remains authoritative.
+
 ```text
 RGB + calibration + timestamp
              │
@@ -133,6 +139,7 @@ experiment, not a result claimed here.
 - [Current status](project/STATUS.md)
 - [Architecture](project/ARCHITECTURE.md)
 - [Data contracts](project/DATA_CONTRACTS.md)
+- [Predictive abstractions](project/PREDICTIVE_ABSTRACTIONS.md)
 - [Getting started](docs/getting_started.md)
 - [Known work](project/TASKS.md)
 

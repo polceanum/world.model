@@ -11,3 +11,9 @@ the full architecture—identity, collisions, occlusion, uncertainty, and online
 physical-parameter identification—not to claim a general visual world model.
 See `PROJECT_SPEC.md` for the complete contract.
 
+The scaling unit is a predictive abstraction: the smallest persistent,
+executable representation that explains observations within calibrated
+uncertainty. A ball should remain a point with a trajectory when that is
+sufficient and refine to a sphere/contact model only when interaction demands
+it. Foundation models and generative objectives extract and complete these
+abstractions; they do not replace the world belief with generated pixels.
