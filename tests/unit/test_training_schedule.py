@@ -10,12 +10,15 @@ from torch import nn
 from world_model.runtime import OnlineWorldModel
 from world_model.training.loop import (
     TrainingBatchResult,
+    _globally_weight_horizon_details,
     _group_closed_loop_terms,
     _weighted_closed_loop_total,
     _weighted_measurement_total,
+    rollout_horizon_loss_key,
     select_closed_loop_window,
 )
 from world_model.training.trainer import (
+    _rollout_selection_is_compatible,
     _validation_loader_result,
     _validation_step,
     measurement_pretrain_frame_index,
@@ -145,6 +148,41 @@ def test_measurement_weights_keep_metric_position_primary() -> None:
     torch.testing.assert_close(total, torch.tensor(1.75))
 
 
+def test_rollout_horizons_are_weighted_after_per_horizon_averaging() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    details = {
+        rollout_horizon_loss_key("rollout_position", 0.1): torch.tensor(1.0),
+        rollout_horizon_loss_key("rollout_position", 0.25): torch.tensor(2.0),
+        rollout_horizon_loss_key("rollout_position", 0.5): torch.tensor(4.0),
+        rollout_horizon_loss_key("rollout_velocity", 0.1): torch.tensor(3.0),
+        rollout_horizon_loss_key("rollout_velocity", 0.25): torch.tensor(3.0),
+        rollout_horizon_loss_key("rollout_velocity", 0.5): torch.tensor(3.0),
+    }
+
+    balanced = _globally_weight_horizon_details(details, config, torch.zeros(()))
+
+    torch.testing.assert_close(
+        balanced["rollout_position"],
+        torch.tensor((1.0 * 1.0 + 1.5 * 2.0 + 2.0 * 4.0) / 4.5),
+    )
+    torch.testing.assert_close(balanced["rollout_velocity"], torch.tensor(3.0))
+
+
+def test_missing_long_horizon_does_not_renormalize_short_losses() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    details = {
+        rollout_horizon_loss_key("rollout_position", 0.1): torch.tensor(1.0),
+        rollout_horizon_loss_key("rollout_position", 0.25): torch.tensor(2.0),
+    }
+
+    balanced = _globally_weight_horizon_details(details, config, torch.zeros(()))
+
+    torch.testing.assert_close(
+        balanced["rollout_position"],
+        torch.tensor((1.0 * 1.0 + 1.5 * 2.0) / 4.5),
+    )
+
+
 def test_closed_loop_window_can_be_conditioned_on_collision() -> None:
     batch = {
         "rgb": torch.zeros((2, 10, 3, 8, 8)),
@@ -163,6 +201,67 @@ def test_closed_loop_window_can_be_conditioned_on_collision() -> None:
 
     assert 0 <= start <= 6
     assert start <= 7 < start + 4
+
+
+def test_closed_loop_window_can_require_a_maximum_horizon_anchor() -> None:
+    batch = {
+        "rgb": torch.zeros((2, 16, 3, 8, 8)),
+        "events": {
+            "collision": torch.zeros((2, 16, 3), dtype=torch.bool),
+        },
+    }
+    random.seed(19)
+
+    starts = {
+        select_closed_loop_window(
+            batch,
+            6,
+            event_condition_probability=0.0,
+            maximum_rollout_frame_offset=10,
+            long_horizon_probability=1.0,
+        )
+        for _ in range(32)
+    }
+
+    assert starts
+    assert starts <= set(range(6))
+
+
+def test_collision_conditioning_takes_priority_over_long_horizon_window() -> None:
+    batch = {
+        "rgb": torch.zeros((1, 32, 3, 8, 8)),
+        "events": {
+            "collision": torch.zeros((1, 32, 2), dtype=torch.bool),
+        },
+    }
+    batch["events"]["collision"][0, 31, 0] = True
+    random.seed(23)
+
+    start = select_closed_loop_window(
+        batch,
+        8,
+        event_condition_probability=1.0,
+        maximum_rollout_frame_offset=20,
+        long_horizon_probability=1.0,
+    )
+
+    assert start == 24
+    assert start <= 31 < start + 8
+
+
+def test_legacy_rollout_score_is_not_reused_after_objective_fix() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    payload = {
+        "config": config.to_dict(),
+        "metrics": {
+            "best_rollout_validated": 1.0,
+            "best_rollout_position_loss": 0.01,
+        },
+    }
+
+    assert not _rollout_selection_is_compatible(payload, config)
+    payload["metrics"]["rollout_selection_metric_version"] = 2.0
+    assert _rollout_selection_is_compatible(payload, config)
 
 
 class _ModeOnlyModel:

@@ -34,6 +34,7 @@ from world_model.utils.seeds import seed_everything
 
 _SAFE_RUN_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _ROLLOUT_SELECTION_MIN_DELTA = 1.0e-5
+_ROLLOUT_SELECTION_METRIC_VERSION = 2.0
 
 
 def _repository_root(config: OrpheusConfig) -> Path:
@@ -142,6 +143,38 @@ def _result_metrics(
     if gradient_norm is not None:
         metrics["gradient_norm"] = float(gradient_norm)
     return metrics
+
+
+def _rollout_selection_is_compatible(
+    payload: Mapping[str, Any],
+    config: OrpheusConfig,
+) -> bool:
+    """Return whether a resumed best score uses this objective's semantics."""
+
+    metrics = payload.get("metrics")
+    checkpoint_config = payload.get("config")
+    if not isinstance(metrics, Mapping) or not isinstance(checkpoint_config, Mapping):
+        return False
+    try:
+        version = float(metrics.get("rollout_selection_metric_version", 0.0))
+    except (TypeError, ValueError):
+        return False
+    if version != _ROLLOUT_SELECTION_METRIC_VERSION:
+        return False
+    checkpoint_training = checkpoint_config.get("training")
+    checkpoint_evaluation = checkpoint_config.get("evaluation")
+    if not isinstance(checkpoint_training, Mapping) or not isinstance(
+        checkpoint_evaluation,
+        Mapping,
+    ):
+        return False
+    requested = config.to_dict()
+    return (
+        checkpoint_training.get("horizon_weights")
+        == requested["training"]["horizon_weights"]
+        and checkpoint_evaluation.get("horizons_seconds")
+        == requested["evaluation"]["horizons_seconds"]
+    )
 
 
 def measurement_pretrain_frame_index(
@@ -437,6 +470,11 @@ def train_from_config(
         best_measurement_validated = bool(
             float(resume_metrics.get("best_measurement_validated", 0.0))
         )
+        if best_rollout_validated and not _rollout_selection_is_compatible(payload, config):
+            # A numerically smaller score from the legacy per-anchor objective,
+            # or from a different horizon set, is not comparable with the
+            # globally horizon-balanced physical-position objective.
+            best_rollout_validated = False
         if best_rollout_validated:
             position_metric = resume_metrics.get("best_rollout_position_loss")
             if position_metric is None:
@@ -524,10 +562,21 @@ def train_from_config(
             )
             total_frames = int(batch["rgb"].shape[1])
             window_steps = min(total_frames, config.training.tbptt_steps)
+            maximum_rollout_frame_offset = max(
+                max(
+                    1,
+                    int(round(horizon * config.simulator.frame_rate)),
+                )
+                for horizon in config.evaluation.horizons_seconds
+            )
             window_start = select_closed_loop_window(
                 batch,
                 window_steps,
                 event_condition_probability=(config.training.collision_window_probability),
+                maximum_rollout_frame_offset=maximum_rollout_frame_offset,
+                long_horizon_probability=(
+                    config.training.long_horizon_window_probability
+                ),
             )
             result = run_closed_loop_batch(
                 model,
@@ -614,6 +663,11 @@ def train_from_config(
                 if improved:
                     best_rollout = rollout_position_metric
                     best_rollout_validated = True
+                    per_horizon_metrics = {
+                        f"validation_{name}": float(value)
+                        for name, value in validation.metrics.items()
+                        if name.startswith("rollout_position@")
+                    }
                     save_checkpoint(
                         best_rollout_path,
                         model=model,
@@ -629,6 +683,10 @@ def train_from_config(
                             "best_rollout_loss": best_rollout,
                             "best_rollout_position_loss": best_rollout,
                             "best_rollout_validated": 1.0,
+                            "rollout_selection_metric_version": (
+                                _ROLLOUT_SELECTION_METRIC_VERSION
+                            ),
+                            **per_horizon_metrics,
                             "best_measurement_validated": float(best_measurement_validated),
                             **(
                                 {
@@ -666,6 +724,9 @@ def train_from_config(
                             "best_measurement_world_position_mae_m": best_measurement,
                             "best_measurement_validated": 1.0,
                             "best_rollout_validated": float(best_rollout_validated),
+                            "rollout_selection_metric_version": (
+                                _ROLLOUT_SELECTION_METRIC_VERSION
+                            ),
                             **(
                                 {
                                     "best_rollout_loss": best_rollout,
@@ -690,6 +751,9 @@ def train_from_config(
             }
             checkpoint_metrics["best_rollout_validated"] = float(best_rollout_validated)
             checkpoint_metrics["best_measurement_validated"] = float(best_measurement_validated)
+            checkpoint_metrics["rollout_selection_metric_version"] = (
+                _ROLLOUT_SELECTION_METRIC_VERSION
+            )
             if best_rollout_validated:
                 checkpoint_metrics["best_rollout_loss"] = best_rollout
                 checkpoint_metrics["best_rollout_position_loss"] = best_rollout
@@ -712,6 +776,7 @@ def train_from_config(
         selection_metrics = {
             "best_rollout_validated": float(best_rollout_validated),
             "best_measurement_validated": float(best_measurement_validated),
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
         }
         if best_rollout_validated:
             selection_metrics["best_rollout_loss"] = best_rollout
@@ -758,6 +823,7 @@ def train_from_config(
         "best_measurement_validated": best_measurement_validated,
         "best_rollout_loss": best_rollout if best_rollout_validated else None,
         "best_rollout_position_loss": (best_rollout if best_rollout_validated else None),
+        "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
         "best_measurement_loss": (best_measurement if best_measurement_validated else None),
         "best_measurement_world_position_mae_m": (
             best_measurement if best_measurement_validated else None

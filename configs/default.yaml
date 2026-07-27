@@ -131,6 +131,7 @@ training:
   perturbation_position_std: 0.12
   perturbation_velocity_std: 0.20
   collision_window_probability: 0.50
+  long_horizon_window_probability: 0.50
   collision_positive_weight_max: 10.0
   horizon_weights: [1.0, 1.0, 1.2, 1.5, 1.5]
   measurement_loss_weights:

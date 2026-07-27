@@ -130,6 +130,11 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         == best_rollout_payload["metrics"]["best_rollout_position_loss"]
         == best_rollout_payload["metrics"]["validation_rollout_position_loss"]
     )
+    assert best_rollout_payload["metrics"]["rollout_selection_metric_version"] == 2.0
+    assert any(
+        name.startswith("validation_rollout_position@")
+        for name in best_rollout_payload["metrics"]
+    )
     training_records = [
         json.loads(line)
         for line in (run_directory / "metrics.jsonl").read_text(encoding="utf-8").splitlines()

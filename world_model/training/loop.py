@@ -534,6 +534,57 @@ def _valid_rollout_offsets(
     )
 
 
+def rollout_horizon_loss_key(name: str, seconds: float) -> str:
+    """Return the stable metric key for one physical rollout horizon."""
+
+    return f"{name}@{seconds:.3f}s"
+
+
+def _globally_weight_horizon_details(
+    details: dict[str, Tensor],
+    config: OrpheusConfig,
+    reference: Tensor,
+) -> dict[str, Tensor]:
+    """Aggregate each horizon after averaging only its eligible anchors.
+
+    A short horizon is available at more episode anchors than a long one.
+    Normalising horizon weights independently at every anchor therefore lets
+    numerous late short-only anchors overwhelm the configured long-horizon
+    weight. Per-horizon means make ``training.horizon_weights`` describe the
+    intended global objective.
+    """
+
+    output = dict(details)
+    unique_horizons: list[tuple[float, float]] = []
+    seen_offsets: set[int] = set()
+    for horizon, weight in zip(
+        config.evaluation.horizons_seconds,
+        config.training.horizon_weights,
+        strict=True,
+    ):
+        frame_offset = max(1, int(round(float(horizon) * config.simulator.frame_rate)))
+        if frame_offset in seen_offsets:
+            continue
+        seen_offsets.add(frame_offset)
+        unique_horizons.append((frame_offset / config.simulator.frame_rate, float(weight)))
+    configured_weight_total = sum(weight for _, weight in unique_horizons)
+
+    for name in ("rollout_position", "rollout_velocity", "correction_future"):
+        values: list[Tensor] = []
+        weights: list[float] = []
+        for seconds, weight in unique_horizons:
+            key = rollout_horizon_loss_key(name, seconds)
+            if key in details:
+                values.append(details[key])
+                weights.append(weight)
+        if values:
+            horizon_weights = reference.new_tensor(weights)
+            output[name] = (
+                torch.stack(values) * horizon_weights
+            ).sum() / max(configured_weight_total, 1.0e-8)
+    return output
+
+
 def _belief_state_losses(
     belief: WorldBelief,
     batch: Mapping[str, Any],
@@ -601,7 +652,7 @@ def _rollout_losses(
     matched: Tensor,
 ) -> dict[str, Tensor]:
     total_frames = int(batch["rgb"].shape[1])
-    frame_offsets, _, horizon_weights = _valid_rollout_offsets(
+    frame_offsets, query_seconds, horizon_weights = _valid_rollout_offsets(
         config,
         frame_index,
         total_frames,
@@ -631,6 +682,7 @@ def _rollout_losses(
     )
     position_losses: list[Tensor] = []
     velocity_losses: list[Tensor] = []
+    horizon_losses: dict[str, Tensor] = {}
     event_losses: list[Tensor] = []
     event_weights: list[float] = []
     for query_index, frame_offset in enumerate(frame_offsets):
@@ -652,20 +704,21 @@ def _rollout_losses(
         target_velocity = gather_target_slots(
             batch["objects"]["velocity"][:, target_index], indices
         )
-        position_losses.append(
-            masked_huber(
-                target_positions[:, query_index],
-                target_position,
-                valid,
-            )
+        position_loss = masked_huber(
+            target_positions[:, query_index],
+            target_position,
+            valid,
         )
-        velocity_losses.append(
-            masked_huber(
-                target_velocities[:, query_index],
-                target_velocity,
-                valid,
-            )
+        velocity_loss = masked_huber(
+            target_velocities[:, query_index],
+            target_velocity,
+            valid,
         )
+        position_losses.append(position_loss)
+        velocity_losses.append(velocity_loss)
+        seconds = query_seconds[query_index]
+        horizon_losses[rollout_horizon_loss_key("rollout_position", seconds)] = position_loss
+        horizon_losses[rollout_horizon_loss_key("rollout_velocity", seconds)] = velocity_loss
         if target_event_logits is not None:
             event_target = (
                 gather_target_slots(
@@ -701,6 +754,7 @@ def _rollout_losses(
         "rollout_position": weighted_mean(position_losses, horizon_weights),
         "rollout_velocity": weighted_mean(velocity_losses, horizon_weights),
         "event_collision": weighted_mean(event_losses, event_weights),
+        **horizon_losses,
     }
 
 
@@ -777,12 +831,15 @@ def select_closed_loop_window(
     window_steps: int,
     *,
     event_condition_probability: float = 0.5,
+    maximum_rollout_frame_offset: int | None = None,
+    long_horizon_probability: float = 0.0,
 ) -> int:
     """Sample a valid TBPTT window, preferentially covering collision frames.
 
     The returned start is stochastic under the trainer's seeded Python RNG.
-    When collision labels are available, half of windows by default place a
-    randomly selected collision inside the trainable span.  Labels select only
+    Collision conditioning has first priority so late events remain trainable.
+    Among the remaining windows, long-horizon conditioning can require the
+    first anchor to support the maximum configured rollout. Labels select only
     the loss window; they are never passed to the RGB runtime.
     """
 
@@ -794,6 +851,10 @@ def select_closed_loop_window(
         raise ValueError("window_steps must lie in [1, episode_frames]")
     if not 0.0 <= event_condition_probability <= 1.0:
         raise ValueError("event_condition_probability must lie in [0, 1]")
+    if not 0.0 <= long_horizon_probability <= 1.0:
+        raise ValueError("long_horizon_probability must lie in [0, 1]")
+    if maximum_rollout_frame_offset is not None and maximum_rollout_frame_offset <= 0:
+        raise ValueError("maximum_rollout_frame_offset must be positive")
     maximum_start = total_frames - window_steps
     if maximum_start == 0:
         return 0
@@ -824,6 +885,16 @@ def select_closed_loop_window(
             maximum_event_start = min(maximum_event_start, event_frame - 1)
         if minimum_start <= maximum_event_start:
             return random.randint(minimum_start, maximum_event_start)
+    condition_on_long_horizon = long_horizon_probability >= 1.0 or (
+        long_horizon_probability > 0.0 and random.random() < long_horizon_probability
+    )
+    if condition_on_long_horizon and maximum_rollout_frame_offset is not None:
+        last_eligible_anchor = total_frames - maximum_rollout_frame_offset - 1
+        if last_eligible_anchor < 0:
+            raise ValueError("maximum rollout frame offset exceeds the episode")
+        # Among non-event-conditioned windows, make the first trainable frame
+        # itself a valid maximum-horizon anchor.
+        maximum_start = min(maximum_start, last_eligible_anchor)
     return random.randint(0, maximum_start)
 
 
@@ -1074,6 +1145,13 @@ def run_closed_loop_batch(
                             valid,
                         )
                     )
+                    add(
+                        rollout_horizon_loss_key(
+                            "correction_future",
+                            query_seconds[query_index],
+                        ),
+                        correction_losses[-1],
+                    )
             if deltas:
                 future_correction_improvements.append(
                     float(torch.stack(deltas).mean().detach().cpu())
@@ -1110,6 +1188,7 @@ def run_closed_loop_batch(
 
     reference = rgb
     details = {name: _mean_losses(values, reference) for name, values in detail_lists.items()}
+    details = _globally_weight_horizon_details(details, config, reference)
     terms = _group_closed_loop_terms(details, reference)
     total = _weighted_closed_loop_total(terms, config.training.loss_weights)
     metrics = {name: float(value.detach().cpu()) for name, value in details.items()}

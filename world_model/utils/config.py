@@ -200,6 +200,7 @@ class TrainingConfig:
     perturbation_position_std: float = 0.12
     perturbation_velocity_std: float = 0.20
     collision_window_probability: float = 0.50
+    long_horizon_window_probability: float = 0.50
     collision_positive_weight_max: float = 10.0
     horizon_weights: tuple[float, ...] = (1.0, 1.0, 1.2, 1.5, 1.5)
     measurement_loss_weights: dict[str, float] = field(
@@ -426,6 +427,8 @@ class OrpheusConfig:
             raise ValueError("training.perturbation_velocity_std must be finite and positive")
         if not 0 <= self.training.collision_window_probability <= 1:
             raise ValueError("training.collision_window_probability must lie in [0, 1]")
+        if not 0 <= self.training.long_horizon_window_probability <= 1:
+            raise ValueError("training.long_horizon_window_probability must lie in [0, 1]")
         if self.training.collision_positive_weight_max < 1:
             raise ValueError("training.collision_positive_weight_max must be at least one")
 

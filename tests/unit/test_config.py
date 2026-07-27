@@ -120,6 +120,15 @@ def test_collision_positive_weight_is_at_least_one() -> None:
         )
 
 
+@pytest.mark.parametrize("probability", [-0.1, 1.1])
+def test_long_horizon_window_probability_is_bounded(probability: float) -> None:
+    with pytest.raises(ValueError, match="long_horizon_window_probability"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.long_horizon_window_probability={probability}"],
+        )
+
+
 @pytest.mark.parametrize(
     ("key", "value"),
     [

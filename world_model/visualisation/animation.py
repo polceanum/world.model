@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from matplotlib.lines import Line2D
 from PIL import Image
 from scipy.optimize import linear_sum_assignment
 
@@ -23,6 +25,31 @@ from world_model.visualisation.frames import normalized_to_pixels, overlay_point
 from world_model.visualisation.plots import save_parameter_plot
 from world_model.visualisation.trajectories import plot_xy_trajectory
 from world_model.visualisation.uncertainty import add_uncertainty_ellipse
+
+
+@dataclass(frozen=True)
+class _PositionMatches:
+    """Evaluation-only endpoint matches used by the demo overlay."""
+
+    prediction_indices: np.ndarray
+    target_indices: np.ndarray
+    prediction_points: np.ndarray
+    target_points: np.ndarray
+    distances: np.ndarray
+
+    @property
+    def mean_error(self) -> float:
+        return float(self.distances.mean()) if self.distances.size else float("nan")
+
+
+@dataclass(frozen=True)
+class _ForecastTrace:
+    """One posterior forecast retained in absolute world coordinates."""
+
+    anchor_index: int
+    anchor_timestamp: float
+    positions: np.ndarray
+    active: np.ndarray
 
 
 def _packet(
@@ -45,19 +72,236 @@ def _packet(
     )
 
 
+def _match_positions(
+    prediction: torch.Tensor,
+    target: torch.Tensor,
+    prediction_mask: torch.Tensor,
+    target_mask: torch.Tensor,
+) -> _PositionMatches:
+    """Hungarian-match endpoints without exposing labels to the runtime."""
+
+    if prediction.ndim != 2 or target.ndim != 2 or prediction.shape[-1] != target.shape[-1]:
+        raise ValueError("prediction and target must have compatible [N,D] shapes")
+    if prediction_mask.shape != prediction.shape[:1]:
+        raise ValueError("prediction_mask must match the prediction object axis")
+    if target_mask.shape != target.shape[:1]:
+        raise ValueError("target_mask must match the target object axis")
+    prediction_indices = torch.nonzero(prediction_mask, as_tuple=False).flatten().detach().cpu()
+    target_indices = torch.nonzero(target_mask, as_tuple=False).flatten().detach().cpu()
+    predicted = prediction.index_select(0, prediction_indices.to(prediction.device)).detach().cpu()
+    truth = target.index_select(0, target_indices.to(target.device)).detach().cpu()
+    if predicted.numel() == 0 or truth.numel() == 0:
+        dimension = int(prediction.shape[-1])
+        return _PositionMatches(
+            prediction_indices=np.empty(0, dtype=np.int64),
+            target_indices=np.empty(0, dtype=np.int64),
+            prediction_points=np.empty((0, dimension), dtype=np.float32),
+            target_points=np.empty((0, dimension), dtype=np.float32),
+            distances=np.empty(0, dtype=np.float32),
+        )
+    cost = torch.cdist(predicted, truth)
+    rows, columns = linear_sum_assignment(cost.numpy())
+    row_tensor = torch.as_tensor(rows, dtype=torch.int64)
+    column_tensor = torch.as_tensor(columns, dtype=torch.int64)
+    return _PositionMatches(
+        prediction_indices=prediction_indices[row_tensor].numpy(),
+        target_indices=target_indices[column_tensor].numpy(),
+        prediction_points=predicted[row_tensor].numpy(),
+        target_points=truth[column_tensor].numpy(),
+        distances=cost[row_tensor, column_tensor].numpy(),
+    )
+
+
 def _matched_error(
     prediction: torch.Tensor,
     target: torch.Tensor,
     prediction_mask: torch.Tensor,
     target_mask: torch.Tensor,
 ) -> float:
-    predicted = prediction[prediction_mask].detach().cpu()
-    truth = target[target_mask].detach().cpu()
-    if predicted.numel() == 0 or truth.numel() == 0:
-        return float("nan")
-    cost = torch.cdist(predicted, truth)
-    rows, columns = linear_sum_assignment(cost.numpy())
-    return float(cost[rows, columns].mean())
+    return _match_positions(prediction, target, prediction_mask, target_mask).mean_error
+
+
+def _future_query_seconds(
+    timestamps: torch.Tensor,
+    anchor_index: int,
+    future_index: int,
+) -> list[float]:
+    """Return observation-aligned positive offsets for a displayed rollout."""
+
+    if timestamps.ndim != 1:
+        raise ValueError("demo timestamps must have shape [T]")
+    if not 0 <= anchor_index <= future_index < timestamps.shape[0]:
+        raise IndexError("demo forecast indices are outside the timestamp axis")
+    anchor = float(timestamps[anchor_index])
+    return [
+        float(timestamps[index]) - anchor
+        for index in range(anchor_index + 1, future_index + 1)
+    ]
+
+
+def _history_alpha(index: int, count: int) -> float:
+    """Fade older forecasts while keeping every retained trace visible."""
+
+    if count <= 0 or not 0 <= index < count:
+        raise ValueError("history alpha index must lie inside a nonempty history")
+    recency = (index + 1) / count
+    return 0.04 + 0.24 * recency
+
+
+def _plot_historical_forecasts(
+    axis: Any,
+    forecasts: list[_ForecastTrace],
+) -> list[Line2D]:
+    """Plot forecasts at their original absolute anchors with recency fading."""
+
+    lines: list[Line2D] = []
+    for index, forecast in enumerate(forecasts):
+        lines.extend(
+            plot_xy_trajectory(
+                axis,
+                forecast.positions,
+                forecast.active,
+                color="seagreen",
+                label=None,
+                alpha=_history_alpha(index, len(forecasts)),
+                linewidth=0.8,
+                zorder=2,
+            )
+        )
+    return lines
+
+
+def _configure_world_axis(
+    axis: Any,
+    world_bounds: tuple[tuple[float, float], ...],
+) -> None:
+    """Fix the world panel geometry so GIF frames do not jump or rescale."""
+
+    if len(world_bounds) < 2:
+        raise ValueError("world bounds must provide x and y limits")
+    x_min, x_max = world_bounds[0]
+    y_min, y_max = world_bounds[1]
+    x_padding = 0.04 * (x_max - x_min)
+    y_padding = 0.04 * (y_max - y_min)
+    axis.set_xlim(x_min - x_padding, x_max + x_padding)
+    axis.set_ylim(y_min - y_padding, y_max + y_padding)
+    axis.set_aspect("equal", adjustable="box")
+    axis.set_xlabel("world x (m)")
+    axis.set_ylabel("world y (m)")
+    axis.grid(alpha=0.2)
+
+
+def _add_image_legend(axis: Any) -> None:
+    handles = [
+        Line2D(
+            [],
+            [],
+            color="yellow",
+            marker="x",
+            linestyle="None",
+            label="scheduled RGB measurement",
+        ),
+        Line2D(
+            [],
+            [],
+            color="orange",
+            marker="o",
+            markerfacecolor="none",
+            linestyle="None",
+            label="prior",
+        ),
+        Line2D(
+            [],
+            [],
+            color="lime",
+            marker="o",
+            markerfacecolor="none",
+            linestyle="None",
+            label="posterior",
+        ),
+        Line2D(
+            [],
+            [],
+            color="white",
+            marker="+",
+            linestyle="None",
+            label="ground truth overlay",
+        ),
+    ]
+    axis.legend(handles=handles, loc="lower right", fontsize=7, framealpha=0.85)
+
+
+def _add_world_legend(axis: Any) -> None:
+    handles = [
+        Line2D([], [], color="royalblue", linewidth=1.4, label="GT trajectory overlay"),
+        Line2D(
+            [],
+            [],
+            color="seagreen",
+            linewidth=1.0,
+            alpha=0.35,
+            label="historical posterior forecasts",
+        ),
+        Line2D(
+            [],
+            [],
+            color="orangered",
+            linestyle="--",
+            linewidth=1.2,
+            label="latest prior forecast",
+        ),
+        Line2D([], [], color="green", linewidth=1.6, label="latest posterior forecast"),
+        Line2D(
+            [],
+            [],
+            color="black",
+            marker="o",
+            markerfacecolor="none",
+            linestyle=":",
+            linewidth=0.8,
+            label="posterior endpoint ↔ matched GT",
+        ),
+    ]
+    axis.legend(handles=handles, loc="lower right", fontsize=7, framealpha=0.9)
+
+
+def _draw_endpoint_matches(axis: Any, matches: _PositionMatches) -> None:
+    for predicted, target in zip(
+        matches.prediction_points,
+        matches.target_points,
+        strict=True,
+    ):
+        axis.plot(
+            [predicted[0], target[0]],
+            [predicted[1], target[1]],
+            color="black",
+            linestyle=":",
+            linewidth=0.8,
+            alpha=0.8,
+            zorder=6,
+        )
+    if matches.prediction_points.size:
+        axis.scatter(
+            matches.prediction_points[:, 0],
+            matches.prediction_points[:, 1],
+            marker="o",
+            facecolors="none",
+            edgecolors="green",
+            linewidths=1.2,
+            zorder=7,
+        )
+        axis.scatter(
+            matches.target_points[:, 0],
+            matches.target_points[:, 1],
+            marker="x",
+            color="royalblue",
+            linewidths=1.2,
+            zorder=7,
+        )
+
+
+def _optional_number(value: float) -> float | None:
+    return float(value) if np.isfinite(value) else None
 
 
 def _project_world(
@@ -120,6 +364,8 @@ def create_demo(
     estimated_restitution: list[float] = []
     target_drag: list[float] = []
     target_restitution: list[float] = []
+    forecast_history: list[_ForecastTrace] = []
+    per_frame_metrics: list[dict[str, Any]] = []
 
     with torch.no_grad():
         for index in range(count):
@@ -128,9 +374,13 @@ def create_demo(
                 total_frames - 1,
                 index + round(horizon * config.simulator.frame_rate),
             )
-            future_seconds = float(
-                episode["timestamps"][future_index] - episode["timestamps"][index]
+            query_seconds = _future_query_seconds(
+                episode["timestamps"],
+                index,
+                future_index,
             )
+            future_seconds = query_seconds[-1] if query_seconds else 0.0
+            rollout_queries = query_seconds if query_seconds else [0.0]
             previous = model.belief
             prior = None
             prior_future = None
@@ -143,13 +393,13 @@ def create_demo(
                     - previous.timestamp
                 )
                 prior = model.dynamics.predict(previous, dt)
-                prior_future = model.dynamics.rollout(prior, [future_seconds])
+                prior_future = model.dynamics.rollout(prior, rollout_queries)
 
             posterior = model.ingest(packet)
             measured = model.last_measurements
             if measured is None:
                 raise RuntimeError("runtime did not retain its scheduled RGB measurements")
-            posterior_future = model.predict([future_seconds])
+            posterior_future = model.predict(rollout_queries)
             observation_mode = (
                 model.diagnostics.latest.observation_mode
                 if model.diagnostics.latest is not None
@@ -166,6 +416,15 @@ def create_demo(
             current_prior_error = float("nan")
             future_prior_error = float("nan")
             future_posterior_error = float("nan")
+            future_matches: _PositionMatches | None = None
+            if future_seconds > 0.0:
+                future_matches = _match_positions(
+                    posterior_future.positions[0, -1],
+                    future_target_position,
+                    posterior_future.active_mask[0, -1],
+                    future_target_active,
+                )
+                future_posterior_error = future_matches.mean_error
             if prior is not None:
                 current_prior_error = _matched_error(
                     prior.objects.position[0],
@@ -181,12 +440,6 @@ def create_demo(
                         prior_future.active_mask[0, -1],
                         future_target_active,
                     )
-                    future_posterior_error = _matched_error(
-                        posterior_future.positions[0, -1],
-                        future_target_position,
-                        posterior_future.active_mask[0, -1],
-                        future_target_active,
-                    )
                     prior_future_errors.append(future_prior_error)
                     posterior_future_errors.append(future_posterior_error)
             current_posterior_error = _matched_error(
@@ -199,15 +452,39 @@ def create_demo(
             if posterior_future.event_logits is None:
                 predicted_collision_probability = float("nan")
             else:
-                event_probability = posterior_future.event_logits[0, -1].softmax(dim=-1)
-                future_active = posterior_future.active_mask[0, -1]
+                event_probability = posterior_future.event_logits[0].softmax(dim=-1)
+                future_active = posterior_future.active_mask[0]
                 if future_active.any():
                     predicted_collision_probability = float(
-                        event_probability[future_active, MotionMode.COLLISION].max().cpu()
+                        event_probability[..., MotionMode.COLLISION]
+                        .masked_select(future_active)
+                        .max()
+                        .cpu()
                     )
                 else:
                     predicted_collision_probability = float("nan")
             predicted_collision_probabilities.append(predicted_collision_probability)
+            if future_seconds > 0.0:
+                forecast_history.append(
+                    _ForecastTrace(
+                        anchor_index=index,
+                        anchor_timestamp=packet.timestamp,
+                        positions=np.concatenate(
+                            (
+                                posterior.objects.position[:, None].cpu().numpy(),
+                                posterior_future.positions.cpu().numpy(),
+                            ),
+                            axis=1,
+                        )[0],
+                        active=np.concatenate(
+                            (
+                                posterior.objects.active[:, None].cpu().numpy(),
+                                posterior_future.active_mask.cpu().numpy(),
+                            ),
+                            axis=1,
+                        )[0],
+                    )
+                )
 
             active = posterior.objects.active[0]
             if active.any():
@@ -226,6 +503,22 @@ def create_demo(
                 float(episode["objects"]["restitution"][index, visible_target].mean())
             )
             parameter_timestamps.append(packet.timestamp)
+            per_frame_metrics.append(
+                {
+                    "frame_index": index,
+                    "timestamp_seconds": packet.timestamp,
+                    "forecast_horizon_seconds": future_seconds,
+                    "observation_mode": observation_mode,
+                    "current_prior_error_m": _optional_number(current_prior_error),
+                    "current_posterior_error_m": _optional_number(current_posterior_error),
+                    "future_prior_error_m": _optional_number(future_prior_error),
+                    "future_posterior_error_m": _optional_number(future_posterior_error),
+                    "future_matched_pairs": (
+                        int(future_matches.distances.size) if future_matches is not None else 0
+                    ),
+                    "future_target_objects": int(future_target_active.sum()),
+                }
+            )
 
             figure, axes = plt.subplots(1, 2, figsize=(11, 4.5))
             image = episode["rgb"][index].permute(1, 2, 0).numpy()
@@ -240,7 +533,7 @@ def create_demo(
                 measurement_pixels,
                 color="yellow",
                 marker="x",
-                label=f"{observation_mode} measurement",
+                label="scheduled RGB measurement",
                 valid=(measured.measurement_mask[0] & (measurement_probability > 0.35))
                 .detach()
                 .cpu()
@@ -305,20 +598,39 @@ def create_demo(
             else:
                 current_error_text = f"posterior error {current_posterior_error:.3f} m"
             axes[0].set_title(
-                f"RGB-only online step {index} · t={packet.timestamp:.2f}s\n{current_error_text}"
+                f"RGB-only online step {index} · t={packet.timestamp:.2f}s · {observation_mode}\n"
+                f"{current_error_text}"
             )
             axes[0].axis("off")
-            axes[0].legend(loc="lower right", fontsize=7)
+            _add_image_legend(axes[0])
 
-            truth_track = episode["objects"]["position"][index : future_index + 1].numpy()
-            truth_active_track = episode["objects"]["active"][index : future_index + 1].numpy()
+            # Simulator labels below are evaluation/overlay data only. They are
+            # read after RGB ingest and are never passed into the runtime.
+            truth_track = episode["objects"]["position"][: future_index + 1].numpy()
+            truth_active_track = episode["objects"]["active"][: future_index + 1].numpy()
             plot_xy_trajectory(
                 axes[1],
                 truth_track,
                 truth_active_track,
                 color="royalblue",
-                label="GT future",
+                label=None,
+                alpha=0.35,
+                linewidth=0.9,
+                zorder=1,
             )
+            plot_xy_trajectory(
+                axes[1],
+                episode["objects"]["position"][index : future_index + 1].numpy(),
+                episode["objects"]["active"][index : future_index + 1].numpy(),
+                color="royalblue",
+                label=None,
+                linewidth=1.5,
+                zorder=3,
+            )
+            historical_forecasts = forecast_history
+            if forecast_history and forecast_history[-1].anchor_index == index:
+                historical_forecasts = forecast_history[:-1]
+            _plot_historical_forecasts(axes[1], historical_forecasts)
             if prior_future is not None:
                 plot_xy_trajectory(
                     axes[1],
@@ -337,8 +649,10 @@ def create_demo(
                         axis=1,
                     )[0],
                     color="orangered",
-                    label="prior rollout",
+                    label=None,
                     linestyle="--",
+                    linewidth=1.2,
+                    zorder=4,
                 )
             plot_xy_trajectory(
                 axes[1],
@@ -357,26 +671,70 @@ def create_demo(
                     axis=1,
                 )[0],
                 color="green",
-                label="posterior rollout",
+                label=None,
+                linewidth=1.6,
+                zorder=5,
             )
-            axes[1].set_xlabel("world x (m)")
-            axes[1].set_ylabel("world y (m)")
-            future_error_text = (
-                f"future Δ={future_prior_error - future_posterior_error:+.3f} m"
-                if np.isfinite(future_prior_error) and np.isfinite(future_posterior_error)
-                else "future Δ=n/a"
+            if future_matches is not None:
+                _draw_endpoint_matches(axes[1], future_matches)
+            if future_matches is not None and np.isfinite(future_posterior_error):
+                future_error_lines = [
+                    f"matched endpoints {future_matches.distances.size}/"
+                    f"{int(future_target_active.sum())}",
+                    f"posterior {future_posterior_error:.3f} m",
+                ]
+                if np.isfinite(future_prior_error):
+                    future_error_lines[-1] += f" · prior {future_prior_error:.3f} m"
+                    future_error_lines.append(
+                        "correction gain "
+                        f"{future_prior_error - future_posterior_error:+.3f} m"
+                    )
+                else:
+                    future_error_lines.append("prior/correction gain n/a at initialisation")
+                future_error_text = "\n".join(future_error_lines)
+            else:
+                future_error_text = "matched future endpoint error: n/a"
+            axes[1].text(
+                0.02,
+                0.98,
+                future_error_text,
+                transform=axes[1].transAxes,
+                ha="left",
+                va="top",
+                fontsize=7.5,
+                family="monospace",
+                bbox={
+                    "boxstyle": "round,pad=0.3",
+                    "facecolor": "white",
+                    "edgecolor": "0.7",
+                    "alpha": 0.88,
+                },
+            )
+            collision_probability_text = (
+                f"{predicted_collision_probability:.2f}"
+                if np.isfinite(predicted_collision_probability)
+                else "n/a"
+            )
+            gt_collision_in_horizon = bool(
+                episode["events"]["collision"][index + 1 : future_index + 1].any()
             )
             axes[1].set_title(
-                "future revision "
-                f"({future_seconds:.2f}s) · predicted collision "
-                f"p={predicted_collision_probability:.2f}\n"
-                f"{future_error_text} · "
-                "GT collision now="
-                f"{bool(episode['events']['collision'][index].any())}"
+                f"recursive forecast · horizon {future_seconds:.2f}s · "
+                f"collision p={collision_probability_text}\n"
+                f"GT collision in horizon={gt_collision_in_horizon} · "
+                f"retained forecasts={len(forecast_history)}"
             )
-            axes[1].legend(fontsize=8)
-            axes[1].grid(alpha=0.2)
-            figure.tight_layout()
+            _configure_world_axis(axes[1], config.simulator.world_bounds)
+            _add_world_legend(axes[1])
+            # Fixed margins avoid frame-to-frame panel movement from changing
+            # title, legend, or numeric annotation widths.
+            figure.subplots_adjust(
+                left=0.035,
+                right=0.98,
+                bottom=0.11,
+                top=0.82,
+                wspace=0.22,
+            )
             path = frame_dir / f"frame_{index:04d}.png"
             figure.savefig(path, dpi=120)
             plt.close(figure)
@@ -436,6 +794,9 @@ def create_demo(
             else float("nan")
         ),
         "observation_mode_counts": observation_mode_counts,
+        "retained_posterior_forecasts": len(forecast_history),
+        "ground_truth_usage": "demo scoring and overlay only; never runtime input",
+        "per_frame_metrics": per_frame_metrics,
         "gif": str(gif_path.resolve()),
         "parameter_plot": str(parameter_plot.resolve()),
         "frame_directory": str(frame_dir.resolve()),
