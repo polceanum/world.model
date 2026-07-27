@@ -14,8 +14,10 @@ simulator:
   sequence_frames: 32
   min_objects: 2
   max_objects: 2
+  radius_range: [0.21, 0.21]
   camera_motion: fixed
   render_noise_std: 0.0
+  scenario_mixture: [reference_pairs]
 model:
   max_objects: 3
   state:
@@ -43,8 +45,11 @@ model:
     temporal_velocity_unobserved_variance: 10000.0
     temporal_velocity_reset_on_collision: true
     temporal_velocity_max_age_steps: 3
+    temporal_velocity_post_event_max_samples: 3
     temporal_velocity_measurement_position_blend: 0.125
     structured_disc_center_enabled: true
+    structured_disc_depth_relative_std: 0.05
+    structured_disc_position_confidence: 0.9975
   dynamics:
     hidden_dim: 40
     max_substep: 0.008333333333333333
@@ -82,7 +87,9 @@ training:
     measurement: 1.0
     state_position: 2.0
     state_velocity: 0.25
-    rollout_position: 4.0
+    rollout_position_x: 2.0
+    rollout_position_y: 1.0
+    rollout_position_z: 1.0
     rollout_velocity: 0.1
     event: 0.2
     parameter: 0.1

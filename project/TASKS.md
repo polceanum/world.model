@@ -208,3 +208,15 @@
   wider/OOD validation; do not ship the promising fixed-axis diagnostic blend.
 - [ ] Replace the synthetic disc prior with a learned or externally structured
   real-video adapter without changing the measurement/belief contracts.
+- [x] Add axis-resolved current/forecast position and velocity metrics plus
+  independently weighted rollout-position losses, while keeping event
+  detection and interaction dynamics joint.
+- [x] Add a familiar `reference_pairs` regime whose ensured sphere collision
+  is temporally separated from its first floor impact and regression-test that
+  separation.
+- [ ] Add an optional mature physics-engine dataset backend behind the
+  canonical episode and RGB `ObservationPacket` contracts. Keep it out of the
+  smoke dependency set and report it as a separate dataset family.
+- [ ] Improve RGB-derived x velocity and 0.5–1.0 s prediction on the clean
+  reference regime. Direct measured-point history and denser global cadence
+  improved some current-state metrics but failed the multistep selection gate.

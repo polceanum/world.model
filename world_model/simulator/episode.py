@@ -203,7 +203,7 @@ def generate_episode(
         "num_objects": int((world._spawn_frame >= 0).sum()),
         "metadata": {
             "simulator": "sphere_world",
-            "simulator_version": 1,
+            "simulator_version": 2,
             "distribution": resolved.distribution,
             "scenario": world.scenario_name,
             "camera_trajectory": world.camera.mode,

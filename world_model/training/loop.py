@@ -681,6 +681,11 @@ def _rollout_losses(
         else event_query_plan.select_target_endpoints(trajectory.event_logits)
     )
     position_losses: list[Tensor] = []
+    position_axis_losses: dict[str, list[Tensor]] = {
+        "x": [],
+        "y": [],
+        "z": [],
+    }
     velocity_losses: list[Tensor] = []
     horizon_losses: dict[str, Tensor] = {}
     event_losses: list[Tensor] = []
@@ -709,6 +714,14 @@ def _rollout_losses(
             target_position,
             valid,
         )
+        for axis_index, axis_name in enumerate(("x", "y", "z")):
+            position_axis_losses[axis_name].append(
+                masked_huber(
+                    target_positions[:, query_index, :, axis_index],
+                    target_position[:, :, axis_index],
+                    valid,
+                )
+            )
         velocity_loss = masked_huber(
             target_velocities[:, query_index],
             target_velocity,
@@ -752,6 +765,13 @@ def _rollout_losses(
 
     return {
         "rollout_position": weighted_mean(position_losses, horizon_weights),
+        **{
+            f"rollout_position_{axis_name}": weighted_mean(
+                axis_losses,
+                horizon_weights,
+            )
+            for axis_name, axis_losses in position_axis_losses.items()
+        },
         "rollout_velocity": weighted_mean(velocity_losses, horizon_weights),
         "event_collision": weighted_mean(event_losses, event_weights),
         **horizon_losses,
@@ -769,6 +789,14 @@ def _group_closed_loop_terms(
     state_position = details.get("state_position", reference.sum() * 0)
     state_velocity = details.get("state_velocity", reference.sum() * 0)
     rollout_position = details.get("rollout_position", reference.sum() * 0)
+    rollout_position_axes = {
+        name: details.get(name, reference.sum() * 0)
+        for name in (
+            "rollout_position_x",
+            "rollout_position_y",
+            "rollout_position_z",
+        )
+    }
     rollout_velocity = details.get("rollout_velocity", reference.sum() * 0)
     return {
         "measurement": details.get("measurement", reference.sum() * 0),
@@ -776,6 +804,7 @@ def _group_closed_loop_terms(
         "state_velocity": state_velocity,
         "state": total("state_position", "state_velocity"),
         "rollout_position": rollout_position,
+        **rollout_position_axes,
         "rollout_velocity": rollout_velocity,
         "rollout": total("rollout_position", "rollout_velocity"),
         "event": details.get("event_collision", reference.sum() * 0),
@@ -810,17 +839,28 @@ def _weighted_closed_loop_total(
         "state": ("state_position", "state_velocity"),
         "rollout": ("rollout_position", "rollout_velocity"),
     }
+    rollout_position_axes = (
+        "rollout_position_x",
+        "rollout_position_y",
+        "rollout_position_z",
+    )
+    use_axis_position = any(name in weights for name in rollout_position_axes)
     selected: dict[str, Tensor] = {
         name: value
         for name, value in terms.items()
         if name
         not in {component for components in aggregate_families.values() for component in components}
         and name not in aggregate_families
+        and name not in rollout_position_axes
     }
     for aggregate, components in aggregate_families.items():
         if any(component in weights for component in components):
             for component in components:
-                selected[component] = terms[component]
+                if component == "rollout_position" and use_axis_position:
+                    for axis_name in rollout_position_axes:
+                        selected[axis_name] = terms[axis_name]
+                else:
+                    selected[component] = terms[component]
         else:
             selected[aggregate] = terms[aggregate]
     return weighted_total(selected, weights)

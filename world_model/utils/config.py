@@ -50,6 +50,9 @@ class SimulatorConfig:
     drag_range: tuple[float, float] = (0.01, 0.16)
     friction_range: tuple[float, float] = (0.05, 0.35)
     initial_speed_range: tuple[float, float] = (0.35, 1.35)
+    ensured_pair_height_range: tuple[float, float] = (1.1, 1.35)
+    ensured_pair_surface_gap_range: tuple[float, float] = (0.75, 0.9)
+    ensured_pair_speed_range: tuple[float, float] = (0.85, 1.25)
     gravity: tuple[float, float, float] = (0.0, -9.81, 0.0)
     camera_motion: str = "orbit"
     known_camera_pose: bool = True
@@ -99,12 +102,15 @@ class RGBConfig:
     temporal_velocity_unobserved_variance: float = 1.0e4
     temporal_velocity_reset_on_collision: bool = False
     temporal_velocity_max_age_steps: int | None = None
+    temporal_velocity_post_event_max_samples: int | None = None
     temporal_velocity_measurement_position_blend: float = 0.0
     structured_disc_center_enabled: bool = False
     structured_disc_threshold: float = 0.04
     structured_disc_min_pixels: int = 4
     structured_disc_max_assignment_distance: float = 0.75
     structured_disc_center_std_pixels: float = 0.75
+    structured_disc_depth_relative_std: float | None = None
+    structured_disc_position_confidence: float | None = None
     roi_uncertainty_scale: float = 2.5
     global_uncertainty_threshold: float = 4.0
     surprise_threshold: float = 8.0
@@ -355,6 +361,15 @@ class OrpheusConfig:
                 "than temporal_velocity_min_samples"
             )
         if (
+            model.rgb.temporal_velocity_post_event_max_samples is not None
+            and model.rgb.temporal_velocity_post_event_max_samples
+            < model.rgb.temporal_velocity_min_samples
+        ):
+            raise ValueError(
+                "model.rgb.temporal_velocity_post_event_max_samples must be no smaller "
+                "than temporal_velocity_min_samples"
+            )
+        if (
             not math.isfinite(model.rgb.temporal_velocity_measurement_position_blend)
             or not 0.0 <= model.rgb.temporal_velocity_measurement_position_blend <= 1.0
         ):
@@ -382,6 +397,16 @@ class OrpheusConfig:
             raise ValueError(
                 "model.rgb.structured_disc_center_std_pixels must be finite and positive"
             )
+        if model.rgb.structured_disc_depth_relative_std is not None and (
+            not math.isfinite(model.rgb.structured_disc_depth_relative_std)
+            or not 0.0 < model.rgb.structured_disc_depth_relative_std <= 1.0
+        ):
+            raise ValueError("model.rgb.structured_disc_depth_relative_std must lie in (0, 1]")
+        if model.rgb.structured_disc_position_confidence is not None and (
+            not math.isfinite(model.rgb.structured_disc_position_confidence)
+            or not 0.0 < model.rgb.structured_disc_position_confidence <= 1.0
+        ):
+            raise ValueError("model.rgb.structured_disc_position_confidence must lie in (0, 1]")
         if not (
             0.0 <= model.lifecycle.occlusion_existence_decay <= model.lifecycle.existence_decay
         ):
@@ -406,6 +431,9 @@ class OrpheusConfig:
             ("drag", simulator.drag_range),
             ("friction", simulator.friction_range),
             ("initial_speed", simulator.initial_speed_range),
+            ("ensured_pair_height", simulator.ensured_pair_height_range),
+            ("ensured_pair_surface_gap", simulator.ensured_pair_surface_gap_range),
+            ("ensured_pair_speed", simulator.ensured_pair_speed_range),
             ("external_impulse", simulator.external_impulse_range),
         ):
             if len(bounds) != 2 or bounds[0] > bounds[1]:
@@ -418,6 +446,7 @@ class OrpheusConfig:
             raise ValueError("simulator.scenario_mixture must contain at least one scenario")
         supported_scenarios = {
             "baseline",
+            "reference_pairs",
             "elastic_pairs",
             "damped_contacts",
             "impulse_perturbation",

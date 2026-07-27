@@ -324,3 +324,31 @@ The subsequent eight-step RGB plus eight-step closed-loop adaptation improved
 velocity while broadly regressing position and three-object detection recall.
 Both are retained under `runs/accuracy-interactions-v1` and `v2` as rejected
 experiments; the lateral-velocity step-648 checkpoint remains selected.
+
+The reference-physics investigation advances the specification to 1.2 and the
+sphere dataset metadata to v2. A new `reference_pairs` scenario separates the
+ensured pair impact from the first floor impact, uses familiar low-friction
+parameters, and has an integration regression for post-impact separation and
+event timing. Ensured-pair height, surface gap, and speed are now configurable.
+The specification and agent guide also define a future mature physics engine as
+an optional independent RGB dataset backend, never privileged runtime input.
+
+Evaluation now reports x/y/z current and every-horizon position errors plus
+axis-resolved velocity/correction evidence. Training can weight rollout
+position by axis while retaining joint interactions and events. Structured RGB
+discs now provide both point centers and equivalent-area radii; the reference
+profile uses the known sphere radius to form calibrated analytic depth evidence
+without simulator-state input. Position confidence is separate from existence
+confidence so a trustworthy matched point cannot create spurious tracks.
+Temporal velocity history can reopen for a bounded number of post-event samples,
+and global scheduling now correctly accumulates consecutive association
+failures.
+
+Two short CPU continuations completed on the clean reference curriculum. The
+second selected step 672 by its internal two-episode rollout loss, but a
+four-seed external test showed essentially no improvement over the inherited
+weights; it is retained only as the weight source for the parameter-free
+structured runtime. Denser global cadence, direct raw-point velocity history,
+fast-path structured confidence, and zero learned-correction scale were tested
+and rejected because they failed to improve 1-second x error. This is not
+claimed as a solved accuracy result.

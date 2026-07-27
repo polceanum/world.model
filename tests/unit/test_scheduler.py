@@ -67,3 +67,47 @@ def test_scheduler_uncertainty_threshold_is_position_standard_deviation() -> Non
         scheduler.choose(packet=_packet(), belief=belief, predicted=predicted)
         == ObservationMode.RECOVERY
     )
+
+
+def test_scheduler_recovers_after_consecutive_association_failures() -> None:
+    scheduler = ObservationScheduler(
+        global_every_steps=20,
+        uncertainty_threshold=4.0,
+        surprise_threshold=8.0,
+        failure_threshold=2,
+    )
+    belief, predicted = _belief_and_prediction(position_std=0.1)
+    scheduler.record("camera", ObservationMode.GLOBAL_DISCOVERY)
+
+    scheduler.record(
+        "camera",
+        ObservationMode.FAST_ROI,
+        association_failures=1,
+    )
+    assert (
+        scheduler.choose(
+            packet=_packet(),
+            belief=belief,
+            predicted=predicted,
+            diagnostics={"association_failures": 1},
+        )
+        == ObservationMode.FAST_ROI
+    )
+
+    scheduler.record(
+        "camera",
+        ObservationMode.FAST_ROI,
+        association_failures=1,
+    )
+    assert (
+        scheduler.choose(
+            packet=_packet(),
+            belief=belief,
+            predicted=predicted,
+            diagnostics={"association_failures": 1},
+        )
+        == ObservationMode.RECOVERY
+    )
+
+    scheduler.record("camera", ObservationMode.RECOVERY, association_failures=0)
+    assert scheduler.state_for("camera").association_failures == 0

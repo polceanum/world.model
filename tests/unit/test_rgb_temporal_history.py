@@ -4,7 +4,7 @@ import math
 
 import torch
 
-from world_model.belief import BeliefFactory
+from world_model.belief import BeliefFactory, MotionMode
 from world_model.fusion import AssociationResult
 from world_model.observations import MeasurementSet
 from world_model.observations.rgb import RGBObservationConfig, RGBObservationModule
@@ -36,6 +36,7 @@ def _append(
     positions: torch.Tensor,
     active_mask: torch.Tensor | None = None,
     observed_mask: torch.Tensor | None = None,
+    reset_mask: torch.Tensor | None = None,
     position_variance: float = 1.0e-4,
     minimum_dt: float = 1.0e-3,
 ) -> RGBTemporalPositionHistory:
@@ -47,6 +48,7 @@ def _append(
         object_ids=object_ids,
         active_mask=active_mask,
         observed_mask=observed_mask,
+        reset_mask=reset_mask,
         timestamp=torch.tensor([timestamp], dtype=positions.dtype),
         positions=positions,
         position_log_variance=torch.full_like(
@@ -129,9 +131,57 @@ def test_reset_mask_discards_pre_event_motion_before_append() -> None:
     )
 
     assert history.valid_mask.sum().item() == 1
+    assert history.has_reset.item()
+    assert history.post_reset_sample_count.item() == 1
     torch.testing.assert_close(
         history.positions[0, 0, 0],
         torch.tensor([0.0, 0.5, 0.0], dtype=torch.float64),
+    )
+
+
+def test_post_reset_segment_count_tracks_only_accepted_samples() -> None:
+    object_ids = torch.tensor([[7]])
+    history = _empty_history(object_ids)
+    history = _append(
+        history,
+        object_ids=object_ids,
+        timestamp=0.0,
+        positions=torch.zeros(1, 1, 3, dtype=torch.float64),
+    )
+    history = _append(
+        history,
+        object_ids=object_ids,
+        timestamp=0.05,
+        positions=torch.tensor([[[0.1, 0.0, 0.0]]], dtype=torch.float64),
+        reset_mask=torch.tensor([[True]]),
+    )
+    assert history.post_reset_sample_count.item() == 1
+
+    history = _append(
+        history,
+        object_ids=object_ids,
+        timestamp=0.05,
+        positions=torch.tensor([[[99.0, 0.0, 0.0]]], dtype=torch.float64),
+    )
+    assert history.post_reset_sample_count.item() == 1
+
+    history = _append(
+        history,
+        object_ids=object_ids,
+        timestamp=0.1,
+        positions=torch.tensor([[[0.2, 0.0, 0.0]]], dtype=torch.float64),
+    )
+    assert history.post_reset_sample_count.item() == 2
+    velocity, _, valid = history.least_squares_velocity(
+        minimum_dt=1.0e-3,
+        minimum_samples=2,
+        variance_scale=1.0,
+        variance_floor=1.0e-3,
+    )
+    assert valid.item()
+    torch.testing.assert_close(
+        velocity,
+        torch.tensor([[[2.0, 0.0, 0.0]]], dtype=torch.float64),
     )
 
 
@@ -294,6 +344,8 @@ def test_detach_removes_temporal_history_graph() -> None:
     assert not detached.positions.requires_grad
     assert not detached.position_log_variance.requires_grad
     assert not detached.valid_mask.requires_grad
+    assert not detached.post_reset_sample_count.requires_grad
+    assert not detached.has_reset.requires_grad
     assert detached.timestamps.grad_fn is None
     assert detached.positions.grad_fn is None
     assert detached.position_log_variance.grad_fn is None
@@ -449,3 +501,83 @@ def test_rgb_module_lateral_velocity_preserves_analytic_vertical_state() -> None
         evidence.log_variance.exp()[0, 0, 1:],
         torch.tensor([1.0e4, 1.0e4]),
     )
+
+
+def test_old_track_can_reinitialize_lateral_velocity_after_collision() -> None:
+    factory = BeliefFactory(max_objects=1, appearance_dim=4)
+    base = factory.create()
+    modes = base.objects.motion_mode_logits.clone()
+    modes[..., MotionMode.COLLISION] = 8.0
+    belief = base.replace(
+        objects=base.objects.replace(
+            active=torch.tensor([[True]]),
+            object_id=torch.tensor([[12]]),
+            age_steps=torch.tensor([[20]]),
+            motion_mode_logits=modes,
+            existence_logit=torch.tensor([[8.0]]),
+        )
+    )
+    module = RGBObservationModule(
+        RGBObservationConfig(
+            max_objects=1,
+            backbone_channels=(8, 16, 24, 32),
+            feature_dim=16,
+            appearance_dim=4,
+            roi_size=8,
+            roi_hidden_dim=16,
+            temporal_velocity_enabled=True,
+            temporal_velocity_min_samples=2,
+            temporal_velocity_lateral_only=True,
+            temporal_velocity_reset_on_collision=True,
+            temporal_velocity_max_age_steps=3,
+            temporal_velocity_post_event_max_samples=3,
+            temporal_velocity_measurement_position_blend=1.0,
+        )
+    )
+    association = AssociationResult(
+        belief_indices=torch.tensor([[0]]),
+        measurement_indices=torch.tensor([[0]]),
+        pair_mask=torch.tensor([[True]]),
+        pair_cost=torch.tensor([[0.0]]),
+        unmatched_beliefs=torch.tensor([[False]]),
+        unmatched_measurements=torch.tensor([[False]]),
+        ambiguous=torch.tensor([[False]]),
+    )
+    history = None
+    for sample_index, timestamp in enumerate((0.0, 0.05)):
+        current_modes = modes.clone()
+        if sample_index:
+            current_modes[..., MotionMode.COLLISION] = -8.0
+        current = belief.replace(objects=belief.objects.replace(motion_mode_logits=current_modes))
+        measured = MeasurementSet(
+            modality="rgb",
+            sensor_id="camera",
+            timestamp=torch.tensor([timestamp]),
+            values=torch.zeros(1, 1, 7),
+            log_variance=torch.zeros(1, 1, 7),
+            existence_logits=torch.tensor([[8.0]]),
+            measurement_mask=torch.tensor([[True]]),
+            appearance=None,
+            class_logits=None,
+            frame_id="camera:camera",
+            supported_state_fields=("position",),
+            auxiliary={
+                "world_position": torch.tensor([[[timestamp, 0.0, 0.0]]]),
+                "world_position_log_variance": torch.full(
+                    (1, 1, 3),
+                    math.log(1.0e-4),
+                ),
+            },
+        )
+        evidence, history = module.update_temporal_history(
+            posterior=current,
+            measured=measured,
+            association=association,
+            history=history,
+        )
+
+    assert history is not None
+    assert history.has_reset.item()
+    assert history.post_reset_sample_count.item() == 2
+    assert evidence is not None and evidence.valid_mask.item()
+    torch.testing.assert_close(evidence.velocity[..., 0], torch.ones(1, 1))

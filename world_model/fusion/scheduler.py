@@ -69,7 +69,10 @@ class ObservationScheduler:
             return ObservationMode.GLOBAL_DISCOVERY
         diagnostics = diagnostics or {}
         surprise = float(diagnostics.get("surprise", state.last_surprise))
-        failures = int(diagnostics.get("association_failures", state.association_failures))
+        failures = max(
+            int(diagnostics.get("association_failures", 0)),
+            state.association_failures,
+        )
         if surprise >= self.surprise_threshold or failures >= self.failure_threshold:
             return ObservationMode.RECOVERY
         objects = belief.objects
@@ -99,7 +102,9 @@ class ObservationScheduler:
         state = self.state_for(sensor_id)
         state.last_mode = mode
         state.last_surprise = surprise
-        state.association_failures = association_failures
+        state.association_failures = (
+            state.association_failures + association_failures if association_failures > 0 else 0
+        )
         if mode in {ObservationMode.GLOBAL_DISCOVERY, ObservationMode.RECOVERY}:
             state.steps_since_global = 0
         elif mode == ObservationMode.FAST_ROI:

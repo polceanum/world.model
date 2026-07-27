@@ -40,12 +40,15 @@ _RGB_LEGACY_DEFAULT_FIELDS = (
     "temporal_velocity_unobserved_variance",
     "temporal_velocity_reset_on_collision",
     "temporal_velocity_max_age_steps",
+    "temporal_velocity_post_event_max_samples",
     "temporal_velocity_measurement_position_blend",
     "structured_disc_center_enabled",
     "structured_disc_threshold",
     "structured_disc_min_pixels",
     "structured_disc_max_assignment_distance",
     "structured_disc_center_std_pixels",
+    "structured_disc_depth_relative_std",
+    "structured_disc_position_confidence",
 )
 
 _DYNAMICS_MIGRATION_DEFAULT_FIELDS = ("contact_confidence_sigma",)
@@ -168,7 +171,7 @@ def checkpoint_payload(
         },
         "project_version": __version__,
         "specification_version": SPECIFICATION_VERSION,
-        "simulator_version": "sphere_world_v1",
+        "simulator_version": "sphere_world_v2",
         "device": device,
         "precision": "float32",
         "git": _git_metadata(root),

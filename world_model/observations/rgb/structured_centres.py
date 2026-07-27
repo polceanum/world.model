@@ -10,6 +10,7 @@ not simulator-state input.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -27,6 +28,7 @@ class StructuredCentreOutput:
     """Foreground centroids aligned to proposal order."""
 
     centres: Tensor
+    radius_pixels: Tensor
     valid_mask: Tensor
     component_count: Tensor
 
@@ -59,7 +61,7 @@ def _foreground_centres(
     *,
     threshold: float,
     minimum_pixels: int,
-) -> Tensor:
+) -> tuple[Tensor, Tensor]:
     """Return normalized connected-component centroids for one ``[3,H,W]`` image."""
 
     _, height, width = image.shape
@@ -75,6 +77,7 @@ def _foreground_centres(
         structure=np.ones((3, 3), dtype=np.int8),
     )
     centres: list[tuple[float, float]] = []
+    radii: list[float] = []
     for component_index in range(1, component_count + 1):
         component_mask = components == component_index
         pixel_y, pixel_x = np.nonzero(component_mask)
@@ -119,9 +122,16 @@ def _foreground_centres(
             normalized_x = 2.0 * centre_x / max(width - 1, 1) - 1.0
             normalized_y = 2.0 * centre_y / max(height - 1, 1) - 1.0
             centres.append((float(normalized_x), float(normalized_y)))
+            radii.append(math.sqrt(float(basin_x.size) / math.pi))
     if not centres:
-        return torch.empty((0, 2), dtype=torch.float32)
-    return torch.tensor(centres, dtype=torch.float32)
+        return (
+            torch.empty((0, 2), dtype=torch.float32),
+            torch.empty((0,), dtype=torch.float32),
+        )
+    return (
+        torch.tensor(centres, dtype=torch.float32),
+        torch.tensor(radii, dtype=torch.float32),
+    )
 
 
 def structured_disc_centres(
@@ -153,6 +163,7 @@ def structured_disc_centres(
     )
 
     refined = proposal_centres.detach().clone()
+    refined_radius_pixels = proposal_centres.new_zeros(proposal_centres.shape[:2])
     valid = torch.zeros(
         proposal_centres.shape[:2],
         device=proposal_centres.device,
@@ -164,7 +175,7 @@ def structured_disc_centres(
         dtype=torch.int64,
     )
     for batch_index in range(image.shape[0]):
-        component_centres = _foreground_centres(
+        component_centres, component_radius_pixels = _foreground_centres(
             image[batch_index],
             threshold=threshold,
             minimum_pixels=minimum_pixels,
@@ -193,9 +204,16 @@ def structured_disc_centres(
                 device=refined.device,
                 dtype=refined.dtype,
             )
+            refined_radius_pixels[batch_index, proposal_row] = component_radius_pixels[
+                component_column
+            ].to(
+                device=refined.device,
+                dtype=refined.dtype,
+            )
             valid[batch_index, proposal_row] = True
     return StructuredCentreOutput(
         centres=refined,
+        radius_pixels=refined_radius_pixels,
         valid_mask=valid,
         component_count=counts,
     )

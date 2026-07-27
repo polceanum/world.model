@@ -95,6 +95,9 @@ def test_closed_loop_terms_expose_physical_components_without_double_counting() 
             "state_position": torch.tensor(1.0),
             "state_velocity": torch.tensor(3.0),
             "rollout_position": torch.tensor(2.0),
+            "rollout_position_x": torch.tensor(1.0),
+            "rollout_position_y": torch.tensor(2.0),
+            "rollout_position_z": torch.tensor(3.0),
             "rollout_velocity": torch.tensor(6.0),
         },
         reference,
@@ -104,6 +107,7 @@ def test_closed_loop_terms_expose_physical_components_without_double_counting() 
     assert terms["state_velocity"].item() == 3.0
     assert terms["state"].item() == 2.0
     assert terms["rollout_position"].item() == 2.0
+    assert terms["rollout_position_x"].item() == 1.0
     assert terms["rollout_velocity"].item() == 6.0
     assert terms["rollout"].item() == 4.0
     torch.testing.assert_close(
@@ -125,6 +129,18 @@ def test_closed_loop_terms_expose_physical_components_without_double_counting() 
             },
         ),
         torch.tensor(12.0),
+    )
+    torch.testing.assert_close(
+        _weighted_closed_loop_total(
+            terms,
+            {
+                "rollout_position_x": 2.0,
+                "rollout_position_y": 1.0,
+                "rollout_position_z": 1.0,
+                "rollout_velocity": 0.25,
+            },
+        ),
+        torch.tensor(10.5),
     )
 
 

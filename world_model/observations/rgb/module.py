@@ -71,12 +71,15 @@ class RGBObservationConfig:
     temporal_velocity_unobserved_variance: float = 1.0e4
     temporal_velocity_reset_on_collision: bool = False
     temporal_velocity_max_age_steps: int | None = None
+    temporal_velocity_post_event_max_samples: int | None = None
     temporal_velocity_measurement_position_blend: float = 0.0
     structured_disc_center_enabled: bool = False
     structured_disc_threshold: float = 0.04
     structured_disc_min_pixels: int = 4
     structured_disc_max_assignment_distance: float = 0.75
     structured_disc_center_std_pixels: float = 0.75
+    structured_disc_depth_relative_std: float | None = None
+    structured_disc_position_confidence: float | None = None
     roi_uncertainty_scale: float = 2.5
     default_world_radius: float = 0.15
     proposal_threshold: float = 0.25
@@ -122,6 +125,14 @@ class RGBObservationConfig:
                 "temporal_velocity_min_samples"
             )
         if (
+            self.temporal_velocity_post_event_max_samples is not None
+            and self.temporal_velocity_post_event_max_samples < self.temporal_velocity_min_samples
+        ):
+            raise ValueError(
+                "temporal_velocity_post_event_max_samples must be no smaller than "
+                "temporal_velocity_min_samples"
+            )
+        if (
             not math.isfinite(self.temporal_velocity_measurement_position_blend)
             or not 0.0 <= self.temporal_velocity_measurement_position_blend <= 1.0
         ):
@@ -142,6 +153,16 @@ class RGBObservationConfig:
             or self.structured_disc_center_std_pixels <= 0
         ):
             raise ValueError("structured_disc_center_std_pixels must be finite and positive")
+        if self.structured_disc_depth_relative_std is not None and (
+            not math.isfinite(self.structured_disc_depth_relative_std)
+            or not 0.0 < self.structured_disc_depth_relative_std <= 1.0
+        ):
+            raise ValueError("structured_disc_depth_relative_std must lie in (0, 1]")
+        if self.structured_disc_position_confidence is not None and (
+            not math.isfinite(self.structured_disc_position_confidence)
+            or not 0.0 < self.structured_disc_position_confidence <= 1.0
+        ):
+            raise ValueError("structured_disc_position_confidence must lie in (0, 1]")
 
 
 def _packet_batch(packets: Sequence[ObservationPacket]) -> tuple[Tensor, float]:
@@ -258,6 +279,7 @@ class RGBObservationModule(ObservationModule):
             device=image.device,
             dtype=torch.int64,
         )
+        log_radius = output.log_radius
         if self.config.structured_disc_center_enabled:
             structured = structured_disc_centres(
                 image,
@@ -270,19 +292,41 @@ class RGBObservationModule(ObservationModule):
             # residual retains gradients for the learned discovery head while
             # using the directly observed pixel centroid in the forward pass.
             centre = output.centre + (structured.centres - output.centre).detach()
+            normalized_radius = (
+                structured.radius_pixels / (0.5 * min(image.shape[-2], image.shape[-1]))
+            ).clamp_min(1.0e-4)
+            structured_log_radius = normalized_radius.log().unsqueeze(-1)
+            log_radius = torch.where(
+                structured.valid_mask.unsqueeze(-1),
+                output.log_radius + (structured_log_radius - output.log_radius).detach(),
+                output.log_radius,
+            )
             structured_valid = structured.valid_mask
             structured_count = structured.component_count
         inverse_depth = self._structured_inverse_depth(
-            output.log_radius,
+            log_radius,
             intrinsics,
             image_size,
             self.config.default_world_radius,
             output.inverse_depth_residual,
         )
+        if self.config.structured_disc_depth_relative_std is not None:
+            analytic_inverse_depth = self._structured_inverse_depth(
+                log_radius,
+                intrinsics,
+                image_size,
+                self.config.default_world_radius,
+                torch.zeros_like(output.inverse_depth_residual),
+            )
+            inverse_depth = torch.where(
+                structured_valid,
+                analytic_inverse_depth,
+                inverse_depth,
+            )
         values = torch.cat(
             (
                 centre,
-                output.log_radius,
+                log_radius,
                 inverse_depth.unsqueeze(-1),
                 output.colour,
             ),
@@ -311,6 +355,29 @@ class RGBObservationModule(ObservationModule):
                 (centre_log_variance, measurement_log_variance[..., 2:]),
                 dim=-1,
             )
+            if self.config.structured_disc_depth_relative_std is not None:
+                relative_variance = self.config.structured_disc_depth_relative_std**2
+                radius_log_variance = image.new_full(
+                    log_radius.shape,
+                    math.log(relative_variance),
+                )
+                inverse_depth_log_variance = (
+                    (inverse_depth.square() * relative_variance)
+                    .clamp_min(1.0e-10)
+                    .log()
+                    .unsqueeze(-1)
+                )
+                measurement_log_variance = measurement_log_variance.clone()
+                measurement_log_variance[..., 2:3] = torch.where(
+                    structured_valid.unsqueeze(-1),
+                    radius_log_variance,
+                    measurement_log_variance[..., 2:3],
+                )
+                measurement_log_variance[..., 3:4] = torch.where(
+                    structured_valid.unsqueeze(-1),
+                    inverse_depth_log_variance,
+                    measurement_log_variance[..., 3:4],
+                )
         world_position = backproject_rgb_measurements(
             values,
             world_from_camera,
@@ -332,6 +399,16 @@ class RGBObservationModule(ObservationModule):
             ).clamp_min(1.0e-4)
         )
         existence_logits = output.existence_logits + confidence_bias
+        position_confidence = existence_logits.sigmoid()
+        if self.config.structured_disc_position_confidence is not None:
+            position_confidence = torch.where(
+                structured_valid,
+                torch.full_like(
+                    position_confidence,
+                    self.config.structured_disc_position_confidence,
+                ),
+                position_confidence,
+            )
         # Keep all proposals available to Hungarian matching; lifecycle applies
         # the confidence threshold for births.
         measurement_mask = torch.ones_like(existence_logits, dtype=torch.bool)
@@ -365,6 +442,7 @@ class RGBObservationModule(ObservationModule):
                 ),
                 "world_log_variance": world_position_log_variance,
                 "world_position_log_variance": world_position_log_variance,
+                "position_confidence": position_confidence,
                 "visibility_logit": output.visibility_logits,
                 "visibility_logits": output.visibility_logits,
                 "query_features": output.query_features,
@@ -675,9 +753,16 @@ class RGBObservationModule(ObservationModule):
         )
         velocity_valid_mask = velocity_valid_mask & observed_mask & active_mask
         if self.config.temporal_velocity_max_age_steps is not None:
-            velocity_valid_mask = velocity_valid_mask & (
+            lifetime_window = (
                 posterior.objects.age_steps <= self.config.temporal_velocity_max_age_steps
             )
+            post_event_window = torch.zeros_like(lifetime_window)
+            if self.config.temporal_velocity_post_event_max_samples is not None:
+                post_event_window = history.has_reset & (
+                    history.post_reset_sample_count
+                    <= self.config.temporal_velocity_post_event_max_samples
+                )
+            velocity_valid_mask = velocity_valid_mask & (lifetime_window | post_event_window)
         if self.config.temporal_velocity_lateral_only:
             camera_lateral = posterior.camera.world_from_camera[:, :3, 0]
             camera_lateral = F.normalize(camera_lateral, dim=-1).unsqueeze(1)

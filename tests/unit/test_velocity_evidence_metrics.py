@@ -48,6 +48,10 @@ def test_current_velocity_error_is_coordinate_wise_under_exact_mask() -> None:
     assert metrics["posterior_current_velocity_mae_mps"] == pytest.approx(2.0)
     assert metrics["posterior_current_velocity_coordinate_count"] == 3.0
     assert metrics["posterior_current_velocity_object_frame_count"] == 1.0
+    assert metrics["posterior_current_velocity_x_rmse_mps"] == 1.0
+    assert metrics["posterior_current_velocity_y_rmse_mps"] == 2.0
+    assert metrics["posterior_current_velocity_z_rmse_mps"] == 3.0
+    assert metrics["posterior_current_velocity_x_count"] == 1.0
 
 
 def test_ordinary_velocity_correction_reports_norm_error_improvement() -> None:
@@ -66,6 +70,11 @@ def test_ordinary_velocity_correction_reports_norm_error_improvement() -> None:
     assert metrics["ordinary_velocity_prior_to_posterior_norm_error_improvement_fraction"] == 0.25
     assert metrics["ordinary_velocity_prior_to_posterior_positive_rate"] == 0.5
     assert metrics["ordinary_velocity_evaluated_object_updates"] == 2.0
+    assert metrics["ordinary_velocity_x_prior_mae_mps"] == 2.0
+    assert metrics["ordinary_velocity_x_posterior_mae_mps"] == 1.5
+    assert metrics["ordinary_velocity_x_improvement_mps"] == 0.5
+    assert metrics["ordinary_velocity_x_positive_rate"] == 0.5
+    assert metrics["ordinary_velocity_y_improvement_mps"] == 0.0
 
 
 def test_velocity_accumulators_report_null_without_eligible_objects() -> None:

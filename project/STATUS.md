@@ -1,11 +1,12 @@
 # Project status
 
 **Date:** 2026-07-27
-**Specification:** `PROJECT_SPEC.md` 1.0  
+**Specification:** `PROJECT_SPEC.md` 1.2
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
-stable forecast-history visualisation, and corrected event semantics;
+stable forecast-history visualisation, axis-resolved diagnostics, and an
+invariant-tested familiar reference-pair regime;
 collision, occlusion, identification, and full-MPS acceptance remain open
 
 ## What works
@@ -1290,3 +1291,109 @@ Results: all 162 Python files were already formatted, Ruff passed, and
 because this subprocess reports MPS unavailable. No training or held-out
 evaluation was run for this parameter-free contract increment, so the selected
 checkpoint and recorded accuracy metrics are unchanged.
+
+## Reference physics and axis-resolved prediction (2026-07-27)
+
+The specification is now 1.2. The clean `reference_pairs` scenario separates
+the ensured sphere-pair impact from the first floor impact and records
+sphere-world simulator version 2. The model/data contracts are unchanged.
+PyBullet and MuJoCo were not installed in `orpheus`; Gymnasium was present.
+No engine was installed. A mature engine is specified as a future independent
+RGB dataset backend, not a predictor or default smoke dependency.
+
+The RGB path now extracts an explicit point and equivalent-area scale from each
+structured disc. In the fixed-radius reference profile, scale produces
+calibrated analytic depth evidence. Per-axis position and velocity metrics and
+axis-weighted rollout losses make the weak x component visible. Fast kinematic
+state, joint interaction/event context, slow parameter gates, identity, and
+uncertainty remain explicit.
+
+Two short CPU continuations were run on the clean curriculum. The selected
+step-672 weights came from the second continuation's lower internal two-episode
+rollout loss (`0.066595`), but an external four-seed test was essentially
+unchanged from the inherited weights. This is not evidence that the
+continuation generalized. The promoted artifact is therefore described as the
+step-672 weight source plus a parameter-free structured point/scale runtime,
+not as a successful accuracy-training claim.
+
+Full RGB-only standard-test result on seeds `200000–200015`:
+
+- current position x/y/z RMSE:
+  `0.416612 / 0.111049 / 0.174254 m`;
+- current aggregate position RMSE: `0.268491 m`;
+- current x/aggregate velocity RMSE: `1.120426 / 0.985151 m/s`;
+- model x RMSE at 0.10/0.25/0.50/0.75/1.00 seconds:
+  `0.434326 / 0.474210 / 0.582723 / 0.729778 / 0.816342 m`;
+- aggregate model RMSE at those horizons:
+  `0.280165 / 0.305264 / 0.370350 / 0.452147 / 0.503794 m`;
+- one-second constant-velocity x/aggregate RMSE:
+  `0.970399 / 1.628896 m`;
+- collision F1: `0.461538`;
+- distance-gated detection recall/precision: `0.720703 / 0.720703`;
+- identity switches: `0`; predicted/target object frames:
+  `1024 / 1024`; non-finite outputs: `0`.
+
+This is a coherent runnable result and the model beats constant velocity at the
+one-second x endpoint, but absolute x accuracy is not yet good. The final demo
+visibly retains near-vertical forecasts for some frames; the corrected ground
+truth now shows familiar ballistic and pair-contact motion, making that model
+failure diagnosable.
+
+Accepted artifacts:
+
+- checkpoint:
+  `runs/20260727-233802-reference-physics-v1/checkpoints/best_rollout.pt`
+  (SHA-256
+  `075245ae5edc426c98c2df0d74e1bff53c8f6a762fd05e24bf4677c06673e2b8`);
+- evaluation:
+  `runs/20260727-233802-reference-physics-v1/evaluation/20260727-234344-final-test16/`;
+- demo:
+  `demo_outputs/20260727-234542-reference-physics-final/online_correction.gif`
+  (SHA-256
+  `8c7405b82e86e75849cba7c7b0fa4117d15d9065c687536c32b9cd4e067a5f35`).
+
+Selection diagnostics rejected denser global cadence, direct raw-point
+temporal blending (with and without post-event reopening), fast-path structured
+confidence, and a zero learned-correction scale. They improved isolated
+current-state quantities or were neutral but failed the four-seed one-second x
+selection gate.
+
+Four superseded timestamped run directories and three superseded demo
+directories were moved, without deletion, to
+`/private/tmp/orpheus-superseded-20260727/`. The workspace `runs/` directory
+now contains only the selected reference-physics bundle; the newest demo is the
+only non-archive directory under `demo_outputs/`.
+
+Environment and final validation commands:
+
+```bash
+conda run -n orpheus python -c \
+  "import platform,torch; print(platform.python_version(), torch.__version__, \
+  torch.backends.mps.is_built(), torch.backends.mps.is_available())"
+PYTHONPATH=. conda run -n orpheus python evaluate.py \
+  --config configs/tiny_lateral_velocity.yaml \
+  --checkpoint runs/20260727-233802-reference-physics-v1/checkpoints/best_rollout.pt \
+  --split test \
+  --output runs/20260727-233802-reference-physics-v1/evaluation/final-test16 \
+  --device cpu
+PYTHONPATH=. conda run -n orpheus python demo.py \
+  --config configs/tiny_lateral_velocity.yaml \
+  --checkpoint runs/20260727-233802-reference-physics-v1/checkpoints/best_rollout.pt \
+  --output demo_outputs/reference-physics-final \
+  --device cpu
+PYTHONPATH=. conda run -n orpheus python -m ruff format .
+PYTHONPATH=. conda run -n orpheus python -m ruff check .
+PYTHONPATH=. conda run -n orpheus pytest
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-reference-pycache PYTHONPATH=. \
+  conda run -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+git diff --check
+```
+
+Environment: Python `3.10.20`, PyTorch `2.10.0`, MPS built `True`, MPS
+available to the process `False`; evaluation/training therefore ran on CPU in
+float32. Formatting changed seven files, Ruff passed, and pytest reported
+`220 passed, 3 skipped in 175.22 s`; all skips were MPS-conditional.
+Compileall passed. The first combined compile/diff invocation exposed one
+Markdown trailing-space error; it was corrected and the final diff check
+passed.

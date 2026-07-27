@@ -85,9 +85,39 @@ def test_fixed_seed_generation_is_exactly_repeatable_and_seed_sensitive() -> Non
     assert not torch.equal(first["objects"]["mass"][0], different["objects"]["mass"][0])
 
 
+def test_ensured_pair_collision_is_not_confounded_with_floor_impact() -> None:
+    config = SphereWorldConfig(
+        image_size=(48, 48),
+        frame_rate=20.0,
+        physics_rate=120.0,
+        sequence_frames=32,
+        min_objects=2,
+        max_objects=2,
+        camera_motion="fixed",
+        render_noise_std=0.0,
+        ensure_collision=True,
+    )
+    episode = generate_episode(config, seed=200000)
+    pair_frames = torch.nonzero(
+        episode["events"]["pair_collision"].any(dim=(1, 2)),
+        as_tuple=False,
+    ).flatten()
+
+    assert pair_frames.numel() == 1
+    collision_frame = int(pair_frames[0])
+    assert not episode["events"]["ground_collision"][collision_frame, :2].any()
+
+    position = episode["objects"]["position"][collision_frame, :2]
+    velocity = episode["objects"]["velocity"][collision_frame, :2]
+    normal = torch.nn.functional.normalize(position[1] - position[0], dim=0)
+    separating_speed = torch.dot(velocity[1] - velocity[0], normal)
+    assert separating_speed > 0.5
+
+
 def test_seeded_scenario_mixture_exercises_distinct_physical_regimes() -> None:
     scenarios = (
         "baseline",
+        "reference_pairs",
         "elastic_pairs",
         "damped_contacts",
         "impulse_perturbation",
@@ -105,19 +135,21 @@ def test_seeded_scenario_mixture_exercises_distinct_physical_regimes() -> None:
 
     worlds = [SphereWorld(config, seed=index) for index in range(len(scenarios))]
     assert [world.scenario_name for world in worlds] == list(scenarios)
-    assert worlds[1].config.restitution_range == (0.78, 0.95)
-    assert worlds[1].config.drag_range == (0.005, 0.04)
-    assert worlds[2].config.restitution_range == (0.18, 0.42)
-    assert worlds[2].config.friction_range == (0.28, 0.55)
-    assert worlds[3].config.external_impulse_probability == 0.12
-    assert worlds[3].config.external_impulse_range == (0.25, 0.8)
-    assert worlds[4].config.camera_motion == "combined"
-    assert worlds[4].config.camera_zoom_amplitude == 0.12
-    assert worlds[5].config.initial_speed_range == (1.1, 1.8)
-    assert worlds[5].config.friction_range == (0.01, 0.08)
-    assert worlds[6].config.mass_range == (0.3, 2.5)
+    assert worlds[1].config.mass_range == (0.85, 1.15)
+    assert worlds[1].config.friction_range == (0.0, 0.04)
+    assert worlds[2].config.restitution_range == (0.78, 0.95)
+    assert worlds[2].config.drag_range == (0.005, 0.04)
+    assert worlds[3].config.restitution_range == (0.18, 0.42)
+    assert worlds[3].config.friction_range == (0.28, 0.55)
+    assert worlds[4].config.external_impulse_probability == 0.12
+    assert worlds[4].config.external_impulse_range == (0.25, 0.8)
+    assert worlds[5].config.camera_motion == "combined"
+    assert worlds[5].config.camera_zoom_amplitude == 0.12
+    assert worlds[6].config.initial_speed_range == (1.1, 1.8)
+    assert worlds[6].config.friction_range == (0.01, 0.08)
+    assert worlds[7].config.mass_range == (0.3, 2.5)
 
-    episode = generate_episode(config, seed=2)
+    episode = generate_episode(config, seed=3)
     assert episode["metadata"]["scenario"] == "damped_contacts"
     active = episode["objects"]["active"][0]
     assert torch.all(episode["objects"]["restitution"][0, active, 0] <= 0.42)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pytest
 import torch
 
@@ -84,6 +86,10 @@ def test_localizes_exact_foreground_component_centres_from_rgb_pixels() -> None:
     assert result.valid_mask.tolist() == [[True, True]]
     assert result.centres.dtype == proposals.dtype
     assert result.centres.device == proposals.device
+    torch.testing.assert_close(
+        result.radius_pixels[0],
+        torch.full((2,), math.sqrt(9.0 / math.pi), dtype=proposals.dtype),
+    )
     torch.testing.assert_close(result.centres[0], expected, rtol=0.0, atol=1.0e-6)
 
 
@@ -415,6 +421,7 @@ def test_rgb_module_keeps_global_and_fast_raw_centres_differentiable(
             roi_size=8,
             roi_hidden_dim=16,
             structured_disc_center_enabled=True,
+            structured_disc_position_confidence=0.9975,
         )
     )
 
@@ -429,6 +436,10 @@ def test_rgb_module_keeps_global_and_fast_raw_centres_differentiable(
         ),
     )
     global_raw = global_measurement.auxiliary["raw_centre"]
+    torch.testing.assert_close(
+        global_measurement.auxiliary["position_confidence"],
+        torch.tensor([[0.9975]]),
+    )
     assert global_raw.requires_grad
     global_raw.sum().backward()
     assert module.global_detector.centre_head.weight.grad is not None

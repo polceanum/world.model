@@ -164,8 +164,32 @@ class BeliefUpdater(nn.Module):
             batch_index,
             pair_index,
         )
+        learned_confidence = confidence
         if cause is not None:
-            confidence = confidence * cause.robust_weight[batch_index, pair_index]
+            # The analytic diagonal update applies its own robust influence.
+            # Applying the surprise weight here as well would suppress large,
+            # valid event corrections twice. Keep the extra conservative gate
+            # only for the unconstrained learned residual path.
+            learned_confidence = (
+                confidence
+                * cause.robust_weight[
+                    batch_index,
+                    pair_index,
+                ]
+            )
+        position_confidence = confidence
+        reported_position_confidence = measured.auxiliary.get("position_confidence")
+        if reported_position_confidence is not None:
+            if reported_position_confidence.shape != measured.measurement_mask.shape:
+                raise ValueError("auxiliary.position_confidence must have shape [B,M]")
+            measurement_index = association.measurement_indices[batch_index, pair_index]
+            position_confidence = torch.maximum(
+                position_confidence,
+                reported_position_confidence[
+                    batch_index,
+                    measurement_index,
+                ].clamp(0.0, 1.0),
+            )
         position = innovation.auxiliary.get("measured_world_position")
         if position is None:
             raise ValueError(
@@ -187,7 +211,7 @@ class BeliefUpdater(nn.Module):
             prior_position_lv,
             position_measurement,
             position_measurement_lv,
-            confidence=confidence,
+            confidence=position_confidence,
             robust_clip_norm=self.config.robust_clip_norm,
             minimum_log_variance=self.config.minimum_log_variance,
             maximum_log_variance=self.config.maximum_log_variance,
@@ -309,7 +333,7 @@ class BeliefUpdater(nn.Module):
                 motion_mode_logits=modes,
                 modality_index=modality,
             )
-            confidence_full = confidence.unsqueeze(-1)
+            confidence_full = learned_confidence.unsqueeze(-1)
             learned_delta = (
                 learned.state_gate
                 * learned.mean_delta

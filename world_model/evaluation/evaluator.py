@@ -65,31 +65,62 @@ class _ErrorAccumulator:
     squared_sum: float = 0.0
     absolute_sum: float = 0.0
     count: int = 0
+    axis_squared_sum: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    axis_absolute_sum: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    axis_count: list[int] = field(default_factory=lambda: [0, 0, 0])
 
     def update(self, prediction: Tensor, target: Tensor, mask: Tensor) -> None:
+        if prediction.shape != target.shape or prediction.shape[-1] != 3:
+            raise ValueError("position error inputs must have matching [...,3] shapes")
         expanded = mask
         while expanded.ndim < prediction.ndim:
             expanded = expanded.unsqueeze(-1)
-        values = (prediction - target).masked_select(expanded.expand_as(prediction))
+        residual = prediction - target
+        values = residual.masked_select(expanded.expand_as(prediction))
         if values.numel() == 0:
             return
         detached = values.detach().float().cpu()
         self.squared_sum += float(detached.square().sum())
         self.absolute_sum += float(detached.abs().sum())
         self.count += int(detached.numel())
+        for axis in range(3):
+            axis_values = residual[..., axis].masked_select(mask).detach().float().cpu()
+            self.axis_squared_sum[axis] += float(axis_values.square().sum())
+            self.axis_absolute_sum[axis] += float(axis_values.abs().sum())
+            self.axis_count[axis] += int(axis_values.numel())
 
     def metrics(self, prefix: str) -> dict[str, float | None]:
+        metrics: dict[str, float | None] = {}
+        for axis, label in enumerate(("x", "y", "z")):
+            count = self.axis_count[axis]
+            metrics.update(
+                {
+                    f"{prefix}_position_{label}_rmse_m": (
+                        math.sqrt(self.axis_squared_sum[axis] / count) if count else None
+                    ),
+                    f"{prefix}_position_{label}_mae_m": (
+                        self.axis_absolute_sum[axis] / count if count else None
+                    ),
+                    f"{prefix}_position_{label}_count": float(count),
+                }
+            )
         if self.count == 0:
-            return {
-                f"{prefix}_position_rmse_m": None,
-                f"{prefix}_position_mae_m": None,
-                f"{prefix}_position_coordinate_count": 0.0,
+            metrics.update(
+                {
+                    f"{prefix}_position_rmse_m": None,
+                    f"{prefix}_position_mae_m": None,
+                    f"{prefix}_position_coordinate_count": 0.0,
+                }
+            )
+            return metrics
+        metrics.update(
+            {
+                f"{prefix}_position_rmse_m": math.sqrt(self.squared_sum / self.count),
+                f"{prefix}_position_mae_m": self.absolute_sum / self.count,
+                f"{prefix}_position_coordinate_count": float(self.count),
             }
-        return {
-            f"{prefix}_position_rmse_m": math.sqrt(self.squared_sum / self.count),
-            f"{prefix}_position_mae_m": self.absolute_sum / self.count,
-            f"{prefix}_position_coordinate_count": float(self.count),
-        }
+        )
+        return metrics
 
 
 @dataclass

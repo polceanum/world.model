@@ -63,6 +63,9 @@ class SphereWorldConfig:
     drag_range: tuple[float, float] = (0.01, 0.16)
     friction_range: tuple[float, float] = (0.04, 0.3)
     initial_speed_range: tuple[float, float] = (0.35, 1.35)
+    ensured_pair_height_range: tuple[float, float] = (1.1, 1.35)
+    ensured_pair_surface_gap_range: tuple[float, float] = (0.75, 0.9)
+    ensured_pair_speed_range: tuple[float, float] = (0.85, 1.25)
     camera_motion: str = "fixed"
     camera_fov_degrees: float = 48.0
     camera_translation_amplitude: float = 0.35
@@ -113,6 +116,9 @@ class SphereWorldConfig:
             "drag_range",
             "friction_range",
             "initial_speed_range",
+            "ensured_pair_height_range",
+            "ensured_pair_surface_gap_range",
+            "ensured_pair_speed_range",
             "external_impulse_range",
         ):
             lower, upper = getattr(self, name)
@@ -134,6 +140,7 @@ class SphereWorldConfig:
             raise ValueError("scenario_mixture must contain at least one scenario")
         supported_scenarios = {
             "baseline",
+            "reference_pairs",
             "elastic_pairs",
             "damped_contacts",
             "impulse_perturbation",
@@ -200,6 +207,9 @@ class SphereWorldConfig:
             "drag_range",
             "friction_range",
             "initial_speed_range",
+            "ensured_pair_height_range",
+            "ensured_pair_surface_gap_range",
+            "ensured_pair_speed_range",
             "external_impulse_range",
         ):
             if range_name in values:
@@ -237,6 +247,18 @@ class SphereWorldConfig:
 
         if scenario == "baseline":
             return self
+        if scenario == "reference_pairs":
+            return replace(
+                self,
+                radius_range=(0.21, 0.21),
+                mass_range=(0.85, 1.15),
+                restitution_range=(0.75, 0.9),
+                drag_range=(0.005, 0.04),
+                friction_range=(0.0, 0.04),
+                initial_speed_range=(0.9, 1.25),
+                ensured_pair_speed_range=(1.35, 1.6),
+                external_impulse_probability=0.0,
+            )
         if scenario == "elastic_pairs":
             return replace(
                 self,
@@ -384,15 +406,19 @@ class SphereWorld:
         bounds = torch.tensor(config.world_bounds, dtype=torch.float32)
         placed = 0
         if count >= 2 and config.ensure_collision:
-            pair_height = float(_uniform(self.generator, (), (0.9, 1.35)))
+            pair_height = float(_uniform(self.generator, (), config.ensured_pair_height_range))
             pair_z = float(_uniform(self.generator, (), (-0.25, 0.25)))
-            half_separation = max(
-                0.62,
-                float(radius[0, 0] + radius[1, 0]) * 1.45,
+            surface_gap = float(
+                _uniform(
+                    self.generator,
+                    (),
+                    config.ensured_pair_surface_gap_range,
+                )
             )
+            half_separation = 0.5 * (float(radius[0, 0] + radius[1, 0]) + surface_gap)
             position[0] = torch.tensor([-half_separation, pair_height, pair_z])
             position[1] = torch.tensor([half_separation, pair_height, pair_z])
-            speed = float(_uniform(self.generator, (), (0.85, 1.25)))
+            speed = float(_uniform(self.generator, (), config.ensured_pair_speed_range))
             velocity[0] = torch.tensor([speed, 0.15, 0.0])
             velocity[1] = torch.tensor([-speed, 0.15, 0.0])
             placed = 2

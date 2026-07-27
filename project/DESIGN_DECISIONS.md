@@ -657,3 +657,76 @@
   routing, generative hypotheses, actions, and language must produce typed
   proposals and pass structured prediction/calibration/complexity gates before
   assimilation.
+
+## ADR-040 — Separate familiar reference physics from harder learnable regimes
+
+- **Date:** 2026-07-27
+- **Status:** accepted
+- **Context:** The prior ensured-pair generator allowed the pair impact and
+  first floor impact to occur in the same 50 ms RGB interval. Floor friction
+  could then cancel lateral velocity immediately after an otherwise valid pair
+  impulse. The resulting trace was physically explainable but visually
+  surprising and unsuitable as the primary correctness demonstration.
+- **Decision:** Add a named `reference_pairs` scenario with fixed visible
+  radius, low drag/friction, familiar restitution, stronger approach speed,
+  and enough initial height/surface gap to separate pair and floor events.
+  Parameterize ensured-pair height, surface gap, and speed. Regression-test
+  that the reference pair is separating after collision and does not receive a
+  simultaneous ground event. Treat compound and unusual dynamics as separately
+  named later curricula, not as evidence that an ambiguous reference is
+  acceptable.
+- **Consequences:** Simulator data/version metadata advances to sphere-world
+  v2. The model remains able to learn arbitrary dynamics from observations;
+  only the benchmark's meaning is made explicit. Existing v1 metrics and
+  checkpoints remain historical evidence and are not directly comparable
+  without identifying their simulator family.
+
+## ADR-041 — Use a physics engine as an independent dataset backend, not a predictor
+
+- **Date:** 2026-07-27
+- **Status:** accepted; implementation deferred
+- **Context:** A mature rigid-body engine would provide independently
+  implemented contacts, friction, rolling, spin, stacking, and compound
+  interactions that are useful for realistic validation. Neither PyBullet nor
+  MuJoCo is currently installed in `orpheus`; Gymnasium is available. Adding a
+  heavyweight dependency during this accuracy investigation would obscure the
+  current causal comparison and make the default smoke path less reliable.
+- **Decision:** Future engine integration must sit behind the canonical
+  episode and timestamped RGB `ObservationPacket` contracts. Privileged engine
+  state is restricted to supervision, evaluation, tests, and labelled oracle
+  debugging. Record engine/version, solver, timestep, units, seed, scenario,
+  and split manifest, and report engine-backed metrics separately. Keep the
+  analytic sphere world as the fast invariant oracle and do not feed engine
+  state/equations to the runtime predictor.
+- **Consequences:** The same `WorldBelief`, measurement, association,
+  innovation, correction, and rollout code must work across both backends.
+  The engine tests whether dynamics were learned rather than memorized from
+  one simulator, without narrowing the architecture to rigid-body physics.
+
+## ADR-042 — Axis-local losses and structured point/scale evidence remain subordinate to held-out multistep gates
+
+- **Date:** 2026-07-27
+- **Status:** accepted with limitations
+- **Context:** Aggregate 3-D error hid a weak camera-lateral x estimate. Raw
+  structured RGB centers were much more accurate than the posterior on that
+  axis, while continuous learned-residual ablations had negligible effect.
+- **Decision:** Export x/y/z current and forecast position/velocity metrics and
+  allow separately weighted rollout-position losses. Use an RGB disc's center
+  as point evidence and its connected-component area as explicit scale/depth
+  evidence in the reference scenario. Keep object existence/lifecycle
+  confidence distinct from position confidence. Preserve constant/damped
+  per-axis motion as the low-complexity prior, while joint geometric/event
+  context remains able to change any component.
+- **Evidence:** On the four-seed held-out diagnostic, the selected cadence-4
+  candidate reached current x RMSE `0.473544 m` and 1-second model x RMSE
+  `0.885634 m`, versus `1.063635 m` for constant velocity. Cadence 2 worsened
+  the model's 1-second x RMSE to `0.962442 m`. Replacing conservative temporal
+  blending with raw measured points improved current x velocity but worsened
+  cadence-4 1-second x RMSE to `0.940926 m`. Applying structured confidence to
+  fast ROI centers also worsened it to `0.889826 m`; those variants were
+  rejected.
+- **Consequences:** The implementation now makes the axis failure visible and
+  prevents a jointly averaged metric from hiding it. The accepted changes
+  improve interpretability and preserve multistep behavior, but do not solve
+  absolute x accuracy; a larger clean reference curriculum and learned
+  uncertainty/velocity gating remain required.

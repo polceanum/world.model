@@ -20,6 +20,8 @@ class RGBTemporalPositionHistory(ModalityHistory):
     positions: Tensor
     position_log_variance: Tensor
     valid_mask: Tensor
+    post_reset_sample_count: Tensor
+    has_reset: Tensor
     history_size: int
 
     @classmethod
@@ -69,6 +71,18 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 device=object_ids.device,
                 dtype=torch.bool,
             ),
+            post_reset_sample_count=torch.zeros(
+                batch,
+                objects,
+                device=object_ids.device,
+                dtype=torch.long,
+            ),
+            has_reset=torch.zeros(
+                batch,
+                objects,
+                device=object_ids.device,
+                dtype=torch.bool,
+            ),
             history_size=history_size,
         )
 
@@ -87,6 +101,8 @@ class RGBTemporalPositionHistory(ModalityHistory):
             and self.positions.shape == (*object_ids.shape, history_size, 3)
             and self.position_log_variance.shape == self.positions.shape
             and self.valid_mask.shape == self.timestamps.shape
+            and self.post_reset_sample_count.shape == object_ids.shape
+            and self.has_reset.shape == object_ids.shape
             and self.object_ids.device == object_ids.device
             and self.positions.device == positions.device
             and self.positions.dtype == positions.dtype
@@ -169,6 +185,10 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 aligned.valid_mask[batch_index, slot] = source.valid_mask[
                     batch_index, previous_slot
                 ]
+                aligned.post_reset_sample_count[batch_index, slot] = source.post_reset_sample_count[
+                    batch_index, previous_slot
+                ]
+                aligned.has_reset[batch_index, slot] = source.has_reset[batch_index, previous_slot]
 
         aligned.timestamps = torch.where(
             reset_mask.unsqueeze(-1),
@@ -186,6 +206,12 @@ class RGBTemporalPositionHistory(ModalityHistory):
             aligned.position_log_variance,
         )
         aligned.valid_mask = aligned.valid_mask & ~reset_mask.unsqueeze(-1)
+        aligned.post_reset_sample_count = torch.where(
+            reset_mask,
+            torch.zeros_like(aligned.post_reset_sample_count),
+            aligned.post_reset_sample_count,
+        )
+        aligned.has_reset = aligned.has_reset | reset_mask
 
         append_mask = observed_mask & active_mask & (current_ids >= 0)
         finite = torch.isfinite(positions).all(dim=-1) & torch.isfinite(position_log_variance).all(
@@ -219,6 +245,8 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 batch_index, slot
             ]
             aligned.valid_mask[batch_index, slot, count] = True
+            if aligned.has_reset[batch_index, slot]:
+                aligned.post_reset_sample_count[batch_index, slot] += 1
         return aligned
 
     def least_squares_velocity(
@@ -284,5 +312,7 @@ class RGBTemporalPositionHistory(ModalityHistory):
             positions=self.positions.detach(),
             position_log_variance=self.position_log_variance.detach(),
             valid_mask=self.valid_mask.detach(),
+            post_reset_sample_count=self.post_reset_sample_count.detach(),
+            has_reset=self.has_reset.detach(),
             history_size=self.history_size,
         )

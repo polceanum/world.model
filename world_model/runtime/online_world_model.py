@@ -212,6 +212,9 @@ class OnlineWorldModel(nn.Module):
                         rgb_config.temporal_velocity_reset_on_collision
                     ),
                     temporal_velocity_max_age_steps=(rgb_config.temporal_velocity_max_age_steps),
+                    temporal_velocity_post_event_max_samples=(
+                        rgb_config.temporal_velocity_post_event_max_samples
+                    ),
                     temporal_velocity_measurement_position_blend=(
                         rgb_config.temporal_velocity_measurement_position_blend
                     ),
@@ -223,6 +226,12 @@ class OnlineWorldModel(nn.Module):
                     ),
                     structured_disc_center_std_pixels=(
                         rgb_config.structured_disc_center_std_pixels
+                    ),
+                    structured_disc_depth_relative_std=(
+                        rgb_config.structured_disc_depth_relative_std
+                    ),
+                    structured_disc_position_confidence=(
+                        rgb_config.structured_disc_position_confidence
                     ),
                     roi_uncertainty_scale=rgb_config.roi_uncertainty_scale,
                     default_world_radius=(sum(config.simulator.radius_range) / 2.0),

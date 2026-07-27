@@ -11,7 +11,12 @@ from world_model.filtering import (
     BeliefUpdaterConfig,
     diagonal_kalman_update,
 )
-from world_model.fusion import AssociationResult, Associator, build_innovation
+from world_model.fusion import (
+    AssociationResult,
+    Associator,
+    SurpriseAssessment,
+    build_innovation,
+)
 from world_model.observations import (
     DirectVelocityEvidence,
     MeasurementSet,
@@ -194,6 +199,49 @@ def test_rgb_temporal_position_coupling_estimates_directional_velocity() -> None
     prior_future_x = belief.objects.position[0, 0, 0] + belief.objects.velocity[0, 0, 0]
     posterior_future_x = posterior.objects.position[0, 0, 0] + posterior.objects.velocity[0, 0, 0]
     assert (posterior_future_x - target_future_x).abs() < (prior_future_x - target_future_x).abs()
+
+
+def test_surprise_weight_does_not_double_clip_analytic_position_update() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(enable_learned_corrector=False),
+    )
+    baseline = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+    )
+    cause = SurpriseAssessment(
+        cause_probabilities=torch.zeros(1, 1, 7),
+        robust_weight=torch.tensor([[0.01]]),
+        trigger_global=torch.tensor([True]),
+        aggregate_surprise=torch.tensor([100.0]),
+    )
+    surprised = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+        cause=cause,
+    )
+
+    torch.testing.assert_close(
+        surprised.objects.position,
+        baseline.objects.position,
+    )
 
 
 def test_same_timestamp_rgb_position_does_not_update_velocity() -> None:

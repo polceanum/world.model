@@ -37,3 +37,11 @@ Working rules:
   complete, or propose abstractions. They must not replace `WorldBelief` with
   an opaque sensor latent or make generated pixels the primary evidence of
   physical correctness.
+- Preserve at least one familiar, invariant-tested reference-physics regime.
+  Unusual and compound dynamics are valid learnable scenarios, but label and
+  evaluate them separately so simulator quirks cannot masquerade as model
+  accuracy or failure.
+- Treat a mature physics engine as an optional independent RGB dataset backend,
+  never as runtime privileged input or a replacement for learned dynamics.
+  It must emit the canonical episode/observation contracts and record its
+  engine version, solver settings, units, timestep, scenario, and seed.

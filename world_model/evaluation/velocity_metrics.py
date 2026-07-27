@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import torch
 from torch import Tensor
@@ -47,6 +47,9 @@ class MaskedVelocityErrorAccumulator:
     absolute_sum: float = 0.0
     coordinate_count: int = 0
     object_frame_count: int = 0
+    axis_squared_sum: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    axis_absolute_sum: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    axis_count: list[int] = field(default_factory=lambda: [0, 0, 0])
 
     def update(self, prediction: Tensor, target: Tensor, mask: Tensor) -> None:
         _validate_velocity_inputs(
@@ -55,7 +58,8 @@ class MaskedVelocityErrorAccumulator:
             mask,
             prediction_name="predicted velocity",
         )
-        values = (prediction - target).masked_select(mask.unsqueeze(-1).expand_as(prediction))
+        residual = prediction - target
+        values = residual.masked_select(mask.unsqueeze(-1).expand_as(prediction))
         if values.numel() == 0:
             return
         detached = values.detach().float().cpu()
@@ -63,21 +67,46 @@ class MaskedVelocityErrorAccumulator:
         self.absolute_sum += float(detached.abs().sum())
         self.coordinate_count += int(detached.numel())
         self.object_frame_count += int(mask.sum().detach().cpu())
+        for axis in range(3):
+            axis_values = residual[..., axis].masked_select(mask).detach().float().cpu()
+            self.axis_squared_sum[axis] += float(axis_values.square().sum())
+            self.axis_absolute_sum[axis] += float(axis_values.abs().sum())
+            self.axis_count[axis] += int(axis_values.numel())
 
     def metrics(self, prefix: str) -> dict[str, float | None]:
+        metrics: dict[str, float | None] = {}
+        for axis, label in enumerate(("x", "y", "z")):
+            count = self.axis_count[axis]
+            metrics.update(
+                {
+                    f"{prefix}_velocity_{label}_rmse_mps": (
+                        math.sqrt(self.axis_squared_sum[axis] / count) if count else None
+                    ),
+                    f"{prefix}_velocity_{label}_mae_mps": (
+                        self.axis_absolute_sum[axis] / count if count else None
+                    ),
+                    f"{prefix}_velocity_{label}_count": float(count),
+                }
+            )
         if self.coordinate_count == 0:
-            return {
-                f"{prefix}_velocity_rmse_mps": None,
-                f"{prefix}_velocity_mae_mps": None,
-                f"{prefix}_velocity_coordinate_count": 0.0,
-                f"{prefix}_velocity_object_frame_count": 0.0,
+            metrics.update(
+                {
+                    f"{prefix}_velocity_rmse_mps": None,
+                    f"{prefix}_velocity_mae_mps": None,
+                    f"{prefix}_velocity_coordinate_count": 0.0,
+                    f"{prefix}_velocity_object_frame_count": 0.0,
+                }
+            )
+            return metrics
+        metrics.update(
+            {
+                f"{prefix}_velocity_rmse_mps": math.sqrt(self.squared_sum / self.coordinate_count),
+                f"{prefix}_velocity_mae_mps": self.absolute_sum / self.coordinate_count,
+                f"{prefix}_velocity_coordinate_count": float(self.coordinate_count),
+                f"{prefix}_velocity_object_frame_count": float(self.object_frame_count),
             }
-        return {
-            f"{prefix}_velocity_rmse_mps": math.sqrt(self.squared_sum / self.coordinate_count),
-            f"{prefix}_velocity_mae_mps": self.absolute_sum / self.coordinate_count,
-            f"{prefix}_velocity_coordinate_count": float(self.coordinate_count),
-            f"{prefix}_velocity_object_frame_count": float(self.object_frame_count),
-        }
+        )
+        return metrics
 
 
 @dataclass
@@ -88,6 +117,10 @@ class OrdinaryVelocityCorrectionAccumulator:
     posterior_norm_error_sum: float = 0.0
     positive_count: int = 0
     object_update_count: int = 0
+    axis_prior_absolute_sum: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    axis_posterior_absolute_sum: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    axis_positive_count: list[int] = field(default_factory=lambda: [0, 0, 0])
+    axis_count: list[int] = field(default_factory=lambda: [0, 0, 0])
 
     def update(
         self,
@@ -119,31 +152,69 @@ class OrdinaryVelocityCorrectionAccumulator:
         self.posterior_norm_error_sum += float(posterior_values.sum())
         self.positive_count += int((improvement > 0.0).sum())
         self.object_update_count += int(improvement.numel())
+        for axis in range(3):
+            prior_axis = (prior[..., axis] - target[..., axis]).abs().masked_select(mask)
+            posterior_axis = (posterior[..., axis] - target[..., axis]).abs().masked_select(mask)
+            prior_axis = prior_axis.detach().float().cpu()
+            posterior_axis = posterior_axis.detach().float().cpu()
+            self.axis_prior_absolute_sum[axis] += float(prior_axis.sum())
+            self.axis_posterior_absolute_sum[axis] += float(posterior_axis.sum())
+            self.axis_positive_count[axis] += int((posterior_axis < prior_axis).sum())
+            self.axis_count[axis] += int(prior_axis.numel())
 
     def metrics(self) -> dict[str, float | None]:
+        metrics: dict[str, float | None] = {}
+        for axis, label in enumerate(("x", "y", "z")):
+            count = self.axis_count[axis]
+            prior_axis = self.axis_prior_absolute_sum[axis] / count if count else None
+            posterior_axis = self.axis_posterior_absolute_sum[axis] / count if count else None
+            metrics.update(
+                {
+                    f"ordinary_velocity_{label}_prior_mae_mps": prior_axis,
+                    f"ordinary_velocity_{label}_posterior_mae_mps": posterior_axis,
+                    f"ordinary_velocity_{label}_improvement_mps": (
+                        prior_axis - posterior_axis
+                        if prior_axis is not None and posterior_axis is not None
+                        else None
+                    ),
+                    f"ordinary_velocity_{label}_positive_rate": (
+                        self.axis_positive_count[axis] / count if count else None
+                    ),
+                    f"ordinary_velocity_{label}_evaluated_updates": float(count),
+                }
+            )
         if self.object_update_count == 0:
-            return {
-                "ordinary_velocity_prior_norm_error_mean_mps": None,
-                "ordinary_velocity_posterior_norm_error_mean_mps": None,
-                ("ordinary_velocity_prior_to_posterior_norm_error_improvement_mean_mps"): None,
-                ("ordinary_velocity_prior_to_posterior_norm_error_improvement_fraction"): None,
-                "ordinary_velocity_prior_to_posterior_positive_rate": None,
-                "ordinary_velocity_evaluated_object_updates": 0.0,
-            }
+            metrics.update(
+                {
+                    "ordinary_velocity_prior_norm_error_mean_mps": None,
+                    "ordinary_velocity_posterior_norm_error_mean_mps": None,
+                    ("ordinary_velocity_prior_to_posterior_norm_error_improvement_mean_mps"): None,
+                    ("ordinary_velocity_prior_to_posterior_norm_error_improvement_fraction"): None,
+                    "ordinary_velocity_prior_to_posterior_positive_rate": None,
+                    "ordinary_velocity_evaluated_object_updates": 0.0,
+                }
+            )
+            return metrics
         prior = self.prior_norm_error_sum / self.object_update_count
         posterior = self.posterior_norm_error_sum / self.object_update_count
         improvement = prior - posterior
-        return {
-            "ordinary_velocity_prior_norm_error_mean_mps": prior,
-            "ordinary_velocity_posterior_norm_error_mean_mps": posterior,
-            ("ordinary_velocity_prior_to_posterior_norm_error_improvement_mean_mps"): improvement,
-            ("ordinary_velocity_prior_to_posterior_norm_error_improvement_fraction"): improvement
-            / max(prior, 1.0e-8),
-            "ordinary_velocity_prior_to_posterior_positive_rate": (
-                self.positive_count / self.object_update_count
-            ),
-            "ordinary_velocity_evaluated_object_updates": float(self.object_update_count),
-        }
+        metrics.update(
+            {
+                "ordinary_velocity_prior_norm_error_mean_mps": prior,
+                "ordinary_velocity_posterior_norm_error_mean_mps": posterior,
+                (
+                    "ordinary_velocity_prior_to_posterior_norm_error_improvement_mean_mps"
+                ): improvement,
+                (
+                    "ordinary_velocity_prior_to_posterior_norm_error_improvement_fraction"
+                ): improvement / max(prior, 1.0e-8),
+                "ordinary_velocity_prior_to_posterior_positive_rate": (
+                    self.positive_count / self.object_update_count
+                ),
+                "ordinary_velocity_evaluated_object_updates": float(self.object_update_count),
+            }
+        )
+        return metrics
 
 
 @dataclass

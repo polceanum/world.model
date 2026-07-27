@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.1
-**Date:** 26 July 2026; predictive-abstraction amendment 27 July 2026
+**Version:** 1.2
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -1777,6 +1777,20 @@ Do not implement a single opaque `DynamicsMLP` that maps packed state to next pa
 
 ## 25. Analytic kinematics
 
+The low-complexity prior for each translational axis is constant or
+parameter-damped velocity plus known external acceleration. This is an
+inductive bias, not a hard forecast rule. Learned modal/residual dynamics and
+explicit events may revise an axis when observations, interactions, or scene
+context provide evidence.
+
+Training and evaluation must expose position and velocity errors separately
+for x, y, and z as well as jointly. The model should be able to learn
+axis-local regularities while retaining cross-axis and pairwise context for
+event gates. For example, a contact detected from full 3-D geometry may open a
+transition that changes one or more velocity components; absent such evidence,
+the learned residual should not needlessly rewrite predictable inertial
+motion.
+
 ### 25.1 Time handling
 
 Every call accepts a real \(\Delta t\), not an integer frame count. Support irregular observation intervals.
@@ -2581,6 +2595,11 @@ Increase within the same simulator/config family:
 - longer horizons;
 - mild sensor noise.
 
+Introduce compound or unfamiliar physical regimes only after the familiar
+reference regime passes simulator invariants and qualitative trajectory
+inspection. Report per-scenario results so gains on an unusual regime cannot
+hide regression on the interpretable baseline.
+
 The project must not stop at Stage A or B.
 
 ## 51. Perturbation/recovery training
@@ -2902,6 +2921,11 @@ This avoids building a general-purpose rigid-body engine while still including:
 - data association;
 - belief correction.
 
+The sphere world is the first simulator backend, not a permanent definition of
+the dynamics the model may learn. Dataset generation must preserve a backend
+boundary so a mature rigid-body engine, another simulator, or recorded real
+data can emit the same episode and observation contracts.
+
 ## 63. Simulator state
 
 For each object:
@@ -2928,6 +2952,32 @@ Global:
 - episode seed.
 
 ## 64. Physics
+
+The architecture is intended to learn more than one physical system. The
+benchmark, however, must make the selected system explicit and auditable.
+Maintain at least one familiar reference regime whose trajectories can be
+judged visually, then add unusual restitution, friction, mass-ratio,
+actuation, or camera regimes under distinct scenario names. Do not silently
+mix a surprising or confounded regime into the reference demo.
+
+Every deterministic reference regime must be backed by invariant tests where
+applicable:
+
+- sphere-pair impulses conserve linear momentum;
+- relative normal speed obeys configured restitution within numerical
+  tolerance;
+- tangential changes are attributable to the configured friction model;
+- separating overlaps do not receive a second impulse;
+- event labels identify the interval in which the state jump occurs;
+- curriculum construction avoids accidental simultaneous events unless the
+  scenario is explicitly named and evaluated as a compound event.
+
+In particular, the ensured pair-collision setup must provide a clean temporal
+window between the pair impact and the first floor impact. Otherwise floor
+friction can cancel lateral motion in the same observation interval, making a
+correct but compound trajectory look like an incorrect or sticky pair
+collision. Compound pair/floor events remain useful later, but they belong in
+a separately labelled harder scenario.
 
 ### 64.1 Integration
 
@@ -2964,6 +3014,39 @@ The model should not simply share all simulator equations and parameters. Introd
 - rendering noise.
 
 The explicit model still provides structure, while learned residuals have work to do.
+
+Simulator/model mismatch must not mean simulator ambiguity. Record the
+integrator, contact law, scenario name, parameter ranges, and simulator/data
+version in generated artifacts. A model may learn unfamiliar dynamics, but
+evaluation claims require either familiar interpretable physics or sufficient
+invariant/counterfactual diagnostics to establish what “correct” means.
+
+### 64.7 Independent physics-engine reference backend
+
+Add a mature physics-engine backend when the dependency and training budget
+permit. Its purpose is independent realistic ground truth for contacts,
+rolling, spin, friction, stacked/compound interactions, and counterfactual
+validation; it must not leak engine state or equations into runtime inference.
+
+The backend must:
+
+- emit the canonical episode tensors, timestamps, calibration, identities,
+  visibility, parameters, and event labels;
+- render or export RGB through the same `ObservationPacket` path;
+- expose privileged state only to supervision, evaluation, unit tests, and
+  clearly labelled oracle debugging;
+- identify engine name/version, solver settings, timestep, units, and scenario
+  in metadata;
+- provide deterministic seeds where the engine supports them;
+- use explicit train/validation/test manifests;
+- report metrics separately from the lightweight sphere backend.
+
+Do not make a heavyweight engine mandatory for the default local smoke test.
+The analytic sphere backend remains the fast deterministic invariant oracle.
+An engine-backed reference is an additional dataset family used to verify that
+the model learns dynamics rather than reproducing quirks of one handwritten
+simulator. The same model and persistent belief contracts must run on both
+without architectural replacement.
 
 ## 65. Rendering
 
@@ -4489,6 +4572,22 @@ Mitigation:
 - held-out combinations;
 - explicit geometry/physics factors;
 - counterfactual changes.
+
+## 125.1 Benchmark physics is visually surprising or accidentally confounded
+
+Risk: the model is judged against ground truth whose pair, floor, wall, or
+external events overlap unintentionally, or whose unusual law was not
+identified. Correct learning then looks wrong, while actual simulator defects
+can be mistaken for model error.
+
+Mitigation:
+
+- a named familiar reference regime;
+- analytic invariants and per-event diagnostics;
+- separation of elementary events in the reference curriculum;
+- separately named compound-event scenarios;
+- plots of pre/post velocity and event time as well as position;
+- simulator/data versioning and per-scenario metrics.
 
 ## 126. MPS unsupported operations
 
