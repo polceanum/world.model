@@ -51,6 +51,17 @@
 - [x] Report sequence-aware occlusion identity/uncertainty transitions and
   directional before/after drag/restitution update metrics with explicit
   zero-sample/null behavior.
+- [x] Add explicit fresh-validation manifests that are disjoint from trainer
+  validation and the reserved test range, with exact seed provenance.
+- [x] Report current velocity error, ordinary prior-to-posterior velocity
+  correction, temporal-evidence availability/variance, and
+  collision-conditioned model/baseline forecasts.
+- [x] Implement a bounded causal RGB position history keyed by persistent ID
+  and a cheap explicit velocity-only correction path. Keep it disabled by
+  default because the first validation-selected ablations regress the primary
+  localization/forecast metrics.
+- [x] Exclude invalid graph edges and diagonals when pooling learned event
+  residuals, so valid negative collision evidence is not clamped to zero.
 
 ## Milestone 1 research acceptance — not yet achieved
 
@@ -58,8 +69,9 @@
   episodes (59.375% on the two-episode protocol; 75% over eight episodes).
 - [ ] Sustain the recommended 20% injected-perturbation recovery improvement
   on the wider test protocol (27.71% on two episodes; 19.59% on eight).
-- [ ] Learn useful collision prediction (best exact-window collision F1:
-  0.0556; semantics are fixed but skill remains far below the 0.75 target).
+- [ ] Learn useful collision prediction (the promoted checkpoint reaches
+  0.0426 fresh-validation F1 and 0.0556 on the older exploratory test;
+  semantics are fixed but skill remains far below the 0.75 target).
 - [ ] Demonstrate calibrated uncertainty expansion/recovery through held-out
   rendered occlusions.
 - [ ] Demonstrate distance-gated drag and restitution convergence from RGB,
@@ -69,14 +81,15 @@
 - [ ] Train and validate fast inverse-depth residuals on the now
   belief-slot-aligned cached sequences; enable them only after per-mode
   current/future improvement.
-- [ ] Add temporal RGB velocity/event evidence so collision impulses are
-  assimilated instead of only propagated by oracle-correct dynamics.
+- [x] Add temporal RGB velocity evidence so post-association motion can be
+  assimilated without re-encoding history. Validation has not yet justified
+  enabling it in public profiles.
 - [ ] Run the full 3,000-step `configs/toy_mps.yaml` schedule and a materially
   larger held-out test split.
 - [x] Export sequence-aware occlusion survival/uncertainty metrics with
   explicit zero-sample behavior.
-- [ ] Export physics-violation diagnostics, collision-conditioned metrics, and
-  representative failure plots.
+- [x] Export collision-conditioned model/baseline forecast metrics.
+- [ ] Export physics-violation diagnostics and representative failure plots.
 
 ## Deferred architecture
 
@@ -87,3 +100,5 @@
 - [ ] Continuous collision timing and richer geometry.
 - [ ] Spectral fixed-window ablation.
 - [ ] A second modality and real calibrated video adapter.
+- [ ] Correlation-aware temporal measurement covariance or learned confidence
+  gating that improves velocity without degrading localization.

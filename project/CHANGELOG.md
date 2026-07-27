@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — 2026-07-26
+## Unreleased — 2026-07-27
 
 ### Added
 
@@ -41,6 +41,12 @@
 - Focused unit/integration tests for simulator, contracts, dynamics, filtering,
   RGB global/ROI paths, MPS gradients, occlusion/lifecycle, checkpoint
   compatibility, CLI train/resume/evaluate, and oracle exclusion.
+- Explicit fresh-validation seed protocols with persisted non-overlap
+  provenance, collision-conditioned forecast/baseline metrics, and direct
+  current/ordinary-correction velocity evidence.
+- An opt-in bounded persistent-ID RGB temporal position history, causal
+  least-squares velocity measurement, and post-association velocity-only
+  correction with explicit uncertainty and availability diagnostics.
 
 ### Changed after integration audit
 
@@ -89,6 +95,15 @@
 - Added informative before/after restitution and drag metrics, including signed
   error reduction and physical update magnitude; these expose the current
   identifier's numerically negligible updates.
+- Corrected direct-velocity filtering so a modality must provide explicit
+  world velocity, log variance, and validity rather than accidentally treating
+  unrelated RGB value dimensions as velocity covariance.
+- Separated persistent temporal measurement history from disposable ROI
+  feature caches; global discovery can invalidate feature crops without
+  erasing safely associated same-ID motion evidence.
+- Excluded invalid graph edges and diagonals from learned event max-pooling, so
+  a valid negative residual can suppress rather than be clamped by stored
+  zeros.
 
 ### Evidence
 
@@ -114,17 +129,31 @@
   `runs/milestone1-toy-mps-scaled-smoke`.
 - Final 12-step public CPU smoke:
   `runs/accuracy-final-smoke`.
+- Fresh 16-episode validation baseline and temporal ablations:
+  `runs/temporal-rgb-evidence`.
+- Negative 22-step temporal continuation and paired fresh validation reports:
+  `runs/temporal-continuation-94`.
 
 The frozen continuation reaches 75.39% distance-gated recall/precision over
 eight held-out episodes, 0.161387 m 0.5-second forecast RMSE versus 0.490275 m
 for constant velocity, zero gated ID switches, and positive perturbation
-recovery. Milestone 1 acceptance is still not claimed: best exact-window
-collision F1 is only 0.0556, wider perturbation recovery is about 19.5% versus
-the recommended 20%, parameter convergence and held-out occlusion recovery
-remain incomplete, and the full MPS schedule has not run.
+recovery. Milestone 1 acceptance is still not claimed: the unchanged promoted
+checkpoint reaches only 0.042553 collision F1 on fresh validation, parameter
+convergence and held-out occlusion recovery remain incomplete, and the full
+MPS schedule has not run.
 
 The continuation and event-loss comparisons repeatedly inspect the same eight
 fixed test episodes and are therefore exploratory. Step 72 remains selected by
 validation loss; any preference for step-94 `last.pt` requires confirmation on
 a fresh, larger held-out seed set. Run and demo artifact directories are local
 and gitignored.
+
+The new fresh-validation protocol evaluated the unchanged selected step-72
+checkpoint on seeds `100004–100019`: current position MAE was `0.186991 m`,
+0.5-second RMSE `0.174269 m`, collision F1 `0.042553`, and perturbation
+recovery `20.09%`. Temporal inference improved velocity RMSE and short
+collision/event metrics but regressed localization, aggregate forecasting, and
+perturbation recovery under every tested history/variance setting, so it
+remains disabled. The temporal continuation reached F1 `0.121622` but was
+also rejected because position MAE rose to `0.196397 m`, 0.5-second RMSE to
+`0.184454 m`, and perturbation recovery fell to `11.84%`.

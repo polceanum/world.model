@@ -36,17 +36,27 @@ The first complete RGB-only vertical slice is runnable and tested. It includes
 the simulator, typed persistent belief, hybrid dynamics, oracle debug path,
 global/ROI RGB measurements, association and innovation, fast correction,
 occlusion-aware lifecycle, observability-gated parameter updates, training,
-held-out evaluation, and demo export.
+held-out evaluation, and demo export. Evaluation now supports explicit
+fresh-validation seed manifests, current velocity/correction evidence, and
+collision-conditioned model/baseline errors.
 
 This is implementation evidence, not a completed research milestone. The
 current deterministic RGB checkpoint reaches 75.39% distance-gated localization
 over eight held-out episodes and reduces 0.5-second RMSE from 0.491 m for
 constant velocity to 0.161 m. Ordinary global/fast corrections improve the
 held-out demo. Collision window semantics are now correct, but measured event
-skill remains weak (best exact-window F1 0.0556); wider perturbation recovery
-is narrowly below its recommended gate, and the full MPS schedule has not run.
+skill remains weak (the promoted checkpoint scores 0.0426 F1 on fresh
+validation and 0.0556 on the older exploratory test); wider untouched-test
+perturbation recovery is narrowly below its recommended gate, and the full MPS
+schedule has not run.
 See [`project/STATUS.md`](project/STATUS.md) for exact commands, metrics, and
 limitations.
+
+A bounded three-sample, persistent-ID RGB motion history is implemented as an
+opt-in experiment. On 16 fresh validation episodes it improved velocity RMSE
+but regressed localization and aggregate forecasts, so it remains disabled in
+the public profiles. A controlled continuation raised collision F1 to 0.1216
+but worsened the primary physical metrics and was likewise not promoted.
 
 ## Quick start
 
@@ -60,6 +70,17 @@ python train.py --config configs/toy_mps.yaml
 python evaluate.py --config configs/toy_mps.yaml --checkpoint <path>
 python demo.py --config configs/toy_mps.yaml --checkpoint <path>
 pytest
+```
+
+For checkpoint selection without reusing trainer-validation or test seeds:
+
+```bash
+python evaluate.py \
+  --config configs/tiny_overfit.yaml \
+  --checkpoint <path> \
+  --split validation \
+  --seed-protocol fresh_validation \
+  --set evaluation.episodes=16
 ```
 
 For the deterministic convergence/debug run:

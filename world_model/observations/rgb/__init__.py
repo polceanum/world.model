@@ -21,6 +21,7 @@ from world_model.observations.rgb.roi_updater import (
     make_roi_grid,
     sample_rois,
 )
+from world_model.observations.rgb.temporal import RGBTemporalPositionHistory
 
 __all__ = [
     "FastROIUpdater",
@@ -32,6 +33,7 @@ __all__ = [
     "RGBObservationConfig",
     "RGBObservationModule",
     "RGBProjectorConfig",
+    "RGBTemporalPositionHistory",
     "ROIUpdateOutput",
     "backproject_rgb_log_variance",
     "backproject_rgb_measurements",

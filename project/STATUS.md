@@ -1,10 +1,10 @@
 # Project status
 
-**Date:** 2026-07-26  
+**Date:** 2026-07-27
 **Specification:** `PROJECT_SPEC.md` 1.0  
 **Current state:** runnable RGB-only Milestone 1 vertical slice with converged
-tiny localization/forecasting and corrected event semantics; collision/event
-accuracy acceptance remains open
+tiny localization/forecasting, explicit fresh-seed/velocity evidence, and
+corrected event semantics; collision/event accuracy acceptance remains open
 
 ## What works
 
@@ -46,6 +46,15 @@ accuracy acceptance remains open
   regularizer and now also penalizes current/future posterior updates that fail
   to improve over a detached prior. Rare collision positives receive a
   bounded, explicitly configured BCE weight.
+- Evaluation can derive a deterministic fresh-validation manifest from
+  checkpoint provenance, persist its exact seeds/non-overlap status, report
+  current and ordinary-correction velocity metrics, and compare model and
+  baselines on identical future-collision masks.
+- RGB has a separate bounded persistent-ID temporal position history with
+  explicit timestamps and uncertainty. It can provide a cheap causal
+  velocity-only correction without new weights or history re-encoding, but is
+  disabled in public profiles because its current accuracy tradeoff fails the
+  overall validation gate.
 - The debug oracle is registered only when explicitly enabled. Every result
   below uses RGB plus known calibration; simulator state is used only for
   supervision, evaluation alignment, and explicitly labelled baselines.
@@ -56,14 +65,15 @@ accuracy acceptance remains open
 - Python: 3.10.20
 - Process architecture: x86_64
 - PyTorch: 2.10.0, installed build preserved unchanged
-- MPS: compiled and available in direct conda Python; real forward/backward
-  optimizer steps completed on `mps`
+- MPS: compiled, but unavailable to the current final-validation process;
+  earlier recorded real forward/backward optimizer steps completed on `mps`
 - CUDA: unavailable
 - Precision: float32
 
-Some `conda run ... pytest` launcher subprocesses report MPS unavailable and
-skip conditional tests. Direct `conda run -n orpheus python -m pytest`
-previously exercised the same MPS-specific tests successfully.
+The current launcher process reports MPS unavailable, so three
+hardware-conditional tests skip. Earlier direct runs exercised the same
+MPS-specific paths successfully; the preserved run evidence is described
+below.
 
 ## Current converged CPU evidence
 
@@ -283,6 +293,106 @@ independent model-selection protocol. Step 72 remains the validation-selected
 checkpoint; the small apparent test improvement of `last.pt` requires
 confirmation on a fresh, larger held-out seed set.
 
+## Fresh validation, velocity evidence, and temporal ablation
+
+The evaluator now reserves an explicit checkpoint-selection block after the
+trainer's validation episodes:
+
+```bash
+conda run --no-capture-output -n orpheus python evaluate.py \
+  --config configs/tiny_overfit.yaml \
+  --checkpoint runs/accuracy-closed-frozen-94/checkpoints/best_rollout.pt \
+  --split validation \
+  --seed-protocol fresh_validation \
+  --device cpu \
+  --set model.rgb.temporal_velocity_enabled=false \
+  --set evaluation.episodes=16 \
+  --output runs/temporal-rgb-evidence/fresh-validation-final-baseline
+```
+
+This 56.85-second CPU run used exactly seeds `100004–100019`. The report
+asserts no overlap with trainer validation (`100000–100003`) or the reserved
+test range. It is model-selection validation evidence, not final test
+acceptance. The unchanged step-72 checkpoint produced:
+
+- current position MAE/RMSE: `0.186991 / 0.239613 m`;
+- distance-gated current velocity MAE/RMSE:
+  `0.647751 / 1.369454 m/s` over 377 object-frames;
+- ordinary velocity prior/posterior norm error:
+  `1.747554 / 1.745960 m/s`, only `0.001594 m/s` improvement;
+- model RMSE at 0.10 / 0.25 / 0.50 seconds:
+  `0.236517 / 0.189670 / 0.174269 m`;
+- collision F1 `0.042553`;
+- perturbation recovery `20.0935%`, positive on `78.125%` of 96 horizons;
+- 90% forecast coverage `97.7522%`, zero ID switches, zero dropped/non-finite
+  forecasts.
+
+Future-collision-conditioned model RMSE at 0.10 / 0.25 / 0.50 seconds was
+`0.149769 / 0.137729 / 0.174269 m`, respectively
+`22.08% / 56.87% / 65.94%` below constant velocity on the exact same masks.
+
+The implemented temporal path keeps a separate sensor-local three-position
+history keyed by persistent object ID. It survives global/ROI feature-cache
+changes, requires strictly increasing timestamps and nonambiguous
+associations, and performs a velocity-only diagonal correction. With an
+explicit experimental variance ceiling of `1.0 (m/s)²`:
+
+```bash
+conda run --no-capture-output -n orpheus python evaluate.py \
+  --config configs/tiny_overfit.yaml \
+  --checkpoint runs/accuracy-closed-frozen-94/checkpoints/best_rollout.pt \
+  --split validation \
+  --seed-protocol fresh_validation \
+  --device cpu \
+  --set evaluation.episodes=16 \
+  --set model.rgb.temporal_velocity_enabled=true \
+  --set model.rgb.temporal_velocity_variance_ceiling=1.0 \
+  --output runs/temporal-rgb-evidence/fresh-validation-final-temporal
+```
+
+Velocity RMSE improved to `1.309964 m/s`, ordinary correction improvement to
+`0.025985 m/s`, short collision-conditioned RMSE to `0.140309 m`, and
+collision F1 to `0.055172`. However, current position MAE worsened to
+`0.190923 m`, 0.25-second RMSE to `0.201318 m`, perturbation recovery to
+`19.2569%`, and calibration/detection also regressed. Ceilings two/four and
+history size four showed the same tradeoff. No inference-only temporal setting
+was promoted; the public profiles keep it disabled and use uncapped propagated
+uncertainty when explicitly enabled without an override.
+
+A controlled frozen-global continuation was run rather than inferred:
+
+```bash
+conda run --no-capture-output -n orpheus python train.py \
+  --config configs/tiny_overfit.yaml \
+  --run-name temporal-continuation-94 \
+  --resume runs/accuracy-closed-frozen-94/checkpoints/best_rollout.pt \
+  --set model.rgb.temporal_velocity_enabled=true \
+  --set model.rgb.temporal_velocity_variance_ceiling=1.0 \
+  --set training.steps=94 \
+  --set training.eval_every=8 \
+  --set training.checkpoint_every=8 \
+  --set training.log_every=2
+```
+
+Twenty-two new CPU steps completed in `183.147 s`, with finite gradients and
+no oracle runtime input. Step 94 lowered the small trainer-validation rollout
+loss to `0.249018`. On the larger fresh manifest with temporal correction it
+improved velocity RMSE to `1.277519 m/s` and collision F1 to `0.121622`, but
+position MAE worsened to `0.196397 m`, 0.10/0.25/0.50-second RMSE to
+`0.243738 / 0.207295 / 0.184454 m`, and perturbation recovery to `11.843%`.
+Disabling temporal inference on the same weights was also worse. This run is a
+truthful negative result and step 72 remains the promoted checkpoint.
+
+Artifacts:
+
+- `runs/temporal-rgb-evidence/fresh-validation-final-baseline/report.md`
+- `runs/temporal-rgb-evidence/fresh-validation-final-temporal/report.md`
+- `runs/temporal-rgb-evidence/fresh-validation-temporal-ceiling2/report.md`
+- `runs/temporal-rgb-evidence/fresh-validation-temporal-ceiling4/report.md`
+- `runs/temporal-continuation-94/checkpoints/best_rollout.pt`
+- `runs/temporal-continuation-94/evaluation/fresh-validation-enabled/report.md`
+- `runs/temporal-continuation-94/evaluation/fresh-validation-disabled/report.md`
+
 ### Demo
 
 ```bash
@@ -334,18 +444,10 @@ checks, not convergence claims. The full 3,000-step schedule remains unrun.
 Full suite:
 
 ```bash
-conda run -n orpheus python -m pytest
+conda run --no-capture-output -n orpheus pytest
 ```
 
-Passed: 116 tests in 39.89 s, including all three MPS-conditional tests.
-
-Default launcher:
-
-```bash
-conda run -n orpheus pytest
-```
-
-Passed: 113 tests with three process-specific MPS skips in 37.76 s.
+Passed: 148 tests with three MPS-unavailable skips in 34.46 s.
 
 Lint and formatting:
 
@@ -354,13 +456,13 @@ conda run -n orpheus ruff check .
 conda run -n orpheus ruff format --check .
 ```
 
-Passed: all checks clean; 142 Python files formatted.
+Passed: all checks clean; 150 Python files formatted.
 
 Bytecode compilation:
 
 ```bash
 PYTHONPYCACHEPREFIX=/private/tmp/orpheus-final-pycache PYTHONPATH=. \
-  conda run -n orpheus python -m compileall \
+  conda run --no-capture-output -n orpheus python -m compileall -q \
   world_model train.py evaluate.py demo.py scripts tests
 ```
 
@@ -389,18 +491,23 @@ conda run -n orpheus python train.py \
   --config configs/toy_mps.yaml --dry-run
 ```
 
-Passed and selected `mps` with PyTorch 2.10.0, 96x96 images, 72 frames, RGB-only
-runtime, and the configured 3,000-step schedule.
+Passed with PyTorch 2.10.0, 96x96 images, 72 frames, RGB-only runtime, and the
+configured 3,000-step schedule. It selected `cpu` because MPS was unavailable
+to this final-validation process.
 
 ## Known limitations and open acceptance gates
 
 - Collision semantics are now correct and F1 is nonzero, but accuracy remains
-  poor (best measured exact-window F1: 0.0556 versus the recommended 0.75).
+  poor (fresh-validation F1: 0.042553 versus the recommended 0.75). The
+  rejected temporal continuation reached 0.121622 while materially worsening
+  state/forecast/recovery metrics, so it is not a promoted accuracy result.
   Focused exact-state tests and a non-persisted scratch oracle diagnostic point
   to RGB state accuracy and event uncertainty—not loss of collisions between
   internal substeps—as the limiting factors.
-- The wider eight-episode perturbation reduction is 19.59%, narrowly below the
-  recommended 20% gate, despite the two-episode protocol reaching 27.71%.
+- Fresh-validation perturbation reduction is 20.09%, but it has now been used
+  during model development and needs confirmation on a new untouched manifest.
+  The older wider test result was 19.59%, narrowly below the recommended 20%
+  gate.
 - Global vertical-centre predictions remain less image-dependent than target
   motion. More varied measurement training and explicit component losses are
   still warranted.
@@ -408,12 +515,16 @@ runtime, and the configured 3,000-step schedule.
   be trained with belief-slot-aligned cached sequences and enabled only after a
   held-out per-mode correction gate passes.
 - Repeated correlated RGB measurements can still make the diagonal filter
-  overconfident. The eight-episode 90% coverage is within target at 96.05%, but
-  explicit correlation handling remains absent.
+  overconfident. Fresh-validation 90% coverage is 97.75%, but explicit
+  correlation handling remains absent. The new temporal velocity measurement
+  is disabled by default because treating overlapping three-frame estimates as
+  independent improves velocity RMSE while degrading aggregate closed-loop
+  accuracy.
 - Directional before/after metrics confirm that physical parameter updates are
-  currently numerically tiny. Restitution slightly worsens on four informative
-  updates; drag improves by only 0.000000529 mean absolute error over 53
-  informative updates. Useful identification is not established.
+  currently numerically tiny. On fresh validation, restitution and drag signed
+  error reduction are slightly negative (`-3.67e-8` over 13 informative
+  updates and `-6.95e-8` over 104, respectively). Useful identification is not
+  established.
 - The evaluated short sequences contain no usable held-out distance-gated
   occlusion interval; rendered occlusion recovery remains supported mainly by
   focused geometry/lifecycle tests.
@@ -425,23 +536,25 @@ runtime, and the configured 3,000-step schedule.
 - Belief-slot-aligned fast supervision avoids rematching conditioned outputs,
   but its per-frame belief-to-label assignment can still switch under close
   crossings. Sequence-level training identity alignment remains future work.
-- The evaluator still lacks the full collision-conditioned,
-  physics-violation, and saved failure-plot suite.
+- The evaluator now reports collision-conditioned matched model/baseline
+  forecasts, but still lacks the full physics-violation and saved failure-plot
+  suite.
 - Multiple-hypothesis association, multi-frame tentative births, estimated
   camera pose, continuous collision timing, real video, and a second modality
   remain future work.
 
 ## Next concrete tasks
 
-1. Add uncertainty-aware temporal RGB velocity/event evidence and a
-   validation-selected probabilistic collision head; the exact-window
-   event-balanced loss alone did not generalize.
+1. Add correlation-aware temporal RGB velocity uncertainty, an innovation/
+   observability gate, and a validation-selected probabilistic collision head;
+   the current independent diagonal update and exact-window event-balanced
+   loss did not generalize.
 2. Train fast ROI updates on belief-slot-aligned cached sequences with
    teacher-forced/jittered valid ROIs, then validate and enable the depth
    residual through a per-mode improvement gate.
 3. Add correlation-aware measurement uncertainty and evaluate the implemented
    expansion/recovery metrics on an occlusion-rich held-out split.
-4. Add collision-conditioned forecast/baseline metrics and failure plots.
+4. Add physics-violation metrics and saved collision/forecast failure plots.
 5. Run the full `toy_mps` schedule and a larger event/occlusion-balanced split.
 
 All `runs/` and `demo_outputs/` paths above are real local artifacts but are

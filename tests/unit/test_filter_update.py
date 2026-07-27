@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
+import pytest
 import torch
 
 from world_model.belief import NUM_MOTION_MODES, BeliefFactory
@@ -10,6 +13,7 @@ from world_model.filtering import (
 )
 from world_model.fusion import AssociationResult, Associator, build_innovation
 from world_model.observations import (
+    DirectVelocityEvidence,
     MeasurementSet,
     ObservationPacket,
     PredictedMeasurements,
@@ -214,3 +218,133 @@ def test_same_timestamp_rgb_position_does_not_update_velocity() -> None:
         dt=0.0,
     )
     assert torch.equal(posterior.objects.velocity, belief.objects.velocity)
+
+
+def _direct_velocity_posterior(
+    *,
+    velocity_log_variance: float,
+    valid: bool = True,
+) -> tuple[object, object]:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    measured = replace(
+        measured,
+        supported_state_fields=("position", "velocity"),
+        auxiliary={
+            **measured.auxiliary,
+            "world_velocity": torch.tensor([[[2.0, 0.0, 0.0]]]),
+            "world_velocity_log_variance": torch.full(
+                (1, 1, 3),
+                velocity_log_variance,
+            ),
+            "world_velocity_valid_mask": torch.tensor([[valid]]),
+        },
+    )
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(enable_learned_corrector=False),
+    )
+    posterior = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=0.0,
+    )
+    return belief, posterior
+
+
+def test_direct_velocity_uses_auxiliary_uncertainty_not_rgb_value_dimensions() -> None:
+    _, precise = _direct_velocity_posterior(velocity_log_variance=-8.0)
+    _, uncertain = _direct_velocity_posterior(velocity_log_variance=8.0)
+
+    # This RGB fixture has only three sensor-value dimensions. Direct world
+    # velocity and its uncertainty therefore cannot come from values[...,3:6].
+    assert precise.objects.velocity[0, 0, 0] > 1.5
+    assert uncertain.objects.velocity[0, 0, 0] < 0.01
+    assert (
+        precise.objects.fast_log_variance[0, 0, 3] < (uncertain.objects.fast_log_variance[0, 0, 3])
+    )
+
+
+def test_invalid_direct_velocity_evidence_leaves_velocity_unchanged() -> None:
+    belief, posterior = _direct_velocity_posterior(
+        velocity_log_variance=-8.0,
+        valid=False,
+    )
+    torch.testing.assert_close(posterior.objects.velocity, belief.objects.velocity)
+    torch.testing.assert_close(
+        posterior.objects.fast_log_variance[..., 3:6],
+        belief.objects.fast_log_variance[..., 3:6],
+    )
+
+
+def test_post_association_direct_velocity_updates_only_valid_active_slots() -> None:
+    factory = BeliefFactory(max_objects=2, appearance_dim=4)
+    belief = factory.create().replace(
+        objects=factory.create().objects.replace(
+            active=torch.tensor([[True, False]]),
+            object_id=torch.tensor([[5, -1]]),
+            velocity=torch.zeros(1, 2, 3),
+        )
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=factory.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(enable_learned_corrector=False),
+    )
+    sentinel = object()
+    updater.last_diagnostics = sentinel  # type: ignore[assignment]
+    posterior = updater.correct_direct_velocity(
+        belief,
+        DirectVelocityEvidence(
+            velocity=torch.tensor([[[2.0, -1.0, 0.5], [9.0, 9.0, 9.0]]]),
+            log_variance=torch.full((1, 2, 3), -8.0),
+            valid_mask=torch.tensor([[True, True]]),
+            confidence=torch.ones(1, 2),
+        ),
+    )
+
+    assert posterior.objects.velocity[0, 0, 0] > 1.5
+    torch.testing.assert_close(posterior.objects.velocity[0, 1], torch.zeros(3))
+    assert updater.last_diagnostics is sentinel
+
+
+def test_direct_velocity_requires_explicit_auxiliary_log_variance() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    measured = replace(
+        measured,
+        supported_state_fields=("position", "velocity"),
+        auxiliary={
+            **measured.auxiliary,
+            "world_velocity": torch.zeros(1, 1, 3),
+            "world_velocity_valid_mask": torch.tensor([[True]]),
+        },
+    )
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(enable_learned_corrector=False),
+    )
+    with pytest.raises(ValueError, match="world_velocity_log_variance"):
+        updater.correct(
+            prior=belief,
+            measured=measured,
+            predicted=predicted,
+            association=association,
+            innovation=innovation,
+            dt=0.0,
+        )

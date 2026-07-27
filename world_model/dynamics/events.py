@@ -20,6 +20,24 @@ class EventOutput:
     contacts: ContactResult
 
 
+def _max_valid_edge_residual(edge_logits: Tensor, edge_mask: Tensor) -> Tensor:
+    """Max-pool learned edge logits without treating missing edges as zero."""
+    if edge_logits.shape != edge_mask.shape:
+        raise ValueError("edge logits and edge mask must have identical shapes")
+    if edge_mask.dtype != torch.bool:
+        raise ValueError("edge mask must be boolean")
+    masked_logits = edge_logits.masked_fill(
+        ~edge_mask,
+        torch.finfo(edge_logits.dtype).min,
+    )
+    pooled = masked_logits.max(dim=-1).values
+    return torch.where(
+        edge_mask.any(dim=-1),
+        pooled,
+        torch.zeros_like(pooled),
+    )
+
+
 class EventModel(nn.Module):
     """Hybrid categorical mode model backed by analytic sphere contact jumps."""
 
@@ -69,8 +87,14 @@ class EventModel(nn.Module):
             torch.full_like(updated.visibility_logit, -4.0),
         )
         if graph is not None:
-            pair_score = pair_score + graph.contact_logits.max(dim=-1).values
-            collision_score = collision_score + graph.collision_logits.max(dim=-1).values
+            pair_score = pair_score + _max_valid_edge_residual(
+                graph.contact_logits,
+                graph.edge_mask,
+            )
+            collision_score = collision_score + _max_valid_edge_residual(
+                graph.collision_logits,
+                graph.edge_mask,
+            )
         logits[..., MotionMode.GROUND_CONTACT] = ground_score
         logits[..., MotionMode.PAIR_CONTACT] = pair_score
         logits[..., MotionMode.COLLISION] = collision_score

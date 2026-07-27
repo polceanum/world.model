@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from pathlib import Path
@@ -83,6 +84,12 @@ class RGBConfig:
     global_every_steps: int = 12
     roi_size: int = 20
     fast_depth_residual_enabled: bool = False
+    temporal_velocity_enabled: bool = False
+    temporal_velocity_history_size: int = 3
+    temporal_velocity_min_dt: float = 1.0e-3
+    temporal_velocity_variance_scale: float = 1.0
+    temporal_velocity_variance_floor: float = 0.25
+    temporal_velocity_variance_ceiling: float | None = None
     roi_uncertainty_scale: float = 2.5
     global_uncertainty_threshold: float = 4.0
     surprise_threshold: float = 8.0
@@ -258,6 +265,36 @@ class OrpheusConfig:
             raise ValueError("modal_count must be nonnegative and modal_dim positive")
         if model.lifecycle.max_missed_steps <= 0:
             raise ValueError("model.lifecycle.max_missed_steps must be positive")
+        if (
+            not math.isfinite(model.rgb.temporal_velocity_min_dt)
+            or model.rgb.temporal_velocity_min_dt <= 0
+        ):
+            raise ValueError("model.rgb.temporal_velocity_min_dt must be finite and positive")
+        if model.rgb.temporal_velocity_history_size < 3:
+            raise ValueError("model.rgb.temporal_velocity_history_size must be at least three")
+        if (
+            not math.isfinite(model.rgb.temporal_velocity_variance_scale)
+            or model.rgb.temporal_velocity_variance_scale < 1
+        ):
+            raise ValueError(
+                "model.rgb.temporal_velocity_variance_scale must be finite and at least one"
+            )
+        if (
+            not math.isfinite(model.rgb.temporal_velocity_variance_floor)
+            or model.rgb.temporal_velocity_variance_floor <= 0
+        ):
+            raise ValueError(
+                "model.rgb.temporal_velocity_variance_floor must be finite and positive"
+            )
+        variance_ceiling = model.rgb.temporal_velocity_variance_ceiling
+        if variance_ceiling is not None and (
+            not math.isfinite(variance_ceiling)
+            or variance_ceiling < model.rgb.temporal_velocity_variance_floor
+        ):
+            raise ValueError(
+                "model.rgb.temporal_velocity_variance_ceiling must be finite "
+                "and no smaller than temporal_velocity_variance_floor"
+            )
         if not (
             0.0 <= model.lifecycle.occlusion_existence_decay <= model.lifecycle.existence_decay
         ):

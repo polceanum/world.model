@@ -6,6 +6,7 @@ import pytest
 import torch
 
 from world_model.observations import ObservationPacket
+from world_model.observations.rgb import RGBTemporalPositionHistory
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
 from world_model.utils.config import OrpheusConfig
@@ -133,6 +134,61 @@ def test_global_pass_invalidates_fast_roi_cache() -> None:
     assert model.diagnostics.latest is not None
     assert model.diagnostics.latest.observation_mode == "GLOBAL_DISCOVERY"
     assert "camera" not in model.caches
+
+
+def test_global_pass_preserves_separate_temporal_history_and_reset_clears_it() -> None:
+    torch.manual_seed(3)
+    config = _small_rgb_config()
+    config = replace(
+        config,
+        model=replace(
+            config.model,
+            rgb=replace(
+                config.model.rgb,
+                temporal_velocity_enabled=True,
+                temporal_velocity_history_size=3,
+            ),
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    model.ingest(_rgb_packet(0.0))
+    model.ingest(_rgb_packet(1.0 / 30.0, shift=1))
+    assert "camera" in model.caches
+    assert "camera" in model.state.temporal_histories
+    assert model.last_measurements is not None
+    assert {"velocity", "velocity_from_position"}.isdisjoint(
+        model.last_measurements.supported_state_fields
+    )
+    history_before = model.state.temporal_histories["camera"]
+    assert isinstance(history_before, RGBTemporalPositionHistory)
+    valid_before = int(history_before.valid_mask.sum())
+
+    model.diagnostics.reset()
+    scheduler_state = model.scheduler.state_for("camera")
+    scheduler_state.last_surprise = 0.0
+    scheduler_state.association_failures = 0
+    scheduler_state.steps_since_global = model.scheduler.global_every_steps
+    model.ingest(_rgb_packet(2.0 / 30.0, shift=1))
+
+    assert model.diagnostics.latest is not None
+    assert model.diagnostics.latest.observation_mode == "GLOBAL_DISCOVERY"
+    assert "camera" not in model.caches
+    history_after = model.state.temporal_histories["camera"]
+    assert isinstance(history_after, RGBTemporalPositionHistory)
+    assert int(history_after.valid_mask.sum()) >= valid_before
+    assert model.last_measurements is not None
+    assert {"velocity", "velocity_from_position"}.isdisjoint(
+        model.last_measurements.supported_state_fields
+    )
+    assert "world_velocity_valid_mask" in model.last_measurements.auxiliary
+    assert "world_velocity_log_variance" in model.last_measurements.auxiliary
+
+    model.detach_state()
+    detached = model.state.temporal_histories["camera"]
+    assert isinstance(detached, RGBTemporalPositionHistory)
+    assert not detached.positions.requires_grad
+    model.reset()
+    assert not model.state.temporal_histories
 
 
 def test_fast_roi_cache_is_invalidated_when_object_id_order_changes() -> None:

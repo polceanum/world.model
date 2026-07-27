@@ -11,6 +11,8 @@ from world_model.observations.base import ModalityCache
 
 @dataclass
 class RGBModalityCache(ModalityCache):
+    """Ephemeral feature state for one RGB sensor."""
+
     feature_map: Tensor
     object_features: Tensor
     rois: Tensor

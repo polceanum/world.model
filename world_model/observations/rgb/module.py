@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -10,10 +11,16 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
+from world_model.belief import fast_packing_map
 from world_model.fusion.innovation import build_innovation
-from world_model.observations.base import ModalityCache, ObservationModule
+from world_model.observations.base import (
+    ModalityCache,
+    ModalityHistory,
+    ObservationModule,
+)
 from world_model.observations.context import ObservationContext, SensorContext
 from world_model.observations.measurements import (
+    DirectVelocityEvidence,
     InnovationSet,
     MeasurementSet,
     PredictedMeasurements,
@@ -32,6 +39,7 @@ from world_model.observations.rgb.projector import (
     calibration_tensors,
 )
 from world_model.observations.rgb.roi_updater import FastROIUpdater
+from world_model.observations.rgb.temporal import RGBTemporalPositionHistory
 
 if TYPE_CHECKING:
     from world_model.belief.world_belief import WorldBelief
@@ -48,11 +56,39 @@ class RGBObservationConfig:
     roi_size: int = 20
     roi_hidden_dim: int = 96
     fast_depth_residual_enabled: bool = False
+    temporal_velocity_enabled: bool = False
+    temporal_velocity_history_size: int = 3
+    temporal_velocity_min_dt: float = 1.0e-3
+    temporal_velocity_variance_scale: float = 1.0
+    temporal_velocity_variance_floor: float = 0.25
+    temporal_velocity_variance_ceiling: float | None = None
     roi_uncertainty_scale: float = 2.5
     default_world_radius: float = 0.15
     proposal_threshold: float = 0.25
     measurement_log_variance_min: float = -8.0
     measurement_log_variance_max: float = 3.0
+
+    def __post_init__(self) -> None:
+        if self.temporal_velocity_history_size < 3:
+            raise ValueError("temporal_velocity_history_size must be at least three")
+        if not math.isfinite(self.temporal_velocity_min_dt) or (self.temporal_velocity_min_dt <= 0):
+            raise ValueError("temporal_velocity_min_dt must be finite and positive")
+        if not math.isfinite(self.temporal_velocity_variance_scale) or (
+            self.temporal_velocity_variance_scale < 1
+        ):
+            raise ValueError("temporal_velocity_variance_scale must be finite and at least one")
+        if not math.isfinite(self.temporal_velocity_variance_floor) or (
+            self.temporal_velocity_variance_floor <= 0
+        ):
+            raise ValueError("temporal_velocity_variance_floor must be finite and positive")
+        if self.temporal_velocity_variance_ceiling is not None and (
+            not math.isfinite(self.temporal_velocity_variance_ceiling)
+            or self.temporal_velocity_variance_ceiling < self.temporal_velocity_variance_floor
+        ):
+            raise ValueError(
+                "temporal_velocity_variance_ceiling must be finite and no "
+                "smaller than temporal_velocity_variance_floor"
+            )
 
 
 def _packet_batch(packets: Sequence[ObservationPacket]) -> tuple[Tensor, float]:
@@ -214,10 +250,14 @@ class RGBObservationModule(ObservationModule):
             class_logits=None,
             frame_id=packet.frame_id,
             supported_state_fields=(
-                "position",
-                "velocity_from_position",
-                "geometry",
-                "appearance",
+                ("position", "geometry", "appearance")
+                if self.config.temporal_velocity_enabled
+                else (
+                    "position",
+                    "velocity_from_position",
+                    "geometry",
+                    "appearance",
+                )
             ),
             auxiliary={
                 "world_position": world_position,
@@ -261,7 +301,24 @@ class RGBObservationModule(ObservationModule):
         feature_map = self.backbone.forward_fast(image)["stage2"]
         if predicted.rois is None:
             raise ValueError("RGB fast path requires projected ROIs")
-        previous_features = cache.object_features if isinstance(cache, RGBModalityCache) else None
+        previous_features = None
+        if isinstance(cache, RGBModalityCache):
+            cached_features = cache.object_features
+            if (
+                cached_features.shape[:2] == predicted.object_ids.shape
+                and cached_features.device == feature_map.device
+                and cached_features.dtype == feature_map.dtype
+                and cache.object_ids.shape == predicted.object_ids.shape
+                and cache.object_ids.device == predicted.object_ids.device
+            ):
+                same_identity = (predicted.object_ids >= 0) & (
+                    cache.object_ids == predicted.object_ids
+                )
+                previous_features = torch.where(
+                    same_identity.unsqueeze(-1),
+                    cached_features,
+                    torch.zeros_like(cached_features),
+                )
         output = self.roi_updater(
             feature_map,
             predicted.rois,
@@ -316,6 +373,23 @@ class RGBObservationModule(ObservationModule):
         existence_logits = output.existence_logits + torch.logit(
             predicted.visibility.clamp(1.0e-4, 1.0 - 1.0e-4)
         )
+        supported_state_fields = [
+            "position",
+            "geometry",
+            "appearance",
+        ]
+        if not self.config.temporal_velocity_enabled:
+            supported_state_fields.insert(1, "velocity_from_position")
+        auxiliary = {
+            "world_position": world_position,
+            "world_radius": predicted.auxiliary["world_radius"],
+            "world_log_variance": world_position_log_variance,
+            "world_position_log_variance": world_position_log_variance,
+            "visibility_logit": output.visibility_logits,
+            "visibility_logits": output.visibility_logits,
+            "event_features": output.event_features,
+            "appearance_gate": output.appearance_gate,
+        }
         measurement = MeasurementSet(
             modality=self.modality_name,
             sensor_id=packets[0].sensor_id,
@@ -327,22 +401,8 @@ class RGBObservationModule(ObservationModule):
             appearance=appearance,
             class_logits=None,
             frame_id=packets[0].frame_id,
-            supported_state_fields=(
-                "position",
-                "velocity_from_position",
-                "geometry",
-                "appearance",
-            ),
-            auxiliary={
-                "world_position": world_position,
-                "world_radius": predicted.auxiliary["world_radius"],
-                "world_log_variance": world_position_log_variance,
-                "world_position_log_variance": world_position_log_variance,
-                "visibility_logit": output.visibility_logits,
-                "visibility_logits": output.visibility_logits,
-                "event_features": output.event_features,
-                "appearance_gate": output.appearance_gate,
-            },
+            supported_state_fields=tuple(supported_state_fields),
+            auxiliary=auxiliary,
         )
         measurement.validate()
         object_ids = predicted.object_ids
@@ -356,6 +416,102 @@ class RGBObservationModule(ObservationModule):
             object_ids=object_ids,
         )
         return measurement, new_cache
+
+    def update_temporal_history(
+        self,
+        *,
+        posterior: WorldBelief,
+        measured: MeasurementSet,
+        association: AssociationResult,
+        history: ModalityHistory | None,
+    ) -> tuple[DirectVelocityEvidence | None, ModalityHistory | None]:
+        """Update same-ID corrected-position history and emit a causal LS slope."""
+
+        if not self.config.temporal_velocity_enabled:
+            return None, history
+        object_ids = posterior.objects.object_id
+        active_mask = posterior.objects.active
+        observed_mask = torch.zeros_like(active_mask)
+        confidence = posterior.objects.position.new_zeros(active_mask.shape)
+        batch_index, pair_index = torch.nonzero(association.pair_mask, as_tuple=True)
+        if batch_index.numel():
+            belief_index = association.belief_indices[batch_index, pair_index]
+            measurement_index = association.measurement_indices[batch_index, pair_index]
+            nonambiguous = ~association.ambiguous[batch_index, pair_index]
+            accepted_batch = batch_index[nonambiguous]
+            accepted_belief = belief_index[nonambiguous]
+            accepted_measurement = measurement_index[nonambiguous]
+            observed_mask[accepted_batch, accepted_belief] = True
+            confidence[accepted_batch, accepted_belief] = measured.existence_logits[
+                accepted_batch,
+                accepted_measurement,
+            ].sigmoid()
+
+        position_slice = fast_packing_map(posterior.objects)["position"]
+        position_log_variance = posterior.objects.fast_log_variance[..., position_slice]
+        if (
+            not isinstance(history, RGBTemporalPositionHistory)
+            or history.history_size != self.config.temporal_velocity_history_size
+        ):
+            history = RGBTemporalPositionHistory.empty(
+                object_ids=object_ids,
+                active_mask=active_mask,
+                history_size=self.config.temporal_velocity_history_size,
+                dtype=posterior.dtype,
+            )
+        history = history.append(
+            object_ids=object_ids,
+            active_mask=active_mask,
+            observed_mask=observed_mask,
+            timestamp=measured.timestamp,
+            positions=posterior.objects.position,
+            position_log_variance=position_log_variance,
+            minimum_dt=self.config.temporal_velocity_min_dt,
+        )
+        velocity, velocity_log_variance, velocity_valid_mask = history.least_squares_velocity(
+            minimum_dt=self.config.temporal_velocity_min_dt,
+            variance_scale=self.config.temporal_velocity_variance_scale,
+            variance_floor=self.config.temporal_velocity_variance_floor,
+            variance_ceiling=self.config.temporal_velocity_variance_ceiling,
+        )
+        velocity_valid_mask = velocity_valid_mask & observed_mask & active_mask
+
+        measurement_velocity = measured.values.new_zeros((*measured.values.shape[:2], 3))
+        measurement_log_variance = measured.values.new_full(
+            (*measured.values.shape[:2], 3),
+            math.log(self.config.temporal_velocity_variance_floor),
+        )
+        measurement_valid = torch.zeros_like(measured.measurement_mask)
+        if batch_index.numel():
+            evidence_valid = velocity_valid_mask[batch_index, belief_index] & (
+                ~association.ambiguous[batch_index, pair_index]
+            )
+            valid_batch = batch_index[evidence_valid]
+            valid_belief = belief_index[evidence_valid]
+            valid_measurement = measurement_index[evidence_valid]
+            measurement_velocity[valid_batch, valid_measurement] = velocity[
+                valid_batch,
+                valid_belief,
+            ]
+            measurement_log_variance[valid_batch, valid_measurement] = velocity_log_variance[
+                valid_batch, valid_belief
+            ]
+            measurement_valid[valid_batch, valid_measurement] = True
+        measured.auxiliary.update(
+            {
+                "world_velocity": measurement_velocity,
+                "world_velocity_log_variance": measurement_log_variance,
+                "world_velocity_valid_mask": measurement_valid,
+            }
+        )
+        evidence = DirectVelocityEvidence(
+            velocity=velocity,
+            log_variance=velocity_log_variance,
+            valid_mask=velocity_valid_mask,
+            confidence=confidence,
+        )
+        evidence.validate()
+        return evidence, history
 
     def project(
         self,

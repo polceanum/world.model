@@ -1,8 +1,9 @@
 """Timestamped observation contracts and concrete modality modules."""
 
-from world_model.observations.base import ModalityCache, ObservationModule
+from world_model.observations.base import ModalityCache, ModalityHistory, ObservationModule
 from world_model.observations.context import ObservationContext, SensorContext
 from world_model.observations.measurements import (
+    DirectVelocityEvidence,
     InnovationSet,
     MeasurementSet,
     PredictedMeasurements,
@@ -15,9 +16,11 @@ from world_model.observations.registry import (
 )
 
 __all__ = [
+    "DirectVelocityEvidence",
     "InnovationSet",
     "MeasurementSet",
     "ModalityCache",
+    "ModalityHistory",
     "OBSERVATION_MODULES",
     "ObservationContext",
     "ObservationModule",

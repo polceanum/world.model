@@ -6,6 +6,7 @@ import hashlib
 import math
 import statistics
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -17,12 +18,25 @@ from torch.utils.data import DataLoader
 from world_model.belief import MotionMode
 from world_model.datasets import SyntheticSphereDataset, collate_episodes
 from world_model.evaluation.baselines import baseline_bundle
+from world_model.evaluation.collision_conditioned import (
+    CollisionConditionedForecastAccumulator,
+    collision_mask_for_forecast_window,
+)
 from world_model.evaluation.latency import synchronize
 from world_model.evaluation.occlusion_metrics import (
     OcclusionTransitionAccumulator,
 )
 from world_model.evaluation.parameter_metrics import OnlineParameterUpdateAccumulator
 from world_model.evaluation.reports import write_evaluation_report
+from world_model.evaluation.seed_protocol import (
+    STANDARD_SEED_PROTOCOL,
+    make_evaluation_seed_protocol,
+)
+from world_model.evaluation.velocity_metrics import (
+    MaskedVelocityErrorAccumulator,
+    OrdinaryVelocityCorrectionAccumulator,
+    TemporalVelocityMeasurementAccumulator,
+)
 from world_model.identification import ParameterUpdateDiagnostics
 from world_model.runtime import OnlineWorldModel
 from world_model.training.checkpointing import load_checkpoint
@@ -458,6 +472,7 @@ def evaluate_checkpoint(
     checkpoint_path: str | Path,
     *,
     split: str = "test",
+    seed_protocol: str = STANDARD_SEED_PROTOCOL,
     output_dir: str | Path | None = None,
     device_info: DeviceInfo | None = None,
 ) -> dict[str, Any]:
@@ -489,10 +504,28 @@ def evaluate_checkpoint(
     )
     model.eval()
 
+    checkpoint_training_config = payload["config"].get("training")
+    if not isinstance(checkpoint_training_config, Mapping):
+        raise ValueError("checkpoint config is missing its training mapping")
+    checkpoint_validation_episodes = checkpoint_training_config.get("validation_episodes")
+    if (
+        not isinstance(checkpoint_validation_episodes, int)
+        or isinstance(checkpoint_validation_episodes, bool)
+        or checkpoint_validation_episodes < 0
+    ):
+        raise ValueError(
+            "checkpoint config training.validation_episodes must be a nonnegative integer"
+        )
+    resolved_seed_protocol = make_evaluation_seed_protocol(
+        name=seed_protocol,
+        split=split,
+        episode_count=config.evaluation.episodes,
+        training_validation_episodes=checkpoint_validation_episodes,
+    )
     dataset = SyntheticSphereDataset(
         config,
-        split=split,
-        num_episodes=config.evaluation.episodes,
+        split=resolved_seed_protocol.split,
+        seeds=resolved_seed_protocol.manifest,
         memory_cache=True,
     )
     loader = DataLoader(
@@ -508,10 +541,14 @@ def evaluate_checkpoint(
     )
 
     current_error = _ErrorAccumulator()
+    current_velocity_error = MaskedVelocityErrorAccumulator()
+    ordinary_velocity_correction = OrdinaryVelocityCorrectionAccumulator()
+    temporal_velocity_measurements = TemporalVelocityMeasurementAccumulator()
     forecast_errors: dict[tuple[str, str], _ErrorAccumulator] = {}
     correction = _CorrectionAccumulator()
     events = _BinaryAccumulator()
     calibration = _CalibrationAccumulator()
+    collision_conditioned_forecasts = CollisionConditionedForecastAccumulator()
     parameters = _ParameterAccumulator()
     directional_parameters = OnlineParameterUpdateAccumulator()
     identifier_metrics = _IdentifierAccumulator()
@@ -550,8 +587,18 @@ def evaluate_checkpoint(
                 packet = make_rgb_packet(batch, frame_index)
                 prior_rollout = None
                 prior_variance = None
+                ordinary_velocity_prior = None
                 perturb_offsets: list[int] = []
                 perturb_seconds: list[float] = []
+                if model.belief is not None and frame_index != perturbation_frame:
+                    requested = model.belief.timestamp.new_full(
+                        model.belief.timestamp.shape,
+                        packet.timestamp,
+                    )
+                    ordinary_velocity_prior = model.dynamics.predict(
+                        model.belief,
+                        requested - model.belief.timestamp,
+                    )
                 if model.belief is not None and frame_index == perturbation_frame:
                     source_belief = perturb_belief(
                         model.belief,
@@ -597,6 +644,22 @@ def evaluate_checkpoint(
                 belief = model.ingest(packet)
                 synchronize(device)
                 update_elapsed_ms = (time.perf_counter() - update_started) * 1000.0
+                last_measurements = model.last_measurements
+                if last_measurements is not None:
+                    expected_measurement_timestamp = last_measurements.timestamp.new_full(
+                        last_measurements.timestamp.shape,
+                        packet.timestamp,
+                    )
+                    if not torch.allclose(
+                        last_measurements.timestamp,
+                        expected_measurement_timestamp,
+                        atol=1.0e-6,
+                        rtol=0.0,
+                    ):
+                        # SKIP leaves the previous diagnostics snapshot in the
+                        # runtime; never count that stale measurement twice.
+                        last_measurements = None
+                temporal_velocity_measurements.update(last_measurements)
                 if model.diagnostics.oracle_used:
                     raise RuntimeError(
                         "oracle diagnostics detected during claimed RGB-only evaluation"
@@ -624,6 +687,25 @@ def evaluate_checkpoint(
                     aligned_position,
                     matched,
                 )
+                target_velocity = batch["objects"]["velocity"][:, frame_index]
+                aligned_velocity = gather_target_slots(target_velocity, target_indices)
+                current_velocity_error.update(
+                    belief.objects.velocity,
+                    aligned_velocity,
+                    distance_gated_matched,
+                )
+                if ordinary_velocity_prior is not None and last_measurements is not None:
+                    same_persistent_slot = (
+                        ordinary_velocity_prior.objects.active
+                        & belief.objects.active
+                        & (ordinary_velocity_prior.objects.object_id == belief.objects.object_id)
+                    )
+                    ordinary_velocity_correction.update(
+                        ordinary_velocity_prior.objects.velocity,
+                        belief.objects.velocity,
+                        aligned_velocity,
+                        distance_gated_matched & same_persistent_slot,
+                    )
                 tracking.update(
                     belief.objects.object_id,
                     batch["objects"]["id"][:, frame_index],
@@ -900,6 +982,32 @@ def evaluate_checkpoint(
                             future_target,
                             common_valid,
                         )
+                        collision_during_window = collision_mask_for_forecast_window(
+                            batch["events"]["collision"],
+                            anchor_frame=frame_index,
+                            target_frame=target_frame,
+                        )
+                        aligned_collision_during_window = (
+                            gather_target_slots(
+                                collision_during_window.unsqueeze(-1),
+                                target_indices,
+                            )
+                            .squeeze(-1)
+                            .bool()
+                        )
+                        collision_conditioned_forecasts.update(
+                            horizon=horizon,
+                            predictions={
+                                "model": model_positions[:, query_index],
+                                **{
+                                    baseline_name: positions[:, query_index]
+                                    for baseline_name, positions in baselines.items()
+                                },
+                            },
+                            target=future_target,
+                            valid_mask=common_valid,
+                            collision_mask=aligned_collision_during_window,
+                        )
                         if model_collision_logits is not None:
                             # The selected endpoint logit covers exactly
                             # [target_frame - 1, target_frame], matching the
@@ -970,8 +1078,12 @@ def evaluate_checkpoint(
 
     metrics: dict[str, Any] = {}
     metrics.update(current_error.metrics("posterior_current"))
+    metrics.update(current_velocity_error.metrics("posterior_current"))
+    metrics.update(ordinary_velocity_correction.metrics())
+    metrics.update(temporal_velocity_measurements.metrics())
     for (method, horizon), accumulator in sorted(forecast_errors.items()):
         metrics.update(accumulator.metrics(f"{method}@{horizon}"))
+    metrics.update(collision_conditioned_forecasts.metrics())
     metrics.update(correction.metrics())
     metrics.update(events.metrics("collision"))
     metrics.update(calibration.metrics())
@@ -1035,7 +1147,13 @@ def evaluate_checkpoint(
     output = (
         Path(output_dir).expanduser().resolve()
         if output_dir is not None
-        else checkpoint.parent.parent / "evaluation" / split
+        else checkpoint.parent.parent
+        / "evaluation"
+        / (
+            split
+            if resolved_seed_protocol.name == STANDARD_SEED_PROTOCOL
+            else f"{split}-{resolved_seed_protocol.name}"
+        )
     )
     limitations = [
         (
@@ -1057,6 +1175,29 @@ def evaluate_checkpoint(
     if correction.count == 0:
         limitations.append(
             "No active matched object/horizon was available for perturbation correction metrics."
+        )
+    if ordinary_velocity_correction.object_update_count == 0:
+        limitations.append(
+            "No persistent, distance-gated object was available across an ordinary "
+            "non-perturbed prior-to-posterior observation update; ordinary velocity "
+            "correction metrics are null."
+        )
+    if temporal_velocity_measurements.explicit_field_update_count == 0:
+        limitations.append(
+            "The evaluated runtime exposed no complete explicit temporal velocity "
+            "measurement fields; temporal velocity measurement counts are zero and "
+            "reported measurement variance is null."
+        )
+    elif temporal_velocity_measurements.valid_object_count == 0:
+        limitations.append(
+            "Explicit temporal velocity measurement fields were exposed, but no "
+            "distance-independent measurement proposal was marked valid; reported "
+            "measurement variance is null."
+        )
+    if collision_conditioned_forecasts.total_collision_object_horizons == 0:
+        limitations.append(
+            "No tracked object had a simulator-labelled collision in any future "
+            "forecast window; collision-conditioned forecast errors are null."
         )
     if distance_gated_matched_object_frames == 0:
         limitations.append(
@@ -1104,6 +1245,9 @@ def evaluate_checkpoint(
         "rgb_only": True,
         "oracle_runtime_input_used": False,
         "simulator_state_usage": "metrics_and_baselines_only",
+        "collision_conditioned_mask_source": (
+            "evaluation_only_simulator_collision_any_in_(anchor_frame,target_frame]"
+        ),
         "parameter_metric_mask_source": "runtime_identifier_diagnostics",
         "directional_parameter_metric_mask_source": (
             "persistent_distance_gated_runtime_update_and_evaluation_only_"
@@ -1111,12 +1255,21 @@ def evaluate_checkpoint(
         ),
         "current_detection_distance_threshold_m": (_CURRENT_DETECTION_DISTANCE_THRESHOLD_M),
         "identity_metric_match_source": "distance_gated_current_detection",
+        "current_velocity_metric_match_source": "distance_gated_current_detection",
+        "ordinary_velocity_correction_scope": (
+            "timestamp_advanced_prior_to_posterior_nonperturbed_fresh_observation_"
+            "same_persistent_slot_and_distance_gated_current_detection"
+        ),
+        "temporal_velocity_measurement_metric_source": (
+            "fresh_runtime_last_measurements_explicit_auxiliary_fields_only"
+        ),
         "occlusion_visible_fraction_threshold": (occlusion_transitions.visible_fraction_threshold),
         "occlusion_fully_hidden_fraction_threshold": (
             occlusion_transitions.fully_occluded_fraction_threshold
         ),
         "occlusion_tracking_key": "pre_occlusion_target_to_persistent_prediction_id",
         "occlusion_hidden_tracking_localization_gate_m": None,
+        **resolved_seed_protocol.metadata(),
     }
     json_path, markdown_path = write_evaluation_report(
         output,
@@ -1131,6 +1284,8 @@ def evaluate_checkpoint(
         "checkpoint": str(checkpoint),
         "checkpoint_step": int(payload["step"]),
         "split": split,
+        "seed_protocol": resolved_seed_protocol.name,
+        "episode_seeds": list(resolved_seed_protocol.manifest.seeds),
         "device": str(device),
         "rgb_only": True,
         "oracle_runtime_input_used": False,

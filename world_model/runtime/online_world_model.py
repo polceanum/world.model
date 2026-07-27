@@ -187,6 +187,14 @@ class OnlineWorldModel(nn.Module):
                     roi_size=rgb_config.roi_size,
                     roi_hidden_dim=config.model.filter.hidden_dim,
                     fast_depth_residual_enabled=(rgb_config.fast_depth_residual_enabled),
+                    temporal_velocity_enabled=rgb_config.temporal_velocity_enabled,
+                    temporal_velocity_history_size=(rgb_config.temporal_velocity_history_size),
+                    temporal_velocity_min_dt=rgb_config.temporal_velocity_min_dt,
+                    temporal_velocity_variance_scale=(rgb_config.temporal_velocity_variance_scale),
+                    temporal_velocity_variance_floor=(rgb_config.temporal_velocity_variance_floor),
+                    temporal_velocity_variance_ceiling=(
+                        rgb_config.temporal_velocity_variance_ceiling
+                    ),
                     roi_uncertainty_scale=rgb_config.roi_uncertainty_scale,
                     default_world_radius=(sum(config.simulator.radius_range) / 2.0),
                     proposal_threshold=rgb_config.existence_threshold,
@@ -454,7 +462,6 @@ class OnlineWorldModel(nn.Module):
             self.state.caches[packet.sensor_id] = new_cache
         else:
             return posterior
-        self._last_measurements = measurements.detach()
         active_before = int(posterior.objects.active.sum().detach().cpu())
         association = self.associator.match(posterior, measurements, predicted)
         innovation = module.innovation(measurements, predicted, association)
@@ -468,6 +475,22 @@ class OnlineWorldModel(nn.Module):
             dt=prediction_dt,
             cause=surprise,
         )
+        velocity_evidence, temporal_history = module.update_temporal_history(
+            posterior=posterior,
+            measured=measurements,
+            association=association,
+            history=self.state.temporal_histories.get(packet.sensor_id),
+        )
+        if temporal_history is None:
+            self.state.temporal_histories.pop(packet.sensor_id, None)
+        else:
+            self.state.temporal_histories[packet.sensor_id] = temporal_history
+        if velocity_evidence is not None:
+            posterior = self.updater.correct_direct_velocity(
+                posterior,
+                velocity_evidence,
+            )
+        self._last_measurements = measurements.detach()
         observed_mask = (
             self.updater.last_diagnostics.observed_mask
             if self.updater.last_diagnostics is not None

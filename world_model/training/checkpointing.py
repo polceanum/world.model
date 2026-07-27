@@ -6,6 +6,7 @@ import os
 import random
 import subprocess
 from collections.abc import Mapping
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,30 @@ _SIMULATOR_COMPATIBILITY_FIELDS = (
     "known_camera_pose",
 )
 
+_RGB_OPERATIONAL_COMPATIBILITY_FIELDS = (
+    "temporal_velocity_enabled",
+    "temporal_velocity_history_size",
+    "temporal_velocity_min_dt",
+    "temporal_velocity_variance_scale",
+    "temporal_velocity_variance_floor",
+    "temporal_velocity_variance_ceiling",
+)
+
+
+def _model_checkpoint_semantics(value: object) -> object:
+    """Remove weight-free RGB runtime controls from compatibility equality."""
+
+    if not isinstance(value, Mapping):
+        return value
+    model = deepcopy(dict(value))
+    rgb = model.get("rgb")
+    if isinstance(rgb, Mapping):
+        normalized_rgb = dict(rgb)
+        for field_name in _RGB_OPERATIONAL_COMPATIBILITY_FIELDS:
+            normalized_rgb.pop(field_name, None)
+        model["rgb"] = normalized_rgb
+    return model
+
 
 def validate_checkpoint_config(
     payload: Mapping[str, Any],
@@ -44,7 +69,9 @@ def validate_checkpoint_config(
         raise ValueError("checkpoint does not contain a resolved config mapping")
     requested = config.to_dict()
     mismatches: list[str] = []
-    if checkpoint_config.get("model") != requested["model"]:
+    if _model_checkpoint_semantics(checkpoint_config.get("model")) != (
+        _model_checkpoint_semantics(requested["model"])
+    ):
         mismatches.append("model")
     if checkpoint_config.get("runtime") != requested["runtime"]:
         mismatches.append("runtime")

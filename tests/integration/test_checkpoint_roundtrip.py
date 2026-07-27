@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import replace
 
 import pytest
@@ -122,3 +123,49 @@ def test_checkpoint_roundtrip_preserves_trained_state(tmp_path):
     incompatible.validate()
     with pytest.raises(ValueError, match=r"simulator\.world_bounds"):
         validate_checkpoint_config(payload, incompatible)
+
+
+def test_temporal_rgb_operational_controls_preserve_checkpoint_compatibility() -> None:
+    config = _small_config()
+    payload = {"config": config.to_dict()}
+    legacy_payload = deepcopy(payload)
+    legacy_rgb = legacy_payload["config"]["model"]["rgb"]
+    for field_name in (
+        "temporal_velocity_enabled",
+        "temporal_velocity_history_size",
+        "temporal_velocity_min_dt",
+        "temporal_velocity_variance_scale",
+        "temporal_velocity_variance_floor",
+        "temporal_velocity_variance_ceiling",
+    ):
+        legacy_rgb.pop(field_name)
+
+    enabled = replace(
+        config,
+        model=replace(
+            config.model,
+            rgb=replace(
+                config.model.rgb,
+                temporal_velocity_enabled=True,
+                temporal_velocity_history_size=4,
+                temporal_velocity_min_dt=0.002,
+                temporal_velocity_variance_scale=2.0,
+                temporal_velocity_variance_floor=0.5,
+                temporal_velocity_variance_ceiling=4.0,
+            ),
+        ),
+    )
+    enabled.validate()
+    validate_checkpoint_config(payload, enabled)
+    validate_checkpoint_config(legacy_payload, enabled)
+
+    architecture_change = replace(
+        enabled,
+        model=replace(
+            enabled.model,
+            rgb=replace(enabled.model.rgb, roi_size=enabled.model.rgb.roi_size + 1),
+        ),
+    )
+    architecture_change.validate()
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(payload, architecture_change)

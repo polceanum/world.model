@@ -10,6 +10,7 @@ from torch import Tensor, nn
 
 from world_model.observations.context import ObservationContext, SensorContext
 from world_model.observations.measurements import (
+    DirectVelocityEvidence,
     InnovationSet,
     MeasurementSet,
     PredictedMeasurements,
@@ -25,6 +26,13 @@ class ModalityCache:
     """Marker base class for sensor-local, non-physical cached state."""
 
     def detach(self) -> ModalityCache:
+        return self
+
+
+class ModalityHistory:
+    """Marker base for bounded sensor-local causal histories."""
+
+    def detach(self) -> ModalityHistory:
         return self
 
 
@@ -83,6 +91,19 @@ class ObservationModule(nn.Module, ABC):
     ) -> Mapping[str, Tensor]:
         del outputs, targets, masks
         return {}
+
+    def update_temporal_history(
+        self,
+        *,
+        posterior: WorldBelief,
+        measured: MeasurementSet,
+        association: AssociationResult,
+        history: ModalityHistory | None,
+    ) -> tuple[DirectVelocityEvidence | None, ModalityHistory | None]:
+        """Optionally derive causal state evidence after ordinary correction."""
+
+        del posterior, measured, association
+        return None, history
 
     def observe(
         self,

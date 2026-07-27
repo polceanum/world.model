@@ -128,6 +128,9 @@ class StateObservationModule(ObservationModule):
             "world_position": values[..., :3],
             "world_velocity": values[..., 3:6],
             "world_log_variance": log_variance[..., :3],
+            "world_position_log_variance": log_variance[..., :3],
+            "world_velocity_log_variance": log_variance[..., 3:6],
+            "world_velocity_valid_mask": active,
             "object_id": object_id,
         }
         if radius_value is not None:

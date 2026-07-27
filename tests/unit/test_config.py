@@ -30,6 +30,50 @@ def test_dotted_override_is_typed(tmp_path: Path) -> None:
     assert config.simulator.image_size == (32, 40)
 
 
+def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
+    default = load_config(CONFIG_DIR / "toy_smoke.yaml")
+    assert not default.model.rgb.temporal_velocity_enabled
+    assert default.model.rgb.temporal_velocity_history_size == 3
+    assert default.model.rgb.temporal_velocity_variance_ceiling is None
+
+    enabled = load_config(
+        CONFIG_DIR / "toy_smoke.yaml",
+        overrides=[
+            "model.rgb.temporal_velocity_enabled=true",
+            "model.rgb.temporal_velocity_history_size=4",
+            "model.rgb.temporal_velocity_variance_scale=3.0",
+            "model.rgb.temporal_velocity_variance_floor=0.4",
+            "model.rgb.temporal_velocity_variance_ceiling=2.0",
+        ],
+    )
+    assert enabled.model.rgb.temporal_velocity_enabled
+    assert enabled.model.rgb.temporal_velocity_history_size == 4
+    assert enabled.model.rgb.temporal_velocity_variance_scale == 3.0
+    assert enabled.model.rgb.temporal_velocity_variance_floor == 0.4
+    assert enabled.model.rgb.temporal_velocity_variance_ceiling == 2.0
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("temporal_velocity_min_dt", 0.0),
+        ("temporal_velocity_history_size", 2),
+        ("temporal_velocity_variance_scale", 0.5),
+        ("temporal_velocity_variance_floor", 0.0),
+        ("temporal_velocity_variance_ceiling", 0.1),
+    ],
+)
+def test_temporal_rgb_velocity_uncertainty_config_is_bounded(
+    key: str,
+    value: float | int,
+) -> None:
+    with pytest.raises(ValueError, match=key):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=[f"model.rgb.{key}={value}"],
+        )
+
+
 def test_unknown_key_fails(tmp_path: Path) -> None:
     bad = tmp_path / "bad.yaml"
     bad.write_text("project:\n  mystery: true\n", encoding="utf-8")

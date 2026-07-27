@@ -274,3 +274,68 @@
   rates. Update counts can no longer be presented as identification progress;
   the current tiny checkpoint is truthfully measured as making
   numerically negligible drag/restitution changes.
+
+## ADR-023 — Checkpoint selection uses explicit fresh validation seeds
+
+- **Date:** 2026-07-27
+- **Status:** accepted
+- **Context:** Repeatedly inspecting the same eight test episodes made earlier
+  continuation comparisons exploratory rather than independent evidence. The
+  trainer also uses the first configured validation episodes internally.
+- **Decision:** `evaluate.py --seed-protocol fresh_validation --split
+  validation` begins immediately after the checkpoint's recorded
+  `training.validation_episodes`. Reports persist every seed and assert that
+  this manifest overlaps neither trainer validation nor the reserved test
+  range. Collision-conditioned forecasts use simulator collision labels only
+  as an evaluation mask over `(anchor, target]`, with identical masks for the
+  model and every baseline.
+- **Evidence:** The step-72 comparison used seeds `100004–100019`; metadata
+  records no trainer-validation or test overlap.
+- **Consequences:** These episodes are suitable for checkpoint selection, not
+  final test acceptance. Reusing them for several temporal hyperparameter
+  ablations makes those ablations selection evidence and requires a later
+  confirmation block before promotion.
+
+## ADR-024 — Temporal RGB history is separate, causal, and gated by evidence
+
+- **Date:** 2026-07-27
+- **Status:** accepted experimentally; disabled by default
+- **Context:** A one-frame position-to-velocity update amplifies RGB covariance
+  by `1/dt²` and changed held-out velocity error by only about `0.0013 m/s`.
+  ROI feature caches are also intentionally invalidated by global discovery,
+  so they cannot safely own persistent kinematic history.
+- **Decision:** Add a bounded sensor-local history of corrected RGB positions,
+  diagonal variance, timestamps, validity, and persistent object IDs. A
+  modality hook updates it after association and position correction; three
+  strictly increasing same-ID samples produce a causal least-squares velocity
+  observation followed by a velocity-only diagonal correction. Global/ROI
+  feature cache changes do not erase this history. Births, deaths, ambiguity,
+  ID changes, stale timestamps, reset, and detach are explicit. The default
+  propagates position uncertainty without a variance ceiling; any empirical
+  ceiling must be an explicit operational override.
+- **Evidence:** On a development validation block, a three-position slope was
+  more accurate than the prior. On fresh selection seeds, a calibrated
+  `1.0 (m/s)²` ceiling improved current velocity RMSE from `1.369454` to
+  `1.309964 m/s` and collision F1 from `0.042553` to `0.055172`, but worsened
+  current position MAE from `0.186991` to `0.190923 m`, 0.25-second RMSE from
+  `0.189670` to `0.201318 m`, and perturbation recovery from `20.09%` to
+  `19.26%`. A 22-step continuation raised F1 to `0.121622` but further
+  regressed the primary physical metrics.
+- **Consequences:** The architecture and diagnostics are retained, but
+  `temporal_velocity_enabled` remains false in public profiles and the
+  continuation checkpoint is a negative experiment, not the promoted model.
+
+## ADR-025 — Missing interaction edges are not zero-valued event evidence
+
+- **Date:** 2026-07-27
+- **Status:** accepted
+- **Context:** Dense graph tensors store diagonal and absent edges as zero.
+  Max-pooling those tensors prevented a valid negative learned edge logit from
+  suppressing an analytic false positive.
+- **Decision:** Mask invalid edges and diagonals before neighbor max-pooling.
+  Preserve signed values on valid edges and use a finite neutral residual only
+  for nodes with no valid neighbor.
+- **Consequences:** Positive and negative learned interaction-event evidence
+  now has the intended semantics. The unchanged step-72 checkpoint's fresh
+  collision F1 remained `0.042553`, so this correctness fix is not presented
+  as an accuracy gain by itself.

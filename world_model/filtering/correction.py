@@ -22,6 +22,7 @@ from world_model.filtering.uncertainty import (
 )
 from world_model.fusion import AssociationResult, SurpriseAssessment
 from world_model.observations import (
+    DirectVelocityEvidence,
     InnovationSet,
     MeasurementSet,
     PredictedMeasurements,
@@ -200,16 +201,33 @@ class BeliefUpdater(nn.Module):
         if "velocity" in measured.supported_state_fields:
             velocity = innovation.auxiliary.get("measured_world_velocity")
             if velocity is None:
-                velocity = innovation.auxiliary["measured_values"][..., 3:6]
+                raise ValueError("direct velocity measurements require auxiliary.world_velocity")
+            velocity_lv = innovation.auxiliary.get("measured_world_velocity_log_variance")
+            if velocity_lv is None:
+                raise ValueError(
+                    "direct velocity measurements require auxiliary.world_velocity_log_variance"
+                )
+            velocity_valid = innovation.auxiliary.get("measured_world_velocity_valid_mask")
+            if velocity_valid is None:
+                raise ValueError(
+                    "direct velocity measurements require auxiliary.world_velocity_valid_mask"
+                )
+            if velocity.shape[-1] != 3 or velocity_lv.shape != velocity.shape:
+                raise ValueError("direct world velocity and log variance must end with three")
+            if velocity_valid.shape != velocity.shape[:2] or velocity_valid.dtype != torch.bool:
+                raise ValueError("direct world velocity validity must be boolean [B,P]")
             velocity_measurement = velocity[batch_index, pair_index]
-            measured_lv = innovation.auxiliary["measurement_log_variance"]
-            velocity_measurement_lv = measured_lv[batch_index, pair_index, 3:6]
+            velocity_measurement_lv = velocity_lv[batch_index, pair_index]
+            velocity_confidence = confidence * velocity_valid[
+                batch_index,
+                pair_index,
+            ].to(confidence.dtype)
             analytic_velocity = diagonal_kalman_update(
                 packed[batch_index, belief_index, velocity_slice],
                 log_variance[batch_index, belief_index, velocity_slice],
                 velocity_measurement,
                 velocity_measurement_lv,
-                confidence=confidence,
+                confidence=velocity_confidence,
                 robust_clip_norm=self.config.robust_clip_norm,
                 minimum_log_variance=self.config.minimum_log_variance,
                 maximum_log_variance=self.config.maximum_log_variance,
@@ -373,3 +391,47 @@ class BeliefUpdater(nn.Module):
             robust_weight=robust_weight,
         )
         return posterior
+
+    def correct_direct_velocity(
+        self,
+        prior: WorldBelief,
+        evidence: DirectVelocityEvidence,
+    ) -> WorldBelief:
+        """Apply explicit post-association velocity evidence in belief-slot order.
+
+        This second analytic update intentionally leaves ``last_diagnostics``
+        describing the ordinary measurement correction and observed mask.
+        """
+
+        evidence.validate()
+        expected = (*prior.objects.active.shape, 3)
+        if evidence.velocity.shape != expected:
+            raise ValueError(f"direct velocity evidence must have shape {expected}")
+        valid = evidence.valid_mask & prior.objects.active
+        batch_index, belief_index = torch.nonzero(valid, as_tuple=True)
+        if batch_index.numel() == 0:
+            return prior
+
+        packed = pack_fast_state(prior.objects)
+        log_variance = prior.objects.fast_log_variance
+        velocity_slice = fast_packing_map(prior.objects)["velocity"]
+        analytic_velocity = diagonal_kalman_update(
+            packed[batch_index, belief_index, velocity_slice],
+            log_variance[batch_index, belief_index, velocity_slice],
+            evidence.velocity[batch_index, belief_index],
+            evidence.log_variance[batch_index, belief_index],
+            confidence=evidence.confidence[batch_index, belief_index],
+            robust_clip_norm=self.config.robust_clip_norm,
+            minimum_log_variance=self.config.minimum_log_variance,
+            maximum_log_variance=self.config.maximum_log_variance,
+        )
+        updated_packed = packed.clone()
+        updated_log_variance = log_variance.clone()
+        updated_packed[batch_index, belief_index, velocity_slice] = analytic_velocity.mean
+        updated_log_variance[batch_index, belief_index, velocity_slice] = (
+            analytic_velocity.log_variance
+        )
+        objects = unpack_fast_state(updated_packed, prior.objects).replace(
+            fast_log_variance=updated_log_variance
+        )
+        return prior.replace(objects=objects)

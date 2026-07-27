@@ -178,3 +178,33 @@ class InnovationSet:
                 raise ValueError(f"{name} must have shape [B, P]")
         if self.pair_mask.dtype != torch.bool:
             raise TypeError("innovation pair_mask must be torch.bool")
+
+
+@dataclass
+class DirectVelocityEvidence:
+    """Explicit world-frame velocity evidence in persistent belief-slot order."""
+
+    velocity: Tensor
+    log_variance: Tensor
+    valid_mask: Tensor
+    confidence: Tensor
+
+    def validate(self) -> None:
+        if self.velocity.ndim != 3 or self.velocity.shape[-1] != 3:
+            raise ValueError("direct velocity must have shape [B,N,3]")
+        if self.log_variance.shape != self.velocity.shape:
+            raise ValueError("direct velocity log_variance must match velocity")
+        if self.valid_mask.shape != self.velocity.shape[:2]:
+            raise ValueError("direct velocity valid_mask must have shape [B,N]")
+        if self.confidence.shape != self.valid_mask.shape:
+            raise ValueError("direct velocity confidence must have shape [B,N]")
+        if self.valid_mask.dtype != torch.bool:
+            raise TypeError("direct velocity valid_mask must be torch.bool")
+        if not torch.isfinite(self.velocity).all():
+            raise ValueError("direct velocity contains NaN or Inf")
+        if not torch.isfinite(self.log_variance).all():
+            raise ValueError("direct velocity log_variance contains NaN or Inf")
+        if not torch.isfinite(self.confidence).all():
+            raise ValueError("direct velocity confidence contains NaN or Inf")
+        if torch.any((self.confidence < 0) | (self.confidence > 1)):
+            raise ValueError("direct velocity confidence must lie in [0,1]")

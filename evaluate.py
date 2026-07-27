@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 
+from world_model.evaluation.seed_protocol import EVALUATION_SEED_PROTOCOLS
 from world_model.utils.config import load_config
 from world_model.utils.device import select_device
 
@@ -15,6 +16,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", required=True)
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--split", default="test", choices=["validation", "test", "ood"])
+    parser.add_argument(
+        "--seed-protocol",
+        default="standard",
+        choices=EVALUATION_SEED_PROTOCOLS,
+        help=(
+            "Use fresh_validation with --split validation for checkpoint "
+            "selection on seeds disjoint from trainer validation and test."
+        ),
+    )
     parser.add_argument("--output")
     parser.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"])
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
@@ -35,6 +45,7 @@ def main() -> int:
         config=config,
         checkpoint_path=args.checkpoint,
         split=args.split,
+        seed_protocol=args.seed_protocol,
         output_dir=args.output,
         device_info=device,
     )
