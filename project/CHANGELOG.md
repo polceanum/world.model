@@ -58,6 +58,11 @@
 - Collision-conditioned TBPTT window sampling with causal RGB prefix burn-in.
 - Explicit `evaluate.py --seed-offset` support for reproducible paired
   selection and confirmation manifests.
+- A deterministic 32-frame multistep profile with recursive
+  0.10/0.25/0.50/0.75/1.00-second horizons and explicit long-window sampling.
+- Stable demo world bounds, manual legends, recency-faded absolute forecast
+  history, matched future endpoints, per-frame absolute errors, and
+  scoring-only lookahead that keeps the displayed horizon fixed.
 
 ### Changed after integration audit
 
@@ -124,6 +129,13 @@
 - Split current-state and rollout position/velocity objectives and changed
   best-rollout selection to physical position loss with a meaningful minimum
   delta.
+- Changed rollout and future-correction aggregation to average all eligible
+  anchors per physical horizon before applying configured weights, with a
+  fixed denominator that does not inflate short-only tail windows.
+- Versioned rollout-selection semantics, persisted per-horizon validation
+  losses, and reset incompatible inherited best scores on resume.
+- Added a maximum-horizon-capable window preference beside collision-priority
+  sampling.
 - Added independent position/velocity perturbation magnitudes and representative
   collision-window sampling.
 - Enabled synthetic structured centers in sphere profiles, with a measured
@@ -175,6 +187,12 @@
   `runs/accuracy-closed-structured-v4`.
 - Promoted accuracy-v4 RGB-only demo:
   `demo_outputs/accuracy-closed-structured-v4`.
+- Fresh 32-frame one-second baseline and rejected continuation reports:
+  `runs/accuracy-multistep-v1`,
+  `runs/accuracy-multistep-balanced-v4`, and
+  `runs/accuracy-multistep-long-v5`.
+- Stable full-horizon forecast-history demo:
+  `demo_outputs/accuracy-v4-forecast-history`.
 
 The earlier frozen continuation reached 75.39% distance-gated
 recall/precision over eight held-out episodes, 0.161387 m 0.5-second forecast
@@ -244,3 +262,12 @@ The frozen final test reached position MAE/RMSE
 dropped/non-finite forecasts. An exhaustive threshold probe was negative
 because logits were saturated; mean-radius and photometric analytic-depth
 probes were also rejected.
+
+The new 32-frame multistep baseline on fresh-validation seeds
+`100096–100111` reached recursive position RMSE
+`0.162863 / 0.190546 / 0.218011 / 0.230611 / 0.228255 m` at
+0.10/0.25/0.50/0.75/1.00 seconds. Aggressive, balanced, and conservative
+one-second continuations failed to improve the mean 0.50–1.00-second result,
+so step 648 remains promoted. Oracle-start and learned-dynamics ablations
+showed that RGB state/velocity and slow-parameter estimation, rather than the
+recursive dynamics residuals, dominate the remaining error.

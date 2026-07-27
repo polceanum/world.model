@@ -89,6 +89,14 @@
   choice.
 - [x] Reject mean-radius and photometric analytic depth replacements after
   metric-space and confirmation checks failed.
+- [x] Aggregate rollout/correction losses globally per horizon, keep the
+  configured horizon denominator fixed, sample maximum-horizon-capable
+  windows, and version checkpoint selection semantics.
+- [x] Add a 32-frame deterministic multistep profile covering recursive
+  0.10/0.25/0.50/0.75/1.00-second forecasts.
+- [x] Stabilise demo axes, margins, and legends; retain historical posterior
+  forecasts with fading alpha; show matched endpoint error; and reserve
+  scoring-only lookahead so the displayed horizon remains fixed.
 
 ## Milestone 1 research acceptance — not yet achieved
 
@@ -112,6 +120,9 @@
 - [ ] Train and validate fast inverse-depth residuals on the now
   belief-slot-aligned cached sequences; enable them only after per-mode
   current/future improvement.
+- [ ] Beat the promoted step-648 checkpoint on paired 0.50/0.75/1.00-second
+  RGB-only validation. Three horizon-weight/window-only continuations were
+  neutral or negative and remain rejected.
 - [x] Add temporal RGB velocity evidence so post-association motion can be
   assimilated without re-encoding history. Validation has not yet justified
   enabling it in public profiles.
@@ -135,5 +146,8 @@
   gating that improves velocity without degrading localization.
 - [ ] Evaluate a two-frame anisotropic position-slope velocity measurement;
   it is a future opportunity, not an implemented/promoted path.
+- [ ] Implement an observability-driven gravity-aligned motion gate only if it
+  propagates position, velocity, covariance, and events coherently and passes
+  wider/OOD validation; do not ship the promising fixed-axis diagnostic blend.
 - [ ] Replace the synthetic disc prior with a learned or externally structured
   real-video adapter without changing the measurement/belief contracts.

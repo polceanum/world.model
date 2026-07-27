@@ -5,10 +5,12 @@ import numpy as np
 import pytest
 import torch
 
+from world_model.utils.config import OrpheusConfig
 from world_model.visualisation.animation import (
     _add_image_legend,
     _add_world_legend,
     _configure_world_axis,
+    _demo_generation_config,
     _ForecastTrace,
     _future_query_seconds,
     _history_alpha,
@@ -54,6 +56,17 @@ def test_demo_dense_queries_follow_observation_timestamps() -> None:
     assert _future_query_seconds(timestamps, 3, 3) == []
     with pytest.raises(IndexError):
         _future_query_seconds(timestamps, 2, 4)
+
+
+def test_demo_reserves_label_only_lookahead_without_mutating_runtime_config() -> None:
+    config = OrpheusConfig()
+
+    generation_config, display_count = _demo_generation_config(config)
+
+    assert display_count == config.demo.max_frames
+    assert generation_config.simulator.sequence_frames == 78
+    assert config.simulator.sequence_frames == 72
+    assert generation_config.model is config.model
 
 
 def test_historical_forecasts_keep_absolute_anchors_and_fade_by_age() -> None:
@@ -107,4 +120,5 @@ def test_demo_axes_and_legends_have_stable_geometry_and_entries() -> None:
         "latest posterior forecast",
         "posterior endpoint ↔ matched GT",
     ]
+    assert axes[1].get_legend()._loc == 1
     plt.close(figure)

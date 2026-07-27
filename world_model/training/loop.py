@@ -579,9 +579,9 @@ def _globally_weight_horizon_details(
                 weights.append(weight)
         if values:
             horizon_weights = reference.new_tensor(weights)
-            output[name] = (
-                torch.stack(values) * horizon_weights
-            ).sum() / max(configured_weight_total, 1.0e-8)
+            output[name] = (torch.stack(values) * horizon_weights).sum() / max(
+                configured_weight_total, 1.0e-8
+            )
     return output
 
 

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,27 @@ class _ForecastTrace:
     anchor_timestamp: float
     positions: np.ndarray
     active: np.ndarray
+
+
+def _demo_generation_config(config: OrpheusConfig) -> tuple[OrpheusConfig, int]:
+    """Reserve label-only lookahead so every displayed frame has a full forecast."""
+
+    display_count = min(config.demo.max_frames, config.simulator.sequence_frames)
+    lookahead_frames = math.ceil(config.demo.future_horizon_seconds * config.simulator.frame_rate)
+    generated_frames = max(
+        config.simulator.sequence_frames,
+        display_count + lookahead_frames,
+    )
+    return (
+        replace(
+            config,
+            simulator=replace(
+                config.simulator,
+                sequence_frames=generated_frames,
+            ),
+        ),
+        display_count,
+    )
 
 
 def _packet(
@@ -134,8 +156,7 @@ def _future_query_seconds(
         raise IndexError("demo forecast indices are outside the timestamp axis")
     anchor = float(timestamps[anchor_index])
     return [
-        float(timestamps[index]) - anchor
-        for index in range(anchor_index + 1, future_index + 1)
+        float(timestamps[index]) - anchor for index in range(anchor_index + 1, future_index + 1)
     ]
 
 
@@ -262,7 +283,7 @@ def _add_world_legend(axis: Any) -> None:
             label="posterior endpoint ↔ matched GT",
         ),
     ]
-    axis.legend(handles=handles, loc="lower right", fontsize=7, framealpha=0.9)
+    axis.legend(handles=handles, loc="upper right", fontsize=7, framealpha=0.9)
 
 
 def _draw_endpoint_matches(axis: Any, matches: _PositionMatches) -> None:
@@ -345,9 +366,9 @@ def create_demo(
     )
     model.eval()
     model.reset()
-    episode = generate_episode(config, config.demo.seed)
+    generation_config, count = _demo_generation_config(config)
+    episode = generate_episode(generation_config, config.demo.seed)
     total_frames = int(episode["rgb"].shape[0])
-    count = min(config.demo.max_frames, total_frames)
     horizon = min(
         config.demo.future_horizon_seconds,
         float(episode["timestamps"][-1] - episode["timestamps"][0]),
@@ -686,8 +707,7 @@ def create_demo(
                 if np.isfinite(future_prior_error):
                     future_error_lines[-1] += f" · prior {future_prior_error:.3f} m"
                     future_error_lines.append(
-                        "correction gain "
-                        f"{future_prior_error - future_posterior_error:+.3f} m"
+                        f"correction gain {future_prior_error - future_posterior_error:+.3f} m"
                     )
                 else:
                     future_error_lines.append("prior/correction gain n/a at initialisation")
@@ -763,6 +783,10 @@ def create_demo(
     finite_prior = np.asarray(prior_errors, dtype=float)
     finite_posterior = np.asarray(posterior_errors[1:], dtype=float)
     valid = np.isfinite(finite_prior) & np.isfinite(finite_posterior)
+    mean_current_prior_error = float(np.mean(finite_prior[valid])) if valid.any() else float("nan")
+    mean_current_posterior_error = (
+        float(np.mean(finite_posterior[valid])) if valid.any() else float("nan")
+    )
     mean_improvement = (
         float(np.mean(finite_prior[valid] - finite_posterior[valid]))
         if valid.any()
@@ -771,6 +795,14 @@ def create_demo(
     finite_prior_future = np.asarray(prior_future_errors, dtype=float)
     finite_posterior_future = np.asarray(posterior_future_errors, dtype=float)
     future_valid = np.isfinite(finite_prior_future) & np.isfinite(finite_posterior_future)
+    mean_future_prior_error = (
+        float(np.mean(finite_prior_future[future_valid])) if future_valid.any() else float("nan")
+    )
+    mean_future_posterior_error = (
+        float(np.mean(finite_posterior_future[future_valid]))
+        if future_valid.any()
+        else float("nan")
+    )
     mean_future_improvement = (
         float(np.mean(finite_prior_future[future_valid] - finite_posterior_future[future_valid]))
         if future_valid.any()
@@ -785,7 +817,14 @@ def create_demo(
         "oracle_input": False,
         "device": str(device_info.device),
         "frames": count,
+        "requested_forecast_horizon_seconds": config.demo.future_horizon_seconds,
+        "undisplayed_lookahead_frames": total_frames - count,
+        "current_comparisons": int(valid.sum()),
+        "mean_current_prior_error_m": mean_current_prior_error,
+        "mean_current_posterior_error_m": mean_current_posterior_error,
         "mean_current_prior_to_posterior_improvement_m": mean_improvement,
+        "mean_future_prior_error_m": mean_future_prior_error,
+        "mean_future_posterior_error_m": mean_future_posterior_error,
         "mean_future_prior_to_posterior_improvement_m": mean_future_improvement,
         "future_comparisons": int(future_valid.sum()),
         "maximum_predicted_collision_probability": (

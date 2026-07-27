@@ -170,8 +170,7 @@ def _rollout_selection_is_compatible(
         return False
     requested = config.to_dict()
     return (
-        checkpoint_training.get("horizon_weights")
-        == requested["training"]["horizon_weights"]
+        checkpoint_training.get("horizon_weights") == requested["training"]["horizon_weights"]
         and checkpoint_evaluation.get("horizons_seconds")
         == requested["evaluation"]["horizons_seconds"]
     )
@@ -574,9 +573,7 @@ def train_from_config(
                 window_steps,
                 event_condition_probability=(config.training.collision_window_probability),
                 maximum_rollout_frame_offset=maximum_rollout_frame_offset,
-                long_horizon_probability=(
-                    config.training.long_horizon_window_probability
-                ),
+                long_horizon_probability=(config.training.long_horizon_window_probability),
             )
             result = run_closed_loop_batch(
                 model,
@@ -683,9 +680,7 @@ def train_from_config(
                             "best_rollout_loss": best_rollout,
                             "best_rollout_position_loss": best_rollout,
                             "best_rollout_validated": 1.0,
-                            "rollout_selection_metric_version": (
-                                _ROLLOUT_SELECTION_METRIC_VERSION
-                            ),
+                            "rollout_selection_metric_version": (_ROLLOUT_SELECTION_METRIC_VERSION),
                             **per_horizon_metrics,
                             "best_measurement_validated": float(best_measurement_validated),
                             **(
@@ -724,9 +719,7 @@ def train_from_config(
                             "best_measurement_world_position_mae_m": best_measurement,
                             "best_measurement_validated": 1.0,
                             "best_rollout_validated": float(best_rollout_validated),
-                            "rollout_selection_metric_version": (
-                                _ROLLOUT_SELECTION_METRIC_VERSION
-                            ),
+                            "rollout_selection_metric_version": (_ROLLOUT_SELECTION_METRIC_VERSION),
                             **(
                                 {
                                     "best_rollout_loss": best_rollout,

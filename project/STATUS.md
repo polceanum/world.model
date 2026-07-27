@@ -4,7 +4,8 @@
 **Specification:** `PROJECT_SPEC.md` 1.0  
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
-selection/confirmation/test manifests, and corrected event semantics;
+selection/confirmation/test manifests, horizon-balanced recursive training,
+stable forecast-history visualisation, and corrected event semantics;
 collision, occlusion, identification, and full-MPS acceptance remain open
 
 ## What works
@@ -52,8 +53,14 @@ collision, occlusion, identification, and full-MPS acceptance remain open
   output values.
 - Mid-episode TBPTT windows ingest their complete RGB prefix causally under
   `no_grad`, detach the resulting persistent state, and preferentially sample
-  collision-bearing spans. Closed-loop validation evaluates all configured
-  episodes through their complete causal sequence.
+  collision-bearing or maximum-horizon-capable spans. Closed-loop validation
+  evaluates all configured episodes through their complete causal sequence.
+- Per-horizon rollout and future-correction losses are averaged over all
+  eligible anchors before configured horizon weights are applied. A fixed
+  configured denominator prevents short tail windows from silently
+  renormalising themselves into larger objectives. Checkpoint selection records
+  the physical per-horizon validation losses and rejects legacy scores with
+  incompatible aggregation semantics.
 - Collision occurrence is aggregated over every internal physics substep in a
   rollout segment while persistent motion-mode logits remain instantaneous.
   Training and evaluation insert exact `[h-dt_obs, h]` query boundaries so
@@ -76,6 +83,12 @@ collision, occlusion, identification, and full-MPS acceptance remain open
 - The debug oracle is registered only when explicitly enabled. Every result
   below uses RGB plus known calibration; simulator state is used only for
   supervision, evaluation alignment, and explicitly labelled baselines.
+- Demo world axes, panel margins, and manual legends are fixed across GIF
+  frames. Every posterior forecast is retained at its original world-space
+  anchor with recency-faded alpha, while the latest prior/posterior paths,
+  Hungarian-matched endpoint connectors, and absolute errors remain explicit.
+  Extra simulator frames supply scoring-only lookahead so every displayed
+  frame uses the same requested forecast horizon.
 
 ## Environment
 
@@ -262,25 +275,114 @@ Report and machine-readable metrics:
 - `runs/accuracy-closed-structured-v4/evaluation/final-test32/report.md`
 - `runs/accuracy-closed-structured-v4/evaluation/final-test32/evaluation.json`
 
-### Current RGB-only demo
+### Recursive multistep status
+
+These are true recursive rollouts from one persistent RGB posterior, not
+independent next-step predictions. At the tiny profile's 20 Hz observation
+rate, the 0.10/0.25/0.50/0.75/1.00-second queries span 2/5/10/15/20 future
+observation intervals. Dynamics internally advances roughly
+12/30/60/90/120 physics substeps at 120 Hz. No future RGB or simulator state is
+fed into the rollout.
+
+The new `configs/tiny_multistep.yaml` extends synthetic sequences to 32 frames,
+evaluates through one second, and makes full-horizon windows explicit. The
+promoted step-648 baseline was evaluated on fresh-validation seeds
+`100096–100111`:
 
 ```bash
+conda run --no-capture-output -n orpheus python train.py \
+  --config configs/tiny_multistep.yaml --dry-run --device cpu
+```
+
+Result: **passed**. It resolved the RGB-only 48x48 architecture, 32-frame
+sequences, 656 total steps, PyTorch 2.10.0, and CPU because this launcher
+reports MPS unavailable.
+
+The exact baseline evaluation command was:
+
+```bash
+conda run --no-capture-output -n orpheus python evaluate.py \
+  --config configs/tiny_multistep.yaml \
+  --checkpoint runs/accuracy-closed-structured-v4/checkpoints/best_rollout.pt \
+  --split validation \
+  --seed-protocol fresh_validation \
+  --seed-offset 96 \
+  --device cpu \
+  --set evaluation.episodes=16 \
+  --output runs/accuracy-multistep-v1/evaluation/baseline-select16
+```
+
+| Checkpoint | Current RMSE (m) | 0.10 s | 0.25 s | 0.50 s | 0.75 s | 1.00 s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| promoted step 648 | `0.149951` | `0.162863` | `0.190546` | `0.218011` | `0.230611` | `0.228255` |
+| aggressive 16-update continuation | `0.154447` | `0.168657` | `0.199543` | `0.230619` | `0.248444` | `0.243224` |
+| conservative 8-update short-window continuation | `0.150226` | `0.163706` | `0.191533` | `0.218606` | `0.230512` | `0.228311` |
+| conservative 8-update one-second continuation | `0.149833` | `0.163161` | `0.190705` | `0.218114` | `0.230712` | `0.228364` |
+
+The promoted model's mean 0.50/0.75/1.00-second RMSE is `0.225626 m`; the
+best conservative continuation reached `0.225730 m`, a `0.046%` regression.
+The aggressive run regressed every horizon. None was promoted, and the
+step-648 SHA remains unchanged. Reports:
+
+- `runs/accuracy-multistep-v1/evaluation/baseline-select16/report.md`
+- `runs/accuracy-multistep-v1/evaluation/candidate-select16/report.md`
+- `runs/accuracy-multistep-balanced-v4/evaluation/select16-long/report.md`
+- `runs/accuracy-multistep-long-v5/evaluation/select16/report.md`
+
+The baseline still substantially outperforms constant velocity as the horizon
+grows: constant-velocity RMSE is
+`0.181946 / 0.347282 / 0.683607 / 0.944198 / 1.423512 m`. Baseline collision
+F1 is `0.404092`, detection recall/precision are both `0.970703`, and
+nominal-90% coverage is `0.862745` on this longer protocol.
+
+Evaluation-only oracle-start and dynamics ablations locate the remaining
+error. At one second, replacing only the current position with labels reduced
+coordinate RMSE from about `0.221` to `0.168 m`; replacing position and
+velocity reduced it to `0.091 m`; additionally replacing slow physical
+parameters reduced it to `0.0473 m`. Conversely, disabling the learned graph
+acceleration changed a separate eight-seed one-second result by only
+`+0.000277 m`; modal and learned-impulse effects were below `0.000005 m`.
+The next accuracy work therefore belongs in RGB depth and anisotropic velocity
+state estimation, not larger residual dynamics. Specifically, global RGB
+measurement camera-depth RMSE/bias is `0.223 / -0.144 m`; filtering improves
+that to `0.184 / -0.089 m`, while camera-x error grows from `0.053` to
+`0.103 m` over four ROI steps, consistent with velocity drift.
+
+A fit/held-out diagnostic found that suppressing gravity-orthogonal displacement
+while retaining vertical dynamics could reduce held-out 0.50–1.00-second RMSE
+by `7.48%`. It is deliberately not implemented as a fixed output blend:
+doing so would make position inconsistent with velocity, covariance, events,
+and the online prior, and the fitted gate could encode this split's motion
+distribution. A production version must be observability/uncertainty-driven,
+propagate a coherent belief trajectory, and pass wider/OOD confirmation.
+
+### Current RGB-only forecast-history demo
+
+```bash
+MPLCONFIGDIR=/private/tmp/orpheus-mpl-cache \
 conda run --no-capture-output -n orpheus python demo.py \
   --config configs/tiny_overfit.yaml \
   --checkpoint runs/accuracy-closed-structured-v4/checkpoints/best_rollout.pt \
   --device cpu \
-  --output demo_outputs/accuracy-closed-structured-v4
+  --output demo_outputs/accuracy-v4-forecast-history
 ```
 
 The 16-frame demo used four global and 12 ROI-local updates with no oracle
-input. Mean ordinary current/future prior-to-posterior improvements were
-`+0.02041067 / +0.02171345 m`; maximum predicted collision probability was
-`0.981899`. Real artifacts:
+input. Ten scoring-only lookahead frames keep the recursive horizon at
+`0.50 s` in every displayed frame. The fixed-geometry GIF retains all 16
+posterior forecasts with fading alpha and highlights the latest prior and
+posterior. It labels endpoint matches and errors directly. Across 15 paired
+comparisons, mean current prior/posterior error was
+`0.212537 / 0.192126 m`; mean 0.50-second prior/posterior error was
+`0.359118 / 0.341841 m`. Mean improvements were
+`+0.020411 / +0.017277 m`, and maximum predicted collision probability was
+`0.981901`. Ground truth is used only for the overlay and scores recorded in
+the summary. Real artifacts:
 
-- `demo_outputs/accuracy-closed-structured-v4/online_correction.gif`
-- `demo_outputs/accuracy-closed-structured-v4/parameter_estimates.png`
-- `demo_outputs/accuracy-closed-structured-v4/summary.json`
-- `demo_outputs/accuracy-closed-structured-v4/frames/`
+- `demo_outputs/accuracy-v4-forecast-history/online_correction.gif`
+- `demo_outputs/accuracy-v4-forecast-history/parameter_estimates.png`
+- `demo_outputs/accuracy-v4-forecast-history/summary.json`
+- `demo_outputs/accuracy-v4-forecast-history/frames/`
 
 ### Superseded and rejected experiments
 
@@ -695,7 +797,7 @@ Full suite:
 conda run --no-capture-output -n orpheus pytest
 ```
 
-Result: **178 passed, 3 skipped in 35.81 s**. The three skips are the
+Result: **191 passed, 3 skipped in 67.65 s**. The three skips are the
 hardware-conditional MPS tests; this launcher process reports MPS unavailable.
 
 Lint and formatting:
@@ -705,8 +807,8 @@ conda run --no-capture-output -n orpheus ruff check .
 conda run --no-capture-output -n orpheus ruff format --check .
 ```
 
-Results: **passed**. Ruff reported all checks clean and all 153 Python files
-already formatted.
+Results: **passed** after mechanically formatting four changed Python files.
+Ruff reported all checks clean and all 154 Python files formatted.
 
 Bytecode compilation:
 
@@ -745,6 +847,11 @@ Result: **passed**.
 - Current velocity RMSE remains weak at `0.792257 m/s`. The experimental
   overlapping-frame temporal update is disabled because it improved velocity
   while regressing aggregate physical accuracy.
+- On the fresh 32-frame multistep protocol, model RMSE plateaus at about
+  `0.218–0.230 m` from 0.5 to 1.0 seconds. Three weight/window-only
+  continuations failed to beat step 648. Oracle-start evidence identifies RGB
+  depth/velocity and slow-parameter state as the dominant ceiling; no oracle
+  state is used in normal operation.
 - Nominal-90% forecast coverage is `86.9518%`, so the diagonal filter is
   overconfident despite strong point accuracy. Explicit temporal/cross-modal
   correlation handling is absent.
@@ -778,9 +885,10 @@ Result: **passed**.
 
 ## Next concrete tasks
 
-1. Improve velocity estimation and collision recall together, using
-   correlation-aware causal motion evidence. A two-frame anisotropic
-   position-slope is an unimplemented opportunity, not a current feature.
+1. Improve RGB depth in the persistent posterior, then add gravity-aligned,
+   anisotropic velocity evidence with covariance/observability gating. Any
+   horizontal forecast gate must update position, velocity, covariance, and
+   event rollouts coherently; do not add a horizon-specific output blend.
    Train a validation-selected probabilistic event head without sacrificing
    the promoted point/forecast accuracy; threshold tuning cannot fix the
    saturated structural errors.

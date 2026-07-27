@@ -442,3 +442,64 @@
   tradeoffs, which remain reported. Collision threshold stays `0.5`, learned
   depth stays active, and a two-frame anisotropic velocity slope remains an
   unimplemented research option rather than a promoted inference heuristic.
+
+## ADR-030 — Multistep objectives aggregate globally by physical horizon
+
+- **Date:** 2026-07-27
+- **Status:** accepted
+- **Context:** Averaging a weighted horizon loss separately at every anchor
+  lets short tail windows renormalise their few available horizons to full
+  weight. This overrepresents short predictions and makes a scalar validation
+  score depend on window geometry rather than the configured physical
+  objective.
+- **Decision:** Accumulate each configured horizon across every eligible
+  anchor, average within that horizon, and only then apply the configured
+  horizon weights with their fixed total denominator. Apply the same rule to
+  future-correction loss. Prefer collision-bearing windows first and
+  maximum-horizon-capable windows otherwise with an explicit probability.
+  Persist per-horizon validation losses and a selection-semantics version;
+  inherited scores from older semantics cannot silently suppress a new best
+  checkpoint.
+- **Consequences:** A 0.5/0.75/1.0-second objective means the same thing across
+  train windows, and a tiny tail cannot inflate short-horizon gradients.
+  Sequence length still limits eligibility, so the dedicated deterministic
+  multistep profile uses 32 frames. Three controlled continuations failed the
+  external physical gate, so this correctness change does not promote a new
+  checkpoint by itself.
+
+## ADR-031 — Forecast visualisation preserves history and fixed geometry
+
+- **Date:** 2026-07-27
+- **Status:** accepted
+- **Context:** Automatically derived axes/legends and showing only the newest
+  line made GIF motion difficult to distinguish from plot-layout motion and
+  hid whether successive forecasts were converging toward the realised path.
+- **Decision:** Fix world bounds, margins, legend entries, and legend
+  placement. Retain each posterior forecast in absolute world coordinates and
+  fade it monotonically by age, while drawing the newest prior/posterior more
+  strongly. Match the latest forecast endpoint to evaluation-only ground truth
+  with Hungarian assignment and display absolute prior/posterior error plus
+  correction gain. Generate enough scoring-only lookahead that every displayed
+  frame keeps the requested horizon.
+- **Consequences:** The GIF directly exposes forecast drift and revision
+  without changing runtime inference. Simulator labels remain overlay/scoring
+  data read after RGB ingest and never become model input.
+
+## ADR-032 — Do not hide state error with horizon-specific forecast blending
+
+- **Date:** 2026-07-27
+- **Status:** accepted as a research guard
+- **Context:** Oracle-start diagnostics show that one-second error falls from
+  about `0.221 m` to `0.091 m` when current position and velocity are supplied,
+  and to `0.0473 m` when slow parameters are also supplied. Learned dynamics
+  ablations have millimetre-or-smaller leverage. A split diagnostic found a
+  `7.48%` long-horizon gain from suppressing gravity-orthogonal displacement,
+  but a scalar or horizon-specific interpolation regressed held-out error.
+- **Decision:** Prioritise RGB depth, anisotropic velocity, and slow-state
+  observability. Do not add a fitted per-horizon or fixed-axis output blend. A
+  future gravity-aligned motion gate is acceptable only when driven by
+  uncertainty/observability, propagated coherently through position, velocity,
+  covariance, and event state, and confirmed on wider and OOD motion.
+- **Consequences:** Reported trajectories remain physically self-consistent
+  rather than cosmetically calibrated to one split. Step 648 remains promoted
+  until an RGB-only candidate improves paired long-horizon physical metrics.
