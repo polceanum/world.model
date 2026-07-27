@@ -124,6 +124,19 @@ def test_structured_pair_jump_conserves_momentum_and_separates_spheres() -> None
     assert distance > torch.tensor(0.18)
 
 
+def test_contact_confidence_delays_uncertain_geometric_overlap() -> None:
+    _, objects = _two_objects()
+    uncertain = objects.clone()
+    uncertain.fast_log_variance[..., :3] = -1.0
+
+    delayed = SphereContactResolver(contact_confidence_sigma=0.5)(uncertain)
+    confident = SphereContactResolver(contact_confidence_sigma=0.5)(objects)
+
+    assert not delayed.pair_contact.any()
+    assert not delayed.pair_collision.any()
+    assert confident.pair_collision[0, 0, 1]
+
+
 def test_no_pair_impulse_for_separating_spheres() -> None:
     _, objects = _two_objects()
     objects.velocity[0, 0, 0] = -1.0

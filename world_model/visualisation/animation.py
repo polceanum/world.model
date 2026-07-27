@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from matplotlib.lines import Line2D
+from matplotlib.patches import Ellipse
 from PIL import Image
 from scipy.optimize import linear_sum_assignment
 
@@ -365,6 +366,16 @@ def _add_image_legend(axis: Any) -> None:
             linestyle="None",
             label="posterior",
         ),
+        Ellipse(
+            (0.0, 0.0),
+            width=1.8,
+            height=1.0,
+            fill=False,
+            edgecolor="lime",
+            linewidth=0.8,
+            alpha=0.7,
+            label="posterior 90% position uncertainty",
+        ),
         Line2D(
             [],
             [],
@@ -482,6 +493,62 @@ def _project_world(
     pixels = projected[:, :2] / projected[:, 2:].clamp_min(1.0e-5)
     valid = active & (depth > 1.0e-4) & torch.isfinite(pixels).all(dim=-1)
     return pixels.detach().cpu().numpy(), valid.detach().cpu().numpy()
+
+
+def _project_world_uncertainty(
+    position: torch.Tensor,
+    position_log_variance: torch.Tensor,
+    active: torch.Tensor,
+    world_from_camera: torch.Tensor,
+    intrinsics: torch.Tensor,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Project diagonal world-position covariance into image pixels."""
+
+    if position.shape != position_log_variance.shape or position.shape[-1] != 3:
+        raise ValueError("position and log variance must have matching [N,3] shapes")
+    transform = world_from_camera.to(device=position.device, dtype=position.dtype)
+    calibration = intrinsics.to(device=position.device, dtype=position.dtype)
+    rotation = transform[:3, :3]
+    camera_position = (position - transform[:3, 3]) @ rotation
+    homogeneous = camera_position @ calibration.T
+    denominator = homogeneous[:, 2].clamp_min(1.0e-5)
+    denominator_squared = denominator.square()
+    jacobian_camera = torch.stack(
+        (
+            (
+                calibration[0].unsqueeze(0) * denominator.unsqueeze(-1)
+                - homogeneous[:, 0:1] * calibration[2].unsqueeze(0)
+            )
+            / denominator_squared.unsqueeze(-1),
+            (
+                calibration[1].unsqueeze(0) * denominator.unsqueeze(-1)
+                - homogeneous[:, 1:2] * calibration[2].unsqueeze(0)
+            )
+            / denominator_squared.unsqueeze(-1),
+        ),
+        dim=1,
+    )
+    jacobian_world = jacobian_camera @ rotation.T
+    world_covariance = torch.diag_embed(position_log_variance.exp())
+    pixel_covariance = jacobian_world @ world_covariance @ jacobian_world.transpose(-1, -2)
+    eigenvalues, eigenvectors = torch.linalg.eigh(pixel_covariance)
+    eigenvalues = eigenvalues.clamp_min(0.0)
+    minor_sigma = eigenvalues[:, 0].sqrt()
+    major_sigma = eigenvalues[:, 1].sqrt()
+    major_vector = eigenvectors[:, :, 1]
+    angle_degrees = torch.rad2deg(torch.atan2(major_vector[:, 1], major_vector[:, 0]))
+    sigma = torch.stack((major_sigma, minor_sigma), dim=-1)
+    valid = (
+        active
+        & (camera_position[:, 2] > 1.0e-4)
+        & torch.isfinite(sigma).all(dim=-1)
+        & torch.isfinite(angle_degrees)
+    )
+    return (
+        sigma.detach().cpu().numpy(),
+        angle_degrees.detach().cpu().numpy(),
+        valid.detach().cpu().numpy(),
+    )
 
 
 def create_demo(
@@ -724,6 +791,13 @@ def create_demo(
                 calibration_world,
                 calibration_intrinsics,
             )
+            posterior_sigma, posterior_angle, uncertainty_valid = _project_world_uncertainty(
+                posterior.objects.position[0],
+                posterior.objects.fast_log_variance[0, :, :3],
+                posterior.objects.active[0],
+                calibration_world,
+                calibration_intrinsics,
+            )
             overlay_points(
                 axes[0],
                 posterior_pixels,
@@ -741,17 +815,16 @@ def create_demo(
                 label="ground truth",
                 valid=target_active.numpy(),
             )
-            for slot, valid in enumerate(posterior_valid):
+            for slot, valid in enumerate(posterior_valid & uncertainty_valid):
                 if not valid:
                     continue
-                variance = posterior.objects.fast_log_variance[0, slot, :2].exp()
-                sigma = float(variance.mean().sqrt().cpu()) * 20.0
                 add_uncertainty_ellipse(
                     axes[0],
                     x=float(posterior_pixels[slot, 0]),
                     y=float(posterior_pixels[slot, 1]),
-                    sigma_x_pixels=sigma,
-                    sigma_y_pixels=sigma,
+                    sigma_x_pixels=float(posterior_sigma[slot, 0]),
+                    sigma_y_pixels=float(posterior_sigma[slot, 1]),
+                    angle_degrees=float(posterior_angle[slot]),
                 )
             if np.isfinite(current_prior_error):
                 current_error_text = (

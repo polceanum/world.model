@@ -137,6 +137,9 @@ class SphereWorldConfig:
             "elastic_pairs",
             "damped_contacts",
             "impulse_perturbation",
+            "camera_parallax",
+            "glancing_impacts",
+            "heavy_light_impacts",
         }
         unknown_scenarios = set(self.scenario_mixture) - supported_scenarios
         if unknown_scenarios:
@@ -261,6 +264,34 @@ class SphereWorldConfig:
                 initial_speed_range=(0.45, 1.3),
                 external_impulse_probability=0.12,
                 external_impulse_range=(0.25, 0.8),
+            )
+        if scenario == "camera_parallax":
+            return replace(
+                self,
+                camera_motion="combined",
+                camera_translation_amplitude=0.55,
+                camera_orbit_amplitude=0.45,
+                camera_zoom_amplitude=0.12,
+                external_impulse_probability=0.0,
+            )
+        if scenario == "glancing_impacts":
+            return replace(
+                self,
+                restitution_range=(0.55, 0.88),
+                drag_range=(0.005, 0.08),
+                friction_range=(0.01, 0.08),
+                initial_speed_range=(1.1, 1.8),
+                external_impulse_probability=0.0,
+            )
+        if scenario == "heavy_light_impacts":
+            return replace(
+                self,
+                mass_range=(0.3, 2.5),
+                restitution_range=(0.38, 0.78),
+                drag_range=(0.01, 0.12),
+                friction_range=(0.04, 0.22),
+                initial_speed_range=(0.7, 1.5),
+                external_impulse_probability=0.0,
             )
         raise ValueError(f"unsupported scenario {scenario!r}")
 

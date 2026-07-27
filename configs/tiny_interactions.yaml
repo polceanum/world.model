@@ -22,6 +22,9 @@ simulator:
     - elastic_pairs
     - damped_contacts
     - impulse_perturbation
+    - camera_parallax
+    - glancing_impacts
+    - heavy_light_impacts
 model:
   max_objects: 3
   state:
@@ -72,8 +75,8 @@ training:
   checkpoint_every: 8
   eval_every: 8
   log_every: 2
-  train_episodes: 96
-  validation_episodes: 12
+  train_episodes: 140
+  validation_episodes: 14
   fixed_dataset: true
   rgb_pretrain_steps: 656
   measurement_validation_frames: 16

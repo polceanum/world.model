@@ -903,9 +903,10 @@ Result: **passed**.
 6. Run the full `toy_mps` schedule when MPS is available and compare CPU/MPS
    throughput without changing the runtime/data contracts.
 
-All `runs/` and `demo_outputs/` paths above are real local artifacts but are
-gitignored by design; checkpoints and generated media are not published in the
-source commit.
+The paths above record the original experiment locations. Per the explicit
+2026-07-27 cleanup request, superseded `runs/` directories were later deleted
+after the selected checkpoint and compact evidence were consolidated. Generated
+artifacts remain gitignored and are not published in the source commit.
 
 ## RGB lateral-motion and trajectory-display correction (2026-07-27)
 
@@ -927,7 +928,7 @@ RGB world positions into corrected posterior history gives the horizontal
 signal without continuously overriding physical dynamics.
 
 Selected checkpoint:
-`runs/accuracy-lateral-velocity-v5/checkpoints/blended_birth_window.pt`
+`runs/20260727-193657-selected-contact-confidence-v1/checkpoints/best_rollout.pt`
 (step 648, CPU runtime semantics). On the same fresh-validation seeds
 `100096–100111`, the previous step-648 baseline versus the selected candidate
 was:
@@ -941,9 +942,10 @@ was:
 - nominal-90% coverage: `0.862745 → 0.846814`;
 - no dropped or nonfinite forecasts occurred.
 
-The exact report is
-`runs/accuracy-lateral-velocity-v5/evaluation/select16/report.md`. Rejected
-ablations are retained under `runs/accuracy-lateral-velocity-v1` through `v4`.
+The original exact report was consolidated with the newly accepted contact
+semantics under
+`runs/20260727-193657-selected-contact-confidence-v1/evaluation/`.
+Rejected ablation directories were removed after their outcomes were recorded.
 Continuous strong temporal updates, an eight-step adapted continuation, raw
 two-frame RGB slopes, and raw three-frame slopes all failed the wider physical
 gate.
@@ -1126,3 +1128,111 @@ Python `3.10.20`, and PyTorch `2.10.0`; MPS is built but unavailable to this
 process, so validation ran on CPU. The latest GIF still has SHA-256
 `74f6cf96fd0cd12723f7c1a255ab44ab9f15e8206909b8a51fc21c6f16cfe690`,
 confirming that cleanup changed its location, not its contents.
+
+## Uncertainty-aware contact and seven-scenario audit (2026-07-27)
+
+The large lime rings in the RGB panel were misleading: diagonal world
+variance was multiplied by a fixed pixel scale. The demo now projects the full
+diagonal world-position covariance through the calibrated camera Jacobian,
+draws the resulting oriented 90% ellipse, and labels it separately from the
+posterior point.
+
+The dynamics contact resolver already applied impulses at 120 Hz geometric
+contact substeps. The early lateral damping came from treating an uncertain
+posterior mean as exact. Pair and plane contact now require
+`gap + 0.25 * sigma_gap <= contact_margin`. A single-frame structured
+apparent-radius depth replacement was tested first and rejected: current RMSE
+rose to `0.519538 m` because independently varying physical radius and depth
+are not identifiable from one fixed-camera silhouette.
+
+On the unchanged selected step-648 weights and fresh-validation seeds
+`100096–100111`, old versus accepted `0.25σ` semantics were:
+
+| Metric | old | accepted |
+| --- | ---: | ---: |
+| current position RMSE | `0.139696 m` | `0.137969 m` |
+| current velocity RMSE | `0.762795 m/s` | `0.830722 m/s` |
+| 0.10 s RMSE | `0.150671 m` | `0.147986 m` |
+| 0.25 s RMSE | `0.173691 m` | `0.168943 m` |
+| 0.50 s RMSE | `0.196885 m` | `0.189775 m` |
+| 0.75 s RMSE | `0.204839 m` | `0.191977 m` |
+| 1.00 s RMSE | `0.209191 m` | `0.200973 m` |
+| collision F1 | `0.398922` | `0.409836` |
+| nominal 90% coverage | `0.846814` | `0.847733` |
+
+The accepted checkpoint and report are:
+
+- `runs/20260727-193657-selected-contact-confidence-v1/checkpoints/best_rollout.pt`
+- `runs/20260727-193657-selected-contact-confidence-v1/evaluation/20260727-185824-select16/report.md`
+- `runs/20260727-193657-selected-contact-confidence-v1/scenario-audit/`
+
+Checkpoint SHA-256 remains
+`d5628d9df10ebd9fea30223cc2b38b41248e7e361b90988306a36a34fabad2b2`.
+
+Three regimes were added to the existing baseline/elastic/damped/impulse
+mixture: moving-camera parallax, fast low-friction glancing impacts, and broad
+unequal-mass impacts. A deterministic CPU continuation used 140 training and
+14 validation episodes, 24 RGB updates and 16 closed-loop updates:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/tiny_interactions.yaml \
+  --run-name interaction-parallax-v3 \
+  --resume runs/accuracy-lateral-velocity-v5/checkpoints/blended_birth_window.pt \
+  --set training.steps=688 \
+  --set training.rgb_pretrain_steps=672 \
+  --set training.checkpoint_every=8 \
+  --set training.eval_every=8
+```
+
+Result: completed on CPU in `1718.97 s`; step 680 was internally selected at
+validation rollout-position loss `0.067989`. On paired two-episode breadth
+checks it improved current position and 0.5/1.0-second position in all seven
+regimes, and velocity in six. It was nevertheless rejected on the decisive
+original 16-episode gate: versus the accepted inherited weights, current RMSE
+regressed `0.137969 → 0.159862 m`, 1-second RMSE
+`0.200973 → 0.241969 m`, detection recall
+`0.992188 → 0.947266`, and collision F1
+`0.409836 → 0.384615`. Its compact metrics and configuration remain under
+`runs/20260727-193657-selected-contact-confidence-v1/rejected-interaction-training/`;
+its checkpoint was not retained.
+
+The regenerated RGB-only demo command was:
+
+```bash
+MPLCONFIGDIR=/private/tmp/orpheus-mpl PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus python demo.py \
+  --config configs/tiny_lateral_velocity.yaml \
+  --checkpoint runs/accuracy-lateral-velocity-v5/checkpoints/blended_birth_window.pt \
+  --output demo_outputs/contact-confidence-v1
+```
+
+Actual artifact:
+`demo_outputs/20260727-193538-contact-confidence-v1/online_correction.gif`.
+Mean current posterior error improved from `0.194245` to `0.183953 m`; mean
+1-second endpoint error improved from `0.272091` to `0.259955 m`. The
+uncertainty ellipse is now correctly projected. The fixed-camera right-ball
+forecast remains too vertical because physical radius/depth/height are still
+weakly observable; this is a known limitation, not a solved claim.
+
+After verifying the consolidated checkpoint and evidence, 64 superseded run
+directories (`~156 MB`) were permanently removed at the user's request.
+`runs/` now contains only the timestamped `1.1 MB` selected bundle above.
+
+Final source validation:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff format .
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-contact-pycache PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+git diff --check
+```
+
+Results: one Python file was reformatted and 155 were unchanged, Ruff passed,
+`209 passed, 3 skipped in 61.12 s`, and compileall/diff checks passed. The three skips are
+the existing MPS-conditional tests because MPS was unavailable to this
+process. The new GIF SHA-256 is
+`a164b44e0d581d37373f34346d447450ceb8a568ad13a438f1841773677628d4`.

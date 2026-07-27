@@ -49,6 +49,7 @@ class DynamicsConfig:
     ground_height: float = 0.0
     penetration_slop: float = 1e-4
     max_penetration_correction: float = 0.05
+    contact_confidence_sigma: float = 0.0
     sleep_speed: float = 0.02
     world_bounds: tuple[tuple[float, float], ...] | None = None
 
@@ -76,6 +77,8 @@ class DynamicsConfig:
                 raise ValueError(f"{name} must be positive")
         if self.log_variance_min >= self.log_variance_max:
             raise ValueError("invalid log variance bounds")
+        if self.contact_confidence_sigma < 0:
+            raise ValueError("contact_confidence_sigma must be nonnegative")
         if self.world_bounds is not None and (
             len(self.world_bounds) != 3
             or any(len(bounds) != 2 or bounds[0] >= bounds[1] for bounds in self.world_bounds)
@@ -117,6 +120,7 @@ class DynamicsModel(nn.Module):
             planes=self._environment_planes(),
             penetration_slop=self.config.penetration_slop,
             max_position_correction=self.config.max_penetration_correction,
+            contact_confidence_sigma=self.config.contact_confidence_sigma,
         )
         self.events = EventModel(
             resolver,
@@ -199,6 +203,7 @@ class DynamicsModel(nn.Module):
             ground_height=ground_height,
             penetration_slop=float(dynamics.penetration_slop),
             max_penetration_correction=float(dynamics.max_penetration_correction),
+            contact_confidence_sigma=float(dynamics.contact_confidence_sigma),
             sleep_speed=float(dynamics.sleep_speed),
             world_bounds=(
                 tuple((float(bounds[0]), float(bounds[1])) for bounds in simulator.world_bounds)

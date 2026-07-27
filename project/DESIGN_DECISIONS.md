@@ -599,3 +599,32 @@
   reports its actual generated path. Existing research evidence remains valid.
   Timestamp resolution is one second, so callers launching identical labels
   within the same second must provide distinct labels.
+
+## ADR-038 — Delay uncertain contact jumps and reject the broader adapted checkpoint
+
+- **Date:** 2026-07-27
+- **Status:** accepted
+- **Context:** The contact resolver already localized analytic impacts at
+  120 Hz substeps, but monocular RGB height uncertainty placed some posterior
+  means too close to a surface and caused premature jumps. A structured
+  apparent-radius depth replacement was tested and rejected because physical
+  radius and depth are not separately observable from one fixed-camera
+  silhouette.
+- **Decision:** Require the geometric gap plus `0.25` projected standard
+  deviations to reach contact before applying a pair/plane jump. Keep the
+  original step-648 weights with this explicit runtime semantic. Add camera
+  parallax, glancing-impact, and unequal-mass regimes to the deterministic
+  curriculum, but reject the 24-RGB/16-closed-loop step-680 continuation
+  because it regressed the decisive original 16-episode multistep gate.
+- **Evidence:** On seeds `100096–100111`, the new contact semantics change
+  0.10/0.25/0.50/0.75/1.00-second RMSE from
+  `0.150671/0.173691/0.196885/0.204839/0.209191` to
+  `0.147986/0.168943/0.189775/0.191977/0.200973 m`; collision F1 changes
+  `0.398922 → 0.409836`. Velocity RMSE regresses
+  `0.762795 → 0.830722 m/s`. The adapted step-680 checkpoint reaches
+  `0.241969 m` at one second and is rejected.
+- **Consequences:** Contact timing now responds explicitly to uncertainty,
+  rather than treating an uncertain mean as exact. The remaining fixed-camera
+  scale/height ambiguity is not claimed solved. Per the user's explicit
+  cleanup request, superseded run directories were deleted after the accepted
+  checkpoint and compact evidence were consolidated into one timestamped run.

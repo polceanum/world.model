@@ -67,8 +67,19 @@
   evaluation, and demo directory names, including explicit CLI labels.
 - A recoverable `demo_outputs/archive/` containing the eight superseded demo
   sets; the current RGB-only demo remains directly under `demo_outputs/`.
+- Camera-parallax, glancing-impact, and unequal-mass deterministic scenario
+  presets, expanding the mixed curriculum from four regimes to seven.
+- Camera-Jacobian projection of posterior world covariance for correctly
+  oriented image-space uncertainty ellipses with an explicit legend entry.
 
 ### Changed after integration audit
+
+- Delayed analytic contact jumps until the estimated geometric gap plus a
+  `0.25σ` position-uncertainty margin reaches contact, reducing premature
+  lateral damping on the selected multistep block.
+- Consolidated the accepted checkpoint, evaluation, scenario audit, and
+  rejected-training record into one timestamp-first run; permanently removed
+  64 superseded run directories after explicit user authorization.
 
 - Preserved positive observation `dt` through training/evaluation so RGB
   position differences can inform velocity correction.

@@ -15,6 +15,7 @@ def add_uncertainty_ellipse(
     sigma_y_pixels: float,
     color: str = "lime",
     confidence_scale: float = 1.64,
+    angle_degrees: float = 0.0,
 ) -> None:
     width = max(1.0, 2.0 * confidence_scale * sigma_x_pixels)
     height = max(1.0, 2.0 * confidence_scale * sigma_y_pixels)
@@ -23,6 +24,7 @@ def add_uncertainty_ellipse(
             (x, y),
             width=width,
             height=height,
+            angle=angle_degrees,
             fill=False,
             edgecolor=color,
             linewidth=0.8,

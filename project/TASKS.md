@@ -99,6 +99,15 @@
   scoring-only lookahead so the displayed horizon remains fixed.
 - [x] Prefix new train/evaluation/demo artifact folders with sortable UTC
   timestamps and recoverably archive superseded demos.
+- [x] Project posterior world covariance through the camera Jacobian before
+  drawing image-space uncertainty.
+- [x] Gate analytic pair/plane contact jumps by position uncertainty and
+  validate the `0.25σ` setting on the 16-episode multistep block.
+- [x] Add camera-parallax, glancing-impact, and unequal-mass interaction
+  regimes; train a 140-episode seven-regime continuation and reject it after
+  the original-task confirmation gate regressed.
+- [x] Consolidate the accepted checkpoint/evidence and remove 64 superseded
+  run directories at the user's request.
 
 ## Milestone 1 research acceptance — not yet achieved
 
@@ -133,9 +142,9 @@
   forecast horizon on the 16-episode fresh-validation gate.
 - [x] Correct the demo ground-truth XY display so each identity has one
   colour-coded past/current-horizon trajectory with explicit time direction.
-- [ ] Localize collision time instead of damping lateral motion too early;
-  recover collision F1 and nominal coverage without sacrificing the selected
-  multistep gains.
+- [ ] Resolve the remaining monocular scale/height ambiguity; uncertainty-aware
+  contact improves timing, collision F1, and multistep position, but velocity
+  remains worse and the right-ball forecast is still too vertical.
 - [x] Add deterministic baseline, elastic-pair, damped-contact, and
   impulse-perturbation scenario mixtures without changing episode/runtime
   tensor contracts.

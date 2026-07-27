@@ -91,6 +91,9 @@ def test_seeded_scenario_mixture_exercises_distinct_physical_regimes() -> None:
         "elastic_pairs",
         "damped_contacts",
         "impulse_perturbation",
+        "camera_parallax",
+        "glancing_impacts",
+        "heavy_light_impacts",
     )
     config = SphereWorldConfig(
         image_size=(24, 24),
@@ -108,6 +111,11 @@ def test_seeded_scenario_mixture_exercises_distinct_physical_regimes() -> None:
     assert worlds[2].config.friction_range == (0.28, 0.55)
     assert worlds[3].config.external_impulse_probability == 0.12
     assert worlds[3].config.external_impulse_range == (0.25, 0.8)
+    assert worlds[4].config.camera_motion == "combined"
+    assert worlds[4].config.camera_zoom_amplitude == 0.12
+    assert worlds[5].config.initial_speed_range == (1.1, 1.8)
+    assert worlds[5].config.friction_range == (0.01, 0.08)
+    assert worlds[6].config.mass_range == (0.3, 2.5)
 
     episode = generate_episode(config, seed=2)
     assert episode["metadata"]["scenario"] == "damped_contacts"

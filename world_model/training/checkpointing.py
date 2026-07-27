@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from world_model.utils.config import OrpheusConfig, RGBConfig
+from world_model.utils.config import DynamicsConfig, OrpheusConfig, RGBConfig
 from world_model.utils.version import SPECIFICATION_VERSION, __version__
 
 _SIMULATOR_COMPATIBILITY_FIELDS = (
@@ -48,15 +48,19 @@ _RGB_LEGACY_DEFAULT_FIELDS = (
     "structured_disc_center_std_pixels",
 )
 
+_DYNAMICS_MIGRATION_DEFAULT_FIELDS = ("contact_confidence_sigma",)
+
 
 def _model_checkpoint_semantics(value: object) -> object:
-    """Normalize fields absent from legacy checkpoints to their old defaults.
+    """Normalize fields absent from legacy checkpoints to explicit semantics.
 
     RGB controls that alter measurement means, variances, or supported state
     fields are runtime semantics even when they add no trainable parameters.
     They therefore remain in the compatibility comparison.  Only genuinely
-    missing legacy fields are filled with the defaults that those checkpoints
-    used.
+    missing RGB fields are filled with the defaults those checkpoints used.
+    The parameter-free contact-confidence field is deliberately migrated to
+    the current validated default; its source checkpoint remains otherwise
+    immutable and the migration is recorded in project memory.
     """
 
     if not isinstance(value, Mapping):
@@ -69,6 +73,13 @@ def _model_checkpoint_semantics(value: object) -> object:
         for field_name in _RGB_LEGACY_DEFAULT_FIELDS:
             normalized_rgb.setdefault(field_name, getattr(defaults, field_name))
         model["rgb"] = normalized_rgb
+    dynamics = model.get("dynamics")
+    if isinstance(dynamics, Mapping):
+        normalized_dynamics = dict(dynamics)
+        defaults = DynamicsConfig()
+        for field_name in _DYNAMICS_MIGRATION_DEFAULT_FIELDS:
+            normalized_dynamics.setdefault(field_name, getattr(defaults, field_name))
+        model["dynamics"] = normalized_dynamics
     return model
 
 

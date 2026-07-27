@@ -17,6 +17,7 @@ from world_model.visualisation.animation import (
     _match_positions,
     _plot_ground_truth_window,
     _plot_historical_forecasts,
+    _project_world_uncertainty,
 )
 
 
@@ -148,6 +149,7 @@ def test_demo_axes_and_legends_have_stable_geometry_and_entries() -> None:
         "scheduled RGB measurement",
         "prior",
         "posterior",
+        "posterior 90% position uncertainty",
         "ground truth overlay",
     ]
     assert [text.get_text() for text in axes[1].get_legend().get_texts()] == [
@@ -160,3 +162,29 @@ def test_demo_axes_and_legends_have_stable_geometry_and_entries() -> None:
     ]
     assert axes[1].get_legend()._loc == 1
     plt.close(figure)
+
+
+def test_world_covariance_is_projected_through_camera_jacobian() -> None:
+    position = torch.tensor([[0.0, 0.0, 2.0]])
+    log_variance = torch.tensor([[0.01, 0.04, 0.25]]).log()
+    active = torch.tensor([True])
+    world_from_camera = torch.eye(4)
+    intrinsics = torch.tensor(
+        [
+            [100.0, 0.0, 20.0],
+            [0.0, 100.0, 20.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+
+    sigma, angle, valid = _project_world_uncertainty(
+        position,
+        log_variance,
+        active,
+        world_from_camera,
+        intrinsics,
+    )
+
+    assert valid.tolist() == [True]
+    np.testing.assert_allclose(sigma[0], [10.0, 5.0], atol=1.0e-5)
+    assert abs(abs(float(angle[0])) - 90.0) < 1.0e-5

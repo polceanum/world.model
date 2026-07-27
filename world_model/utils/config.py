@@ -124,6 +124,7 @@ class DynamicsConfig:
     residual_acceleration_scale: float = 0.5
     penetration_slop: float = 1e-3
     max_penetration_correction: float = 0.08
+    contact_confidence_sigma: float = 0.25
     sleep_speed: float = 0.05
     allow_large_substep: bool = False
 
@@ -390,6 +391,8 @@ class OrpheusConfig:
             )
         if model.dynamics.max_substep <= 0:
             raise ValueError("model.dynamics.max_substep must be positive")
+        if model.dynamics.contact_confidence_sigma < 0:
+            raise ValueError("model.dynamics.contact_confidence_sigma must be nonnegative")
         observation_dt = 1.0 / simulator.frame_rate
         if model.dynamics.max_substep > observation_dt and not model.dynamics.allow_large_substep:
             raise ValueError(
@@ -418,6 +421,9 @@ class OrpheusConfig:
             "elastic_pairs",
             "damped_contacts",
             "impulse_perturbation",
+            "camera_parallax",
+            "glancing_impacts",
+            "heavy_light_impacts",
         }
         unknown_scenarios = set(simulator.scenario_mixture) - supported_scenarios
         if unknown_scenarios:

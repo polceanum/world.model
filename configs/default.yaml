@@ -73,6 +73,7 @@ model:
     residual_acceleration_scale: 0.5
     penetration_slop: 0.001
     max_penetration_correction: 0.08
+    contact_confidence_sigma: 0.25
     sleep_speed: 0.05
     allow_large_substep: false
   filter:

@@ -193,3 +193,29 @@ def test_rgb_runtime_controls_are_semantic_with_legacy_defaults() -> None:
     architecture_change.validate()
     with pytest.raises(ValueError, match="model"):
         validate_checkpoint_config(payload, architecture_change)
+
+
+def test_contact_confidence_semantics_migrate_legacy_checkpoint() -> None:
+    config = _small_config()
+    payload = {"config": config.to_dict()}
+    legacy_payload = deepcopy(payload)
+    legacy_payload["config"]["model"]["dynamics"].pop("contact_confidence_sigma")
+
+    validate_checkpoint_config(payload, config)
+    validate_checkpoint_config(legacy_payload, config)
+
+    changed = replace(
+        config,
+        model=replace(
+            config.model,
+            dynamics=replace(
+                config.model.dynamics,
+                contact_confidence_sigma=0.5,
+            ),
+        ),
+    )
+    changed.validate()
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(payload, changed)
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(legacy_payload, changed)

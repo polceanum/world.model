@@ -115,6 +115,13 @@ artifact last. Explicit `--run-name` and `--output` values are treated as
 human-readable labels; the command's JSON result contains the actual path.
 Superseded demos are retained under `demo_outputs/archive/`.
 
+The current local RGB-only selection bundle is
+`runs/20260727-193657-selected-contact-confidence-v1/`; the latest visual
+result is
+`demo_outputs/20260727-193538-contact-confidence-v1/online_correction.gif`.
+These generated artifacts are gitignored. The seven-regime interaction
+curriculum is configured in `configs/tiny_interactions.yaml`.
+
 PyTorch 2.10.0 in the existing environment is MPS-enabled. A reduced explicit
 MPS training smoke has exercised both global RGB and differentiable fast ROI
 backward paths. The full 3,000-step `toy_mps` protocol remains an overnight

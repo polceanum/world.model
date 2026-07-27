@@ -48,6 +48,7 @@ class SphereContactResolver(nn.Module):
         max_position_correction: float = 0.05,
         max_impulse_multiplier_residual: float = 0.25,
         max_impulse_additive_residual: float = 0.1,
+        contact_confidence_sigma: float = 0.0,
     ) -> None:
         super().__init__()
         selected = tuple(planes or (ContactPlane((0.0, 1.0, 0.0)),))
@@ -70,6 +71,9 @@ class SphereContactResolver(nn.Module):
         self.max_position_correction = max_position_correction
         self.max_impulse_multiplier_residual = max_impulse_multiplier_residual
         self.max_impulse_additive_residual = max_impulse_additive_residual
+        if contact_confidence_sigma < 0:
+            raise ValueError("contact_confidence_sigma must be nonnegative")
+        self.contact_confidence_sigma = contact_confidence_sigma
 
     def forward(
         self,
@@ -125,7 +129,11 @@ class SphereContactResolver(nn.Module):
             diagonal=1,
         ).unsqueeze(0)
         gap = distance - radius[:, :, None] - radius[:, None, :]
-        contact_upper = active_pair & upper & (gap <= self.contact_margin)
+        position_variance = objects.fast_log_variance[..., :3].exp()
+        relative_variance = position_variance[:, :, None, :] + position_variance[:, None, :, :]
+        gap_sigma = (relative_variance * normal.square()).sum(dim=-1).sqrt()
+        confident_gap = gap + self.contact_confidence_sigma * gap_sigma
+        contact_upper = active_pair & upper & (confident_gap <= self.contact_margin)
         collision_upper = contact_upper & (relative_normal_velocity < -self.collision_speed_epsilon)
 
         inverse_mass = objects.mass.squeeze(-1).reciprocal()
@@ -209,8 +217,15 @@ class SphereContactResolver(nn.Module):
         )
         signed_center = torch.einsum("bnc,pc->bnp", objects.position, normals)
         gap = signed_center - offsets[None, None, :] - objects.radius
+        position_variance = objects.fast_log_variance[..., :3].exp()
+        gap_sigma = torch.einsum(
+            "bnc,pc->bnp",
+            position_variance,
+            normals.square(),
+        ).sqrt()
+        confident_gap = gap + self.contact_confidence_sigma * gap_sigma
         normal_velocity = torch.einsum("bnc,pc->bnp", objects.velocity, normals)
-        contact = objects.active.unsqueeze(-1) & (gap <= self.contact_margin)
+        contact = objects.active.unsqueeze(-1) & (confident_gap <= self.contact_margin)
         collision = contact & (normal_velocity < -self.collision_speed_epsilon)
         penetration = (-gap).clamp_min(0.0) * contact
 
