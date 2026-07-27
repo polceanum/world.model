@@ -134,6 +134,14 @@
 - [ ] Localize collision time instead of damping lateral motion too early;
   recover collision F1 and nominal coverage without sacrificing the selected
   multistep gains.
+- [x] Add deterministic baseline, elastic-pair, damped-contact, and
+  impulse-perturbation scenario mixtures without changing episode/runtime
+  tensor contracts.
+- [x] Run paired per-scenario RGB-only evaluations before and after mixed
+  closed-loop and RGB-adapted continuations; retain both as rejected evidence.
+- [ ] Train multi-object discovery/association on a balanced three-object
+  curriculum with per-query recall validation before another dynamics
+  continuation. The short mixed RGB adaptation reduced detection recall.
 - [ ] Run the full 3,000-step `configs/toy_mps.yaml` schedule and a materially
   larger held-out test split.
 - [x] Export sequence-aware occlusion survival/uncertainty metrics with

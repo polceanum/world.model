@@ -49,11 +49,15 @@ class SimulatorConfig:
     restitution_range: tuple[float, float] = (0.45, 0.9)
     drag_range: tuple[float, float] = (0.01, 0.16)
     friction_range: tuple[float, float] = (0.05, 0.35)
+    initial_speed_range: tuple[float, float] = (0.35, 1.35)
     gravity: tuple[float, float, float] = (0.0, -9.81, 0.0)
     camera_motion: str = "orbit"
     known_camera_pose: bool = True
     render_noise_std: float = 0.01
+    ensure_collision: bool = True
     external_impulse_probability: float = 0.0
+    external_impulse_range: tuple[float, float] = (0.15, 0.6)
+    scenario_mixture: tuple[str, ...] = ("baseline",)
     split_train_start: int = 0
     split_validation_start: int = 100000
     split_test_start: int = 200000
@@ -398,6 +402,8 @@ class OrpheusConfig:
             ("restitution", simulator.restitution_range),
             ("drag", simulator.drag_range),
             ("friction", simulator.friction_range),
+            ("initial_speed", simulator.initial_speed_range),
+            ("external_impulse", simulator.external_impulse_range),
         ):
             if len(bounds) != 2 or bounds[0] > bounds[1]:
                 raise ValueError(f"invalid simulator {name}_range")
@@ -405,6 +411,17 @@ class OrpheusConfig:
             raise ValueError("restitution_range must lie in [0, 1]")
         if not (0 <= simulator.friction_range[0] <= simulator.friction_range[1] <= 1):
             raise ValueError("friction_range must lie in [0, 1]")
+        if not simulator.scenario_mixture:
+            raise ValueError("simulator.scenario_mixture must contain at least one scenario")
+        supported_scenarios = {
+            "baseline",
+            "elastic_pairs",
+            "damped_contacts",
+            "impulse_perturbation",
+        }
+        unknown_scenarios = set(simulator.scenario_mixture) - supported_scenarios
+        if unknown_scenarios:
+            raise ValueError(f"unsupported simulator scenarios: {sorted(unknown_scenarios)}")
         if self.device.preference not in {"auto", "cpu", "mps", "cuda"}:
             raise ValueError(f"Unsupported device preference {self.device.preference!r}")
         if self.runtime.modality not in {"rgb", "debug_oracle"}:

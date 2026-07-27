@@ -205,6 +205,7 @@ def generate_episode(
             "simulator": "sphere_world",
             "simulator_version": 1,
             "distribution": resolved.distribution,
+            "scenario": world.scenario_name,
             "camera_trajectory": world.camera.mode,
             "frame_rate": resolved.frame_rate,
             "physics_rate": resolved.physics_rate,

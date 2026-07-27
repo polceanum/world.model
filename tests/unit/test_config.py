@@ -32,6 +32,30 @@ def test_dotted_override_is_typed(tmp_path: Path) -> None:
     assert config.simulator.image_size == (32, 40)
 
 
+def test_simulator_scenario_mixture_is_typed_and_validated() -> None:
+    config = load_config(
+        CONFIG_DIR / "toy_smoke.yaml",
+        overrides=[
+            "simulator.scenario_mixture=[elastic_pairs,damped_contacts,impulse_perturbation]",
+            "simulator.initial_speed_range=[0.2,1.8]",
+            "simulator.external_impulse_range=[0.1,0.9]",
+        ],
+    )
+    assert config.simulator.scenario_mixture == (
+        "elastic_pairs",
+        "damped_contacts",
+        "impulse_perturbation",
+    )
+    assert config.simulator.initial_speed_range == (0.2, 1.8)
+    assert config.simulator.external_impulse_range == (0.1, 0.9)
+
+    with pytest.raises(ValueError, match="unsupported simulator scenarios"):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=["simulator.scenario_mixture=[unknown]"],
+        )
+
+
 def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
     default = load_config(CONFIG_DIR / "toy_smoke.yaml")
     assert not default.model.rgb.temporal_velocity_enabled

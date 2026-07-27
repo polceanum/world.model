@@ -78,6 +78,7 @@ class SphereWorldConfig:
     removal_probability: float = 0.05
     external_impulse_probability: float = 0.0
     external_impulse_range: tuple[float, float] = (0.15, 0.6)
+    scenario_mixture: tuple[str, ...] = ("baseline",)
     distribution: str = "in_distribution"
 
     @property
@@ -129,6 +130,17 @@ class SphereWorldConfig:
             probability = getattr(self, probability_name)
             if not 0 <= probability <= 1:
                 raise ValueError(f"{probability_name} must lie in [0, 1]")
+        if not self.scenario_mixture:
+            raise ValueError("scenario_mixture must contain at least one scenario")
+        supported_scenarios = {
+            "baseline",
+            "elastic_pairs",
+            "damped_contacts",
+            "impulse_perturbation",
+        }
+        unknown_scenarios = set(self.scenario_mixture) - supported_scenarios
+        if unknown_scenarios:
+            raise ValueError(f"unsupported scenarios: {sorted(unknown_scenarios)}")
         if self.distribution not in {"in_distribution", "ood"}:
             raise ValueError("distribution must be 'in_distribution' or 'ood'")
 
@@ -189,6 +201,8 @@ class SphereWorldConfig:
         ):
             if range_name in values:
                 values[range_name] = _tuple_range(values[range_name], name=range_name)
+        if "scenario_mixture" in values:
+            values["scenario_mixture"] = tuple(str(item) for item in values["scenario_mixture"])
         resolved = cls(**values)
         resolved.validate()
         return resolved
@@ -210,6 +224,46 @@ class SphereWorldConfig:
             camera_motion=("combined" if self.camera_motion == "fixed" else self.camera_motion),
         )
 
+    def scenario_for_seed(self, seed: int) -> str:
+        """Select a deterministic interaction regime for an episode seed."""
+
+        return self.scenario_mixture[int(seed) % len(self.scenario_mixture)]
+
+    def for_scenario(self, scenario: str) -> SphereWorldConfig:
+        """Resolve named physical ranges without changing tensor contracts."""
+
+        if scenario == "baseline":
+            return self
+        if scenario == "elastic_pairs":
+            return replace(
+                self,
+                restitution_range=(0.78, 0.95),
+                drag_range=(0.005, 0.04),
+                friction_range=(0.03, 0.12),
+                initial_speed_range=(0.85, 1.55),
+                external_impulse_probability=0.0,
+            )
+        if scenario == "damped_contacts":
+            return replace(
+                self,
+                restitution_range=(0.18, 0.42),
+                drag_range=(0.18, 0.32),
+                friction_range=(0.28, 0.55),
+                initial_speed_range=(0.35, 1.0),
+                external_impulse_probability=0.0,
+            )
+        if scenario == "impulse_perturbation":
+            return replace(
+                self,
+                restitution_range=(0.4, 0.8),
+                drag_range=(0.02, 0.14),
+                friction_range=(0.06, 0.3),
+                initial_speed_range=(0.45, 1.3),
+                external_impulse_probability=0.12,
+                external_impulse_range=(0.25, 0.8),
+            )
+        raise ValueError(f"unsupported scenario {scenario!r}")
+
 
 @dataclass(frozen=True)
 class LifecycleEvents:
@@ -230,8 +284,10 @@ class SphereWorld:
     """Stateful deterministic simulator with explicit frame-time stepping."""
 
     def __init__(self, config: SphereWorldConfig | Mapping[str, Any], seed: int) -> None:
-        self.config = SphereWorldConfig.from_config(config)
         self.seed = int(seed)
+        base_config = SphereWorldConfig.from_config(config)
+        self.scenario_name = base_config.scenario_for_seed(self.seed)
+        self.config = base_config.for_scenario(self.scenario_name)
         self.generator = torch.Generator(device="cpu")
         self.generator.manual_seed(self.seed & 0x7FFF_FFFF_FFFF_FFFF)
         self.camera = CameraTrajectory(

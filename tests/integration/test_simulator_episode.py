@@ -10,7 +10,7 @@ from world_model.datasets import (
     collate_episodes,
     make_seed_manifest,
 )
-from world_model.simulator import SphereWorldConfig, generate_episode, validate_episode
+from world_model.simulator import SphereWorld, SphereWorldConfig, generate_episode, validate_episode
 
 
 def _test_config() -> SphereWorldConfig:
@@ -83,6 +83,37 @@ def test_fixed_seed_generation_is_exactly_repeatable_and_seed_sensitive() -> Non
         repeated["events"]["pair_collision"],
     )
     assert not torch.equal(first["objects"]["mass"][0], different["objects"]["mass"][0])
+
+
+def test_seeded_scenario_mixture_exercises_distinct_physical_regimes() -> None:
+    scenarios = (
+        "baseline",
+        "elastic_pairs",
+        "damped_contacts",
+        "impulse_perturbation",
+    )
+    config = SphereWorldConfig(
+        image_size=(24, 24),
+        sequence_frames=4,
+        min_objects=3,
+        max_objects=3,
+        scenario_mixture=scenarios,
+    )
+
+    worlds = [SphereWorld(config, seed=index) for index in range(len(scenarios))]
+    assert [world.scenario_name for world in worlds] == list(scenarios)
+    assert worlds[1].config.restitution_range == (0.78, 0.95)
+    assert worlds[1].config.drag_range == (0.005, 0.04)
+    assert worlds[2].config.restitution_range == (0.18, 0.42)
+    assert worlds[2].config.friction_range == (0.28, 0.55)
+    assert worlds[3].config.external_impulse_probability == 0.12
+    assert worlds[3].config.external_impulse_range == (0.25, 0.8)
+
+    episode = generate_episode(config, seed=2)
+    assert episode["metadata"]["scenario"] == "damped_contacts"
+    active = episode["objects"]["active"][0]
+    assert torch.all(episode["objects"]["restitution"][0, active, 0] <= 0.42)
+    assert torch.all(episode["objects"]["drag"][0, active, 0] >= 0.18)
 
 
 def test_dataset_splits_and_collation_preserve_batch_time_object_order() -> None:

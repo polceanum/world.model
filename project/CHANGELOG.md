@@ -288,3 +288,17 @@ and nominal coverage regress slightly and excessive early collision damping is
 still visible, so event timing/calibration remains open. Stronger continuous,
 raw-measurement, and short adapted-training variants are recorded as rejected
 runs rather than promoted.
+
+A deterministic four-regime interaction suite was added for baseline,
+high-restitution elastic pairs, damped high-friction contacts, and labelled
+external impulses. `configs/tiny_interactions.yaml` exercises three-object,
+40-frame episodes while preserving the canonical RGB/episode/belief
+contracts. Scenario names are recorded in episode metadata and singleton
+scenario overrides support paired evaluation.
+
+Two mixed training attempts were completed on CPU. The eight-step closed-loop
+run improved impulse-driven forecasts by about 3% but was neutral elsewhere.
+The subsequent eight-step RGB plus eight-step closed-loop adaptation improved
+velocity while broadly regressing position and three-object detection recall.
+Both are retained under `runs/accuracy-interactions-v1` and `v2` as rejected
+experiments; the lateral-velocity step-648 checkpoint remains selected.

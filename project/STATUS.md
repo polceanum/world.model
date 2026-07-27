@@ -1004,3 +1004,79 @@ unavailable. Checkpoint SHA-256:
 `d5628d9df10ebd9fea30223cc2b38b41248e7e361b90988306a36a34fabad2b2`.
 GIF SHA-256:
 `74f6cf96fd0cd12723f7c1a255ab44ab9f15e8206909b8a51fc21c6f16cfe690`.
+
+## Mixed interaction scenario audit (2026-07-27)
+
+`configs/tiny_interactions.yaml` adds a deterministic four-regime mixture with
+three simultaneous objects and 40-frame episodes:
+
+- `baseline`: the existing in-distribution ranges;
+- `elastic_pairs`: restitution `0.78–0.95`, drag `0.005–0.04`, friction
+  `0.03–0.12`, and faster initial motion;
+- `damped_contacts`: restitution `0.18–0.42`, drag `0.18–0.32`, and friction
+  `0.28–0.55`;
+- `impulse_perturbation`: moderate contact parameters plus labelled random
+  impulses with probability `0.12` per observation interval.
+
+Scenario selection is `seed % len(scenario_mixture)`, is recorded in episode
+metadata, and changes physical sampling only; tensor/runtime contracts are
+unchanged. Focused simulator/config coverage passed `42` tests.
+
+Two CPU continuations from the selected lateral-velocity checkpoint were
+completed and rejected:
+
+1. `runs/accuracy-interactions-v1` ran eight closed-loop steps over 96 mixed
+   training and 12 mixed validation episodes in `677.31 s`. It was nearly
+   neutral on baseline/elastic/damped scenes and improved the impulse regime
+   by `3.07%` current-position RMSE, `2.83%` 0.5-second RMSE, and `4.55%`
+   relative collision F1.
+2. `runs/accuracy-interactions-v2` ran eight RGB pretraining plus eight
+   closed-loop steps in `847.90 s`. Although velocity RMSE improved
+   `5.46–33.31%`, position forecasts regressed broadly and three-object
+   detection recall fell, so its step-664 checkpoint is not promoted.
+
+Paired four-episode scenario results on fresh-validation seeds
+`100012–100015` for the untouched step-648 checkpoint versus the rejected
+step-664 RGB-adapted checkpoint were:
+
+| Scenario | current RMSE m | 0.5 s RMSE m | 1.0 s RMSE m | collision F1 | detection recall |
+| --- | --- | --- | --- | --- | --- |
+| baseline old/new | `0.2570/0.3004` | `0.3014/0.3241` | `0.3375/0.3550` | `0.3836/0.5795` | `0.5146/0.4417` |
+| elastic old/new | `0.3472/0.3866` | `0.4036/0.4242` | `0.4498/0.4380` | `0.3333/0.2778` | `0.3854/0.2479` |
+| damped old/new | `0.1998/0.2665` | `0.2211/0.3002` | `0.2124/0.3250` | `0.2152/0.2632` | `0.5542/0.4771` |
+| impulse old/new | `0.1948/0.2710` | `0.2242/0.3069` | `0.2305/0.3414` | `0.4348/0.5000` | `0.5625/0.4458` |
+
+All evaluations were RGB-only, used no oracle runtime input, and produced no
+nonfinite or dropped forecasts. The original model therefore executes across
+all regimes, but is not accurate enough for three-object elastic interactions.
+The main blocker is global multi-object discovery/association rather than
+rollout-only dynamics adaptation. The selected
+`accuracy-lateral-velocity-v5` checkpoint remains promoted.
+
+Exact training commands:
+
+```bash
+PYTHONPATH=. conda run -n orpheus python train.py \
+  --config configs/tiny_interactions.yaml \
+  --run-name accuracy-interactions-v1 \
+  --resume runs/accuracy-lateral-velocity-v5/checkpoints/blended_birth_window.pt
+
+PYTHONPATH=. conda run -n orpheus python train.py \
+  --config configs/tiny_interactions.yaml \
+  --run-name accuracy-interactions-v2 \
+  --resume runs/accuracy-lateral-velocity-v5/checkpoints/blended_birth_window.pt
+```
+
+Per-regime reports are under
+`runs/accuracy-interactions-v1/evaluation/*-{baseline4,trained4}` and
+`runs/accuracy-interactions-v2/evaluation/*-trained4`.
+
+Final source validation:
+
+```bash
+conda run --no-capture-output -n orpheus ruff check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
+```
+
+Results: Ruff passed; `203 passed, 3 skipped in 62.17 s`. The skips are the
+existing MPS-conditional tests because MPS was unavailable to this process.

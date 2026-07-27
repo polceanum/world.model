@@ -1,0 +1,106 @@
+project:
+  name: orpheus-tiny-interactions
+  seed: 17
+  output_dir: runs
+  deterministic: true
+device:
+  preference: cpu
+  cuda_amp: false
+  compile: false
+simulator:
+  image_size: [48, 48]
+  frame_rate: 20
+  physics_rate: 120
+  sequence_frames: 40
+  min_objects: 3
+  max_objects: 3
+  camera_motion: fixed
+  render_noise_std: 0.0
+  ensure_collision: true
+  scenario_mixture:
+    - baseline
+    - elastic_pairs
+    - damped_contacts
+    - impulse_perturbation
+model:
+  max_objects: 3
+  state:
+    geometry_dim: 4
+    appearance_dim: 12
+    residual_dynamics_dim: 6
+    modal_count: 2
+    modal_dim: 2
+    parameter_memory_dim: 24
+    global_dim: 6
+  rgb:
+    backbone_channels: [12, 20, 28, 40]
+    feature_dim: 32
+    proposal_queries: 3
+    global_every_steps: 4
+    roi_size: 12
+    fast_depth_residual_enabled: false
+    temporal_velocity_enabled: true
+    temporal_velocity_history_size: 3
+    temporal_velocity_min_samples: 2
+    temporal_velocity_variance_scale: 1.0
+    temporal_velocity_variance_floor: 0.25
+    temporal_velocity_variance_ceiling: 0.25
+    temporal_velocity_lateral_only: true
+    temporal_velocity_unobserved_variance: 10000.0
+    temporal_velocity_reset_on_collision: true
+    temporal_velocity_max_age_steps: 3
+    temporal_velocity_measurement_position_blend: 0.125
+    structured_disc_center_enabled: true
+  dynamics:
+    hidden_dim: 40
+    max_substep: 0.008333333333333333
+  filter:
+    hidden_dim: 48
+  identification:
+    hidden_dim: 24
+runtime:
+  modality: rgb
+  enable_debug_oracle: false
+training:
+  batch_size: 2
+  steps: 664
+  learning_rate: 0.0001
+  closed_loop_learning_rate_scale: 0.1
+  closed_loop_global_trainable_steps: 0
+  weight_decay: 0.0001
+  tbptt_steps: 10
+  checkpoint_every: 8
+  eval_every: 8
+  log_every: 2
+  train_episodes: 96
+  validation_episodes: 12
+  fixed_dataset: true
+  rgb_pretrain_steps: 656
+  measurement_validation_frames: 16
+  perturbation_probability: 0.25
+  perturbation_position_std: 0.12
+  perturbation_velocity_std: 0.20
+  collision_window_probability: 0.60
+  long_horizon_window_probability: 0.80
+  collision_positive_weight_max: 10.0
+  horizon_weights: [1.0, 1.5, 2.0, 2.5, 3.0]
+  loss_weights:
+    measurement: 1.0
+    state_position: 2.0
+    state_velocity: 0.25
+    rollout_position: 4.0
+    rollout_velocity: 0.1
+    event: 0.3
+    parameter: 0.15
+    existence: 0.2
+    uncertainty: 0.05
+    correction: 0.02
+evaluation:
+  horizons_seconds: [0.1, 0.25, 0.5, 0.75, 1.0]
+  episodes: 12
+  rgb_only: true
+demo:
+  seed: 200000
+  max_frames: 40
+  future_horizon_seconds: 1.0
+  fps: 10

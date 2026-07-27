@@ -546,3 +546,36 @@
 - **Consequences:** Historical forecasts and ground truth can be compared
   without duplicated traces or layout motion. Simulator positions remain
   post-ingest scoring/overlay data only and never enter RGB runtime inference.
+
+## ADR-035 — Interaction regimes are deterministic physical range presets
+
+- **Date:** 2026-07-27
+- **Status:** accepted
+- **Context:** A single broad random range made it difficult to tell whether a
+  checkpoint handled elastic pair collisions, damped contacts, and external
+  disturbances or merely averaged over them.
+- **Decision:** Add named physical presets selected deterministically from an
+  ordered `scenario_mixture` by episode seed. Presets alter only simulator
+  parameter/impulse sampling and write their name into episode metadata; they
+  do not change timestamps, object padding, RGB packets, belief contracts, or
+  runtime access to labels.
+- **Consequences:** Training and evaluation can use the same data contract
+  while reporting each interaction regime separately. A singleton mixture
+  gives a reproducible per-scenario evaluation; the four-element mixture gives
+  balanced deterministic training coverage.
+
+## ADR-036 — Reject short mixed-interaction adaptations that trade position for velocity
+
+- **Date:** 2026-07-27
+- **Status:** accepted rejection
+- **Context:** Eight closed-loop mixed steps helped impulse-driven scenes but
+  were neutral elsewhere. Adding eight three-object RGB pretraining steps
+  improved velocity and some collision scores but reduced discovery recall and
+  regressed position forecasts across the paired scenario suite.
+- **Decision:** Do not promote either `accuracy-interactions-v1` or
+  `accuracy-interactions-v2`. Keep `accuracy-lateral-velocity-v5` selected.
+  Before further dynamics training, require a balanced multi-object
+  perception curriculum and explicit per-query/distance-gated recall gate.
+- **Consequences:** Scenario support is shipped as validated infrastructure,
+  while checkpoint limitations remain truthful. Finite execution across a
+  regime is not presented as accurate generalization.
