@@ -36,7 +36,13 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
     default = load_config(CONFIG_DIR / "toy_smoke.yaml")
     assert not default.model.rgb.temporal_velocity_enabled
     assert default.model.rgb.temporal_velocity_history_size == 3
+    assert default.model.rgb.temporal_velocity_min_samples == 3
     assert default.model.rgb.temporal_velocity_variance_ceiling is None
+    assert not default.model.rgb.temporal_velocity_lateral_only
+    assert default.model.rgb.temporal_velocity_unobserved_variance == 1.0e4
+    assert not default.model.rgb.temporal_velocity_reset_on_collision
+    assert default.model.rgb.temporal_velocity_max_age_steps is None
+    assert default.model.rgb.temporal_velocity_measurement_position_blend == 0.0
     assert default.model.rgb.structured_disc_center_enabled
 
     enabled = load_config(
@@ -44,16 +50,28 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
         overrides=[
             "model.rgb.temporal_velocity_enabled=true",
             "model.rgb.temporal_velocity_history_size=4",
+            "model.rgb.temporal_velocity_min_samples=2",
             "model.rgb.temporal_velocity_variance_scale=3.0",
             "model.rgb.temporal_velocity_variance_floor=0.4",
             "model.rgb.temporal_velocity_variance_ceiling=2.0",
+            "model.rgb.temporal_velocity_lateral_only=true",
+            "model.rgb.temporal_velocity_unobserved_variance=1000.0",
+            "model.rgb.temporal_velocity_reset_on_collision=true",
+            "model.rgb.temporal_velocity_max_age_steps=3",
+            "model.rgb.temporal_velocity_measurement_position_blend=0.25",
         ],
     )
     assert enabled.model.rgb.temporal_velocity_enabled
     assert enabled.model.rgb.temporal_velocity_history_size == 4
+    assert enabled.model.rgb.temporal_velocity_min_samples == 2
     assert enabled.model.rgb.temporal_velocity_variance_scale == 3.0
     assert enabled.model.rgb.temporal_velocity_variance_floor == 0.4
     assert enabled.model.rgb.temporal_velocity_variance_ceiling == 2.0
+    assert enabled.model.rgb.temporal_velocity_lateral_only
+    assert enabled.model.rgb.temporal_velocity_unobserved_variance == 1000.0
+    assert enabled.model.rgb.temporal_velocity_reset_on_collision
+    assert enabled.model.rgb.temporal_velocity_max_age_steps == 3
+    assert enabled.model.rgb.temporal_velocity_measurement_position_blend == 0.25
 
 
 @pytest.mark.parametrize(
@@ -61,9 +79,13 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
     [
         ("temporal_velocity_min_dt", 0.0),
         ("temporal_velocity_history_size", 2),
+        ("temporal_velocity_min_samples", 4),
         ("temporal_velocity_variance_scale", 0.5),
         ("temporal_velocity_variance_floor", 0.0),
         ("temporal_velocity_variance_ceiling", 0.1),
+        ("temporal_velocity_unobserved_variance", 0.1),
+        ("temporal_velocity_max_age_steps", 1),
+        ("temporal_velocity_measurement_position_blend", 1.1),
     ],
 )
 def test_temporal_rgb_velocity_uncertainty_config_is_bounded(

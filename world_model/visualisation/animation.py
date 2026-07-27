@@ -27,6 +27,17 @@ from world_model.visualisation.plots import save_parameter_plot
 from world_model.visualisation.trajectories import plot_xy_trajectory
 from world_model.visualisation.uncertainty import add_uncertainty_ellipse
 
+_GROUND_TRUTH_COLORS = (
+    "royalblue",
+    "darkorange",
+    "mediumpurple",
+    "deeppink",
+    "saddlebrown",
+    "teal",
+    "olive",
+    "slateblue",
+)
+
 
 @dataclass(frozen=True)
 class _PositionMatches:
@@ -192,6 +203,119 @@ def _plot_historical_forecasts(
     return lines
 
 
+def _plot_ground_truth_window(
+    axis: Any,
+    positions: np.ndarray,
+    active: np.ndarray,
+    object_ids: np.ndarray,
+    *,
+    current_index: int,
+    future_index: int,
+) -> list[Line2D]:
+    """Draw past and current-horizon truth once, with identity and time direction."""
+
+    if positions.ndim != 3 or positions.shape[-1] != 3:
+        raise ValueError("ground-truth positions must have shape [T,N,3]")
+    if active.shape != positions.shape[:2]:
+        raise ValueError("ground-truth active mask must have shape [T,N]")
+    if object_ids.shape != positions.shape[1:2]:
+        raise ValueError("ground-truth object IDs must have shape [N]")
+    if not 0 <= current_index <= future_index < positions.shape[0]:
+        raise IndexError("ground-truth plot indices are outside the time axis")
+
+    lines: list[Line2D] = []
+    for slot in range(positions.shape[1]):
+        color = _GROUND_TRUTH_COLORS[slot % len(_GROUND_TRUTH_COLORS)]
+        past_valid = active[: current_index + 1, slot] & np.isfinite(
+            positions[: current_index + 1, slot]
+        ).all(axis=-1)
+        if past_valid.sum() >= 2:
+            lines.extend(
+                axis.plot(
+                    positions[: current_index + 1, slot, 0][past_valid],
+                    positions[: current_index + 1, slot, 1][past_valid],
+                    color=color,
+                    linestyle=":",
+                    linewidth=0.9,
+                    alpha=0.28,
+                    zorder=1,
+                )
+            )
+
+        future_positions = positions[current_index : future_index + 1, slot]
+        future_valid = active[current_index : future_index + 1, slot] & np.isfinite(
+            future_positions
+        ).all(axis=-1)
+        future_points = future_positions[future_valid]
+        if future_points.size == 0:
+            continue
+        lines.extend(
+            axis.plot(
+                future_points[:, 0],
+                future_points[:, 1],
+                color=color,
+                linestyle="-",
+                marker=".",
+                markersize=3.0,
+                linewidth=1.6,
+                alpha=0.95,
+                zorder=3,
+            )
+        )
+        axis.scatter(
+            future_points[0, 0],
+            future_points[0, 1],
+            marker="s",
+            s=24,
+            facecolors="white",
+            edgecolors=color,
+            linewidths=1.0,
+            zorder=7,
+        )
+        axis.scatter(
+            future_points[-1, 0],
+            future_points[-1, 1],
+            marker="x",
+            s=28,
+            color=color,
+            linewidths=1.2,
+            zorder=7,
+        )
+        for point_index in range(future_points.shape[0] - 1, 0, -1):
+            previous = future_points[point_index - 1]
+            current = future_points[point_index]
+            if np.linalg.norm(current[:2] - previous[:2]) <= 1.0e-8:
+                continue
+            axis.annotate(
+                "",
+                xy=current[:2],
+                xytext=previous[:2],
+                arrowprops={
+                    "arrowstyle": "->",
+                    "color": color,
+                    "linewidth": 1.1,
+                    "alpha": 0.95,
+                    "shrinkA": 0.0,
+                    "shrinkB": 0.0,
+                },
+                zorder=8,
+            )
+            break
+        object_id = int(object_ids[slot])
+        if object_id >= 0:
+            axis.annotate(
+                f"GT {object_id}",
+                xy=future_points[0, :2],
+                xytext=(4, 5),
+                textcoords="offset points",
+                color=color,
+                fontsize=6.5,
+                weight="bold",
+                zorder=8,
+            )
+    return lines
+
+
 def _configure_world_axis(
     axis: Any,
     world_bounds: tuple[tuple[float, float], ...],
@@ -254,7 +378,23 @@ def _add_image_legend(axis: Any) -> None:
 
 def _add_world_legend(axis: Any) -> None:
     handles = [
-        Line2D([], [], color="royalblue", linewidth=1.4, label="GT trajectory overlay"),
+        Line2D(
+            [],
+            [],
+            color="royalblue",
+            linestyle=":",
+            linewidth=1.0,
+            alpha=0.45,
+            label="GT past (through now)",
+        ),
+        Line2D(
+            [],
+            [],
+            color="royalblue",
+            marker=".",
+            linewidth=1.6,
+            label="GT current horizon (object colours)",
+        ),
         Line2D(
             [],
             [],
@@ -283,7 +423,7 @@ def _add_world_legend(axis: Any) -> None:
             label="posterior endpoint ↔ matched GT",
         ),
     ]
-    axis.legend(handles=handles, loc="upper right", fontsize=7, framealpha=0.9)
+    axis.legend(handles=handles, loc="upper right", fontsize=6.5, framealpha=0.9)
 
 
 def _draw_endpoint_matches(axis: Any, matches: _PositionMatches) -> None:
@@ -627,26 +767,13 @@ def create_demo(
 
             # Simulator labels below are evaluation/overlay data only. They are
             # read after RGB ingest and are never passed into the runtime.
-            truth_track = episode["objects"]["position"][: future_index + 1].numpy()
-            truth_active_track = episode["objects"]["active"][: future_index + 1].numpy()
-            plot_xy_trajectory(
+            _plot_ground_truth_window(
                 axes[1],
-                truth_track,
-                truth_active_track,
-                color="royalblue",
-                label=None,
-                alpha=0.35,
-                linewidth=0.9,
-                zorder=1,
-            )
-            plot_xy_trajectory(
-                axes[1],
-                episode["objects"]["position"][index : future_index + 1].numpy(),
-                episode["objects"]["active"][index : future_index + 1].numpy(),
-                color="royalblue",
-                label=None,
-                linewidth=1.5,
-                zorder=3,
+                episode["objects"]["position"].numpy(),
+                episode["objects"]["active"].numpy(),
+                episode["objects"]["id"][index].numpy(),
+                current_index=index,
+                future_index=future_index,
             )
             historical_forecasts = forecast_history
             if forecast_history and forecast_history[-1].anchor_index == index:

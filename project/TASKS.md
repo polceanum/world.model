@@ -120,12 +120,20 @@
 - [ ] Train and validate fast inverse-depth residuals on the now
   belief-slot-aligned cached sequences; enable them only after per-mode
   current/future improvement.
-- [ ] Beat the promoted step-648 checkpoint on paired 0.50/0.75/1.00-second
-  RGB-only validation. Three horizon-weight/window-only continuations were
-  neutral or negative and remain rejected.
+- [x] Beat the promoted step-648 checkpoint on the 16-episode
+  0.50/0.75/1.00-second RGB-only fresh-validation block with the bounded
+  lateral young-track initializer. A disjoint confirmation block is still
+  required before a reserved-test promotion claim.
 - [x] Add temporal RGB velocity evidence so post-association motion can be
-  assimilated without re-encoding history. Validation has not yet justified
-  enabling it in public profiles.
+  assimilated without re-encoding history.
+- [x] Validate and enable a camera-lateral young-track velocity initializer in
+  `tiny_lateral_velocity.yaml`; it improves current state and every 0.1–1.0 s
+  forecast horizon on the 16-episode fresh-validation gate.
+- [x] Correct the demo ground-truth XY display so each identity has one
+  colour-coded past/current-horizon trajectory with explicit time direction.
+- [ ] Localize collision time instead of damping lateral motion too early;
+  recover collision F1 and nominal coverage without sacrificing the selected
+  multistep gains.
 - [ ] Run the full 3,000-step `configs/toy_mps.yaml` schedule and a materially
   larger held-out test split.
 - [x] Export sequence-aware occlusion survival/uncertainty metrics with

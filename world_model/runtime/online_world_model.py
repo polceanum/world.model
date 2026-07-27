@@ -189,11 +189,23 @@ class OnlineWorldModel(nn.Module):
                     fast_depth_residual_enabled=(rgb_config.fast_depth_residual_enabled),
                     temporal_velocity_enabled=rgb_config.temporal_velocity_enabled,
                     temporal_velocity_history_size=(rgb_config.temporal_velocity_history_size),
+                    temporal_velocity_min_samples=(rgb_config.temporal_velocity_min_samples),
                     temporal_velocity_min_dt=rgb_config.temporal_velocity_min_dt,
                     temporal_velocity_variance_scale=(rgb_config.temporal_velocity_variance_scale),
                     temporal_velocity_variance_floor=(rgb_config.temporal_velocity_variance_floor),
                     temporal_velocity_variance_ceiling=(
                         rgb_config.temporal_velocity_variance_ceiling
+                    ),
+                    temporal_velocity_lateral_only=(rgb_config.temporal_velocity_lateral_only),
+                    temporal_velocity_unobserved_variance=(
+                        rgb_config.temporal_velocity_unobserved_variance
+                    ),
+                    temporal_velocity_reset_on_collision=(
+                        rgb_config.temporal_velocity_reset_on_collision
+                    ),
+                    temporal_velocity_max_age_steps=(rgb_config.temporal_velocity_max_age_steps),
+                    temporal_velocity_measurement_position_blend=(
+                        rgb_config.temporal_velocity_measurement_position_blend
                     ),
                     structured_disc_center_enabled=(rgb_config.structured_disc_center_enabled),
                     structured_disc_threshold=rgb_config.structured_disc_threshold,

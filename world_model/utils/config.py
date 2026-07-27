@@ -86,10 +86,16 @@ class RGBConfig:
     fast_depth_residual_enabled: bool = False
     temporal_velocity_enabled: bool = False
     temporal_velocity_history_size: int = 3
+    temporal_velocity_min_samples: int = 3
     temporal_velocity_min_dt: float = 1.0e-3
     temporal_velocity_variance_scale: float = 1.0
     temporal_velocity_variance_floor: float = 0.25
     temporal_velocity_variance_ceiling: float | None = None
+    temporal_velocity_lateral_only: bool = False
+    temporal_velocity_unobserved_variance: float = 1.0e4
+    temporal_velocity_reset_on_collision: bool = False
+    temporal_velocity_max_age_steps: int | None = None
+    temporal_velocity_measurement_position_blend: float = 0.0
     structured_disc_center_enabled: bool = False
     structured_disc_threshold: float = 0.04
     structured_disc_min_pixels: int = 4
@@ -296,6 +302,14 @@ class OrpheusConfig:
         if model.rgb.temporal_velocity_history_size < 3:
             raise ValueError("model.rgb.temporal_velocity_history_size must be at least three")
         if (
+            not 2
+            <= model.rgb.temporal_velocity_min_samples
+            <= (model.rgb.temporal_velocity_history_size)
+        ):
+            raise ValueError(
+                "model.rgb.temporal_velocity_min_samples must lie between two and history_size"
+            )
+        if (
             not math.isfinite(model.rgb.temporal_velocity_variance_scale)
             or model.rgb.temporal_velocity_variance_scale < 1
         ):
@@ -317,6 +331,30 @@ class OrpheusConfig:
             raise ValueError(
                 "model.rgb.temporal_velocity_variance_ceiling must be finite "
                 "and no smaller than temporal_velocity_variance_floor"
+            )
+        if (
+            not math.isfinite(model.rgb.temporal_velocity_unobserved_variance)
+            or model.rgb.temporal_velocity_unobserved_variance
+            < model.rgb.temporal_velocity_variance_floor
+        ):
+            raise ValueError(
+                "model.rgb.temporal_velocity_unobserved_variance must be finite "
+                "and no smaller than temporal_velocity_variance_floor"
+            )
+        if (
+            model.rgb.temporal_velocity_max_age_steps is not None
+            and model.rgb.temporal_velocity_max_age_steps < model.rgb.temporal_velocity_min_samples
+        ):
+            raise ValueError(
+                "model.rgb.temporal_velocity_max_age_steps must be no smaller "
+                "than temporal_velocity_min_samples"
+            )
+        if (
+            not math.isfinite(model.rgb.temporal_velocity_measurement_position_blend)
+            or not 0.0 <= model.rgb.temporal_velocity_measurement_position_blend <= 1.0
+        ):
+            raise ValueError(
+                "model.rgb.temporal_velocity_measurement_position_blend must lie in [0, 1]"
             )
         if (
             not math.isfinite(model.rgb.structured_disc_threshold)

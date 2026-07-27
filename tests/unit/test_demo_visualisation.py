@@ -15,6 +15,7 @@ from world_model.visualisation.animation import (
     _future_query_seconds,
     _history_alpha,
     _match_positions,
+    _plot_ground_truth_window,
     _plot_historical_forecasts,
 )
 
@@ -97,6 +98,42 @@ def test_historical_forecasts_keep_absolute_anchors_and_fade_by_age() -> None:
     plt.close(figure)
 
 
+def test_ground_truth_plot_separates_past_from_current_horizon_by_object() -> None:
+    figure, axis = plt.subplots()
+    positions = np.asarray(
+        [
+            [[0.0, 1.0, 0.0], [1.0, 1.0, 0.0]],
+            [[0.1, 0.9, 0.0], [0.9, 0.9, 0.0]],
+            [[0.2, 0.7, 0.0], [0.8, 0.7, 0.0]],
+            [[0.3, 0.4, 0.0], [0.7, 0.4, 0.0]],
+        ]
+    )
+    active = np.ones((4, 2), dtype=bool)
+
+    lines = _plot_ground_truth_window(
+        axis,
+        positions,
+        active,
+        np.asarray([10, 11]),
+        current_index=1,
+        future_index=3,
+    )
+
+    assert len(lines) == 4
+    np.testing.assert_allclose(lines[0].get_xdata(), [0.0, 0.1])
+    np.testing.assert_allclose(lines[1].get_xdata(), [0.1, 0.2, 0.3])
+    np.testing.assert_allclose(lines[2].get_xdata(), [1.0, 0.9])
+    np.testing.assert_allclose(lines[3].get_xdata(), [0.9, 0.8, 0.7])
+    assert lines[0].get_linestyle() == ":"
+    assert lines[1].get_linestyle() == "-"
+    assert lines[1].get_color() != lines[3].get_color()
+    assert [text.get_text() for text in axis.texts if text.get_text()] == [
+        "GT 10",
+        "GT 11",
+    ]
+    plt.close(figure)
+
+
 def test_demo_axes_and_legends_have_stable_geometry_and_entries() -> None:
     figure, axes = plt.subplots(1, 2)
     bounds = ((-2.0, 2.0), (0.0, 3.0), (-1.0, 1.0))
@@ -114,7 +151,8 @@ def test_demo_axes_and_legends_have_stable_geometry_and_entries() -> None:
         "ground truth overlay",
     ]
     assert [text.get_text() for text in axes[1].get_legend().get_texts()] == [
-        "GT trajectory overlay",
+        "GT past (through now)",
+        "GT current horizon (object colours)",
         "historical posterior forecasts",
         "latest prior forecast",
         "latest posterior forecast",

@@ -503,3 +503,46 @@
 - **Consequences:** Reported trajectories remain physically self-consistent
   rather than cosmetically calibrated to one split. Step 648 remains promoted
   until an RGB-only candidate improves paired long-horizon physical metrics.
+
+## ADR-033 — Use bounded camera-lateral velocity evidence only for track initialization
+
+- **Date:** 2026-07-27
+- **Status:** accepted for the tiny lateral-velocity profile
+- **Context:** RGB centroids contained the missing horizontal displacement, but
+  the isotropic position-to-velocity fallback divided full 3-D backprojection
+  variance by `dt²`. At 20 Hz this produced roughly `700 (m/s)²` uncertainty
+  and negligible horizontal gain. Continuously applying a strong temporal
+  slope improved velocity but regressed localization and forecasts.
+- **Decision:** Maintain bounded causal positions by persistent ID, estimate a
+  least-squares slope, project only onto the known camera-lateral world
+  direction, and give unobserved axes high variance so analytic gravity and
+  depth dynamics remain authoritative. Clear history at collision events and
+  restrict evidence to young tracks. Blend associated RGB world position into
+  corrected posterior history by `0.125`; do not use simulator state or a
+  horizon-specific output correction.
+- **Evidence:** On fresh-validation seeds `100096–100111`, the selected
+  candidate lowers current position/velocity RMSE by `6.84% / 3.60%` and
+  recursive 0.1–1.0 s position RMSE by `7.49–11.18%`. Collision F1 changes
+  `0.404092 → 0.398922` and nominal-90% coverage
+  `0.862745 → 0.846814`. Strong continuous, raw two-frame, raw three-frame,
+  and eight-step adaptation variants were rejected.
+- **Consequences:** The new behavior is explicit checkpoint semantics and
+  opt-in through `configs/tiny_lateral_velocity.yaml`; legacy checkpoints
+  normalize to the old disabled defaults. Event timing and uncertainty
+  calibration remain separate acceptance gates.
+
+## ADR-034 — Ground-truth trajectory overlays separate history, horizon, identity, and time
+
+- **Date:** 2026-07-27
+- **Status:** accepted
+- **Context:** Ground truth was drawn twice with one colour: once from episode
+  start through the future endpoint and again from the current frame. In a
+  two-sphere collision that produced overlapping curves and apparent vertical
+  lines with no clear identity or time direction.
+- **Decision:** Draw each object once per temporal segment: faint dotted past
+  through now, then a solid current horizon. Use persistent per-object colours,
+  identity labels, sampled time markers, start/end glyphs, and a final-segment
+  arrow. Keep the legend and world geometry fixed across GIF frames.
+- **Consequences:** Historical forecasts and ground truth can be compared
+  without duplicated traces or layout motion. Simulator positions remain
+  post-ingest scoring/overlay data only and never enter RGB runtime inference.

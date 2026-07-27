@@ -271,3 +271,20 @@ one-second continuations failed to improve the mean 0.50–1.00-second result,
 so step 648 remains promoted. Oracle-start and learned-dynamics ablations
 showed that RGB state/velocity and slow-parameter estimation, rather than the
 recursive dynamics residuals, dominate the remaining error.
+
+On 2026-07-27 the misleading XY/GIF overlay was corrected: ground-truth past
+and current horizon are no longer drawn on top of each other, identities use
+stable colours and labels, and start/end/time-direction markers make the
+two-sphere collision trace explicit. The final regenerated artifact is
+`demo_outputs/accuracy-v6-blended-velocity/online_correction.gif`.
+
+The same investigation fixed the model's near-zero camera-lateral velocity
+gain with bounded persistent-ID temporal evidence restricted to young tracks.
+The selected `accuracy-lateral-velocity-v5` checkpoint improves current
+position/velocity RMSE and every recursive 0.1–1.0 s forecast horizon on
+fresh-validation seeds `100096–100111`; the exact report is
+`runs/accuracy-lateral-velocity-v5/evaluation/select16/report.md`. Collision F1
+and nominal coverage regress slightly and excessive early collision damping is
+still visible, so event timing/calibration remains open. Stronger continuous,
+raw-measurement, and short adapted-training variants are recorded as rejected
+runs rather than promoted.

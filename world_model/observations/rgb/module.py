@@ -11,7 +11,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from world_model.belief import fast_packing_map
+from world_model.belief import MotionMode, fast_packing_map
 from world_model.fusion.innovation import build_innovation
 from world_model.observations.base import (
     ModalityCache,
@@ -62,10 +62,16 @@ class RGBObservationConfig:
     fast_depth_residual_enabled: bool = False
     temporal_velocity_enabled: bool = False
     temporal_velocity_history_size: int = 3
+    temporal_velocity_min_samples: int = 3
     temporal_velocity_min_dt: float = 1.0e-3
     temporal_velocity_variance_scale: float = 1.0
     temporal_velocity_variance_floor: float = 0.25
     temporal_velocity_variance_ceiling: float | None = None
+    temporal_velocity_lateral_only: bool = False
+    temporal_velocity_unobserved_variance: float = 1.0e4
+    temporal_velocity_reset_on_collision: bool = False
+    temporal_velocity_max_age_steps: int | None = None
+    temporal_velocity_measurement_position_blend: float = 0.0
     structured_disc_center_enabled: bool = False
     structured_disc_threshold: float = 0.04
     structured_disc_min_pixels: int = 4
@@ -80,6 +86,8 @@ class RGBObservationConfig:
     def __post_init__(self) -> None:
         if self.temporal_velocity_history_size < 3:
             raise ValueError("temporal_velocity_history_size must be at least three")
+        if not 2 <= self.temporal_velocity_min_samples <= self.temporal_velocity_history_size:
+            raise ValueError("temporal_velocity_min_samples must lie between two and history_size")
         if not math.isfinite(self.temporal_velocity_min_dt) or (self.temporal_velocity_min_dt <= 0):
             raise ValueError("temporal_velocity_min_dt must be finite and positive")
         if not math.isfinite(self.temporal_velocity_variance_scale) or (
@@ -98,6 +106,26 @@ class RGBObservationConfig:
                 "temporal_velocity_variance_ceiling must be finite and no "
                 "smaller than temporal_velocity_variance_floor"
             )
+        if not math.isfinite(self.temporal_velocity_unobserved_variance) or (
+            self.temporal_velocity_unobserved_variance < self.temporal_velocity_variance_floor
+        ):
+            raise ValueError(
+                "temporal_velocity_unobserved_variance must be finite and no "
+                "smaller than temporal_velocity_variance_floor"
+            )
+        if (
+            self.temporal_velocity_max_age_steps is not None
+            and self.temporal_velocity_max_age_steps < self.temporal_velocity_min_samples
+        ):
+            raise ValueError(
+                "temporal_velocity_max_age_steps must be no smaller than "
+                "temporal_velocity_min_samples"
+            )
+        if (
+            not math.isfinite(self.temporal_velocity_measurement_position_blend)
+            or not 0.0 <= self.temporal_velocity_measurement_position_blend <= 1.0
+        ):
+            raise ValueError("temporal_velocity_measurement_position_blend must lie in [0, 1]")
         if not math.isfinite(self.structured_disc_threshold) or not (
             0 < self.structured_disc_threshold < 2
         ):
@@ -555,6 +583,9 @@ class RGBObservationModule(ObservationModule):
         observed_mask = torch.zeros_like(active_mask)
         confidence = posterior.objects.position.new_zeros(active_mask.shape)
         batch_index, pair_index = torch.nonzero(association.pair_mask, as_tuple=True)
+        accepted_batch = batch_index[:0]
+        accepted_belief = batch_index[:0]
+        accepted_measurement = batch_index[:0]
         if batch_index.numel():
             belief_index = association.belief_indices[batch_index, pair_index]
             measurement_index = association.measurement_indices[batch_index, pair_index]
@@ -570,6 +601,46 @@ class RGBObservationModule(ObservationModule):
 
         position_slice = fast_packing_map(posterior.objects)["position"]
         position_log_variance = posterior.objects.fast_log_variance[..., position_slice]
+        history_positions = posterior.objects.position
+        history_position_log_variance = position_log_variance
+        measured_world_position = measured.auxiliary.get("world_position")
+        measured_world_position_log_variance = measured.auxiliary.get("world_position_log_variance")
+        if (
+            self.config.temporal_velocity_measurement_position_blend > 0.0
+            and measured_world_position is not None
+            and measured_world_position_log_variance is not None
+        ):
+            if measured_world_position.shape != (*measured.values.shape[:2], 3):
+                raise ValueError("RGB auxiliary.world_position must have shape [B,M,3]")
+            if measured_world_position_log_variance.shape != measured_world_position.shape:
+                raise ValueError(
+                    "RGB auxiliary.world_position_log_variance must match world_position"
+                )
+            history_positions = history_positions.clone()
+            history_position_log_variance = history_position_log_variance.clone()
+            if accepted_batch.numel():
+                blend = self.config.temporal_velocity_measurement_position_blend
+                prior_position = history_positions[accepted_batch, accepted_belief]
+                measured_position = measured_world_position[
+                    accepted_batch,
+                    accepted_measurement,
+                ]
+                history_positions[accepted_batch, accepted_belief] = prior_position + blend * (
+                    measured_position - prior_position
+                )
+                prior_variance = history_position_log_variance[
+                    accepted_batch,
+                    accepted_belief,
+                ].exp()
+                measured_variance = measured_world_position_log_variance[
+                    accepted_batch,
+                    accepted_measurement,
+                ].exp()
+                history_position_log_variance[accepted_batch, accepted_belief] = (
+                    ((1.0 - blend) * prior_variance + blend * measured_variance)
+                    .clamp_min(1.0e-10)
+                    .log()
+                )
         if (
             not isinstance(history, RGBTemporalPositionHistory)
             or history.history_size != self.config.temporal_velocity_history_size
@@ -580,22 +651,54 @@ class RGBObservationModule(ObservationModule):
                 history_size=self.config.temporal_velocity_history_size,
                 dtype=posterior.dtype,
             )
+        reset_mask = torch.zeros_like(active_mask)
+        if self.config.temporal_velocity_reset_on_collision:
+            reset_mask = posterior.objects.motion_mode_logits.argmax(dim=-1) == int(
+                MotionMode.COLLISION
+            )
         history = history.append(
             object_ids=object_ids,
             active_mask=active_mask,
             observed_mask=observed_mask,
+            reset_mask=reset_mask,
             timestamp=measured.timestamp,
-            positions=posterior.objects.position,
-            position_log_variance=position_log_variance,
+            positions=history_positions,
+            position_log_variance=history_position_log_variance,
             minimum_dt=self.config.temporal_velocity_min_dt,
         )
         velocity, velocity_log_variance, velocity_valid_mask = history.least_squares_velocity(
             minimum_dt=self.config.temporal_velocity_min_dt,
+            minimum_samples=self.config.temporal_velocity_min_samples,
             variance_scale=self.config.temporal_velocity_variance_scale,
             variance_floor=self.config.temporal_velocity_variance_floor,
             variance_ceiling=self.config.temporal_velocity_variance_ceiling,
         )
         velocity_valid_mask = velocity_valid_mask & observed_mask & active_mask
+        if self.config.temporal_velocity_max_age_steps is not None:
+            velocity_valid_mask = velocity_valid_mask & (
+                posterior.objects.age_steps <= self.config.temporal_velocity_max_age_steps
+            )
+        if self.config.temporal_velocity_lateral_only:
+            camera_lateral = posterior.camera.world_from_camera[:, :3, 0]
+            camera_lateral = F.normalize(camera_lateral, dim=-1).unsqueeze(1)
+            prior_velocity = posterior.objects.velocity
+            lateral_delta = ((velocity - prior_velocity) * camera_lateral).sum(dim=-1, keepdim=True)
+            velocity = prior_velocity + camera_lateral * lateral_delta
+
+            scalar_variance = (velocity_log_variance.exp() * camera_lateral.square()).sum(
+                dim=-1, keepdim=True
+            )
+            observable = camera_lateral.square() >= 1.0e-4
+            projected_variance = scalar_variance / camera_lateral.square().clamp_min(1.0e-4)
+            unobserved_variance = torch.full_like(
+                projected_variance,
+                self.config.temporal_velocity_unobserved_variance,
+            )
+            velocity_log_variance = torch.where(
+                observable,
+                projected_variance,
+                unobserved_variance,
+            ).log()
 
         measurement_velocity = measured.values.new_zeros((*measured.values.shape[:2], 3))
         measurement_log_variance = measured.values.new_full(

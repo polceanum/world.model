@@ -98,6 +98,7 @@ class RGBTemporalPositionHistory(ModalityHistory):
         object_ids: Tensor,
         active_mask: Tensor,
         observed_mask: Tensor,
+        reset_mask: Tensor | None = None,
         timestamp: Tensor,
         positions: Tensor,
         position_log_variance: Tensor,
@@ -113,6 +114,10 @@ class RGBTemporalPositionHistory(ModalityHistory):
             raise ValueError("active_mask must be boolean [B,N]")
         if observed_mask.shape != object_ids.shape or observed_mask.dtype != torch.bool:
             raise ValueError("observed_mask must be boolean [B,N]")
+        if reset_mask is None:
+            reset_mask = torch.zeros_like(active_mask)
+        if reset_mask.shape != object_ids.shape or reset_mask.dtype != torch.bool:
+            raise ValueError("reset_mask must be boolean [B,N]")
         if timestamp.shape != object_ids.shape[:1]:
             raise ValueError("timestamp must have shape [B]")
         if not math.isfinite(minimum_dt) or minimum_dt <= 0:
@@ -165,6 +170,23 @@ class RGBTemporalPositionHistory(ModalityHistory):
                     batch_index, previous_slot
                 ]
 
+        aligned.timestamps = torch.where(
+            reset_mask.unsqueeze(-1),
+            torch.zeros_like(aligned.timestamps),
+            aligned.timestamps,
+        )
+        aligned.positions = torch.where(
+            reset_mask.unsqueeze(-1).unsqueeze(-1),
+            torch.zeros_like(aligned.positions),
+            aligned.positions,
+        )
+        aligned.position_log_variance = torch.where(
+            reset_mask.unsqueeze(-1).unsqueeze(-1),
+            torch.zeros_like(aligned.position_log_variance),
+            aligned.position_log_variance,
+        )
+        aligned.valid_mask = aligned.valid_mask & ~reset_mask.unsqueeze(-1)
+
         append_mask = observed_mask & active_mask & (current_ids >= 0)
         finite = torch.isfinite(positions).all(dim=-1) & torch.isfinite(position_log_variance).all(
             dim=-1
@@ -203,6 +225,7 @@ class RGBTemporalPositionHistory(ModalityHistory):
         self,
         *,
         minimum_dt: float,
+        minimum_samples: int = 3,
         variance_scale: float,
         variance_floor: float,
         variance_ceiling: float | None = None,
@@ -211,6 +234,8 @@ class RGBTemporalPositionHistory(ModalityHistory):
 
         if variance_scale < 1 or not math.isfinite(variance_scale):
             raise ValueError("variance_scale must be finite and at least one")
+        if not 2 <= minimum_samples <= self.history_size:
+            raise ValueError("minimum_samples must lie between two and history_size")
         if variance_floor <= 0 or not math.isfinite(variance_floor):
             raise ValueError("variance_floor must be finite and positive")
         if variance_ceiling is not None and (
@@ -237,7 +262,7 @@ class RGBTemporalPositionHistory(ModalityHistory):
             (~adjacent) | ((self.timestamps[..., 1:] - self.timestamps[..., :-1]) > minimum_dt)
         ).all(dim=-1)
         valid = (
-            (count >= 3)
+            (count >= minimum_samples)
             & monotonic
             & (denominator > minimum_dt * minimum_dt)
             & torch.isfinite(velocity).all(dim=-1)

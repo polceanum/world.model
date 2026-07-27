@@ -906,3 +906,101 @@ Result: **passed**.
 All `runs/` and `demo_outputs/` paths above are real local artifacts but are
 gitignored by design; checkpoints and generated media are not published in the
 source commit.
+
+## RGB lateral-motion and trajectory-display correction (2026-07-27)
+
+The trajectory display now draws ground truth exactly once per object and
+separates the faint dotted past from the solid current forecast horizon.
+Persistent object colours, `GT <id>` labels, start squares, endpoint crosses,
+time-direction arrows, fixed axes, and a fixed legend remove the prior
+double-drawn curve/vertical-line ambiguity. Historical posterior forecasts
+remain in absolute coordinates and fade by age.
+
+The model-side defect was an unobservable isotropic finite-difference update:
+at 20 Hz it divided full backprojection covariance by `dt²`, yielding roughly
+`700 (m/s)²` velocity variance and almost zero horizontal Kalman gain. The new
+opt-in `configs/tiny_lateral_velocity.yaml` path maintains a bounded,
+persistent-ID temporal history, extracts only the camera-lateral component,
+preserves analytic vertical/depth velocity, resets across collision events,
+and only initializes young tracks. A conservative `0.125` blend of associated
+RGB world positions into corrected posterior history gives the horizontal
+signal without continuously overriding physical dynamics.
+
+Selected checkpoint:
+`runs/accuracy-lateral-velocity-v5/checkpoints/blended_birth_window.pt`
+(step 648, CPU runtime semantics). On the same fresh-validation seeds
+`100096–100111`, the previous step-648 baseline versus the selected candidate
+was:
+
+- current position RMSE: `0.149951 → 0.139696 m` (6.84% lower);
+- current velocity RMSE: `0.791269 → 0.762795 m/s` (3.60% lower);
+- recursive 0.10/0.25/0.50/0.75/1.00-second RMSE:
+  `0.162863/0.190546/0.218011/0.230611/0.228255 →
+  0.150671/0.173691/0.196885/0.204839/0.209191 m`;
+- collision F1: `0.404092 → 0.398922`;
+- nominal-90% coverage: `0.862745 → 0.846814`;
+- no dropped or nonfinite forecasts occurred.
+
+The exact report is
+`runs/accuracy-lateral-velocity-v5/evaluation/select16/report.md`. Rejected
+ablations are retained under `runs/accuracy-lateral-velocity-v1` through `v4`.
+Continuous strong temporal updates, an eight-step adapted continuation, raw
+two-frame RGB slopes, and raw three-frame slopes all failed the wider physical
+gate.
+
+The regenerated RGB-only demo is
+`demo_outputs/accuracy-v6-blended-velocity/online_correction.gif`, with
+`summary.json`, 32 PNG frames, and `parameter_estimates.png` in the same
+directory. It uses seed `200000`, a fixed 1.0-second displayed horizon and 20
+undisplayed lookahead frames. Mean current posterior error was `0.194245 m`;
+mean 1.0-second posterior endpoint error was `0.272091 m`. Ground truth was
+used only for scoring and overlay.
+
+Known remaining limitation: this collision-heavy demo still predicts excessive
+early damping of lateral motion. The RGB velocity information path is now
+causal and nonzero, but the event model assigns maximum collision probability
+about `0.9819` over the horizon and does not localize collision time sharply.
+Continuous collision timing/event calibration is the next model-side accuracy
+task. The selected point-accuracy gain also trades away 1.28% relative
+collision F1 and 1.85% relative nominal-90% coverage on this selection block.
+
+Commands and outcomes for this change:
+
+```bash
+PYTHONPATH=. conda run -n orpheus python evaluate.py \
+  --config configs/tiny_lateral_velocity.yaml \
+  --checkpoint runs/accuracy-lateral-velocity-v5/checkpoints/blended_birth_window.pt \
+  --split validation --seed-protocol fresh_validation --seed-offset 96 \
+  --output runs/accuracy-lateral-velocity-v5/evaluation/select16
+```
+
+Result: passed on CPU, 16 RGB-only episodes, seeds `100096–100111`,
+`oracle_runtime_input_used=false`; metrics are recorded above.
+
+```bash
+MPLCONFIGDIR=/private/tmp/orpheus-mpl PYTHONPATH=. \
+  conda run -n orpheus python demo.py \
+  --config configs/tiny_lateral_velocity.yaml \
+  --checkpoint runs/accuracy-lateral-velocity-v5/checkpoints/blended_birth_window.pt \
+  --output demo_outputs/accuracy-v6-blended-velocity
+```
+
+Result: passed on CPU; generated 32 frames, GIF, summary, and parameter plot.
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
+conda run --no-capture-output -n orpheus ruff check .
+conda run --no-capture-output -n orpheus ruff format --check .
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-lateral-pycache PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+git diff --check
+```
+
+Results: `200 passed, 3 skipped in 59.90 s`; all Ruff checks passed and all
+154 Python files were formatted; compileall and diff checks passed. The three
+skips are the existing MPS-conditional tests, because this process reports MPS
+unavailable. Checkpoint SHA-256:
+`d5628d9df10ebd9fea30223cc2b38b41248e7e361b90988306a36a34fabad2b2`.
+GIF SHA-256:
+`74f6cf96fd0cd12723f7c1a255ab44ab9f15e8206909b8a51fc21c6f16cfe690`.
