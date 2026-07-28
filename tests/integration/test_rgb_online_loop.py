@@ -191,6 +191,30 @@ def test_global_pass_preserves_separate_temporal_history_and_reset_clears_it() -
     assert not model.state.temporal_histories
 
 
+def test_temporal_velocity_can_retain_position_innovation_coupling() -> None:
+    torch.manual_seed(3)
+    config = _small_rgb_config()
+    config = replace(
+        config,
+        model=replace(
+            config.model,
+            rgb=replace(
+                config.model.rgb,
+                temporal_velocity_enabled=True,
+                temporal_velocity_position_innovation_coupling=True,
+            ),
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    model.ingest(_rgb_packet(0.0))
+    model.ingest(_rgb_packet(1.0 / 30.0, shift=1))
+
+    assert model.last_measurements is not None
+    assert "velocity_from_position" in model.last_measurements.supported_state_fields
+    assert "velocity" not in model.last_measurements.supported_state_fields
+    assert "world_velocity_valid_mask" in model.last_measurements.auxiliary
+
+
 def test_fast_roi_cache_is_invalidated_when_object_id_order_changes() -> None:
     torch.manual_seed(3)
     model = OnlineWorldModel.from_config(_small_rgb_config(), device="cpu")

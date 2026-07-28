@@ -104,12 +104,15 @@ class RGBConfig:
     temporal_velocity_max_age_steps: int | None = None
     temporal_velocity_post_event_max_samples: int | None = None
     temporal_velocity_measurement_position_blend: float = 0.0
+    temporal_velocity_position_innovation_coupling: bool = False
     structured_disc_center_enabled: bool = False
     structured_disc_threshold: float = 0.04
     structured_disc_min_pixels: int = 4
     structured_disc_max_assignment_distance: float = 0.75
     structured_disc_center_std_pixels: float = 0.75
     structured_disc_depth_relative_std: float | None = None
+    structured_disc_depth_outlier_relative_threshold: float | None = None
+    structured_disc_depth_outlier_variance_scale: float = 9.0
     structured_disc_position_confidence: float | None = None
     roi_uncertainty_scale: float = 2.5
     global_uncertainty_threshold: float = 4.0
@@ -403,6 +406,22 @@ class OrpheusConfig:
             or not 0.0 < model.rgb.structured_disc_depth_relative_std <= 1.0
         ):
             raise ValueError("model.rgb.structured_disc_depth_relative_std must lie in (0, 1]")
+        if model.rgb.structured_disc_depth_outlier_relative_threshold is not None and (
+            not math.isfinite(model.rgb.structured_disc_depth_outlier_relative_threshold)
+            or model.rgb.structured_disc_depth_outlier_relative_threshold <= 0.0
+        ):
+            raise ValueError(
+                "model.rgb.structured_disc_depth_outlier_relative_threshold "
+                "must be finite and positive"
+            )
+        if (
+            not math.isfinite(model.rgb.structured_disc_depth_outlier_variance_scale)
+            or model.rgb.structured_disc_depth_outlier_variance_scale < 1.0
+        ):
+            raise ValueError(
+                "model.rgb.structured_disc_depth_outlier_variance_scale "
+                "must be finite and at least one"
+            )
         if model.rgb.structured_disc_position_confidence is not None and (
             not math.isfinite(model.rgb.structured_disc_position_confidence)
             or not 0.0 < model.rgb.structured_disc_position_confidence <= 1.0

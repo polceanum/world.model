@@ -237,3 +237,19 @@
 - [ ] Raise shared-model collision F1 and reduce identity switches on a larger
   balanced test manifest; the current 16-episode result is only
   `0.320388` F1 with three switches.
+- [x] Audit structured RGB point/scale accuracy and separate centre error from
+  monocular depth error. Centre localization is subpixel; heavy-tailed
+  radius-derived depth under overlap is dominant.
+- [x] Add disabled-by-default, tested gates for associated depth-disagreement
+  covariance inflation and combined temporal/position-innovation velocity
+  evidence. Reject both policies after final-test multistep regressions.
+- [ ] Replace single-frame radius depth in ordinary correction with a learned
+  persistent-ID multi-frame point/scale trajectory measurement. Produce
+  per-axis estimates and uncertainty from axis-local history, then use joint
+  interaction/event context to gate departures and cross-axis coupling.
+- [ ] Supervise scale quality with visible fraction, boundary truncation,
+  component overlap, temporal scale consistency, and prediction disagreement;
+  validate calibration by quality bucket before enabling correction.
+- [ ] Train event-conditioned outgoing velocity on balanced pre-contact and
+  post-contact windows, with constant/damped motion represented as a learned
+  low-complexity prior rather than a hardcoded runtime rule.

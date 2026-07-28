@@ -73,12 +73,15 @@ class RGBObservationConfig:
     temporal_velocity_max_age_steps: int | None = None
     temporal_velocity_post_event_max_samples: int | None = None
     temporal_velocity_measurement_position_blend: float = 0.0
+    temporal_velocity_position_innovation_coupling: bool = False
     structured_disc_center_enabled: bool = False
     structured_disc_threshold: float = 0.04
     structured_disc_min_pixels: int = 4
     structured_disc_max_assignment_distance: float = 0.75
     structured_disc_center_std_pixels: float = 0.75
     structured_disc_depth_relative_std: float | None = None
+    structured_disc_depth_outlier_relative_threshold: float | None = None
+    structured_disc_depth_outlier_variance_scale: float = 9.0
     structured_disc_position_confidence: float | None = None
     roi_uncertainty_scale: float = 2.5
     default_world_radius: float = 0.15
@@ -158,6 +161,20 @@ class RGBObservationConfig:
             or not 0.0 < self.structured_disc_depth_relative_std <= 1.0
         ):
             raise ValueError("structured_disc_depth_relative_std must lie in (0, 1]")
+        if self.structured_disc_depth_outlier_relative_threshold is not None and (
+            not math.isfinite(self.structured_disc_depth_outlier_relative_threshold)
+            or self.structured_disc_depth_outlier_relative_threshold <= 0.0
+        ):
+            raise ValueError(
+                "structured_disc_depth_outlier_relative_threshold must be finite and positive"
+            )
+        if (
+            not math.isfinite(self.structured_disc_depth_outlier_variance_scale)
+            or self.structured_disc_depth_outlier_variance_scale < 1.0
+        ):
+            raise ValueError(
+                "structured_disc_depth_outlier_variance_scale must be finite and at least one"
+            )
         if self.structured_disc_position_confidence is not None and (
             not math.isfinite(self.structured_disc_position_confidence)
             or not 0.0 < self.structured_disc_position_confidence <= 1.0
@@ -425,14 +442,17 @@ class RGBObservationModule(ObservationModule):
             class_logits=None,
             frame_id=packet.frame_id,
             supported_state_fields=(
-                ("position", "geometry", "appearance")
-                if self.config.temporal_velocity_enabled
-                else (
+                (
                     "position",
                     "velocity_from_position",
                     "geometry",
                     "appearance",
                 )
+                if (
+                    not self.config.temporal_velocity_enabled
+                    or self.config.temporal_velocity_position_innovation_coupling
+                )
+                else ("position", "geometry", "appearance")
             ),
             auxiliary={
                 "world_position": world_position,
@@ -602,7 +622,10 @@ class RGBObservationModule(ObservationModule):
             "geometry",
             "appearance",
         ]
-        if not self.config.temporal_velocity_enabled:
+        if (
+            not self.config.temporal_velocity_enabled
+            or self.config.temporal_velocity_position_innovation_coupling
+        ):
             supported_state_fields.insert(1, "velocity_from_position")
         auxiliary = {
             "world_position": world_position,
@@ -835,12 +858,36 @@ class RGBObservationModule(ObservationModule):
         predicted: PredictedMeasurements,
         association: AssociationResult,
     ) -> InnovationSet:
-        return build_innovation(
+        result = build_innovation(
             measured=measured,
             predicted=predicted,
             association=association,
             modality_index=self.modality_index,
         )
+        threshold = self.config.structured_disc_depth_outlier_relative_threshold
+        if threshold is None:
+            return result
+        measured_values = result.auxiliary["measured_values"]
+        predicted_values = result.auxiliary["predicted_values"]
+        structured_valid = result.auxiliary.get("measured_structured_centre_valid")
+        position_log_variance = result.auxiliary.get("measured_world_position_log_variance")
+        if structured_valid is None or position_log_variance is None:
+            return result
+        measured_inverse_depth = measured_values[..., 3]
+        predicted_inverse_depth = predicted_values[..., 3].clamp_min(1.0e-4)
+        relative_disagreement = (
+            measured_inverse_depth - predicted_inverse_depth
+        ).abs() / predicted_inverse_depth
+        outlier = result.pair_mask & structured_valid & (relative_disagreement > threshold)
+        variance_inflation = math.log(self.config.structured_disc_depth_outlier_variance_scale)
+        result.auxiliary["measured_world_position_log_variance"] = torch.where(
+            outlier.unsqueeze(-1),
+            position_log_variance + variance_inflation,
+            position_log_variance,
+        )
+        result.auxiliary["measured_depth_outlier_mask"] = outlier
+        result.auxiliary["measured_depth_relative_disagreement"] = relative_disagreement
+        return result
 
     def training_losses(
         self,

@@ -218,6 +218,9 @@ class OnlineWorldModel(nn.Module):
                     temporal_velocity_measurement_position_blend=(
                         rgb_config.temporal_velocity_measurement_position_blend
                     ),
+                    temporal_velocity_position_innovation_coupling=(
+                        rgb_config.temporal_velocity_position_innovation_coupling
+                    ),
                     structured_disc_center_enabled=(rgb_config.structured_disc_center_enabled),
                     structured_disc_threshold=rgb_config.structured_disc_threshold,
                     structured_disc_min_pixels=rgb_config.structured_disc_min_pixels,
@@ -229,6 +232,12 @@ class OnlineWorldModel(nn.Module):
                     ),
                     structured_disc_depth_relative_std=(
                         rgb_config.structured_disc_depth_relative_std
+                    ),
+                    structured_disc_depth_outlier_relative_threshold=(
+                        rgb_config.structured_disc_depth_outlier_relative_threshold
+                    ),
+                    structured_disc_depth_outlier_variance_scale=(
+                        rgb_config.structured_disc_depth_outlier_variance_scale
                     ),
                     structured_disc_position_confidence=(
                         rgb_config.structured_disc_position_confidence

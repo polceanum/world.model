@@ -67,7 +67,9 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
     assert not default.model.rgb.temporal_velocity_reset_on_collision
     assert default.model.rgb.temporal_velocity_max_age_steps is None
     assert default.model.rgb.temporal_velocity_measurement_position_blend == 0.0
+    assert not default.model.rgb.temporal_velocity_position_innovation_coupling
     assert default.model.rgb.structured_disc_center_enabled
+    assert default.model.rgb.structured_disc_depth_outlier_relative_threshold is None
 
     enabled = load_config(
         CONFIG_DIR / "toy_smoke.yaml",
@@ -83,6 +85,9 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
             "model.rgb.temporal_velocity_reset_on_collision=true",
             "model.rgb.temporal_velocity_max_age_steps=3",
             "model.rgb.temporal_velocity_measurement_position_blend=0.25",
+            "model.rgb.temporal_velocity_position_innovation_coupling=true",
+            "model.rgb.structured_disc_depth_outlier_relative_threshold=0.12",
+            "model.rgb.structured_disc_depth_outlier_variance_scale=9.0",
         ],
     )
     assert enabled.model.rgb.temporal_velocity_enabled
@@ -96,6 +101,9 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
     assert enabled.model.rgb.temporal_velocity_reset_on_collision
     assert enabled.model.rgb.temporal_velocity_max_age_steps == 3
     assert enabled.model.rgb.temporal_velocity_measurement_position_blend == 0.25
+    assert enabled.model.rgb.temporal_velocity_position_innovation_coupling
+    assert enabled.model.rgb.structured_disc_depth_outlier_relative_threshold == 0.12
+    assert enabled.model.rgb.structured_disc_depth_outlier_variance_scale == 9.0
 
 
 @pytest.mark.parametrize(
@@ -110,6 +118,8 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
         ("temporal_velocity_unobserved_variance", 0.1),
         ("temporal_velocity_max_age_steps", 1),
         ("temporal_velocity_measurement_position_blend", 1.1),
+        ("structured_disc_depth_outlier_relative_threshold", 0.0),
+        ("structured_disc_depth_outlier_variance_scale", 0.5),
     ],
 )
 def test_temporal_rgb_velocity_uncertainty_config_is_bounded(

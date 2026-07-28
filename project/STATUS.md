@@ -1518,3 +1518,81 @@ Five superseded run directories and the previous reference demo were moved
 without deletion to `/private/tmp/orpheus-superseded-20260728/`; the workspace
 now contains only the selected run and the two newest timestamped demos
 (besides the existing demo archive).
+
+## 2026-07-28 — RGB evidence audit and rejected accuracy candidates
+
+The selected shared checkpoint remains
+`runs/20260728-091315-selected-all-scenarios-v1/checkpoints/best_rollout.pt`.
+No new weights or runtime policy passed the final multistep gate, so the
+published test metrics above remain authoritative.
+
+A direct held-out RGB diagnostic measured structured-centre RMSE at
+`0.1388 px`. Global RGB 3-D measurement RMSE was `0.3865 m`, with axis RMSE
+`0.0663 / 0.0992 / 0.3677 m`; camera-depth RMSE was `0.3837 m`. The dominant
+failure is heavy-tailed single-frame scale/depth when components overlap,
+truncate, or partially occlude one another.
+
+Three bounded candidates were evaluated:
+
+- simultaneous temporal least-squares and position-innovation velocity
+  evidence improved every rollout horizon on paired validation offsets 8 and
+  16, but the untouched 16-episode test regressed current position
+  `0.200430 → 0.202235 m` and 1-second rollout
+  `0.364040 → 0.365094 m`;
+- adaptive covariance inflation for associated scale/depth disagreement
+  improved final-test aggregate RMSE at 0.10/0.25/0.50/0.75 seconds to
+  `0.210540 / 0.242193 / 0.284037 / 0.320669 m`, but regressed the 1-second
+  endpoint to `0.364672 m` and x endpoint to `0.463177 m`;
+- 128 additional balanced RGB measurement updates completed in `166.74 s`,
+  but paired offset-8 1-second RMSE worsened
+  `0.285499 → 0.329262 m` and detection recall fell
+  `0.850694 → 0.817708`.
+
+All were rejected. The generic evidence mechanisms remain tested and disabled
+by default (`false`/`null`) so a future learned quality policy can use them
+without changing belief contracts. The next accuracy milestone is a learned
+multi-frame point/scale trajectory measurement aligned by persistent identity:
+axis-local estimates and uncertainty, explicit scale/occlusion quality, and
+joint event context gating when axes may change. It must correct
+`WorldBelief`; it must not become a second history state or consume simulator
+state.
+
+Focused validation completed before documentation:
+
+```bash
+PYTHONPATH=. conda run -n orpheus pytest \
+  tests/unit/test_config.py \
+  tests/unit/test_structured_rgb_centres.py \
+  tests/integration/test_rgb_online_loop.py \
+  tests/integration/test_checkpoint_roundtrip.py
+PYTHONPATH=. conda run -n orpheus python train.py \
+  --config configs/tiny_all_scenarios.yaml \
+  --resume runs/20260728-091315-selected-all-scenarios-v1/checkpoints/best_rollout.pt \
+  --run-name balanced-rgb-discovery-v1 \
+  --set training.steps=800 --set training.rgb_pretrain_steps=800 \
+  --set training.learning_rate=0.0001 \
+  --set training.eval_every=32 --set training.checkpoint_every=32
+PYTHONPATH=. conda run -n orpheus python evaluate.py \
+  --config configs/tiny_all_scenarios.yaml \
+  --checkpoint <candidate> \
+  --split validation --seed-protocol fresh_validation --seed-offset 8 \
+  --device cpu --set evaluation.episodes=8
+```
+
+The focused suite passed `66` tests. Final validation ran:
+
+```bash
+PYTHONPATH=. conda run -n orpheus python -m ruff format .
+PYTHONPATH=. conda run -n orpheus python -m ruff check .
+PYTHONPATH=. conda run -n orpheus pytest
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-accuracy-pycache \
+  PYTHONPATH=. conda run -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+git diff --check
+```
+
+Ruff passed; pytest reported `235 passed, 3 skipped in 67.85 s`, with
+all skips MPS-conditional; compileall and `git diff --check` passed. Nine
+rejected timestamped runs were moved without deletion to
+`/private/tmp/orpheus-superseded-20260728-accuracy/runs/`. The workspace
+`runs/` directory again contains only the selected timestamped artifact.

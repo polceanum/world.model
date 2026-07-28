@@ -367,3 +367,14 @@ structured runtime. Denser global cadence, direct raw-point velocity history,
 fast-path structured confidence, and zero learned-correction scale were tested
 and rejected because they failed to improve 1-second x error. This is not
 claimed as a solved accuracy result.
+
+An additional held-out audit separated the RGB abstraction into point and
+scale errors. Disc centres were already subpixel accurate, while single-frame
+equivalent-area scale produced heavy-tailed depth errors under overlap and
+truncation. RGB observations now support disabled-by-default, tested
+depth-disagreement covariance inflation and optional simultaneous
+temporal/position-innovation velocity evidence. Neither policy is enabled:
+both failed the untouched 1-second test gate. A 128-step balanced RGB
+continuation was also rejected after paired 1-second RMSE worsened. The
+selected checkpoint and published metrics remain unchanged; ADR-046 records
+the multi-frame point/scale trajectory design supported by the evidence.

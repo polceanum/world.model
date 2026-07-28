@@ -784,3 +784,31 @@
   re-encoding history. The correction is invariant-tested, though the current
   selected episodes showed no material aggregate metric change, so it is not
   presented as an accuracy gain.
+
+## ADR-046 — Treat monocular scale quality and velocity evidence as explicit, separately gated signals
+
+- **Date:** 2026-07-28
+- **Status:** accepted infrastructure; experimental policies rejected
+- **Context:** A raw RGB audit found subpixel structured-disc centres
+  (`0.1388 px` RMSE), but much larger 3-D error (`0.3865 m` RMSE), dominated
+  by heavy-tailed radius-derived depth (`0.3837 m` camera-depth RMSE) during
+  overlap and truncation. Temporal least-squares velocity and instantaneous
+  position-innovation velocity are correlated evidence and should be testable
+  separately rather than silently replacing one another.
+- **Decision:** Add optional, configuration-explicit depth-disagreement
+  covariance inflation after association, and optional position-innovation
+  velocity coupling alongside temporal velocity. Both default to disabled.
+  Promotion requires identical paired seed manifests and every declared
+  multistep horizon.
+- **Evidence:** Adaptive depth improved four of five aggregate test horizons
+  but regressed the 1-second endpoint (`0.364040 → 0.364672 m`) and x endpoint
+  (`0.462605 → 0.463177 m`). Hybrid velocity improved every horizon on two
+  validation blocks, then regressed final-test 1-second RMSE
+  (`0.364040 → 0.365094 m`). A 128-step balanced RGB continuation raised
+  paired-validation 1-second RMSE from `0.285499` to `0.329262 m`.
+- **Consequences:** The selected configuration and checkpoint are unchanged.
+  The next accuracy implementation is a learned multi-frame point/scale
+  trajectory measurement: estimate axes from recent evidence, expose
+  scale/occlusion quality, and allow joint event context to gate changes. It
+  remains observation evidence correcting `WorldBelief`, not a parallel
+  source of truth.

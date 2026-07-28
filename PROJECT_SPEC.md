@@ -1323,6 +1323,24 @@ For spherical objects with known or estimated physical radius \(r_w\), calibrate
 z \approx \frac{f r_w}{r_p}.
 \]
 
+This single-frame proposal is evidence, not truth. Connected-component area
+has heavy-tailed error under overlap, boundary truncation, and partial
+occlusion even when its centre is subpixel accurate. The RGB module must expose
+scale quality and anisotropic uncertainty using observable inputs such as
+visible fraction, boundary contact, component ambiguity, temporal scale
+consistency, and disagreement with the predicted measurement. Low-quality
+scale may update image-plane point position without receiving the same depth
+correction weight.
+
+The scalable RGB representation is a persistent-ID multi-frame point/scale
+trajectory measurement. Axis-local estimators should preserve predictable
+motion and quantify their own evidence, while joint object/event context gates
+departures caused by interactions. This is not a second world state: bounded
+modality history produces a timestamped measurement and uncertainty, which
+then follows normal association, innovation, and `WorldBelief` correction.
+Constant or damped motion is a learnable low-complexity bias, not an
+unconditional hardcoded rule.
+
 Use this as a structured initial proposal. A learned bounded residual may correct rendering/perspective errors.
 
 Back-project centre to camera coordinates:

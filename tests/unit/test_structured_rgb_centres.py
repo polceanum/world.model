@@ -6,7 +6,14 @@ import pytest
 import torch
 
 from world_model.belief import BeliefFactory
-from world_model.observations import ObservationContext, ObservationPacket, SensorContext
+from world_model.fusion import AssociationResult
+from world_model.observations import (
+    MeasurementSet,
+    ObservationContext,
+    ObservationPacket,
+    PredictedMeasurements,
+    SensorContext,
+)
 from world_model.observations.rgb import RGBObservationConfig, RGBObservationModule
 from world_model.observations.rgb import module as rgb_module
 from world_model.observations.rgb.structured_centres import (
@@ -421,6 +428,7 @@ def test_rgb_module_keeps_global_and_fast_raw_centres_differentiable(
             roi_size=8,
             roi_hidden_dim=16,
             structured_disc_center_enabled=True,
+            structured_disc_depth_relative_std=0.05,
             structured_disc_position_confidence=0.9975,
         )
     )
@@ -488,3 +496,69 @@ def test_rgb_module_keeps_global_and_fast_raw_centres_differentiable(
     assert fast_raw.requires_grad
     fast_raw.sum().backward()
     assert module.roi_updater.delta_head.bias.grad is not None
+
+
+def test_rgb_innovation_inflates_only_depth_outlier_correction_variance() -> None:
+    module = RGBObservationModule(
+        RGBObservationConfig(
+            max_objects=1,
+            birth_extra_queries=0,
+            backbone_channels=(8, 16, 24, 32),
+            feature_dim=16,
+            appearance_dim=8,
+            roi_size=8,
+            roi_hidden_dim=16,
+            structured_disc_depth_outlier_relative_threshold=0.12,
+            structured_disc_depth_outlier_variance_scale=9.0,
+        )
+    )
+    measured_values = torch.tensor([[[0.0, 0.0, -2.0, 0.5, 0.2, 0.3, 0.4]]])
+    position_log_variance = torch.full((1, 1, 3), -4.0)
+    measured = MeasurementSet(
+        modality="rgb",
+        sensor_id="camera",
+        timestamp=torch.tensor([0.1]),
+        values=measured_values,
+        log_variance=torch.full_like(measured_values, -4.0),
+        existence_logits=torch.tensor([[8.0]]),
+        measurement_mask=torch.tensor([[True]]),
+        appearance=None,
+        class_logits=None,
+        frame_id="camera:camera",
+        supported_state_fields=("position",),
+        auxiliary={
+            "world_position": torch.zeros(1, 1, 3),
+            "world_position_log_variance": position_log_variance,
+            "structured_centre_valid": torch.tensor([[True]]),
+        },
+    )
+    predicted_values = measured_values.clone()
+    predicted_values[..., 3] = 0.4
+    predicted = PredictedMeasurements(
+        modality="rgb",
+        sensor_id="camera",
+        timestamp=torch.tensor([0.1]),
+        values=predicted_values,
+        log_variance=torch.full_like(predicted_values, -4.0),
+        object_ids=torch.tensor([[7]]),
+        belief_indices=torch.tensor([[0]]),
+        valid_mask=torch.tensor([[True]]),
+        visibility=torch.tensor([[1.0]]),
+    )
+    association = AssociationResult(
+        belief_indices=torch.tensor([[0]]),
+        measurement_indices=torch.tensor([[0]]),
+        pair_mask=torch.tensor([[True]]),
+        pair_cost=torch.tensor([[0.0]]),
+        unmatched_beliefs=torch.tensor([[False]]),
+        unmatched_measurements=torch.tensor([[False]]),
+        ambiguous=torch.tensor([[False]]),
+    )
+
+    innovation = module.innovation(measured, predicted, association)
+
+    assert innovation.auxiliary["measured_depth_outlier_mask"].item()
+    torch.testing.assert_close(
+        innovation.auxiliary["measured_world_position_log_variance"],
+        position_log_variance + math.log(9.0),
+    )

@@ -42,12 +42,15 @@ _RGB_LEGACY_DEFAULT_FIELDS = (
     "temporal_velocity_max_age_steps",
     "temporal_velocity_post_event_max_samples",
     "temporal_velocity_measurement_position_blend",
+    "temporal_velocity_position_innovation_coupling",
     "structured_disc_center_enabled",
     "structured_disc_threshold",
     "structured_disc_min_pixels",
     "structured_disc_max_assignment_distance",
     "structured_disc_center_std_pixels",
     "structured_disc_depth_relative_std",
+    "structured_disc_depth_outlier_relative_threshold",
+    "structured_disc_depth_outlier_variance_scale",
     "structured_disc_position_confidence",
 )
 
