@@ -120,3 +120,44 @@ The tiny convergence profile uses 64 measurement steps and six jointly
 trainable closed-loop steps. Fast inverse-depth deltas remain gated at the
 analytic prior until a separately trained ROI checkpoint passes held-out
 per-mode correction tests.
+
+## Scaled generalization curriculum
+
+`configs/scaled_curriculum.yaml` keeps the same online architecture and expands
+the shared model to about 1.90 million parameters, versus about 0.16 million in
+the selected tiny all-scenario profile. It declares 4,096 training episodes,
+256 validation episodes, and 256 test episodes across the same eight balanced
+scenario families. Seeds vary continuous initial state, physical parameters,
+camera motion, object count, appearance, event timing, and observation noise
+within those families.
+
+The 48,000-step schedule draws 48,000 episode examples at batch size one,
+approximately 11.7 passes through the deterministic seed manifest. The small
+microbatch and eight-step TBPTT window bound the retained causal graph for the
+larger model; four loader workers overlap deterministic rendering with MPS/GPU
+training. With `fixed_dataset: false`, episodes are generated on demand and
+frame/window locations are resampled rather than retaining the rendered
+dataset in memory.
+Use:
+
+```bash
+python train.py --config configs/scaled_curriculum.yaml
+python evaluate.py \
+  --config configs/scaled_curriculum.yaml \
+  --checkpoint <path> \
+  --split validation
+python evaluate.py \
+  --config configs/scaled_curriculum.yaml \
+  --checkpoint <path> \
+  --split test
+python evaluate.py \
+  --config configs/scaled_curriculum.yaml \
+  --checkpoint <path> \
+  --split ood
+```
+
+The configuration prefers CUDA, then MPS, then CPU through `device: auto`.
+CPU is suitable for smoke tests but not an efficient way to complete this
+schedule. Run summaries record model parameter count, episode draws, nominal
+dataset passes, split sizes, and scenario families so a short run cannot be
+mistaken for the full protocol.

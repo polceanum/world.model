@@ -54,6 +54,19 @@ def main() -> int:
                     "runtime_modality": config.runtime.modality,
                     "rgb_only_evaluation": config.evaluation.rgb_only,
                     "training_steps": config.training.steps,
+                    "train_episodes": config.training.train_episodes,
+                    "validation_episodes": config.training.validation_episodes,
+                    "batch_size": config.training.batch_size,
+                    "nominal_training_episode_draws": (
+                        config.training.steps * config.training.batch_size
+                    ),
+                    "nominal_dataset_passes": (
+                        config.training.steps
+                        * config.training.batch_size
+                        / config.training.train_episodes
+                    ),
+                    "scenario_families": list(config.simulator.scenario_mixture),
+                    "fixed_dataset": config.training.fixed_dataset,
                 },
                 indent=2,
             )

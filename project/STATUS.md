@@ -1596,3 +1596,62 @@ all skips MPS-conditional; compileall and `git diff --check` passed. Nine
 rejected timestamped runs were moved without deletion to
 `/private/tmp/orpheus-superseded-20260728-accuracy/runs/`. The workspace
 `runs/` directory again contains only the selected timestamped artifact.
+
+## 2026-07-28 — scaled curriculum and MPS proof
+
+`configs/scaled_curriculum.yaml` defines the next generalization experiment:
+
+- one shared `1,901,030`-parameter model, versus `156,490` parameters in the
+  selected tiny all-scenario model;
+- 4,096 training, 256 validation, and 256 test episodes;
+- eight balanced scenario families, with continuous seed-driven variation in
+  initial state, physical parameters, camera, object count, appearance, event
+  timing, and noise;
+- 48,000 episode draws (`11.71875` nominal manifest passes), batch one,
+  eight-step TBPTT, and four on-the-fly renderer workers;
+- the same RGB packets, `WorldBelief`, association, innovation, correction,
+  identification, event, and rollout contracts.
+
+The sandboxed process reported MPS built but unavailable. Running the same
+diagnostic outside the execution sandbox confirmed Python `3.10.20`, PyTorch
+`2.10.0`, MPS built `True`, and MPS available `True`. Explicit MPS resume then
+found and fixed a checkpoint bug: `map_location=mps` had moved the saved CPU
+RNG state to MPS before calling `torch.set_rng_state`. Restoration now
+explicitly transfers CPU/CUDA generator states to CPU first.
+
+Observed bounded scale run:
+
+- artifact:
+  `runs/20260728-131727-scaled-curriculum-1k-v1/`;
+- 256 measurement optimizer updates, representing 1,024 episode draws from
+  the 4,096-episode pool;
+- best 16-episode measurement validation world-position MAE:
+  `0.645048 m`;
+- one full 48-frame causal MPS update checkpointed at step 257;
+- step-257 rollout-position training loss `0.019657`, total loss `6.796081`,
+  gradient norm `3.950501`, and no non-finite failure;
+- device recorded in the checkpoint: `mps`.
+
+The first causal step used a batch-one, eight-update graph and remained
+expensive; a second was interrupted as memory and wall time continued to grow.
+This artifact proves the large model/data/MPS/checkpoint path, but has no
+closed-loop validation and is not promoted as more accurate than the selected
+checkpoint. The full schedule has not been run.
+
+Validation for this change:
+
+```bash
+PYTHONPATH=. conda run -n orpheus python train.py \
+  --config configs/scaled_curriculum.yaml --dry-run
+PYTHONPATH=. conda run -n orpheus python -m ruff format .
+PYTHONPATH=. conda run -n orpheus python -m ruff check .
+PYTHONPATH=. conda run -n orpheus pytest
+PYTHONPATH=. conda run -n orpheus pytest \
+  tests/integration/test_rgb_measurements.py::test_roi_sampling_mps_training_cpu_fallback_is_differentiable \
+  tests/unit/test_association.py::test_association_transfers_cost_to_cpu_without_mps_float64 \
+  tests/unit/test_modal_dynamics.py::test_modal_device_when_available
+```
+
+The full sandboxed suite passed `238` tests and skipped the three
+MPS-conditional tests in `63.65 s`. Running those three tests outside the
+sandbox, where MPS is available, passed all three in `2.40 s`. Ruff passed.

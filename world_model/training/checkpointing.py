@@ -245,7 +245,9 @@ def load_checkpoint(
         rng = payload["rng"]
         random.setstate(rng["python"])
         np.random.set_state(rng["numpy"])
-        torch.set_rng_state(rng["torch_cpu"])
+        # ``map_location`` follows model placement, but PyTorch's default RNG
+        # is always a CPU generator and rejects an MPS/CUDA ByteTensor.
+        torch.set_rng_state(rng["torch_cpu"].cpu())
         if torch.cuda.is_available() and rng.get("torch_cuda") is not None:
-            torch.cuda.set_rng_state_all(rng["torch_cuda"])
+            torch.cuda.set_rng_state_all([state.cpu() for state in rng["torch_cuda"]])
     return payload

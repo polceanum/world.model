@@ -269,3 +269,20 @@ def test_all_scenarios_profile_is_balanced_and_uses_one_shared_model() -> None:
     assert config.runtime.modality == "rgb"
     assert not config.runtime.enable_debug_oracle
     assert config.model.rgb.temporal_velocity_max_age_steps is None
+
+
+def test_scaled_curriculum_has_capacity_and_thousands_of_diverse_episodes() -> None:
+    config = load_config(CONFIG_DIR / "scaled_curriculum.yaml")
+
+    assert config.training.train_episodes == 4096
+    assert config.training.validation_episodes == 256
+    assert not config.training.fixed_dataset
+    assert config.training.steps * config.training.batch_size >= 10 * config.training.train_episodes
+    assert config.training.train_episodes % len(config.simulator.scenario_mixture) == 0
+    assert config.training.validation_episodes % len(config.simulator.scenario_mixture) == 0
+    assert config.model.max_objects >= config.simulator.max_objects
+    assert config.model.rgb.feature_dim >= 96
+    assert config.model.dynamics.hidden_dim >= 160
+    assert config.model.filter.hidden_dim >= 192
+    assert config.runtime.modality == "rgb"
+    assert not config.runtime.enable_debug_oracle

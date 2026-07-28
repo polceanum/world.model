@@ -378,3 +378,13 @@ both failed the untouched 1-second test gate. A 128-step balanced RGB
 continuation was also rejected after paired 1-second RMSE worsened. The
 selected checkpoint and published metrics remain unchanged; ADR-046 records
 the multi-frame point/scale trajectory design supported by the evidence.
+
+Added `configs/scaled_curriculum.yaml`: one 1.90M-parameter shared RGB world
+model trained from 4,096 deterministic, continuously varied episodes across
+eight balanced scenario families, with separate 256-episode validation/test
+splits and an OOD path. Training plans and summaries now report capacity,
+episode draws, nominal dataset passes, and scenario families. The chosen
+48,000-example schedule uses batch-one/eight-step causal graphs and four
+renderer workers after a bounded MPS run exposed the memory and simulation
+throughput limits of batch four. Cross-device checkpoint resume now restores
+the default PyTorch RNG state on CPU even when model tensors map to MPS.

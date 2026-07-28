@@ -812,3 +812,30 @@
   scale/occlusion quality, and allow joint event context to gate changes. It
   remains observation evidence correcting `WorldBelief`, not a parallel
   source of truth.
+
+## ADR-047 — Scale examples and capacity with bounded causal graphs
+
+- **Date:** 2026-07-28
+- **Status:** accepted; full training pending
+- **Context:** The selected 156,490-parameter model and 128 fixed training
+  episodes are debugging scale. A first larger run also showed that batch-four,
+  16-step closed-loop graphs at 1.90 million parameters create excessive
+  memory/latency even on MPS, while on-the-fly rendering is CPU-bound without
+  loader workers.
+- **Decision:** Add one 1,901,030-parameter shared profile over 4,096 training
+  and 256 validation episodes spanning eight balanced scenario families. Use
+  batch one, eight-step TBPTT, four renderer workers, 48,000 episode draws, and
+  no rendered-episode memory cache. Keep the same belief/runtime contracts and
+  require disjoint RGB-only multistep evaluation.
+- **Evidence:** MPS was built and available outside the execution sandbox.
+  Four data workers reduced the 64–128 pretraining segment to roughly
+  `174 s`, versus about `511 s` for the first CPU-bound segment including
+  validation. A bounded run completed 256 measurement updates (1,024 episode
+  draws), selected validation world-position MAE `0.645048 m`, and checkpointed
+  one full causal MPS update at step 257 with finite gradient norm `3.950501`.
+  This is pipeline evidence, not an accuracy promotion.
+- **Consequences:** The full 48,000-step run is now mechanically defined but
+  remains expensive. Its first candidate must be evaluated against the
+  selected small checkpoint and simple baselines on identical manifests.
+  Gradient checkpointing or explicit optimizer accumulation may be added later
+  without changing runtime semantics.

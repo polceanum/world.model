@@ -253,3 +253,16 @@
 - [ ] Train event-conditioned outgoing velocity on balanced pre-contact and
   post-contact windows, with constant/damped motion represented as a learned
   low-complexity prior rather than a hardcoded runtime rule.
+- [x] Add a 1.90M-parameter scaled shared-model profile with 4,096 training,
+  256 validation, and 256 test episodes across all eight scenario families.
+- [x] Record model parameter count, episode draws, nominal manifest passes,
+  split sizes, and scenario families in training plans/summaries.
+- [x] Fix cross-device RNG restoration so a CPU checkpoint can resume on MPS.
+- [x] Complete 1,024 mixed-scenario measurement draws and one full causal
+  update with the scaled model on MPS; retain it as an unvalidated scale
+  artifact, not an accuracy promotion.
+- [ ] Complete the 48,000-example `configs/scaled_curriculum.yaml` schedule on
+  MPS or CUDA, then evaluate validation, test, and OOD splits using fixed
+  manifests and per-scenario slices.
+- [ ] Add gradient checkpointing or optimizer accumulation if eight-step,
+  batch-one causal updates remain the throughput bottleneck.

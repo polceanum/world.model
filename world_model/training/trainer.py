@@ -475,6 +475,7 @@ def train_from_config(
     )
     train_iterator = iter(train_loader)
     model = OnlineWorldModel.from_config(config, device=device)
+    model_parameter_count = sum(parameter.numel() for parameter in model.parameters())
     model.train()
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -862,6 +863,14 @@ def train_from_config(
             best_measurement if best_measurement_validated else None
         ),
         "completed_steps": config.training.steps,
+        "model_parameter_count": model_parameter_count,
+        "planned_training_episode_draws": (config.training.steps * config.training.batch_size),
+        "nominal_dataset_passes": (
+            config.training.steps * config.training.batch_size / config.training.train_episodes
+        ),
+        "train_episodes": config.training.train_episodes,
+        "validation_episodes": config.training.validation_episodes,
+        "scenario_families": list(config.simulator.scenario_mixture),
         "rgb_pretrain_steps": min(config.training.steps, config.training.rgb_pretrain_steps),
         "closed_loop_steps": max(0, config.training.steps - config.training.rgb_pretrain_steps),
         "device": str(device),

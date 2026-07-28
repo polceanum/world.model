@@ -125,6 +125,39 @@ def test_checkpoint_roundtrip_preserves_trained_state(tmp_path):
         validate_checkpoint_config(payload, incompatible)
 
 
+def test_checkpoint_rng_restore_uses_cpu_generator_state(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    config = _small_config()
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    checkpoint = save_checkpoint(
+        tmp_path / "rng.pt",
+        model=model,
+        optimizer=None,
+        config=config,
+        step=1,
+        device="cpu",
+    )
+    observed_devices: list[torch.device] = []
+    original = torch.set_rng_state
+
+    def record_cpu_state(state: torch.Tensor) -> None:
+        observed_devices.append(state.device)
+        original(state)
+
+    monkeypatch.setattr(torch, "set_rng_state", record_cpu_state)
+    load_checkpoint(
+        checkpoint,
+        model=model,
+        map_location="cpu",
+        restore_rng=True,
+        expected_config=config,
+    )
+
+    assert observed_devices == [torch.device("cpu")]
+
+
 def test_rgb_runtime_controls_are_semantic_with_legacy_defaults() -> None:
     config = _small_config()
     payload = {"config": config.to_dict()}

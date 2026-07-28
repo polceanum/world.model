@@ -81,6 +81,8 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         "--dry-run",
     )
     assert '"runtime_modality": "rgb"' in dry_run.stdout
+    assert '"nominal_training_episode_draws": 2' in dry_run.stdout
+    assert '"nominal_dataset_passes": 2.0' in dry_run.stdout
 
     _run(
         "train.py",
@@ -107,6 +109,8 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
     assert pretrain_summary["best_rollout_checkpoint"] is None
     assert pretrain_summary["best_rollout_validated"] is False
     assert pretrain_summary["best_rollout_loss"] is None
+    assert pretrain_summary["model_parameter_count"] > 0
+    assert pretrain_summary["planned_training_episode_draws"] == 1
 
     _run(
         "train.py",

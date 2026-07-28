@@ -2627,6 +2627,32 @@ scenario slice.
 
 The project must not stop at Stage A or B.
 
+### 50.1 Dataset-size and capacity scaling
+
+The tiny profiles are debugging instruments, not evidence of generalization.
+A generalization run should use thousands of deterministic seeded episodes,
+hundreds of disjoint validation/test episodes, and balanced coverage of every
+declared scenario family. Continuous initial conditions, physical parameters,
+camera paths, object counts, appearances, event timing, and observation noise
+must vary within each family. Report episode draws and approximate dataset
+passes as well as optimizer steps.
+
+Increase model capacity behind the frozen contracts: perception width,
+appearance/residual state, interaction/event networks, filter capacity, and
+parameter memory may grow, while `WorldBelief`, timestamped observations,
+association, innovation, correction, and rollout APIs remain unchanged. Use
+one shared checkpoint. Capacity comparisons must keep seed manifests and
+evaluation semantics fixed, and a larger model is promoted only by disjoint
+RGB-only multistep validation and test—not training loss.
+
+On-the-fly datasets should avoid caching thousands of rendered episodes in
+memory. Shuffle deterministic seed manifests and resample frame/window
+positions between passes. Bound retained closed-loop graphs with microbatches
+and short TBPTT windows; overlap deterministic rendering using a tested,
+configurable worker count. A full-scale schedule may be handed off to MPS or a
+single CUDA GPU when local CPU throughput makes completion impractical, but a
+bounded two-phase smoke run is still required on the current machine.
+
 ## 51. Perturbation/recovery training
 
 At random times, corrupt the belief before an observation:
