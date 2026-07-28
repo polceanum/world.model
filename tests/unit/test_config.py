@@ -158,6 +158,14 @@ def test_closed_loop_global_trainable_steps_is_nonnegative() -> None:
         )
 
 
+def test_closed_loop_trainable_scope_is_explicit() -> None:
+    with pytest.raises(ValueError, match="closed_loop_trainable_scope"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=["training.closed_loop_trainable_scope=perception"],
+        )
+
+
 def test_collision_positive_weight_is_at_least_one() -> None:
     with pytest.raises(ValueError, match="collision_positive_weight_max"):
         load_config(
@@ -231,3 +239,23 @@ def test_noisy_profiles_use_noise_robust_structured_rgb_threshold(
     # Renderer-strength Gaussian noise may form an occasional tiny connected
     # cluster, but must not consume a meaningful fraction of proposal slots.
     assert int(output.component_count.max()) <= 2
+
+
+def test_all_scenarios_profile_is_balanced_and_uses_one_shared_model() -> None:
+    config = load_config(CONFIG_DIR / "tiny_all_scenarios.yaml")
+
+    assert config.simulator.scenario_mixture == (
+        "reference_pairs",
+        "baseline",
+        "elastic_pairs",
+        "damped_contacts",
+        "impulse_perturbation",
+        "camera_parallax",
+        "glancing_impacts",
+        "heavy_light_impacts",
+    )
+    assert config.training.validation_episodes == len(config.simulator.scenario_mixture)
+    assert config.model.max_objects >= config.simulator.max_objects
+    assert config.runtime.modality == "rgb"
+    assert not config.runtime.enable_debug_oracle
+    assert config.model.rgb.temporal_velocity_max_age_steps is None

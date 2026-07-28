@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.2
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026
+**Version:** 1.3
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -2600,6 +2600,13 @@ reference regime passes simulator invariants and qualitative trajectory
 inspection. Report per-scenario results so gains on an unusual regime cannot
 hide regression on the interpretable baseline.
 
+The preferred result across a scenario curriculum is one shared checkpoint and
+one persistent runtime architecture. Scenario-specific checkpoints are
+diagnostic ablations only unless the deployed system includes an explicit,
+observation-derived regime router. A balanced shared run must record the
+ordered scenario mixture and report the aggregate result together with every
+scenario slice.
+
 The project must not stop at Stage A or B.
 
 ## 51. Perturbation/recovery training
@@ -3345,6 +3352,18 @@ Do not tune only to these numbers; report full curves and failure cases.
 - output JSON and human-readable Markdown summary;
 - generate plots by horizon;
 - include at least a few failure visualisations.
+
+Checkpoint comparisons must use the same explicit episode-seed manifest,
+scenario order, object-count distribution, sequence length, horizon set, and
+metric semantics. A resumed training run must not inherit a best score when any
+of those selection-defining fields changes. Changing a checkpoint's embedded
+validation count must never silently change the episodes used for a paired
+comparison; use an explicit seed offset or persisted seed manifest.
+
+Promote a shared-model adaptation only when paired held-out evidence improves
+the declared selection objective without hiding material per-scenario
+regressions. Negative adaptations are valid evidence and must remain labelled
+as rejected rather than being reported as accuracy gains.
 
 ---
 

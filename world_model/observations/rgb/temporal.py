@@ -22,6 +22,7 @@ class RGBTemporalPositionHistory(ModalityHistory):
     valid_mask: Tensor
     post_reset_sample_count: Tensor
     has_reset: Tensor
+    reset_active: Tensor
     history_size: int
 
     @classmethod
@@ -83,6 +84,12 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 device=object_ids.device,
                 dtype=torch.bool,
             ),
+            reset_active=torch.zeros(
+                batch,
+                objects,
+                device=object_ids.device,
+                dtype=torch.bool,
+            ),
             history_size=history_size,
         )
 
@@ -103,6 +110,7 @@ class RGBTemporalPositionHistory(ModalityHistory):
             and self.valid_mask.shape == self.timestamps.shape
             and self.post_reset_sample_count.shape == object_ids.shape
             and self.has_reset.shape == object_ids.shape
+            and self.reset_active.shape == object_ids.shape
             and self.object_ids.device == object_ids.device
             and self.positions.device == positions.device
             and self.positions.dtype == positions.dtype
@@ -189,29 +197,34 @@ class RGBTemporalPositionHistory(ModalityHistory):
                     batch_index, previous_slot
                 ]
                 aligned.has_reset[batch_index, slot] = source.has_reset[batch_index, previous_slot]
+                aligned.reset_active[batch_index, slot] = source.reset_active[
+                    batch_index, previous_slot
+                ]
 
+        reset_edge = reset_mask & ~aligned.reset_active
         aligned.timestamps = torch.where(
-            reset_mask.unsqueeze(-1),
+            reset_edge.unsqueeze(-1),
             torch.zeros_like(aligned.timestamps),
             aligned.timestamps,
         )
         aligned.positions = torch.where(
-            reset_mask.unsqueeze(-1).unsqueeze(-1),
+            reset_edge.unsqueeze(-1).unsqueeze(-1),
             torch.zeros_like(aligned.positions),
             aligned.positions,
         )
         aligned.position_log_variance = torch.where(
-            reset_mask.unsqueeze(-1).unsqueeze(-1),
+            reset_edge.unsqueeze(-1).unsqueeze(-1),
             torch.zeros_like(aligned.position_log_variance),
             aligned.position_log_variance,
         )
-        aligned.valid_mask = aligned.valid_mask & ~reset_mask.unsqueeze(-1)
+        aligned.valid_mask = aligned.valid_mask & ~reset_edge.unsqueeze(-1)
         aligned.post_reset_sample_count = torch.where(
-            reset_mask,
+            reset_edge,
             torch.zeros_like(aligned.post_reset_sample_count),
             aligned.post_reset_sample_count,
         )
-        aligned.has_reset = aligned.has_reset | reset_mask
+        aligned.has_reset = aligned.has_reset | reset_edge
+        aligned.reset_active = reset_mask & active_mask
 
         append_mask = observed_mask & active_mask & (current_ids >= 0)
         finite = torch.isfinite(positions).all(dim=-1) & torch.isfinite(position_log_variance).all(
@@ -314,5 +327,6 @@ class RGBTemporalPositionHistory(ModalityHistory):
             valid_mask=self.valid_mask.detach(),
             post_reset_sample_count=self.post_reset_sample_count.detach(),
             has_reset=self.has_reset.detach(),
+            reset_active=self.reset_active.detach(),
             history_size=self.history_size,
         )

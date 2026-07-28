@@ -22,6 +22,7 @@ from world_model.training.trainer import (
     _validation_loader_result,
     _validation_step,
     measurement_pretrain_frame_index,
+    set_closed_loop_trainable_scope,
     set_global_perception_trainable,
 )
 from world_model.utils.config import load_config
@@ -86,6 +87,22 @@ def test_global_perception_freeze_leaves_fast_roi_trainable() -> None:
     set_global_perception_trainable(model, trainable=True)
     assert all(parameter.requires_grad for parameter in rgb.backbone.parameters())
     assert all(parameter.requires_grad for parameter in rgb.global_detector.parameters())
+
+
+def test_dynamics_only_scope_preserves_rgb_and_filter_weights() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+
+    set_closed_loop_trainable_scope(model, scope="dynamics")
+
+    assert all(parameter.requires_grad for parameter in model.dynamics.parameters())
+    assert not any(
+        parameter.requires_grad
+        for name, parameter in model.named_parameters()
+        if not name.startswith("dynamics.")
+    )
+
+    set_closed_loop_trainable_scope(model, scope="all")
+    assert all(parameter.requires_grad for parameter in model.parameters())
 
 
 def test_closed_loop_terms_expose_physical_components_without_double_counting() -> None:
@@ -278,6 +295,37 @@ def test_legacy_rollout_score_is_not_reused_after_objective_fix() -> None:
     assert not _rollout_selection_is_compatible(payload, config)
     payload["metrics"]["rollout_selection_metric_version"] = 2.0
     assert _rollout_selection_is_compatible(payload, config)
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("simulator", "scenario_mixture", ["baseline", "elastic_pairs"]),
+        ("simulator", "sequence_frames", 17),
+        ("simulator", "min_objects", 1),
+        ("simulator", "max_objects", 3),
+        ("training", "validation_episodes", 7),
+        ("project", "seed", 99),
+    ],
+)
+def test_rollout_score_is_not_reused_across_validation_protocols(
+    section: str,
+    field: str,
+    value: object,
+) -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    checkpoint_config = config.to_dict()
+    checkpoint_config[section][field] = value
+    payload = {
+        "config": checkpoint_config,
+        "metrics": {
+            "best_rollout_validated": 1.0,
+            "best_rollout_position_loss": 0.01,
+            "rollout_selection_metric_version": 2.0,
+        },
+    }
+
+    assert not _rollout_selection_is_compatible(payload, config)
 
 
 class _ModeOnlyModel:

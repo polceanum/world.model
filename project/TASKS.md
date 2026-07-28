@@ -220,3 +220,20 @@
 - [ ] Improve RGB-derived x velocity and 0.5–1.0 s prediction on the clean
   reference regime. Direct measured-point history and denser global cadence
   improved some current-state metrics but failed the multistep selection gate.
+- [x] Add one balanced eight-scenario profile with a single shared checkpoint,
+  deterministic scenario ordering, fixed-radius RGB geometry, and per-scenario
+  evaluation reports.
+- [x] Make resumed best-checkpoint compatibility depend on the validation
+  episode count, scenario mixture, sequence length, object-count range, seed,
+  horizons, and metric version.
+- [x] Make collision-triggered RGB temporal-history resets edge-triggered so a
+  sustained collision mode can accumulate outgoing velocity evidence.
+- [ ] Improve three-object global discovery in `damped_contacts` and
+  `reference_pairs`; detection recall remains the main current-state bottleneck
+  in the weakest held-out examples.
+- [ ] Learn event-conditioned outgoing lateral velocity that improves the
+  paired 0.5–1.0 second gate, especially for `reference_pairs`, without
+  regressing the seven easier regimes.
+- [ ] Raise shared-model collision F1 and reduce identity switches on a larger
+  balanced test manifest; the current 16-episode result is only
+  `0.320388` F1 with three switches.

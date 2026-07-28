@@ -201,6 +201,7 @@ class TrainingConfig:
     learning_rate: float = 3e-4
     closed_loop_learning_rate_scale: float = 0.1
     closed_loop_global_trainable_steps: int = 50
+    closed_loop_trainable_scope: str = "all"
     weight_decay: float = 1e-4
     tbptt_steps: int = 24
     grad_clip_norm: float = 1.0
@@ -499,6 +500,8 @@ class OrpheusConfig:
             raise ValueError("training.closed_loop_learning_rate_scale must lie in (0, 1]")
         if self.training.closed_loop_global_trainable_steps < 0:
             raise ValueError("training.closed_loop_global_trainable_steps must be nonnegative")
+        if self.training.closed_loop_trainable_scope not in {"all", "dynamics"}:
+            raise ValueError("training.closed_loop_trainable_scope must be 'all' or 'dynamics'")
         if self.training.tbptt_steps <= 0:
             raise ValueError("training.tbptt_steps must be positive")
         if self.training.measurement_validation_frames <= 0:

@@ -55,6 +55,7 @@ from world_model.utils.artifacts import timestamped_artifact_path
 from world_model.utils.config import OrpheusConfig
 from world_model.utils.device import DeviceInfo, select_device
 from world_model.utils.seeds import seed_everything
+from world_model.utils.version import SIMULATOR_VERSION
 
 _IDENTIFIER_PARAMETERS = ("mass", "restitution", "drag", "friction", "radius")
 _CURRENT_DETECTION_DISTANCE_THRESHOLD_M = 0.5
@@ -1273,6 +1274,12 @@ def evaluate_checkpoint(
         "checkpoint": str(checkpoint),
         "checkpoint_sha256": _checkpoint_sha256(checkpoint),
         "checkpoint_step": int(payload["step"]),
+        "simulator_version": SIMULATOR_VERSION,
+        "scenario_mixture": list(config.simulator.scenario_mixture),
+        "evaluation_episode_scenarios": [
+            config.simulator.scenario_mixture[int(seed) % len(config.simulator.scenario_mixture)]
+            for seed in resolved_seed_protocol.manifest.seeds
+        ],
         "split": split,
         "episodes": evaluated_episodes,
         "device": str(device),

@@ -165,16 +165,31 @@ def _rollout_selection_is_compatible(
         return False
     checkpoint_training = checkpoint_config.get("training")
     checkpoint_evaluation = checkpoint_config.get("evaluation")
+    checkpoint_simulator = checkpoint_config.get("simulator")
+    checkpoint_project = checkpoint_config.get("project")
     if not isinstance(checkpoint_training, Mapping) or not isinstance(
         checkpoint_evaluation,
+        Mapping,
+    ):
+        return False
+    if not isinstance(checkpoint_simulator, Mapping) or not isinstance(
+        checkpoint_project,
         Mapping,
     ):
         return False
     requested = config.to_dict()
     return (
         checkpoint_training.get("horizon_weights") == requested["training"]["horizon_weights"]
+        and checkpoint_training.get("validation_episodes")
+        == requested["training"]["validation_episodes"]
         and checkpoint_evaluation.get("horizons_seconds")
         == requested["evaluation"]["horizons_seconds"]
+        and checkpoint_simulator.get("scenario_mixture")
+        == requested["simulator"]["scenario_mixture"]
+        and checkpoint_simulator.get("sequence_frames") == requested["simulator"]["sequence_frames"]
+        and checkpoint_simulator.get("min_objects") == requested["simulator"]["min_objects"]
+        and checkpoint_simulator.get("max_objects") == requested["simulator"]["max_objects"]
+        and checkpoint_project.get("seed") == requested["project"]["seed"]
     )
 
 
@@ -213,6 +228,22 @@ def set_global_perception_trainable(
         if component is None:
             raise TypeError(f"RGB module is missing {component_name}")
         component.requires_grad_(trainable)
+
+
+def set_closed_loop_trainable_scope(
+    model: OnlineWorldModel,
+    *,
+    scope: str,
+) -> None:
+    """Restrict adaptation without changing the complete RGB runtime path."""
+
+    if scope == "all":
+        model.requires_grad_(True)
+        return
+    if scope != "dynamics":
+        raise ValueError("closed-loop trainable scope must be 'all' or 'dynamics'")
+    model.requires_grad_(False)
+    model.dynamics.requires_grad_(True)
 
 
 def _mean_batch_results(
@@ -538,6 +569,13 @@ def train_from_config(
             < config.training.rgb_pretrain_steps
             + config.training.closed_loop_global_trainable_steps
         )
+        if step < config.training.rgb_pretrain_steps:
+            model.requires_grad_(True)
+        else:
+            set_closed_loop_trainable_scope(
+                model,
+                scope=config.training.closed_loop_trainable_scope,
+            )
         set_global_perception_trainable(
             model,
             trainable=global_perception_trainable,

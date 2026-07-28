@@ -1,12 +1,13 @@
 # Project status
 
-**Date:** 2026-07-27
-**Specification:** `PROJECT_SPEC.md` 1.2
+**Date:** 2026-07-28
+**Specification:** `PROJECT_SPEC.md` 1.3
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
-stable forecast-history visualisation, axis-resolved diagnostics, and an
-invariant-tested familiar reference-pair regime;
+stable forecast-history visualisation, axis-resolved diagnostics, an
+invariant-tested familiar reference-pair regime, and one balanced eight-regime
+shared-model profile;
 collision, occlusion, identification, and full-MPS acceptance remain open
 
 ## What works
@@ -1397,3 +1398,123 @@ float32. Formatting changed seven files, Ruff passed, and pytest reported
 Compileall passed. The first combined compile/diff invocation exposed one
 Markdown trailing-space error; it was corrected and the final diff check
 passed.
+
+## 2026-07-28 — one shared model across eight scenarios
+
+`configs/tiny_all_scenarios.yaml` now exercises, in deterministic order,
+`reference_pairs`, `baseline`, `elastic_pairs`, `damped_contacts`,
+`impulse_perturbation`, `camera_parallax`, `glancing_impacts`, and
+`heavy_light_impacts`. It keeps one RGB runtime, one `WorldBelief` contract,
+and one checkpoint; no scenario state or simulator state enters the model.
+
+The selected checkpoint retains the learned step-672 weights and adds the
+continuous causal RGB point-history observer across all regimes. Three
+all-scenario adaptations were screened: a short full-model continuation, a
+conservative dynamics-only continuation, and an eight-step dynamics-only
+continuation at `1e-4`. The apparent first gain was traced to an evaluator seed
+offset confound: the source checkpoint embedded two validation episodes while
+the candidates embedded eight, so the default fresh-validation blocks
+differed. After forcing the identical offset-8 manifest, neither dynamics
+candidate improved the declared multistep objective. No adapted weights were
+promoted.
+
+The trainer now refuses to inherit a best rollout score when the validation
+episode count, scenario mixture, sequence length, object-count range, seed,
+horizons, or metric version changes. Evaluation outputs also persist the
+simulator version, ordered scenario mixture, and scenario selected for every
+episode. Collision-triggered temporal-history clearing is edge-triggered so a
+sustained event mode does not erase every outgoing sample.
+
+Final shared RGB-only test on seeds `200000–200015`, exactly two episodes from
+each scenario:
+
+- current position aggregate/x RMSE: `0.200430 / 0.156614 m`;
+- current velocity aggregate/x RMSE: `0.968753 / 0.497078 m/s`;
+- aggregate recursive position RMSE at
+  0.10/0.25/0.50/0.75/1.00 seconds:
+  `0.214112 / 0.245655 / 0.290137 / 0.320995 / 0.364040 m`;
+- x recursive position RMSE at those horizons:
+  `0.164730 / 0.202167 / 0.279684 / 0.365591 / 0.462605 m`;
+- one-second constant-velocity aggregate/x RMSE:
+  `1.527034 / 0.804134 m`;
+- collision F1: `0.320388`;
+- distance-gated RGB detection recall/precision:
+  `0.762957 / 0.873473`;
+- identity switches: `3`; non-finite outputs: `0`.
+
+Per-scenario two-episode one-second aggregate RMSE was `0.2715` baseline,
+`0.3144` elastic, `0.3251` damped, `0.2682` impulse, `0.3519` camera parallax,
+`0.2905` glancing, `0.2764` heavy/light, and `0.5147 m` reference pairs.
+Reference pairs remains the weakest multistep regime; damped contacts remains
+the weakest current localization regime. Fine-grained reference diagnostics
+separate two bottlenecks: missed three-object RGB discovery and inaccurate
+post-contact lateral velocity. Lower temporal-velocity variance, longer
+history, repeated-reset behavior, a change-point heuristic, and the trained
+dynamics candidates did not pass paired selection.
+
+Accepted artifacts:
+
+- shared checkpoint:
+  `runs/20260728-091315-selected-all-scenarios-v1/checkpoints/best_rollout.pt`;
+- combined test report:
+  `runs/20260728-091315-selected-all-scenarios-v1/evaluation/20260728-093649-final-test16-v13/report.md`;
+- eight per-scenario reports under the same run's `evaluation/` directory;
+- representative reference failure demo:
+  `demo_outputs/20260728-092305-all-scenarios-reference/online_correction.gif`;
+- representative damped failure demo:
+  `demo_outputs/20260728-092305-all-scenarios-damped/online_correction.gif`.
+
+The shared result substantially beats constant velocity at one second and is
+stable and finite across the matrix, but it is not yet high absolute accuracy.
+The next accuracy work is balanced three-object discovery supervision followed
+by event-conditioned outgoing-velocity learning, with the same explicit
+paired manifest and per-scenario regression gates.
+
+Artifact SHA-256:
+
+- checkpoint:
+  `0aba6b222e10446aa892c810bd632c393e3b8d2195858f48e68022f66e847af2`;
+- reference GIF:
+  `c732b21096b304bf058db22f55369432a27569a5b5045a82e2c80614f6a2fa8e`;
+- damped GIF:
+  `76d52d34d11550caf4f002989221fe667d19a7b7328ae74ceafa2de8d315ca15`.
+
+Commands run for the final shared selection included:
+
+```bash
+PYTHONPATH=. conda run -n orpheus python train.py \
+  --config configs/tiny_all_scenarios.yaml \
+  --resume runs/20260727-233802-reference-physics-v1/checkpoints/best_rollout.pt \
+  --run-label shared-dynamics-v1
+PYTHONPATH=. conda run -n orpheus python evaluate.py \
+  --config configs/tiny_all_scenarios.yaml \
+  --checkpoint <candidate> \
+  --split validation --seed-protocol fresh_validation --seed-offset 8 \
+  --device cpu --set evaluation.episodes=8
+PYTHONPATH=. conda run -n orpheus python evaluate.py \
+  --config configs/tiny_all_scenarios.yaml \
+  --checkpoint runs/20260728-091315-selected-all-scenarios-v1/checkpoints/best_rollout.pt \
+  --split test --device cpu \
+  --output runs/20260728-091315-selected-all-scenarios-v1/evaluation/20260728-093649-final-test16-v13
+PYTHONPATH=. conda run -n orpheus python demo.py \
+  --config configs/tiny_all_scenarios.yaml \
+  --checkpoint runs/20260728-091315-selected-all-scenarios-v1/checkpoints/best_rollout.pt \
+  --device cpu --episode-index 0 \
+  --output demo_outputs/20260728-092305-all-scenarios-reference
+PYTHONPATH=. conda run -n orpheus python -m ruff format .
+PYTHONPATH=. conda run -n orpheus python -m ruff check .
+PYTHONPATH=. conda run -n orpheus pytest
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-all-scenarios-pycache \
+  PYTHONPATH=. conda run -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+git diff --check
+```
+
+Final environment: Python `3.10.20`, PyTorch `2.10.0`, MPS built `True`,
+MPS available to this process `False`; the shared sweep therefore ran on CPU.
+Ruff passed, pytest reported `231 passed, 3 skipped in 173.23 s` with only
+MPS-conditional skips, compileall passed, and `git diff --check` passed.
+Five superseded run directories and the previous reference demo were moved
+without deletion to `/private/tmp/orpheus-superseded-20260728/`; the workspace
+now contains only the selected run and the two newest timestamped demos
+(besides the existing demo archive).

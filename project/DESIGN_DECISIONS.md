@@ -730,3 +730,57 @@
   improve interpretability and preserve multistep behavior, but do not solve
   absolute x accuracy; a larger clean reference curriculum and learned
   uncertainty/velocity gating remain required.
+
+## ADR-043 — Select one shared checkpoint on an explicit balanced scenario manifest
+
+- **Date:** 2026-07-28
+- **Status:** accepted
+- **Context:** Scenario-specific tuning can make each small synthetic regime
+  look better while avoiding the intended question: whether the same
+  abstraction, belief, observer, and dynamics can predict across distinct
+  interactions. The evaluator's prior default fresh-validation offset also
+  depended on the checkpoint's embedded validation count, which made an
+  adapted checkpoint appear better on different episodes.
+- **Decision:** Add one deterministic eight-scenario profile and use one shared
+  checkpoint. Persist the ordered scenario mixture and episode-scenario list.
+  Paired selection must specify the same seed offset or seed manifest, object
+  counts, sequence length, and horizons. Resumed best-score compatibility now
+  includes every selection-defining field available in configuration.
+- **Consequences:** The first apparent training improvement was invalidated,
+  and no candidate weights were promoted. This is stricter but prevents seed
+  composition from masquerading as learning. Scenario-specific checkpoints
+  remain diagnostic ablations only.
+
+## ADR-044 — Permit dynamics-only adaptation but promote only paired gains
+
+- **Date:** 2026-07-28
+- **Status:** accepted as an experiment control; candidates rejected
+- **Context:** Short full-model mixed-regime adaptation risks degrading RGB
+  discovery while testing whether shared dynamics can improve. A restricted
+  scope is useful for separating these effects.
+- **Decision:** Add `training.closed_loop_trainable_scope`, with `all` as the
+  compatibility default and `dynamics` as the controlled alternative. Run
+  conservative and higher-rate dynamics-only continuations, but require the
+  same paired held-out manifest for promotion.
+- **Evidence:** At explicit fresh-validation offset 8, the higher-rate
+  candidate changed one-second aggregate RMSE from `0.285499` to `0.285456 m`
+  while worsening current position, x position, and earlier horizons. The
+  conservative candidate likewise produced no robust shared gain.
+- **Consequences:** The option remains available for longer experiments, but
+  the selected artifact retains the prior step-672 learned weights. Training
+  activity alone is not reported as accuracy improvement.
+
+## ADR-045 — Reset temporal velocity history on collision edges, not collision state
+
+- **Date:** 2026-07-28
+- **Status:** accepted
+- **Context:** Collision mode can remain active for several observations.
+  Clearing history on every active frame prevents the observer from collecting
+  the outgoing samples needed to estimate post-contact velocity.
+- **Decision:** Store an aligned `reset_active` flag per track, clear samples
+  only on the false-to-true edge, and continue accumulating while the mode is
+  sustained.
+- **Consequences:** The causal observer can learn outgoing velocity without
+  re-encoding history. The correction is invariant-tested, though the current
+  selected episodes showed no material aggregate metric change, so it is not
+  presented as an accuracy gain.

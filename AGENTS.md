@@ -45,3 +45,10 @@ Working rules:
   never as runtime privileged input or a replacement for learned dynamics.
   It must emit the canonical episode/observation contracts and record its
   engine version, solver settings, units, timestep, scenario, and seed.
+- Prefer one shared checkpoint across the declared scenario mixture. Treat
+  scenario-specific checkpoints as diagnostic ablations unless an explicit
+  observation-derived regime router is part of the runtime.
+- Compare checkpoints on the same explicit seed manifest, ordered scenario
+  mixture, object counts, sequence length, horizons, and metric semantics.
+  Never infer an accuracy gain from evaluator defaults that select different
+  episodes.

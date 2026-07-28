@@ -15,7 +15,7 @@ import torch
 from torch import nn
 
 from world_model.utils.config import DynamicsConfig, OrpheusConfig, RGBConfig
-from world_model.utils.version import SPECIFICATION_VERSION, __version__
+from world_model.utils.version import SIMULATOR_VERSION, SPECIFICATION_VERSION, __version__
 
 _SIMULATOR_COMPATIBILITY_FIELDS = (
     "type",
@@ -171,7 +171,7 @@ def checkpoint_payload(
         },
         "project_version": __version__,
         "specification_version": SPECIFICATION_VERSION,
-        "simulator_version": "sphere_world_v2",
+        "simulator_version": SIMULATOR_VERSION,
         "device": device,
         "precision": "float32",
         "git": _git_metadata(root),

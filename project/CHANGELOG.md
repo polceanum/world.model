@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — 2026-07-27
+## Unreleased — 2026-07-28
 
 ### Added
 
@@ -78,9 +78,24 @@
 - Runtime accessors for current abstraction assignments and transformer-ready
   belief tokens. Both are derived on demand from `WorldBelief` and add no
   checkpoint parameters.
+- A balanced `tiny_all_scenarios.yaml` profile covering reference, baseline,
+  elastic, damped, impulse, camera-parallax, glancing, and heavy/light
+  interactions with one shared runtime checkpoint.
+- Per-evaluation simulator version, ordered scenario mixture, and exact
+  episode-scenario provenance.
+- A closed-loop `dynamics`-only trainable scope for controlled shared-model
+  adaptation experiments.
 
 ### Changed after integration audit
 
+- Resumed rollout selection now rejects inherited best scores when validation
+  count, scenario mixture, sequence length, object-count range, project seed,
+  horizons, or selection-metric semantics differ.
+- RGB temporal-history collision resets are edge-triggered, allowing outgoing
+  velocity evidence to accumulate while collision mode remains active.
+- The authoritative specification is now version 1.3 and requires identical
+  explicit episode manifests for checkpoint comparisons and per-scenario gates
+  for one shared model.
 - Delayed analytic contact jumps until the estimated geometric gap plus a
   `0.25σ` position-uncertainty margin reaches contact, reducing premature
   lateral damping on the selected multistep block.

@@ -15,6 +15,7 @@ from world_model.simulator.labels import (
 )
 from world_model.simulator.physics import PhysicsStepEvents, empty_physics_events
 from world_model.simulator.sphere_world import SphereWorld, SphereWorldConfig
+from world_model.utils.version import SIMULATOR_VERSION
 
 Episode = dict[str, Any]
 
@@ -203,7 +204,7 @@ def generate_episode(
         "num_objects": int((world._spawn_frame >= 0).sum()),
         "metadata": {
             "simulator": "sphere_world",
-            "simulator_version": 2,
+            "simulator_version": SIMULATOR_VERSION,
             "distribution": resolved.distribution,
             "scenario": world.scenario_name,
             "camera_trajectory": world.camera.mode,

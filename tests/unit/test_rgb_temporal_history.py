@@ -185,6 +185,55 @@ def test_post_reset_segment_count_tracks_only_accepted_samples() -> None:
     )
 
 
+def test_sustained_collision_mode_resets_once_and_learns_outgoing_velocity() -> None:
+    object_ids = torch.tensor([[7]])
+    history = _empty_history(object_ids)
+    history = _append(
+        history,
+        object_ids=object_ids,
+        timestamp=0.0,
+        positions=torch.zeros(1, 1, 3, dtype=torch.float64),
+    )
+    collision_active = torch.tensor([[True]])
+    for timestamp, x_position in ((0.05, -0.05), (0.10, -0.15)):
+        history = _append(
+            history,
+            object_ids=object_ids,
+            timestamp=timestamp,
+            positions=torch.tensor(
+                [[[x_position, 0.0, 0.0]]],
+                dtype=torch.float64,
+            ),
+            reset_mask=collision_active,
+        )
+
+    assert history.valid_mask.sum().item() == 2
+    assert history.post_reset_sample_count.item() == 2
+    assert history.reset_active.item()
+    velocity, _, valid = history.least_squares_velocity(
+        minimum_dt=1.0e-3,
+        minimum_samples=2,
+        variance_scale=1.0,
+        variance_floor=1.0e-3,
+    )
+    assert valid.item()
+    torch.testing.assert_close(
+        velocity,
+        torch.tensor([[[-2.0, 0.0, 0.0]]], dtype=torch.float64),
+        rtol=0.0,
+        atol=1.0e-12,
+    )
+
+    history = _append(
+        history,
+        object_ids=object_ids,
+        timestamp=0.15,
+        positions=torch.tensor([[[-0.25, 0.0, 0.0]]], dtype=torch.float64),
+        reset_mask=torch.tensor([[False]]),
+    )
+    assert not history.reset_active.item()
+
+
 def test_nonmonotonic_and_too_close_timestamps_are_skipped() -> None:
     object_ids = torch.tensor([[4]])
     history = _empty_history(object_ids, history_size=4)
