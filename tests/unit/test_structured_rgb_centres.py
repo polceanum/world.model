@@ -562,3 +562,23 @@ def test_rgb_innovation_inflates_only_depth_outlier_correction_variance() -> Non
         innovation.auxiliary["measured_world_position_log_variance"],
         position_log_variance + math.log(9.0),
     )
+
+
+def test_global_structured_assignment_skips_nonfinite_proposal_rows() -> None:
+    image = torch.zeros((1, 3, 9, 9), dtype=torch.float32)
+    expected = _paint_block(
+        image,
+        batch_index=0,
+        top=3,
+        left=3,
+        height=3,
+        width=3,
+        colour=(1.0, 0.2, 0.1),
+    )
+    proposals = torch.tensor([[[float("nan"), 0.0], [0.0, 0.0]]])
+
+    output = structured_disc_centres(image, proposals)
+
+    assert not output.valid_mask[0, 0]
+    assert output.valid_mask[0, 1]
+    torch.testing.assert_close(output.centres[0, 1], expected)

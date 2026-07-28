@@ -839,3 +839,28 @@
   selected small checkpoint and simple baselines on identical manifests.
   Gradient checkpointing or explicit optimizer accumulation may be added later
   without changing runtime semantics.
+
+## ADR-048 — Preserve final weights before validation and reject mixed long-horizon gains
+
+- **Date:** 2026-07-28
+- **Status:** accepted
+- **Context:** A 1.90M-parameter, 24-frame closed-loop validation remained
+  compute-active for about 84 minutes and prevented the old trainer from
+  checkpointing its final eight optimizer updates. A separate higher-rate
+  continuation also produced one non-finite proposal row, and MPS evaluation
+  exposed a direct float64-cast failure in scoring-only parameter metrics.
+- **Decision:** Write final weights before entering final validation, then
+  overwrite them with validated selection metadata only after success. Ignore
+  non-finite proposal rows during structured RGB assignment, fail explicitly
+  on non-finite validation aggregates, and transfer MPS diagnostics to CPU
+  before float64 accumulation. Do not promote a checkpoint unless the same
+  disjoint manifest improves current state and every declared forecast gate.
+- **Evidence:** Step 896 improved paired current-position RMSE by `18.60%` and
+  0.10/0.25/0.50/0.75-second RMSE by
+  `12.89/5.68/5.04/1.16%`, but worsened velocity RMSE by `94.11%` and
+  one-second RMSE by `5.04%`. Direct MPS regression tests pass after the
+  reporting fix.
+- **Consequences:** Step 896 is retained as diagnostic perception evidence,
+  not as the selected model. Large-model throughput must be profiled and the
+  velocity/long-horizon objective must improve before scaling the schedule
+  further.

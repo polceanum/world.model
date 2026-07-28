@@ -382,6 +382,9 @@ def _validation_loader_result(
                 closed_loop=closed_loop,
             )
         )
+        if not bool(torch.isfinite(results[-1].total_loss)):
+            phase = "closed-loop" if closed_loop else "measurement"
+            raise FloatingPointError(f"nonfinite {phase} validation loss")
         batch_sizes.append(float(batch["rgb"].shape[0]))
     return _mean_batch_results(results, weights=batch_sizes)
 
@@ -669,6 +672,35 @@ def train_from_config(
             or completed_step == config.training.rgb_pretrain_steps
             or completed_step == config.training.steps
         )
+        if should_validate and completed_step == config.training.steps:
+            # Closed-loop validation can be much more expensive than the final
+            # optimiser update. Persist those weights first so an interrupted
+            # validation does not discard a successfully completed run.
+            prevalidation_metrics = {
+                key: float(value)
+                for key, value in last_metrics.items()
+                if isinstance(value, (int, float)) and math.isfinite(float(value))
+            }
+            prevalidation_metrics["best_rollout_validated"] = float(best_rollout_validated)
+            prevalidation_metrics["best_measurement_validated"] = float(best_measurement_validated)
+            prevalidation_metrics["rollout_selection_metric_version"] = (
+                _ROLLOUT_SELECTION_METRIC_VERSION
+            )
+            if best_rollout_validated:
+                prevalidation_metrics["best_rollout_loss"] = best_rollout
+                prevalidation_metrics["best_rollout_position_loss"] = best_rollout
+            if best_measurement_validated:
+                prevalidation_metrics["best_measurement_loss"] = best_measurement
+                prevalidation_metrics["best_measurement_world_position_mae_m"] = best_measurement
+            save_checkpoint(
+                last_path,
+                model=model,
+                optimizer=optimizer,
+                config=config,
+                step=completed_step,
+                metrics=prevalidation_metrics,
+                device=str(device),
+            )
         if should_validate:
             validation = _validation_loader_result(
                 model,

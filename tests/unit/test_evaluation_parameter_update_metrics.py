@@ -73,3 +73,17 @@ def test_directional_parameter_metrics_validate_scalar_contract() -> None:
             torch.zeros(1, 2, 2),
             torch.ones(1, 2, dtype=torch.bool),
         )
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="MPS is unavailable")
+def test_directional_parameter_metrics_transfer_before_float64_accumulation() -> None:
+    accumulator = OnlineParameterUpdateAccumulator()
+    accumulator.update(
+        "drag",
+        torch.tensor([[[0.02]]], device="mps"),
+        torch.tensor([[[0.04]]], device="mps"),
+        torch.tensor([[[0.05]]], device="mps"),
+        torch.tensor([[True]], device="mps"),
+    )
+
+    assert accumulator.metrics()["informative_drag_update_count"] == 1.0

@@ -261,8 +261,17 @@
 - [x] Complete 1,024 mixed-scenario measurement draws and one full causal
   update with the scaled model on MPS; retain it as an unvalidated scale
   artifact, not an accuracy promotion.
+- [x] Continue the shared scaled model to step 896 on MPS and run a disjoint
+  paired two-episode check. Retain the checkpoint as mixed evidence: current
+  and 0.1–0.75 s position improve, while velocity and 1.0 s prediction regress.
+- [x] Persist final weights before expensive validation, reject non-finite
+  validation aggregates, ignore non-finite structured proposal rows, and make
+  parameter-update reporting safe for MPS float64 accumulation.
 - [ ] Complete the 48,000-example `configs/scaled_curriculum.yaml` schedule on
   MPS or CUDA, then evaluate validation, test, and OOD splits using fixed
   manifests and per-scenario slices.
+- [ ] Profile and reduce closed-loop validation/rollout cost before another
+  large run; the 24-frame eight-episode validator exceeded 84 minutes and
+  evaluator rollout calls averaged about 9.8 seconds.
 - [ ] Add gradient checkpointing or optimizer accumulation if eight-step,
   batch-one causal updates remain the throughput bottleneck.

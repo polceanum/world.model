@@ -72,10 +72,12 @@ class OnlineParameterUpdateAccumulator:
         post_error = (selected_post - selected_target).abs()
         error_reduction = pre_error - post_error
         absolute_update = (selected_post - selected_pre).abs()
-        detached_pre = pre_error.detach().to(device="cpu", dtype=torch.float64)
-        detached_post = post_error.detach().to(device="cpu", dtype=torch.float64)
-        detached_reduction = error_reduction.detach().to(device="cpu", dtype=torch.float64)
-        detached_update = absolute_update.detach().to(device="cpu", dtype=torch.float64)
+        # MPS cannot cast directly to float64. Transfer first, then use CPU
+        # double precision for stable long-run accumulation.
+        detached_pre = pre_error.detach().to(device="cpu").to(dtype=torch.float64)
+        detached_post = post_error.detach().to(device="cpu").to(dtype=torch.float64)
+        detached_reduction = error_reduction.detach().to(device="cpu").to(dtype=torch.float64)
+        detached_update = absolute_update.detach().to(device="cpu").to(dtype=torch.float64)
 
         totals = self.totals[name]
         totals.pre_update_absolute_error += float(detached_pre.sum())

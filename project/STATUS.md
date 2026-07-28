@@ -98,15 +98,15 @@ collision, occlusion, identification, and full-MPS acceptance remain open
 - Python: 3.10.20
 - Process architecture: x86_64
 - PyTorch: 2.10.0, installed build preserved unchanged
-- MPS: compiled, but unavailable to this launcher process;
-  earlier recorded real forward/backward optimizer steps completed on `mps`
+- MPS: compiled and available to the direct `conda run` processes used for the
+  current training/evaluation; sandboxed subprocesses may still report it
+  unavailable
 - CUDA: unavailable
 - Precision: float32
 
-The current launcher process reports MPS unavailable, so three
-hardware-conditional tests skip. Earlier direct runs exercised the same
-MPS-specific paths successfully; the preserved run evidence is described
-below.
+Direct MPS tests and evaluation are now part of the current evidence. A
+sandboxed launcher can still skip hardware-conditional tests, so each command
+below states whether it ran inside or outside that boundary.
 
 ## Accuracy-v4 promoted CPU evidence
 
@@ -1655,3 +1655,138 @@ PYTHONPATH=. conda run -n orpheus pytest \
 The full sandboxed suite passed `238` tests and skipped the three
 MPS-conditional tests in `63.65 s`. Running those three tests outside the
 sandbox, where MPS is available, passed all three in `2.40 s`. Ruff passed.
+
+## 2026-07-28 — longer scaled MPS continuation and paired result
+
+No prior trainer was active when this work began. The scaled checkpoint was
+continued on direct MPS from step 256 to the persisted step-896 measurement
+checkpoint, representing 640 additional optimizer updates over the same
+4,096-episode, eight-scenario curriculum. The accepted stable segment used
+24-frame episodes, batch one, four-step TBPTT, four renderer workers, and
+`2.5e-5` measurement learning rate. Its eight causal updates used the
+configured 10x phase reduction.
+
+The first continuation used `1e-4` and encountered a non-finite learned
+proposal during step-768 validation. Global structured assignment now ignores
+non-finite proposal rows while retaining finite candidates, and validation
+fails explicitly if its aggregate loss is non-finite. The stable rerun
+reported measurement-validation world-position MAE:
+
+- step 640: `0.614591 m`;
+- step 768: `0.614583 m`;
+- step 896: `0.614574 m`;
+- original step 256: `0.645048 m`.
+
+That internal measurement metric improved by `4.72%`. The final eight-episode
+closed-loop validation was stopped after the complete process reached the
+two-hour cap: it had spent about 84 minutes in validation, remained
+compute-active, and had produced no result. Step-896 weights were already
+safe; the eight later causal updates existed only in the interrupted process.
+Training now writes the final `last.pt` before entering expensive final
+validation, so future interruptions cannot discard completed optimizer work.
+
+The unbiased paired RGB-only confirmation used fresh-validation seeds
+`100016–100017`, disjoint from both checkpoints' trainer-validation manifests:
+
+| Metric | step 256 | step 896 | Change |
+| --- | ---: | ---: | ---: |
+| current position RMSE | `0.945633 m` | `0.769763 m` | `-18.60%` |
+| current position MAE | `0.546452 m` | `0.447509 m` | `-18.11%` |
+| current velocity RMSE | `0.608411 m/s` | `1.180957 m/s` | `+94.11%` |
+| 0.10 s position RMSE | `0.828191 m` | `0.721454 m` | `-12.89%` |
+| 0.25 s position RMSE | `0.711230 m` | `0.670801 m` | `-5.68%` |
+| 0.50 s position RMSE | `0.756100 m` | `0.718019 m` | `-5.04%` |
+| 0.75 s position RMSE | `0.798965 m` | `0.789715 m` | `-1.16%` |
+| 1.00 s position RMSE | `0.832044 m` | `0.873989 m` | `+5.04%` |
+| 0.5 m detection recall | `0.243056` | `0.340278` | `+0.097222` |
+| 0.5 m detection precision | `0.165094` | `0.270718` | `+0.105624` |
+| collision F1 | `0.153846` | `0.400000` | `+0.246154` |
+| forecast 90% coverage | `0.704981` | `0.668582` | `-0.036399` |
+
+Both checkpoints had zero distance-gated ID switches and no non-finite
+outputs. The longer run is therefore useful perception/short-horizon evidence,
+but it fails the velocity, calibration, and one-second promotion gates. It
+does not replace the selected tiny checkpoint. The sample contains only two
+episodes and is confirmation evidence, not broad validation/test acceptance.
+
+On the candidate, mean global/fast RGB update latency was approximately
+`1.625 / 1.504 s`, and future rollout latency was `9.823 s` per evaluator
+call. The current large closed-loop implementation is too slow for routine
+full-manifest iteration and must be profiled before the 48,000-draw schedule.
+
+Artifacts:
+
+- checkpoint:
+  `runs/20260728-152237-scaled-longer-stable-v2/checkpoints/best_measurement.pt`
+  (step 896, SHA-256
+  `125c4c45e2780a98d5321392d9ebea2cd72b98fab66d773a29fcbf4d2dc9cd4f`);
+- candidate paired report:
+  `runs/20260728-152237-scaled-longer-stable-v2/evaluation/20260728-174523-scaled-step896-paired-confirm2-offset16/report.md`;
+- baseline paired report:
+  `runs/20260728-131727-scaled-curriculum-1k-v1/evaluation/20260728-173848-scaled-step256-paired-confirm2-offset16/report.md`;
+- supplementary candidate report on seeds `100008–100009`:
+  `runs/20260728-152237-scaled-longer-stable-v2/evaluation/20260728-173118-scaled-longer-stable-v2-confirm2/report.md`.
+
+Exact main training command:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/scaled_curriculum.yaml \
+  --resume runs/20260728-151508-scaled-longer-v1/checkpoints/best_measurement.pt \
+  --run-name scaled-longer-stable-v2 --device mps --seed 44 \
+  --set simulator.sequence_frames=24 --set training.steps=904 \
+  --set training.rgb_pretrain_steps=896 --set training.batch_size=1 \
+  --set training.tbptt_steps=4 --set training.train_episodes=4096 \
+  --set training.validation_episodes=8 --set training.num_workers=4 \
+  --set training.learning_rate=0.000025 --set training.eval_every=128 \
+  --set training.checkpoint_every=64 --set training.log_every=10 \
+  --set evaluation.episodes=8
+```
+
+Exact paired evaluation command shape (checkpoint/output changed per side):
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python evaluate.py \
+  --config runs/20260728-152237-scaled-longer-stable-v2/config.resolved.yaml \
+  --checkpoint <step-256-or-step-896-checkpoint> \
+  --split validation --seed-protocol fresh_validation --seed-offset 16 \
+  --device mps --set evaluation.episodes=2 --output <paired-label>
+```
+
+Validation commands for the stability changes:
+
+```bash
+PYTHONPATH=. conda run -n orpheus ruff check \
+  world_model/observations/rgb/structured_centres.py \
+  world_model/training/trainer.py \
+  tests/unit/test_structured_rgb_centres.py
+PYTHONPATH=. conda run -n orpheus pytest \
+  tests/unit/test_structured_rgb_centres.py \
+  tests/integration/test_checkpoint_roundtrip.py
+PYTHONPATH=. conda run -n orpheus pytest \
+  tests/unit/test_training_schedule.py tests/integration/test_cli_smoke.py
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest \
+  tests/unit/test_evaluation_parameter_update_metrics.py \
+  tests/unit/test_association.py tests/integration/test_rgb_measurements.py -q
+```
+
+Results before the final full-suite run were `17 passed`, `22 passed`, and
+`16 passed` respectively; the last command executed directly with MPS
+available and included the new MPS float64-transfer regression.
+
+Final repository validation:
+
+```bash
+PYTHONPATH=. conda run -n orpheus ruff format --check .
+PYTHONPATH=. conda run -n orpheus ruff check .
+PYTHONPATH=. conda run -n orpheus pytest
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-scaled-pycache \
+  PYTHONPATH=. conda run -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+git diff --check
+```
+
+Ruff and `git diff --check` passed. Pytest reported
+`239 passed, 4 skipped in 67.13 s`; all skips were hardware-conditional in the
+sandboxed process, and the relevant direct-MPS subset passed as described
+above.

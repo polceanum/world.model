@@ -388,3 +388,15 @@ episode draws, nominal dataset passes, and scenario families. The chosen
 renderer workers after a bounded MPS run exposed the memory and simulation
 throughput limits of batch four. Cross-device checkpoint resume now restores
 the default PyTorch RNG state on CPU even when model tensors map to MPS.
+
+Continued the scaled MPS checkpoint from step 256 to a persisted step-896
+measurement checkpoint. On two fresh-validation episodes it improved current
+position and 0.1–0.75-second forecasts, detection, and collision F1, but
+regressed velocity, calibration, and the 1.0-second forecast; it is recorded as
+mixed evidence rather than promoted.
+
+Hardened long MPS runs by filtering non-finite structured proposal rows,
+raising on non-finite validation losses, checkpointing final weights before
+expensive validation, and transferring evaluation diagnostics to CPU before
+float64 accumulation. The last change fixes a directly reproduced MPS-only
+evaluation crash.

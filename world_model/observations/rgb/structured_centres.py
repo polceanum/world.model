@@ -191,15 +191,20 @@ def structured_disc_centres(
                 dtype=torch.float32,
             )
         )
-        cost = torch.cdist(proposal_cpu, component_centres)
+        finite_rows = torch.isfinite(proposal_cpu).all(dim=-1)
+        finite_row_indices = torch.nonzero(finite_rows, as_tuple=False).flatten()
+        if finite_row_indices.numel() == 0:
+            continue
+        cost = torch.cdist(proposal_cpu[finite_row_indices], component_centres)
         proposal_rows, component_columns = linear_sum_assignment(np.asarray(cost))
-        for proposal_row, component_column in zip(
+        for finite_proposal_row, component_column in zip(
             proposal_rows,
             component_columns,
             strict=True,
         ):
-            if float(cost[proposal_row, component_column]) > maximum_assignment_distance:
+            if float(cost[finite_proposal_row, component_column]) > maximum_assignment_distance:
                 continue
+            proposal_row = int(finite_row_indices[finite_proposal_row])
             refined[batch_index, proposal_row] = component_centres[component_column].to(
                 device=refined.device,
                 dtype=refined.dtype,
