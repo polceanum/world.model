@@ -37,6 +37,7 @@ def _append(
     active_mask: torch.Tensor | None = None,
     observed_mask: torch.Tensor | None = None,
     reset_mask: torch.Tensor | None = None,
+    scale_valid_mask: torch.Tensor | None = None,
     position_variance: float = 1.0e-4,
     minimum_dt: float = 1.0e-3,
 ) -> RGBTemporalPositionHistory:
@@ -48,6 +49,7 @@ def _append(
         object_ids=object_ids,
         active_mask=active_mask,
         observed_mask=observed_mask,
+        scale_valid_mask=scale_valid_mask,
         reset_mask=reset_mask,
         timestamp=torch.tensor([timestamp], dtype=positions.dtype),
         positions=positions,
@@ -57,6 +59,91 @@ def _append(
         ),
         minimum_dt=minimum_dt,
     )
+
+
+def test_robust_point_scale_trajectory_rejects_one_depth_outlier() -> None:
+    object_ids = torch.tensor([[17]])
+    history = _empty_history(object_ids, history_size=5)
+    velocity = torch.tensor([[[0.4, -0.2, 0.5]]], dtype=torch.float64)
+    initial = torch.tensor([[[0.1, 0.3, 2.0]]], dtype=torch.float64)
+    for timestamp in (0.0, 0.05, 0.1, 0.15, 0.2):
+        position = initial + velocity * timestamp
+        if timestamp == 0.15:
+            position = position + torch.tensor([[[0.0, 0.0, 1.0]]], dtype=torch.float64)
+        history = _append(
+            history,
+            object_ids=object_ids,
+            timestamp=timestamp,
+            positions=position,
+            scale_valid_mask=torch.tensor([[True]]),
+            position_variance=2.5e-3,
+        )
+
+    estimate, log_variance, valid = history.robust_trajectory_position(
+        query_timestamp=torch.tensor([0.2], dtype=torch.float64),
+        minimum_dt=1.0e-3,
+        minimum_samples=3,
+        robust_threshold=2.0,
+        variance_scale=2.0,
+        variance_floor=1.0e-4,
+        variance_ceiling=0.1,
+    )
+
+    assert valid.item()
+    expected = initial + velocity * 0.2
+    torch.testing.assert_close(estimate[..., :2], expected[..., :2], atol=1.0e-10, rtol=0.0)
+    assert abs(float(estimate[..., 2] - expected[..., 2])) < 0.12
+    assert torch.all(log_variance.exp() <= 0.1)
+
+
+def test_point_scale_trajectory_ignores_centre_only_samples() -> None:
+    object_ids = torch.tensor([[9]])
+    history = _empty_history(object_ids)
+    for sample_index, timestamp in enumerate((0.0, 0.05, 0.1)):
+        history = _append(
+            history,
+            object_ids=object_ids,
+            timestamp=timestamp,
+            positions=torch.tensor([[[timestamp, 0.0, 2.0]]], dtype=torch.float64),
+            scale_valid_mask=torch.tensor([[sample_index != 1]]),
+        )
+
+    _, _, valid = history.robust_trajectory_position(
+        query_timestamp=torch.tensor([0.1], dtype=torch.float64),
+        minimum_dt=1.0e-3,
+        minimum_samples=3,
+        robust_threshold=2.5,
+        variance_scale=2.0,
+        variance_floor=1.0e-4,
+    )
+    assert not valid.item()
+
+
+def test_scale_anchor_ring_survives_interleaved_fast_centre_samples() -> None:
+    object_ids = torch.tensor([[9]])
+    history = _empty_history(object_ids, history_size=3)
+    for sample_index in range(7):
+        timestamp = 0.05 * sample_index
+        history = _append(
+            history,
+            object_ids=object_ids,
+            timestamp=timestamp,
+            positions=torch.tensor([[[timestamp, 0.0, 2.0 + timestamp]]], dtype=torch.float64),
+            scale_valid_mask=torch.tensor([[sample_index % 3 == 0]]),
+        )
+
+    assert history.valid_mask.sum().item() == 3
+    assert history.scale_valid_mask.sum().item() == 3
+    estimate, _, valid = history.robust_trajectory_position(
+        query_timestamp=torch.tensor([0.3], dtype=torch.float64),
+        minimum_dt=1.0e-3,
+        minimum_samples=3,
+        robust_threshold=2.5,
+        variance_scale=2.0,
+        variance_floor=1.0e-4,
+    )
+    assert valid.item()
+    torch.testing.assert_close(estimate[..., 2], torch.tensor([[2.3]], dtype=torch.float64))
 
 
 def test_three_causal_samples_recover_constant_velocity_at_20_hz() -> None:
@@ -469,6 +556,90 @@ def test_rgb_module_emits_post_correction_evidence_and_measurement_annotations()
     torch.testing.assert_close(
         measured.auxiliary["world_velocity"],
         expected_velocity,
+    )
+
+
+def test_rgb_module_emits_depth_only_multiframe_position_evidence() -> None:
+    factory = BeliefFactory(max_objects=1, appearance_dim=4)
+    base = factory.create()
+    belief = base.replace(
+        objects=base.objects.replace(
+            active=torch.tensor([[True]]),
+            object_id=torch.tensor([[12]]),
+            position=torch.tensor([[[0.0, 0.0, 2.0]]]),
+            existence_logit=torch.tensor([[8.0]]),
+        )
+    )
+    module = RGBObservationModule(
+        RGBObservationConfig(
+            max_objects=1,
+            backbone_channels=(8, 16, 24, 32),
+            feature_dim=16,
+            appearance_dim=4,
+            roi_size=8,
+            roi_hidden_dim=16,
+            temporal_velocity_enabled=False,
+            temporal_velocity_history_size=3,
+            temporal_position_enabled=True,
+            temporal_position_min_samples=3,
+            temporal_position_variance_scale=2.0,
+            temporal_position_variance_floor=0.01,
+            temporal_position_variance_ceiling=0.1,
+            temporal_position_depth_only=True,
+        )
+    )
+    association = AssociationResult(
+        belief_indices=torch.tensor([[0]]),
+        measurement_indices=torch.tensor([[0]]),
+        pair_mask=torch.tensor([[True]]),
+        pair_cost=torch.tensor([[0.0]]),
+        unmatched_beliefs=torch.tensor([[False]]),
+        unmatched_measurements=torch.tensor([[False]]),
+        ambiguous=torch.tensor([[False]]),
+    )
+    history = None
+    evidence = None
+    for sample_index, timestamp in enumerate((0.0, 0.05, 0.1)):
+        measured_position = torch.tensor([[[0.3, -0.2, 2.0 + timestamp]]])
+        measured = MeasurementSet(
+            modality="rgb",
+            sensor_id="camera",
+            timestamp=torch.tensor([timestamp]),
+            values=torch.zeros(1, 1, 7),
+            log_variance=torch.zeros(1, 1, 7),
+            existence_logits=torch.tensor([[8.0]]),
+            measurement_mask=torch.tensor([[True]]),
+            appearance=None,
+            class_logits=None,
+            frame_id="camera:camera",
+            supported_state_fields=("position",),
+            auxiliary={
+                "world_position": measured_position,
+                "world_position_log_variance": torch.full(
+                    (1, 1, 3),
+                    math.log(0.01),
+                ),
+                "structured_depth_valid": torch.tensor([[True]]),
+            },
+        )
+        evidence, history = module.update_temporal_history(
+            posterior=belief,
+            measured=measured,
+            association=association,
+            history=history,
+        )
+        assert evidence is not None
+        assert evidence.position_valid_mask is not None
+        assert evidence.position_valid_mask.item() is (sample_index == 2)
+
+    assert evidence is not None and evidence.position is not None
+    torch.testing.assert_close(evidence.position[..., :2], belief.objects.position[..., :2])
+    torch.testing.assert_close(evidence.position[..., 2], torch.tensor([[2.1]]))
+    assert not evidence.valid_mask.item()
+    assert measured.auxiliary["world_trajectory_position_valid_mask"].item()
+    torch.testing.assert_close(
+        measured.auxiliary["world_trajectory_position"][..., 2],
+        torch.tensor([[2.1]]),
     )
 
 

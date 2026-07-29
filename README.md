@@ -80,6 +80,15 @@ but regressed localization and aggregate forecasts, so it remains disabled in
 the public profiles. A controlled continuation raised collision F1 to 0.1216
 but worsened the primary physical metrics and was likewise not promoted.
 
+The scaled profile now also keeps scarce global scale anchors in a separate
+persistent-ID ring, so centre-only ROI updates cannot evict the multi-frame
+depth evidence. A robust axis-local trajectory estimate corrects only the
+calibrated camera-depth component of `WorldBelief`. With unchanged model
+weights, current position and every recursive 0.1–1.0-second position horizon
+improved on two disjoint paired MPS blocks. Velocity and collision F1 regressed,
+so this is a position/depth improvement rather than a claim that event dynamics
+are solved; exact metrics and reports are in `project/STATUS.md`.
+
 ## Quick start
 
 Use the existing `orpheus` environment. PyTorch is an externally managed

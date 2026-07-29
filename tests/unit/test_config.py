@@ -68,6 +68,13 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
     assert default.model.rgb.temporal_velocity_max_age_steps is None
     assert default.model.rgb.temporal_velocity_measurement_position_blend == 0.0
     assert not default.model.rgb.temporal_velocity_position_innovation_coupling
+    assert not default.model.rgb.temporal_position_enabled
+    assert default.model.rgb.temporal_position_min_samples == 3
+    assert default.model.rgb.temporal_position_robust_threshold == 2.5
+    assert default.model.rgb.temporal_position_variance_scale == 4.0
+    assert default.model.rgb.temporal_position_variance_floor == 0.01
+    assert default.model.rgb.temporal_position_variance_ceiling is None
+    assert default.model.rgb.temporal_position_depth_only
     assert default.model.rgb.structured_disc_center_enabled
     assert default.model.rgb.structured_disc_depth_outlier_relative_threshold is None
 
@@ -86,6 +93,13 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
             "model.rgb.temporal_velocity_max_age_steps=3",
             "model.rgb.temporal_velocity_measurement_position_blend=0.25",
             "model.rgb.temporal_velocity_position_innovation_coupling=true",
+            "model.rgb.temporal_position_enabled=true",
+            "model.rgb.temporal_position_min_samples=2",
+            "model.rgb.temporal_position_robust_threshold=2.0",
+            "model.rgb.temporal_position_variance_scale=3.0",
+            "model.rgb.temporal_position_variance_floor=0.02",
+            "model.rgb.temporal_position_variance_ceiling=0.5",
+            "model.rgb.temporal_position_depth_only=false",
             "model.rgb.structured_disc_depth_outlier_relative_threshold=0.12",
             "model.rgb.structured_disc_depth_outlier_variance_scale=9.0",
         ],
@@ -102,6 +116,13 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
     assert enabled.model.rgb.temporal_velocity_max_age_steps == 3
     assert enabled.model.rgb.temporal_velocity_measurement_position_blend == 0.25
     assert enabled.model.rgb.temporal_velocity_position_innovation_coupling
+    assert enabled.model.rgb.temporal_position_enabled
+    assert enabled.model.rgb.temporal_position_min_samples == 2
+    assert enabled.model.rgb.temporal_position_robust_threshold == 2.0
+    assert enabled.model.rgb.temporal_position_variance_scale == 3.0
+    assert enabled.model.rgb.temporal_position_variance_floor == 0.02
+    assert enabled.model.rgb.temporal_position_variance_ceiling == 0.5
+    assert not enabled.model.rgb.temporal_position_depth_only
     assert enabled.model.rgb.structured_disc_depth_outlier_relative_threshold == 0.12
     assert enabled.model.rgb.structured_disc_depth_outlier_variance_scale == 9.0
 

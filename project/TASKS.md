@@ -243,16 +243,21 @@
 - [x] Add disabled-by-default, tested gates for associated depth-disagreement
   covariance inflation and combined temporal/position-innovation velocity
   evidence. Reject both policies after final-test multistep regressions.
-- [ ] Replace single-frame radius depth in ordinary correction with a learned
-  persistent-ID multi-frame point/scale trajectory measurement. Produce
-  per-axis estimates and uncertainty from axis-local history, then use joint
-  interaction/event context to gate departures and cross-axis coupling.
+- [x] Add a persistent-ID multi-frame point/scale trajectory measurement with
+  independent bounded point/scale rings, axis-local robust estimates,
+  uncertainty, boundary/overlap quality gates, and camera-depth-only direct
+  belief correction. It is parameter-free rather than learned; the scaled
+  policy improves all 0.1–1.0-second position horizons on two disjoint paired
+  blocks while exposing an event/velocity tradeoff.
 - [ ] Supervise scale quality with visible fraction, boundary truncation,
   component overlap, temporal scale consistency, and prediction disagreement;
   validate calibration by quality bucket before enabling correction.
 - [ ] Train event-conditioned outgoing velocity on balanced pre-contact and
   post-contact windows, with constant/damped motion represented as a learned
   low-complexity prior rather than a hardcoded runtime rule.
+- [ ] Recover collision F1 and outgoing-velocity accuracy after enabling the
+  confirmed point/scale observer; position, detection, and calibration improve
+  strongly, but velocity and event F1 regress on the paired blocks.
 - [x] Add a 1.90M-parameter scaled shared-model profile with 4,096 training,
   256 validation, and 256 test episodes across all eight scenario families.
 - [x] Record model parameter count, episode draws, nominal manifest passes,

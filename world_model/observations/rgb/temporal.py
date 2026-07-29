@@ -20,6 +20,10 @@ class RGBTemporalPositionHistory(ModalityHistory):
     positions: Tensor
     position_log_variance: Tensor
     valid_mask: Tensor
+    scale_timestamps: Tensor
+    scale_positions: Tensor
+    scale_position_log_variance: Tensor
+    scale_valid_mask: Tensor
     post_reset_sample_count: Tensor
     has_reset: Tensor
     reset_active: Tensor
@@ -72,6 +76,36 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 device=object_ids.device,
                 dtype=torch.bool,
             ),
+            scale_timestamps=torch.zeros(
+                batch,
+                objects,
+                history_size,
+                device=object_ids.device,
+                dtype=dtype,
+            ),
+            scale_positions=torch.zeros(
+                batch,
+                objects,
+                history_size,
+                3,
+                device=object_ids.device,
+                dtype=dtype,
+            ),
+            scale_position_log_variance=torch.zeros(
+                batch,
+                objects,
+                history_size,
+                3,
+                device=object_ids.device,
+                dtype=dtype,
+            ),
+            scale_valid_mask=torch.zeros(
+                batch,
+                objects,
+                history_size,
+                device=object_ids.device,
+                dtype=torch.bool,
+            ),
             post_reset_sample_count=torch.zeros(
                 batch,
                 objects,
@@ -108,6 +142,10 @@ class RGBTemporalPositionHistory(ModalityHistory):
             and self.positions.shape == (*object_ids.shape, history_size, 3)
             and self.position_log_variance.shape == self.positions.shape
             and self.valid_mask.shape == self.timestamps.shape
+            and self.scale_timestamps.shape == self.timestamps.shape
+            and self.scale_positions.shape == self.positions.shape
+            and self.scale_position_log_variance.shape == self.positions.shape
+            and self.scale_valid_mask.shape == self.scale_timestamps.shape
             and self.post_reset_sample_count.shape == object_ids.shape
             and self.has_reset.shape == object_ids.shape
             and self.reset_active.shape == object_ids.shape
@@ -122,6 +160,7 @@ class RGBTemporalPositionHistory(ModalityHistory):
         object_ids: Tensor,
         active_mask: Tensor,
         observed_mask: Tensor,
+        scale_valid_mask: Tensor | None = None,
         reset_mask: Tensor | None = None,
         timestamp: Tensor,
         positions: Tensor,
@@ -142,6 +181,10 @@ class RGBTemporalPositionHistory(ModalityHistory):
             reset_mask = torch.zeros_like(active_mask)
         if reset_mask.shape != object_ids.shape or reset_mask.dtype != torch.bool:
             raise ValueError("reset_mask must be boolean [B,N]")
+        if scale_valid_mask is None:
+            scale_valid_mask = torch.zeros_like(active_mask)
+        if scale_valid_mask.shape != object_ids.shape or scale_valid_mask.dtype != torch.bool:
+            raise ValueError("scale_valid_mask must be boolean [B,N]")
         if timestamp.shape != object_ids.shape[:1]:
             raise ValueError("timestamp must have shape [B]")
         if not math.isfinite(minimum_dt) or minimum_dt <= 0:
@@ -193,6 +236,18 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 aligned.valid_mask[batch_index, slot] = source.valid_mask[
                     batch_index, previous_slot
                 ]
+                aligned.scale_timestamps[batch_index, slot] = source.scale_timestamps[
+                    batch_index, previous_slot
+                ]
+                aligned.scale_positions[batch_index, slot] = source.scale_positions[
+                    batch_index, previous_slot
+                ]
+                aligned.scale_position_log_variance[batch_index, slot] = (
+                    source.scale_position_log_variance[batch_index, previous_slot]
+                )
+                aligned.scale_valid_mask[batch_index, slot] = source.scale_valid_mask[
+                    batch_index, previous_slot
+                ]
                 aligned.post_reset_sample_count[batch_index, slot] = source.post_reset_sample_count[
                     batch_index, previous_slot
                 ]
@@ -218,6 +273,22 @@ class RGBTemporalPositionHistory(ModalityHistory):
             aligned.position_log_variance,
         )
         aligned.valid_mask = aligned.valid_mask & ~reset_edge.unsqueeze(-1)
+        aligned.scale_timestamps = torch.where(
+            reset_edge.unsqueeze(-1),
+            torch.zeros_like(aligned.scale_timestamps),
+            aligned.scale_timestamps,
+        )
+        aligned.scale_positions = torch.where(
+            reset_edge.unsqueeze(-1).unsqueeze(-1),
+            torch.zeros_like(aligned.scale_positions),
+            aligned.scale_positions,
+        )
+        aligned.scale_position_log_variance = torch.where(
+            reset_edge.unsqueeze(-1).unsqueeze(-1),
+            torch.zeros_like(aligned.scale_position_log_variance),
+            aligned.scale_position_log_variance,
+        )
+        aligned.scale_valid_mask = aligned.scale_valid_mask & ~reset_edge.unsqueeze(-1)
         aligned.post_reset_sample_count = torch.where(
             reset_edge,
             torch.zeros_like(aligned.post_reset_sample_count),
@@ -260,6 +331,40 @@ class RGBTemporalPositionHistory(ModalityHistory):
             aligned.valid_mask[batch_index, slot, count] = True
             if aligned.has_reset[batch_index, slot]:
                 aligned.post_reset_sample_count[batch_index, slot] += 1
+        scale_append_mask = append_mask & scale_valid_mask
+        for batch_index, slot in torch.nonzero(scale_append_mask, as_tuple=False).tolist():
+            count = int(aligned.scale_valid_mask[batch_index, slot].sum())
+            current_timestamp = timestamp[batch_index]
+            if count:
+                previous_timestamp = aligned.scale_timestamps[
+                    batch_index,
+                    slot,
+                    count - 1,
+                ]
+                if current_timestamp <= previous_timestamp + minimum_dt:
+                    continue
+            if count >= self.history_size:
+                aligned.scale_timestamps[batch_index, slot, :-1] = aligned.scale_timestamps[
+                    batch_index, slot, 1:
+                ].clone()
+                aligned.scale_positions[batch_index, slot, :-1] = aligned.scale_positions[
+                    batch_index,
+                    slot,
+                    1:,
+                ].clone()
+                aligned.scale_position_log_variance[batch_index, slot, :-1] = (
+                    aligned.scale_position_log_variance[batch_index, slot, 1:].clone()
+                )
+                aligned.scale_valid_mask[batch_index, slot, :-1] = aligned.scale_valid_mask[
+                    batch_index, slot, 1:
+                ].clone()
+                count = self.history_size - 1
+            aligned.scale_timestamps[batch_index, slot, count] = current_timestamp
+            aligned.scale_positions[batch_index, slot, count] = positions[batch_index, slot]
+            aligned.scale_position_log_variance[batch_index, slot, count] = position_log_variance[
+                batch_index, slot
+            ]
+            aligned.scale_valid_mask[batch_index, slot, count] = True
         return aligned
 
     def least_squares_velocity(
@@ -318,6 +423,127 @@ class RGBTemporalPositionHistory(ModalityHistory):
         )
         return velocity, log_variance, valid
 
+    def robust_trajectory_position(
+        self,
+        *,
+        query_timestamp: Tensor,
+        minimum_dt: float,
+        minimum_samples: int,
+        robust_threshold: float,
+        variance_scale: float,
+        variance_floor: float,
+        variance_ceiling: float | None = None,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        """Fit an axis-local robust line to trustworthy point/scale samples.
+
+        The fit uses inverse-variance weights and one Huber reweighting pass.
+        It evaluates the trajectory at the current packet timestamp, so fast
+        ROI frames can receive a depth estimate from earlier global scale
+        anchors without averaging positions across real object motion.
+        """
+
+        if query_timestamp.shape != self.object_ids.shape[:1]:
+            raise ValueError("query_timestamp must have shape [B]")
+        if not 2 <= minimum_samples <= self.history_size:
+            raise ValueError("minimum_samples must lie between two and history_size")
+        if minimum_dt <= 0 or not math.isfinite(minimum_dt):
+            raise ValueError("minimum_dt must be finite and positive")
+        if robust_threshold <= 0 or not math.isfinite(robust_threshold):
+            raise ValueError("robust_threshold must be finite and positive")
+        if variance_scale < 1 or not math.isfinite(variance_scale):
+            raise ValueError("variance_scale must be finite and at least one")
+        if variance_floor <= 0 or not math.isfinite(variance_floor):
+            raise ValueError("variance_floor must be finite and positive")
+        if variance_ceiling is not None and (
+            not math.isfinite(variance_ceiling) or variance_ceiling < variance_floor
+        ):
+            raise ValueError("variance_ceiling must be no smaller than variance_floor")
+
+        sample_mask = self.scale_valid_mask
+        finite = torch.isfinite(self.scale_positions).all(dim=-1) & torch.isfinite(
+            self.scale_position_log_variance
+        ).all(dim=-1)
+        sample_mask = sample_mask & finite
+        sample_count = sample_mask.sum(dim=-1)
+        sample_variance = self.scale_position_log_variance.clamp(-20.0, 20.0).exp()
+        timestamps = self.scale_timestamps.unsqueeze(-1)
+        mask = sample_mask.unsqueeze(-1)
+
+        def fit(weights: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+            weight_sum = weights.sum(dim=-2).clamp_min(1.0e-8)
+            mean_time = (weights * timestamps).sum(dim=-2) / weight_sum
+            mean_position = (weights * self.scale_positions).sum(dim=-2) / weight_sum
+            centred_time = timestamps - mean_time.unsqueeze(-2)
+            denominator = (
+                (weights * centred_time.square()).sum(dim=-2).clamp_min(minimum_dt * minimum_dt)
+            )
+            slope = (
+                weights * centred_time * (self.scale_positions - mean_position.unsqueeze(-2))
+            ).sum(dim=-2) / denominator
+            query_delta = query_timestamp[:, None, None] - mean_time
+            estimate = mean_position + slope * query_delta
+            return estimate, slope, mean_time, denominator
+
+        base_weights = torch.where(
+            mask,
+            sample_variance.reciprocal(),
+            torch.zeros_like(sample_variance),
+        )
+        weights = base_weights
+        # A fixed small IRLS count is deterministic and cheap for the bounded
+        # online history. Re-fitting prevents a large apparent-scale error from
+        # continuing to pull the Huber centre after its first downweighting.
+        for _ in range(3):
+            _, slope, mean_time, _ = fit(weights)
+            mean_position = (weights * self.scale_positions).sum(dim=-2) / (
+                weights.sum(dim=-2).clamp_min(1.0e-8)
+            )
+            fitted_samples = mean_position.unsqueeze(-2) + slope.unsqueeze(-2) * (
+                timestamps - mean_time.unsqueeze(-2)
+            )
+            standardized_residual = (
+                self.scale_positions - fitted_samples
+            ).abs() / sample_variance.sqrt().clamp_min(1.0e-4)
+            robust_weight = torch.minimum(
+                torch.ones_like(standardized_residual),
+                robust_threshold / standardized_residual.clamp_min(1.0e-4),
+            )
+            weights = base_weights * robust_weight
+        estimate, _, mean_time, denominator = fit(weights)
+        weight_sum = weights.sum(dim=-2).clamp_min(1.0e-8)
+        query_delta = query_timestamp[:, None, None] - mean_time
+        estimate_variance = variance_scale * (
+            weight_sum.reciprocal() + query_delta.square() / denominator
+        )
+        estimate_variance = estimate_variance.clamp_min(variance_floor)
+        if variance_ceiling is not None:
+            estimate_variance = estimate_variance.clamp_max(variance_ceiling)
+        positive_infinity = torch.full_like(self.scale_timestamps, torch.inf)
+        negative_infinity = torch.full_like(self.scale_timestamps, -torch.inf)
+        minimum_timestamp = torch.where(
+            sample_mask,
+            self.scale_timestamps,
+            positive_infinity,
+        ).amin(dim=-1)
+        maximum_timestamp = torch.where(
+            sample_mask,
+            self.scale_timestamps,
+            negative_infinity,
+        ).amax(dim=-1)
+        valid = (
+            (sample_count >= minimum_samples)
+            & ((maximum_timestamp - minimum_timestamp) > minimum_dt)
+            & torch.isfinite(estimate).all(dim=-1)
+            & torch.isfinite(estimate_variance).all(dim=-1)
+        )
+        estimate = torch.where(valid.unsqueeze(-1), estimate, torch.zeros_like(estimate))
+        log_variance = torch.where(
+            valid.unsqueeze(-1),
+            estimate_variance.log(),
+            torch.full_like(estimate, math.log(variance_floor)),
+        )
+        return estimate, log_variance, valid
+
     def detach(self) -> RGBTemporalPositionHistory:
         return RGBTemporalPositionHistory(
             object_ids=self.object_ids.detach(),
@@ -325,6 +551,10 @@ class RGBTemporalPositionHistory(ModalityHistory):
             positions=self.positions.detach(),
             position_log_variance=self.position_log_variance.detach(),
             valid_mask=self.valid_mask.detach(),
+            scale_timestamps=self.scale_timestamps.detach(),
+            scale_positions=self.scale_positions.detach(),
+            scale_position_log_variance=self.scale_position_log_variance.detach(),
+            scale_valid_mask=self.scale_valid_mask.detach(),
             post_reset_sample_count=self.post_reset_sample_count.detach(),
             has_reset=self.has_reset.detach(),
             reset_active=self.reset_active.detach(),

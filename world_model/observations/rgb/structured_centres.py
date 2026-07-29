@@ -30,6 +30,7 @@ class StructuredCentreOutput:
     centres: Tensor
     radius_pixels: Tensor
     valid_mask: Tensor
+    depth_valid_mask: Tensor
     component_count: Tensor
 
 
@@ -63,7 +64,7 @@ def _foreground_centres(
     *,
     threshold: float,
     minimum_pixels: int,
-) -> tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     """Return normalized connected-component centroids for one ``[3,H,W]`` image."""
 
     _, height, width = image.shape
@@ -80,6 +81,7 @@ def _foreground_centres(
     )
     centres: list[tuple[float, float]] = []
     radii: list[float] = []
+    depth_validity: list[bool] = []
     for component_index in range(1, component_count + 1):
         component_mask = components == component_index
         pixel_y, pixel_x = np.nonzero(component_mask)
@@ -107,6 +109,13 @@ def _foreground_centres(
                 peak_centres.append((float(peak_y.mean()), float(peak_x.mean())))
         if not peak_centres:
             peak_centres.append((float(pixel_y.mean()), float(pixel_x.mean())))
+        component_touches_boundary = bool(
+            (pixel_x == 0).any()
+            or (pixel_x == width - 1).any()
+            or (pixel_y == 0).any()
+            or (pixel_y == height - 1).any()
+        )
+        component_scale_ambiguous = len(peak_centres) > 1
         peaks = np.asarray(peak_centres, dtype=np.float32)
         pixels = np.stack((pixel_y, pixel_x), axis=-1).astype(np.float32)
         basin = np.square(pixels[:, None, :] - peaks[None, :, :]).sum(axis=-1).argmin(axis=1)
@@ -125,14 +134,17 @@ def _foreground_centres(
             normalized_y = 2.0 * centre_y / max(height - 1, 1) - 1.0
             centres.append((float(normalized_x), float(normalized_y)))
             radii.append(math.sqrt(float(basin_x.size) / math.pi))
+            depth_validity.append(not component_touches_boundary and not component_scale_ambiguous)
     if not centres:
         return (
             torch.empty((0, 2), dtype=torch.float32),
             torch.empty((0,), dtype=torch.float32),
+            torch.empty((0,), dtype=torch.bool),
         )
     return (
         torch.tensor(centres, dtype=torch.float32),
         torch.tensor(radii, dtype=torch.float32),
+        torch.tensor(depth_validity, dtype=torch.bool),
     )
 
 
@@ -171,13 +183,14 @@ def structured_disc_centres(
         device=proposal_centres.device,
         dtype=torch.bool,
     )
+    depth_valid = torch.zeros_like(valid)
     counts = torch.zeros(
         proposal_centres.shape[0],
         device=proposal_centres.device,
         dtype=torch.int64,
     )
     for batch_index in range(image.shape[0]):
-        component_centres, component_radius_pixels = _foreground_centres(
+        component_centres, component_radius_pixels, component_depth_valid = _foreground_centres(
             image[batch_index],
             threshold=threshold,
             minimum_pixels=minimum_pixels,
@@ -218,10 +231,14 @@ def structured_disc_centres(
                 dtype=refined.dtype,
             )
             valid[batch_index, proposal_row] = True
+            depth_valid[batch_index, proposal_row] = component_depth_valid[component_column].to(
+                device=depth_valid.device
+            )
     return StructuredCentreOutput(
         centres=refined,
         radius_pixels=refined_radius_pixels,
         valid_mask=valid,
+        depth_valid_mask=depth_valid,
         component_count=counts,
     )
 

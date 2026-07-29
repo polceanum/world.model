@@ -74,6 +74,13 @@ class RGBObservationConfig:
     temporal_velocity_post_event_max_samples: int | None = None
     temporal_velocity_measurement_position_blend: float = 0.0
     temporal_velocity_position_innovation_coupling: bool = False
+    temporal_position_enabled: bool = False
+    temporal_position_min_samples: int = 3
+    temporal_position_robust_threshold: float = 2.5
+    temporal_position_variance_scale: float = 4.0
+    temporal_position_variance_floor: float = 0.01
+    temporal_position_variance_ceiling: float | None = None
+    temporal_position_depth_only: bool = True
     structured_disc_center_enabled: bool = False
     structured_disc_threshold: float = 0.04
     structured_disc_min_pixels: int = 4
@@ -141,6 +148,31 @@ class RGBObservationConfig:
             or not 0.0 <= self.temporal_velocity_measurement_position_blend <= 1.0
         ):
             raise ValueError("temporal_velocity_measurement_position_blend must lie in [0, 1]")
+        if not 2 <= self.temporal_position_min_samples <= self.temporal_velocity_history_size:
+            raise ValueError("temporal_position_min_samples must lie between two and history_size")
+        if (
+            not math.isfinite(self.temporal_position_robust_threshold)
+            or self.temporal_position_robust_threshold <= 0
+        ):
+            raise ValueError("temporal_position_robust_threshold must be finite and positive")
+        if (
+            not math.isfinite(self.temporal_position_variance_scale)
+            or self.temporal_position_variance_scale < 1
+        ):
+            raise ValueError("temporal_position_variance_scale must be finite and at least one")
+        if (
+            not math.isfinite(self.temporal_position_variance_floor)
+            or self.temporal_position_variance_floor <= 0
+        ):
+            raise ValueError("temporal_position_variance_floor must be finite and positive")
+        if self.temporal_position_variance_ceiling is not None and (
+            not math.isfinite(self.temporal_position_variance_ceiling)
+            or self.temporal_position_variance_ceiling < self.temporal_position_variance_floor
+        ):
+            raise ValueError(
+                "temporal_position_variance_ceiling must be finite and no "
+                "smaller than temporal_position_variance_floor"
+            )
         if not math.isfinite(self.structured_disc_threshold) or not (
             0 < self.structured_disc_threshold < 2
         ):
@@ -292,6 +324,7 @@ class RGBObservationModule(ObservationModule):
             device=image.device,
             dtype=torch.bool,
         )
+        structured_depth_valid = torch.zeros_like(structured_valid)
         structured_count = torch.zeros(
             batch,
             device=image.device,
@@ -320,6 +353,7 @@ class RGBObservationModule(ObservationModule):
                 output.log_radius,
             )
             structured_valid = structured.valid_mask
+            structured_depth_valid = structured.depth_valid_mask
             structured_count = structured.component_count
         inverse_depth = self._structured_inverse_depth(
             log_radius,
@@ -470,6 +504,7 @@ class RGBObservationModule(ObservationModule):
                 "attention": output.attention,
                 "raw_centre": raw_centre,
                 "structured_centre_valid": structured_valid,
+                "structured_depth_valid": structured_depth_valid,
                 "structured_component_count": structured_count,
             },
         )
@@ -729,7 +764,7 @@ class RGBObservationModule(ObservationModule):
     ) -> tuple[DirectVelocityEvidence | None, ModalityHistory | None]:
         """Update same-ID corrected-position history and emit a causal LS slope."""
 
-        if not self.config.temporal_velocity_enabled:
+        if not (self.config.temporal_velocity_enabled or self.config.temporal_position_enabled):
             return None, history
         object_ids = posterior.objects.object_id
         active_mask = posterior.objects.active
@@ -794,6 +829,40 @@ class RGBObservationModule(ObservationModule):
                     .clamp_min(1.0e-10)
                     .log()
                 )
+        scale_valid_mask = torch.zeros_like(active_mask)
+        measured_scale_valid = measured.auxiliary.get("structured_depth_valid")
+        if measured_scale_valid is not None:
+            if (
+                measured_scale_valid.shape != measured.measurement_mask.shape
+                or measured_scale_valid.dtype != torch.bool
+            ):
+                raise ValueError("RGB auxiliary.structured_depth_valid must be boolean [B,M]")
+            if accepted_batch.numel():
+                accepted_scale_valid = measured_scale_valid[
+                    accepted_batch,
+                    accepted_measurement,
+                ]
+                scale_valid_mask[accepted_batch, accepted_belief] = accepted_scale_valid
+                if (
+                    self.config.temporal_position_enabled
+                    and measured_world_position is not None
+                    and measured_world_position_log_variance is not None
+                ):
+                    scale_batch = accepted_batch[accepted_scale_valid]
+                    scale_belief = accepted_belief[accepted_scale_valid]
+                    scale_measurement = accepted_measurement[accepted_scale_valid]
+                    history_positions = history_positions.clone()
+                    history_position_log_variance = history_position_log_variance.clone()
+                    history_positions[scale_batch, scale_belief] = measured_world_position[
+                        scale_batch,
+                        scale_measurement,
+                    ]
+                    history_position_log_variance[scale_batch, scale_belief] = (
+                        measured_world_position_log_variance[
+                            scale_batch,
+                            scale_measurement,
+                        ]
+                    )
         if (
             not isinstance(history, RGBTemporalPositionHistory)
             or history.history_size != self.config.temporal_velocity_history_size
@@ -813,6 +882,7 @@ class RGBObservationModule(ObservationModule):
             object_ids=object_ids,
             active_mask=active_mask,
             observed_mask=observed_mask,
+            scale_valid_mask=scale_valid_mask,
             reset_mask=reset_mask,
             timestamp=measured.timestamp,
             positions=history_positions,
@@ -827,6 +897,8 @@ class RGBObservationModule(ObservationModule):
             variance_ceiling=self.config.temporal_velocity_variance_ceiling,
         )
         velocity_valid_mask = velocity_valid_mask & observed_mask & active_mask
+        if not self.config.temporal_velocity_enabled:
+            velocity_valid_mask = torch.zeros_like(velocity_valid_mask)
         if self.config.temporal_velocity_max_age_steps is not None:
             lifetime_window = (
                 posterior.objects.age_steps <= self.config.temporal_velocity_max_age_steps
@@ -888,11 +960,91 @@ class RGBObservationModule(ObservationModule):
                 "world_velocity_valid_mask": measurement_valid,
             }
         )
+        trajectory_position = None
+        trajectory_position_log_variance = None
+        trajectory_position_valid_mask = None
+        if self.config.temporal_position_enabled:
+            (
+                trajectory_position,
+                trajectory_position_log_variance,
+                trajectory_position_valid_mask,
+            ) = history.robust_trajectory_position(
+                query_timestamp=measured.timestamp,
+                minimum_dt=self.config.temporal_velocity_min_dt,
+                minimum_samples=self.config.temporal_position_min_samples,
+                robust_threshold=self.config.temporal_position_robust_threshold,
+                variance_scale=self.config.temporal_position_variance_scale,
+                variance_floor=self.config.temporal_position_variance_floor,
+                variance_ceiling=self.config.temporal_position_variance_ceiling,
+            )
+            trajectory_position_valid_mask = (
+                trajectory_position_valid_mask & observed_mask & active_mask
+            )
+            if self.config.temporal_position_depth_only:
+                camera_depth_axis = F.normalize(
+                    posterior.camera.world_from_camera[:, :3, 2],
+                    dim=-1,
+                ).unsqueeze(1)
+                prior_position = posterior.objects.position
+                depth_delta = ((trajectory_position - prior_position) * camera_depth_axis).sum(
+                    dim=-1, keepdim=True
+                )
+                trajectory_position = prior_position + camera_depth_axis * depth_delta
+                scalar_variance = (
+                    trajectory_position_log_variance.exp() * camera_depth_axis.square()
+                ).sum(dim=-1, keepdim=True)
+                observable = camera_depth_axis.square() >= 1.0e-4
+                projected_variance = scalar_variance / camera_depth_axis.square().clamp_min(1.0e-4)
+                unobserved_variance = torch.full_like(
+                    projected_variance,
+                    self.config.temporal_velocity_unobserved_variance,
+                )
+                trajectory_position_log_variance = torch.where(
+                    observable,
+                    projected_variance,
+                    unobserved_variance,
+                ).log()
+            measurement_position = measured.values.new_zeros((*measured.values.shape[:2], 3))
+            measurement_position_log_variance = measured.values.new_full(
+                (*measured.values.shape[:2], 3),
+                math.log(self.config.temporal_position_variance_floor),
+            )
+            measurement_position_valid = torch.zeros_like(measured.measurement_mask)
+            if batch_index.numel():
+                position_evidence_valid = trajectory_position_valid_mask[
+                    batch_index,
+                    belief_index,
+                ] & (~association.ambiguous[batch_index, pair_index])
+                position_batch = batch_index[position_evidence_valid]
+                position_belief = belief_index[position_evidence_valid]
+                position_measurement = measurement_index[position_evidence_valid]
+                measurement_position[position_batch, position_measurement] = trajectory_position[
+                    position_batch, position_belief
+                ]
+                measurement_position_log_variance[
+                    position_batch,
+                    position_measurement,
+                ] = trajectory_position_log_variance[
+                    position_batch,
+                    position_belief,
+                ]
+                measurement_position_valid[position_batch, position_measurement] = True
+            measured.auxiliary.update(
+                {
+                    "world_trajectory_position": measurement_position,
+                    "world_trajectory_position_log_variance": (measurement_position_log_variance),
+                    "world_trajectory_position_valid_mask": measurement_position_valid,
+                }
+            )
+
         evidence = DirectVelocityEvidence(
             velocity=velocity,
             log_variance=velocity_log_variance,
             valid_mask=velocity_valid_mask,
             confidence=confidence,
+            position=trajectory_position,
+            position_log_variance=trajectory_position_log_variance,
+            position_valid_mask=trajectory_position_valid_mask,
         )
         evidence.validate()
         return evidence, history

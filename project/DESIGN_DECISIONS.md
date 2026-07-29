@@ -921,3 +921,53 @@
   windows and remains subject to paired promotion gates. A step-16
   sampler-corrected continuation was subsequently rejected: current state
   improved marginally, but 0.25–1.00-second forecasts regressed.
+
+## ADR-051 — Preserve scarce scale anchors separately from per-frame point history
+
+- **Date:** 2026-07-29
+- **Status:** accepted for scaled position prediction; event/velocity follow-up
+  required
+- **Context:** Global fixed-radius RGB localization is substantially more
+  accurate than the online posterior, but apparent scale is heavy-tailed under
+  overlap and truncation. A single mixed five-frame history at global cadence
+  three can never contain three global scale observations because intervening
+  centre-only ROI samples evict them.
+- **Decision:** Keep two bounded sensor-local rings per persistent object ID:
+  one per-frame point ring for axis-local velocity and one scale-anchor ring
+  that advances only for nonambiguous associated global silhouettes. Reject
+  boundary-truncated and multi-peak/overlap-split silhouettes as scale anchors
+  without discarding their useful centres. Fit an inverse-variance,
+  three-iteration Huber/IRLS trajectory independently by axis and evaluate it
+  at the current timestamp. Emit the result as optional typed direct position
+  evidence, projected onto the calibrated camera-depth direction by default,
+  and correct `WorldBelief` through the normal robust diagonal filter.
+- **Alternatives considered:** average raw depths across moving objects; enlarge
+  the mixed velocity window until it happens to retain scale frames; enable the
+  rejected single-frame ROI scale correction; store the fitted trajectory as a
+  second authoritative tracker.
+- **Evidence:** On fresh-validation seeds `100016–100017`, the initial
+  parameter-free weights-identical ablation reduced current position RMSE from
+  `0.906217` to `0.684258 m` and recursive
+  0.10/0.25/0.50/0.75/1.00-second RMSE from
+  `0.780533/0.626639/0.650438/0.773491/1.007125` to
+  `0.698125/0.526197/0.517001/0.562448/0.618672 m`. Velocity RMSE regressed
+  `1.082334 → 1.148529 m/s`, collision F1 regressed
+  `0.357143 → 0.271186`, and detection precision regressed
+  `0.568182 → 0.480583`. On disjoint seeds `100018–100019`, current RMSE
+  improved `1.165912 → 0.804367 m` and every recursive horizon improved from
+  `1.010213/0.877051/0.922522/0.988420/1.267293` to
+  `0.802223/0.630088/0.644967/0.693634/0.760509 m`. Detection
+  recall/precision improved `0.391667/0.345588 → 0.675000/0.455056`, nominal
+  90% coverage improved `0.554667 → 0.722522`, and identity switches remained
+  zero. Confirmation velocity RMSE regressed
+  `0.889775 → 0.986646 m/s` and collision F1 regressed
+  `0.190476 → 0.078431`.
+- **Consequences:** The observer removes the cadence/history impossibility and
+  attacks the measured monocular depth ceiling without new weights or history
+  re-encoding. Position and velocity evidence retain independent validity and
+  uncertainty. The scaled profile enables the confirmed position policy
+  because current state and all declared position horizons improve strongly on
+  both paired blocks; it does not claim an overall event-model promotion.
+  Event-conditioned outgoing velocity, per-scenario gates,
+  correlation-aware calibration, variable-radius depth, and real video remain
+  open.

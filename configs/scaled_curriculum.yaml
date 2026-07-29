@@ -66,6 +66,17 @@ model:
     temporal_velocity_post_event_max_samples: 3
     temporal_velocity_measurement_position_blend: 0.125
     temporal_velocity_position_innovation_coupling: false
+    # Keep scarce, trustworthy global scale anchors in a separate persistent-ID
+    # ring and robustly extrapolate only camera-depth position. On two disjoint
+    # paired MPS blocks this improved current state and every 0.1–1.0 s
+    # position horizon; velocity/event tradeoffs remain explicitly reported.
+    temporal_position_enabled: true
+    temporal_position_min_samples: 3
+    temporal_position_robust_threshold: 2.0
+    temporal_position_variance_scale: 8.0
+    temporal_position_variance_floor: 0.04
+    temporal_position_variance_ceiling: 0.5
+    temporal_position_depth_only: true
     structured_disc_center_enabled: true
     # Conservative ROI scale extraction exists as an ablation, but it is
     # disabled after worsening velocity, detection, events, and calibration.

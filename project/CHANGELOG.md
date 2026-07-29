@@ -4,6 +4,13 @@
 
 ### Added
 
+- A quality-aware persistent-ID point/scale trajectory observer with separate
+  bounded point and scale-anchor rings, axis-local robust IRLS fitting,
+  timestamp extrapolation, typed direct position evidence, and conservative
+  camera-depth belief correction.
+- Explicit global scale quality that rejects image-boundary truncation and
+  overlap-split components as depth-history anchors while retaining their
+  useful RGB centres.
 - A strict weights-only curriculum initializer (`train.py --initialize-from`)
   that records provenance and resets optimizer, scheduler, RNG, and steps
   instead of disguising changed simulator semantics as a resume.
@@ -95,6 +102,11 @@
 
 ### Changed after integration audit
 
+- The scaled curriculum enables the confirmed multi-frame camera-depth
+  observer. Across two disjoint paired two-episode MPS blocks, current
+  position RMSE and every 0.1–1.0-second recursive position horizon improved;
+  the velocity/collision-F1 regression remains an explicit follow-up rather
+  than being hidden as an overall model promotion.
 - The scaled accuracy curriculum now uses identifiable fixed sphere scale and
   re-anchors global RGB tracks every three frames while preserving two fast ROI
   updates per cycle.

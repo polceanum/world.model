@@ -88,12 +88,20 @@ sensor-local measurement history keyed by persistent object ID. It survives
 global/ROI mode changes, accepts only observed nonambiguous identities at
 strictly increasing timestamps, and never replaces `WorldBelief`.
 
-The temporal history can emit a causal least-squares world-velocity
-measurement after three positions. A second analytic correction updates only
-velocity and its diagonal uncertainty. This path has no new model weights and
-is currently disabled in public profiles because its first fresh-validation
-ablations improved velocity but regressed primary localization/forecast
-metrics.
+The temporal observer has two independently bounded rings per persistent ID.
+The per-frame point ring emits the existing axis-local least-squares velocity
+measurement. A separate scale-anchor ring retains only nonambiguous global
+disc measurements whose silhouettes are neither boundary-truncated nor
+overlap-split; intervening centre-only ROI frames cannot evict these scarce
+depth anchors. A robust inverse-variance trajectory fit extrapolates the
+point/scale abstraction to the current timestamp and can emit conservative
+camera-depth position evidence. Both signals pass through typed analytic
+correction into `WorldBelief`; neither ring is a second physical state.
+
+The original continuous velocity-only policy remains bounded to young or
+post-event tracks in public profiles. The new depth-position policy is
+configuration-gated and must pass paired multistep, tracking, event, and
+calibration evaluation before promotion.
 
 Evaluation seed manifests are explicit. `fresh_validation` starts after the
 checkpoint's trainer-validation episodes by default; `--seed-offset` can select

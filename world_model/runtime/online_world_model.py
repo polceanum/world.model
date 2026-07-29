@@ -221,6 +221,17 @@ class OnlineWorldModel(nn.Module):
                     temporal_velocity_position_innovation_coupling=(
                         rgb_config.temporal_velocity_position_innovation_coupling
                     ),
+                    temporal_position_enabled=rgb_config.temporal_position_enabled,
+                    temporal_position_min_samples=rgb_config.temporal_position_min_samples,
+                    temporal_position_robust_threshold=(
+                        rgb_config.temporal_position_robust_threshold
+                    ),
+                    temporal_position_variance_scale=(rgb_config.temporal_position_variance_scale),
+                    temporal_position_variance_floor=(rgb_config.temporal_position_variance_floor),
+                    temporal_position_variance_ceiling=(
+                        rgb_config.temporal_position_variance_ceiling
+                    ),
+                    temporal_position_depth_only=rgb_config.temporal_position_depth_only,
                     structured_disc_center_enabled=(rgb_config.structured_disc_center_enabled),
                     structured_disc_threshold=rgb_config.structured_disc_threshold,
                     structured_disc_min_pixels=rgb_config.structured_disc_min_pixels,

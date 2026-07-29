@@ -182,12 +182,23 @@ class InnovationSet:
 
 @dataclass
 class DirectVelocityEvidence:
-    """Explicit world-frame velocity evidence in persistent belief-slot order."""
+    """Explicit world-frame kinematic evidence in persistent belief-slot order.
+
+    Velocity remains required for compatibility with the original temporal
+    observer.  A modality may additionally provide a position estimate derived
+    from a bounded causal trajectory history.  The optional position fields
+    are kept on the same typed evidence object so the runtime applies both
+    corrections atomically to ``WorldBelief`` rather than maintaining a second
+    physical state.
+    """
 
     velocity: Tensor
     log_variance: Tensor
     valid_mask: Tensor
     confidence: Tensor
+    position: Tensor | None = None
+    position_log_variance: Tensor | None = None
+    position_valid_mask: Tensor | None = None
 
     def validate(self) -> None:
         if self.velocity.ndim != 3 or self.velocity.shape[-1] != 3:
@@ -208,3 +219,26 @@ class DirectVelocityEvidence:
             raise ValueError("direct velocity confidence contains NaN or Inf")
         if torch.any((self.confidence < 0) | (self.confidence > 1)):
             raise ValueError("direct velocity confidence must lie in [0,1]")
+        position_fields = (
+            self.position,
+            self.position_log_variance,
+            self.position_valid_mask,
+        )
+        if any(field is not None for field in position_fields):
+            if any(field is None for field in position_fields):
+                raise ValueError("direct position evidence fields must be provided together")
+            assert self.position is not None
+            assert self.position_log_variance is not None
+            assert self.position_valid_mask is not None
+            if self.position.shape != self.velocity.shape:
+                raise ValueError("direct position must match direct velocity shape")
+            if self.position_log_variance.shape != self.position.shape:
+                raise ValueError("direct position log_variance must match position")
+            if self.position_valid_mask.shape != self.valid_mask.shape:
+                raise ValueError("direct position valid_mask must have shape [B,N]")
+            if self.position_valid_mask.dtype != torch.bool:
+                raise TypeError("direct position valid_mask must be torch.bool")
+            if not torch.isfinite(self.position).all():
+                raise ValueError("direct position contains NaN or Inf")
+            if not torch.isfinite(self.position_log_variance).all():
+                raise ValueError("direct position log_variance contains NaN or Inf")

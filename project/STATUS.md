@@ -1,13 +1,14 @@
 # Project status
 
-**Date:** 2026-07-28
+**Date:** 2026-07-29
 **Specification:** `PROJECT_SPEC.md` 1.3
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
 stable forecast-history visualisation, axis-resolved diagnostics, an
 invariant-tested familiar reference-pair regime, and one balanced eight-regime
-shared-model profile;
+shared-model profile, plus a quality-aware persistent-ID multi-frame
+point/scale depth observer;
 collision, occlusion, identification, and full-MPS acceptance remain open
 
 ## What works
@@ -1920,3 +1921,118 @@ passed directly on MPS (`4 passed in 2.49 s`). Compileall and
 `git diff --check` passed. A first direct-MPS selector command named a stale
 test and collected nothing; the corrected command above is the executed
 hardware result.
+
+## 2026-07-29 — persistent point/scale trajectory depth correction
+
+The cadence-three scaled observer exposed a structural history limitation:
+the existing five-frame point/velocity ring could never retain three global
+scale measurements because the two intervening centre-only ROI frames evicted
+the previous scale anchor. The RGB observer now keeps two bounded rings per
+persistent ID:
+
+- every reliable associated frame contributes a point sample for the existing
+  axis-local velocity estimate;
+- only nonambiguous global silhouettes with trustworthy scale contribute to a
+  separate scale-anchor ring;
+- image-boundary-truncated and overlap-split components retain their accurate
+  RGB centres but cannot become scale anchors;
+- a three-iteration Huber/IRLS inverse-variance line is fit independently per
+  world axis and evaluated at the current timestamp;
+- the resulting position evidence is projected onto calibrated camera depth
+  by default, carries explicit variance/validity, and corrects `WorldBelief`
+  through the ordinary robust diagonal filter.
+
+No model weights, simulator state, future RGB, or history re-encoding are used.
+The runtime-ablation checkpoint contains the unchanged cadence-three weights
+and explicit new configuration semantics:
+
+`runs/20260729-084712-scaled-point-scale-trajectory-v1/checkpoints/runtime_ablation.pt`.
+
+Paired MPS results:
+
+| Evidence | Current RMSE m | Velocity RMSE m/s | 0.10 / 0.25 / 0.50 / 0.75 / 1.00 s RMSE m | F1 | Detection R/P | Coverage 90 |
+| --- | ---: | ---: | --- | ---: | --- | ---: |
+| offset-16 cadence-three baseline | `0.906217` | `1.082334` | `0.780533 / 0.626639 / 0.650438 / 0.773491 / 1.007125` | `0.357143` | `0.694444 / 0.568182` | `0.737805` |
+| offset-16 trajectory candidate | `0.684258` | `1.148529` | `0.698125 / 0.526197 / 0.517001 / 0.562448 / 0.618672` | `0.271186` | `0.687500 / 0.480583` | `0.780204` |
+| offset-18 cadence-three baseline | `1.165912` | `0.889775` | `1.010213 / 0.877051 / 0.922522 / 0.988420 / 1.267293` | `0.190476` | `0.391667 / 0.345588` | `0.554667` |
+| offset-18 quality-gated confirmation | `0.804367` | `0.986646` | `0.802223 / 0.630088 / 0.644967 / 0.693634 / 0.760509` | `0.078431` | `0.675000 / 0.455056` | `0.722522` |
+
+The position result repeats strongly: current RMSE improves by `24.5%` and
+`31.0%`; one-second RMSE improves by `38.6%` and `40.0%`. Every declared
+position horizon improves on both disjoint blocks. Confirmation also improves
+detection and calibration with zero identity switches. This removes much of
+the measured persistent monocular depth/tracker ceiling and is enabled in
+`configs/scaled_curriculum.yaml`.
+
+This is deliberately a position-accuracy promotion, not an overall event-model
+claim. Velocity RMSE regresses by `6.1%` and `10.9%`, and collision F1
+regresses on both two-episode blocks. The next concrete limitation is
+event-conditioned outgoing velocity/contact classification under the improved
+depth state, followed by wider per-scenario confirmation. The sample remains
+four validation episodes and is not a reserved-test acceptance result.
+
+Exact completed MPS command shape:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python evaluate.py \
+  --config configs/scaled_curriculum.yaml \
+  --checkpoint \
+    runs/20260729-084712-scaled-point-scale-trajectory-v1/checkpoints/runtime_ablation.pt \
+  --split validation --seed-protocol fresh_validation \
+  --seed-offset <16-or-18> --device mps \
+  --set evaluation.episodes=2 \
+  --set model.rgb.temporal_position_enabled=true \
+  --set model.rgb.temporal_position_min_samples=3 \
+  --set model.rgb.temporal_position_robust_threshold=2.0 \
+  --set model.rgb.temporal_position_variance_scale=8.0 \
+  --set model.rgb.temporal_position_variance_floor=0.04 \
+  --set model.rgb.temporal_position_variance_ceiling=0.5 \
+  --set model.rgb.temporal_position_depth_only=true \
+  --output <timestamped-output-label>
+```
+
+Reports:
+
+- final-source selection:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-100628-select2-offset16-final-v5/report.md`;
+- initial selection diagnostic:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-090821-select2-offset16-v2/report.md`;
+- exact quality-gate diagnostic on the same selection block:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-092718-select2-offset16-quality-v3/report.md`;
+- disjoint confirmation:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-094349-confirm2-offset18-quality-v4/report.md`.
+
+An initial evaluation was stopped after discovering the mixed-ring cadence
+impossibility; it produced no report and is not evidence. A later diagnostic
+that changed ordinary single-frame depth semantics was also rejected as
+confounded; ordinary checkpoint measurement behavior was restored, while the
+stricter quality mask remains limited to the new scale-anchor ring.
+
+Final validation for the committed source:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff format .
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
+```
+
+One Python file was mechanically formatted, Ruff passed, and Pytest reported
+`250 passed, 4 skipped in 116.45 s`. The skips were the four
+hardware-conditional MPS tests. Running those exact tests directly where MPS
+was available reported `4 passed in 3.28 s`.
+
+```bash
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-point-scale-pycache PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/scaled_curriculum.yaml --dry-run --device cpu
+git diff --check
+```
+
+Compileall and `git diff --check` passed. The dry run resolved the
+1.90M-parameter-contract scaled RGB-only 48,000-draw/eight-scenario plan with
+the new observer configuration, Python `3.10.20`, PyTorch `2.10.0`, and MPS
+built. The sandboxed dry-run process reported MPS unavailable and therefore
+used explicit CPU; the paired evaluations and direct device tests above ran on
+MPS.

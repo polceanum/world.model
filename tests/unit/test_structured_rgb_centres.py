@@ -91,6 +91,7 @@ def test_localizes_exact_foreground_component_centres_from_rgb_pixels() -> None:
 
     assert result.component_count.tolist() == [2]
     assert result.valid_mask.tolist() == [[True, True]]
+    assert result.depth_valid_mask.tolist() == [[True, True]]
     assert result.centres.dtype == proposals.dtype
     assert result.centres.device == proposals.device
     torch.testing.assert_close(
@@ -171,7 +172,26 @@ def test_splits_touching_disc_silhouettes_at_distance_peaks() -> None:
 
     assert result.component_count.tolist() == [2]
     assert result.valid_mask.tolist() == [[True, True]]
+    assert result.depth_valid_mask.tolist() == [[False, False]]
     torch.testing.assert_close(result.centres[0], expected, rtol=0.0, atol=0.055)
+
+
+def test_global_component_touching_image_boundary_keeps_centre_but_rejects_scale() -> None:
+    image = torch.zeros((1, 3, 11, 11), dtype=torch.float32)
+    centre = _paint_block(
+        image,
+        batch_index=0,
+        top=3,
+        left=0,
+        height=5,
+        width=4,
+        colour=(0.9, 0.2, 0.1),
+    )
+    result = structured_disc_centres(image, centre.reshape(1, 1, 2))
+
+    assert result.valid_mask.tolist() == [[True]]
+    assert result.depth_valid_mask.tolist() == [[False]]
+    torch.testing.assert_close(result.centres[0, 0], centre)
 
 
 def test_rejects_bright_speckle_noise_below_minimum_component_size() -> None:

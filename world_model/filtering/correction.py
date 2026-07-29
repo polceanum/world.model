@@ -421,7 +421,7 @@ class BeliefUpdater(nn.Module):
         prior: WorldBelief,
         evidence: DirectVelocityEvidence,
     ) -> WorldBelief:
-        """Apply explicit post-association velocity evidence in belief-slot order.
+        """Apply explicit post-association kinematic evidence in belief-slot order.
 
         This second analytic update intentionally leaves ``last_diagnostics``
         describing the ordinary measurement correction and observed mask.
@@ -431,30 +431,56 @@ class BeliefUpdater(nn.Module):
         expected = (*prior.objects.active.shape, 3)
         if evidence.velocity.shape != expected:
             raise ValueError(f"direct velocity evidence must have shape {expected}")
-        valid = evidence.valid_mask & prior.objects.active
-        batch_index, belief_index = torch.nonzero(valid, as_tuple=True)
-        if batch_index.numel() == 0:
-            return prior
-
         packed = pack_fast_state(prior.objects)
         log_variance = prior.objects.fast_log_variance
-        velocity_slice = fast_packing_map(prior.objects)["velocity"]
-        analytic_velocity = diagonal_kalman_update(
-            packed[batch_index, belief_index, velocity_slice],
-            log_variance[batch_index, belief_index, velocity_slice],
-            evidence.velocity[batch_index, belief_index],
-            evidence.log_variance[batch_index, belief_index],
-            confidence=evidence.confidence[batch_index, belief_index],
-            robust_clip_norm=self.config.robust_clip_norm,
-            minimum_log_variance=self.config.minimum_log_variance,
-            maximum_log_variance=self.config.maximum_log_variance,
-        )
         updated_packed = packed.clone()
         updated_log_variance = log_variance.clone()
-        updated_packed[batch_index, belief_index, velocity_slice] = analytic_velocity.mean
-        updated_log_variance[batch_index, belief_index, velocity_slice] = (
-            analytic_velocity.log_variance
-        )
+        position_slice = fast_packing_map(prior.objects)["position"]
+        position_update_count = 0
+        if evidence.position is not None:
+            assert evidence.position_log_variance is not None
+            assert evidence.position_valid_mask is not None
+            position_valid = evidence.position_valid_mask & prior.objects.active
+            position_batch, position_belief = torch.nonzero(position_valid, as_tuple=True)
+            if position_batch.numel():
+                position_update_count = int(position_batch.numel())
+                analytic_position = diagonal_kalman_update(
+                    packed[position_batch, position_belief, position_slice],
+                    log_variance[position_batch, position_belief, position_slice],
+                    evidence.position[position_batch, position_belief],
+                    evidence.position_log_variance[position_batch, position_belief],
+                    confidence=evidence.confidence[position_batch, position_belief],
+                    robust_clip_norm=self.config.robust_clip_norm,
+                    minimum_log_variance=self.config.minimum_log_variance,
+                    maximum_log_variance=self.config.maximum_log_variance,
+                )
+                updated_packed[position_batch, position_belief, position_slice] = (
+                    analytic_position.mean
+                )
+                updated_log_variance[position_batch, position_belief, position_slice] = (
+                    analytic_position.log_variance
+                )
+
+        valid = evidence.valid_mask & prior.objects.active
+        batch_index, belief_index = torch.nonzero(valid, as_tuple=True)
+        velocity_slice = fast_packing_map(prior.objects)["velocity"]
+        if batch_index.numel():
+            analytic_velocity = diagonal_kalman_update(
+                packed[batch_index, belief_index, velocity_slice],
+                log_variance[batch_index, belief_index, velocity_slice],
+                evidence.velocity[batch_index, belief_index],
+                evidence.log_variance[batch_index, belief_index],
+                confidence=evidence.confidence[batch_index, belief_index],
+                robust_clip_norm=self.config.robust_clip_norm,
+                minimum_log_variance=self.config.minimum_log_variance,
+                maximum_log_variance=self.config.maximum_log_variance,
+            )
+            updated_packed[batch_index, belief_index, velocity_slice] = analytic_velocity.mean
+            updated_log_variance[batch_index, belief_index, velocity_slice] = (
+                analytic_velocity.log_variance
+            )
+        if batch_index.numel() == 0 and position_update_count == 0:
+            return prior
         objects = unpack_fast_state(updated_packed, prior.objects).replace(
             fast_log_variance=updated_log_variance
         )

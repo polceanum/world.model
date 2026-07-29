@@ -105,6 +105,13 @@ class RGBConfig:
     temporal_velocity_post_event_max_samples: int | None = None
     temporal_velocity_measurement_position_blend: float = 0.0
     temporal_velocity_position_innovation_coupling: bool = False
+    temporal_position_enabled: bool = False
+    temporal_position_min_samples: int = 3
+    temporal_position_robust_threshold: float = 2.5
+    temporal_position_variance_scale: float = 4.0
+    temporal_position_variance_floor: float = 0.01
+    temporal_position_variance_ceiling: float | None = None
+    temporal_position_depth_only: bool = True
     structured_disc_center_enabled: bool = False
     structured_disc_threshold: float = 0.04
     structured_disc_min_pixels: int = 4
@@ -380,6 +387,45 @@ class OrpheusConfig:
         ):
             raise ValueError(
                 "model.rgb.temporal_velocity_measurement_position_blend must lie in [0, 1]"
+            )
+        if (
+            not 2
+            <= model.rgb.temporal_position_min_samples
+            <= (model.rgb.temporal_velocity_history_size)
+        ):
+            raise ValueError(
+                "model.rgb.temporal_position_min_samples must lie between two "
+                "and temporal_velocity_history_size"
+            )
+        if (
+            not math.isfinite(model.rgb.temporal_position_robust_threshold)
+            or model.rgb.temporal_position_robust_threshold <= 0
+        ):
+            raise ValueError(
+                "model.rgb.temporal_position_robust_threshold must be finite and positive"
+            )
+        if (
+            not math.isfinite(model.rgb.temporal_position_variance_scale)
+            or model.rgb.temporal_position_variance_scale < 1
+        ):
+            raise ValueError(
+                "model.rgb.temporal_position_variance_scale must be finite and at least one"
+            )
+        if (
+            not math.isfinite(model.rgb.temporal_position_variance_floor)
+            or model.rgb.temporal_position_variance_floor <= 0
+        ):
+            raise ValueError(
+                "model.rgb.temporal_position_variance_floor must be finite and positive"
+            )
+        position_variance_ceiling = model.rgb.temporal_position_variance_ceiling
+        if position_variance_ceiling is not None and (
+            not math.isfinite(position_variance_ceiling)
+            or position_variance_ceiling < model.rgb.temporal_position_variance_floor
+        ):
+            raise ValueError(
+                "model.rgb.temporal_position_variance_ceiling must be finite "
+                "and no smaller than temporal_position_variance_floor"
             )
         if (
             not math.isfinite(model.rgb.structured_disc_threshold)
