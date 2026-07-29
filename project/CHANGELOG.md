@@ -4,6 +4,13 @@
 
 ### Added
 
+- A strict weights-only curriculum initializer (`train.py --initialize-from`)
+  that records provenance and resets optimizer, scheduler, RNG, and steps
+  instead of disguising changed simulator semantics as a resume.
+- Persistent belief-ID-to-target alignment for closed-loop supervision, so
+  nearby objects cannot silently exchange targets during contacts.
+- Disabled-by-default, boundary-gated ROI component-scale measurements for
+  investigating fast monocular depth without trusting truncated crops.
 - Repository agent policy and project memory anchored to the user-provided
   authoritative Project Orpheus specification.
 - Plain-PyTorch packaging, strict dataclass/YAML configuration, device
@@ -87,6 +94,16 @@
   adaptation experiments.
 
 ### Changed after integration audit
+
+- The scaled accuracy curriculum now uses identifiable fixed sphere scale and
+  re-anchors global RGB tracks every three frames while preserving two fast ROI
+  updates per cycle.
+- Closed-loop TBPTT sampling now guarantees at least one valid future forecast
+  anchor; late event conditioning can no longer spend a full causal update
+  with zero rollout loss.
+- Scaled velocity terms receive equal weight to position terms, and the
+  `state_dynamics` scope freezes perception while adapting dynamics, filter,
+  and online identification.
 
 - Resumed rollout selection now rejects inherited best scores when validation
   count, scenario mixture, sequence length, object-count range, project seed,

@@ -110,6 +110,7 @@ class RGBConfig:
     structured_disc_min_pixels: int = 4
     structured_disc_max_assignment_distance: float = 0.75
     structured_disc_center_std_pixels: float = 0.75
+    structured_disc_fast_depth_enabled: bool = False
     structured_disc_depth_relative_std: float | None = None
     structured_disc_depth_outlier_relative_threshold: float | None = None
     structured_disc_depth_outlier_variance_scale: float = 9.0
@@ -519,8 +520,15 @@ class OrpheusConfig:
             raise ValueError("training.closed_loop_learning_rate_scale must lie in (0, 1]")
         if self.training.closed_loop_global_trainable_steps < 0:
             raise ValueError("training.closed_loop_global_trainable_steps must be nonnegative")
-        if self.training.closed_loop_trainable_scope not in {"all", "dynamics"}:
-            raise ValueError("training.closed_loop_trainable_scope must be 'all' or 'dynamics'")
+        if self.training.closed_loop_trainable_scope not in {
+            "all",
+            "dynamics",
+            "state_dynamics",
+        }:
+            raise ValueError(
+                "training.closed_loop_trainable_scope must be "
+                "'all', 'dynamics', or 'state_dynamics'"
+            )
         if self.training.tbptt_steps <= 0:
             raise ValueError("training.tbptt_steps must be positive")
         if self.training.measurement_validation_frames <= 0:

@@ -289,7 +289,9 @@ def test_roi_refinement_localizes_only_the_projected_rgb_crop() -> None:
     )
 
     assert result.valid_mask.tolist() == [[True]]
+    assert result.depth_valid_mask.tolist() == [[True]]
     assert result.component_pixel_count.item() >= 4
+    assert 1.5 < result.radius_pixels.item() < 5.0
     assert result.centres.dtype == proposal.dtype
     assert result.centres.device == proposal.device
     torch.testing.assert_close(
@@ -428,6 +430,7 @@ def test_rgb_module_keeps_global_and_fast_raw_centres_differentiable(
             roi_size=8,
             roi_hidden_dim=16,
             structured_disc_center_enabled=True,
+            structured_disc_fast_depth_enabled=True,
             structured_disc_depth_relative_std=0.05,
             structured_disc_position_confidence=0.9975,
         )
@@ -493,6 +496,8 @@ def test_rgb_module_keeps_global_and_fast_raw_centres_differentiable(
     )
     fast_raw = fast_measurement.auxiliary["raw_centre"]
     assert fast_measurement.auxiliary["structured_centre_valid"].tolist() == [[True]]
+    assert fast_measurement.auxiliary["structured_depth_valid"].tolist() == [[True]]
+    assert torch.isfinite(fast_measurement.auxiliary["world_position"]).all()
     assert fast_raw.requires_grad
     fast_raw.sum().backward()
     assert module.roi_updater.delta_head.bias.grad is not None

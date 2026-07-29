@@ -35,10 +35,12 @@ class StructuredCentreOutput:
 
 @dataclass(frozen=True)
 class StructuredROICentreOutput:
-    """Per-object foreground centroids found inside projected RGB ROIs."""
+    """Per-object foreground centroids and trustworthy scales inside RGB ROIs."""
 
     centres: Tensor
+    radius_pixels: Tensor
     valid_mask: Tensor
+    depth_valid_mask: Tensor
     component_pixel_count: Tensor
 
 
@@ -278,7 +280,13 @@ def structured_disc_centres_in_rois(
     if objects == 0:
         return StructuredROICentreOutput(
             centres=proposal_centres.detach().clone(),
+            radius_pixels=proposal_centres.new_zeros((batch, 0)),
             valid_mask=torch.zeros(
+                (batch, 0),
+                device=output_device,
+                dtype=torch.bool,
+            ),
+            depth_valid_mask=torch.zeros(
                 (batch, 0),
                 device=output_device,
                 dtype=torch.bool,
@@ -369,6 +377,12 @@ def structured_disc_centres_in_rois(
         ) & flat_foreground
     component = reached.reshape(batch, objects, output_size, output_size)
     component_pixel_count = component.sum(dim=(-1, -2), dtype=torch.int64)
+    touches_crop_border = (
+        component[..., 0, :].any(dim=-1)
+        | component[..., -1, :].any(dim=-1)
+        | component[..., :, 0].any(dim=-1)
+        | component[..., :, -1].any(dim=-1)
+    )
 
     weights = (foreground_strength - foreground_strength.new_tensor(threshold)).clamp_min(
         torch.finfo(foreground_strength.dtype).eps
@@ -389,12 +403,31 @@ def structured_disc_centres_in_rois(
         & torch.isfinite(candidate_centres).all(dim=-1)
         & (assignment_distance <= maximum_assignment_distance)
     )
+    # Convert sampled component area back to source-image pixels. A component
+    # touching the crop edge has unknown missing area, so its centre may still
+    # be useful but its scale must not drive monocular depth.
+    source_height, source_width = image.shape[-2:]
+    roi_width_pixels = roi_extent[..., 0] * (0.5 * max(source_width - 1, 1))
+    roi_height_pixels = roi_extent[..., 1] * (0.5 * max(source_height - 1, 1))
+    sampled_pixel_area = roi_width_pixels * roi_height_pixels / float(max(output_size - 1, 1) ** 2)
+    radius_pixels = (
+        (
+            component_pixel_count.to(sampled_pixel_area.dtype)
+            * sampled_pixel_area.clamp_min(0.0)
+            / math.pi
+        )
+        .clamp_min(0.0)
+        .sqrt()
+    )
+    depth_valid = matched & ~touches_crop_border & torch.isfinite(radius_pixels)
 
     candidate_centres = candidate_centres.to(
         device=output_device,
         dtype=output_dtype,
     )
     matched = matched.to(device=output_device)
+    depth_valid = depth_valid.to(device=output_device)
+    radius_pixels = radius_pixels.to(device=output_device, dtype=output_dtype)
     component_pixel_count = component_pixel_count.to(device=output_device)
     refined = torch.where(
         matched.unsqueeze(-1),
@@ -403,7 +436,13 @@ def structured_disc_centres_in_rois(
     )
     return StructuredROICentreOutput(
         centres=refined,
+        radius_pixels=torch.where(
+            depth_valid,
+            radius_pixels,
+            torch.zeros_like(radius_pixels),
+        ),
         valid_mask=matched,
+        depth_valid_mask=depth_valid,
         component_pixel_count=component_pixel_count,
     )
 

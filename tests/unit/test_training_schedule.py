@@ -105,6 +105,18 @@ def test_dynamics_only_scope_preserves_rgb_and_filter_weights() -> None:
     assert all(parameter.requires_grad for parameter in model.parameters())
 
 
+def test_state_dynamics_scope_freezes_rgb_and_trains_filter_dynamics_identifier() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+
+    set_closed_loop_trainable_scope(model, scope="state_dynamics")
+
+    assert all(parameter.requires_grad for parameter in model.dynamics.parameters())
+    assert all(parameter.requires_grad for parameter in model.updater.parameters())
+    assert model.identifier is not None
+    assert all(parameter.requires_grad for parameter in model.identifier.parameters())
+    assert not any(parameter.requires_grad for parameter in model.observation_modules.parameters())
+
+
 def test_closed_loop_terms_expose_physical_components_without_double_counting() -> None:
     reference = torch.zeros(())
     terms = _group_closed_loop_terms(
@@ -280,6 +292,32 @@ def test_collision_conditioning_takes_priority_over_long_horizon_window() -> Non
 
     assert start == 24
     assert start <= 31 < start + 8
+
+
+def test_closed_loop_window_always_keeps_a_future_rollout_anchor() -> None:
+    batch = {
+        "rgb": torch.zeros((1, 24, 3, 8, 8)),
+        "events": {
+            "collision": torch.zeros((1, 24, 2), dtype=torch.bool),
+        },
+    }
+    batch["events"]["collision"][0, 23, 0] = True
+    random.seed(29)
+
+    starts = {
+        select_closed_loop_window(
+            batch,
+            2,
+            event_condition_probability=1.0,
+            maximum_rollout_frame_offset=20,
+            minimum_rollout_frame_offset=2,
+            long_horizon_probability=0.0,
+        )
+        for _ in range(32)
+    }
+
+    assert starts
+    assert max(starts) <= 21
 
 
 def test_legacy_rollout_score_is_not_reused_after_objective_fix() -> None:

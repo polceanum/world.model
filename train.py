@@ -18,6 +18,13 @@ def parse_args() -> argparse.Namespace:
         help="Run label; the directory receives a sortable UTC timestamp prefix",
     )
     parser.add_argument("--resume", help="Trusted local checkpoint to resume")
+    parser.add_argument(
+        "--initialize-from",
+        help=(
+            "Trusted local checkpoint providing model weights only; starts a new "
+            "run with step/optimizer/RNG reset"
+        ),
+    )
     parser.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"])
     parser.add_argument("--seed", type=int)
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
@@ -44,6 +51,7 @@ def main() -> int:
                     "project": config.project.name,
                     "run_name": args.run_name,
                     "resume": args.resume,
+                    "initialize_from": args.initialize_from,
                     "device": str(device.device),
                     "torch": device.torch_version,
                     "mps_built": device.mps_built,
@@ -79,6 +87,7 @@ def main() -> int:
         config,
         run_name=args.run_name,
         resume_path=args.resume,
+        initialize_from_path=args.initialize_from,
         device_info=device,
     )
     print(json.dumps(result, indent=2, default=str))

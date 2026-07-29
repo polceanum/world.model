@@ -240,10 +240,17 @@ def set_closed_loop_trainable_scope(
     if scope == "all":
         model.requires_grad_(True)
         return
-    if scope != "dynamics":
-        raise ValueError("closed-loop trainable scope must be 'all' or 'dynamics'")
     model.requires_grad_(False)
-    model.dynamics.requires_grad_(True)
+    if scope == "dynamics":
+        model.dynamics.requires_grad_(True)
+        return
+    if scope == "state_dynamics":
+        model.dynamics.requires_grad_(True)
+        model.updater.requires_grad_(True)
+        if model.identifier is not None:
+            model.identifier.requires_grad_(True)
+        return
+    raise ValueError("closed-loop trainable scope must be 'all', 'dynamics', or 'state_dynamics'")
 
 
 def _mean_batch_results(
@@ -395,6 +402,7 @@ def _write_run_metadata(
     config: OrpheusConfig,
     device_info: DeviceInfo,
     resume_path: str | Path | None,
+    initialize_from_path: str | Path | None,
 ) -> None:
     payload = {
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -409,6 +417,11 @@ def _write_run_metadata(
         "runtime_modality": config.runtime.modality,
         "debug_oracle_enabled": config.runtime.enable_debug_oracle,
         "resume_path": None if resume_path is None else str(Path(resume_path).resolve()),
+        "initialize_from_path": (
+            None
+            if initialize_from_path is None
+            else str(Path(initialize_from_path).expanduser().resolve())
+        ),
     }
     atomic_write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
@@ -418,6 +431,7 @@ def train_from_config(
     *,
     run_name: str | None = None,
     resume_path: str | Path | None = None,
+    initialize_from_path: str | Path | None = None,
     device_info: DeviceInfo | None = None,
 ) -> dict[str, Any]:
     """Train RGB measurements, then the causal RGB-only online loop.
@@ -426,6 +440,8 @@ def train_from_config(
     """
 
     config.validate()
+    if resume_path is not None and initialize_from_path is not None:
+        raise ValueError("--resume and --initialize-from are mutually exclusive")
     if config.runtime.modality != "rgb":
         raise ValueError(
             "the primary trainer requires runtime.modality=rgb; "
@@ -462,6 +478,7 @@ def train_from_config(
         config=config,
         device_info=resolved_device,
         resume_path=resume_path,
+        initialize_from_path=initialize_from_path,
     )
 
     train_loader = _make_loader(
@@ -478,6 +495,21 @@ def train_from_config(
     )
     train_iterator = iter(train_loader)
     model = OnlineWorldModel.from_config(config, device=device)
+    initialized_from: str | None = None
+    if initialize_from_path is not None:
+        source = Path(initialize_from_path).expanduser().resolve()
+        if not source.is_file():
+            raise FileNotFoundError(f"Initialization checkpoint not found: {source}")
+        initialization_payload = torch.load(
+            source,
+            map_location=device,
+            weights_only=False,
+        )
+        model_state = initialization_payload.get("model_state")
+        if not isinstance(model_state, Mapping):
+            raise ValueError("initialization checkpoint does not contain model_state")
+        model.load_state_dict(model_state, strict=True)
+        initialized_from = str(source)
     model_parameter_count = sum(parameter.numel() for parameter in model.parameters())
     model.train()
     optimizer = torch.optim.AdamW(
@@ -617,6 +649,13 @@ def train_from_config(
                 window_steps,
                 event_condition_probability=(config.training.collision_window_probability),
                 maximum_rollout_frame_offset=maximum_rollout_frame_offset,
+                minimum_rollout_frame_offset=min(
+                    max(
+                        1,
+                        int(round(horizon * config.simulator.frame_rate)),
+                    )
+                    for horizon in config.evaluation.horizons_seconds
+                ),
                 long_horizon_probability=(config.training.long_horizon_window_probability),
             )
             result = run_closed_loop_batch(
@@ -909,6 +948,7 @@ def train_from_config(
         "precision": resolved_device.precision,
         "elapsed_seconds": elapsed,
         "resumed_from": resumed_from,
+        "initialized_from": initialized_from,
         "last_metrics": last_metrics,
         "oracle_runtime_input_used": False,
     }

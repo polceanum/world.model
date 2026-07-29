@@ -79,6 +79,7 @@ class RGBObservationConfig:
     structured_disc_min_pixels: int = 4
     structured_disc_max_assignment_distance: float = 0.75
     structured_disc_center_std_pixels: float = 0.75
+    structured_disc_fast_depth_enabled: bool = False
     structured_disc_depth_relative_std: float | None = None
     structured_disc_depth_outlier_relative_threshold: float | None = None
     structured_disc_depth_outlier_variance_scale: float = 9.0
@@ -539,6 +540,10 @@ class RGBObservationModule(ObservationModule):
                 ),
                 dim=-1,
             )
+        batch, objects, _ = output.values.shape
+        world_from_camera = predicted.auxiliary["world_from_camera"][:, 0]
+        intrinsics = predicted.auxiliary["intrinsics"][:, 0]
+        image_size = (image.shape[-2], image.shape[-1])
         structured_valid = torch.zeros(
             values.shape[:2],
             device=image.device,
@@ -549,6 +554,7 @@ class RGBObservationModule(ObservationModule):
             device=image.device,
             dtype=torch.int64,
         )
+        structured_depth_valid = torch.zeros_like(structured_valid)
         if self.config.structured_disc_center_enabled:
             structured = structured_disc_centres_in_rois(
                 image,
@@ -564,10 +570,31 @@ class RGBObservationModule(ObservationModule):
             values = torch.cat((centre, values[..., 2:]), dim=-1)
             structured_valid = structured.valid_mask
             structured_count = structured.valid_mask.sum(dim=-1)
-        batch, objects, _ = output.values.shape
-        world_from_camera = predicted.auxiliary["world_from_camera"][:, 0]
-        intrinsics = predicted.auxiliary["intrinsics"][:, 0]
-        image_size = (image.shape[-2], image.shape[-1])
+            if self.config.structured_disc_fast_depth_enabled:
+                normalized_radius = (structured.radius_pixels / (0.5 * min(image_size))).clamp_min(
+                    1.0e-4
+                )
+                structured_log_radius = normalized_radius.log().unsqueeze(-1)
+                analytic_inverse_depth = self._structured_inverse_depth(
+                    structured_log_radius,
+                    intrinsics,
+                    image_size,
+                    self.config.default_world_radius,
+                    torch.zeros_like(values[..., 3:4]),
+                ).unsqueeze(-1)
+                depth_valid = structured.depth_valid_mask.unsqueeze(-1)
+                values = values.clone()
+                values[..., 2:3] = torch.where(
+                    depth_valid,
+                    structured_log_radius,
+                    values[..., 2:3],
+                )
+                values[..., 3:4] = torch.where(
+                    depth_valid,
+                    analytic_inverse_depth,
+                    values[..., 3:4],
+                )
+                structured_depth_valid = structured.depth_valid_mask
         measurement_log_variance = output.log_variance.clamp(
             self.config.measurement_log_variance_min,
             self.config.measurement_log_variance_max,
@@ -591,6 +618,30 @@ class RGBObservationModule(ObservationModule):
                 (centre_log_variance, measurement_log_variance[..., 2:]),
                 dim=-1,
             )
+            if (
+                self.config.structured_disc_fast_depth_enabled
+                and self.config.structured_disc_depth_relative_std is not None
+            ):
+                relative_variance = self.config.structured_disc_depth_relative_std**2
+                radius_log_variance = image.new_full(
+                    values[..., 2:3].shape,
+                    math.log(relative_variance),
+                )
+                inverse_depth_log_variance = (
+                    (values[..., 3:4].square() * relative_variance).clamp_min(1.0e-10).log()
+                )
+                depth_valid = structured_depth_valid.unsqueeze(-1)
+                measurement_log_variance = measurement_log_variance.clone()
+                measurement_log_variance[..., 2:3] = torch.where(
+                    depth_valid,
+                    radius_log_variance,
+                    measurement_log_variance[..., 2:3],
+                )
+                measurement_log_variance[..., 3:4] = torch.where(
+                    depth_valid,
+                    inverse_depth_log_variance,
+                    measurement_log_variance[..., 3:4],
+                )
         world_position = backproject_rgb_measurements(
             values,
             world_from_camera,
@@ -638,6 +689,7 @@ class RGBObservationModule(ObservationModule):
             "appearance_gate": output.appearance_gate,
             "raw_centre": raw_centre,
             "structured_centre_valid": structured_valid,
+            "structured_depth_valid": structured_depth_valid,
             "structured_component_count": structured_count,
         }
         measurement = MeasurementSet(

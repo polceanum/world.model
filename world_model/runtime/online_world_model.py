@@ -230,6 +230,9 @@ class OnlineWorldModel(nn.Module):
                     structured_disc_center_std_pixels=(
                         rgb_config.structured_disc_center_std_pixels
                     ),
+                    structured_disc_fast_depth_enabled=(
+                        rgb_config.structured_disc_fast_depth_enabled
+                    ),
                     structured_disc_depth_relative_std=(
                         rgb_config.structured_disc_depth_relative_std
                     ),

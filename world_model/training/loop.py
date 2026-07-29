@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import random
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -49,6 +49,108 @@ class TrainingBatchResult:
     loss_terms: dict[str, Tensor]
     metrics: dict[str, float]
     phase: str
+
+
+@dataclass
+class PersistentTargetMatcher:
+    """Keep training-only simulator targets aligned to persistent belief IDs.
+
+    A fresh positional Hungarian match bootstraps new runtime tracks. Once an
+    internal object ID is mapped, that target slot is retained while both
+    remain active. This prevents close contacts from silently swapping the
+    velocity/event supervision of two nearby objects.
+    """
+
+    mappings: list[dict[int, int]] = field(default_factory=list)
+
+    def match(
+        self,
+        belief: WorldBelief,
+        target_position: Tensor,
+        target_active: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        objects = belief.objects
+        batch, belief_count = objects.active.shape
+        if target_position.ndim != 3 or target_position.shape[0] != batch:
+            raise ValueError("target_position must have shape [B,N,3]")
+        if target_active.shape != target_position.shape[:2]:
+            raise ValueError("target_active must have shape [B,N]")
+        if len(self.mappings) != batch:
+            self.mappings = [{} for _ in range(batch)]
+
+        indices = torch.full(
+            (batch, belief_count),
+            -1,
+            device=objects.position.device,
+            dtype=torch.int64,
+        )
+        matched = torch.zeros(
+            (batch, belief_count),
+            device=objects.position.device,
+            dtype=torch.bool,
+        )
+        updated_mappings: list[dict[int, int]] = []
+        for batch_index in range(batch):
+            previous = self.mappings[batch_index]
+            active_beliefs = torch.nonzero(
+                objects.active[batch_index],
+                as_tuple=False,
+            ).flatten()
+            active_targets = torch.nonzero(
+                target_active[batch_index],
+                as_tuple=False,
+            ).flatten()
+            current: dict[int, int] = {}
+            used_targets: set[int] = set()
+            unmatched_beliefs: list[int] = []
+            for belief_slot_tensor in active_beliefs:
+                belief_slot = int(belief_slot_tensor)
+                object_id = int(objects.object_id[batch_index, belief_slot])
+                target_slot = previous.get(object_id) if object_id >= 0 else None
+                if (
+                    target_slot is not None
+                    and bool(target_active[batch_index, target_slot])
+                    and target_slot not in used_targets
+                ):
+                    indices[batch_index, belief_slot] = target_slot
+                    matched[batch_index, belief_slot] = True
+                    current[object_id] = target_slot
+                    used_targets.add(target_slot)
+                else:
+                    unmatched_beliefs.append(belief_slot)
+
+            available_targets = [
+                int(target_slot)
+                for target_slot in active_targets
+                if int(target_slot) not in used_targets
+            ]
+            if unmatched_beliefs and available_targets:
+                belief_slots = torch.as_tensor(
+                    unmatched_beliefs,
+                    device=objects.position.device,
+                    dtype=torch.int64,
+                )
+                target_slots = torch.as_tensor(
+                    available_targets,
+                    device=target_position.device,
+                    dtype=torch.int64,
+                )
+                cost = torch.cdist(
+                    objects.position[batch_index, belief_slots].detach().cpu(),
+                    target_position[batch_index, target_slots].detach().cpu(),
+                )
+                rows, columns = linear_sum_assignment(np.asarray(cost))
+                for row, column in zip(rows, columns, strict=True):
+                    belief_slot = unmatched_beliefs[int(row)]
+                    target_slot = available_targets[int(column)]
+                    indices[batch_index, belief_slot] = target_slot
+                    matched[batch_index, belief_slot] = True
+                    object_id = int(objects.object_id[batch_index, belief_slot])
+                    if object_id >= 0:
+                        current[object_id] = target_slot
+            updated_mappings.append(current)
+        self.mappings = updated_mappings
+        return indices, matched
 
 
 def move_batch_to_device(
@@ -589,12 +691,22 @@ def _belief_state_losses(
     belief: WorldBelief,
     batch: Mapping[str, Any],
     frame_index: int,
+    *,
+    indices: Tensor | None = None,
+    matched: Tensor | None = None,
 ) -> tuple[dict[str, Tensor], Tensor, Tensor]:
     objects = belief.objects
     target_objects = batch["objects"]
     target_position = target_objects["position"][:, frame_index]
     target_active = target_objects["active"][:, frame_index].bool()
-    indices, matched = match_belief_to_targets(belief, target_position, target_active)
+    if (indices is None) != (matched is None):
+        raise ValueError("indices and matched must be supplied together")
+    if indices is None or matched is None:
+        indices, matched = match_belief_to_targets(
+            belief,
+            target_position,
+            target_active,
+        )
     aligned_position = gather_target_slots(target_position, indices)
     aligned_velocity = gather_target_slots(target_objects["velocity"][:, frame_index], indices)
     state_position = masked_huber(objects.position, aligned_position, matched)
@@ -872,6 +984,7 @@ def select_closed_loop_window(
     *,
     event_condition_probability: float = 0.5,
     maximum_rollout_frame_offset: int | None = None,
+    minimum_rollout_frame_offset: int | None = None,
     long_horizon_probability: float = 0.0,
 ) -> int:
     """Sample a valid TBPTT window, preferentially covering collision frames.
@@ -895,7 +1008,20 @@ def select_closed_loop_window(
         raise ValueError("long_horizon_probability must lie in [0, 1]")
     if maximum_rollout_frame_offset is not None and maximum_rollout_frame_offset <= 0:
         raise ValueError("maximum_rollout_frame_offset must be positive")
+    if minimum_rollout_frame_offset is not None and minimum_rollout_frame_offset <= 0:
+        raise ValueError("minimum_rollout_frame_offset must be positive")
+    if (
+        minimum_rollout_frame_offset is not None
+        and maximum_rollout_frame_offset is not None
+        and minimum_rollout_frame_offset > maximum_rollout_frame_offset
+    ):
+        raise ValueError("minimum rollout frame offset cannot exceed maximum")
     maximum_start = total_frames - window_steps
+    if minimum_rollout_frame_offset is not None:
+        last_any_horizon_anchor = total_frames - minimum_rollout_frame_offset - 1
+        if last_any_horizon_anchor < 0:
+            raise ValueError("minimum rollout frame offset exceeds the episode")
+        maximum_start = min(maximum_start, last_any_horizon_anchor)
     if maximum_start == 0:
         return 0
 
@@ -942,6 +1068,7 @@ def _burn_in_causal_prefix(
     model: OnlineWorldModel,
     batch: Mapping[str, Any],
     window_start: int,
+    target_matcher: PersistentTargetMatcher,
 ) -> None:
     """Advance the real RGB filter to a mid-episode loss window.
 
@@ -955,7 +1082,12 @@ def _burn_in_causal_prefix(
         raise ValueError("window_start must be nonnegative")
     with torch.no_grad():
         for frame_index in range(window_start):
-            model.ingest(make_rgb_packet(batch, frame_index))
+            belief = model.ingest(make_rgb_packet(batch, frame_index))
+            target_matcher.match(
+                belief,
+                batch["objects"]["position"][:, frame_index],
+                batch["objects"]["active"][:, frame_index].bool(),
+            )
     if window_start:
         model.detach_state()
 
@@ -991,7 +1123,8 @@ def run_closed_loop_batch(
         raise ValueError("closed-loop window lies outside the episode")
 
     model.reset(batch_size=batch_size)
-    _burn_in_causal_prefix(model, batch, window_start)
+    target_matcher = PersistentTargetMatcher()
+    _burn_in_causal_prefix(model, batch, window_start, target_matcher)
     detail_lists: dict[str, list[Tensor]] = {}
     current_correction_improvements: list[float] = []
     future_correction_improvements: list[float] = []
@@ -1054,7 +1187,7 @@ def run_closed_loop_batch(
                         predicted,
                         model.state.caches.get(packet.sensor_id),
                     )
-                    belief_target_indices, belief_matched_slots = match_belief_to_targets(
+                    belief_target_indices, belief_matched_slots = target_matcher.match(
                         prior,
                         batch["objects"]["position"][:, frame_index],
                         batch["objects"]["active"][:, frame_index].bool(),
@@ -1102,7 +1235,18 @@ def run_closed_loop_batch(
                     fast_supervised_frames += 1
 
         belief = model.ingest(packet)
-        current, indices, matched = _belief_state_losses(belief, batch, frame_index)
+        indices, matched = target_matcher.match(
+            belief,
+            batch["objects"]["position"][:, frame_index],
+            batch["objects"]["active"][:, frame_index].bool(),
+        )
+        current, indices, matched = _belief_state_losses(
+            belief,
+            batch,
+            frame_index,
+            indices=indices,
+            matched=matched,
+        )
         matched_count += int(matched.sum().detach().cpu())
         for name, value in current.items():
             add(name, value)

@@ -270,6 +270,19 @@
 - [ ] Complete the 48,000-example `configs/scaled_curriculum.yaml` schedule on
   MPS or CUDA, then evaluate validation, test, and OOD splits using fixed
   manifests and per-scenario slices.
+- [x] Make the primary scaled monocular accuracy curriculum physically
+  identifiable with fixed known radius; keep variable radius as a separately
+  labelled transfer/OOD identification task.
+- [x] Add strict weights-only curriculum initialization with reset
+  optimizer/RNG/step provenance.
+- [x] Diagnose six-frame ROI/tracker drift and provisionally select a
+  three-frame global anchor cadence on two disjoint paired validation blocks.
+- [x] Prevent collision-conditioned TBPTT windows from producing zero-horizon
+  causal updates.
+- [x] Run a bounded sampler-corrected causal continuation through step 16 and
+  reject its weights after 0.25–1.00-second paired regressions.
+- [ ] Confirm cadence three and sampler-corrected causal training on at least
+  16 fresh-validation episodes before test promotion.
 - [ ] Profile and reduce closed-loop validation/rollout cost before another
   large run; the 24-frame eight-episode validator exceeded 84 minutes and
   evaluator rollout calls averaged about 9.8 seconds.

@@ -48,6 +48,7 @@ _RGB_LEGACY_DEFAULT_FIELDS = (
     "structured_disc_min_pixels",
     "structured_disc_max_assignment_distance",
     "structured_disc_center_std_pixels",
+    "structured_disc_fast_depth_enabled",
     "structured_disc_depth_relative_std",
     "structured_disc_depth_outlier_relative_threshold",
     "structured_disc_depth_outlier_variance_scale",

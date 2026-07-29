@@ -116,6 +116,32 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         "train.py",
         "--config",
         str(config_path),
+        "--run-name",
+        "cli-initialize",
+        "--initialize-from",
+        str(checkpoint),
+        "--set",
+        "training.steps=1",
+    )
+    initialized_run = next((tmp_path / "runs").glob("*-cli-initialize"))
+    initialized_summary = json.loads(
+        (initialized_run / "train_summary.json").read_text(encoding="utf-8")
+    )
+    assert initialized_summary["initialized_from"] == str(checkpoint.resolve())
+    assert initialized_summary["resumed_from"] is None
+    assert (
+        torch.load(
+            initialized_run / "checkpoints" / "last.pt",
+            map_location="cpu",
+            weights_only=False,
+        )["step"]
+        == 1
+    )
+
+    _run(
+        "train.py",
+        "--config",
+        str(config_path),
         "--resume",
         str(checkpoint),
         "--set",

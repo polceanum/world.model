@@ -864,3 +864,60 @@
   not as the selected model. Large-model throughput must be profiled and the
   velocity/long-horizon objective must improve before scaling the schedule
   further.
+
+## ADR-049 — Separate weights-only curriculum transfer from checkpoint resume
+
+- **Date:** 2026-07-29
+- **Status:** accepted
+- **Context:** The scaled monocular curriculum varied unknown sphere radius
+  from `0.16–0.25 m` while RGB back-projection used the range mean. A single
+  apparent radius cannot identify physical radius and depth independently.
+  Reusing the learned detector on an identifiable fixed-radius accuracy
+  curriculum is useful, but changing those simulator semantics is not a valid
+  optimizer/RNG resume.
+- **Decision:** `train.py --initialize-from` loads a trusted checkpoint's model
+  tensors strictly while resetting step, optimizer, scheduler, and RNG into a
+  new timestamped run. `--resume` remains the only exact-continuation path and
+  the two options are mutually exclusive. The primary scaled accuracy
+  curriculum uses a known `0.21 m` radius; variable-radius data remains an
+  OOD/parameter-identification problem rather than a hidden ambiguity in the
+  localization gate.
+- **Evidence:** A 1,024-draw, eight-scenario MPS transfer reduced the
+  eight-episode measurement world-position MAE from `0.614574 m` to
+  `0.380453 m`. The stricter online result did not improve automatically,
+  proving that tracker/fusion drift remains distinct from measurement
+  identifiability.
+- **Consequences:** Transfer provenance is explicit in run metadata and
+  summaries. Fixed-scale results do not establish variable-size
+  generalisation, and must not be compared as same-dataset checkpoint deltas.
+
+## ADR-050 — Re-anchor scaled tracks every three frames and require forecastable windows
+
+- **Date:** 2026-07-29
+- **Status:** accepted provisionally
+- **Context:** The fixed-scale detector reached `0.380453 m` standalone MAE,
+  while six-frame online anchoring produced roughly `0.9–1.2 m` current RMSE.
+  A conservative ROI scale estimate improved some position metrics but
+  degraded velocity, detection, event F1, and calibration. Causal training
+  also sampled late collision windows with zero valid future horizons.
+- **Decision:** Keep ROI scale extraction behind the disabled
+  `structured_disc_fast_depth_enabled` gate. In the scaled profile, run global
+  discovery every three frames and retain fast ROI updates on the intervening
+  two. Closed-loop window selection must leave at least one anchor with the
+  shortest configured future horizon, even when a late collision label would
+  otherwise take priority.
+- **Evidence:** On seeds `100016–100017`, cadence three improved current
+  RMSE/MAE by `5.9%/21.3%`, velocity slightly, 0.10–0.75-second RMSE by
+  `7.6–12.8%`, collision F1 from `0.138` to `0.357`, and detection
+  recall/precision from `0.500/0.377` to `0.694/0.568`. On disjoint seeds
+  `100018–100019`, it improved current RMSE/MAE by `6.3%/12.5%`, velocity by
+  `10.7%`, 0.10–0.75-second RMSE by `3.4–9.0%`, collision F1, and target
+  coverage. One switch occurred on the first pair and nominal 90% coverage
+  worsened on the second. The corrected sampler produced nonzero position and
+  velocity rollout losses at step 6.
+- **Consequences:** Cadence three is the scaled default but still requires a
+  wider validation/test manifest. The one-second horizon remains essentially
+  unchanged. Longer causal training is allowed only from forecast-supervised
+  windows and remains subject to paired promotion gates. A step-16
+  sampler-corrected continuation was subsequently rejected: current state
+  improved marginally, but 0.25–1.00-second forecasts regressed.

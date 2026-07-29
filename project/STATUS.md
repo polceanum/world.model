@@ -1790,3 +1790,133 @@ Ruff and `git diff --check` passed. Pytest reported
 `239 passed, 4 skipped in 67.13 s`; all skips were hardware-conditional in the
 sandboxed process, and the relevant direct-MPS subset passed as described
 above.
+
+## 2026-07-29 — identifiable scale, observer cadence, and useful causal windows
+
+Longer training alone was not the initial remedy. The step-896 artifact had
+completed 896 measurement updates but no persisted causal adaptation. Two
+matched 16-update causal continuations from those weights were rejected:
+
+- all trainable modules worsened current position by `2.76%`, velocity by
+  `37.15%`, and 0.10–0.50-second forecasts by `1.36–3.20%`;
+- freezing RGB and adapting only dynamics/filter/identifier still worsened
+  current position by `2.65%`, velocity by `53.62%`, and 0.10–0.50-second
+  forecasts by `1.24–3.10%`;
+- increasing state/rollout velocity weights from `0.5` to `2.0` produced
+  essentially the same rejected result.
+
+Training supervision now keeps a persistent model-object-ID to simulator-target
+mapping rather than recomputing nearest position at each contact. A matched
+short run did not encounter a target swap, so this is a correctness fix rather
+than an explanation for those regressions.
+
+The scaled curriculum also contained an identifiability error: physical sphere
+radius varied from `0.16–0.25 m`, while monocular back-projection used the
+range mean. RGB apparent radius alone cannot separate unknown physical radius
+from depth. `train.py --initialize-from` now supports strict weights-only
+curriculum transfer with a reset step/optimizer/scheduler/RNG and recorded
+provenance; it is mutually exclusive with exact `--resume`. The primary scaled
+accuracy curriculum now uses fixed known `0.21 m` radius.
+
+A 1,024-draw MPS transfer from step-896 weights completed in `659.55 s` across
+all eight scenario families. Its best eight-episode measurement
+world-position MAE was `0.380453 m`, versus `0.614574 m` before transfer.
+The initial two-episode full online result did not improve, localizing the next
+bottleneck to online ROI/tracker drift rather than global RGB localization.
+
+Matched runtime gates on fixed-scale seeds `100016–100017`:
+
+| Policy | current RMSE | velocity RMSE | 0.10 / 0.25 / 0.50 / 0.75 / 1.00 s RMSE |
+| --- | ---: | ---: | --- |
+| six-frame global anchor | `0.963351 m` | `1.086428 m/s` | `0.844761 / 0.704927 / 0.745774 / 0.853151 / 1.007125 m` |
+| ROI component-scale ablation | `0.925932 m` | `1.308184 m/s` | `0.836798 / 0.710704 / 0.744329 / 0.849377 / 1.003551 m` |
+| global every frame | `0.936374 m` | `1.296193 m/s` | `0.841321 / 0.674488 / 0.678569 / 0.785979 / 1.001967 m` |
+| global every three frames | `0.906217 m` | `1.082334 m/s` | `0.780533 / 0.626639 / 0.650438 / 0.773491 / 1.007125 m` |
+
+The ROI scale policy was rejected because velocity, detection, collision F1,
+and calibration regressed. It remains implemented behind a disabled,
+crop-boundary-gated configuration flag. Global cadence three retained two fast
+ROI frames per cycle and improved current position, 0.10–0.75-second
+forecasts, detection, collision F1, and coverage. A disjoint confirmation on
+seeds `100018–100019` improved current RMSE from `1.244437` to `1.165912 m`,
+velocity from `0.996642` to `0.889775 m/s`, and 0.10–0.75-second forecasts by
+`3.4–9.0%`; one-second error was unchanged. Nominal 90% coverage worsened on
+that harder pair, so cadence three is the scaled default but not yet a reserved
+test promotion.
+
+Closed-loop window sampling previously allowed late collision-conditioned
+windows with no valid future horizon. One such step consumed `172 s` with
+`loss_rollout=0`. The sampler now guarantees that at least one anchor supports
+the shortest configured forecast. The next sampler-corrected steps had
+nonzero position and velocity rollout losses. At step 8, a paired evaluation
+showed small improvements at current state and every horizon, unchanged
+detection/event/identity counts, and 90% coverage improving from `0.737805` to
+`0.739837`; this justified the ongoing extension to step 32 but is not yet a
+meaningful convergence claim.
+
+Primary artifacts:
+
+- transferred checkpoint:
+  `runs/20260728-223558-scaled-fixed-scale-transfer-1k-v1/checkpoints/best_measurement.pt`;
+- fixed-scale base report:
+  `runs/20260728-223558-scaled-fixed-scale-transfer-1k-v1/evaluation/20260728-225136-fixed-scale-select2-offset16/report.md`;
+- cadence-three reports:
+  `runs/20260728-231250-scaled-global-cadence3-ablation-v1/evaluation/20260728-232212-global-cadence3-select2-offset16/report.md`
+  and
+  `runs/20260728-231250-scaled-global-cadence3-ablation-v1/evaluation/20260728-233559-global-cadence3-confirm2-offset18/report.md`;
+- sampler-corrected step-8 report:
+  `runs/20260728-235003-scaled-fixed-cadence3-causal-valid-v2/evaluation/20260729-001101-causal-step8-select2-offset16/report.md`.
+
+The main fixed-scale transfer command was:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/scaled_curriculum.yaml \
+  --initialize-from runs/20260728-152237-scaled-longer-stable-v2/checkpoints/best_measurement.pt \
+  --run-name scaled-fixed-scale-transfer-1k-v1 --device mps --seed 47 \
+  --set simulator.sequence_frames=24 --set training.steps=256 \
+  --set training.rgb_pretrain_steps=256 --set training.batch_size=4 \
+  --set training.train_episodes=4096 --set training.validation_episodes=8 \
+  --set training.num_workers=4 --set training.learning_rate=0.00001 \
+  --set training.eval_every=64 --set training.checkpoint_every=64 \
+  --set training.log_every=8 --set evaluation.episodes=2
+```
+
+All full online reports above were RGB-only, used MPS, and recorded
+`oracle_runtime_input_used=false`. The selection/confirmation sample is four
+episodes, not the required wider validation/test manifest.
+
+The sampler-corrected continuation was extended to a safe step-16 checkpoint.
+Steps 10–16 took about 35 minutes on MPS; individual two-step graphs ranged
+from roughly 6.5 to 10 minutes depending on object/interaction density. Step 16
+slightly improved current position and velocity versus the unchanged
+cadence-three weights, but regressed 0.25/0.50/0.75/1.00-second RMSE from
+`0.626639/0.650438/0.773491/1.007125 m` to
+`0.627064/0.652029/0.776092/1.008927 m`. Detection, collision F1, and identity
+counts were unchanged. It is rejected, and the interrupted target of step 32
+is not reported as completed. The exact report is
+`runs/20260729-001136-scaled-fixed-cadence3-causal-valid32-v3/evaluation/20260729-005424-causal-step16-select2-offset16/report.md`.
+
+Final repository validation for this change:
+
+```bash
+PYTHONPATH=. conda run -n orpheus ruff format --check .
+PYTHONPATH=. conda run -n orpheus ruff check .
+PYTHONPATH=. conda run -n orpheus pytest
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest \
+  tests/integration/test_rgb_measurements.py::test_roi_sampling_mps_training_cpu_fallback_is_differentiable \
+  tests/unit/test_association.py::test_association_transfers_cost_to_cpu_without_mps_float64 \
+  tests/unit/test_evaluation_parameter_update_metrics.py::test_directional_parameter_metrics_transfer_before_float64_accumulation \
+  tests/unit/test_modal_dynamics.py::test_modal_device_when_available -q
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-accuracy-pycache \
+  PYTHONPATH=. conda run -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+git diff --check
+```
+
+Ruff passed. The sandboxed full suite reported
+`243 passed, 4 skipped in 101.85 s`; the four hardware-conditional tests then
+passed directly on MPS (`4 passed in 2.49 s`). Compileall and
+`git diff --check` passed. A first direct-MPS selector command named a stale
+test and collected nothing; the corrected command above is the executed
+hardware result.
