@@ -68,6 +68,7 @@ class RGBObservationConfig:
     temporal_velocity_variance_floor: float = 0.25
     temporal_velocity_variance_ceiling: float | None = None
     temporal_velocity_lateral_only: bool = False
+    temporal_velocity_post_event_gravity_axis_enabled: bool = False
     temporal_velocity_unobserved_variance: float = 1.0e4
     temporal_velocity_reset_on_collision: bool = False
     temporal_velocity_max_age_steps: int | None = None
@@ -119,6 +120,15 @@ class RGBObservationConfig:
             raise ValueError(
                 "temporal_velocity_variance_ceiling must be finite and no "
                 "smaller than temporal_velocity_variance_floor"
+            )
+        if self.temporal_velocity_post_event_gravity_axis_enabled and (
+            not self.temporal_velocity_lateral_only
+            or not self.temporal_velocity_reset_on_collision
+            or self.temporal_velocity_post_event_max_samples is None
+        ):
+            raise ValueError(
+                "post-event gravity velocity requires lateral-only projection, "
+                "collision reset, and a bounded post-event sample window"
             )
         if not math.isfinite(self.temporal_velocity_unobserved_variance) or (
             self.temporal_velocity_unobserved_variance < self.temporal_velocity_variance_floor
@@ -896,6 +906,23 @@ class RGBObservationModule(ObservationModule):
             variance_floor=self.config.temporal_velocity_variance_floor,
             variance_ceiling=self.config.temporal_velocity_variance_ceiling,
         )
+        gravity_velocity = velocity
+        gravity_velocity_log_variance = velocity_log_variance
+        gravity_velocity_valid_mask = velocity_valid_mask
+        if self.config.temporal_velocity_post_event_gravity_axis_enabled:
+            (
+                gravity_velocity,
+                gravity_velocity_log_variance,
+                gravity_velocity_valid_mask,
+            ) = history.least_squares_velocity(
+                minimum_dt=self.config.temporal_velocity_min_dt,
+                minimum_samples=self.config.temporal_velocity_min_samples,
+                variance_scale=self.config.temporal_velocity_variance_scale,
+                variance_floor=self.config.temporal_velocity_variance_floor,
+                variance_ceiling=self.config.temporal_velocity_variance_ceiling,
+                query_timestamp=measured.timestamp,
+                known_acceleration=posterior.gravity,
+            )
         velocity_valid_mask = velocity_valid_mask & observed_mask & active_mask
         if not self.config.temporal_velocity_enabled:
             velocity_valid_mask = torch.zeros_like(velocity_valid_mask)
@@ -912,9 +939,13 @@ class RGBObservationModule(ObservationModule):
             velocity_valid_mask = velocity_valid_mask & (lifetime_window | post_event_window)
         if self.config.temporal_velocity_lateral_only:
             camera_lateral = posterior.camera.world_from_camera[:, :3, 0]
-            camera_lateral = F.normalize(camera_lateral, dim=-1).unsqueeze(1)
+            camera_lateral = F.normalize(camera_lateral, dim=-1)
+            camera_lateral = camera_lateral.unsqueeze(1)
             prior_velocity = posterior.objects.velocity
-            lateral_delta = ((velocity - prior_velocity) * camera_lateral).sum(dim=-1, keepdim=True)
+            lateral_delta = ((velocity - prior_velocity) * camera_lateral).sum(
+                dim=-1,
+                keepdim=True,
+            )
             velocity = prior_velocity + camera_lateral * lateral_delta
 
             scalar_variance = (velocity_log_variance.exp() * camera_lateral.square()).sum(
@@ -922,6 +953,83 @@ class RGBObservationModule(ObservationModule):
             )
             observable = camera_lateral.square() >= 1.0e-4
             projected_variance = scalar_variance / camera_lateral.square().clamp_min(1.0e-4)
+            if self.config.temporal_velocity_post_event_gravity_axis_enabled:
+                camera_lateral = camera_lateral.squeeze(1)
+                gravity_axis = F.normalize(posterior.gravity, dim=-1)
+                basis = torch.stack((camera_lateral, gravity_axis), dim=-1)
+                gram = torch.einsum("bci,bcj->bij", basis, basis)
+                gram = (
+                    gram
+                    + torch.eye(
+                        gram.shape[-1],
+                        device=gram.device,
+                        dtype=gram.dtype,
+                    ).unsqueeze(0)
+                    * 1.0e-6
+                )
+                determinant = (
+                    gram[:, 0, 0] * gram[:, 1, 1] - gram[:, 0, 1] * gram[:, 1, 0]
+                ).clamp_min(1.0e-8)
+                inverse_gram = (
+                    torch.stack(
+                        (
+                            gram[:, 1, 1],
+                            -gram[:, 0, 1],
+                            -gram[:, 1, 0],
+                            gram[:, 0, 0],
+                        ),
+                        dim=-1,
+                    ).reshape(-1, 2, 2)
+                    / determinant[:, None, None]
+                )
+                velocity_delta = gravity_velocity - prior_velocity
+                coefficients = torch.einsum(
+                    "bij,bnj->bni",
+                    inverse_gram,
+                    torch.einsum("bci,bnc->bni", basis, velocity_delta),
+                )
+                gravity_projected_velocity = prior_velocity + torch.einsum(
+                    "bci,bni->bnc",
+                    basis,
+                    coefficients,
+                )
+
+                component_variance = torch.einsum(
+                    "bnc,bci->bni",
+                    gravity_velocity_log_variance.exp(),
+                    basis.square(),
+                )
+                coverage = basis.square().sum(dim=-1).unsqueeze(1)
+                gravity_projected_variance = torch.einsum(
+                    "bni,bci->bnc",
+                    component_variance,
+                    basis.square(),
+                ) / coverage.square().clamp_min(1.0e-4)
+                gravity_observable = coverage >= 1.0e-4
+                post_event_window = history.has_reset
+                if self.config.temporal_velocity_post_event_max_samples is not None:
+                    post_event_window = post_event_window & (
+                        history.post_reset_sample_count
+                        <= self.config.temporal_velocity_post_event_max_samples
+                    )
+                post_event_gravity_valid = (
+                    post_event_window & gravity_velocity_valid_mask & velocity_valid_mask
+                )
+                velocity = torch.where(
+                    post_event_gravity_valid.unsqueeze(-1),
+                    gravity_projected_velocity,
+                    velocity,
+                )
+                projected_variance = torch.where(
+                    post_event_gravity_valid.unsqueeze(-1),
+                    gravity_projected_variance,
+                    projected_variance,
+                )
+                observable = torch.where(
+                    post_event_gravity_valid.unsqueeze(-1),
+                    gravity_observable,
+                    observable,
+                )
             unobserved_variance = torch.full_like(
                 projected_variance,
                 self.config.temporal_velocity_unobserved_variance,

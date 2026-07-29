@@ -429,3 +429,11 @@ raising on non-finite validation losses, checkpointing final weights before
 expensive validation, and transferring evaluation diagnostics to CPU before
 float64 accumulation. The last change fixes a directly reproduced MPS-only
 evaluation crash.
+
+Added an opt-in acceleration-aware causal temporal velocity estimator. It
+removes known quadratic acceleration before fitting velocity at the current
+timestamp and can expose only camera-lateral plus post-event gravity-axis
+evidence, leaving monocular depth velocity unobserved. Focused tests cover the
+endpoint-bias correction and subspace projection. Matched MPS ablations found
+useful vertical-velocity signal but no net multistep/event promotion, so the
+scaled default remains disabled and the reports record the rejected policies.

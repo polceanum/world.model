@@ -99,6 +99,7 @@ class RGBConfig:
     temporal_velocity_variance_floor: float = 0.25
     temporal_velocity_variance_ceiling: float | None = None
     temporal_velocity_lateral_only: bool = False
+    temporal_velocity_post_event_gravity_axis_enabled: bool = False
     temporal_velocity_unobserved_variance: float = 1.0e4
     temporal_velocity_reset_on_collision: bool = False
     temporal_velocity_max_age_steps: int | None = None

@@ -375,8 +375,17 @@ class RGBTemporalPositionHistory(ModalityHistory):
         variance_scale: float,
         variance_floor: float,
         variance_ceiling: float | None = None,
+        query_timestamp: Tensor | None = None,
+        known_acceleration: Tensor | None = None,
     ) -> tuple[Tensor, Tensor, Tensor]:
-        """Return causal LS slope and propagated diagonal uncertainty."""
+        """Return causal LS slope and propagated diagonal uncertainty.
+
+        When a known acceleration is supplied, subtract its quadratic
+        displacement about ``query_timestamp`` before fitting.  The resulting
+        slope estimates velocity at the query time rather than at the history
+        window midpoint.  This keeps the observer causal while avoiding a
+        systematic gravity bias.
+        """
 
         if variance_scale < 1 or not math.isfinite(variance_scale):
             raise ValueError("variance_scale must be finite and at least one")
@@ -388,6 +397,20 @@ class RGBTemporalPositionHistory(ModalityHistory):
             not math.isfinite(variance_ceiling) or variance_ceiling < variance_floor
         ):
             raise ValueError("variance_ceiling must be finite and no smaller than variance_floor")
+        if (query_timestamp is None) != (known_acceleration is None):
+            raise ValueError(
+                "query_timestamp and known_acceleration must either both be supplied or both omitted"
+            )
+        positions = self.positions
+        if query_timestamp is not None and known_acceleration is not None:
+            if query_timestamp.shape != self.object_ids.shape[:1]:
+                raise ValueError("query_timestamp must have shape [B]")
+            if known_acceleration.shape != (*self.object_ids.shape[:1], 3):
+                raise ValueError("known_acceleration must have shape [B,3]")
+            time_from_query = self.timestamps - query_timestamp.unsqueeze(-1)
+            positions = positions - 0.5 * known_acceleration[:, None, None, :] * (
+                time_from_query[..., None].square()
+            )
         mask = self.valid_mask
         count = mask.sum(dim=-1)
         mask_float = mask.to(self.timestamps.dtype)
@@ -395,7 +418,7 @@ class RGBTemporalPositionHistory(ModalityHistory):
         centred = (self.timestamps - mean_timestamp.unsqueeze(-1)) * mask_float
         denominator = centred.square().sum(dim=-1)
         weights = centred / denominator.clamp_min(minimum_dt * minimum_dt).unsqueeze(-1)
-        velocity = (weights.unsqueeze(-1) * self.positions).sum(dim=-2)
+        velocity = (weights.unsqueeze(-1) * positions).sum(dim=-2)
         position_variance = self.position_log_variance.clamp(-30.0, 30.0).exp()
         velocity_variance = (weights.square().unsqueeze(-1) * position_variance).sum(
             dim=-2

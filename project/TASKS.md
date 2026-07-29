@@ -258,6 +258,14 @@
 - [ ] Recover collision F1 and outgoing-velocity accuracy after enabling the
   confirmed point/scale observer; position, detection, and calibration improve
   strongly, but velocity and event F1 regress on the paired blocks.
+- [x] Add a tested opt-in acceleration-aware temporal velocity fit that
+  estimates velocity at the current timestamp and exposes only camera-lateral
+  plus post-event gravity-axis evidence. Reject continuous/all-axis and
+  endpoint-contact variants after paired MPS selection tradeoffs.
+- [ ] Infer contact/change points causally from robust RGB trajectory residuals
+  so post-event velocity history does not depend on a transient endpoint
+  `COLLISION` mode; train and validate that gate on balanced contact/no-contact
+  windows before enabling gravity-axis correction.
 - [x] Add a 1.90M-parameter scaled shared-model profile with 4,096 training,
   256 validation, and 256 test episodes across all eight scenario families.
 - [x] Record model parameter count, episode draws, nominal manifest passes,

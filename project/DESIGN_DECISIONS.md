@@ -971,3 +971,40 @@
   Event-conditioned outgoing velocity, per-scenario gates,
   correlation-aware calibration, variable-radius depth, and real video remain
   open.
+
+## ADR-052 — Keep acceleration-aware gravity velocity behind an observed-event gate
+
+- **Date:** 2026-07-29
+- **Status:** capability accepted; scaled policy rejected
+- **Context:** After point/scale position correction, aggregate velocity error
+  is dominated by the gravity axis. A straight line through an accelerated
+  history estimates velocity near the window midpoint rather than at the
+  current timestamp. Over a five-frame 20 Hz window, gravity alone creates
+  roughly a `0.98 m/s` endpoint bias. The existing post-event history reset
+  also depends on the transient endpoint `COLLISION` mode.
+- **Decision:** Support an optional causal known-acceleration fit that subtracts
+  quadratic displacement about the query timestamp, then projects evidence
+  only into the calibrated camera-lateral and gravity subspace. Never expose
+  monocular camera-depth slope through this gate. Apply the gravity component
+  only after an edge-triggered event reset. Keep the scaled default disabled
+  until RGB trajectory residuals provide a validated contact/change-point
+  trigger.
+- **Alternatives considered:** enable noisy all-axis slope; use the
+  uncompensated line slope as current velocity; treat every endpoint contact
+  mode as an event reset; promote a small velocity gain despite multistep/event
+  regressions.
+- **Evidence:** On validation seed `100016`, unrestricted all-axis correction
+  raised velocity RMSE to `2.228049 m/s`. Camera-lateral plus gravity reduced
+  velocity RMSE from `1.288819` to `1.150215 m/s` and vertical RMSE from
+  `1.965171` to `1.654356 m/s`, but worsened current position and every
+  recursive horizon and reduced collision F1. Raising variance reduced the
+  tradeoff but still worsened all position horizons. Post-event-only correction
+  was exactly identical to baseline because no usable endpoint collision reset
+  occurred. Broadening reset to endpoint contact yielded only
+  `0.02–0.09%` gains at three horizons, essentially flat/slightly worse results
+  at two horizons, and collision F1 `0.285714 → 0.266667`.
+- **Consequences:** The estimator math and configuration contract are tested
+  and available for the next observed-change-point experiment, while the
+  validated scaled runtime remains unchanged. This avoids encoding constant
+  velocity as a hard rule: analytic acceleration is removable known context,
+  and observation evidence still controls whether velocity is corrected.

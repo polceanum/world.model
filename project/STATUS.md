@@ -2036,3 +2036,72 @@ the new observer configuration, Python `3.10.20`, PyTorch `2.10.0`, and MPS
 built. The sandboxed dry-run process reported MPS unavailable and therefore
 used explicit CPU; the paired evaluations and direct device tests above ran on
 MPS.
+
+## 2026-07-29 — acceleration-aware outgoing-velocity investigation
+
+The remaining paired velocity regression is concentrated on the gravity axis.
+The temporal observer now has an opt-in causal fit that removes the known
+quadratic acceleration about the packet timestamp before estimating current
+velocity. Its correction subspace contains calibrated camera-lateral motion
+and, only after an event reset, the gravity axis. Camera-depth velocity remains
+unobserved. The scaled default keeps this option off.
+
+Focused validation passed `21` tests before the final contact diagnostic
+(`tests/unit/test_rgb_temporal_history.py` plus checkpoint roundtrip). Matched
+one-episode MPS selection on seed `100016` gave:
+
+| Policy | Current RMSE m | Velocity RMSE m/s | Vertical RMSE m/s | 0.10 / 0.25 / 0.50 / 0.75 / 1.00 s RMSE m | Collision F1 |
+| --- | ---: | ---: | ---: | --- | ---: |
+| validated lateral-only baseline | `0.648034` | `1.288819` | `1.965171` | `0.661424 / 0.524227 / 0.568464 / 0.662076 / 0.751615` | `0.285714` |
+| lateral + gravity | `0.662815` | `1.150215` | `1.654356` | `0.672865 / 0.537488 / 0.579988 / 0.671576 / 0.759725` | `0.235294` |
+| conservative variance | `0.656559` | `1.215172` | `1.814179` | `0.666575 / 0.530451 / 0.572762 / 0.665180 / 0.753400` | `0.250000` |
+| post-event endpoint collision only | `0.648034` | `1.288819` | `1.965171` | identical to baseline | `0.285714` |
+| endpoint contact onset diagnostic | `0.647704` | `1.288726` | `1.964988` | `0.660803 / 0.524367 / 0.568098 / 0.662317 / 0.751496` | `0.266667` |
+
+The continuous policies prove that acceleration-aware RGB slope contains useful
+vertical signal, but both fail the position/event promotion gate. The
+post-event policy is inert because `COLLISION` is an interval event and rarely
+survives as the endpoint mode at an observation. Treating all endpoint contacts
+as event onsets produces only negligible mixed changes and one extra event
+false positive. It is rejected. The next concrete task is a causal,
+RGB-trajectory-residual change-point detector trained on balanced
+contact/no-contact windows.
+
+Primary reports:
+
+- baseline:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-134615-gravity-axis-offset16-baseline/report.md`;
+- unrestricted gravity:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-132941-gravity-axis-offset16-selection/report.md`;
+- conservative gravity:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-140223-gravity-axis-conservative-offset16-selection/report.md`;
+- endpoint-collision-only:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-142009-post-event-gravity-offset16-selection/report.md`;
+- endpoint-contact diagnostic:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-143722-contact-onset-gravity-offset16-selection/report.md`.
+
+Final validation for this change:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff format .
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
+```
+
+Ruff formatted two files and passed. The sandboxed full suite reported
+`252 passed, 4 skipped in 190.54 s`; the four hardware-conditional tests then
+passed directly on MPS (`4 passed in 6.38 s`).
+
+```bash
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-acceleration-aware-pycache \
+  PYTHONPATH=. conda run --no-capture-output -n orpheus python \
+  -m compileall -q world_model train.py evaluate.py demo.py scripts tests
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/scaled_curriculum.yaml --dry-run --device cpu
+git diff --check
+```
+
+Compileall and `git diff --check` passed. The dry run resolved the unchanged
+1.90M-parameter-contract, 48,000-draw, eight-scenario RGB-only plan with Python
+`3.10.20`, PyTorch `2.10.0`, and MPS built. The sandboxed dry run used explicit
+CPU; the evaluations and direct device tests above ran on MPS.

@@ -172,6 +172,46 @@ def test_three_causal_samples_recover_constant_velocity_at_20_hz() -> None:
     torch.testing.assert_close(log_variance.exp(), expected_variance)
 
 
+def test_known_acceleration_fit_estimates_velocity_at_query_time() -> None:
+    object_ids = torch.tensor([[17]])
+    history = _empty_history(object_ids, history_size=5)
+    acceleration = torch.tensor([[0.0, -10.0, 0.0]], dtype=torch.float64)
+    initial_velocity = torch.tensor([[[0.4, 2.0, -0.3]]], dtype=torch.float64)
+    initial_position = torch.tensor([[[0.1, 0.4, 2.0]]], dtype=torch.float64)
+    for timestamp in (0.0, 0.05, 0.1, 0.15, 0.2):
+        position = (
+            initial_position
+            + initial_velocity * timestamp
+            + 0.5 * acceleration[:, None] * timestamp**2
+        )
+        history = _append(
+            history,
+            object_ids=object_ids,
+            timestamp=timestamp,
+            positions=position,
+        )
+
+    uncompensated, _, valid = history.least_squares_velocity(
+        minimum_dt=1.0e-3,
+        minimum_samples=3,
+        variance_scale=1.0,
+        variance_floor=1.0e-4,
+    )
+    compensated, _, compensated_valid = history.least_squares_velocity(
+        minimum_dt=1.0e-3,
+        minimum_samples=3,
+        variance_scale=1.0,
+        variance_floor=1.0e-4,
+        query_timestamp=torch.tensor([0.2], dtype=torch.float64),
+        known_acceleration=acceleration,
+    )
+
+    expected_velocity = initial_velocity + acceleration[:, None] * 0.2
+    assert valid.item() and compensated_valid.item()
+    assert abs(float(uncompensated[..., 1] - expected_velocity[..., 1])) > 0.9
+    torch.testing.assert_close(compensated, expected_velocity, atol=1.0e-10, rtol=0.0)
+
+
 def test_two_sample_mode_emits_earliest_causal_velocity() -> None:
     object_ids = torch.tensor([[17]])
     history = _empty_history(object_ids)
@@ -720,6 +760,103 @@ def test_rgb_module_lateral_velocity_preserves_analytic_vertical_state() -> None
     torch.testing.assert_close(
         evidence.log_variance.exp()[0, 0, 1:],
         torch.tensor([1.0e4, 1.0e4]),
+    )
+
+
+def test_rgb_module_post_event_gravity_compensation_updates_vertical_velocity() -> None:
+    factory = BeliefFactory(max_objects=1, appearance_dim=4)
+    base = factory.create()
+    prior_velocity = torch.tensor([[[0.1, -2.0, 0.3]]])
+    belief = base.replace(
+        objects=base.objects.replace(
+            active=torch.tensor([[True]]),
+            object_id=torch.tensor([[12]]),
+            position=torch.zeros(1, 1, 3),
+            velocity=prior_velocity,
+            existence_logit=torch.tensor([[8.0]]),
+        )
+    )
+    module = RGBObservationModule(
+        RGBObservationConfig(
+            max_objects=1,
+            backbone_channels=(8, 16, 24, 32),
+            feature_dim=16,
+            appearance_dim=4,
+            roi_size=8,
+            roi_hidden_dim=16,
+            temporal_velocity_enabled=True,
+            temporal_velocity_history_size=3,
+            temporal_velocity_min_samples=3,
+            temporal_velocity_variance_floor=0.01,
+            temporal_velocity_variance_ceiling=0.1,
+            temporal_velocity_lateral_only=True,
+            temporal_velocity_post_event_gravity_axis_enabled=True,
+            temporal_velocity_unobserved_variance=1.0e4,
+            temporal_velocity_reset_on_collision=True,
+            temporal_velocity_max_age_steps=3,
+            temporal_velocity_post_event_max_samples=3,
+            temporal_velocity_measurement_position_blend=1.0,
+        )
+    )
+    association = AssociationResult(
+        belief_indices=torch.tensor([[0]]),
+        measurement_indices=torch.tensor([[0]]),
+        pair_mask=torch.tensor([[True]]),
+        pair_cost=torch.tensor([[0.0]]),
+        unmatched_beliefs=torch.tensor([[False]]),
+        unmatched_measurements=torch.tensor([[False]]),
+        ambiguous=torch.tensor([[False]]),
+    )
+    initial_velocity = torch.tensor([[[1.0, 2.0, 5.0]]])
+    history = None
+    evidence = None
+    for sample_index, timestamp in enumerate((0.0, 0.05, 0.1)):
+        modes = belief.objects.motion_mode_logits.clone()
+        modes[..., MotionMode.COLLISION] = 8.0 if sample_index == 0 else -8.0
+        current = belief.replace(
+            objects=belief.objects.replace(
+                motion_mode_logits=modes,
+            )
+        )
+        measured_position = (
+            initial_velocity * timestamp + 0.5 * belief.gravity[:, None] * timestamp**2
+        )
+        measured = MeasurementSet(
+            modality="rgb",
+            sensor_id="camera",
+            timestamp=torch.tensor([timestamp]),
+            values=torch.zeros(1, 1, 7),
+            log_variance=torch.zeros(1, 1, 7),
+            existence_logits=torch.tensor([[8.0]]),
+            measurement_mask=torch.tensor([[True]]),
+            appearance=None,
+            class_logits=None,
+            frame_id="camera:camera",
+            supported_state_fields=("position",),
+            auxiliary={
+                "world_position": measured_position,
+                "world_position_log_variance": torch.full(
+                    (1, 1, 3),
+                    math.log(1.0e-4),
+                ),
+            },
+        )
+        evidence, history = module.update_temporal_history(
+            posterior=current,
+            measured=measured,
+            association=association,
+            history=history,
+        )
+
+    assert evidence is not None and evidence.valid_mask.item()
+    expected_vertical = initial_velocity[..., 1] + belief.gravity[:, None, 1] * 0.1
+    torch.testing.assert_close(evidence.velocity[..., 0], torch.ones(1, 1))
+    torch.testing.assert_close(evidence.velocity[..., 1], expected_vertical)
+    torch.testing.assert_close(evidence.velocity[..., 2], prior_velocity[..., 2])
+    assert torch.all(evidence.log_variance.exp()[..., :2] <= 0.1)
+    torch.testing.assert_close(
+        evidence.log_variance.exp()[..., 2],
+        torch.full((1, 1), 1.0e4),
     )
 
 

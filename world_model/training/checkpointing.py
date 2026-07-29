@@ -37,6 +37,7 @@ _RGB_LEGACY_DEFAULT_FIELDS = (
     "temporal_velocity_variance_floor",
     "temporal_velocity_variance_ceiling",
     "temporal_velocity_lateral_only",
+    "temporal_velocity_post_event_gravity_axis_enabled",
     "temporal_velocity_unobserved_variance",
     "temporal_velocity_reset_on_collision",
     "temporal_velocity_max_age_steps",

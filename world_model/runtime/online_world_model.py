@@ -205,6 +205,9 @@ class OnlineWorldModel(nn.Module):
                         rgb_config.temporal_velocity_variance_ceiling
                     ),
                     temporal_velocity_lateral_only=(rgb_config.temporal_velocity_lateral_only),
+                    temporal_velocity_post_event_gravity_axis_enabled=(
+                        rgb_config.temporal_velocity_post_event_gravity_axis_enabled
+                    ),
                     temporal_velocity_unobserved_variance=(
                         rgb_config.temporal_velocity_unobserved_variance
                     ),

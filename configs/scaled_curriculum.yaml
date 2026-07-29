@@ -58,6 +58,10 @@ model:
     temporal_velocity_variance_floor: 0.04
     temporal_velocity_variance_ceiling: 0.25
     temporal_velocity_lateral_only: true
+    # Opt-in observer ablation: fit known gravity away before estimating a
+    # post-event current slope. Kept off because endpoint collision modes do
+    # not yet expose enough RGB contact onsets for a validated net gain.
+    temporal_velocity_post_event_gravity_axis_enabled: false
     temporal_velocity_unobserved_variance: 10000.0
     temporal_velocity_reset_on_collision: true
     # Treat temporal slope as bounded initialization/reinitialization evidence.
