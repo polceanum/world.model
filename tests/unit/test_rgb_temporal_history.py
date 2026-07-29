@@ -302,6 +302,44 @@ def test_kinematic_change_point_ignores_monocular_depth_jump() -> None:
     assert score.item() == 0.0
 
 
+def test_change_point_features_standardize_by_rgb_position_uncertainty() -> None:
+    object_ids = torch.tensor([[17]])
+    low_uncertainty = _empty_history(object_ids)
+    high_uncertainty = _empty_history(object_ids)
+    for timestamp, vertical_position in ((0.0, 0.0), (0.05, -0.05), (0.1, 0.0)):
+        position = torch.tensor([[[0.0, vertical_position, 0.0]]], dtype=torch.float64)
+        low_uncertainty = _append(
+            low_uncertainty,
+            object_ids=object_ids,
+            timestamp=timestamp,
+            positions=position,
+            position_variance=1.0e-4,
+        )
+        high_uncertainty = _append(
+            high_uncertainty,
+            object_ids=object_ids,
+            timestamp=timestamp,
+            positions=position,
+            position_variance=0.1,
+        )
+
+    axis = torch.tensor([[[0.0], [1.0], [0.0]]], dtype=torch.float64)
+    low_features, low_valid = low_uncertainty.kinematic_change_point_features(
+        observable_axes=axis,
+        known_acceleration=torch.tensor([[0.0, -10.0, 0.0]], dtype=torch.float64),
+        minimum_dt=1.0e-3,
+    )
+    high_features, high_valid = high_uncertainty.kinematic_change_point_features(
+        observable_axes=axis,
+        known_acceleration=torch.tensor([[0.0, -10.0, 0.0]], dtype=torch.float64),
+        minimum_dt=1.0e-3,
+    )
+
+    assert low_valid.item() and high_valid.item()
+    torch.testing.assert_close(low_features[..., 0], high_features[..., 0])
+    assert low_features[..., 2].item() > high_features[..., 2].item()
+
+
 def test_two_sample_mode_emits_earliest_causal_velocity() -> None:
     object_ids = torch.tensor([[17]])
     history = _empty_history(object_ids)

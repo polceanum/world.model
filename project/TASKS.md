@@ -266,9 +266,13 @@
   capability with observable-axis projection, independent point/scale reset
   semantics, reset provenance, diagnostics, and a two-sample post-event fit.
   Reject the permissive and endpoint-contact policies after paired MPS checks.
-- [ ] Train an uncertainty-aware change-point gate on balanced
-  contact/no-contact RGB windows; validate precision/recall and paired
-  multistep accuracy before enabling gravity-axis correction.
+- [x] Train linear and eight-hidden-unit nonlinear uncertainty-aware
+  change-point gates on balanced, exact-timestamp RGB history windows; cache
+  features, preserve checkpoint provenance, and reject both learned policies
+  after held-out classification and paired MPS runtime checks.
+- [ ] Learn a calibrated outgoing-velocity proposal jointly with the
+  observation-side event gate. The sparse learned gate is safe, but the
+  two-sample post-event slope still slightly regresses velocity when it acts.
 - [x] Add a 1.90M-parameter scaled shared-model profile with 4,096 training,
   256 validation, and 256 test episodes across all eight scenario families.
 - [x] Record model parameter count, episode draws, nominal manifest passes,

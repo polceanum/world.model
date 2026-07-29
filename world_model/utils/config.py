@@ -110,6 +110,24 @@ class RGBConfig:
     temporal_velocity_change_point_minimum_delta: float = 0.75
     temporal_velocity_change_point_strong_delta: float = 2.0
     temporal_velocity_change_point_require_contact_mode: bool = True
+    temporal_velocity_change_point_gate: str = "heuristic"
+    temporal_velocity_change_point_linear_weights: tuple[float, ...] = (
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    )
+    temporal_velocity_change_point_linear_bias: float = -8.0
+    temporal_velocity_change_point_mlp_hidden_weights: tuple[float, ...] = ()
+    temporal_velocity_change_point_mlp_hidden_bias: tuple[float, ...] = ()
+    temporal_velocity_change_point_mlp_output_weights: tuple[float, ...] = ()
+    temporal_velocity_change_point_mlp_output_bias: float = 0.0
+    temporal_velocity_change_point_probability_threshold: float = 0.5
     temporal_velocity_measurement_position_blend: float = 0.0
     temporal_velocity_position_innovation_coupling: bool = False
     temporal_position_enabled: bool = False
@@ -387,6 +405,48 @@ class OrpheusConfig:
             raise ValueError(
                 "model.rgb.temporal_velocity_post_event_max_samples must be no smaller "
                 "than temporal_velocity_min_samples"
+            )
+        if model.rgb.temporal_velocity_change_point_gate not in {
+            "heuristic",
+            "linear",
+            "mlp",
+        }:
+            raise ValueError(
+                "model.rgb.temporal_velocity_change_point_gate must be heuristic, linear, or mlp"
+            )
+        if len(model.rgb.temporal_velocity_change_point_linear_weights) != 9 or not all(
+            math.isfinite(value)
+            for value in model.rgb.temporal_velocity_change_point_linear_weights
+        ):
+            raise ValueError(
+                "model.rgb.temporal_velocity_change_point_linear_weights must "
+                "contain nine finite values"
+            )
+        if not math.isfinite(model.rgb.temporal_velocity_change_point_linear_bias):
+            raise ValueError("model.rgb.temporal_velocity_change_point_linear_bias must be finite")
+        mlp_hidden = len(model.rgb.temporal_velocity_change_point_mlp_hidden_bias)
+        if model.rgb.temporal_velocity_change_point_gate == "mlp" and (
+            mlp_hidden <= 0
+            or len(model.rgb.temporal_velocity_change_point_mlp_hidden_weights) != 9 * mlp_hidden
+            or len(model.rgb.temporal_velocity_change_point_mlp_output_weights) != mlp_hidden
+        ):
+            raise ValueError("model.rgb change-point MLP coefficient dimensions are inconsistent")
+        if not all(
+            math.isfinite(value)
+            for values in (
+                model.rgb.temporal_velocity_change_point_mlp_hidden_weights,
+                model.rgb.temporal_velocity_change_point_mlp_hidden_bias,
+                model.rgb.temporal_velocity_change_point_mlp_output_weights,
+            )
+            for value in values
+        ) or not math.isfinite(model.rgb.temporal_velocity_change_point_mlp_output_bias):
+            raise ValueError("model.rgb change-point MLP coefficients must be finite")
+        if (
+            not math.isfinite(model.rgb.temporal_velocity_change_point_probability_threshold)
+            or not 0.0 < model.rgb.temporal_velocity_change_point_probability_threshold < 1.0
+        ):
+            raise ValueError(
+                "model.rgb.temporal_velocity_change_point_probability_threshold must lie in (0, 1)"
             )
         if (
             not math.isfinite(model.rgb.temporal_velocity_measurement_position_blend)

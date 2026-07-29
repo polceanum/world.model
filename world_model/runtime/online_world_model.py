@@ -236,6 +236,30 @@ class OnlineWorldModel(nn.Module):
                     temporal_velocity_change_point_require_contact_mode=(
                         rgb_config.temporal_velocity_change_point_require_contact_mode
                     ),
+                    temporal_velocity_change_point_gate=(
+                        rgb_config.temporal_velocity_change_point_gate
+                    ),
+                    temporal_velocity_change_point_linear_weights=(
+                        rgb_config.temporal_velocity_change_point_linear_weights
+                    ),
+                    temporal_velocity_change_point_linear_bias=(
+                        rgb_config.temporal_velocity_change_point_linear_bias
+                    ),
+                    temporal_velocity_change_point_mlp_hidden_weights=(
+                        rgb_config.temporal_velocity_change_point_mlp_hidden_weights
+                    ),
+                    temporal_velocity_change_point_mlp_hidden_bias=(
+                        rgb_config.temporal_velocity_change_point_mlp_hidden_bias
+                    ),
+                    temporal_velocity_change_point_mlp_output_weights=(
+                        rgb_config.temporal_velocity_change_point_mlp_output_weights
+                    ),
+                    temporal_velocity_change_point_mlp_output_bias=(
+                        rgb_config.temporal_velocity_change_point_mlp_output_bias
+                    ),
+                    temporal_velocity_change_point_probability_threshold=(
+                        rgb_config.temporal_velocity_change_point_probability_threshold
+                    ),
                     temporal_velocity_measurement_position_blend=(
                         rgb_config.temporal_velocity_measurement_position_blend
                     ),

@@ -48,6 +48,14 @@ _RGB_LEGACY_DEFAULT_FIELDS = (
     "temporal_velocity_change_point_minimum_delta",
     "temporal_velocity_change_point_strong_delta",
     "temporal_velocity_change_point_require_contact_mode",
+    "temporal_velocity_change_point_gate",
+    "temporal_velocity_change_point_linear_weights",
+    "temporal_velocity_change_point_linear_bias",
+    "temporal_velocity_change_point_mlp_hidden_weights",
+    "temporal_velocity_change_point_mlp_hidden_bias",
+    "temporal_velocity_change_point_mlp_output_weights",
+    "temporal_velocity_change_point_mlp_output_bias",
+    "temporal_velocity_change_point_probability_threshold",
     "temporal_velocity_measurement_position_blend",
     "temporal_velocity_position_innovation_coupling",
     "temporal_position_enabled",
@@ -93,6 +101,15 @@ def _model_checkpoint_semantics(value: object) -> object:
         defaults = RGBConfig()
         for field_name in _RGB_LEGACY_DEFAULT_FIELDS:
             normalized_rgb.setdefault(field_name, getattr(defaults, field_name))
+        for coefficient_field in (
+            "temporal_velocity_change_point_linear_weights",
+            "temporal_velocity_change_point_mlp_hidden_weights",
+            "temporal_velocity_change_point_mlp_hidden_bias",
+            "temporal_velocity_change_point_mlp_output_weights",
+        ):
+            coefficients = normalized_rgb.get(coefficient_field)
+            if isinstance(coefficients, list):
+                normalized_rgb[coefficient_field] = tuple(coefficients)
         model["rgb"] = normalized_rgb
     dynamics = model.get("dynamics")
     if isinstance(dynamics, Mapping):

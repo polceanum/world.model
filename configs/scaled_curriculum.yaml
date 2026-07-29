@@ -76,6 +76,14 @@ model:
     temporal_velocity_change_point_minimum_delta: 0.75
     temporal_velocity_change_point_strong_delta: 2.0
     temporal_velocity_change_point_require_contact_mode: true
+    temporal_velocity_change_point_gate: heuristic
+    temporal_velocity_change_point_linear_weights: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    temporal_velocity_change_point_linear_bias: -8.0
+    temporal_velocity_change_point_mlp_hidden_weights: []
+    temporal_velocity_change_point_mlp_hidden_bias: []
+    temporal_velocity_change_point_mlp_output_weights: []
+    temporal_velocity_change_point_mlp_output_bias: 0.0
+    temporal_velocity_change_point_probability_threshold: 0.5
     temporal_velocity_post_event_min_samples: 2
     temporal_velocity_measurement_position_blend: 0.125
     temporal_velocity_position_innovation_coupling: false

@@ -1042,3 +1042,42 @@
   observed motion discontinuities without simulator input or history
   re-encoding. Promotion still requires a learned, uncertainty-aware RGB gate
   trained on balanced contact/no-contact windows and paired multistep evidence.
+
+## ADR-054 — Learn event gates offline, but do not promote without state benefit
+
+- **Date:** 2026-07-29
+- **Status:** workflow accepted; learned policies rejected
+- **Context:** The heuristic change-point detector in ADR-053 could be noisy or
+  inert. A learned gate needs balanced labels, exact alignment to asynchronous
+  RGB history, uncertainty inputs, and cheap inference. Adding a large
+  recurrent network or updating weights online would violate the intended
+  fast correction path.
+- **Decision:** Export nine causal features per persistent object: signed and
+  absolute acceleration-compensated residual, standardized residual, adjacent
+  velocities, reversal, minimum speed, propagated log variance, and contact
+  probability. Preserve the exact three observation timestamps. Train either
+  logistic regression or an eight-hidden-unit MLP offline using simulator
+  collision/velocity only as supervision. Store coefficients in typed runtime
+  config and cache feature tensors. At inference, apply at most a tiny MLP and
+  no history re-encoding or weight update. Keep every learned gate disabled in
+  the scaled default until paired physical metrics improve.
+- **Alternatives considered:** label every RGB feature with the immediately
+  preceding simulator frame; train a large sequence model; accept classifier
+  precision without measuring downstream state; enable the sparse gate because
+  it is nearly neutral.
+- **Evidence:** Misaligned logistic labels produced validation precision
+  `0.2727` and recall `0.0822`. Exact timestamp alignment yielded 543
+  train/398 validation windows with 197/146 observable event positives. The
+  linear gate could not meet useful precision/recall. A loose MLP reached
+  precision `0.6000`, recall `0.1644`, but fired 13 times on seed `100016` and
+  collapsed detection recall to `0.2083`. A sparse threshold reached held-out
+  precision `0.7500`, recall `0.0411`. It was exactly baseline on seed
+  `100016`; on seed `100017`, current RMSE improved
+  `0.702313 → 0.702296 m` and 0.1-second RMSE
+  `0.715284 → 0.715256 m`, but velocity RMSE regressed
+  `1.148770 → 1.154865 m/s`.
+- **Consequences:** Event-gate data generation, caching, fitting, configuration,
+  and provenance are now reproducible. The experiment falsifies “better event
+  classification alone fixes velocity.” The next accuracy target is a
+  calibrated learned outgoing-velocity proposal trained jointly with the gate,
+  while the validated runtime remains unchanged.

@@ -581,6 +581,129 @@ class RGBTemporalPositionHistory(ModalityHistory):
         score = torch.where(valid, score, torch.zeros_like(score))
         return change_point, score
 
+    def kinematic_change_point_features(
+        self,
+        *,
+        observable_axes: Tensor,
+        known_acceleration: Tensor,
+        minimum_dt: float,
+    ) -> tuple[Tensor, Tensor]:
+        """Return uncertainty-aware causal features for a learned event gate.
+
+        Features are produced independently for every supplied observable axis:
+        signed and absolute acceleration-compensated velocity residual,
+        standardized residual, the adjacent segment velocities, a reversal
+        indicator, the smaller adjacent speed, and log residual variance.
+        Simulator state is neither accepted nor consulted.
+        """
+
+        if observable_axes.ndim != 3 or observable_axes.shape[:2] != (
+            self.object_ids.shape[0],
+            3,
+        ):
+            raise ValueError("observable_axes must have shape [B,3,K]")
+        if known_acceleration.shape != (self.object_ids.shape[0], 3):
+            raise ValueError("known_acceleration must have shape [B,3]")
+        if not math.isfinite(minimum_dt) or minimum_dt <= 0:
+            raise ValueError("minimum_dt must be finite and positive")
+
+        count = self.valid_mask.sum(dim=-1)
+        enough = count >= 3
+        last_indices = torch.stack((count - 3, count - 2, count - 1), dim=-1).clamp_min(0)
+        timestamps = self.timestamps.gather(dim=-1, index=last_indices)
+        positions = self.positions.gather(
+            dim=-2,
+            index=last_indices.unsqueeze(-1).expand(-1, -1, -1, 3),
+        )
+        log_variance = self.position_log_variance.gather(
+            dim=-2,
+            index=last_indices.unsqueeze(-1).expand(-1, -1, -1, 3),
+        )
+        previous_dt = timestamps[..., 1] - timestamps[..., 0]
+        current_dt = timestamps[..., 2] - timestamps[..., 1]
+        valid_dt = (previous_dt > minimum_dt) & (current_dt > minimum_dt)
+        safe_previous_dt = previous_dt.clamp_min(minimum_dt)
+        safe_current_dt = current_dt.clamp_min(minimum_dt)
+        previous_velocity = (positions[..., 1, :] - positions[..., 0, :]) / (
+            safe_previous_dt.unsqueeze(-1)
+        )
+        current_velocity = (positions[..., 2, :] - positions[..., 1, :]) / (
+            safe_current_dt.unsqueeze(-1)
+        )
+        midpoint_dt = 0.5 * (previous_dt + current_dt)
+        residual = (
+            current_velocity
+            - previous_velocity
+            - known_acceleration[:, None, :] * midpoint_dt.unsqueeze(-1)
+        )
+
+        position_variance = log_variance.clamp(-30.0, 30.0).exp()
+        residual_variance = (
+            position_variance[..., 0, :] / safe_previous_dt.square().unsqueeze(-1)
+            + position_variance[..., 1, :]
+            * (safe_previous_dt.reciprocal() + safe_current_dt.reciprocal()).square().unsqueeze(-1)
+            + position_variance[..., 2, :] / safe_current_dt.square().unsqueeze(-1)
+        )
+        previous_components = torch.einsum(
+            "bnc,bck->bnk",
+            previous_velocity,
+            observable_axes,
+        )
+        current_components = torch.einsum(
+            "bnc,bck->bnk",
+            current_velocity,
+            observable_axes,
+        )
+        residual_components = torch.einsum(
+            "bnc,bck->bnk",
+            residual,
+            observable_axes,
+        )
+        residual_axis_variance = torch.einsum(
+            "bnc,bck->bnk",
+            residual_variance,
+            observable_axes.square(),
+        ).clamp_min(1.0e-8)
+        absolute_residual = residual_components.abs()
+        standardized_residual = absolute_residual / residual_axis_variance.sqrt()
+        features = torch.stack(
+            (
+                (residual_components / 5.0).clamp(-4.0, 4.0),
+                (absolute_residual / 5.0).clamp(0.0, 4.0),
+                (standardized_residual / 5.0).clamp(0.0, 4.0),
+                (previous_components / 5.0).clamp(-4.0, 4.0),
+                (current_components / 5.0).clamp(-4.0, 4.0),
+                (previous_components * current_components < 0).to(positions.dtype),
+                (torch.minimum(previous_components.abs(), current_components.abs()) / 5.0).clamp(
+                    0.0, 4.0
+                ),
+                (residual_axis_variance.log() / 8.0).clamp(-2.0, 2.0),
+            ),
+            dim=-1,
+        )
+        valid = enough.unsqueeze(-1) & valid_dt.unsqueeze(-1) & torch.isfinite(features).all(dim=-1)
+        features = torch.where(valid.unsqueeze(-1), features, torch.zeros_like(features))
+        return features, valid
+
+    def latest_triplet_timestamps(self, *, minimum_dt: float) -> tuple[Tensor, Tensor]:
+        """Return the exact causal timestamps underlying change-point features."""
+
+        if not math.isfinite(minimum_dt) or minimum_dt <= 0:
+            raise ValueError("minimum_dt must be finite and positive")
+        count = self.valid_mask.sum(dim=-1)
+        indices = torch.stack((count - 3, count - 2, count - 1), dim=-1).clamp_min(0)
+        timestamps = self.timestamps.gather(dim=-1, index=indices)
+        valid = (count >= 3) & (
+            (timestamps[..., 1] - timestamps[..., 0] > minimum_dt)
+            & (timestamps[..., 2] - timestamps[..., 1] > minimum_dt)
+        )
+        timestamps = torch.where(
+            valid.unsqueeze(-1),
+            timestamps,
+            torch.zeros_like(timestamps),
+        )
+        return timestamps, valid
+
     def robust_trajectory_position(
         self,
         *,

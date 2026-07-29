@@ -79,6 +79,24 @@ class RGBObservationConfig:
     temporal_velocity_change_point_minimum_delta: float = 0.75
     temporal_velocity_change_point_strong_delta: float = 2.0
     temporal_velocity_change_point_require_contact_mode: bool = True
+    temporal_velocity_change_point_gate: str = "heuristic"
+    temporal_velocity_change_point_linear_weights: tuple[float, ...] = (
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    )
+    temporal_velocity_change_point_linear_bias: float = -8.0
+    temporal_velocity_change_point_mlp_hidden_weights: tuple[float, ...] = ()
+    temporal_velocity_change_point_mlp_hidden_bias: tuple[float, ...] = ()
+    temporal_velocity_change_point_mlp_output_weights: tuple[float, ...] = ()
+    temporal_velocity_change_point_mlp_output_bias: float = 0.0
+    temporal_velocity_change_point_probability_threshold: float = 0.5
     temporal_velocity_measurement_position_blend: float = 0.0
     temporal_velocity_position_innovation_coupling: bool = False
     temporal_position_enabled: bool = False
@@ -207,6 +225,42 @@ class RGBObservationConfig:
             raise ValueError(
                 "trajectory change points require temporal history reset and "
                 "post-event gravity-axis correction"
+            )
+        if self.temporal_velocity_change_point_gate not in {"heuristic", "linear", "mlp"}:
+            raise ValueError(
+                "temporal_velocity_change_point_gate must be heuristic, linear, or mlp"
+            )
+        if len(self.temporal_velocity_change_point_linear_weights) != 9 or not all(
+            math.isfinite(value) for value in self.temporal_velocity_change_point_linear_weights
+        ):
+            raise ValueError(
+                "temporal_velocity_change_point_linear_weights must contain nine finite values"
+            )
+        if not math.isfinite(self.temporal_velocity_change_point_linear_bias):
+            raise ValueError("temporal_velocity_change_point_linear_bias must be finite")
+        mlp_hidden = len(self.temporal_velocity_change_point_mlp_hidden_bias)
+        if self.temporal_velocity_change_point_gate == "mlp" and (
+            mlp_hidden <= 0
+            or len(self.temporal_velocity_change_point_mlp_hidden_weights) != 9 * mlp_hidden
+            or len(self.temporal_velocity_change_point_mlp_output_weights) != mlp_hidden
+        ):
+            raise ValueError("change-point MLP coefficient dimensions are inconsistent")
+        if not all(
+            math.isfinite(value)
+            for values in (
+                self.temporal_velocity_change_point_mlp_hidden_weights,
+                self.temporal_velocity_change_point_mlp_hidden_bias,
+                self.temporal_velocity_change_point_mlp_output_weights,
+            )
+            for value in values
+        ) or not math.isfinite(self.temporal_velocity_change_point_mlp_output_bias):
+            raise ValueError("change-point MLP coefficients must be finite")
+        if (
+            not math.isfinite(self.temporal_velocity_change_point_probability_threshold)
+            or not 0.0 < self.temporal_velocity_change_point_probability_threshold < 1.0
+        ):
+            raise ValueError(
+                "temporal_velocity_change_point_probability_threshold must lie in (0, 1)"
             )
         if (
             not math.isfinite(self.temporal_velocity_measurement_position_blend)
@@ -956,17 +1010,77 @@ class RGBObservationModule(ObservationModule):
         )
         change_point_mask = torch.zeros_like(active_mask)
         change_point_score = posterior.objects.position.new_zeros(active_mask.shape)
-        if self.config.temporal_velocity_change_point_enabled:
-            gravity_axis = F.normalize(posterior.gravity, dim=-1)
-            observable_axes = gravity_axis.unsqueeze(-1)
-            change_point_mask, change_point_score = history.kinematic_change_point(
-                observable_axes=observable_axes,
-                known_acceleration=posterior.gravity,
-                minimum_dt=self.config.temporal_velocity_min_dt,
-                minimum_speed=self.config.temporal_velocity_change_point_minimum_speed,
-                minimum_velocity_change=(self.config.temporal_velocity_change_point_minimum_delta),
-                strong_velocity_change=(self.config.temporal_velocity_change_point_strong_delta),
+        gravity_axis = F.normalize(posterior.gravity, dim=-1)
+        observable_axes = gravity_axis.unsqueeze(-1)
+        learned_features, learned_feature_valid = history.kinematic_change_point_features(
+            observable_axes=observable_axes,
+            known_acceleration=posterior.gravity,
+            minimum_dt=self.config.temporal_velocity_min_dt,
+        )
+        learned_features = learned_features.squeeze(-2)
+        learned_feature_valid = learned_feature_valid.squeeze(-1)
+        learned_feature_timestamps, timestamp_valid = history.latest_triplet_timestamps(
+            minimum_dt=self.config.temporal_velocity_min_dt
+        )
+        learned_feature_valid = learned_feature_valid & timestamp_valid
+        mode_probability = posterior.objects.motion_mode_logits.softmax(dim=-1)
+        contact_probability = (
+            mode_probability[..., MotionMode.COLLISION]
+            + mode_probability[..., MotionMode.GROUND_CONTACT]
+            + mode_probability[..., MotionMode.PAIR_CONTACT]
+        ).clamp(0.0, 1.0)
+        learned_gate_features = torch.cat(
+            (learned_features, contact_probability.unsqueeze(-1)),
+            dim=-1,
+        )
+        learned_weights = posterior.objects.position.new_tensor(
+            self.config.temporal_velocity_change_point_linear_weights
+        )
+        if self.config.temporal_velocity_change_point_gate == "mlp":
+            hidden_bias = posterior.objects.position.new_tensor(
+                self.config.temporal_velocity_change_point_mlp_hidden_bias
             )
+            hidden_weights = posterior.objects.position.new_tensor(
+                self.config.temporal_velocity_change_point_mlp_hidden_weights
+            ).reshape(hidden_bias.numel(), learned_gate_features.shape[-1])
+            output_weights = posterior.objects.position.new_tensor(
+                self.config.temporal_velocity_change_point_mlp_output_weights
+            )
+            hidden = F.silu(F.linear(learned_gate_features, hidden_weights, hidden_bias))
+            learned_logit = F.linear(
+                hidden,
+                output_weights.unsqueeze(0),
+                posterior.objects.position.new_tensor(
+                    [self.config.temporal_velocity_change_point_mlp_output_bias]
+                ),
+            ).squeeze(-1)
+        else:
+            learned_logit = torch.einsum(
+                "bnf,f->bn",
+                learned_gate_features,
+                learned_weights,
+            ) + float(self.config.temporal_velocity_change_point_linear_bias)
+        learned_probability = learned_logit.sigmoid()
+        if self.config.temporal_velocity_change_point_enabled:
+            if self.config.temporal_velocity_change_point_gate in {"linear", "mlp"}:
+                change_point_mask = learned_feature_valid & (
+                    learned_probability
+                    >= self.config.temporal_velocity_change_point_probability_threshold
+                )
+                change_point_score = learned_probability
+            else:
+                change_point_mask, change_point_score = history.kinematic_change_point(
+                    observable_axes=observable_axes,
+                    known_acceleration=posterior.gravity,
+                    minimum_dt=self.config.temporal_velocity_min_dt,
+                    minimum_speed=self.config.temporal_velocity_change_point_minimum_speed,
+                    minimum_velocity_change=(
+                        self.config.temporal_velocity_change_point_minimum_delta
+                    ),
+                    strong_velocity_change=(
+                        self.config.temporal_velocity_change_point_strong_delta
+                    ),
+                )
             change_point_mask = change_point_mask & observed_mask & active_mask
             if self.config.temporal_velocity_change_point_require_contact_mode:
                 endpoint_mode = posterior.objects.motion_mode_logits.argmax(dim=-1)
@@ -999,6 +1113,13 @@ class RGBObservationModule(ObservationModule):
                 "trajectory_change_point_mask": change_point_mask,
                 "trajectory_change_point_score": change_point_score,
                 "trajectory_change_point_eligible_mask": observed_mask & active_mask,
+                "trajectory_change_point_features": learned_gate_features,
+                "trajectory_change_point_feature_valid_mask": (
+                    learned_feature_valid & observed_mask & active_mask
+                ),
+                "trajectory_change_point_feature_timestamps": learned_feature_timestamps,
+                "trajectory_change_point_logit": learned_logit,
+                "trajectory_change_point_probability": learned_probability,
             }
         )
         velocity, velocity_log_variance, velocity_valid_mask = history.least_squares_velocity(

@@ -2171,3 +2171,76 @@ Compileall, the scaled dry run, and `git diff --check` passed. The dry run
 resolved the unchanged 1.90M-parameter-contract, 48,000-draw, eight-scenario
 RGB-only plan with Python `3.10.20`, PyTorch `2.10.0`, and MPS built. The paired
 evaluations and direct device tests ran on MPS.
+
+## 2026-07-29 — learned uncertainty-aware RGB event gate
+
+A reproducible offline-supervised/online-cheap gate workflow now consumes the
+exact three timestamps behind each causal RGB history feature. Simulator
+collision and velocity state are used only to label those cached training
+windows. Runtime input remains RGB, calibration, persistent belief, and
+sensor-local history. The nine features include signed/absolute
+acceleration-compensated residual, propagated-uncertainty standardized
+residual, adjacent velocities, reversal, minimum speed, log variance, and
+belief contact probability. Logistic regression or a one-hidden-layer MLP can
+be refit from cached tensors in seconds, and coefficients are explicit
+checkpoint-compatible runtime semantics. Artifact creation preserves the
+source checkpoint's training and seed provenance.
+
+The aligned eight-scenario MPS collection produced 543 training windows
+(197 observable event positives) and 398 disjoint validation windows
+(146 positives). The linear gate failed the useful precision/recall gate. An
+eight-hidden-unit MLP at the loose threshold reached validation precision
+`0.600000`, recall `0.164384`, and F1 `0.258065`; on seed `100016` it fired
+13 times, collapsed detection recall `0.458333 → 0.208333`, and regressed
+current/velocity RMSE to `0.699426 m` / `1.652333 m/s`. It was rejected.
+
+The sparse MLP threshold reached precision `0.750000`, recall `0.041096`, and
+F1 `0.077922`. It fired twice on each paired seed. Seed `100016` was exactly
+baseline on current, velocity, detection, and 0.1-second metrics. On seed
+`100017`, current RMSE changed `0.702313 → 0.702296 m` and 0.1-second RMSE
+`0.715284 → 0.715256 m`, but velocity RMSE regressed
+`1.148770 → 1.154865 m/s`. It is also rejected. The scaled runtime remains
+unchanged and the learned gate stays disabled. The next concrete accuracy task
+is a jointly calibrated outgoing-velocity proposal rather than further gate
+threshold tuning.
+
+Primary artifacts:
+
+- aligned cached dataset and linear fit:
+  `runs/20260729-214956-rgb-change-point-linear-aligned-8x8-v2/`;
+- loose MLP fit:
+  `runs/20260729-221614-rgb-change-point-mlp-aligned-8x8-v4/`;
+- loose paired seed `100016`:
+  `runs/20260729-221614-rgb-change-point-mlp-aligned-8x8-v4/evaluation/20260729-222116-mlp-fast-offset16/report.md`;
+- sparse MLP fit:
+  `runs/20260729-222143-rgb-change-point-mlp-aligned-precision70-v5/`;
+- sparse paired seeds `100016` and `100017`:
+  `runs/20260729-222143-rgb-change-point-mlp-aligned-precision70-v5/evaluation/20260729-222606-mlp-fast-offset16/report.md`
+  and
+  `runs/20260729-222143-rgb-change-point-mlp-aligned-precision70-v5/evaluation/20260729-223027-mlp-fast-offset17/report.md`.
+
+Final validation:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff format .
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
+```
+
+Ruff left all 167 files unchanged and passed. The sandboxed full suite reported
+`262 passed, 4 skipped in 94.45 s`; the four hardware-conditional tests passed
+directly on MPS (`4 passed in 2.74 s`). The focused gate/temporal/config/
+checkpoint suite reported `75 passed in 3.95 s`.
+
+```bash
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-learned-gate-pycache PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/scaled_curriculum.yaml --dry-run --device cpu
+git diff --check
+```
+
+Compileall, the unchanged 48,000-draw/eight-scenario scaled dry run, and
+`git diff --check` passed. Feature collection and paired evaluations ran on
+MPS; cached logistic/MLP fitting ran on CPU.

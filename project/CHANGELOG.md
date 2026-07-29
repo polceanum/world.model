@@ -446,3 +446,13 @@ Evaluation now reports trigger counts and rates. Paired MPS ablations rejected
 both a noisy permissive gate and an endpoint-contact gate that was too sparse;
 the scaled profile therefore records the feature and thresholds explicitly but
 keeps it disabled.
+
+Added an offline-supervised, online-cheap RGB trajectory-gate workflow.
+Exact history timestamps align simulator-only training labels with the causal
+RGB windows that produced each feature vector. Nine uncertainty-aware features
+feed either logistic regression or a tiny one-hidden-layer MLP; learned
+coefficients live in explicit runtime config, and cached feature tensors permit
+threshold/model refits without rerunning perception. The artifact writer
+preserves source checkpoint training/seed provenance. Linear, loose-MLP, and
+sparse-MLP policies were all rejected for promotion: the sparse policy was
+safe but produced a small velocity regression on one paired seed.

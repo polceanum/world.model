@@ -118,6 +118,28 @@ python evaluate.py \
 Use one disjoint validation offset for candidate selection and a later untouched
 offset for confirmation; do not select checkpoints on the reserved test split.
 
+To collect exact-timestamp causal RGB event windows and fit the experimental
+uncertainty-aware gate:
+
+```bash
+python scripts/train_rgb_change_point_gate.py \
+  --config configs/scaled_curriculum.yaml \
+  --checkpoint <path> \
+  --device mps \
+  --train-episodes 8 \
+  --validation-episodes 8 \
+  --validation-seed-offset 256 \
+  --gate-type mlp \
+  --hidden-features 8
+```
+
+The output contains cached feature tensors, a report, resolved config, and a
+weights-identical checkpoint with explicit gate coefficients. The scaled
+profile keeps this gate disabled: current learned candidates did not pass the
+paired downstream velocity gate. Cached tensors can be supplied with
+`--train-cache` and `--validation-cache` to refit without rerunning RGB
+perception.
+
 For the deterministic convergence/debug run:
 
 ```bash
