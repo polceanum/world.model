@@ -1008,3 +1008,37 @@
   validated scaled runtime remains unchanged. This avoids encoding constant
   velocity as a hard rule: analytic acceleration is removable known context,
   and observation evidence still controls whether velocity is corrected.
+
+## ADR-053 — Retain causal RGB change points as an opt-in capability
+
+- **Date:** 2026-07-29
+- **Status:** capability accepted; scaled policy rejected
+- **Context:** Endpoint motion modes miss collisions that begin and end between
+  observations, so ADR-052 needs an observation-side event gate. Consecutive
+  RGB point segments can expose a velocity discontinuity, but monocular depth
+  noise and ordinary accelerated motion can resemble one.
+- **Decision:** Add a causal three-point kinematic change-point detector. It
+  subtracts the velocity change explained by known gravity, operates only in
+  explicitly observable subspaces, resets the point ring without destroying
+  independent scale anchors, and records reset provenance. A change-point
+  reset may expose a short gravity-only outgoing-velocity correction after two
+  post-event samples; it never exposes camera-depth slope. Require the
+  acceleration-aware post-event correction whenever this detector is enabled.
+  Keep it explicitly disabled in the scaled profile.
+- **Alternatives considered:** reset on every raw residual; treat all endpoint
+  contact modes as event onsets; discard scale anchors at a kinematic reset;
+  silently promote a policy because one current-position metric improved.
+- **Evidence:** On seed `100016`, a permissive detector fired `45/111`
+  inspected object frames and changed current RMSE `0.648034 → 0.637888 m`, but
+  regressed velocity RMSE `1.288819 → 1.357281 m/s` and collision F1
+  `0.285714 → 0.250000`. Conservative, gravity-only, and provenance-decoupled
+  variants fired `23`, `10`, and `15` times and all regressed current and/or
+  velocity accuracy. Requiring an endpoint contact reduced activation to
+  `1/110` on seed `100016` and `0/177` on seed `100017`; the first fast check
+  was identical to its baseline on comparable current, velocity, detection,
+  and 0.1-second metrics. This is safe but too sparse to solve outgoing
+  velocity.
+- **Consequences:** The runtime/data contract can now express and diagnose
+  observed motion discontinuities without simulator input or history
+  re-encoding. Promotion still requires a learned, uncertainty-aware RGB gate
+  trained on balanced contact/no-contact windows and paired multistep evidence.

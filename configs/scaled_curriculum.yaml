@@ -68,6 +68,15 @@ model:
     # Continuous correction was previously rejected on held-out forecasts.
     temporal_velocity_max_age_steps: 3
     temporal_velocity_post_event_max_samples: 3
+    # Experimental causal trajectory-residual gate. Paired validation found
+    # the ungated detector too noisy and the endpoint-contact gate too sparse,
+    # so this remains explicitly disabled until a learned RGB gate is trained.
+    temporal_velocity_change_point_enabled: false
+    temporal_velocity_change_point_minimum_speed: 0.25
+    temporal_velocity_change_point_minimum_delta: 0.75
+    temporal_velocity_change_point_strong_delta: 2.0
+    temporal_velocity_change_point_require_contact_mode: true
+    temporal_velocity_post_event_min_samples: 2
     temporal_velocity_measurement_position_blend: 0.125
     temporal_velocity_position_innovation_coupling: false
     # Keep scarce, trustworthy global scale anchors in a separate persistent-ID

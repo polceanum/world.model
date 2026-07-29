@@ -218,6 +218,24 @@ class OnlineWorldModel(nn.Module):
                     temporal_velocity_post_event_max_samples=(
                         rgb_config.temporal_velocity_post_event_max_samples
                     ),
+                    temporal_velocity_post_event_min_samples=(
+                        rgb_config.temporal_velocity_post_event_min_samples
+                    ),
+                    temporal_velocity_change_point_enabled=(
+                        rgb_config.temporal_velocity_change_point_enabled
+                    ),
+                    temporal_velocity_change_point_minimum_speed=(
+                        rgb_config.temporal_velocity_change_point_minimum_speed
+                    ),
+                    temporal_velocity_change_point_minimum_delta=(
+                        rgb_config.temporal_velocity_change_point_minimum_delta
+                    ),
+                    temporal_velocity_change_point_strong_delta=(
+                        rgb_config.temporal_velocity_change_point_strong_delta
+                    ),
+                    temporal_velocity_change_point_require_contact_mode=(
+                        rgb_config.temporal_velocity_change_point_require_contact_mode
+                    ),
                     temporal_velocity_measurement_position_blend=(
                         rgb_config.temporal_velocity_measurement_position_blend
                     ),

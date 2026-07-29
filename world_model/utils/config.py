@@ -104,6 +104,12 @@ class RGBConfig:
     temporal_velocity_reset_on_collision: bool = False
     temporal_velocity_max_age_steps: int | None = None
     temporal_velocity_post_event_max_samples: int | None = None
+    temporal_velocity_post_event_min_samples: int = 2
+    temporal_velocity_change_point_enabled: bool = False
+    temporal_velocity_change_point_minimum_speed: float = 0.25
+    temporal_velocity_change_point_minimum_delta: float = 0.75
+    temporal_velocity_change_point_strong_delta: float = 2.0
+    temporal_velocity_change_point_require_contact_mode: bool = True
     temporal_velocity_measurement_position_blend: float = 0.0
     temporal_velocity_position_innovation_coupling: bool = False
     temporal_position_enabled: bool = False

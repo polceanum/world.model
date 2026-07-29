@@ -73,6 +73,12 @@ class RGBObservationConfig:
     temporal_velocity_reset_on_collision: bool = False
     temporal_velocity_max_age_steps: int | None = None
     temporal_velocity_post_event_max_samples: int | None = None
+    temporal_velocity_post_event_min_samples: int = 2
+    temporal_velocity_change_point_enabled: bool = False
+    temporal_velocity_change_point_minimum_speed: float = 0.25
+    temporal_velocity_change_point_minimum_delta: float = 0.75
+    temporal_velocity_change_point_strong_delta: float = 2.0
+    temporal_velocity_change_point_require_contact_mode: bool = True
     temporal_velocity_measurement_position_blend: float = 0.0
     temporal_velocity_position_innovation_coupling: bool = False
     temporal_position_enabled: bool = False
@@ -152,6 +158,55 @@ class RGBObservationConfig:
             raise ValueError(
                 "temporal_velocity_post_event_max_samples must be no smaller than "
                 "temporal_velocity_min_samples"
+            )
+        if not (
+            2
+            <= self.temporal_velocity_post_event_min_samples
+            <= self.temporal_velocity_history_size
+        ):
+            raise ValueError(
+                "temporal_velocity_post_event_min_samples must lie between two and history_size"
+            )
+        if (
+            self.temporal_velocity_post_event_max_samples is not None
+            and self.temporal_velocity_post_event_min_samples
+            > self.temporal_velocity_post_event_max_samples
+        ):
+            raise ValueError(
+                "temporal_velocity_post_event_min_samples must be no greater "
+                "than temporal_velocity_post_event_max_samples"
+            )
+        for name, value in (
+            (
+                "temporal_velocity_change_point_minimum_speed",
+                self.temporal_velocity_change_point_minimum_speed,
+            ),
+            (
+                "temporal_velocity_change_point_minimum_delta",
+                self.temporal_velocity_change_point_minimum_delta,
+            ),
+            (
+                "temporal_velocity_change_point_strong_delta",
+                self.temporal_velocity_change_point_strong_delta,
+            ),
+        ):
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be finite and positive")
+        if (
+            self.temporal_velocity_change_point_strong_delta
+            < self.temporal_velocity_change_point_minimum_delta
+        ):
+            raise ValueError(
+                "temporal_velocity_change_point_strong_delta must be no smaller "
+                "than temporal_velocity_change_point_minimum_delta"
+            )
+        if self.temporal_velocity_change_point_enabled and (
+            not self.temporal_velocity_reset_on_collision
+            or not self.temporal_velocity_post_event_gravity_axis_enabled
+        ):
+            raise ValueError(
+                "trajectory change points require temporal history reset and "
+                "post-event gravity-axis correction"
             )
         if (
             not math.isfinite(self.temporal_velocity_measurement_position_blend)
@@ -899,6 +954,53 @@ class RGBObservationModule(ObservationModule):
             position_log_variance=history_position_log_variance,
             minimum_dt=self.config.temporal_velocity_min_dt,
         )
+        change_point_mask = torch.zeros_like(active_mask)
+        change_point_score = posterior.objects.position.new_zeros(active_mask.shape)
+        if self.config.temporal_velocity_change_point_enabled:
+            gravity_axis = F.normalize(posterior.gravity, dim=-1)
+            observable_axes = gravity_axis.unsqueeze(-1)
+            change_point_mask, change_point_score = history.kinematic_change_point(
+                observable_axes=observable_axes,
+                known_acceleration=posterior.gravity,
+                minimum_dt=self.config.temporal_velocity_min_dt,
+                minimum_speed=self.config.temporal_velocity_change_point_minimum_speed,
+                minimum_velocity_change=(self.config.temporal_velocity_change_point_minimum_delta),
+                strong_velocity_change=(self.config.temporal_velocity_change_point_strong_delta),
+            )
+            change_point_mask = change_point_mask & observed_mask & active_mask
+            if self.config.temporal_velocity_change_point_require_contact_mode:
+                endpoint_mode = posterior.objects.motion_mode_logits.argmax(dim=-1)
+                contact_mode = (
+                    (endpoint_mode == int(MotionMode.COLLISION))
+                    | (endpoint_mode == int(MotionMode.GROUND_CONTACT))
+                    | (endpoint_mode == int(MotionMode.PAIR_CONTACT))
+                )
+                change_point_mask = change_point_mask & contact_mode
+            if torch.any(change_point_mask):
+                reset_mask = reset_mask | change_point_mask
+                history = history.append(
+                    object_ids=object_ids,
+                    active_mask=active_mask,
+                    observed_mask=observed_mask,
+                    scale_valid_mask=scale_valid_mask,
+                    reset_mask=reset_mask,
+                    scale_reset_mask=(
+                        posterior.objects.motion_mode_logits.argmax(dim=-1)
+                        == int(MotionMode.COLLISION)
+                    ),
+                    change_point_reset_mask=change_point_mask,
+                    timestamp=measured.timestamp,
+                    positions=history_positions,
+                    position_log_variance=history_position_log_variance,
+                    minimum_dt=self.config.temporal_velocity_min_dt,
+                )
+        measured.auxiliary.update(
+            {
+                "trajectory_change_point_mask": change_point_mask,
+                "trajectory_change_point_score": change_point_score,
+                "trajectory_change_point_eligible_mask": observed_mask & active_mask,
+            }
+        )
         velocity, velocity_log_variance, velocity_valid_mask = history.least_squares_velocity(
             minimum_dt=self.config.temporal_velocity_min_dt,
             minimum_samples=self.config.temporal_velocity_min_samples,
@@ -916,7 +1018,7 @@ class RGBObservationModule(ObservationModule):
                 gravity_velocity_valid_mask,
             ) = history.least_squares_velocity(
                 minimum_dt=self.config.temporal_velocity_min_dt,
-                minimum_samples=self.config.temporal_velocity_min_samples,
+                minimum_samples=self.config.temporal_velocity_post_event_min_samples,
                 variance_scale=self.config.temporal_velocity_variance_scale,
                 variance_floor=self.config.temporal_velocity_variance_floor,
                 variance_ceiling=self.config.temporal_velocity_variance_ceiling,
@@ -938,6 +1040,7 @@ class RGBObservationModule(ObservationModule):
                 )
             velocity_valid_mask = velocity_valid_mask & (lifetime_window | post_event_window)
         if self.config.temporal_velocity_lateral_only:
+            post_event_gravity_valid = torch.zeros_like(velocity_valid_mask)
             camera_lateral = posterior.camera.world_from_camera[:, :3, 0]
             camera_lateral = F.normalize(camera_lateral, dim=-1)
             camera_lateral = camera_lateral.unsqueeze(1)
@@ -1013,7 +1116,45 @@ class RGBObservationModule(ObservationModule):
                         <= self.config.temporal_velocity_post_event_max_samples
                     )
                 post_event_gravity_valid = (
-                    post_event_window & gravity_velocity_valid_mask & velocity_valid_mask
+                    post_event_window & gravity_velocity_valid_mask & observed_mask & active_mask
+                )
+                if not self.config.temporal_velocity_enabled:
+                    post_event_gravity_valid = torch.zeros_like(post_event_gravity_valid)
+                change_point_gravity_valid = post_event_gravity_valid & history.change_point_reset
+                gravity_delta = (
+                    (gravity_velocity - prior_velocity) * gravity_axis[:, None, :]
+                ).sum(dim=-1, keepdim=True)
+                gravity_only_velocity = prior_velocity + gravity_axis[:, None, :] * gravity_delta
+                gravity_scalar_variance = (
+                    gravity_velocity_log_variance.exp() * gravity_axis[:, None, :].square()
+                ).sum(dim=-1, keepdim=True)
+                gravity_only_observable = gravity_axis[:, None, :].square() >= 1.0e-4
+                gravity_only_variance = gravity_scalar_variance / gravity_axis[
+                    :, None, :
+                ].square().clamp_min(1.0e-4)
+                gravity_unobserved_variance = torch.full_like(
+                    gravity_only_variance,
+                    self.config.temporal_velocity_unobserved_variance,
+                )
+                gravity_only_variance = torch.where(
+                    gravity_only_observable,
+                    gravity_only_variance,
+                    gravity_unobserved_variance,
+                )
+                gravity_projected_velocity = torch.where(
+                    change_point_gravity_valid.unsqueeze(-1),
+                    gravity_only_velocity,
+                    gravity_projected_velocity,
+                )
+                gravity_projected_variance = torch.where(
+                    change_point_gravity_valid.unsqueeze(-1),
+                    gravity_only_variance,
+                    gravity_projected_variance,
+                )
+                gravity_observable = torch.where(
+                    change_point_gravity_valid.unsqueeze(-1),
+                    gravity_only_observable,
+                    gravity_observable,
                 )
                 velocity = torch.where(
                     post_event_gravity_valid.unsqueeze(-1),
@@ -1039,6 +1180,7 @@ class RGBObservationModule(ObservationModule):
                 projected_variance,
                 unobserved_variance,
             ).log()
+            velocity_valid_mask = velocity_valid_mask | post_event_gravity_valid
 
         measurement_velocity = measured.values.new_zeros((*measured.values.shape[:2], 3))
         measurement_log_variance = measured.values.new_full(

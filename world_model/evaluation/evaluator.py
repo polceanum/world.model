@@ -602,6 +602,8 @@ def evaluate_checkpoint(
     predicted_object_frames = 0
     matched_object_frames = 0
     distance_gated_matched_object_frames = 0
+    trajectory_change_point_count = 0
+    trajectory_change_point_inspected_object_frames = 0
     forecast_target_count: dict[str, int] = {}
     forecast_tracked_count: dict[str, int] = {}
     forecast_active_count: dict[str, int] = {}
@@ -695,6 +697,28 @@ def evaluate_checkpoint(
                         # runtime; never count that stale measurement twice.
                         last_measurements = None
                 temporal_velocity_measurements.update(last_measurements)
+                if last_measurements is not None:
+                    change_point_mask = last_measurements.auxiliary.get(
+                        "trajectory_change_point_mask"
+                    )
+                    if change_point_mask is not None:
+                        if change_point_mask.dtype != torch.bool or change_point_mask.ndim != 2:
+                            raise ValueError("trajectory_change_point_mask must be boolean [B,N]")
+                        trajectory_change_point_count += int(change_point_mask.sum().detach().cpu())
+                        eligible_mask = last_measurements.auxiliary.get(
+                            "trajectory_change_point_eligible_mask"
+                        )
+                        if (
+                            eligible_mask is None
+                            or eligible_mask.shape != change_point_mask.shape
+                            or eligible_mask.dtype != torch.bool
+                        ):
+                            raise ValueError(
+                                "trajectory_change_point_eligible_mask must be boolean [B,N]"
+                            )
+                        trajectory_change_point_inspected_object_frames += int(
+                            eligible_mask.sum().detach().cpu()
+                        )
                 if model.diagnostics.oracle_used:
                     raise RuntimeError(
                         "oracle diagnostics detected during claimed RGB-only evaluation"
@@ -1150,6 +1174,15 @@ def evaluate_checkpoint(
             "target_object_frames": float(target_object_frames),
             "predicted_object_frames": float(predicted_object_frames),
             "assignment_matched_object_frames": float(matched_object_frames),
+            "trajectory_change_point_count": float(trajectory_change_point_count),
+            "trajectory_change_point_inspected_object_frames": float(
+                trajectory_change_point_inspected_object_frames
+            ),
+            "trajectory_change_point_rate": (
+                trajectory_change_point_count / trajectory_change_point_inspected_object_frames
+                if trajectory_change_point_inspected_object_frames
+                else None
+            ),
             f"distance_gated_matched_object_frames@{detection_threshold_label}": float(
                 distance_gated_matched_object_frames
             ),

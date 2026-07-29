@@ -262,10 +262,13 @@
   estimates velocity at the current timestamp and exposes only camera-lateral
   plus post-event gravity-axis evidence. Reject continuous/all-axis and
   endpoint-contact variants after paired MPS selection tradeoffs.
-- [ ] Infer contact/change points causally from robust RGB trajectory residuals
-  so post-event velocity history does not depend on a transient endpoint
-  `COLLISION` mode; train and validate that gate on balanced contact/no-contact
-  windows before enabling gravity-axis correction.
+- [x] Add a causal, acceleration-compensated RGB trajectory change-point
+  capability with observable-axis projection, independent point/scale reset
+  semantics, reset provenance, diagnostics, and a two-sample post-event fit.
+  Reject the permissive and endpoint-contact policies after paired MPS checks.
+- [ ] Train an uncertainty-aware change-point gate on balanced
+  contact/no-contact RGB windows; validate precision/recall and paired
+  multistep accuracy before enabling gravity-axis correction.
 - [x] Add a 1.90M-parameter scaled shared-model profile with 4,096 training,
   256 validation, and 256 test episodes across all eight scenario families.
 - [x] Record model parameter count, episode draws, nominal manifest passes,

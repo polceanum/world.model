@@ -27,6 +27,8 @@ class RGBTemporalPositionHistory(ModalityHistory):
     post_reset_sample_count: Tensor
     has_reset: Tensor
     reset_active: Tensor
+    scale_reset_active: Tensor
+    change_point_reset: Tensor
     history_size: int
 
     @classmethod
@@ -124,6 +126,18 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 device=object_ids.device,
                 dtype=torch.bool,
             ),
+            scale_reset_active=torch.zeros(
+                batch,
+                objects,
+                device=object_ids.device,
+                dtype=torch.bool,
+            ),
+            change_point_reset=torch.zeros(
+                batch,
+                objects,
+                device=object_ids.device,
+                dtype=torch.bool,
+            ),
             history_size=history_size,
         )
 
@@ -149,6 +163,8 @@ class RGBTemporalPositionHistory(ModalityHistory):
             and self.post_reset_sample_count.shape == object_ids.shape
             and self.has_reset.shape == object_ids.shape
             and self.reset_active.shape == object_ids.shape
+            and self.scale_reset_active.shape == object_ids.shape
+            and self.change_point_reset.shape == object_ids.shape
             and self.object_ids.device == object_ids.device
             and self.positions.device == positions.device
             and self.positions.dtype == positions.dtype
@@ -162,6 +178,8 @@ class RGBTemporalPositionHistory(ModalityHistory):
         observed_mask: Tensor,
         scale_valid_mask: Tensor | None = None,
         reset_mask: Tensor | None = None,
+        scale_reset_mask: Tensor | None = None,
+        change_point_reset_mask: Tensor | None = None,
         timestamp: Tensor,
         positions: Tensor,
         position_log_variance: Tensor,
@@ -181,6 +199,19 @@ class RGBTemporalPositionHistory(ModalityHistory):
             reset_mask = torch.zeros_like(active_mask)
         if reset_mask.shape != object_ids.shape or reset_mask.dtype != torch.bool:
             raise ValueError("reset_mask must be boolean [B,N]")
+        if scale_reset_mask is None:
+            scale_reset_mask = reset_mask
+        if scale_reset_mask.shape != object_ids.shape or scale_reset_mask.dtype != torch.bool:
+            raise ValueError("scale_reset_mask must be boolean [B,N]")
+        if change_point_reset_mask is None:
+            change_point_reset_mask = torch.zeros_like(active_mask)
+        if (
+            change_point_reset_mask.shape != object_ids.shape
+            or change_point_reset_mask.dtype != torch.bool
+        ):
+            raise ValueError("change_point_reset_mask must be boolean [B,N]")
+        if torch.any(change_point_reset_mask & ~reset_mask):
+            raise ValueError("change_point_reset_mask must be a subset of reset_mask")
         if scale_valid_mask is None:
             scale_valid_mask = torch.zeros_like(active_mask)
         if scale_valid_mask.shape != object_ids.shape or scale_valid_mask.dtype != torch.bool:
@@ -255,8 +286,15 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 aligned.reset_active[batch_index, slot] = source.reset_active[
                     batch_index, previous_slot
                 ]
+                aligned.scale_reset_active[batch_index, slot] = source.scale_reset_active[
+                    batch_index, previous_slot
+                ]
+                aligned.change_point_reset[batch_index, slot] = source.change_point_reset[
+                    batch_index, previous_slot
+                ]
 
         reset_edge = reset_mask & ~aligned.reset_active
+        scale_reset_edge = scale_reset_mask & ~aligned.scale_reset_active
         aligned.timestamps = torch.where(
             reset_edge.unsqueeze(-1),
             torch.zeros_like(aligned.timestamps),
@@ -274,28 +312,34 @@ class RGBTemporalPositionHistory(ModalityHistory):
         )
         aligned.valid_mask = aligned.valid_mask & ~reset_edge.unsqueeze(-1)
         aligned.scale_timestamps = torch.where(
-            reset_edge.unsqueeze(-1),
+            scale_reset_edge.unsqueeze(-1),
             torch.zeros_like(aligned.scale_timestamps),
             aligned.scale_timestamps,
         )
         aligned.scale_positions = torch.where(
-            reset_edge.unsqueeze(-1).unsqueeze(-1),
+            scale_reset_edge.unsqueeze(-1).unsqueeze(-1),
             torch.zeros_like(aligned.scale_positions),
             aligned.scale_positions,
         )
         aligned.scale_position_log_variance = torch.where(
-            reset_edge.unsqueeze(-1).unsqueeze(-1),
+            scale_reset_edge.unsqueeze(-1).unsqueeze(-1),
             torch.zeros_like(aligned.scale_position_log_variance),
             aligned.scale_position_log_variance,
         )
-        aligned.scale_valid_mask = aligned.scale_valid_mask & ~reset_edge.unsqueeze(-1)
+        aligned.scale_valid_mask = aligned.scale_valid_mask & ~scale_reset_edge.unsqueeze(-1)
         aligned.post_reset_sample_count = torch.where(
             reset_edge,
             torch.zeros_like(aligned.post_reset_sample_count),
             aligned.post_reset_sample_count,
         )
         aligned.has_reset = aligned.has_reset | reset_edge
+        aligned.change_point_reset = torch.where(
+            reset_edge,
+            change_point_reset_mask,
+            aligned.change_point_reset,
+        )
         aligned.reset_active = reset_mask & active_mask
+        aligned.scale_reset_active = scale_reset_mask & active_mask
 
         append_mask = observed_mask & active_mask & (current_ids >= 0)
         finite = torch.isfinite(positions).all(dim=-1) & torch.isfinite(position_log_variance).all(
@@ -446,6 +490,97 @@ class RGBTemporalPositionHistory(ModalityHistory):
         )
         return velocity, log_variance, valid
 
+    def kinematic_change_point(
+        self,
+        *,
+        observable_axes: Tensor,
+        known_acceleration: Tensor,
+        minimum_dt: float,
+        minimum_speed: float,
+        minimum_velocity_change: float,
+        strong_velocity_change: float,
+    ) -> tuple[Tensor, Tensor]:
+        """Detect a causal motion discontinuity from the latest three points.
+
+        Consecutive segment velocities are compared after subtracting the
+        velocity change expected from known acceleration. Only explicitly
+        observable axes participate, so monocular camera-depth jitter cannot
+        open an event window. A reversal requires meaningful motion on both
+        sides; a larger residual can trigger without a clean sign flip.
+        """
+
+        if observable_axes.ndim != 3 or observable_axes.shape[:2] != (
+            self.object_ids.shape[0],
+            3,
+        ):
+            raise ValueError("observable_axes must have shape [B,3,K]")
+        if known_acceleration.shape != (self.object_ids.shape[0], 3):
+            raise ValueError("known_acceleration must have shape [B,3]")
+        for name, value in (
+            ("minimum_dt", minimum_dt),
+            ("minimum_speed", minimum_speed),
+            ("minimum_velocity_change", minimum_velocity_change),
+            ("strong_velocity_change", strong_velocity_change),
+        ):
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be finite and positive")
+        if strong_velocity_change < minimum_velocity_change:
+            raise ValueError(
+                "strong_velocity_change must be no smaller than minimum_velocity_change"
+            )
+
+        count = self.valid_mask.sum(dim=-1)
+        enough = count >= 3
+        last_indices = torch.stack((count - 3, count - 2, count - 1), dim=-1).clamp_min(0)
+        timestamps = self.timestamps.gather(dim=-1, index=last_indices)
+        positions = self.positions.gather(
+            dim=-2,
+            index=last_indices.unsqueeze(-1).expand(-1, -1, -1, 3),
+        )
+        previous_dt = timestamps[..., 1] - timestamps[..., 0]
+        current_dt = timestamps[..., 2] - timestamps[..., 1]
+        valid_dt = (previous_dt > minimum_dt) & (current_dt > minimum_dt)
+        previous_velocity = (positions[..., 1, :] - positions[..., 0, :]) / (
+            previous_dt.unsqueeze(-1).clamp_min(minimum_dt)
+        )
+        current_velocity = (positions[..., 2, :] - positions[..., 1, :]) / (
+            current_dt.unsqueeze(-1).clamp_min(minimum_dt)
+        )
+        midpoint_dt = 0.5 * (previous_dt + current_dt)
+        residual = (
+            current_velocity
+            - previous_velocity
+            - known_acceleration[:, None, :] * midpoint_dt.unsqueeze(-1)
+        )
+        previous_components = torch.einsum(
+            "bnc,bck->bnk",
+            previous_velocity,
+            observable_axes,
+        )
+        current_components = torch.einsum(
+            "bnc,bck->bnk",
+            current_velocity,
+            observable_axes,
+        )
+        residual_components = torch.einsum(
+            "bnc,bck->bnk",
+            residual,
+            observable_axes,
+        )
+        meaningful_reversal = (
+            (previous_components * current_components < 0)
+            & (previous_components.abs() >= minimum_speed)
+            & (current_components.abs() >= minimum_speed)
+            & (residual_components.abs() >= minimum_velocity_change)
+        )
+        strong_change = residual_components.abs() >= strong_velocity_change
+        axis_change = meaningful_reversal | strong_change
+        valid = enough & valid_dt & torch.isfinite(residual_components).all(dim=-1)
+        change_point = valid & axis_change.any(dim=-1)
+        score = residual_components.abs().amax(dim=-1)
+        score = torch.where(valid, score, torch.zeros_like(score))
+        return change_point, score
+
     def robust_trajectory_position(
         self,
         *,
@@ -581,5 +716,7 @@ class RGBTemporalPositionHistory(ModalityHistory):
             post_reset_sample_count=self.post_reset_sample_count.detach(),
             has_reset=self.has_reset.detach(),
             reset_active=self.reset_active.detach(),
+            scale_reset_active=self.scale_reset_active.detach(),
+            change_point_reset=self.change_point_reset.detach(),
             history_size=self.history_size,
         )

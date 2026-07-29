@@ -437,3 +437,12 @@ evidence, leaving monocular depth velocity unobserved. Focused tests cover the
 endpoint-bias correction and subspace projection. Matched MPS ablations found
 useful vertical-velocity signal but no net multistep/event promotion, so the
 scaled default remains disabled and the reports record the rejected policies.
+
+Added an opt-in causal RGB trajectory change-point path. It compares the latest
+three point observations after removing known gravitational acceleration,
+preserves the independently validated scale-anchor history when reopening the
+kinematic window, and permits a two-sample gravity-only outgoing correction.
+Evaluation now reports trigger counts and rates. Paired MPS ablations rejected
+both a noisy permissive gate and an endpoint-contact gate that was too sparse;
+the scaled profile therefore records the feature and thresholds explicitly but
+keeps it disabled.

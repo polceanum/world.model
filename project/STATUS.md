@@ -2105,3 +2105,69 @@ Compileall and `git diff --check` passed. The dry run resolved the unchanged
 1.90M-parameter-contract, 48,000-draw, eight-scenario RGB-only plan with Python
 `3.10.20`, PyTorch `2.10.0`, and MPS built. The sandboxed dry run used explicit
 CPU; the evaluations and direct device tests above ran on MPS.
+
+## 2026-07-29 — causal RGB trajectory change-point investigation
+
+The RGB temporal observer now has an opt-in causal three-point discontinuity
+detector. It removes the segment-velocity change explained by known gravity,
+projects only onto declared observable axes, and can reopen the point ring
+without discarding the slower scale-anchor ring. Reset provenance prevents a
+gravity change point from accidentally exposing lateral or monocular-depth
+evidence. A separate two-sample acceleration-aware fit permits earlier
+outgoing gravity velocity after a validated event. Runtime measurement
+auxiliary data and evaluation reports expose trigger masks, scores, counts,
+and rates. No simulator state enters this path.
+
+The scaled default remains disabled. On MPS seed `100016`, the permissive gate
+improved current RMSE `0.648034 → 0.637888 m` but regressed velocity
+`1.288819 → 1.357281 m/s`, vertical velocity
+`1.965171 → 2.085003 m/s`, 0.1-second prediction
+`0.661424 → 0.654775 m`, and collision F1
+`0.285714 → 0.250000`, while firing `45/111` times. Conservative,
+gravity-only, and provenance-decoupled variants also failed the joint gate.
+Requiring a contact endpoint reduced triggers to `1/110` on seed `100016` and
+`0/177` on seed `100017`; the seed-`100016` fast run was identical to baseline
+on comparable state, detection, and 0.1-second metrics. That policy is safe but
+does not address the missed between-frame event. The next concrete accuracy
+task is a learned, uncertainty-aware gate trained on balanced contact and
+no-contact RGB windows.
+
+Primary reports:
+
+- permissive:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-160516-rgb-change-point-offset16-selection/report.md`;
+- conservative:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-161717-rgb-change-point-conservative-offset16-selection/report.md`;
+- decoupled gravity-only correction:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-164508-rgb-change-point-decoupled-offset16-selection/report.md`;
+- contact-gated seed `100016`:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-171503-rgb-change-point-two-sample-fast-offset16/report.md`;
+- contact-gated seed `100017`:
+  `runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-172205-rgb-change-point-two-sample-fast-offset17/report.md`.
+
+Validation for the committed source:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff format .
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
+```
+
+Ruff left all 164 files unchanged and passed. The sandboxed full suite reported
+`258 passed, 4 skipped in 118.68 s`; the four hardware-conditional tests then
+passed directly on MPS (`4 passed in 3.62 s`). A focused temporal/config/
+checkpoint run reported `71 passed in 3.90 s`.
+
+```bash
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-change-point-pycache PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/scaled_curriculum.yaml --dry-run --device cpu
+git diff --check
+```
+
+Compileall, the scaled dry run, and `git diff --check` passed. The dry run
+resolved the unchanged 1.90M-parameter-contract, 48,000-draw, eight-scenario
+RGB-only plan with Python `3.10.20`, PyTorch `2.10.0`, and MPS built. The paired
+evaluations and direct device tests ran on MPS.
