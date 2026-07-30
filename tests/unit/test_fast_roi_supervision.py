@@ -11,6 +11,7 @@ from world_model.observations import MeasurementSet
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
 from world_model.training.loop import (
+    physical_validation_metrics,
     run_closed_loop_batch,
     supervised_measurement_losses,
     supervised_slot_measurement_losses,
@@ -317,3 +318,90 @@ def test_mid_episode_window_burns_in_the_causal_prefix() -> None:
     assert result.metrics["fast_supervised_frames"] == 2.0
     assert model.belief is not None
     torch.testing.assert_close(model.belief.timestamp, batch["timestamps"][:, -1])
+
+
+def test_bounded_rollout_anchors_reuse_posterior_and_emit_physical_metrics(
+    monkeypatch: Any,
+) -> None:
+    config = _closed_loop_config()
+    batch = collate_episodes([generate_episode(config, seed=7)])
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    original_rollout = model.dynamics.rollout
+    rollout_calls = 0
+
+    def recording_rollout(*args: Any, **kwargs: Any) -> Any:
+        nonlocal rollout_calls
+        rollout_calls += 1
+        return original_rollout(*args, **kwargs)
+
+    monkeypatch.setattr(model.dynamics, "rollout", recording_rollout)
+    result = run_closed_loop_batch(
+        model,
+        batch,
+        config,
+        window_steps=4,
+        apply_perturbations=False,
+        include_measurement_supervision=False,
+        rollout_anchors_per_window=2,
+    )
+
+    # Eligible anchors are frames 0..2, so the deterministic bound selects
+    # frames 0 and 2. Frame 0 needs one posterior rollout; frame 2 needs one
+    # prior and one posterior. The posterior also serves correction scoring.
+    assert rollout_calls == 3
+    assert result.metrics["rollout_anchor_count"] == 2.0
+    assert result.metrics["rollout_anchor_candidate_count"] == 3.0
+    assert result.metrics["physical_state_position_coordinate_count"] > 0
+    assert result.metrics["physical_state_velocity_coordinate_count"] > 0
+    assert result.metrics["physical_rollout_position@0.050s_coordinate_count"] > 0
+    assert result.metrics["physical_rollout_velocity@0.050s_coordinate_count"] > 0
+    assert result.metrics["physical_target_object_frames"] == 4.0
+    assert "physical_collision_f1_proxy" in result.metrics
+    assert "physical_identity_switches" in result.metrics
+    assert "physical_distance_gated_matched_object_frames" in result.metrics
+    assert "physical_distance_gated_identity_switches" in result.metrics
+    validation = physical_validation_metrics(result.metrics, config)
+    assert set(validation) == {
+        "validation_position_rmse_m",
+        "validation_velocity_rmse_mps",
+        "validation_target_coverage",
+        "validation_prediction_precision",
+        "validation_collision_f1",
+        "validation_id_switch_rate",
+        "validation_position_coverage90",
+        "validation_position_rmse@0.050s",
+        "validation_forecast_target_coverage@0.050s",
+    }
+
+
+def test_validation_can_skip_prior_future_rollouts_without_losing_physical_metrics(
+    monkeypatch: Any,
+) -> None:
+    config = _closed_loop_config()
+    batch = collate_episodes([generate_episode(config, seed=7)])
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    original_rollout = model.dynamics.rollout
+    rollout_calls = 0
+
+    def recording_rollout(*args: Any, **kwargs: Any) -> Any:
+        nonlocal rollout_calls
+        rollout_calls += 1
+        return original_rollout(*args, **kwargs)
+
+    monkeypatch.setattr(model.dynamics, "rollout", recording_rollout)
+    result = run_closed_loop_batch(
+        model,
+        batch,
+        config,
+        window_steps=4,
+        apply_perturbations=False,
+        include_measurement_supervision=False,
+        rollout_anchors_per_window=2,
+        compute_future_correction=False,
+    )
+
+    assert rollout_calls == 2
+    assert "correction_future" not in result.metrics
+    assert result.metrics["physical_rollout_position@0.050s_coordinate_count"] > 0
+    validation = physical_validation_metrics(result.metrics, config)
+    assert validation["validation_position_rmse@0.050s"] >= 0.0

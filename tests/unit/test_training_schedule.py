@@ -10,16 +10,22 @@ from torch import nn
 from world_model.runtime import OnlineWorldModel
 from world_model.training.loop import (
     TrainingBatchResult,
+    _distance_gate_physical_matches,
     _globally_weight_horizon_details,
     _group_closed_loop_terms,
+    _select_rollout_anchor_frames,
     _weighted_closed_loop_total,
     _weighted_measurement_total,
+    physical_validation_metrics,
     rollout_horizon_loss_key,
     select_closed_loop_window,
 )
 from world_model.training.trainer import (
+    _rollout_selection_improves,
     _rollout_selection_is_compatible,
+    _rollout_selection_metrics,
     _validation_loader_result,
+    _validation_protocol_checkpoint_metrics,
     _validation_step,
     measurement_pretrain_frame_index,
     set_closed_loop_trainable_scope,
@@ -115,6 +121,21 @@ def test_state_dynamics_scope_freezes_rgb_and_trains_filter_dynamics_identifier(
     assert model.identifier is not None
     assert all(parameter.requires_grad for parameter in model.identifier.parameters())
     assert not any(parameter.requires_grad for parameter in model.observation_modules.parameters())
+
+
+def test_state_dynamics_roi_scope_trains_fast_rgb_without_global_perception() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+    rgb = model.observation_modules["rgb"]
+
+    set_closed_loop_trainable_scope(model, scope="state_dynamics_roi")
+
+    assert all(parameter.requires_grad for parameter in model.dynamics.parameters())
+    assert all(parameter.requires_grad for parameter in model.updater.parameters())
+    assert model.identifier is not None
+    assert all(parameter.requires_grad for parameter in model.identifier.parameters())
+    assert all(parameter.requires_grad for parameter in rgb.roi_updater.parameters())
+    assert not any(parameter.requires_grad for parameter in rgb.backbone.parameters())
+    assert not any(parameter.requires_grad for parameter in rgb.global_detector.parameters())
 
 
 def test_closed_loop_terms_expose_physical_components_without_double_counting() -> None:
@@ -228,6 +249,107 @@ def test_missing_long_horizon_does_not_renormalize_short_losses() -> None:
     )
 
 
+def test_rollout_anchor_limit_spreads_work_and_preserves_earliest_anchor() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+
+    assert _select_rollout_anchor_frames(
+        config,
+        window_start=0,
+        window_stop=6,
+        total_frames=16,
+        rollout_anchors_per_window=None,
+    ) == tuple(range(6))
+    assert _select_rollout_anchor_frames(
+        config,
+        window_start=0,
+        window_stop=6,
+        total_frames=16,
+        rollout_anchors_per_window=2,
+    ) == (0, 5)
+    assert _select_rollout_anchor_frames(
+        config,
+        window_start=0,
+        window_stop=6,
+        total_frames=16,
+        rollout_anchors_per_window=1,
+    ) == (0,)
+
+
+def test_rollout_anchor_limit_rejects_nonpositive_values() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+
+    with pytest.raises(ValueError, match="rollout_anchors_per_window"):
+        _select_rollout_anchor_frames(
+            config,
+            window_start=0,
+            window_stop=6,
+            total_frames=16,
+            rollout_anchors_per_window=0,
+        )
+
+
+def test_additive_physical_metrics_convert_to_selection_metrics() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    additive = {
+        "physical_state_position_sse": 12.0,
+        "physical_state_position_coordinate_count": 3.0,
+        "physical_state_velocity_sse": 27.0,
+        "physical_state_velocity_coordinate_count": 3.0,
+        "physical_matched_object_frames": 9.0,
+        "physical_target_object_frames": 10.0,
+        "physical_identity_switches": 1.0,
+        "physical_object_frame_associations": 100.0,
+        "physical_distance_gated_matched_object_frames": 8.0,
+        "physical_distance_gated_target_object_frames": 10.0,
+        "physical_distance_gated_predicted_object_frames": 16.0,
+        "physical_distance_gated_identity_switches": 1.0,
+        "physical_distance_gated_object_frame_associations": 80.0,
+        "physical_position_coverage90_hit_count": 85.0,
+        "physical_position_coverage90_coordinate_count": 100.0,
+        "physical_collision_true_positive_count": 3.0,
+        "physical_collision_false_positive_count": 1.0,
+        "physical_collision_false_negative_count": 2.0,
+        "physical_rollout_position@0.100s_sse": 3.0,
+        "physical_rollout_position@0.100s_coordinate_count": 3.0,
+        "physical_forecast_active_count@0.100s": 8.0,
+        "physical_forecast_target_count@0.100s": 10.0,
+        "physical_rollout_position@0.250s_sse": 12.0,
+        "physical_rollout_position@0.250s_coordinate_count": 3.0,
+        "physical_forecast_active_count@0.250s": 7.0,
+        "physical_forecast_target_count@0.250s": 10.0,
+        "physical_rollout_position@0.500s_sse": 27.0,
+        "physical_rollout_position@0.500s_coordinate_count": 3.0,
+        "physical_forecast_active_count@0.500s": 6.0,
+        "physical_forecast_target_count@0.500s": 10.0,
+    }
+
+    metrics = physical_validation_metrics(additive, config)
+
+    assert metrics["validation_position_rmse_m"] == pytest.approx(2.0)
+    assert metrics["validation_velocity_rmse_mps"] == pytest.approx(3.0)
+    assert metrics["validation_target_coverage"] == pytest.approx(0.8)
+    assert metrics["validation_prediction_precision"] == pytest.approx(0.5)
+    assert metrics["validation_collision_f1"] == pytest.approx(2.0 / 3.0)
+    assert metrics["validation_id_switch_rate"] == pytest.approx(0.0125)
+    assert metrics["validation_position_coverage90"] == pytest.approx(0.85)
+    assert metrics["validation_position_rmse@0.100s"] == pytest.approx(1.0)
+    assert metrics["validation_forecast_target_coverage@0.100s"] == pytest.approx(0.8)
+    assert metrics["validation_position_rmse@0.250s"] == pytest.approx(2.0)
+    assert metrics["validation_forecast_target_coverage@0.250s"] == pytest.approx(0.7)
+    assert metrics["validation_position_rmse@0.500s"] == pytest.approx(3.0)
+    assert metrics["validation_forecast_target_coverage@0.500s"] == pytest.approx(0.6)
+
+
+def test_physical_selection_distance_gate_matches_evaluator_threshold() -> None:
+    prediction = torch.tensor([[[0.50, 0.0, 0.0], [0.5001, 0.0, 0.0], [float("nan"), 0.0, 0.0]]])
+    target = torch.zeros_like(prediction)
+    assignment = torch.tensor([[True, True, True]])
+
+    gated = _distance_gate_physical_matches(prediction, target, assignment)
+
+    torch.testing.assert_close(gated, torch.tensor([[True, False, False]]))
+
+
 def test_closed_loop_window_can_be_conditioned_on_collision() -> None:
     batch = {
         "rgb": torch.zeros((2, 10, 3, 8, 8)),
@@ -320,6 +442,119 @@ def test_closed_loop_window_always_keeps_a_future_rollout_anchor() -> None:
     assert max(starts) <= 21
 
 
+def _physical_selection_metrics(
+    *,
+    position: float = 0.4,
+    velocity: float = 0.8,
+    coverage: float = 0.9,
+    precision: float = 0.9,
+    collision_f1: float = 0.6,
+    id_switch_rate: float = 0.01,
+    position_coverage90: float = 0.9,
+    forecast_coverage: tuple[float, float, float] = (0.9, 0.9, 0.9),
+    horizons: tuple[float, float, float] = (0.4, 0.3, 0.2),
+) -> dict[str, float]:
+    return {
+        "validation_position_rmse_m": position,
+        "validation_velocity_rmse_mps": velocity,
+        "validation_target_coverage": coverage,
+        "validation_prediction_precision": precision,
+        "validation_collision_f1": collision_f1,
+        "validation_id_switch_rate": id_switch_rate,
+        "validation_position_coverage90": position_coverage90,
+        "validation_position_rmse@0.100s": horizons[0],
+        "validation_position_rmse@0.250s": horizons[1],
+        "validation_position_rmse@0.500s": horizons[2],
+        "validation_forecast_target_coverage@0.100s": forecast_coverage[0],
+        "validation_forecast_target_coverage@0.250s": forecast_coverage[1],
+        "validation_forecast_target_coverage@0.500s": forecast_coverage[2],
+    }
+
+
+def _broad_checkpoint_metrics() -> dict[str, float]:
+    config = load_config("configs/tiny_overfit.yaml")
+    selection = _rollout_selection_metrics(_physical_selection_metrics(), config)
+    return {
+        "best_rollout_validated": 1.0,
+        "rollout_selection_metric_version": 3.0,
+        **selection.checkpoint_metrics(),
+        **_validation_protocol_checkpoint_metrics(config),
+    }
+
+
+def test_rollout_selection_uses_horizon_weighted_physical_rmse() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+
+    selection = _rollout_selection_metrics(_physical_selection_metrics(), config)
+
+    assert selection.score == pytest.approx((1.0 * 0.4 + 1.5 * 0.3 + 2.0 * 0.2) / 4.5)
+
+
+@pytest.mark.parametrize(
+    "candidate_metrics",
+    [
+        _physical_selection_metrics(
+            velocity=0.817,
+            horizons=(0.39, 0.29, 0.19),
+        ),
+        _physical_selection_metrics(
+            coverage=0.894,
+            horizons=(0.39, 0.29, 0.19),
+        ),
+        _physical_selection_metrics(
+            collision_f1=0.587,
+            horizons=(0.39, 0.29, 0.19),
+        ),
+        _physical_selection_metrics(
+            id_switch_rate=0.016,
+            horizons=(0.39, 0.29, 0.19),
+        ),
+        _physical_selection_metrics(horizons=(0.409, 0.2, 0.1)),
+        _physical_selection_metrics(position=0.409, horizons=(0.3, 0.2, 0.1)),
+    ],
+)
+def test_rollout_selection_rejects_broad_regressions(
+    candidate_metrics: dict[str, float],
+) -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    incumbent = _rollout_selection_metrics(_physical_selection_metrics(), config)
+    candidate = _rollout_selection_metrics(candidate_metrics, config)
+
+    assert candidate.score < incumbent.score
+    assert not _rollout_selection_improves(candidate, incumbent)
+
+
+def test_rollout_selection_accepts_score_gain_within_guardrails() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    incumbent = _rollout_selection_metrics(_physical_selection_metrics(), config)
+    candidate = _rollout_selection_metrics(
+        _physical_selection_metrics(
+            position=0.404,
+            velocity=0.81,
+            coverage=0.896,
+            collision_f1=0.59,
+            id_switch_rate=0.014,
+            horizons=(0.408, 0.24, 0.12),
+        ),
+        config,
+    )
+
+    assert _rollout_selection_improves(candidate, incumbent)
+
+
+def test_rollout_selection_requires_complete_finite_physical_metrics() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    missing = _physical_selection_metrics()
+    del missing["validation_collision_f1"]
+    with pytest.raises(RuntimeError, match="validation_collision_f1"):
+        _rollout_selection_metrics(missing, config)
+
+    nonfinite = _physical_selection_metrics()
+    nonfinite["validation_velocity_rmse_mps"] = float("nan")
+    with pytest.raises(FloatingPointError, match="must all be finite"):
+        _rollout_selection_metrics(nonfinite, config)
+
+
 def test_legacy_rollout_score_is_not_reused_after_objective_fix() -> None:
     config = load_config("configs/tiny_overfit.yaml")
     payload = {
@@ -332,6 +567,8 @@ def test_legacy_rollout_score_is_not_reused_after_objective_fix() -> None:
 
     assert not _rollout_selection_is_compatible(payload, config)
     payload["metrics"]["rollout_selection_metric_version"] = 2.0
+    assert not _rollout_selection_is_compatible(payload, config)
+    payload["metrics"].update(_broad_checkpoint_metrics())
     assert _rollout_selection_is_compatible(payload, config)
 
 
@@ -357,9 +594,7 @@ def test_rollout_score_is_not_reused_across_validation_protocols(
     payload = {
         "config": checkpoint_config,
         "metrics": {
-            "best_rollout_validated": 1.0,
-            "best_rollout_position_loss": 0.01,
-            "rollout_selection_metric_version": 2.0,
+            **_broad_checkpoint_metrics(),
         },
     }
 
@@ -381,10 +616,35 @@ class _ModeOnlyModel:
 
 def _result(value: float) -> TrainingBatchResult:
     scalar = torch.tensor(value)
+    physical_metrics = {
+        "physical_state_position_sse": value,
+        "physical_state_position_coordinate_count": 1.0,
+        "physical_state_velocity_sse": value,
+        "physical_state_velocity_coordinate_count": 1.0,
+        "physical_target_object_frames": 1.0,
+        "physical_matched_object_frames": 1.0,
+        "physical_identity_switches": 0.0,
+        "physical_object_frame_associations": 1.0,
+        "physical_distance_gated_target_object_frames": 1.0,
+        "physical_distance_gated_predicted_object_frames": 1.0,
+        "physical_distance_gated_matched_object_frames": 1.0,
+        "physical_distance_gated_identity_switches": 0.0,
+        "physical_distance_gated_object_frame_associations": 1.0,
+        "physical_position_coverage90_hit_count": 1.0,
+        "physical_position_coverage90_coordinate_count": 1.0,
+        "physical_collision_true_positive_count": 1.0,
+        "physical_collision_false_positive_count": 0.0,
+        "physical_collision_false_negative_count": 0.0,
+    }
+    for suffix in ("0.100s", "0.250s", "0.500s"):
+        physical_metrics[f"physical_rollout_position@{suffix}_sse"] = value
+        physical_metrics[f"physical_rollout_position@{suffix}_coordinate_count"] = 1.0
+        physical_metrics[f"physical_forecast_active_count@{suffix}"] = 1.0
+        physical_metrics[f"physical_forecast_target_count@{suffix}"] = 1.0
     return TrainingBatchResult(
         total_loss=scalar,
         loss_terms={"rollout": scalar},
-        metrics={"value": value},
+        metrics={"value": value, **physical_metrics},
         phase="closed_loop_rgb",
     )
 
@@ -471,3 +731,9 @@ def test_validation_aggregates_every_loader_batch_by_episode_count(
     torch.testing.assert_close(result.total_loss, torch.tensor(2.0))
     torch.testing.assert_close(result.loss_terms["rollout"], torch.tensor(2.0))
     assert result.metrics["value"] == 2.0
+    assert result.metrics["validation_position_rmse_m"] == pytest.approx(2.5**0.5)
+    assert result.metrics["validation_velocity_rmse_mps"] == pytest.approx(2.5**0.5)
+    assert result.metrics["validation_target_coverage"] == 1.0
+    assert result.metrics["validation_collision_f1"] == 1.0
+    assert result.metrics["validation_id_switch_rate"] == 0.0
+    assert result.metrics["validation_position_rmse@0.500s"] == pytest.approx(2.5**0.5)

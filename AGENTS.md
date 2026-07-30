@@ -52,3 +52,12 @@ Working rules:
   mixture, object counts, sequence length, horizons, and metric semantics.
   Never infer an accuracy gain from evaluator defaults that select different
   episodes.
+- Treat short runs as wiring or throughput checks. Do not discard a shared
+  model or claim convergence until its declared balanced minimum training
+  coverage has completed and broad validation has reached a predeclared
+  plateau.
+- Select long-run checkpoints by pooled physical metrics with distance-gated
+  detection/identity, lifecycle, event, velocity, every-horizon, and
+  calibration guardrails. Apply non-regression checks against both the moving
+  incumbent and a fixed pre-campaign reference, and retain numbered validation
+  snapshots with verifiable weight and protocol provenance.

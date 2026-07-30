@@ -1194,3 +1194,47 @@
   post-filter objectives and one DAgger-style pass do not capture future
   observability. The next target must train through association, ROI
   scheduling, identity, and recursive horizon losses.
+
+## ADR-058 — Train one sustained shared model behind fixed broad guardrails
+
+- **Date:** 2026-07-30
+- **Status:** accepted; campaign pending/computing
+- **Context:** The fixed-scale 1.90M-parameter model received only 1,024
+  measurement episode draws and 16 rejected causal updates. Later intervention
+  heads improved their local fit targets but regressed the recursive RGB loop.
+  The nominal 40,000-update causal schedule would take months at the measured
+  161–242 seconds per old update, while another short screen would not answer
+  convergence. The old position-loss selector could also promote a checkpoint
+  that lost tracks or regressed velocity, events, identity, or uncertainty.
+- **Decision:** Initialize one shared eight-scenario model from the selected
+  fixed-scale point/scale runtime, with experimental intervention heads
+  disabled. Run 8,192 measurement updates and 4,096 causal windows. Score one
+  wide-horizon anchor per training TBPTT window while ingesting and supervising
+  every frame; score every horizon supported by that anchor, with the sampler
+  balancing collision and long-horizon windows, and score every eligible
+  posterior anchor in validation. Select by
+  pooled horizon-weighted physical position RMSE only when current
+  position/velocity, every horizon, distance-gated recall/precision and
+  identity, forecast lifecycle coverage, collision F1, and nominal-90%
+  calibration remain within declared tolerances against both the moving best
+  and the fixed initialization reference. Retain numbered candidates. Bind
+  selection metadata to exact protocol/seed and tensor hashes, and start fresh
+  AdamW moments at the measurement-to-causal handoff.
+- **Alternatives considered:** continue fitting isolated event/velocity heads;
+  launch the infeasible 48,000-step profile unchanged; stop after 1,024 causal
+  windows; select only the lowest position loss; compare each candidate only
+  with the moving incumbent; reuse incumbent metrics without linked weights.
+- **Evidence:** The broadly tested small model beats constant velocity at every
+  horizon but remains inaccurate. Fixed scale and point/scale history improve
+  scaled position on two disjoint blocks while velocity/event metrics regress.
+  Old scaled causal runs cost 161–242 seconds per update and an eight-episode
+  validation remained active after about 84 minutes. One bounded anchor across
+  4,096 independent windows provides about 512 windows per scenario and 4,096
+  multihorizon anchors, twice the causal-anchor count of the rejected
+  1,024-window/two-anchor draft.
+- **Consequences:** The first credible campaign is expected to take roughly
+  three to seven days on MPS. No accuracy gain may be claimed until it
+  completes and a winner passes at least 64 fresh balanced validation episodes
+  with per-scenario reporting. If the best safe checkpoint occurs in the final
+  1,024 causal updates with at least 1% improvement, extend rather than
+  declaring convergence.

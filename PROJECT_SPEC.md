@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.3
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026
+**Version:** 1.4
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -2854,6 +2854,14 @@ Initial default:
 
 Parameter groups may use a lower learning rate for perception if pretrained, but avoid many groups initially.
 
+At a measurement-to-causal phase boundary, restore weights without silently
+restoring stale perception-stage optimiser moments. Start the causal optimiser
+state deliberately and record the phase learning rate. A short causal screen is
+an implementation check, not convergence evidence. Before judging a shared
+model, train for a declared minimum amount of balanced scenario coverage and
+continue until that minimum completes plus a predeclared broad-validation
+plateau criterion is met.
+
 ## 56. Mixed precision and compilation
 
 - MPS: float32 by default; do not assume AMP support/benefit;
@@ -2901,9 +2909,33 @@ Save:
 
 - `last.pt`;
 - `best_rollout.pt`;
-- optionally periodic numbered checkpoints.
+- a fixed-reference rollout checkpoint;
+- periodic numbered validation checkpoints.
 
 Use atomic temp-file rename to avoid corrupt checkpoints.
+
+`best_rollout.pt` must be chosen with physical, pooled validation metrics rather
+than a scale-dependent training loss. The primary score is a declared
+horizon-weighted position RMSE, and a candidate may replace the incumbent only
+when it improves that score without material regression in:
+
+- current position and velocity;
+- every declared forecast horizon;
+- distance-gated object recall and precision;
+- forecast lifecycle coverage;
+- collision F1;
+- distance-gated identity switches;
+- uncertainty calibration relative to the nominal coverage target.
+
+Apply these guardrails against both the moving incumbent and the fixed
+pre-campaign reference so a sequence of individually tolerated changes cannot
+ratchet into a large regression. The validation checkpoint must persist the
+exact seed manifest and a canonical protocol hash covering simulator, model,
+runtime, metric, horizon, and validation-batch semantics. Never trust incumbent
+metrics on resume unless the corresponding incumbent weights are available and
+their recorded tensor hash is verified. Keep every numbered validation
+snapshot so later per-scenario confirmation can choose honestly without
+discarding a long campaign.
 
 ## 60. Reproducibility
 

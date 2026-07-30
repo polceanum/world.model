@@ -1,5 +1,32 @@
 # Tasks
 
+## Sustained scaled accuracy campaign
+
+- [x] Audit all comparable training/evaluation artifacts and document which
+  improvements generalize, which are context-specific, and which intervention
+  candidates regress the recursive online loop.
+- [x] Replace position-loss-only rollout selection with pooled physical
+  multihorizon selection and fixed-reference non-regression guardrails for
+  velocity, detection recall/precision, lifecycle, events, identity, and
+  calibration.
+- [x] Bind resumed incumbent/reference metrics to exact validation-protocol,
+  seed-manifest, and model-tensor hashes; retain every numbered validation
+  checkpoint.
+- [x] Bound training rollout anchors without skipping online frame ingestion or
+  state supervision, reuse posterior rollouts, and remove redundant prior
+  future rollouts from validation.
+- [x] Add `configs/sustained_accuracy_mps.yaml`: 8,192 measurement updates plus
+  4,096 causal windows across all eight scenario families, with rejected
+  intervention heads disabled.
+- [ ] Complete the 12,288-update sustained MPS campaign. Do not judge causal
+  convergence before 2,048 causal updates or stop before the full 4,096-window
+  minimum.
+- [ ] If the best safe checkpoint lands in the final 1,024 causal updates with
+  at least 1% improvement, extend by another 4,096 causal updates.
+- [ ] Confirm the selected checkpoint on at least 64 fresh balanced validation
+  episodes, report every scenario/horizon, then use the reserved test split
+  only if all broad gates pass.
+
 ## Milestone 1 vertical slice — implemented
 
 - [x] Read `PROJECT_SPEC.md` in full and inspect the `orpheus` environment.
@@ -321,8 +348,8 @@
   reject its weights after 0.25–1.00-second paired regressions.
 - [ ] Confirm cadence three and sampler-corrected causal training on at least
   16 fresh-validation episodes before test promotion.
-- [ ] Profile and reduce closed-loop validation/rollout cost before another
-  large run; the 24-frame eight-episode validator exceeded 84 minutes and
-  evaluator rollout calls averaged about 9.8 seconds.
+- [x] Profile and reduce closed-loop validation/rollout cost before another
+  large run; bound training anchors, reuse posterior rollouts, and skip the
+  validation-only prior future rollout while retaining all posterior anchors.
 - [ ] Add gradient checkpointing or optimizer accumulation if eight-step,
   batch-one causal updates remain the throughput bottleneck.

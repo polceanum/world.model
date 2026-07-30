@@ -154,18 +154,49 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         map_location="cpu",
         weights_only=False,
     )
-    assert best_rollout_payload["step"] == 2
+    assert best_rollout_payload["step"] in {1, 2}
     assert best_rollout_payload["metrics"]["best_rollout_validated"] == 1.0
     assert "validation_rollout_loss" in best_rollout_payload["metrics"]
     assert (
         best_rollout_payload["metrics"]["best_rollout_loss"]
         == best_rollout_payload["metrics"]["best_rollout_position_loss"]
-        == best_rollout_payload["metrics"]["validation_rollout_position_loss"]
+        == best_rollout_payload["metrics"]["best_rollout_selection_score"]
     )
-    assert best_rollout_payload["metrics"]["rollout_selection_metric_version"] == 2.0
+    assert best_rollout_payload["metrics"]["rollout_selection_metric_version"] == 3.0
+    assert "best_rollout_velocity_rmse_mps" in best_rollout_payload["metrics"]
+    assert "best_rollout_target_coverage" in best_rollout_payload["metrics"]
+    assert "best_rollout_prediction_precision" in best_rollout_payload["metrics"]
+    assert "best_rollout_collision_f1" in best_rollout_payload["metrics"]
+    assert "best_rollout_id_switch_rate" in best_rollout_payload["metrics"]
+    assert "best_rollout_position_calibration_error90" in best_rollout_payload["metrics"]
+    assert len(best_rollout_payload["metrics"]["rollout_validation_protocol_hash"]) == 64
+    assert best_rollout_payload["metrics"]["checkpoint_contains_best_rollout_weights"] == 1.0
     assert any(
-        name.startswith("validation_rollout_position@") for name in best_rollout_payload["metrics"]
+        name.startswith("best_rollout_position_rmse@") for name in best_rollout_payload["metrics"]
     )
+    assert any(
+        name.startswith("best_rollout_forecast_target_coverage@")
+        for name in best_rollout_payload["metrics"]
+    )
+    reference_rollout_payload = torch.load(
+        run_directory / "checkpoints" / "reference_rollout.pt",
+        map_location="cpu",
+        weights_only=False,
+    )
+    assert (
+        reference_rollout_payload["metrics"]["checkpoint_contains_reference_rollout_weights"] == 1.0
+    )
+    resumed_last_payload = torch.load(
+        checkpoint,
+        map_location="cpu",
+        weights_only=False,
+    )
+    assert (
+        resumed_last_payload["metrics"]["best_rollout_model_state_hash"]
+        == best_rollout_payload["metrics"]["best_rollout_model_state_hash"]
+    )
+    assert (run_directory / "checkpoints" / "validation_step_000001.pt").is_file()
+    assert (run_directory / "checkpoints" / "validation_step_000002.pt").is_file()
     training_records = [
         json.loads(line)
         for line in (run_directory / "metrics.jsonl").read_text(encoding="utf-8").splitlines()

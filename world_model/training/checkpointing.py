@@ -222,7 +222,7 @@ def checkpoint_payload(
     scheduler: Any,
     config: OrpheusConfig,
     step: int,
-    metrics: dict[str, float],
+    metrics: Mapping[str, Any],
     device: str,
 ) -> dict[str, Any]:
     """Build a complete local checkpoint payload."""
@@ -259,7 +259,7 @@ def save_checkpoint(
     scheduler: Any = None,
     config: OrpheusConfig,
     step: int,
-    metrics: dict[str, float] | None = None,
+    metrics: Mapping[str, Any] | None = None,
     device: str = "cpu",
 ) -> Path:
     """Atomically save a trusted-local checkpoint."""

@@ -103,6 +103,24 @@ python demo.py --config configs/toy_mps.yaml --checkpoint <path>
 pytest
 ```
 
+For the multi-day shared-model accuracy campaign:
+
+```bash
+python train.py \
+  --config configs/sustained_accuracy_mps.yaml \
+  --initialize-from \
+    runs/20260729-084712-scaled-point-scale-trajectory-v1/checkpoints/runtime_ablation.pt \
+  --run-name scaled-sustained-e2e-v1 \
+  --device mps
+```
+
+This profile runs two full measurement passes and one full causal pass over the
+balanced eight-scenario pool. It preserves a fixed initialization reference,
+keeps every numbered validation candidate, and will not promote a lower
+position score that materially regresses velocity, detection, lifecycle,
+events, identity, or calibration. See `project/ACCURACY_AUDIT.md` and
+`project/TRAINING.md` for the evidence and continuation rule.
+
 For checkpoint selection without reusing trainer-validation or test seeds:
 
 ```bash

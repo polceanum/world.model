@@ -40,6 +40,8 @@ from world_model.training.matching import match_measurements_to_targets
 from world_model.training.perturbations import perturb_belief
 from world_model.utils.config import OrpheusConfig
 
+_PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M = 0.5
+
 
 @dataclass
 class TrainingBatchResult:
@@ -49,6 +51,207 @@ class TrainingBatchResult:
     loss_terms: dict[str, Tensor]
     metrics: dict[str, float]
     phase: str
+
+
+@dataclass
+class _RolloutLossResult:
+    """One posterior rollout shared by losses, diagnostics, and correction."""
+
+    losses: dict[str, Tensor]
+    frame_offsets: list[int]
+    query_seconds: list[float]
+    positions: Tensor | None
+    velocities: Tensor | None
+    position_log_variance: Tensor | None
+    active_mask: Tensor | None
+    physical_metrics: dict[str, float]
+
+
+def _accumulate_float_metrics(
+    destination: dict[str, float],
+    source: Mapping[str, float],
+) -> None:
+    for name, value in source.items():
+        destination[name] = destination.get(name, 0.0) + float(value)
+
+
+def _masked_squared_error(
+    prediction: Tensor,
+    target: Tensor,
+    mask: Tensor,
+) -> tuple[float, int]:
+    """Return detached coordinate-wise SSE/count under an object mask."""
+
+    if prediction.shape != target.shape:
+        raise ValueError("physical diagnostic prediction and target shapes must match")
+    expanded = mask
+    while expanded.ndim < prediction.ndim:
+        expanded = expanded.unsqueeze(-1)
+    values = (prediction - target).masked_select(expanded.expand_as(prediction))
+    if values.numel() == 0:
+        return 0.0, 0
+    detached = values.detach().float()
+    return float(detached.square().sum().cpu()), int(detached.numel())
+
+
+def _add_squared_error_metrics(
+    metrics: dict[str, float],
+    *,
+    prefix: str,
+    prediction: Tensor,
+    target: Tensor,
+    mask: Tensor,
+) -> None:
+    squared_error, coordinate_count = _masked_squared_error(
+        prediction,
+        target,
+        mask,
+    )
+    metrics[f"{prefix}_sse"] = squared_error
+    metrics[f"{prefix}_coordinate_count"] = float(coordinate_count)
+
+
+def _add_gaussian_coverage_metrics(
+    metrics: dict[str, float],
+    *,
+    prefix: str,
+    mean: Tensor,
+    target: Tensor,
+    log_variance: Tensor,
+    mask: Tensor,
+    z_quantile: float = 1.64485363,
+) -> None:
+    """Add detached coordinate counts inside a marginal Gaussian interval."""
+
+    if mean.shape != target.shape or mean.shape != log_variance.shape:
+        raise ValueError("coverage mean, target, and log variance shapes must match")
+    expanded = mask
+    while expanded.ndim < mean.ndim:
+        expanded = expanded.unsqueeze(-1)
+    expanded = expanded.expand_as(mean)
+    error = (mean - target).detach().abs()
+    standard_deviation = (0.5 * log_variance.detach().clamp(-12.0, 8.0)).exp()
+    covered = (error <= z_quantile * standard_deviation) & expanded
+    metrics[f"{prefix}_hit_count"] = float(covered.sum().cpu())
+    metrics[f"{prefix}_coordinate_count"] = float(expanded.sum().cpu())
+
+
+def _f1_from_confusion(
+    true_positive: float,
+    false_positive: float,
+    false_negative: float,
+) -> tuple[float, float]:
+    denominator = 2.0 * true_positive + false_positive + false_negative
+    return (
+        (2.0 * true_positive / denominator) if denominator > 0 else 0.0,
+        denominator,
+    )
+
+
+def _distance_gate_physical_matches(
+    prediction: Tensor,
+    aligned_target: Tensor,
+    assignment_mask: Tensor,
+    *,
+    threshold_m: float = _PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M,
+) -> Tensor:
+    """Apply the evaluator's metric-distance gate to assigned object pairs."""
+
+    if threshold_m <= 0:
+        raise ValueError("physical selection distance threshold must be positive")
+    if prediction.shape != aligned_target.shape or prediction.shape[-1] != 3:
+        raise ValueError("physical selection positions must share shape [B,N,3]")
+    if assignment_mask.shape != prediction.shape[:-1]:
+        raise ValueError("physical selection assignment mask must have shape [B,N]")
+    distance = torch.linalg.vector_norm(prediction - aligned_target, dim=-1)
+    return assignment_mask & torch.isfinite(distance) & (distance <= threshold_m)
+
+
+def physical_validation_metrics(
+    additive_metrics: Mapping[str, float],
+    config: OrpheusConfig,
+) -> dict[str, float]:
+    """Convert additive loop diagnostics into physical selection metrics.
+
+    Callers must first sum each ``physical_*_sse``/count over the complete
+    validation manifest. Applying a common scaling to every additive field
+    (for example, averaging all batch-one episodes) is also safe because each
+    reported metric is a ratio of matching sums.
+    """
+
+    def required(name: str) -> float:
+        if name not in additive_metrics:
+            raise RuntimeError(f"missing additive physical validation metric {name!r}")
+        value = float(additive_metrics[name])
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"additive physical validation metric {name!r} is invalid")
+        return value
+
+    def rmse(sse_name: str, count_name: str) -> float:
+        squared_error = required(sse_name)
+        count = required(count_name)
+        if count <= 0:
+            raise RuntimeError(f"physical validation metric {count_name!r} has no support")
+        return math.sqrt(squared_error / count)
+
+    def bounded_ratio(numerator_name: str, denominator_name: str) -> float:
+        numerator = required(numerator_name)
+        denominator = required(denominator_name)
+        if denominator <= 0:
+            return 0.0
+        return min(1.0, max(0.0, numerator / denominator))
+
+    output = {
+        "validation_position_rmse_m": rmse(
+            "physical_state_position_sse",
+            "physical_state_position_coordinate_count",
+        ),
+        "validation_velocity_rmse_mps": rmse(
+            "physical_state_velocity_sse",
+            "physical_state_velocity_coordinate_count",
+        ),
+        "validation_target_coverage": bounded_ratio(
+            "physical_distance_gated_matched_object_frames",
+            "physical_distance_gated_target_object_frames",
+        ),
+        "validation_prediction_precision": bounded_ratio(
+            "physical_distance_gated_matched_object_frames",
+            "physical_distance_gated_predicted_object_frames",
+        ),
+        "validation_id_switch_rate": bounded_ratio(
+            "physical_distance_gated_identity_switches",
+            "physical_distance_gated_object_frame_associations",
+        ),
+        "validation_position_coverage90": bounded_ratio(
+            "physical_position_coverage90_hit_count",
+            "physical_position_coverage90_coordinate_count",
+        ),
+    }
+    true_positive = required("physical_collision_true_positive_count")
+    false_positive = required("physical_collision_false_positive_count")
+    false_negative = required("physical_collision_false_negative_count")
+    output["validation_collision_f1"] = _f1_from_confusion(
+        true_positive,
+        false_positive,
+        false_negative,
+    )[0]
+    seen_offsets: set[int] = set()
+    for horizon in config.evaluation.horizons_seconds:
+        frame_offset = max(1, int(round(float(horizon) * config.simulator.frame_rate)))
+        if frame_offset in seen_offsets:
+            continue
+        seen_offsets.add(frame_offset)
+        physical_seconds = frame_offset / config.simulator.frame_rate
+        physical_suffix = f"@{physical_seconds:.3f}s"
+        output[f"validation_position_rmse{physical_suffix}"] = rmse(
+            f"physical_rollout_position{physical_suffix}_sse",
+            f"physical_rollout_position{physical_suffix}_coordinate_count",
+        )
+        output[f"validation_forecast_target_coverage{physical_suffix}"] = bounded_ratio(
+            f"physical_forecast_active_count{physical_suffix}",
+            f"physical_forecast_target_count{physical_suffix}",
+        )
+    return output
 
 
 @dataclass
@@ -636,6 +839,41 @@ def _valid_rollout_offsets(
     )
 
 
+def _select_rollout_anchor_frames(
+    config: OrpheusConfig,
+    *,
+    window_start: int,
+    window_stop: int,
+    total_frames: int,
+    rollout_anchors_per_window: int | None,
+) -> tuple[int, ...]:
+    """Select deterministic, horizon-capable rollout anchors.
+
+    Every frame is still ingested and receives current-state supervision.
+    Bounding anchors only avoids repeated expensive recursive rollouts. The
+    earliest eligible frame is retained because it supports the widest horizon
+    set; additional anchors are spread across the remaining causal window.
+    """
+
+    if rollout_anchors_per_window is not None and rollout_anchors_per_window <= 0:
+        raise ValueError("rollout_anchors_per_window must be positive or null")
+    candidates = [
+        frame_index
+        for frame_index in range(window_start, window_stop)
+        if _valid_rollout_offsets(config, frame_index, total_frames)[0]
+    ]
+    if rollout_anchors_per_window is None or rollout_anchors_per_window >= len(candidates):
+        return tuple(candidates)
+    if rollout_anchors_per_window == 1:
+        return (candidates[0],)
+    last = len(candidates) - 1
+    selected_indices = [
+        round(anchor_index * last / (rollout_anchors_per_window - 1))
+        for anchor_index in range(rollout_anchors_per_window)
+    ]
+    return tuple(candidates[index] for index in selected_indices)
+
+
 def rollout_horizon_loss_key(name: str, seconds: float) -> str:
     """Return the stable metric key for one physical rollout horizon."""
 
@@ -754,7 +992,7 @@ def _belief_state_losses(
     )
 
 
-def _rollout_losses(
+def _rollout_loss_result(
     model: OnlineWorldModel,
     belief: WorldBelief,
     batch: Mapping[str, Any],
@@ -762,7 +1000,7 @@ def _rollout_losses(
     frame_index: int,
     indices: Tensor,
     matched: Tensor,
-) -> dict[str, Tensor]:
+) -> _RolloutLossResult:
     total_frames = int(batch["rgb"].shape[1])
     frame_offsets, query_seconds, horizon_weights = _valid_rollout_offsets(
         config,
@@ -771,11 +1009,20 @@ def _rollout_losses(
     )
     reference = belief.objects.position
     if not frame_offsets:
-        return {
-            "rollout_position": reference.sum() * 0,
-            "rollout_velocity": reference.sum() * 0,
-            "event_collision": reference.sum() * 0,
-        }
+        return _RolloutLossResult(
+            losses={
+                "rollout_position": reference.sum() * 0,
+                "rollout_velocity": reference.sum() * 0,
+                "event_collision": reference.sum() * 0,
+            },
+            frame_offsets=[],
+            query_seconds=[],
+            positions=None,
+            velocities=None,
+            position_log_variance=None,
+            active_mask=None,
+            physical_metrics={},
+        )
     event_query_plan = observation_window_query_plan(
         frame_offsets,
         frame_rate=config.simulator.frame_rate,
@@ -787,6 +1034,10 @@ def _rollout_losses(
     )
     target_positions = event_query_plan.select_target_endpoints(trajectory.positions)
     target_velocities = event_query_plan.select_target_endpoints(trajectory.velocities)
+    target_position_log_variance = event_query_plan.select_target_endpoints(
+        trajectory.fast_log_variance[..., :3]
+    )
+    target_active_mask = event_query_plan.select_target_endpoints(trajectory.active_mask)
     target_event_logits = (
         None
         if trajectory.event_logits is None
@@ -802,6 +1053,7 @@ def _rollout_losses(
     horizon_losses: dict[str, Tensor] = {}
     event_losses: list[Tensor] = []
     event_weights: list[float] = []
+    physical_metrics: dict[str, float] = {}
     for query_index, frame_offset in enumerate(frame_offsets):
         target_index = frame_index + frame_offset
         future_active = (
@@ -844,6 +1096,45 @@ def _rollout_losses(
         seconds = query_seconds[query_index]
         horizon_losses[rollout_horizon_loss_key("rollout_position", seconds)] = position_loss
         horizon_losses[rollout_horizon_loss_key("rollout_velocity", seconds)] = velocity_loss
+        horizon_suffix = f"@{seconds:.3f}s"
+        _add_squared_error_metrics(
+            physical_metrics,
+            prefix=f"physical_rollout_position{horizon_suffix}",
+            prediction=target_positions[:, query_index],
+            target=target_position,
+            mask=valid,
+        )
+        _add_gaussian_coverage_metrics(
+            physical_metrics,
+            prefix=f"physical_rollout_position_coverage90{horizon_suffix}",
+            mean=target_positions[:, query_index],
+            target=target_position,
+            log_variance=target_position_log_variance[:, query_index],
+            mask=valid,
+        )
+        _add_squared_error_metrics(
+            physical_metrics,
+            prefix=f"physical_rollout_velocity{horizon_suffix}",
+            prediction=target_velocities[:, query_index],
+            target=target_velocity,
+            mask=valid,
+        )
+        physical_metrics[f"physical_forecast_target_count{horizon_suffix}"] = float(
+            batch["objects"]["active"][:, target_index].sum().detach().cpu()
+        )
+        physical_metrics[f"physical_forecast_tracked_count{horizon_suffix}"] = float(
+            valid.sum().detach().cpu()
+        )
+        physical_metrics[f"physical_forecast_active_count{horizon_suffix}"] = float(
+            (valid & target_active_mask[:, query_index]).sum().detach().cpu()
+        )
+        for confusion_name in (
+            "true_positive",
+            "false_positive",
+            "false_negative",
+            "true_negative",
+        ):
+            physical_metrics[f"physical_collision_{confusion_name}_count{horizon_suffix}"] = 0.0
         if target_event_logits is not None:
             event_target = (
                 gather_target_slots(
@@ -868,6 +1159,18 @@ def _rollout_losses(
                     )
                 )
                 event_weights.append(horizon_weights[query_index])
+                event_prediction = event_scores.detach().sigmoid() >= 0.5
+                event_truth = event_target.detach().bool()
+                confusion = {
+                    "true_positive": event_prediction & event_truth,
+                    "false_positive": event_prediction & ~event_truth,
+                    "false_negative": ~event_prediction & event_truth,
+                    "true_negative": ~event_prediction & ~event_truth,
+                }
+                for confusion_name, confusion_mask in confusion.items():
+                    physical_metrics[
+                        f"physical_collision_{confusion_name}_count{horizon_suffix}"
+                    ] = float((confusion_mask & valid).sum().cpu())
 
     def weighted_mean(losses: list[Tensor], weights: list[float]) -> Tensor:
         if not losses:
@@ -875,19 +1178,50 @@ def _rollout_losses(
         weight = reference.new_tensor(weights)
         return (torch.stack(losses) * weight).sum() / weight.sum().clamp_min(1.0e-8)
 
-    return {
-        "rollout_position": weighted_mean(position_losses, horizon_weights),
-        **{
-            f"rollout_position_{axis_name}": weighted_mean(
-                axis_losses,
-                horizon_weights,
-            )
-            for axis_name, axis_losses in position_axis_losses.items()
+    return _RolloutLossResult(
+        losses={
+            "rollout_position": weighted_mean(position_losses, horizon_weights),
+            **{
+                f"rollout_position_{axis_name}": weighted_mean(
+                    axis_losses,
+                    horizon_weights,
+                )
+                for axis_name, axis_losses in position_axis_losses.items()
+            },
+            "rollout_velocity": weighted_mean(velocity_losses, horizon_weights),
+            "event_collision": weighted_mean(event_losses, event_weights),
+            **horizon_losses,
         },
-        "rollout_velocity": weighted_mean(velocity_losses, horizon_weights),
-        "event_collision": weighted_mean(event_losses, event_weights),
-        **horizon_losses,
-    }
+        frame_offsets=frame_offsets,
+        query_seconds=query_seconds,
+        positions=target_positions,
+        velocities=target_velocities,
+        position_log_variance=target_position_log_variance,
+        active_mask=target_active_mask,
+        physical_metrics=physical_metrics,
+    )
+
+
+def _rollout_losses(
+    model: OnlineWorldModel,
+    belief: WorldBelief,
+    batch: Mapping[str, Any],
+    config: OrpheusConfig,
+    frame_index: int,
+    indices: Tensor,
+    matched: Tensor,
+) -> dict[str, Tensor]:
+    """Backward-compatible loss-only wrapper used by focused unit tests."""
+
+    return _rollout_loss_result(
+        model,
+        belief,
+        batch,
+        config,
+        frame_index,
+        indices,
+        matched,
+    ).losses
 
 
 def _group_closed_loop_terms(
@@ -1101,11 +1435,15 @@ def run_closed_loop_batch(
     window_steps: int | None = None,
     apply_perturbations: bool = True,
     include_measurement_supervision: bool = True,
+    rollout_anchors_per_window: int | None = None,
+    compute_future_correction: bool = True,
 ) -> TrainingBatchResult:
     """Run one causal RGB-only sequence window through the real runtime.
 
     The belief is never reset to simulator state.  Labels are read only after
-    each RGB ingest to compute supervised losses.
+    each RGB ingest to compute supervised losses. Validation may disable the
+    extra prior future rollout used only by the correction-improvement guard;
+    current correction and every posterior physical forecast remain measured.
     """
 
     if config.runtime.modality != "rgb":
@@ -1121,6 +1459,14 @@ def run_closed_loop_batch(
     window_stop = min(total_frames, window_start + window_steps)
     if window_start >= window_stop:
         raise ValueError("closed-loop window lies outside the episode")
+    rollout_anchor_frames = _select_rollout_anchor_frames(
+        config,
+        window_start=window_start,
+        window_stop=window_stop,
+        total_frames=total_frames,
+        rollout_anchors_per_window=rollout_anchors_per_window,
+    )
+    rollout_anchor_set = set(rollout_anchor_frames)
 
     model.reset(batch_size=batch_size)
     target_matcher = PersistentTargetMatcher()
@@ -1130,13 +1476,28 @@ def run_closed_loop_batch(
     future_correction_improvements: list[float] = []
     perturbed_updates = 0
     matched_count = 0
+    target_object_frames = 0
+    predicted_object_frames = 0
     fast_supervised_frames = 0
+    physical_metrics: dict[str, float] = {}
+    identity_switches = 0
+    object_frame_associations = 0
+    distance_gated_identity_switches = 0
+    distance_gated_object_frame_associations = 0
+    distance_gated_matched_count = 0
+    distance_gated_target_object_frames = 0
+    distance_gated_predicted_object_frames = 0
+    last_predicted_id_for_target: list[dict[int, int]] = [{} for _ in range(batch_size)]
+    last_distance_gated_predicted_id_for_target: list[dict[int, int]] = [
+        {} for _ in range(batch_size)
+    ]
 
     def add(name: str, value: Tensor) -> None:
         detail_lists.setdefault(name, []).append(value)
 
     for frame_index in range(window_start, window_stop):
         packet = make_rgb_packet(batch, frame_index)
+        score_rollout = frame_index in rollout_anchor_set
         prior_belief: WorldBelief | None = None
         prior_rollout = None
         frame_offsets: list[int] = []
@@ -1160,13 +1521,18 @@ def run_closed_loop_batch(
                 perturbed_updates += 1
             prior = model.dynamics.predict(source_belief, requested - source_belief.timestamp)
             prior_belief = prior
-            frame_offsets, query_seconds, _ = _valid_rollout_offsets(
-                config,
-                frame_index,
-                total_frames,
-            )
-            if frame_offsets:
-                prior_rollout = model.dynamics.rollout(prior, query_seconds, return_events=False)
+            if score_rollout:
+                frame_offsets, query_seconds, _ = _valid_rollout_offsets(
+                    config,
+                    frame_index,
+                    total_frames,
+                )
+                if frame_offsets and compute_future_correction:
+                    prior_rollout = model.dynamics.rollout(
+                        prior,
+                        query_seconds,
+                        return_events=False,
+                    )
             if include_measurement_supervision:
                 module = model.observation_modules["rgb"]
                 predicted = module.project(
@@ -1248,13 +1614,96 @@ def run_closed_loop_batch(
             matched=matched,
         )
         matched_count += int(matched.sum().detach().cpu())
+        frame_target_count = int(batch["objects"]["active"][:, frame_index].sum().detach().cpu())
+        frame_predicted_count = int(belief.objects.active.sum().detach().cpu())
+        target_object_frames += frame_target_count
+        predicted_object_frames += frame_predicted_count
+        distance_gated_target_object_frames += frame_target_count
+        distance_gated_predicted_object_frames += frame_predicted_count
+        aligned_position = gather_target_slots(
+            batch["objects"]["position"][:, frame_index],
+            indices,
+        )
+        distance_gated_matched = _distance_gate_physical_matches(
+            belief.objects.position,
+            aligned_position,
+            matched,
+        )
+        distance_gated_matched_count += int(distance_gated_matched.sum().detach().cpu())
+        aligned_velocity = gather_target_slots(
+            batch["objects"]["velocity"][:, frame_index],
+            indices,
+        )
+        state_physical: dict[str, float] = {}
+        _add_squared_error_metrics(
+            state_physical,
+            prefix="physical_state_position",
+            prediction=belief.objects.position,
+            target=aligned_position,
+            mask=matched,
+        )
+        _add_squared_error_metrics(
+            state_physical,
+            prefix="physical_state_velocity",
+            prediction=belief.objects.velocity,
+            target=aligned_velocity,
+            mask=matched,
+        )
+        _add_gaussian_coverage_metrics(
+            state_physical,
+            prefix="physical_state_position_coverage90",
+            mean=belief.objects.position,
+            target=aligned_position,
+            log_variance=belief.objects.fast_log_variance[..., :3],
+            mask=matched,
+        )
+        _accumulate_float_metrics(physical_metrics, state_physical)
+        target_ids = batch["objects"].get("id")
+        if isinstance(target_ids, Tensor):
+            for batch_index in range(batch_size):
+                belief_slots = torch.nonzero(
+                    matched[batch_index],
+                    as_tuple=False,
+                ).flatten()
+                for belief_slot_tensor in belief_slots:
+                    belief_slot = int(belief_slot_tensor)
+                    target_slot = int(indices[batch_index, belief_slot])
+                    target_id = int(target_ids[batch_index, frame_index, target_slot])
+                    predicted_id = int(
+                        belief.objects.object_id[batch_index, belief_slot].detach().cpu()
+                    )
+                    if target_id < 0 or predicted_id < 0:
+                        continue
+                    object_frame_associations += 1
+                    previous = last_predicted_id_for_target[batch_index].get(target_id)
+                    if previous is not None and previous != predicted_id:
+                        identity_switches += 1
+                    last_predicted_id_for_target[batch_index][target_id] = predicted_id
+                distance_gated_belief_slots = torch.nonzero(
+                    distance_gated_matched[batch_index],
+                    as_tuple=False,
+                ).flatten()
+                for belief_slot_tensor in distance_gated_belief_slots:
+                    belief_slot = int(belief_slot_tensor)
+                    target_slot = int(indices[batch_index, belief_slot])
+                    target_id = int(target_ids[batch_index, frame_index, target_slot])
+                    predicted_id = int(
+                        belief.objects.object_id[batch_index, belief_slot].detach().cpu()
+                    )
+                    if target_id < 0 or predicted_id < 0:
+                        continue
+                    distance_gated_object_frame_associations += 1
+                    previous = last_distance_gated_predicted_id_for_target[batch_index].get(
+                        target_id
+                    )
+                    if previous is not None and previous != predicted_id:
+                        distance_gated_identity_switches += 1
+                    last_distance_gated_predicted_id_for_target[batch_index][target_id] = (
+                        predicted_id
+                    )
         for name, value in current.items():
             add(name, value)
         if prior_belief is not None:
-            aligned_position = gather_target_slots(
-                batch["objects"]["position"][:, frame_index],
-                indices,
-            )
             correction_valid = matched & prior_belief.objects.active
             prior_current_error = torch.linalg.vector_norm(
                 prior_belief.objects.position - aligned_position,
@@ -1282,20 +1731,30 @@ def run_closed_loop_batch(
                         .cpu()
                     )
                 )
-        rollout = _rollout_losses(
-            model,
-            belief,
-            batch,
-            config,
-            frame_index,
-            indices,
-            matched,
-        )
-        for name, value in rollout.items():
-            add(name, value)
+        rollout_result: _RolloutLossResult | None = None
+        if score_rollout:
+            rollout_result = _rollout_loss_result(
+                model,
+                belief,
+                batch,
+                config,
+                frame_index,
+                indices,
+                matched,
+            )
+            for name, value in rollout_result.losses.items():
+                add(name, value)
+            _accumulate_float_metrics(
+                physical_metrics,
+                rollout_result.physical_metrics,
+            )
 
-        if prior_rollout is not None and frame_offsets:
-            posterior_rollout = model.dynamics.rollout(belief, query_seconds, return_events=False)
+        if (
+            prior_rollout is not None
+            and rollout_result is not None
+            and rollout_result.positions is not None
+            and frame_offsets
+        ):
             deltas: list[Tensor] = []
             correction_losses: list[Tensor] = []
             for query_index, frame_offset in enumerate(frame_offsets):
@@ -1318,7 +1777,7 @@ def run_closed_loop_batch(
                         dim=-1,
                     )
                     posterior_error = torch.linalg.vector_norm(
-                        posterior_rollout.positions[:, query_index] - target_position,
+                        rollout_result.positions[:, query_index] - target_position,
                         dim=-1,
                     )
                     deltas.append((prior_error - posterior_error).masked_select(valid).mean())
@@ -1376,6 +1835,182 @@ def run_closed_loop_batch(
     terms = _group_closed_loop_terms(details, reference)
     total = _weighted_closed_loop_total(terms, config.training.loss_weights)
     metrics = {name: float(value.detach().cpu()) for name, value in details.items()}
+    metrics.update(physical_metrics)
+    metrics.update(
+        {
+            "rollout_anchor_count": float(len(rollout_anchor_frames)),
+            "rollout_anchor_candidate_count": float(
+                sum(
+                    bool(_valid_rollout_offsets(config, frame_index, total_frames)[0])
+                    for frame_index in range(window_start, window_stop)
+                )
+            ),
+            "physical_target_object_frames": float(target_object_frames),
+            "physical_predicted_object_frames": float(predicted_object_frames),
+            "physical_matched_object_frames": float(matched_count),
+            "physical_identity_switches": float(identity_switches),
+            "physical_object_frame_associations": float(object_frame_associations),
+            "physical_distance_gated_target_object_frames": float(
+                distance_gated_target_object_frames
+            ),
+            "physical_distance_gated_predicted_object_frames": float(
+                distance_gated_predicted_object_frames
+            ),
+            "physical_distance_gated_matched_object_frames": float(distance_gated_matched_count),
+            "physical_distance_gated_identity_switches": float(distance_gated_identity_switches),
+            "physical_distance_gated_object_frame_associations": float(
+                distance_gated_object_frame_associations
+            ),
+        }
+    )
+    metrics["physical_current_target_coverage"] = (
+        matched_count / target_object_frames if target_object_frames else 0.0
+    )
+    metrics["physical_current_prediction_coverage"] = (
+        matched_count / predicted_object_frames if predicted_object_frames else 0.0
+    )
+    metrics["physical_identity_switch_rate"] = (
+        identity_switches / object_frame_associations if object_frame_associations else 0.0
+    )
+    metrics["physical_current_distance_gated_target_coverage"] = (
+        distance_gated_matched_count / distance_gated_target_object_frames
+        if distance_gated_target_object_frames
+        else 0.0
+    )
+    metrics["physical_current_distance_gated_prediction_precision"] = (
+        distance_gated_matched_count / distance_gated_predicted_object_frames
+        if distance_gated_predicted_object_frames
+        else 0.0
+    )
+    metrics["physical_distance_gated_identity_switch_rate"] = (
+        distance_gated_identity_switches / distance_gated_object_frame_associations
+        if distance_gated_object_frame_associations
+        else 0.0
+    )
+    state_position_count = metrics.get("physical_state_position_coordinate_count", 0.0)
+    state_velocity_count = metrics.get("physical_state_velocity_coordinate_count", 0.0)
+    metrics["physical_state_position_rmse_m"] = (
+        math.sqrt(metrics["physical_state_position_sse"] / state_position_count)
+        if state_position_count
+        else 0.0
+    )
+    metrics["physical_state_velocity_rmse_mps"] = (
+        math.sqrt(metrics["physical_state_velocity_sse"] / state_velocity_count)
+        if state_velocity_count
+        else 0.0
+    )
+    collision_true_positive = sum(
+        value
+        for name, value in physical_metrics.items()
+        if name.startswith("physical_collision_true_positive_count@")
+    )
+    collision_false_positive = sum(
+        value
+        for name, value in physical_metrics.items()
+        if name.startswith("physical_collision_false_positive_count@")
+    )
+    collision_false_negative = sum(
+        value
+        for name, value in physical_metrics.items()
+        if name.startswith("physical_collision_false_negative_count@")
+    )
+    collision_true_negative = sum(
+        value
+        for name, value in physical_metrics.items()
+        if name.startswith("physical_collision_true_negative_count@")
+    )
+    collision_f1, collision_f1_denominator = _f1_from_confusion(
+        collision_true_positive,
+        collision_false_positive,
+        collision_false_negative,
+    )
+    metrics.update(
+        {
+            "physical_collision_true_positive_count": collision_true_positive,
+            "physical_collision_false_positive_count": collision_false_positive,
+            "physical_collision_false_negative_count": collision_false_negative,
+            "physical_collision_true_negative_count": collision_true_negative,
+            "physical_collision_f1_denominator": collision_f1_denominator,
+            "physical_collision_f1_proxy": collision_f1,
+        }
+    )
+    for seconds in {
+        frame_offset / config.simulator.frame_rate
+        for frame_offset in {
+            max(1, int(round(float(horizon) * config.simulator.frame_rate)))
+            for horizon in config.evaluation.horizons_seconds
+        }
+    }:
+        horizon_suffix = f"@{seconds:.3f}s"
+        position_count = metrics.get(
+            f"physical_rollout_position{horizon_suffix}_coordinate_count",
+            0.0,
+        )
+        velocity_count = metrics.get(
+            f"physical_rollout_velocity{horizon_suffix}_coordinate_count",
+            0.0,
+        )
+        if position_count:
+            metrics[f"physical_rollout_position_rmse_m{horizon_suffix}"] = math.sqrt(
+                metrics[f"physical_rollout_position{horizon_suffix}_sse"] / position_count
+            )
+        else:
+            metrics[f"physical_rollout_position_rmse_m{horizon_suffix}"] = 0.0
+        if velocity_count:
+            metrics[f"physical_rollout_velocity_rmse_mps{horizon_suffix}"] = math.sqrt(
+                metrics[f"physical_rollout_velocity{horizon_suffix}_sse"] / velocity_count
+            )
+        else:
+            metrics[f"physical_rollout_velocity_rmse_mps{horizon_suffix}"] = 0.0
+        target_count = metrics.get(
+            f"physical_forecast_target_count{horizon_suffix}",
+            0.0,
+        )
+        active_count = metrics.get(
+            f"physical_forecast_active_count{horizon_suffix}",
+            0.0,
+        )
+        if target_count:
+            metrics[f"physical_forecast_target_coverage{horizon_suffix}"] = (
+                active_count / target_count
+            )
+        else:
+            metrics[f"physical_forecast_target_coverage{horizon_suffix}"] = 0.0
+        horizon_true_positive = metrics.get(
+            f"physical_collision_true_positive_count{horizon_suffix}",
+            0.0,
+        )
+        horizon_false_positive = metrics.get(
+            f"physical_collision_false_positive_count{horizon_suffix}",
+            0.0,
+        )
+        horizon_false_negative = metrics.get(
+            f"physical_collision_false_negative_count{horizon_suffix}",
+            0.0,
+        )
+        horizon_f1, horizon_f1_denominator = _f1_from_confusion(
+            horizon_true_positive,
+            horizon_false_positive,
+            horizon_false_negative,
+        )
+        metrics[f"physical_collision_f1_proxy{horizon_suffix}"] = horizon_f1
+        metrics[f"physical_collision_f1_denominator{horizon_suffix}"] = horizon_f1_denominator
+    rollout_coverage_hits = sum(
+        value
+        for name, value in physical_metrics.items()
+        if name.startswith("physical_rollout_position_coverage90@") and name.endswith("_hit_count")
+    )
+    rollout_coverage_count = sum(
+        value
+        for name, value in physical_metrics.items()
+        if name.startswith("physical_rollout_position_coverage90@")
+        and name.endswith("_coordinate_count")
+    )
+    metrics["physical_position_coverage90_hit_count"] = rollout_coverage_hits
+    metrics["physical_position_coverage90_coordinate_count"] = rollout_coverage_count
+    metrics["physical_position_coverage90"] = (
+        rollout_coverage_hits / rollout_coverage_count if rollout_coverage_count else 0.0
+    )
     metrics.update(
         {
             "matched_object_frames": float(matched_count),
@@ -1414,6 +2049,7 @@ __all__ = [
     "match_belief_to_targets",
     "measurement_localization_metrics",
     "move_batch_to_device",
+    "physical_validation_metrics",
     "pretrain_rgb_measurements",
     "run_closed_loop_batch",
     "select_closed_loop_window",

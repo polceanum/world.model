@@ -4,6 +4,24 @@
 
 ### Added
 
+- A sustained eight-scenario MPS accuracy profile with two complete
+  measurement passes, one complete causal-window pass, explicit minimum/plateau
+  rules, and the selected fixed-scale point/scale runtime as weights-only
+  initialization.
+- Pooled physical rollout checkpoint selection: horizon-weighted position RMSE
+  plus fixed-reference and moving-incumbent guardrails for current velocity,
+  every horizon, 0.5 m distance-gated recall/precision and identity, forecast
+  lifecycle coverage, collision F1, and nominal-90% calibration.
+- Exact validation protocol and seed-manifest hashes, tensor-hash-verified
+  incumbent/reference checkpoints, numbered validation snapshots, and a fresh
+  causal optimizer state at phase handoff.
+- Bounded training rollout anchors and shared posterior rollout tensors,
+  preserving every online observation/state loss while reducing recursive
+  causal cost; validation retains all posterior anchors and omits only its
+  redundant prior future rollout.
+- `project/ACCURACY_AUDIT.md`, separating comparable broad results from
+  context-specific gains, rejected recursive interventions, and direct
+  evidence of scaled-model undertraining.
 - A disabled-by-default gravity-axis RGB velocity intervention with 21 causal
   gravity/lateral/contact/prior/candidate features, acceleration-aware slope
   context, soft uncertainty gain, and strictly unobserved non-gravity
@@ -138,9 +156,11 @@
   horizons, or selection-metric semantics differ.
 - RGB temporal-history collision resets are edge-triggered, allowing outgoing
   velocity evidence to accumulate while collision mode remains active.
-- The authoritative specification is now version 1.3 and requires identical
-  explicit episode manifests for checkpoint comparisons and per-scenario gates
-  for one shared model.
+- The authoritative specification is now version 1.4 and requires identical
+  explicit episode manifests, fixed-reference broad checkpoint guardrails,
+  verifiable incumbent weights, and declared minimum/plateau training coverage
+  for checkpoint comparisons and per-scenario gates applied to one shared
+  model.
 - Delayed analytic contact jumps until the estimated geometric gap plus a
   `0.25σ` position-uncertainty margin reaches contact, reducing premature
   lateral damping on the selected multistep block.

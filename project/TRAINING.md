@@ -29,10 +29,22 @@ quality. Fixed-dataset measurement training sweeps all frames independently of
 loader-batch position. Validation iterates the complete validation loader;
 closed-loop validation causally unrolls every full episode, while measurement
 validation uses the configured evenly spaced frames from every episode.
-Measurement checkpoints select by calibrated backprojected world-position MAE,
-and rollout checkpoints select by validation `rollout_position`, because a
-summed heteroscedastic objective can be negative and a mixed position/velocity
-loss can improve without implying better localization.
+Measurement checkpoints select by calibrated backprojected world-position MAE.
+Rollout checkpoints use pooled physical metrics over the complete validation
+manifest. Their primary score is horizon-weighted position RMSE; a candidate
+must also remain within declared guardrails for current position and velocity,
+every horizon, 0.5 m distance-gated recall and precision, forecast lifecycle
+coverage, collision F1, distance-gated identity switches, and nominal-90%
+position calibration. Guardrails are checked against both the moving incumbent
+and the fixed initialization reference. Every validation candidate is retained
+as a numbered checkpoint.
+
+Rollout checkpoint metadata contains a canonical validation-protocol hash, the
+explicit validation seed-manifest hash, and tensor hashes linking incumbent and
+reference metrics to real checkpoint weights. A resumed run reuses those
+metrics only when the linked files and hashes verify. This prevents a rejected
+`last.pt` or copied numbered snapshot from carrying better incumbent metrics
+without the corresponding model state.
 
 RGB supervision now includes metric-space position after calibrated
 backprojection. It uses a smooth-L1 (Huber) term plus a diagonal Gaussian NLL,
@@ -57,9 +69,11 @@ The small NLL weights prevent variance fitting from overwhelming metric
 localization while retaining an uncertainty-training signal.
 
 At the phase boundary the trainer restores the best localized measurement
-checkpoint and applies `closed_loop_learning_rate_scale` (0.1 in current
-profiles) to protect perception while downstream filter/dynamics objectives
-begin. Global discovery/backbone parameters remain trainable for
+weights, starts fresh causal AdamW moments, and applies
+`closed_loop_learning_rate_scale` (0.1 in current profiles) to protect
+perception while downstream filter/dynamics objectives begin. The restored
+measurement candidate must pass the same broad rollout guardrails or the fixed
+pre-campaign runtime is restored. Global discovery/backbone parameters remain trainable for
 `closed_loop_global_trainable_steps`, then freeze while the ROI updater,
 filter, dynamics, and identifier continue learning. Fast ROI losses follow the
 persistent belief-slot assignment on every usable frame.
@@ -161,3 +175,38 @@ CPU is suitable for smoke tests but not an efficient way to complete this
 schedule. Run summaries record model parameter count, episode draws, nominal
 dataset passes, split sizes, and scenario families so a short run cannot be
 mistaken for the full protocol.
+
+## Sustained shared-model accuracy campaign
+
+`configs/sustained_accuracy_mps.yaml` is the tractable successor to launching
+the nominal 48,000-step profile unchanged on one Mac. It retains the same
+1.90M-parameter architecture and all eight scenario families, initializes from
+the selected fixed-scale point/scale runtime, and keeps the rejected
+change-point/outgoing/intervention heads disabled.
+
+The declared minimum is 8,192 measurement updates (two complete 4,096-episode
+passes) plus 4,096 independently sampled causal windows (one complete nominal
+causal pass, about 512 windows per scenario). Every frame still advances and
+supervises the persistent belief. Training limits the expensive recursive
+forecast to one earliest eligible anchor per four-frame TBPTT window; that
+anchor evaluates every configured horizon supported from its timestamp. The
+window sampler mixes collision-conditioned and long-horizon windows so all
+declared 0.1–1.0-second horizons receive campaign-wide support. Validation
+remains unbounded and scores all eligible posterior anchors.
+
+```bash
+python train.py \
+  --config configs/sustained_accuracy_mps.yaml \
+  --initialize-from \
+    runs/20260729-084712-scaled-point-scale-trajectory-v1/checkpoints/runtime_ablation.pt \
+  --run-name scaled-sustained-e2e-v1 \
+  --device mps
+```
+
+Do not judge causal convergence before 2,048 causal updates. Complete all
+4,096, then call a plateau only after four consecutive 512-step validations
+have no accepted candidate and under 1% primary-score improvement. Extend by a
+further 4,096 causal updates only if the best checkpoint occurs within the
+final 1,024 updates and improves at least 1% without a guardrail regression.
+The selected checkpoint still requires a balanced fresh-validation
+confirmation of at least 64 episodes before the reserved test split is used.

@@ -214,6 +214,24 @@ def test_long_horizon_window_probability_is_bounded(probability: float) -> None:
         )
 
 
+@pytest.mark.parametrize("anchors", [0, -1])
+def test_rollout_anchors_per_window_must_be_positive_or_null(anchors: int) -> None:
+    with pytest.raises(ValueError, match="rollout_anchors_per_window"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.rollout_anchors_per_window={anchors}"],
+        )
+
+
+def test_rollout_anchors_per_window_accepts_bounded_training_value() -> None:
+    config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=["training.rollout_anchors_per_window=2"],
+    )
+
+    assert config.training.rollout_anchors_per_window == 2
+
+
 @pytest.mark.parametrize(
     ("key", "value"),
     [

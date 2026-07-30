@@ -281,6 +281,10 @@ class TrainingConfig:
     perturbation_velocity_std: float = 0.20
     collision_window_probability: float = 0.50
     long_horizon_window_probability: float = 0.50
+    # ``None`` preserves the historical behavior of scoring every eligible
+    # frame in a TBPTT window. Long-running profiles may bound the expensive
+    # recursive rollouts while still ingesting and supervising every frame.
+    rollout_anchors_per_window: int | None = None
     collision_positive_weight_max: float = 10.0
     horizon_weights: tuple[float, ...] = (1.0, 1.0, 1.2, 1.5, 1.5)
     measurement_loss_weights: dict[str, float] = field(
@@ -790,10 +794,11 @@ class OrpheusConfig:
             "all",
             "dynamics",
             "state_dynamics",
+            "state_dynamics_roi",
         }:
             raise ValueError(
                 "training.closed_loop_trainable_scope must be "
-                "'all', 'dynamics', or 'state_dynamics'"
+                "'all', 'dynamics', 'state_dynamics', or 'state_dynamics_roi'"
             )
         if self.training.tbptt_steps <= 0:
             raise ValueError("training.tbptt_steps must be positive")
@@ -815,6 +820,11 @@ class OrpheusConfig:
             raise ValueError("training.collision_window_probability must lie in [0, 1]")
         if not 0 <= self.training.long_horizon_window_probability <= 1:
             raise ValueError("training.long_horizon_window_probability must lie in [0, 1]")
+        if (
+            self.training.rollout_anchors_per_window is not None
+            and self.training.rollout_anchors_per_window <= 0
+        ):
+            raise ValueError("training.rollout_anchors_per_window must be positive or null")
         if self.training.collision_positive_weight_max < 1:
             raise ValueError("training.collision_positive_weight_max must be at least one")
 

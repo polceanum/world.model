@@ -1,15 +1,149 @@
 # Project status
 
 **Date:** 2026-07-30
-**Specification:** `PROJECT_SPEC.md` 1.3
+**Specification:** `PROJECT_SPEC.md` 1.4
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
 stable forecast-history visualisation, axis-resolved diagnostics, an
 invariant-tested familiar reference-pair regime, and one balanced eight-regime
 shared-model profile, plus a quality-aware persistent-ID multi-frame
-point/scale depth observer;
-collision, occlusion, identification, and full-MPS acceptance remain open
+point/scale depth observer; a sustained shared-model MPS campaign is prepared,
+but collision, occlusion, identification, convergence, and full acceptance
+remain open
+
+## 2026-07-30 — sustained shared-model campaign preflight
+
+The complete artifact audit is
+[`project/ACCURACY_AUDIT.md`](ACCURACY_AUDIT.md). It separates three contexts:
+
+- the 156k-parameter checkpoint is the only model with a completed balanced
+  16-episode test over all eight scenario families; it beats constant velocity
+  at every horizon but remains at `0.200430 m` current position RMSE,
+  `0.968753 m/s` velocity RMSE, `0.364040 m` one-second RMSE, and `0.320388`
+  collision F1;
+- fixed physical scale, cadence-three global discovery, and the point/scale
+  observer improve scaled position, but the current 1.90M-parameter weights
+  received only 1,024 measurement episode draws and no accepted causal
+  training;
+- the later change-point, outgoing, lateral, and gravity heads improve their
+  local cached objectives but regress velocity, detection, events, identity,
+  or longer recursive horizons online. They remain disabled.
+
+The next experiment is therefore one shared scaled model rather than another
+isolated head. `configs/sustained_accuracy_mps.yaml` declares 8,192 measurement
+updates followed by 4,096 independent causal windows across the eight balanced
+scenario families: two complete measurement passes, one nominal causal pass,
+and about 512 causal windows per scenario. The imported runtime is
+`runs/20260729-084712-scaled-point-scale-trajectory-v1/checkpoints/runtime_ablation.pt`.
+
+Training now limits the expensive recursive forecast to one earliest eligible
+anchor per four-frame TBPTT window while still ingesting and supervising every
+frame. The sampled collision/long-horizon windows cover the complete declared
+horizon set. Posterior rollouts are shared by forecast and correction losses.
+Full validation retains every eligible posterior anchor but skips the
+redundant prior future rollout.
+
+Checkpoint selection is physical and pooled over the complete validation
+manifest. The primary score is horizon-weighted position RMSE. A candidate
+must also remain within declared tolerances for current position and velocity,
+every horizon, 0.5 m distance-gated recall/precision and identity, forecast
+lifecycle coverage, collision F1, and nominal-90% calibration. These guards
+apply against both the moving incumbent and the fixed imported reference.
+Every validation candidate is numbered. Exact simulator/model/runtime/metric/
+batch/seed semantics and model tensor hashes bind metrics to real incumbent
+and reference weights on resume. Causal AdamW moments start fresh at the phase
+handoff.
+
+### Environment and validation
+
+Direct hardware inspection on 2026-07-30 reported Python `3.10.20`, PyTorch
+`2.10.0`, MPS built `true`, MPS available `true`, and a successful tensor
+allocation on `mps:0`.
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest \
+  tests/unit/test_config.py \
+  tests/unit/test_training_schedule.py \
+  tests/unit/test_fast_roi_supervision.py \
+  tests/unit/test_event_window_scoring.py \
+  tests/integration/test_trainer_checkpoint_integrity.py \
+  tests/integration/test_cli_smoke.py -q
+```
+
+Result: `101 passed in 36.50 s`.
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff format .
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff check .
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-sustained-pycache PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
+git diff --check
+```
+
+Ruff left all 168 files unchanged and passed; compileall and `git diff --check`
+passed. The sandboxed full suite reported `291 passed, 4 skipped in 81.07 s`.
+The four MPS-conditional files then ran with direct device access and reported
+`21 passed in 2.12 s`.
+
+The real campaign command also passed `train.py --dry-run --device mps`,
+resolving 12,288 steps, 4,096 training episodes, 16 validation episodes,
+batch one, all eight scenario families, and RGB-only runtime.
+
+### Representative scaled MPS smoke
+
+The following wiring/throughput check ran the actual imported incumbent,
+full-anchor validation, and eight one-anchor causal backward updates:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/sustained_accuracy_mps.yaml \
+  --initialize-from \
+    runs/20260729-084712-scaled-point-scale-trajectory-v1/checkpoints/runtime_ablation.pt \
+  --run-name sustained-mps-smoke8-v1 \
+  --device mps \
+  --set training.steps=8 \
+  --set training.rgb_pretrain_steps=0 \
+  --set training.train_episodes=16 \
+  --set training.validation_episodes=1 \
+  --set training.num_workers=0 \
+  --set training.eval_every=8 \
+  --set training.checkpoint_every=4 \
+  --set training.log_every=1 \
+  --set evaluation.episodes=1
+```
+
+Artifact:
+`runs/20260730-185438-sustained-mps-smoke8-v1/`. It contains `last.pt`,
+verified `best_rollout.pt` and `reference_rollout.pt`, and numbered step-zero
+and step-eight validation checkpoints. Total wall time was `1510.29 s`.
+Initial and final one-episode validations took `335.93 s` and `399.22 s`.
+The eight causal updates averaged `96.64 s` (`78.09–112.56 s`), versus about
+`242 s/update` in the previous fixed-cadence causal run.
+
+On this intentionally non-generalizable one-episode smoke manifest, step eight
+passed the predeclared guards:
+
+| metric | imported step 0 | step 8 |
+| --- | ---: | ---: |
+| weighted horizon score | `0.689518` | `0.689004` |
+| current position RMSE | `0.743342 m` | `0.742693 m` |
+| current velocity RMSE | `1.365972 m/s` | `1.365994 m/s` |
+| gated recall / precision | `0.402778 / 0.381579` | unchanged |
+| collision F1 / ID-switch rate | `0.071429 / 0` | unchanged |
+| nominal-90% position coverage | `0.547101` | `0.565217` |
+
+This is a mechanical and timing result, not an accuracy promotion. Eight
+updates and one validation episode are far below the declared convergence and
+scenario-coverage minimum. The measured throughput predicts roughly five days
+for the complete campaign, within the predeclared three-to-seven-day range.
+Do not judge causal convergence before 2,048 causal updates; complete all
+4,096, and extend only if the best safe checkpoint is still materially
+improving in the final 1,024 updates. Final promotion requires at least 64
+fresh balanced validation episodes with per-scenario results before any
+reserved test evaluation.
 
 ## 2026-07-30 — on-policy gravity-axis correction rejected
 
