@@ -1,6 +1,6 @@
 # Project status
 
-**Date:** 2026-07-29
+**Date:** 2026-07-30
 **Specification:** `PROJECT_SPEC.md` 1.3
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
@@ -10,6 +10,105 @@ invariant-tested familiar reference-pair regime, and one balanced eight-regime
 shared-model profile, plus a quality-aware persistent-ID multi-frame
 point/scale depth observer;
 collision, occlusion, identification, and full-MPS acceptance remain open
+
+## 2026-07-30 — bounded outgoing-velocity proposal rejected
+
+The learned RGB event gate remains available but disabled; it was not removed
+because it has no effect on the default runtime and preserves a reproducible
+exact-timestamp diagnostic/data path. The event-fitting workflow now also
+caches the belief's outgoing gravity-velocity prior, aligned simulator-only
+supervision target, and target delta. An optional eight-hidden-unit proposal
+uses the nine causal gate features, scaled prior velocity, and gate probability
+to emit a bounded scalar delta and calibrated variance. Runtime inference is a
+single tiny MLP with no history re-encoding or online weight update. A
+configurable six-sample refractory interval prevents immediate feedback
+retriggering.
+
+An initial runtime implementation waited for a later post-reset history and
+therefore recomputed the proposal from a window different from the supervised
+trigger. This is fixed and unit-tested: a proposal is consumed once on its
+exact causal trigger frame, while later post-event samples use the ordinary
+acceleration-aware estimator.
+
+The eight-scenario MPS collection produced 543 training windows (197 positive)
+and 398 disjoint validation windows (146 positive). A positive-only fit reduced
+positive-window validation RMSE from `2.795367` to `1.194373 m/s`, but it did
+not model false runtime selections. The selected joint gate-focused,
+`1.5 m/s`-bounded fit reduced all-window RMSE
+`1.693066 → 1.548441 m/s` and gate-selected RMSE
+`1.638817 → 1.537791 m/s`; MAE did not improve.
+
+On fresh-validation seed `100017`, delayed application was rejected at current
+position/velocity RMSE `0.702754 m` / `1.170360 m/s`. Correct immediate
+application slightly improved current position `0.702313 → 0.701963 m` and
+0.1-second forecast `0.715284 → 0.714966 m`, but velocity regressed
+`1.148770 → 1.173099 m/s`. The scaled gate and proposal remain disabled, and
+the accepted checkpoint is unchanged. The next concrete accuracy task is an
+intervention-aware camera-lateral outgoing correction with learned
+abstention/gain, trained against post-filter velocity and recursive forecast
+effects rather than gravity-only event labels.
+
+Primary artifacts:
+
+- aligned feature/target caches and positive-only fit:
+  `runs/20260730-074928-rgb-outgoing-proposal-aligned-8x8-v1/`;
+- bounded joint fit:
+  `runs/20260730-081923-rgb-outgoing-proposal-gate-focused-bounded-v4/`;
+- delayed runtime report:
+  `runs/20260730-081923-rgb-outgoing-proposal-gate-focused-bounded-v4/evaluation/20260730-082303-proposal-fast-offset17/report.md`;
+- trigger-aligned runtime report:
+  `runs/20260730-081923-rgb-outgoing-proposal-gate-focused-bounded-v4/evaluation/20260730-083325-proposal-immediate-fast-offset17/report.md`.
+
+Collection/fitting and paired MPS evaluation used:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python \
+  scripts/train_rgb_change_point_gate.py \
+  --config configs/scaled_curriculum.yaml \
+  --checkpoint runs/20260729-084712-scaled-point-scale-trajectory-v1/checkpoints/runtime_ablation.pt \
+  --device mps --train-episodes 8 --validation-episodes 8 \
+  --validation-seed-offset 256 --minimum-precision 0.7 \
+  --gate-type mlp --hidden-features 8 --fit-steps 1500 \
+  --fit-outgoing-proposal --proposal-hidden-features 8 \
+  --proposal-fit-steps 2000 --set simulator.sequence_frames=32 \
+  --output runs/rgb-outgoing-proposal-aligned-8x8-v1
+
+PYTHONPATH=. conda run --no-capture-output -n orpheus python evaluate.py \
+  --config runs/20260730-081923-rgb-outgoing-proposal-gate-focused-bounded-v4/config.resolved.yaml \
+  --checkpoint runs/20260730-081923-rgb-outgoing-proposal-gate-focused-bounded-v4/checkpoints/change_point_gate.pt \
+  --split validation --seed-protocol fresh_validation --seed-offset 17 \
+  --device mps --set simulator.sequence_frames=48 \
+  --set evaluation.episodes=1 --set 'evaluation.horizons_seconds=[0.1]' \
+  --set 'training.horizon_weights=[1.0]' \
+  --output runs/20260730-081923-rgb-outgoing-proposal-gate-focused-bounded-v4/evaluation/proposal-immediate-fast-offset17
+```
+
+Final validation:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff format .
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
+```
+
+Ruff left all 167 files unchanged and passed. The sandboxed full suite reported
+`264 passed, 4 skipped in 75.23 s`; the four hardware-conditional tests then
+passed directly on MPS (`4 passed in 1.63 s`). The focused temporal/gate/config/
+checkpoint suite reported `77 passed in 5.15 s`.
+
+```bash
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-outgoing-proposal-pycache \
+  PYTHONPATH=. conda run --no-capture-output -n orpheus python \
+  -m compileall -q world_model train.py evaluate.py demo.py scripts tests
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/scaled_curriculum.yaml --dry-run --device cpu
+git diff --check
+```
+
+Compileall, the unchanged 48,000-draw/eight-scenario scaled dry run, and
+`git diff --check` passed with Python `3.10.20` and PyTorch `2.10.0`. The
+sandboxed dry run reported MPS compiled but unavailable; the paired evaluation
+and direct device tests ran against the host MPS device.
 
 ## What works
 

@@ -97,6 +97,14 @@ class RGBObservationConfig:
     temporal_velocity_change_point_mlp_output_weights: tuple[float, ...] = ()
     temporal_velocity_change_point_mlp_output_bias: float = 0.0
     temporal_velocity_change_point_probability_threshold: float = 0.5
+    temporal_velocity_change_point_minimum_interval_samples: int = 6
+    temporal_velocity_outgoing_proposal_enabled: bool = False
+    temporal_velocity_outgoing_proposal_hidden_weights: tuple[float, ...] = ()
+    temporal_velocity_outgoing_proposal_hidden_bias: tuple[float, ...] = ()
+    temporal_velocity_outgoing_proposal_output_weights: tuple[float, ...] = ()
+    temporal_velocity_outgoing_proposal_output_bias: float = 0.0
+    temporal_velocity_outgoing_proposal_variance: float = 1.0
+    temporal_velocity_outgoing_proposal_maximum_delta: float = 5.0
     temporal_velocity_measurement_position_blend: float = 0.0
     temporal_velocity_position_innovation_coupling: bool = False
     temporal_position_enabled: bool = False
@@ -255,12 +263,48 @@ class RGBObservationConfig:
             for value in values
         ) or not math.isfinite(self.temporal_velocity_change_point_mlp_output_bias):
             raise ValueError("change-point MLP coefficients must be finite")
+        proposal_hidden = len(self.temporal_velocity_outgoing_proposal_hidden_bias)
+        if self.temporal_velocity_outgoing_proposal_enabled and (
+            not self.temporal_velocity_change_point_enabled
+            or self.temporal_velocity_change_point_gate not in {"linear", "mlp"}
+            or proposal_hidden <= 0
+            or len(self.temporal_velocity_outgoing_proposal_hidden_weights) != 11 * proposal_hidden
+            or len(self.temporal_velocity_outgoing_proposal_output_weights) != proposal_hidden
+        ):
+            raise ValueError(
+                "outgoing velocity proposal requires a learned change-point gate "
+                "and consistent eleven-input MLP coefficients"
+            )
+        if not all(
+            math.isfinite(value)
+            for values in (
+                self.temporal_velocity_outgoing_proposal_hidden_weights,
+                self.temporal_velocity_outgoing_proposal_hidden_bias,
+                self.temporal_velocity_outgoing_proposal_output_weights,
+            )
+            for value in values
+        ) or not math.isfinite(self.temporal_velocity_outgoing_proposal_output_bias):
+            raise ValueError("outgoing velocity proposal coefficients must be finite")
+        if (
+            not math.isfinite(self.temporal_velocity_outgoing_proposal_variance)
+            or self.temporal_velocity_outgoing_proposal_variance <= 0
+        ):
+            raise ValueError("outgoing velocity proposal variance must be finite and positive")
+        if (
+            not math.isfinite(self.temporal_velocity_outgoing_proposal_maximum_delta)
+            or self.temporal_velocity_outgoing_proposal_maximum_delta <= 0
+        ):
+            raise ValueError("outgoing velocity proposal maximum delta must be finite and positive")
         if (
             not math.isfinite(self.temporal_velocity_change_point_probability_threshold)
             or not 0.0 < self.temporal_velocity_change_point_probability_threshold < 1.0
         ):
             raise ValueError(
                 "temporal_velocity_change_point_probability_threshold must lie in (0, 1)"
+            )
+        if self.temporal_velocity_change_point_minimum_interval_samples < 3:
+            raise ValueError(
+                "temporal_velocity_change_point_minimum_interval_samples must be at least three"
             )
         if (
             not math.isfinite(self.temporal_velocity_measurement_position_blend)
@@ -1061,12 +1105,57 @@ class RGBObservationModule(ObservationModule):
                 learned_weights,
             ) + float(self.config.temporal_velocity_change_point_linear_bias)
         learned_probability = learned_logit.sigmoid()
+        outgoing_proposal_delta = posterior.objects.position.new_zeros(active_mask.shape)
+        if self.config.temporal_velocity_outgoing_proposal_enabled:
+            prior_gravity_velocity = (posterior.objects.velocity * gravity_axis[:, None, :]).sum(
+                dim=-1, keepdim=True
+            )
+            proposal_features = torch.cat(
+                (
+                    learned_gate_features,
+                    prior_gravity_velocity / 5.0,
+                    learned_probability.unsqueeze(-1),
+                ),
+                dim=-1,
+            )
+            proposal_hidden_bias = posterior.objects.position.new_tensor(
+                self.config.temporal_velocity_outgoing_proposal_hidden_bias
+            )
+            proposal_hidden_weights = posterior.objects.position.new_tensor(
+                self.config.temporal_velocity_outgoing_proposal_hidden_weights
+            ).reshape(proposal_hidden_bias.numel(), proposal_features.shape[-1])
+            proposal_output_weights = posterior.objects.position.new_tensor(
+                self.config.temporal_velocity_outgoing_proposal_output_weights
+            )
+            proposal_hidden = F.silu(
+                F.linear(
+                    proposal_features,
+                    proposal_hidden_weights,
+                    proposal_hidden_bias,
+                )
+            )
+            outgoing_proposal_delta = F.linear(
+                proposal_hidden,
+                proposal_output_weights.unsqueeze(0),
+                posterior.objects.position.new_tensor(
+                    [self.config.temporal_velocity_outgoing_proposal_output_bias]
+                ),
+            ).squeeze(-1)
+            outgoing_proposal_delta = outgoing_proposal_delta.clamp(
+                -self.config.temporal_velocity_outgoing_proposal_maximum_delta,
+                self.config.temporal_velocity_outgoing_proposal_maximum_delta,
+            )
         if self.config.temporal_velocity_change_point_enabled:
             if self.config.temporal_velocity_change_point_gate in {"linear", "mlp"}:
                 change_point_mask = learned_feature_valid & (
                     learned_probability
                     >= self.config.temporal_velocity_change_point_probability_threshold
                 )
+                outside_refractory_window = (~history.has_reset) | (
+                    history.post_reset_sample_count
+                    >= self.config.temporal_velocity_change_point_minimum_interval_samples
+                )
+                change_point_mask = change_point_mask & outside_refractory_window
                 change_point_score = learned_probability
             else:
                 change_point_mask, change_point_score = history.kinematic_change_point(
@@ -1120,6 +1209,7 @@ class RGBObservationModule(ObservationModule):
                 "trajectory_change_point_feature_timestamps": learned_feature_timestamps,
                 "trajectory_change_point_logit": learned_logit,
                 "trajectory_change_point_probability": learned_probability,
+                "trajectory_outgoing_velocity_delta": outgoing_proposal_delta,
             }
         )
         velocity, velocity_log_variance, velocity_valid_mask = history.least_squares_velocity(
@@ -1241,14 +1331,37 @@ class RGBObservationModule(ObservationModule):
                 )
                 if not self.config.temporal_velocity_enabled:
                     post_event_gravity_valid = torch.zeros_like(post_event_gravity_valid)
+                immediate_proposal_valid = (
+                    change_point_mask
+                    if (
+                        self.config.temporal_velocity_enabled
+                        and self.config.temporal_velocity_outgoing_proposal_enabled
+                    )
+                    else torch.zeros_like(change_point_mask)
+                )
                 change_point_gravity_valid = post_event_gravity_valid & history.change_point_reset
                 gravity_delta = (
                     (gravity_velocity - prior_velocity) * gravity_axis[:, None, :]
                 ).sum(dim=-1, keepdim=True)
+                if self.config.temporal_velocity_outgoing_proposal_enabled:
+                    gravity_delta = torch.where(
+                        immediate_proposal_valid.unsqueeze(-1),
+                        outgoing_proposal_delta.unsqueeze(-1),
+                        gravity_delta,
+                    )
                 gravity_only_velocity = prior_velocity + gravity_axis[:, None, :] * gravity_delta
                 gravity_scalar_variance = (
                     gravity_velocity_log_variance.exp() * gravity_axis[:, None, :].square()
                 ).sum(dim=-1, keepdim=True)
+                if self.config.temporal_velocity_outgoing_proposal_enabled:
+                    gravity_scalar_variance = torch.where(
+                        immediate_proposal_valid.unsqueeze(-1),
+                        torch.full_like(
+                            gravity_scalar_variance,
+                            self.config.temporal_velocity_outgoing_proposal_variance,
+                        ),
+                        gravity_scalar_variance,
+                    )
                 gravity_only_observable = gravity_axis[:, None, :].square() >= 1.0e-4
                 gravity_only_variance = gravity_scalar_variance / gravity_axis[
                     :, None, :
@@ -1262,21 +1375,23 @@ class RGBObservationModule(ObservationModule):
                     gravity_only_variance,
                     gravity_unobserved_variance,
                 )
+                gravity_only_override_valid = change_point_gravity_valid | immediate_proposal_valid
                 gravity_projected_velocity = torch.where(
-                    change_point_gravity_valid.unsqueeze(-1),
+                    gravity_only_override_valid.unsqueeze(-1),
                     gravity_only_velocity,
                     gravity_projected_velocity,
                 )
                 gravity_projected_variance = torch.where(
-                    change_point_gravity_valid.unsqueeze(-1),
+                    gravity_only_override_valid.unsqueeze(-1),
                     gravity_only_variance,
                     gravity_projected_variance,
                 )
                 gravity_observable = torch.where(
-                    change_point_gravity_valid.unsqueeze(-1),
+                    gravity_only_override_valid.unsqueeze(-1),
                     gravity_only_observable,
                     gravity_observable,
                 )
+                post_event_gravity_valid = post_event_gravity_valid | immediate_proposal_valid
                 velocity = torch.where(
                     post_event_gravity_valid.unsqueeze(-1),
                     gravity_projected_velocity,

@@ -56,6 +56,14 @@ _RGB_LEGACY_DEFAULT_FIELDS = (
     "temporal_velocity_change_point_mlp_output_weights",
     "temporal_velocity_change_point_mlp_output_bias",
     "temporal_velocity_change_point_probability_threshold",
+    "temporal_velocity_change_point_minimum_interval_samples",
+    "temporal_velocity_outgoing_proposal_enabled",
+    "temporal_velocity_outgoing_proposal_hidden_weights",
+    "temporal_velocity_outgoing_proposal_hidden_bias",
+    "temporal_velocity_outgoing_proposal_output_weights",
+    "temporal_velocity_outgoing_proposal_output_bias",
+    "temporal_velocity_outgoing_proposal_variance",
+    "temporal_velocity_outgoing_proposal_maximum_delta",
     "temporal_velocity_measurement_position_blend",
     "temporal_velocity_position_innovation_coupling",
     "temporal_position_enabled",
@@ -106,6 +114,9 @@ def _model_checkpoint_semantics(value: object) -> object:
             "temporal_velocity_change_point_mlp_hidden_weights",
             "temporal_velocity_change_point_mlp_hidden_bias",
             "temporal_velocity_change_point_mlp_output_weights",
+            "temporal_velocity_outgoing_proposal_hidden_weights",
+            "temporal_velocity_outgoing_proposal_hidden_bias",
+            "temporal_velocity_outgoing_proposal_output_weights",
         ):
             coefficients = normalized_rgb.get(coefficient_field)
             if isinstance(coefficients, list):

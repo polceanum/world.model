@@ -456,3 +456,16 @@ threshold/model refits without rerunning perception. The artifact writer
 preserves source checkpoint training/seed provenance. Linear, loose-MLP, and
 sparse-MLP policies were all rejected for promotion: the sparse policy was
 safe but produced a small velocity regression on one paired seed.
+
+Added a tiny optional bounded outgoing gravity-velocity proposal behind the
+learned RGB change-point gate. Training caches now include the belief prior,
+aligned simulator-only supervision target, and delta; the proposal consumes
+nine causal RGB/contact features, prior gravity velocity, and gate
+probability. A refractory interval prevents repeated feedback triggers.
+Runtime consumes the proposal once on the exact frame selected by its causal
+gate, fixing an initial train/application timing mismatch. Positive-only and
+joint gate-focused fits improved offline RMSE, and the aligned runtime slightly
+improved current and 0.1-second position on one seed, but velocity regressed.
+The gate and proposal therefore remain disabled in the scaled profile. The
+next target is an intervention-aware camera-lateral outgoing correction, not
+further gravity-axis threshold tuning.

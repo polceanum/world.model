@@ -52,6 +52,39 @@ class MLPChangePointGate:
         ).squeeze(-1)
 
 
+@dataclass(frozen=True)
+class MLPOutgoingVelocityProposal:
+    hidden_weights: tuple[float, ...]
+    hidden_bias: tuple[float, ...]
+    output_weights: tuple[float, ...]
+    output_bias: float
+    variance: float
+    maximum_delta: float
+
+    def delta(self, features: Tensor) -> Tensor:
+        input_features = features.shape[-1]
+        hidden_features = len(self.hidden_bias)
+        if len(self.hidden_weights) != input_features * hidden_features:
+            raise ValueError("hidden weight dimensions do not match proposal features")
+        hidden_weights = features.new_tensor(self.hidden_weights).reshape(
+            hidden_features,
+            input_features,
+        )
+        hidden = F.silu(
+            F.linear(
+                features,
+                hidden_weights,
+                features.new_tensor(self.hidden_bias),
+            )
+        )
+        output = F.linear(
+            hidden,
+            features.new_tensor(self.output_weights).unsqueeze(0),
+            features.new_tensor([self.output_bias]),
+        ).squeeze(-1)
+        return output.clamp(-self.maximum_delta, self.maximum_delta)
+
+
 def binary_metrics(
     logits: Tensor,
     targets: Tensor,
@@ -320,11 +353,148 @@ def fit_mlp_change_point_gate(
     return gate, metrics
 
 
+def fit_mlp_outgoing_velocity_proposal(
+    train_features: Tensor,
+    train_target_delta: Tensor,
+    validation_features: Tensor,
+    validation_target_delta: Tensor,
+    *,
+    hidden_features: int = 8,
+    steps: int = 2000,
+    learning_rate: float = 0.01,
+    weight_decay: float = 5.0e-3,
+    minimum_variance: float = 0.25,
+    maximum_variance: float = 9.0,
+    maximum_delta: float = 5.0,
+    seed: int = 0,
+) -> tuple[MLPOutgoingVelocityProposal, dict[str, float]]:
+    """Fit an axis-local outgoing-velocity delta with calibrated variance."""
+
+    if train_features.ndim != 2 or validation_features.ndim != 2:
+        raise ValueError("proposal features must have shape [samples, features]")
+    if train_features.shape[1] != validation_features.shape[1]:
+        raise ValueError("training and validation feature dimensions must match")
+    if train_target_delta.shape != train_features.shape[:1]:
+        raise ValueError("train_target_delta must have shape [samples]")
+    if validation_target_delta.shape != validation_features.shape[:1]:
+        raise ValueError("validation_target_delta must have shape [samples]")
+    if (
+        hidden_features <= 0
+        or steps <= 0
+        or learning_rate <= 0
+        or weight_decay < 0
+        or not 0 < minimum_variance <= maximum_variance
+        or maximum_delta <= 0
+    ):
+        raise ValueError("invalid outgoing proposal fitting settings")
+    train_features = train_features.float()
+    validation_features = validation_features.float()
+    train_target_delta = train_target_delta.float()
+    validation_target_delta = validation_target_delta.float()
+    if train_target_delta.numel() == 0 or validation_target_delta.numel() == 0:
+        raise ValueError("proposal training and validation sets cannot be empty")
+
+    generator = torch.Generator().manual_seed(seed)
+    hidden_weights = (
+        torch.randn(
+            hidden_features,
+            train_features.shape[1],
+            generator=generator,
+        )
+        * 0.1
+    ).requires_grad_()
+    hidden_bias = torch.zeros(hidden_features, requires_grad=True)
+    output_weights = (torch.randn(hidden_features, generator=generator) * 0.1).requires_grad_()
+    output_bias = torch.zeros(1, requires_grad=True)
+    optimizer = torch.optim.AdamW(
+        (hidden_weights, hidden_bias, output_weights, output_bias),
+        lr=learning_rate,
+        weight_decay=weight_decay,
+    )
+    for _ in range(steps):
+        prediction = F.linear(
+            F.silu(F.linear(train_features, hidden_weights, hidden_bias)),
+            output_weights.unsqueeze(0),
+            output_bias,
+        ).squeeze(-1)
+        prediction = prediction.clamp(-maximum_delta, maximum_delta)
+        loss = F.smooth_l1_loss(prediction, train_target_delta)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    with torch.no_grad():
+        train_prediction = F.linear(
+            F.silu(F.linear(train_features, hidden_weights, hidden_bias)),
+            output_weights.unsqueeze(0),
+            output_bias,
+        ).squeeze(-1)
+        validation_prediction = F.linear(
+            F.silu(F.linear(validation_features, hidden_weights, hidden_bias)),
+            output_weights.unsqueeze(0),
+            output_bias,
+        ).squeeze(-1)
+        train_prediction = train_prediction.clamp(-maximum_delta, maximum_delta)
+        validation_prediction = validation_prediction.clamp(
+            -maximum_delta,
+            maximum_delta,
+        )
+        validation_residual = validation_prediction - validation_target_delta
+        variance = float(
+            validation_residual.square()
+            .mean()
+            .clamp(
+                min=minimum_variance,
+                max=maximum_variance,
+            )
+        )
+
+    def regression_metrics(
+        prediction: Tensor,
+        target: Tensor,
+        prefix: str,
+    ) -> dict[str, float]:
+        residual = prediction - target
+        prior_error = target.abs()
+        posterior_error = residual.abs()
+        return {
+            f"{prefix}_prior_mae_mps": float(prior_error.mean()),
+            f"{prefix}_proposal_mae_mps": float(posterior_error.mean()),
+            f"{prefix}_prior_rmse_mps": float(target.square().mean().sqrt()),
+            f"{prefix}_proposal_rmse_mps": float(residual.square().mean().sqrt()),
+            f"{prefix}_positive_improvement_rate": float(
+                (posterior_error < prior_error).float().mean()
+            ),
+            f"{prefix}_examples": float(target.numel()),
+        }
+
+    proposal = MLPOutgoingVelocityProposal(
+        hidden_weights=tuple(float(value) for value in hidden_weights.detach().flatten()),
+        hidden_bias=tuple(float(value) for value in hidden_bias.detach()),
+        output_weights=tuple(float(value) for value in output_weights.detach()),
+        output_bias=float(output_bias.detach()),
+        variance=variance,
+        maximum_delta=maximum_delta,
+    )
+    metrics = {
+        **regression_metrics(train_prediction, train_target_delta, "train"),
+        **regression_metrics(
+            validation_prediction,
+            validation_target_delta,
+            "validation",
+        ),
+        "calibrated_variance_mps2": variance,
+    }
+    return proposal, metrics
+
+
 __all__ = [
     "LinearChangePointGate",
     "MLPChangePointGate",
+    "MLPOutgoingVelocityProposal",
     "binary_metrics",
     "fit_linear_change_point_gate",
     "fit_mlp_change_point_gate",
+    "fit_mlp_outgoing_velocity_proposal",
     "select_precision_threshold",
 ]

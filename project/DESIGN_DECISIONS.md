@@ -1081,3 +1081,42 @@
   classification alone fixes velocity.” The next accuracy target is a
   calibrated learned outgoing-velocity proposal trained jointly with the gate,
   while the validated runtime remains unchanged.
+
+## ADR-055 — Retain the event gate and outgoing proposal as disabled capabilities
+
+- **Date:** 2026-07-30
+- **Status:** workflow accepted; runtime policies rejected
+- **Context:** The sparse learned gate in ADR-054 has useful precision but poor
+  recall and does not itself estimate an outgoing state. Deleting it would
+  discard exact-timestamp event data and a cheap diagnostic, while enabling it
+  would regress velocity. A proposal trained only on true events can also fail
+  when exposed to runtime false positives or a different post-reset window.
+- **Decision:** Keep the learned gate disabled by default and add a tiny
+  one-hidden-layer proposal for a bounded gravity-axis velocity delta. Its
+  inputs are the nine causal gate features, current prior gravity velocity, and
+  gate probability. Cache aligned prior/target velocities during
+  simulator-supervised collection, calibrate proposal variance on held-out
+  windows, impose a refractory interval, and consume the proposal only on the
+  exact frame whose features triggered it. Simulator values remain labels and
+  metrics only. Do not activate either learned component unless paired online
+  state and forecast metrics improve.
+- **Alternatives considered:** remove the gate; apply a positive-only regressor
+  to every selected runtime window; reuse a newly recomputed proposal after
+  two post-reset samples; promote a small position gain despite worse velocity.
+- **Evidence:** The aligned collection contained 543 train and 398 validation
+  windows. A positive-only proposal reduced held-out positive-window RMSE from
+  `2.795367` to `1.194373 m/s`, but did not model false selections. A
+  gate-focused, `1.5 m/s`-bounded joint fit reduced all-window validation RMSE
+  `1.693066 → 1.548441 m/s` and gate-selected RMSE
+  `1.638817 → 1.537791 m/s`. Delayed runtime application on seed `100017`
+  worsened current/velocity RMSE to `0.702754 m` / `1.170360 m/s`. Consuming
+  the aligned proposal immediately improved current position
+  `0.702313 → 0.701963 m` and 0.1-second forecast
+  `0.715284 → 0.714966 m`, but velocity still worsened
+  `1.148770 → 1.173099 m/s`.
+- **Consequences:** The scaled runtime and accepted checkpoint remain
+  unchanged. The code can now reproduce the failed experiment without
+  conflating classification, regression, and timing. The next accuracy target
+  is an intervention-aware camera-lateral outgoing correction trained on its
+  actual post-filter and recursive forecast effect, with learned
+  abstention/gain; the gravity-only gate is not evidence for lateral events.

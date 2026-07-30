@@ -20,6 +20,7 @@ from world_model.runtime import OnlineWorldModel
 from world_model.training.change_point_gate import (
     fit_linear_change_point_gate,
     fit_mlp_change_point_gate,
+    fit_mlp_outgoing_velocity_proposal,
 )
 from world_model.training.checkpointing import load_checkpoint
 from world_model.training.loop import (
@@ -50,6 +51,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hidden-features", type=int, default=12)
     parser.add_argument("--train-cache")
     parser.add_argument("--validation-cache")
+    parser.add_argument("--fit-outgoing-proposal", action="store_true")
+    parser.add_argument("--proposal-hidden-features", type=int, default=8)
+    parser.add_argument("--proposal-fit-steps", type=int, default=2000)
+    parser.add_argument("--proposal-gate-focus-weight", type=int, default=20)
+    parser.add_argument("--proposal-maximum-delta", type=float, default=3.0)
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     return parser.parse_args()
 
@@ -64,7 +70,7 @@ def collect_examples(
     seed_offset: int,
     device: torch.device,
     minimum_velocity_jump: float,
-) -> tuple[Tensor, Tensor, dict[str, float]]:
+) -> dict[str, Any]:
     if episodes <= 0:
         raise ValueError("episode count must be positive")
     dataset = SyntheticSphereDataset(
@@ -83,6 +89,8 @@ def collect_examples(
     )
     features: list[Tensor] = []
     targets: list[Tensor] = []
+    outgoing_prior: list[Tensor] = []
+    outgoing_target: list[Tensor] = []
     eligible_count = 0
     collision_count = 0
     jump_count = 0
@@ -120,6 +128,13 @@ def collect_examples(
             if valid.any():
                 aligned_target = torch.zeros_like(valid)
                 aligned_collision = torch.zeros_like(valid)
+                aligned_outgoing_prior = torch.zeros_like(
+                    valid,
+                    dtype=belief.objects.position.dtype,
+                )
+                aligned_outgoing_target = torch.zeros_like(
+                    aligned_outgoing_prior,
+                )
                 for belief_slot_tensor in torch.nonzero(valid[0], as_tuple=False).flatten():
                     belief_slot = int(belief_slot_tensor)
                     target_slot = int(indices[0, belief_slot])
@@ -154,8 +169,16 @@ def collect_examples(
                     aligned_target[0, belief_slot] = has_collision and bool(
                         observable_jump >= minimum_velocity_jump
                     )
+                    aligned_outgoing_prior[0, belief_slot] = (
+                        belief.objects.velocity[0, belief_slot] * gravity_axis
+                    ).sum()
+                    aligned_outgoing_target[0, belief_slot] = (
+                        batch["objects"]["velocity"][0, end_index, target_slot] * gravity_axis
+                    ).sum()
                 features.append(gate_features.masked_select(valid.unsqueeze(-1)).reshape(-1, 9))
                 targets.append(aligned_target.masked_select(valid))
+                outgoing_prior.append(aligned_outgoing_prior.masked_select(valid))
+                outgoing_target.append(aligned_outgoing_target.masked_select(valid))
                 eligible_count += int(valid.sum().cpu())
                 collision_count += int(aligned_collision.masked_select(valid).sum().cpu())
                 jump_count += int(aligned_target.masked_select(valid).sum().cpu())
@@ -166,16 +189,21 @@ def collect_examples(
         )
     if not features:
         raise RuntimeError("no eligible RGB trajectory windows were collected")
-    return (
-        torch.cat(features).cpu(),
-        torch.cat(targets).cpu(),
-        {
+    concatenated_prior = torch.cat(outgoing_prior).cpu()
+    concatenated_target = torch.cat(outgoing_target).cpu()
+    return {
+        "features": torch.cat(features).cpu(),
+        "targets": torch.cat(targets).cpu(),
+        "outgoing_prior": concatenated_prior,
+        "outgoing_target": concatenated_target,
+        "outgoing_delta": concatenated_target - concatenated_prior,
+        "collection": {
             "episodes": float(episodes),
             "eligible_windows": float(eligible_count),
             "collision_windows": float(collision_count),
             "observable_jump_windows": float(jump_count),
         },
-    )
+    }
 
 
 def main() -> int:
@@ -197,12 +225,13 @@ def main() -> int:
         expected_config=config,
     )
     if args.train_cache:
-        cached_train = torch.load(args.train_cache, map_location="cpu", weights_only=False)
-        train_features = cached_train["features"]
-        train_targets = cached_train["targets"]
-        train_collection = cached_train["collection"]
+        train_examples = torch.load(
+            args.train_cache,
+            map_location="cpu",
+            weights_only=False,
+        )
     else:
-        train_features, train_targets, train_collection = collect_examples(
+        train_examples = collect_examples(
             model,
             config,
             split="train",
@@ -211,21 +240,18 @@ def main() -> int:
             device=device_info.device,
             minimum_velocity_jump=args.minimum_velocity_jump,
         )
-    torch.save(
-        {"features": train_features, "targets": train_targets, "collection": train_collection},
-        output / "train_features.pt",
-    )
+    train_features = train_examples["features"]
+    train_targets = train_examples["targets"]
+    train_collection = train_examples["collection"]
+    torch.save(train_examples, output / "train_features.pt")
     if args.validation_cache:
-        cached_validation = torch.load(
+        validation_examples = torch.load(
             args.validation_cache,
             map_location="cpu",
             weights_only=False,
         )
-        validation_features = cached_validation["features"]
-        validation_targets = cached_validation["targets"]
-        validation_collection = cached_validation["collection"]
     else:
-        validation_features, validation_targets, validation_collection = collect_examples(
+        validation_examples = collect_examples(
             model,
             config,
             split="validation",
@@ -234,14 +260,10 @@ def main() -> int:
             device=device_info.device,
             minimum_velocity_jump=args.minimum_velocity_jump,
         )
-    torch.save(
-        {
-            "features": validation_features,
-            "targets": validation_targets,
-            "collection": validation_collection,
-        },
-        output / "validation_features.pt",
-    )
+    validation_features = validation_examples["features"]
+    validation_targets = validation_examples["targets"]
+    validation_collection = validation_examples["collection"]
+    torch.save(validation_examples, output / "validation_features.pt")
     if args.gate_type == "mlp":
         gate, metrics = fit_mlp_change_point_gate(
             train_features,
@@ -275,6 +297,122 @@ def main() -> int:
             "temporal_velocity_change_point_linear_bias": gate.bias,
         }
 
+    proposal_metrics: dict[str, float] = {}
+    proposal_updates: dict[str, Any] = {}
+    if args.fit_outgoing_proposal:
+        missing_proposal_fields = {
+            "outgoing_prior",
+            "outgoing_delta",
+        } - set(train_examples)
+        missing_proposal_fields |= {
+            "outgoing_prior",
+            "outgoing_delta",
+        } - set(validation_examples)
+        if missing_proposal_fields:
+            raise ValueError(
+                "cached features do not contain outgoing targets: "
+                + ", ".join(sorted(missing_proposal_fields))
+            )
+        train_gate_probability = gate.logits(train_features).sigmoid()
+        validation_gate_probability = gate.logits(validation_features).sigmoid()
+        train_proposal_features = torch.cat(
+            (
+                train_features,
+                train_examples["outgoing_prior"].unsqueeze(-1) / 5.0,
+                train_gate_probability.unsqueeze(-1),
+            ),
+            dim=-1,
+        )
+        validation_proposal_features = torch.cat(
+            (
+                validation_features,
+                validation_examples["outgoing_prior"].unsqueeze(-1) / 5.0,
+                validation_gate_probability.unsqueeze(-1),
+            ),
+            dim=-1,
+        )
+        base_train_proposal_features = train_proposal_features
+        train_proposal_target = torch.where(
+            train_targets.bool(),
+            train_examples["outgoing_delta"],
+            torch.zeros_like(train_examples["outgoing_delta"]),
+        )
+        validation_proposal_target = torch.where(
+            validation_targets.bool(),
+            validation_examples["outgoing_delta"],
+            torch.zeros_like(validation_examples["outgoing_delta"]),
+        )
+        train_gate_selected = train_gate_probability >= gate.probability_threshold
+        if args.proposal_gate_focus_weight > 1 and train_gate_selected.any():
+            repeat_count = args.proposal_gate_focus_weight - 1
+            train_proposal_features = torch.cat(
+                (
+                    train_proposal_features,
+                    train_proposal_features[train_gate_selected].repeat(
+                        repeat_count,
+                        1,
+                    ),
+                ),
+                dim=0,
+            )
+            train_proposal_target = torch.cat(
+                (
+                    train_proposal_target,
+                    train_proposal_target[train_gate_selected].repeat(
+                        repeat_count,
+                    ),
+                ),
+                dim=0,
+            )
+        proposal, proposal_metrics = fit_mlp_outgoing_velocity_proposal(
+            train_proposal_features,
+            train_proposal_target,
+            validation_proposal_features,
+            validation_proposal_target,
+            hidden_features=args.proposal_hidden_features,
+            steps=args.proposal_fit_steps,
+            maximum_delta=args.proposal_maximum_delta,
+            seed=config.project.seed,
+        )
+        validation_selected = validation_gate_probability >= gate.probability_threshold
+        if validation_selected.any():
+            selected_target = validation_proposal_target[validation_selected]
+            selected_residual = (
+                proposal.delta(
+                    validation_proposal_features[validation_selected],
+                )
+                - selected_target
+            )
+            proposal_metrics.update(
+                {
+                    "validation_gate_selected_examples": float(validation_selected.sum()),
+                    "validation_gate_selected_prior_mae_mps": float(selected_target.abs().mean()),
+                    "validation_gate_selected_proposal_mae_mps": float(
+                        selected_residual.abs().mean()
+                    ),
+                    "validation_gate_selected_prior_rmse_mps": float(
+                        selected_target.square().mean().sqrt()
+                    ),
+                    "validation_gate_selected_proposal_rmse_mps": float(
+                        selected_residual.square().mean().sqrt()
+                    ),
+                }
+            )
+        proposal_metrics["gate_focus_weight"] = float(args.proposal_gate_focus_weight)
+        proposal_metrics["maximum_delta_mps"] = float(args.proposal_maximum_delta)
+        proposal_metrics["unreplicated_train_examples"] = float(
+            base_train_proposal_features.shape[0]
+        )
+        proposal_updates = {
+            "temporal_velocity_outgoing_proposal_enabled": True,
+            "temporal_velocity_outgoing_proposal_hidden_weights": (proposal.hidden_weights),
+            "temporal_velocity_outgoing_proposal_hidden_bias": proposal.hidden_bias,
+            "temporal_velocity_outgoing_proposal_output_weights": (proposal.output_weights),
+            "temporal_velocity_outgoing_proposal_output_bias": proposal.output_bias,
+            "temporal_velocity_outgoing_proposal_variance": proposal.variance,
+            "temporal_velocity_outgoing_proposal_maximum_delta": (proposal.maximum_delta),
+        }
+
     gate_rgb = replace(
         config.model.rgb,
         temporal_velocity_post_event_gravity_axis_enabled=True,
@@ -282,6 +420,7 @@ def main() -> int:
         temporal_velocity_change_point_require_contact_mode=False,
         temporal_velocity_change_point_probability_threshold=(gate.probability_threshold),
         **gate_updates,
+        **proposal_updates,
     )
     gate_config = replace(config, model=replace(config.model, rgb=gate_rgb))
     gate_config.validate()
@@ -295,6 +434,7 @@ def main() -> int:
     output_payload["metrics"] = {
         **dict(payload.get("metrics", {})),
         **{f"change_point_gate_{name}": value for name, value in metrics.items()},
+        **{f"outgoing_velocity_proposal_{name}": value for name, value in proposal_metrics.items()},
     }
     temporary = checkpoint_path.with_suffix(".pt.tmp")
     torch.save(output_payload, temporary)
@@ -326,9 +466,16 @@ def main() -> int:
             },
             "probability_threshold": gate.probability_threshold,
         },
+        "outgoing_proposal": {
+            key.removeprefix("temporal_velocity_outgoing_proposal_"): (
+                list(value) if isinstance(value, tuple) else value
+            )
+            for key, value in proposal_updates.items()
+        },
         "train_collection": train_collection,
         "validation_collection": validation_collection,
         "metrics": metrics,
+        "proposal_metrics": proposal_metrics,
     }
     (output / "report.json").write_text(
         json.dumps(report, indent=2),
@@ -337,7 +484,7 @@ def main() -> int:
     (output / "report.md").write_text(
         "\n".join(
             (
-                "# RGB trajectory change-point gate",
+                "# RGB trajectory change-point gate and outgoing velocity proposal",
                 "",
                 f"- source checkpoint: `{report['source_checkpoint']}`",
                 f"- trained checkpoint: `{checkpoint_path}`",
@@ -351,6 +498,22 @@ def main() -> int:
                 f"- validation recall: `{metrics['validation_recall']:.6f}`",
                 f"- validation F1: `{metrics['validation_f1']:.6f}`",
                 f"- probability threshold: `{gate.probability_threshold:.6f}`",
+                *(
+                    (
+                        "- proposal validation prior/proposal RMSE: "
+                        f"`{proposal_metrics['validation_prior_rmse_mps']:.6f}` / "
+                        f"`{proposal_metrics['validation_proposal_rmse_mps']:.6f}` m/s",
+                        "- proposal validation positive-improvement rate: "
+                        f"`{proposal_metrics['validation_positive_improvement_rate']:.6f}`",
+                        "- proposal gate-selected validation prior/proposal RMSE: "
+                        f"`{proposal_metrics.get('validation_gate_selected_prior_rmse_mps', float('nan')):.6f}` / "
+                        f"`{proposal_metrics.get('validation_gate_selected_proposal_rmse_mps', float('nan')):.6f}` m/s",
+                        "- proposal calibrated variance: "
+                        f"`{proposal_metrics['calibrated_variance_mps2']:.6f}` m2/s2",
+                    )
+                    if proposal_metrics
+                    else ()
+                ),
                 "",
                 "This is a local supervised gate fit. Simulator state supplied labels only;",
                 "runtime gate features remain causal and RGB-derived.",

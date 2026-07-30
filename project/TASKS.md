@@ -167,6 +167,9 @@
   required before a reserved-test promotion claim.
 - [x] Add temporal RGB velocity evidence so post-association motion can be
   assimilated without re-encoding history.
+- [x] Add and evaluate a tiny bounded outgoing gravity-velocity proposal on
+  exact-timestamp RGB event windows. Its offline event-window fit improved,
+  but paired online velocity regressed, so it remains disabled.
 - [x] Validate and enable a camera-lateral young-track velocity initializer in
   `tiny_lateral_velocity.yaml`; it improves current state and every 0.1–1.0 s
   forecast horizon on the 16-episode fresh-validation gate.
@@ -234,6 +237,10 @@
 - [ ] Learn event-conditioned outgoing lateral velocity that improves the
   paired 0.5–1.0 second gate, especially for `reference_pairs`, without
   regressing the seven easier regimes.
+- [ ] Train the next outgoing lateral correction against its actual
+  post-filter intervention and recursive forecast effect, with an explicit
+  learned abstention/gain objective; do not reuse the gravity-only gate as a
+  proxy for camera-lateral collision evidence.
 - [ ] Raise shared-model collision F1 and reduce identity switches on a larger
   balanced test manifest; the current 16-episode result is only
   `0.320388` F1 with three switches.

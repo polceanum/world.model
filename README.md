@@ -130,13 +130,17 @@ python scripts/train_rgb_change_point_gate.py \
   --validation-episodes 8 \
   --validation-seed-offset 256 \
   --gate-type mlp \
-  --hidden-features 8
+  --hidden-features 8 \
+  --fit-outgoing-proposal \
+  --proposal-hidden-features 8
 ```
 
 The output contains cached feature tensors, a report, resolved config, and a
 weights-identical checkpoint with explicit gate coefficients. The scaled
-profile keeps this gate disabled: current learned candidates did not pass the
-paired downstream velocity gate. Cached tensors can be supplied with
+profile keeps both the gate and outgoing proposal disabled: current learned
+candidates did not pass the paired downstream velocity gate. The proposal is
+consumed on the exact causal frame selected by its gate; later post-event
+samples return to the ordinary estimator. Cached tensors can be supplied with
 `--train-cache` and `--validation-cache` to refit without rerunning RGB
 perception.
 

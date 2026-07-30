@@ -6,6 +6,7 @@ from world_model.training.change_point_gate import (
     binary_metrics,
     fit_linear_change_point_gate,
     fit_mlp_change_point_gate,
+    fit_mlp_outgoing_velocity_proposal,
     select_precision_threshold,
 )
 
@@ -83,3 +84,24 @@ def test_mlp_gate_learns_nonlinear_separation() -> None:
     assert len(gate.hidden_weights) == 16
     assert metrics["validation_precision"] >= 0.8
     assert metrics["validation_recall"] >= 0.7
+
+
+def test_outgoing_velocity_proposal_improves_nonlinear_delta() -> None:
+    generator = torch.Generator().manual_seed(9)
+    features = torch.rand(500, 3, generator=generator) * 2.0 - 1.0
+    target_delta = 1.5 * features[:, 0] - features[:, 1].square() + 0.4
+
+    proposal, metrics = fit_mlp_outgoing_velocity_proposal(
+        features[:400],
+        target_delta[:400],
+        features[400:],
+        target_delta[400:],
+        hidden_features=8,
+        steps=700,
+        seed=2,
+    )
+
+    assert len(proposal.hidden_weights) == 24
+    assert proposal.variance > 0
+    assert metrics["validation_proposal_rmse_mps"] < metrics["validation_prior_rmse_mps"] * 0.35
+    assert metrics["validation_positive_improvement_rate"] > 0.85

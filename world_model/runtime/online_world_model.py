@@ -260,6 +260,30 @@ class OnlineWorldModel(nn.Module):
                     temporal_velocity_change_point_probability_threshold=(
                         rgb_config.temporal_velocity_change_point_probability_threshold
                     ),
+                    temporal_velocity_change_point_minimum_interval_samples=(
+                        rgb_config.temporal_velocity_change_point_minimum_interval_samples
+                    ),
+                    temporal_velocity_outgoing_proposal_enabled=(
+                        rgb_config.temporal_velocity_outgoing_proposal_enabled
+                    ),
+                    temporal_velocity_outgoing_proposal_hidden_weights=(
+                        rgb_config.temporal_velocity_outgoing_proposal_hidden_weights
+                    ),
+                    temporal_velocity_outgoing_proposal_hidden_bias=(
+                        rgb_config.temporal_velocity_outgoing_proposal_hidden_bias
+                    ),
+                    temporal_velocity_outgoing_proposal_output_weights=(
+                        rgb_config.temporal_velocity_outgoing_proposal_output_weights
+                    ),
+                    temporal_velocity_outgoing_proposal_output_bias=(
+                        rgb_config.temporal_velocity_outgoing_proposal_output_bias
+                    ),
+                    temporal_velocity_outgoing_proposal_variance=(
+                        rgb_config.temporal_velocity_outgoing_proposal_variance
+                    ),
+                    temporal_velocity_outgoing_proposal_maximum_delta=(
+                        rgb_config.temporal_velocity_outgoing_proposal_maximum_delta
+                    ),
                     temporal_velocity_measurement_position_blend=(
                         rgb_config.temporal_velocity_measurement_position_blend
                     ),

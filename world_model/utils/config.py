@@ -128,6 +128,14 @@ class RGBConfig:
     temporal_velocity_change_point_mlp_output_weights: tuple[float, ...] = ()
     temporal_velocity_change_point_mlp_output_bias: float = 0.0
     temporal_velocity_change_point_probability_threshold: float = 0.5
+    temporal_velocity_change_point_minimum_interval_samples: int = 6
+    temporal_velocity_outgoing_proposal_enabled: bool = False
+    temporal_velocity_outgoing_proposal_hidden_weights: tuple[float, ...] = ()
+    temporal_velocity_outgoing_proposal_hidden_bias: tuple[float, ...] = ()
+    temporal_velocity_outgoing_proposal_output_weights: tuple[float, ...] = ()
+    temporal_velocity_outgoing_proposal_output_bias: float = 0.0
+    temporal_velocity_outgoing_proposal_variance: float = 1.0
+    temporal_velocity_outgoing_proposal_maximum_delta: float = 5.0
     temporal_velocity_measurement_position_blend: float = 0.0
     temporal_velocity_position_innovation_coupling: bool = False
     temporal_position_enabled: bool = False
@@ -441,12 +449,45 @@ class OrpheusConfig:
             for value in values
         ) or not math.isfinite(model.rgb.temporal_velocity_change_point_mlp_output_bias):
             raise ValueError("model.rgb change-point MLP coefficients must be finite")
+        proposal_hidden = len(model.rgb.temporal_velocity_outgoing_proposal_hidden_bias)
+        if model.rgb.temporal_velocity_outgoing_proposal_enabled and (
+            not model.rgb.temporal_velocity_change_point_enabled
+            or model.rgb.temporal_velocity_change_point_gate not in {"linear", "mlp"}
+            or proposal_hidden <= 0
+            or len(model.rgb.temporal_velocity_outgoing_proposal_hidden_weights)
+            != 11 * proposal_hidden
+            or len(model.rgb.temporal_velocity_outgoing_proposal_output_weights) != proposal_hidden
+        ):
+            raise ValueError(
+                "model.rgb outgoing velocity proposal requires a learned gate "
+                "and consistent eleven-input MLP coefficients"
+            )
+        if (
+            not math.isfinite(model.rgb.temporal_velocity_outgoing_proposal_variance)
+            or model.rgb.temporal_velocity_outgoing_proposal_variance <= 0
+        ):
+            raise ValueError(
+                "model.rgb.temporal_velocity_outgoing_proposal_variance must be finite and positive"
+            )
+        if (
+            not math.isfinite(model.rgb.temporal_velocity_outgoing_proposal_maximum_delta)
+            or model.rgb.temporal_velocity_outgoing_proposal_maximum_delta <= 0
+        ):
+            raise ValueError(
+                "model.rgb.temporal_velocity_outgoing_proposal_maximum_delta "
+                "must be finite and positive"
+            )
         if (
             not math.isfinite(model.rgb.temporal_velocity_change_point_probability_threshold)
             or not 0.0 < model.rgb.temporal_velocity_change_point_probability_threshold < 1.0
         ):
             raise ValueError(
                 "model.rgb.temporal_velocity_change_point_probability_threshold must lie in (0, 1)"
+            )
+        if model.rgb.temporal_velocity_change_point_minimum_interval_samples < 3:
+            raise ValueError(
+                "model.rgb.temporal_velocity_change_point_minimum_interval_samples "
+                "must be at least three"
             )
         if (
             not math.isfinite(model.rgb.temporal_velocity_measurement_position_blend)
