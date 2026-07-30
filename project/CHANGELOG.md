@@ -4,6 +4,10 @@
 
 ### Added
 
+- The full 12,288-update sustained accuracy campaign is now running on Apple
+  MPS under the persistent macOS job
+  `com.polceanum.orpheus.sustained-20260730-192625`; its timestamp-first
+  artifact root is `runs/20260730-192625-scaled-sustained-e2e-v1/`.
 - A sustained eight-scenario MPS accuracy profile with two complete
   measurement passes, one complete causal-window pass, explicit minimum/plateau
   rules, and the selected fixed-scale point/scale runtime as weights-only

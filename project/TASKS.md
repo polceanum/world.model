@@ -18,7 +18,8 @@
 - [x] Add `configs/sustained_accuracy_mps.yaml`: 8,192 measurement updates plus
   4,096 causal windows across all eight scenario families, with rejected
   intervention heads disabled.
-- [ ] Complete the 12,288-update sustained MPS campaign. Do not judge causal
+- [ ] Complete the active 12,288-update sustained MPS campaign at
+  `runs/20260730-192625-scaled-sustained-e2e-v1/`. Do not judge causal
   convergence before 2,048 causal updates or stop before the full 4,096-window
   minimum.
 - [ ] If the best safe checkpoint lands in the final 1,024 causal updates with

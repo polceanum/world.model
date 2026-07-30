@@ -8,7 +8,7 @@ selection/confirmation/test manifests, horizon-balanced recursive training,
 stable forecast-history visualisation, axis-resolved diagnostics, an
 invariant-tested familiar reference-pair regime, and one balanced eight-regime
 shared-model profile, plus a quality-aware persistent-ID multi-frame
-point/scale depth observer; a sustained shared-model MPS campaign is prepared,
+point/scale depth observer; a sustained shared-model MPS campaign is active,
 but collision, occlusion, identification, convergence, and full acceptance
 remain open
 
@@ -54,6 +54,36 @@ Every validation candidate is numbered. Exact simulator/model/runtime/metric/
 batch/seed semantics and model tensor hashes bind metrics to real incumbent
 and reference weights on resume. Causal AdamW moments start fresh at the phase
 handoff.
+
+### Active sustained run
+
+The complete campaign started at `2026-07-30T19:26:55Z` from committed
+revision `da558d5`:
+
+```bash
+launchctl submit \
+  -l com.polceanum.orpheus.sustained-20260730-192625 \
+  -o /private/tmp/20260730-192625-scaled-sustained-e2e-v1.stdout.log \
+  -e /private/tmp/20260730-192625-scaled-sustained-e2e-v1.stderr.log \
+  -- /usr/bin/caffeinate -dimsu \
+  /usr/bin/env PYTHONPATH=/Users/mike/Work/world.model \
+  /usr/local/Caskroom/miniforge/base/envs/orpheus/bin/python \
+  /Users/mike/Work/world.model/train.py \
+  --config /Users/mike/Work/world.model/configs/sustained_accuracy_mps.yaml \
+  --initialize-from \
+  /Users/mike/Work/world.model/runs/20260729-084712-scaled-point-scale-trajectory-v1/checkpoints/runtime_ablation.pt \
+  --run-name 20260730-192625-scaled-sustained-e2e-v1 \
+  --device mps
+```
+
+`launchctl print` reported the job in the running state with trainer PID
+`37360`; `run_metadata.json` independently records PyTorch `2.10.0`, device
+`mps`, MPS built/available `true`, `float32`, RGB runtime, and oracle disabled.
+The active artifact root is
+`runs/20260730-192625-scaled-sustained-e2e-v1/`. The trainer first evaluates
+the fixed 16-episode reference manifest, which is expected to take roughly
+60–90 minutes before emitting the first validation metrics. Absence of early
+metrics is therefore not interpreted as a completed or failed run.
 
 ### Environment and validation
 
