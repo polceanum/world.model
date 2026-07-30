@@ -1337,3 +1337,94 @@ def test_learned_outgoing_proposal_is_consumed_on_aligned_trigger_frame() -> Non
         torch.tensor([[-3.25]]),
     )
     torch.testing.assert_close(trigger_evidence.velocity[..., 2], prior_velocity[..., 2])
+
+
+def test_lateral_intervention_emits_soft_gated_pre_filter_measurement() -> None:
+    factory = BeliefFactory(max_objects=1, appearance_dim=4)
+    base = factory.create()
+    prior_velocity = torch.tensor([[[0.1, -2.0, 0.3]]])
+    belief = base.replace(
+        objects=base.objects.replace(
+            active=torch.tensor([[True]]),
+            object_id=torch.tensor([[12]]),
+            age_steps=torch.tensor([[20]]),
+            position=torch.zeros(1, 1, 3),
+            velocity=prior_velocity,
+            existence_logit=torch.tensor([[8.0]]),
+        )
+    )
+    module = RGBObservationModule(
+        RGBObservationConfig(
+            max_objects=1,
+            backbone_channels=(8, 16, 24, 32),
+            feature_dim=16,
+            appearance_dim=4,
+            roi_size=8,
+            roi_hidden_dim=16,
+            temporal_velocity_enabled=True,
+            temporal_velocity_history_size=5,
+            temporal_velocity_min_samples=3,
+            temporal_velocity_lateral_only=True,
+            temporal_velocity_max_age_steps=3,
+            temporal_velocity_measurement_position_blend=1.0,
+            temporal_velocity_lateral_intervention_enabled=True,
+            temporal_velocity_lateral_intervention_hidden_weights=(0.0,) * 19,
+            temporal_velocity_lateral_intervention_hidden_bias=(0.0,),
+            temporal_velocity_lateral_intervention_output_weights=(0.0,) * 2,
+            temporal_velocity_lateral_intervention_output_bias=(1.25, 10.0),
+            temporal_velocity_lateral_intervention_variance_floor=0.04,
+            temporal_velocity_lateral_intervention_variance_ceiling=25.0,
+        )
+    )
+    association = AssociationResult(
+        belief_indices=torch.tensor([[0]]),
+        measurement_indices=torch.tensor([[0]]),
+        pair_mask=torch.tensor([[True]]),
+        pair_cost=torch.tensor([[0.0]]),
+        unmatched_beliefs=torch.tensor([[False]]),
+        unmatched_measurements=torch.tensor([[False]]),
+        ambiguous=torch.tensor([[False]]),
+    )
+    history = None
+    evidence = None
+    measured = None
+    for timestamp in (0.0, 0.05, 0.1):
+        measured = MeasurementSet(
+            modality="rgb",
+            sensor_id="camera",
+            timestamp=torch.tensor([timestamp]),
+            values=torch.zeros(1, 1, 7),
+            log_variance=torch.zeros(1, 1, 7),
+            existence_logits=torch.tensor([[8.0]]),
+            measurement_mask=torch.tensor([[True]]),
+            appearance=None,
+            class_logits=None,
+            frame_id="camera:camera",
+            supported_state_fields=("position",),
+            auxiliary={
+                "world_position": torch.tensor([[[timestamp, 0.0, 0.0]]]),
+                "world_position_log_variance": torch.full(
+                    (1, 1, 3),
+                    math.log(1.0e-4),
+                ),
+            },
+        )
+        evidence, history = module.update_temporal_history(
+            posterior=belief,
+            measured=measured,
+            association=association,
+            history=history,
+        )
+
+    assert measured is not None
+    assert evidence is not None and evidence.valid_mask.item()
+    torch.testing.assert_close(
+        measured.auxiliary["trajectory_direct_prior_velocity"],
+        prior_velocity,
+    )
+    assert measured.auxiliary["trajectory_lateral_intervention_gain"].item() > 0.999
+    torch.testing.assert_close(evidence.velocity[..., 0], torch.tensor([[1.35]]))
+    torch.testing.assert_close(evidence.velocity[..., 1], prior_velocity[..., 1])
+    torch.testing.assert_close(evidence.velocity[..., 2], prior_velocity[..., 2])
+    assert evidence.log_variance.exp()[0, 0, 0] < 0.041
+    assert torch.all(evidence.log_variance.exp()[0, 0, 1:] >= 1.0e4)

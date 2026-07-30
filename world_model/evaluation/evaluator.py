@@ -604,6 +604,9 @@ def evaluate_checkpoint(
     distance_gated_matched_object_frames = 0
     trajectory_change_point_count = 0
     trajectory_change_point_inspected_object_frames = 0
+    lateral_intervention_gain_sum = 0.0
+    lateral_intervention_feature_count = 0
+    lateral_intervention_gain_above_half_count = 0
     forecast_target_count: dict[str, int] = {}
     forecast_tracked_count: dict[str, int] = {}
     forecast_active_count: dict[str, int] = {}
@@ -718,6 +721,29 @@ def evaluate_checkpoint(
                             )
                         trajectory_change_point_inspected_object_frames += int(
                             eligible_mask.sum().detach().cpu()
+                        )
+                    lateral_gain = last_measurements.auxiliary.get(
+                        "trajectory_lateral_intervention_gain"
+                    )
+                    lateral_valid = last_measurements.auxiliary.get(
+                        "trajectory_lateral_intervention_feature_valid_mask"
+                    )
+                    if lateral_gain is not None or lateral_valid is not None:
+                        if (
+                            lateral_gain is None
+                            or lateral_valid is None
+                            or lateral_gain.shape != lateral_valid.shape
+                            or lateral_valid.dtype != torch.bool
+                        ):
+                            raise ValueError(
+                                "lateral intervention gain/valid diagnostics "
+                                "must be aligned [B,N] tensors"
+                            )
+                        selected_gain = lateral_gain.masked_select(lateral_valid)
+                        lateral_intervention_gain_sum += float(selected_gain.sum().detach().cpu())
+                        lateral_intervention_feature_count += int(selected_gain.numel())
+                        lateral_intervention_gain_above_half_count += int(
+                            (selected_gain >= 0.5).sum().detach().cpu()
                         )
                 if model.diagnostics.oracle_used:
                     raise RuntimeError(
@@ -1182,6 +1208,15 @@ def evaluate_checkpoint(
                 trajectory_change_point_count / trajectory_change_point_inspected_object_frames
                 if trajectory_change_point_inspected_object_frames
                 else None
+            ),
+            "lateral_intervention_feature_count": float(lateral_intervention_feature_count),
+            "lateral_intervention_mean_soft_gain": (
+                lateral_intervention_gain_sum / lateral_intervention_feature_count
+                if lateral_intervention_feature_count
+                else None
+            ),
+            "lateral_intervention_gain_above_half_count": float(
+                lateral_intervention_gain_above_half_count
             ),
             f"distance_gated_matched_object_frames@{detection_threshold_label}": float(
                 distance_gated_matched_object_frames

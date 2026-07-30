@@ -11,6 +11,72 @@ shared-model profile, plus a quality-aware persistent-ID multi-frame
 point/scale depth observer;
 collision, occlusion, identification, and full-MPS acceptance remain open
 
+## 2026-07-30 — intervention-aware lateral correction rejected
+
+The RGB trajectory path now exports the exact pre-direct-correction velocity,
+variance, confidence, camera-lateral basis, and a 19-value causal feature
+vector. This fixes a supervision leak in the earlier collector, which read the
+belief after the ordinary temporal correction. A disabled-by-default,
+one-hidden-layer intervention head proposes a bounded lateral measurement and
+a continuous soft gain. The gain maps to measurement variance and the ordinary
+analytic filter performs the actual correction; there is no hard event gate,
+history re-encoding, online optimizer step, or simulator runtime input.
+Feature standardization is folded into the first-layer coefficients. A
+configurable gain power can make low-confidence proposals abstain more
+strongly.
+
+Eight MPS collection episodes produced 543 aligned training windows; eight
+disjoint episodes produced 398 validation windows. The initial 12-unit fit
+overfit (`0.648080 → 0.702765 m/s` held-out RMSE). A regularized one-unit fit
+improved held-out post-filter lateral RMSE `0.648080 → 0.497431 m/s` and MAE
+`0.341558 → 0.287335 m/s`.
+
+That offline gain did not survive the primary paired recursive test. On seed
+`100017`, it improved x-velocity `0.421218 → 0.352271 m/s`, total velocity
+`1.148770 → 1.115892 m/s`, and collision-conditioned 0.1-second position
+`0.123723 → 0.119199 m`. On the protocol-matched two-episode
+`100016–100017` block, current x-position improved
+`0.544812 → 0.538721 m` and collision-conditioned 0.1-second RMSE improved
+`0.216634 → 0.189408 m`, but x-velocity regressed
+`0.568277 → 0.576981 m/s`; x forecast regression grew from `0.41%` at
+0.1 seconds to `5.47%` at 1.0 second. Squaring the soft gain in the variance
+mapping reduced offline aggressiveness but failed the fast runtime gate
+(current position `0.702313 → 0.704354 m`). Both candidates are rejected and
+the scaled default remains disabled.
+
+The next concrete accuracy target is the gravity-axis state/dynamics path:
+held-out y-velocity RMSE is about `1.9 m/s`, far larger than lateral or
+camera-depth velocity error. It should receive an axis-local, acceleration-
+aware learned correction with joint collision context and recursive
+multihorizon supervision, without perturbing the better axes.
+
+Primary artifacts:
+
+- aligned MPS caches:
+  `runs/20260730-090236-rgb-lateral-intervention-aligned-8x8-v1/`;
+- selected regularized offline fit:
+  `runs/20260730-092214-rgb-lateral-intervention-regularized-v2/`;
+- protocol-matched paired report:
+  `runs/20260730-092214-rgb-lateral-intervention-regularized-v2/evaluation/20260730-094915-lateral-select2-offset16-frames48/report.md`;
+- uncertainty-tightened rejected fit and fast report:
+  `runs/20260730-095159-rgb-lateral-intervention-soft-square-v3/` and
+  `evaluation/20260730-095531-lateral-fast-offset17/report.md`.
+
+Validation:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff format .
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
+```
+
+Ruff formatted one file and passed all 167 files. The sandboxed full suite
+reported `266 passed, 4 skipped in 79.80 s`; the four hardware-conditional
+tests then passed directly on Apple MPS (`4 passed in 1.67 s`). The focused
+filter/RGB/config/checkpoint suite reported `79 passed in 9.31 s`. The MPS
+collection and three runtime evaluations used Apple MPS; the small cached MLP
+fits ran on CPU.
+
 ## 2026-07-30 — bounded outgoing-velocity proposal rejected
 
 The learned RGB event gate remains available but disabled; it was not removed

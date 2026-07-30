@@ -237,10 +237,15 @@
 - [ ] Learn event-conditioned outgoing lateral velocity that improves the
   paired 0.5–1.0 second gate, especially for `reference_pairs`, without
   regressing the seven easier regimes.
-- [ ] Train the next outgoing lateral correction against its actual
+- [x] Train an outgoing lateral correction against its actual
   post-filter intervention and recursive forecast effect, with an explicit
   learned abstention/gain objective; do not reuse the gravity-only gate as a
-  proxy for camera-lateral collision evidence.
+  proxy for camera-lateral collision evidence. Reject it after the paired
+  0.5–1.0-second forecast regressed despite offline and short-horizon gains.
+- [ ] Reduce the dominant gravity-axis velocity error with an acceleration-
+  aware axis-local proposal, joint collision context, calibrated uncertainty,
+  and recursive multihorizon training. Do not disturb the better lateral and
+  camera-depth axes.
 - [ ] Raise shared-model collision F1 and reduce identity switches on a larger
   balanced test manifest; the current 16-episode result is only
   `0.320388` F1 with three switches.
@@ -277,9 +282,10 @@
   change-point gates on balanced, exact-timestamp RGB history windows; cache
   features, preserve checkpoint provenance, and reject both learned policies
   after held-out classification and paired MPS runtime checks.
-- [ ] Learn a calibrated outgoing-velocity proposal jointly with the
+- [x] Learn a calibrated outgoing-velocity proposal jointly with the
   observation-side event gate. The sparse learned gate is safe, but the
-  two-sample post-event slope still slightly regresses velocity when it acts.
+  fitted proposal and its trigger-aligned correction were rejected because
+  velocity still regressed when it acted.
 - [x] Add a 1.90M-parameter scaled shared-model profile with 4,096 training,
   256 validation, and 256 test episodes across all eight scenario families.
 - [x] Record model parameter count, episode draws, nominal manifest passes,

@@ -85,6 +85,50 @@ class MLPOutgoingVelocityProposal:
         return output.clamp(-self.maximum_delta, self.maximum_delta)
 
 
+@dataclass(frozen=True)
+class MLPLateralVelocityIntervention:
+    """Tiny lateral measurement proposal with a learned soft abstention gain."""
+
+    hidden_weights: tuple[float, ...]
+    hidden_bias: tuple[float, ...]
+    output_weights: tuple[float, ...]
+    output_bias: tuple[float, float]
+    variance_floor: float
+    variance_ceiling: float
+    gain_power: float
+    maximum_delta: float
+
+    def propose(self, features: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        input_features = features.shape[-1]
+        hidden_features = len(self.hidden_bias)
+        if len(self.hidden_weights) != input_features * hidden_features:
+            raise ValueError("hidden weight dimensions do not match intervention features")
+        if len(self.output_weights) != 2 * hidden_features:
+            raise ValueError("output weight dimensions do not match intervention head")
+        hidden_weights = features.new_tensor(self.hidden_weights).reshape(
+            hidden_features,
+            input_features,
+        )
+        hidden = F.silu(
+            F.linear(
+                features,
+                hidden_weights,
+                features.new_tensor(self.hidden_bias),
+            )
+        )
+        output = F.linear(
+            hidden,
+            features.new_tensor(self.output_weights).reshape(2, hidden_features),
+            features.new_tensor(self.output_bias),
+        )
+        delta = output[..., 0].clamp(-self.maximum_delta, self.maximum_delta)
+        gain = output[..., 1].sigmoid()
+        variance = (self.variance_floor / gain.clamp_min(1.0e-4).pow(self.gain_power)).clamp(
+            max=self.variance_ceiling
+        )
+        return delta, gain, variance
+
+
 def binary_metrics(
     logits: Tensor,
     targets: Tensor,
@@ -488,12 +532,221 @@ def fit_mlp_outgoing_velocity_proposal(
     return proposal, metrics
 
 
+def fit_mlp_lateral_velocity_intervention(
+    train_features: Tensor,
+    train_target_delta: Tensor,
+    train_prior_variance: Tensor,
+    train_confidence: Tensor,
+    validation_features: Tensor,
+    validation_target_delta: Tensor,
+    validation_prior_variance: Tensor,
+    validation_confidence: Tensor,
+    *,
+    hidden_features: int = 12,
+    steps: int = 3000,
+    learning_rate: float = 0.01,
+    weight_decay: float = 5.0e-3,
+    gain_sparsity: float = 0.01,
+    variance_floor: float = 0.04,
+    variance_ceiling: float = 25.0,
+    gain_power: float = 2.0,
+    maximum_delta: float = 5.0,
+    robust_clip_norm: float = 8.0,
+    seed: int = 0,
+) -> tuple[MLPLateralVelocityIntervention, dict[str, float]]:
+    """Fit the actual post-filter lateral correction, including soft abstention."""
+
+    if train_features.ndim != 2 or validation_features.ndim != 2:
+        raise ValueError("intervention features must have shape [samples, features]")
+    if train_features.shape[1] != validation_features.shape[1]:
+        raise ValueError("training and validation feature dimensions must match")
+    train_rows = train_features.shape[:1]
+    validation_rows = validation_features.shape[:1]
+    if any(
+        tensor.shape != train_rows
+        for tensor in (
+            train_target_delta,
+            train_prior_variance,
+            train_confidence,
+        )
+    ):
+        raise ValueError("training intervention targets must have shape [samples]")
+    if any(
+        tensor.shape != validation_rows
+        for tensor in (
+            validation_target_delta,
+            validation_prior_variance,
+            validation_confidence,
+        )
+    ):
+        raise ValueError("validation intervention targets must have shape [samples]")
+    if (
+        hidden_features <= 0
+        or steps <= 0
+        or learning_rate <= 0
+        or weight_decay < 0
+        or gain_sparsity < 0
+        or not 0 < variance_floor <= variance_ceiling
+        or gain_power < 1
+        or maximum_delta <= 0
+        or robust_clip_norm <= 0
+    ):
+        raise ValueError("invalid lateral intervention fitting settings")
+
+    train_features = train_features.float()
+    validation_features = validation_features.float()
+    train_target_delta = train_target_delta.float()
+    validation_target_delta = validation_target_delta.float()
+    train_prior_variance = train_prior_variance.float().clamp_min(1.0e-8)
+    validation_prior_variance = validation_prior_variance.float().clamp_min(1.0e-8)
+    train_confidence = train_confidence.float().clamp(0.0, 1.0)
+    validation_confidence = validation_confidence.float().clamp(0.0, 1.0)
+    if train_target_delta.numel() == 0 or validation_target_delta.numel() == 0:
+        raise ValueError("intervention training and validation sets cannot be empty")
+
+    # Optimize in standardized coordinates so low-amplitude uncertainty and
+    # timing features are not ignored beside the order-one kinematic features.
+    # The normalization is folded back into the first layer below, keeping the
+    # deployed runtime contract as a plain MLP over the original 19 features.
+    feature_mean = train_features.mean(dim=0)
+    feature_scale = train_features.std(dim=0).clamp_min(1.0e-3)
+    normalized_train_features = (train_features - feature_mean) / feature_scale
+    normalized_validation_features = (validation_features - feature_mean) / feature_scale
+
+    generator = torch.Generator().manual_seed(seed)
+    hidden_weights = (
+        torch.randn(
+            hidden_features,
+            train_features.shape[1],
+            generator=generator,
+        )
+        * 0.1
+    ).requires_grad_()
+    hidden_bias = torch.zeros(hidden_features, requires_grad=True)
+    output_weights = (torch.randn(2, hidden_features, generator=generator) * 0.1).requires_grad_()
+    output_bias = torch.tensor([0.0, -2.0], requires_grad=True)
+    optimizer = torch.optim.AdamW(
+        (hidden_weights, hidden_bias, output_weights, output_bias),
+        lr=learning_rate,
+        weight_decay=weight_decay,
+    )
+
+    def intervention(
+        features: Tensor,
+        prior_variance: Tensor,
+        confidence: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        output = F.linear(
+            F.silu(F.linear(features, hidden_weights, hidden_bias)),
+            output_weights,
+            output_bias,
+        )
+        proposal_delta = output[..., 0].clamp(-maximum_delta, maximum_delta)
+        proposal_gain = output[..., 1].sigmoid()
+        measurement_variance = (
+            variance_floor / proposal_gain.clamp_min(1.0e-4).pow(gain_power)
+        ).clamp(max=variance_ceiling)
+        total_variance = prior_variance + measurement_variance
+        influence = torch.minimum(
+            torch.ones_like(proposal_delta),
+            proposal_delta.new_tensor(robust_clip_norm)
+            / (proposal_delta.abs() / total_variance.sqrt()).clamp_min(1.0e-6),
+        )
+        filter_gain = prior_variance / total_variance * confidence * influence
+        applied_delta = filter_gain * proposal_delta
+        return applied_delta, proposal_delta, proposal_gain, measurement_variance
+
+    for _ in range(steps):
+        train_applied, _, train_gain, _ = intervention(
+            normalized_train_features,
+            train_prior_variance,
+            train_confidence,
+        )
+        velocity_loss = F.smooth_l1_loss(train_applied, train_target_delta)
+        # The 0.5 s and 1.0 s terms are a local receding-horizon proxy for the
+        # position effect of this intervention before another event occurs.
+        future_loss = 0.5 * F.smooth_l1_loss(
+            0.5 * train_applied,
+            0.5 * train_target_delta,
+        ) + F.smooth_l1_loss(train_applied, train_target_delta)
+        loss = velocity_loss + future_loss + gain_sparsity * train_gain.mean()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    with torch.no_grad():
+        train_applied, _, train_gain, _ = intervention(
+            normalized_train_features,
+            train_prior_variance,
+            train_confidence,
+        )
+        validation_applied, _, validation_gain, validation_variance = intervention(
+            normalized_validation_features,
+            validation_prior_variance,
+            validation_confidence,
+        )
+
+    def intervention_metrics(
+        applied: Tensor,
+        target: Tensor,
+        gain: Tensor,
+        prefix: str,
+    ) -> dict[str, float]:
+        prior_error = target.abs()
+        posterior_error = (applied - target).abs()
+        return {
+            f"{prefix}_prior_mae_mps": float(prior_error.mean()),
+            f"{prefix}_posterior_mae_mps": float(posterior_error.mean()),
+            f"{prefix}_prior_rmse_mps": float(target.square().mean().sqrt()),
+            f"{prefix}_posterior_rmse_mps": float((applied - target).square().mean().sqrt()),
+            f"{prefix}_positive_improvement_rate": float(
+                (posterior_error < prior_error).float().mean()
+            ),
+            f"{prefix}_mean_soft_gain": float(gain.mean()),
+            f"{prefix}_examples": float(target.numel()),
+        }
+
+    deployed_hidden_weights = hidden_weights.detach() / feature_scale.unsqueeze(0)
+    deployed_hidden_bias = hidden_bias.detach() - deployed_hidden_weights @ feature_mean
+    intervention_model = MLPLateralVelocityIntervention(
+        hidden_weights=tuple(float(value) for value in deployed_hidden_weights.flatten()),
+        hidden_bias=tuple(float(value) for value in deployed_hidden_bias),
+        output_weights=tuple(float(value) for value in output_weights.detach().flatten()),
+        output_bias=(
+            float(output_bias.detach()[0]),
+            float(output_bias.detach()[1]),
+        ),
+        variance_floor=variance_floor,
+        variance_ceiling=variance_ceiling,
+        gain_power=gain_power,
+        maximum_delta=maximum_delta,
+    )
+    metrics = {
+        **intervention_metrics(
+            train_applied,
+            train_target_delta,
+            train_gain,
+            "train",
+        ),
+        **intervention_metrics(
+            validation_applied,
+            validation_target_delta,
+            validation_gain,
+            "validation",
+        ),
+        "validation_measurement_variance_mean_mps2": float(validation_variance.mean()),
+    }
+    return intervention_model, metrics
+
+
 __all__ = [
     "LinearChangePointGate",
     "MLPChangePointGate",
+    "MLPLateralVelocityIntervention",
     "MLPOutgoingVelocityProposal",
     "binary_metrics",
     "fit_linear_change_point_gate",
+    "fit_mlp_lateral_velocity_intervention",
     "fit_mlp_change_point_gate",
     "fit_mlp_outgoing_velocity_proposal",
     "select_precision_threshold",

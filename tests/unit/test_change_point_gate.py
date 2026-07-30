@@ -6,6 +6,7 @@ from world_model.training.change_point_gate import (
     binary_metrics,
     fit_linear_change_point_gate,
     fit_mlp_change_point_gate,
+    fit_mlp_lateral_velocity_intervention,
     fit_mlp_outgoing_velocity_proposal,
     select_precision_threshold,
 )
@@ -105,3 +106,39 @@ def test_outgoing_velocity_proposal_improves_nonlinear_delta() -> None:
     assert proposal.variance > 0
     assert metrics["validation_proposal_rmse_mps"] < metrics["validation_prior_rmse_mps"] * 0.35
     assert metrics["validation_positive_improvement_rate"] > 0.85
+
+
+def test_lateral_intervention_learns_post_filter_correction_and_abstention() -> None:
+    generator = torch.Generator().manual_seed(12)
+    features = torch.rand(600, 4, generator=generator) * 2.0 - 1.0
+    active = features[:, 0] > 0.1
+    target_delta = torch.where(
+        active,
+        1.2 * features[:, 0] - 0.6 * features[:, 1],
+        torch.zeros_like(features[:, 0]),
+    )
+    prior_variance = torch.full((600,), 1.5)
+    confidence = torch.full((600,), 0.95)
+
+    intervention, metrics = fit_mlp_lateral_velocity_intervention(
+        features[:480],
+        target_delta[:480],
+        prior_variance[:480],
+        confidence[:480],
+        features[480:],
+        target_delta[480:],
+        prior_variance[480:],
+        confidence[480:],
+        hidden_features=10,
+        steps=1200,
+        gain_sparsity=0.02,
+        seed=5,
+    )
+    _, gain, variance = intervention.propose(features[480:])
+
+    assert len(intervention.hidden_weights) == 40
+    assert len(intervention.output_weights) == 20
+    assert metrics["validation_posterior_rmse_mps"] < (metrics["validation_prior_rmse_mps"] * 0.55)
+    assert gain[active[480:]].mean() > gain[~active[480:]].mean()
+    assert torch.all(variance >= intervention.variance_floor)
+    assert torch.all(variance <= intervention.variance_ceiling)

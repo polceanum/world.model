@@ -1120,3 +1120,40 @@
   is an intervention-aware camera-lateral outgoing correction trained on its
   actual post-filter and recursive forecast effect, with learned
   abstention/gain; the gravity-only gate is not evidence for lateral events.
+
+## ADR-056 — Fit the actual lateral filter intervention, but reject runtime promotion
+
+- **Date:** 2026-07-30
+- **Status:** workflow accepted; runtime policies rejected
+- **Context:** The gravity-axis event gate and outgoing proposal did not
+  estimate the dominant camera-lateral collision response. The prior collector
+  also read the belief after ordinary direct velocity correction, so its
+  outgoing value was not the actual prior on which a new intervention would
+  act.
+- **Decision:** Export pre-direct-correction velocity, log variance,
+  measurement confidence, camera-lateral basis, eight lateral and eight
+  gravity kinematic features, and contact probability. Fit a tiny MLP to a
+  bounded lateral measurement delta and continuous soft gain while simulating
+  the same diagonal robust Kalman update used at runtime. Fold training feature
+  normalization into its first layer. Map low gain to large measurement
+  variance, optionally with a power of at least one, rather than introducing a
+  hard event gate. Keep the capability disabled in the shared profile unless
+  paired recursive metrics improve.
+- **Alternatives considered:** reuse the gravity-only classifier as a lateral
+  gate; supervise the already-corrected posterior; promote on offline
+  post-filter RMSE; promote on one short-horizon seed; repeatedly apply a
+  high-confidence fixed correction.
+- **Evidence:** The aligned dataset contained 543 train and 398 disjoint
+  validation windows. A 12-unit head overfit, worsening held-out RMSE
+  `0.648080 → 0.702765 m/s`. A standardized, strongly regularized one-unit head
+  improved it to `0.497431 m/s`. It improved seed `100017` x-velocity
+  `0.421218 → 0.352271 m/s`, but on the protocol-matched two-episode block
+  x-velocity regressed `0.568277 → 0.576981 m/s` and x-position forecast RMSE
+  regressed by `3.12%`, `4.52%`, and `5.47%` at 0.5, 0.75, and 1.0 seconds.
+  A squared-gain variance variant failed the fast current-position gate.
+- **Consequences:** The typed observation/filter workflow can now train and
+  measure the intervention it actually performs, and failed fits remain
+  reproducible artifacts. No runtime default or accepted checkpoint changes.
+  The next accuracy target is the much larger gravity-axis velocity error,
+  using an axis-local acceleration-aware correction with joint collision
+  context and recursive multihorizon acceptance.

@@ -136,6 +136,15 @@ class RGBConfig:
     temporal_velocity_outgoing_proposal_output_bias: float = 0.0
     temporal_velocity_outgoing_proposal_variance: float = 1.0
     temporal_velocity_outgoing_proposal_maximum_delta: float = 5.0
+    temporal_velocity_lateral_intervention_enabled: bool = False
+    temporal_velocity_lateral_intervention_hidden_weights: tuple[float, ...] = ()
+    temporal_velocity_lateral_intervention_hidden_bias: tuple[float, ...] = ()
+    temporal_velocity_lateral_intervention_output_weights: tuple[float, ...] = ()
+    temporal_velocity_lateral_intervention_output_bias: tuple[float, float] = (0.0, 0.0)
+    temporal_velocity_lateral_intervention_variance_floor: float = 0.04
+    temporal_velocity_lateral_intervention_variance_ceiling: float = 25.0
+    temporal_velocity_lateral_intervention_gain_power: float = 2.0
+    temporal_velocity_lateral_intervention_maximum_delta: float = 5.0
     temporal_velocity_measurement_position_blend: float = 0.0
     temporal_velocity_position_innovation_coupling: bool = False
     temporal_position_enabled: bool = False
@@ -476,6 +485,53 @@ class OrpheusConfig:
             raise ValueError(
                 "model.rgb.temporal_velocity_outgoing_proposal_maximum_delta "
                 "must be finite and positive"
+            )
+        lateral_hidden = len(model.rgb.temporal_velocity_lateral_intervention_hidden_bias)
+        if model.rgb.temporal_velocity_lateral_intervention_enabled and (
+            not model.rgb.temporal_velocity_enabled
+            or not model.rgb.temporal_velocity_lateral_only
+            or lateral_hidden <= 0
+            or len(model.rgb.temporal_velocity_lateral_intervention_hidden_weights)
+            != 19 * lateral_hidden
+            or len(model.rgb.temporal_velocity_lateral_intervention_output_weights)
+            != 2 * lateral_hidden
+        ):
+            raise ValueError(
+                "model.rgb lateral velocity intervention requires lateral temporal "
+                "velocity and consistent nineteen-input, two-output MLP coefficients"
+            )
+        lateral_coefficients = (
+            model.rgb.temporal_velocity_lateral_intervention_hidden_weights,
+            model.rgb.temporal_velocity_lateral_intervention_hidden_bias,
+            model.rgb.temporal_velocity_lateral_intervention_output_weights,
+            model.rgb.temporal_velocity_lateral_intervention_output_bias,
+        )
+        if not all(math.isfinite(value) for values in lateral_coefficients for value in values):
+            raise ValueError("model.rgb lateral intervention coefficients must be finite")
+        if (
+            not math.isfinite(model.rgb.temporal_velocity_lateral_intervention_variance_floor)
+            or not math.isfinite(model.rgb.temporal_velocity_lateral_intervention_variance_ceiling)
+            or not 0
+            < model.rgb.temporal_velocity_lateral_intervention_variance_floor
+            <= model.rgb.temporal_velocity_lateral_intervention_variance_ceiling
+        ):
+            raise ValueError(
+                "model.rgb lateral intervention variance bounds must be finite, "
+                "positive, and ordered"
+            )
+        if (
+            not math.isfinite(model.rgb.temporal_velocity_lateral_intervention_gain_power)
+            or model.rgb.temporal_velocity_lateral_intervention_gain_power < 1
+        ):
+            raise ValueError(
+                "model.rgb lateral intervention gain power must be finite and at least one"
+            )
+        if (
+            not math.isfinite(model.rgb.temporal_velocity_lateral_intervention_maximum_delta)
+            or model.rgb.temporal_velocity_lateral_intervention_maximum_delta <= 0
+        ):
+            raise ValueError(
+                "model.rgb lateral intervention maximum delta must be finite and positive"
             )
         if (
             not math.isfinite(model.rgb.temporal_velocity_change_point_probability_threshold)

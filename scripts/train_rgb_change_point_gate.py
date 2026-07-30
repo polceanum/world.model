@@ -20,6 +20,7 @@ from world_model.runtime import OnlineWorldModel
 from world_model.training.change_point_gate import (
     fit_linear_change_point_gate,
     fit_mlp_change_point_gate,
+    fit_mlp_lateral_velocity_intervention,
     fit_mlp_outgoing_velocity_proposal,
 )
 from world_model.training.checkpointing import load_checkpoint
@@ -56,6 +57,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--proposal-fit-steps", type=int, default=2000)
     parser.add_argument("--proposal-gate-focus-weight", type=int, default=20)
     parser.add_argument("--proposal-maximum-delta", type=float, default=3.0)
+    parser.add_argument("--fit-lateral-intervention", action="store_true")
+    parser.add_argument("--lateral-hidden-features", type=int, default=12)
+    parser.add_argument("--lateral-fit-steps", type=int, default=3000)
+    parser.add_argument("--lateral-learning-rate", type=float, default=0.01)
+    parser.add_argument("--lateral-weight-decay", type=float, default=5.0e-3)
+    parser.add_argument("--lateral-gain-sparsity", type=float, default=0.01)
+    parser.add_argument("--lateral-variance-floor", type=float, default=0.04)
+    parser.add_argument("--lateral-variance-ceiling", type=float, default=25.0)
+    parser.add_argument("--lateral-gain-power", type=float, default=2.0)
+    parser.add_argument("--lateral-maximum-delta", type=float, default=5.0)
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     return parser.parse_args()
 
@@ -91,6 +102,11 @@ def collect_examples(
     targets: list[Tensor] = []
     outgoing_prior: list[Tensor] = []
     outgoing_target: list[Tensor] = []
+    lateral_features: list[Tensor] = []
+    lateral_prior: list[Tensor] = []
+    lateral_target: list[Tensor] = []
+    lateral_prior_variance: list[Tensor] = []
+    lateral_confidence: list[Tensor] = []
     eligible_count = 0
     collision_count = 0
     jump_count = 0
@@ -118,14 +134,35 @@ def collect_examples(
             feature_timestamps = measurements.auxiliary.get(
                 "trajectory_change_point_feature_timestamps"
             )
+            current_lateral_features = measurements.auxiliary.get(
+                "trajectory_lateral_intervention_features"
+            )
+            lateral_feature_valid = measurements.auxiliary.get(
+                "trajectory_lateral_intervention_feature_valid_mask"
+            )
+            direct_prior_velocity = measurements.auxiliary.get("trajectory_direct_prior_velocity")
+            direct_prior_velocity_log_variance = measurements.auxiliary.get(
+                "trajectory_direct_prior_velocity_log_variance"
+            )
+            direct_confidence = measurements.auxiliary.get("trajectory_direct_confidence")
+            camera_lateral_axis = measurements.auxiliary.get("trajectory_camera_lateral_axis")
             if (
                 not isinstance(gate_features, Tensor)
                 or not isinstance(feature_valid, Tensor)
                 or not isinstance(feature_timestamps, Tensor)
+                or not isinstance(current_lateral_features, Tensor)
+                or not isinstance(lateral_feature_valid, Tensor)
+                or not isinstance(direct_prior_velocity, Tensor)
+                or not isinstance(direct_prior_velocity_log_variance, Tensor)
+                or not isinstance(direct_confidence, Tensor)
+                or not isinstance(camera_lateral_axis, Tensor)
             ):
-                raise RuntimeError("RGB runtime did not expose change-point training features")
+                raise RuntimeError(
+                    "RGB runtime did not expose aligned intervention training features"
+                )
             valid = feature_valid.bool() & matched & belief.objects.active
-            if valid.any():
+            lateral_valid = lateral_feature_valid.bool() & matched & belief.objects.active
+            if (valid | lateral_valid).any():
                 aligned_target = torch.zeros_like(valid)
                 aligned_collision = torch.zeros_like(valid)
                 aligned_outgoing_prior = torch.zeros_like(
@@ -135,7 +172,18 @@ def collect_examples(
                 aligned_outgoing_target = torch.zeros_like(
                     aligned_outgoing_prior,
                 )
-                for belief_slot_tensor in torch.nonzero(valid[0], as_tuple=False).flatten():
+                aligned_lateral_prior = (
+                    direct_prior_velocity * camera_lateral_axis[:, None, :]
+                ).sum(dim=-1)
+                aligned_lateral_target = torch.zeros_like(aligned_lateral_prior)
+                aligned_lateral_prior_variance = (
+                    direct_prior_velocity_log_variance.exp()
+                    * camera_lateral_axis[:, None, :].square()
+                ).sum(dim=-1)
+                for belief_slot_tensor in torch.nonzero(
+                    valid[0] | lateral_valid[0],
+                    as_tuple=False,
+                ).flatten():
                     belief_slot = int(belief_slot_tensor)
                     target_slot = int(indices[0, belief_slot])
                     frame_times = batch["timestamps"][0]
@@ -170,15 +218,37 @@ def collect_examples(
                         observable_jump >= minimum_velocity_jump
                     )
                     aligned_outgoing_prior[0, belief_slot] = (
-                        belief.objects.velocity[0, belief_slot] * gravity_axis
+                        direct_prior_velocity[0, belief_slot] * gravity_axis
                     ).sum()
                     aligned_outgoing_target[0, belief_slot] = (
                         batch["objects"]["velocity"][0, end_index, target_slot] * gravity_axis
                     ).sum()
-                features.append(gate_features.masked_select(valid.unsqueeze(-1)).reshape(-1, 9))
-                targets.append(aligned_target.masked_select(valid))
-                outgoing_prior.append(aligned_outgoing_prior.masked_select(valid))
-                outgoing_target.append(aligned_outgoing_target.masked_select(valid))
+                    aligned_lateral_target[0, belief_slot] = (
+                        batch["objects"]["velocity"][0, end_index, target_slot]
+                        * camera_lateral_axis[0]
+                    ).sum()
+                if valid.any():
+                    features.append(
+                        gate_features.masked_select(valid.unsqueeze(-1)).reshape(
+                            -1,
+                            9,
+                        )
+                    )
+                    targets.append(aligned_target.masked_select(valid))
+                    outgoing_prior.append(aligned_outgoing_prior.masked_select(valid))
+                    outgoing_target.append(aligned_outgoing_target.masked_select(valid))
+                if lateral_valid.any():
+                    lateral_features.append(
+                        current_lateral_features.masked_select(lateral_valid.unsqueeze(-1)).reshape(
+                            -1, 19
+                        )
+                    )
+                    lateral_prior.append(aligned_lateral_prior.masked_select(lateral_valid))
+                    lateral_target.append(aligned_lateral_target.masked_select(lateral_valid))
+                    lateral_prior_variance.append(
+                        aligned_lateral_prior_variance.masked_select(lateral_valid)
+                    )
+                    lateral_confidence.append(direct_confidence.masked_select(lateral_valid))
                 eligible_count += int(valid.sum().cpu())
                 collision_count += int(aligned_collision.masked_select(valid).sum().cpu())
                 jump_count += int(aligned_target.masked_select(valid).sum().cpu())
@@ -191,7 +261,7 @@ def collect_examples(
         raise RuntimeError("no eligible RGB trajectory windows were collected")
     concatenated_prior = torch.cat(outgoing_prior).cpu()
     concatenated_target = torch.cat(outgoing_target).cpu()
-    return {
+    examples = {
         "features": torch.cat(features).cpu(),
         "targets": torch.cat(targets).cpu(),
         "outgoing_prior": concatenated_prior,
@@ -204,6 +274,20 @@ def collect_examples(
             "observable_jump_windows": float(jump_count),
         },
     }
+    if lateral_features:
+        concatenated_lateral_prior = torch.cat(lateral_prior).cpu()
+        concatenated_lateral_target = torch.cat(lateral_target).cpu()
+        examples.update(
+            {
+                "lateral_features": torch.cat(lateral_features).cpu(),
+                "lateral_prior": concatenated_lateral_prior,
+                "lateral_target": concatenated_lateral_target,
+                "lateral_target_delta": (concatenated_lateral_target - concatenated_lateral_prior),
+                "lateral_prior_variance": torch.cat(lateral_prior_variance).cpu(),
+                "lateral_confidence": torch.cat(lateral_confidence).cpu(),
+            }
+        )
+    return examples
 
 
 def main() -> int:
@@ -413,14 +497,68 @@ def main() -> int:
             "temporal_velocity_outgoing_proposal_maximum_delta": (proposal.maximum_delta),
         }
 
+    lateral_metrics: dict[str, float] = {}
+    lateral_updates: dict[str, Any] = {}
+    if args.fit_lateral_intervention:
+        required_lateral_fields = {
+            "lateral_features",
+            "lateral_target_delta",
+            "lateral_prior_variance",
+            "lateral_confidence",
+        }
+        missing_lateral_fields = required_lateral_fields - set(train_examples)
+        missing_lateral_fields |= required_lateral_fields - set(validation_examples)
+        if missing_lateral_fields:
+            raise ValueError(
+                "cached features do not contain lateral intervention targets: "
+                + ", ".join(sorted(missing_lateral_fields))
+            )
+        lateral, lateral_metrics = fit_mlp_lateral_velocity_intervention(
+            train_examples["lateral_features"],
+            train_examples["lateral_target_delta"],
+            train_examples["lateral_prior_variance"],
+            train_examples["lateral_confidence"],
+            validation_examples["lateral_features"],
+            validation_examples["lateral_target_delta"],
+            validation_examples["lateral_prior_variance"],
+            validation_examples["lateral_confidence"],
+            hidden_features=args.lateral_hidden_features,
+            steps=args.lateral_fit_steps,
+            learning_rate=args.lateral_learning_rate,
+            weight_decay=args.lateral_weight_decay,
+            gain_sparsity=args.lateral_gain_sparsity,
+            variance_floor=args.lateral_variance_floor,
+            variance_ceiling=args.lateral_variance_ceiling,
+            gain_power=args.lateral_gain_power,
+            maximum_delta=args.lateral_maximum_delta,
+            robust_clip_norm=config.model.filter.robust_clip,
+            seed=config.project.seed,
+        )
+        lateral_metrics["gain_sparsity"] = args.lateral_gain_sparsity
+        lateral_metrics["learning_rate"] = args.lateral_learning_rate
+        lateral_metrics["weight_decay"] = args.lateral_weight_decay
+        lateral_updates = {
+            "temporal_velocity_lateral_intervention_enabled": True,
+            "temporal_velocity_lateral_intervention_hidden_weights": (lateral.hidden_weights),
+            "temporal_velocity_lateral_intervention_hidden_bias": (lateral.hidden_bias),
+            "temporal_velocity_lateral_intervention_output_weights": (lateral.output_weights),
+            "temporal_velocity_lateral_intervention_output_bias": (lateral.output_bias),
+            "temporal_velocity_lateral_intervention_variance_floor": (lateral.variance_floor),
+            "temporal_velocity_lateral_intervention_variance_ceiling": (lateral.variance_ceiling),
+            "temporal_velocity_lateral_intervention_gain_power": lateral.gain_power,
+            "temporal_velocity_lateral_intervention_maximum_delta": (lateral.maximum_delta),
+        }
+
+    enable_change_point_runtime = args.fit_outgoing_proposal or not args.fit_lateral_intervention
     gate_rgb = replace(
         config.model.rgb,
-        temporal_velocity_post_event_gravity_axis_enabled=True,
-        temporal_velocity_change_point_enabled=True,
+        temporal_velocity_post_event_gravity_axis_enabled=(enable_change_point_runtime),
+        temporal_velocity_change_point_enabled=enable_change_point_runtime,
         temporal_velocity_change_point_require_contact_mode=False,
         temporal_velocity_change_point_probability_threshold=(gate.probability_threshold),
         **gate_updates,
         **proposal_updates,
+        **lateral_updates,
     )
     gate_config = replace(config, model=replace(config.model, rgb=gate_rgb))
     gate_config.validate()
@@ -435,6 +573,10 @@ def main() -> int:
         **dict(payload.get("metrics", {})),
         **{f"change_point_gate_{name}": value for name, value in metrics.items()},
         **{f"outgoing_velocity_proposal_{name}": value for name, value in proposal_metrics.items()},
+        **{
+            f"lateral_velocity_intervention_{name}": value
+            for name, value in lateral_metrics.items()
+        },
     }
     temporary = checkpoint_path.with_suffix(".pt.tmp")
     torch.save(output_payload, temporary)
@@ -472,10 +614,17 @@ def main() -> int:
             )
             for key, value in proposal_updates.items()
         },
+        "lateral_intervention": {
+            key.removeprefix("temporal_velocity_lateral_intervention_"): (
+                list(value) if isinstance(value, tuple) else value
+            )
+            for key, value in lateral_updates.items()
+        },
         "train_collection": train_collection,
         "validation_collection": validation_collection,
         "metrics": metrics,
         "proposal_metrics": proposal_metrics,
+        "lateral_metrics": lateral_metrics,
     }
     (output / "report.json").write_text(
         json.dumps(report, indent=2),
@@ -512,6 +661,19 @@ def main() -> int:
                         f"`{proposal_metrics['calibrated_variance_mps2']:.6f}` m2/s2",
                     )
                     if proposal_metrics
+                    else ()
+                ),
+                *(
+                    (
+                        "- lateral validation prior/posterior RMSE: "
+                        f"`{lateral_metrics['validation_prior_rmse_mps']:.6f}` / "
+                        f"`{lateral_metrics['validation_posterior_rmse_mps']:.6f}` m/s",
+                        "- lateral validation positive-improvement rate: "
+                        f"`{lateral_metrics['validation_positive_improvement_rate']:.6f}`",
+                        "- lateral validation mean soft gain: "
+                        f"`{lateral_metrics['validation_mean_soft_gain']:.6f}`",
+                    )
+                    if lateral_metrics
                     else ()
                 ),
                 "",

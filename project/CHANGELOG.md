@@ -4,6 +4,13 @@
 
 ### Added
 
+- A disabled-by-default intervention-aware camera-lateral RGB velocity
+  proposal using exact pre-correction belief state, 19 causal axis-local/joint
+  features, a bounded delta, continuous soft abstention through measurement
+  variance, folded feature normalization, and post-filter fitting.
+- Lateral-intervention evaluator diagnostics for eligible feature count, mean
+  soft gain, and gains above one half, plus checkpoint compatibility and
+  focused filter/runtime tests.
 - A quality-aware persistent-ID point/scale trajectory observer with separate
   bounded point and scale-anchor rings, axis-local robust IRLS fitting,
   timestamp extrapolation, typed direct position evidence, and conservative

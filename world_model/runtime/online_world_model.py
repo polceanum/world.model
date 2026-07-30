@@ -284,6 +284,33 @@ class OnlineWorldModel(nn.Module):
                     temporal_velocity_outgoing_proposal_maximum_delta=(
                         rgb_config.temporal_velocity_outgoing_proposal_maximum_delta
                     ),
+                    temporal_velocity_lateral_intervention_enabled=(
+                        rgb_config.temporal_velocity_lateral_intervention_enabled
+                    ),
+                    temporal_velocity_lateral_intervention_hidden_weights=(
+                        rgb_config.temporal_velocity_lateral_intervention_hidden_weights
+                    ),
+                    temporal_velocity_lateral_intervention_hidden_bias=(
+                        rgb_config.temporal_velocity_lateral_intervention_hidden_bias
+                    ),
+                    temporal_velocity_lateral_intervention_output_weights=(
+                        rgb_config.temporal_velocity_lateral_intervention_output_weights
+                    ),
+                    temporal_velocity_lateral_intervention_output_bias=(
+                        rgb_config.temporal_velocity_lateral_intervention_output_bias
+                    ),
+                    temporal_velocity_lateral_intervention_variance_floor=(
+                        rgb_config.temporal_velocity_lateral_intervention_variance_floor
+                    ),
+                    temporal_velocity_lateral_intervention_variance_ceiling=(
+                        rgb_config.temporal_velocity_lateral_intervention_variance_ceiling
+                    ),
+                    temporal_velocity_lateral_intervention_gain_power=(
+                        rgb_config.temporal_velocity_lateral_intervention_gain_power
+                    ),
+                    temporal_velocity_lateral_intervention_maximum_delta=(
+                        rgb_config.temporal_velocity_lateral_intervention_maximum_delta
+                    ),
                     temporal_velocity_measurement_position_blend=(
                         rgb_config.temporal_velocity_measurement_position_blend
                     ),
