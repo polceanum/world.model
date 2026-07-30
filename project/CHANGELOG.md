@@ -4,6 +4,15 @@
 
 ### Added
 
+- A provenance-verifying convergence supervisor for the sustained MPS
+  campaign. It monitors the existing trainer, removes its completed KeepAlive
+  job only after artifact verification, resumes `last.pt` sequentially in
+  complete causal blocks, survives supervisor restarts without overlapping
+  trainers, and records child failures without infinite retries.
+- A strict four-validation plateau decision over accepted/rejected numbered
+  candidates, with 1% recent-safe improvement continuation, inconclusive-
+  evidence continuation, and a 24,576-step hard limit reported separately as
+  `limit_hit` unless plateau is actually demonstrated.
 - The full 12,288-update sustained accuracy campaign is now running on Apple
   MPS under the persistent macOS job
   `com.polceanum.orpheus.sustained-20260730-192625`; its timestamp-first

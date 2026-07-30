@@ -85,6 +85,50 @@ the fixed 16-episode reference manifest, which is expected to take roughly
 60–90 minutes before emitting the first validation metrics. Absence of early
 metrics is therefore not interpreted as a completed or failed run.
 
+An autonomous convergence supervisor is now implemented and focused-tested,
+but it has not yet been launched and did not modify or interrupt the active
+trainer. The prepared invocation monitors PID `37360`, waits for a
+tensor/protocol-verified 12,288-step completion, then removes the initial
+KeepAlive job before sequentially resuming `last.pt` in complete 4,096-update
+blocks:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python \
+  scripts/supervise_convergence.py \
+  --config configs/sustained_accuracy_mps.yaml \
+  --run runs/20260730-192625-scaled-sustained-e2e-v1 \
+  --device mps \
+  --initial-trainer-pid 37360 \
+  --initial-launchctl-label \
+    com.polceanum.orpheus.sustained-20260730-192625 \
+  --maximum-total-steps 24576
+```
+
+The supervisor calls a plateau only after four exact consecutive 512-step
+validations accept no candidate and raw primary-score improvement remains
+below 1%. A recent guardrail-safe gain of at least 1%, missing evidence, or
+contradictory evidence requests another complete block. At the hard limit, a
+demonstrated plateau remains a plateau; otherwise the result is truthfully
+`limit_hit`. The script persists events/state/report files, reattaches to an
+exact in-place extension after restart, prevents overlapping trainers, and
+records an initial-PID or child failure without an infinite automatic retry.
+
+Focused verification after this implementation:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff format \
+  world_model/training/convergence.py scripts/supervise_convergence.py \
+  tests/unit/test_convergence_supervisor.py
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff check \
+  world_model/training/convergence.py scripts/supervise_convergence.py \
+  tests/unit/test_convergence_supervisor.py
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest \
+  tests/unit/test_convergence_supervisor.py \
+  tests/integration/test_trainer_checkpoint_integrity.py -q
+```
+
+Result: Ruff passed and `17 passed in 3.73 s`.
+
 ### Environment and validation
 
 Direct hardware inspection on 2026-07-30 reported Python `3.10.20`, PyTorch
@@ -121,6 +165,19 @@ The four MPS-conditional files then ran with direct device access and reported
 The real campaign command also passed `train.py --dry-run --device mps`,
 resolving 12,288 steps, 4,096 training episodes, 16 validation episodes,
 batch one, all eight scenario families, and RGB-only runtime.
+
+```bash
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-convergence-pycache PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus python -m compileall -q \
+  world_model/training/convergence.py scripts/supervise_convergence.py \
+  tests/unit/test_convergence_supervisor.py
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest \
+  tests/integration/test_cli_smoke.py -q
+git diff --check
+```
+
+The new supervisor files passed `compileall`; the existing CLI smoke test
+reported `1 passed in 30.98 s`, and `git diff --check` passed.
 
 ### Representative scaled MPS smoke
 

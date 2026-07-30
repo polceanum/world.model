@@ -18,12 +18,18 @@
 - [x] Add `configs/sustained_accuracy_mps.yaml`: 8,192 measurement updates plus
   4,096 causal windows across all eight scenario families, with rejected
   intervention heads disabled.
+- [x] Implement a provenance-verifying, restart-aware convergence supervisor
+  that waits for the full minimum, resumes only `last.pt` in non-overlapping
+  4,096-update blocks, records failures, and distinguishes a demonstrated
+  plateau from a 24,576-step budget limit.
 - [ ] Complete the active 12,288-update sustained MPS campaign at
   `runs/20260730-192625-scaled-sustained-e2e-v1/`. Do not judge causal
   convergence before 2,048 causal updates or stop before the full 4,096-window
   minimum.
-- [ ] If the best safe checkpoint lands in the final 1,024 causal updates with
-  at least 1% improvement, extend by another 4,096 causal updates.
+- [ ] Launch the prepared persistent supervisor. Continue in complete 4,096
+  blocks while the final 1,024 updates produce at least 1% safe improvement or
+  while four-point plateau evidence is incomplete/contradictory; stop only on
+  the declared plateau or the 24,576-step hard limit.
 - [ ] Confirm the selected checkpoint on at least 64 fresh balanced validation
   episodes, report every scenario/horizon, then use the reserved test split
   only if all broad gates pass.

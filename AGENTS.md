@@ -56,6 +56,11 @@ Working rules:
   model or claim convergence until its declared balanced minimum training
   coverage has completed and broad validation has reached a predeclared
   plateau.
+- For the sustained campaign, plateau requires four exact consecutive
+  512-step validation candidates with no acceptance and less than 1% raw
+  primary-score improvement over the safe pre-window incumbent. Missing or
+  contradictory evidence means continue a complete block; reaching a hard
+  budget without this evidence is `limit_hit`, not convergence.
 - Select long-run checkpoints by pooled physical metrics with distance-gated
   detection/identity, lifecycle, event, velocity, every-horizon, and
   calibration guardrails. Apply non-regression checks against both the moving

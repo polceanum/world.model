@@ -203,10 +203,53 @@ python train.py \
   --device mps
 ```
 
-Do not judge causal convergence before 2,048 causal updates. Complete all
-4,096, then call a plateau only after four consecutive 512-step validations
-have no accepted candidate and under 1% primary-score improvement. Extend by a
-further 4,096 causal updates only if the best checkpoint occurs within the
-final 1,024 updates and improves at least 1% without a guardrail regression.
-The selected checkpoint still requires a balanced fresh-validation
-confirmation of at least 64 episodes before the reserved test split is used.
+Do not judge causal convergence before 2,048 causal updates, and always
+complete the 4,096-window minimum. After that minimum,
+`scripts/supervise_convergence.py` verifies `train_summary.json`, `last.pt`,
+the linked best/reference selectors, every numbered validation candidate,
+their protocol hashes, and their actual model-tensor hashes before deciding.
+It resumes the mutable training iterate from `last.pt`, preserving optimizer
+and RNG state; `best_rollout.pt` remains a separate immutable selection
+artifact.
+
+The predeclared decision rule is:
+
+- continue for another complete 4,096-update causal block when the best
+  guardrail-safe checkpoint is in the final 1,024 updates and improves the
+  primary score by at least 1%;
+- declare a plateau only when the exact four most recent 512-step validation
+  points accepted no candidate and even their best raw primary score improved
+  less than 1% over the safe pre-window incumbent;
+- treat missing or contradictory four-point evidence as inconclusive and
+  continue for another complete block;
+- stop at 24,576 total updates. If the four-point plateau rule is satisfied at
+  that boundary, report `plateau`; otherwise report `limit_hit`, which is a
+  budget stop and not a convergence claim.
+
+The supervisor is restart-aware and never intentionally overlaps two
+extension trainers. An already-running initial trainer can be monitored with
+`--initial-trainer-pid`; disappearance before a verified summary records an
+explicit failure and exits nonzero. A failed extension is also recorded and
+is not retried forever by a persistent job. Each completed segment is recorded
+under `runs/<run>/convergence/`; machine-readable events, state, and the final
+decision are written to `convergence_supervisor.jsonl`,
+`convergence_supervisor_state.json`, and `convergence_report.json`.
+
+For the active campaign, the prepared supervisor invocation is:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python \
+  scripts/supervise_convergence.py \
+  --config configs/sustained_accuracy_mps.yaml \
+  --run runs/20260730-192625-scaled-sustained-e2e-v1 \
+  --device mps \
+  --initial-trainer-pid 37360 \
+  --initial-launchctl-label \
+    com.polceanum.orpheus.sustained-20260730-192625 \
+  --maximum-total-steps 24576
+```
+
+Run that command through a persistent macOS LaunchAgent with `RunAtLoad=true`
+and `KeepAlive.SuccessfulExit=false`; do not launch a second copy manually.
+The selected checkpoint still requires balanced fresh-validation confirmation
+of at least 64 episodes before the reserved test split is used.

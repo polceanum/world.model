@@ -1238,3 +1238,45 @@
   with per-scenario reporting. If the best safe checkpoint occurs in the final
   1,024 causal updates with at least 1% improvement, extend rather than
   declaring convergence.
+
+## ADR-059 — Continue sustained training with verified plateau evidence
+
+- **Date:** 2026-07-30
+- **Status:** accepted; supervisor implemented, launch pending
+- **Context:** A fixed 12,288-update process cannot determine in advance
+  whether the broad validation objective has plateaued. Manual ad-hoc
+  extensions would invite short-run decisions, training-loss selection, or
+  accidental resumption from the selected checkpoint instead of the mutable
+  optimizer/RNG iterate. The initial macOS job may also restart after normal
+  completion, while an unattended supervisor must not overlap trainers or
+  retry deterministic failures forever.
+- **Decision:** Verify the completed summary, `last.pt`, linked
+  best/reference selectors, all numbered validation candidates, exact
+  validation protocol, and actual model-tensor hashes. Resume in place only
+  from `last.pt` and change only `training.steps`, in complete 4,096-update
+  causal blocks. Extend immediately when the best guardrail-safe checkpoint
+  lands in the final 1,024 updates with at least 1% relative primary-score
+  improvement. Declare plateau only when the exact four latest 512-step
+  validations accept no candidate and the best raw primary-score gain over the
+  safe pre-window incumbent is below 1%; missing or contradictory evidence
+  triggers another block. Cap the campaign at 24,576 total updates. A valid
+  plateau at the cap remains `plateau`; reaching the cap without that evidence
+  is `limit_hit`, not convergence. Persist supervisor state/events, monitor the
+  initial PID, reattach only to an exact matching extension after restart, and
+  stop automatic retries after a recorded child failure.
+- **Alternatives considered:** stop unconditionally at the original budget;
+  make extension decisions from training loss; resume from
+  `best_rollout.pt`; accept two rejections as a plateau; train indefinitely;
+  launch independent extension processes; let launchd retry failed children
+  without a recorded terminal state.
+- **Evidence:** The trainer already saves the optimizer/RNG-bearing `last.pt`,
+  tensor-linked selector checkpoints, numbered accepted/rejected validation
+  candidates, and a validation protocol hash that intentionally excludes the
+  training budget. Focused convergence/provenance tests and existing
+  checkpoint-integrity tests report `17 passed`.
+- **Consequences:** The campaign can run unattended without weakening its
+  scientific stopping rule, and interrupted supervision can recover without
+  overlapping the active trainer. `limit_hit` is explicitly a safety-budget
+  outcome. Neither `plateau` nor `limit_hit` promotes a model by itself: at
+  least 64 fresh balanced validation episodes and all broad guardrails remain
+  required before reserved-test evaluation.
