@@ -235,7 +235,8 @@ under `runs/<run>/convergence/`; machine-readable events, state, and the final
 decision are written to `convergence_supervisor.jsonl`,
 `convergence_supervisor_state.json`, and `convergence_report.json`.
 
-For the active campaign, the prepared supervisor invocation is:
+For the active campaign, the supervisor was launched persistently with these
+arguments:
 
 ```bash
 PYTHONPATH=. conda run --no-capture-output -n orpheus python \

@@ -26,7 +26,7 @@
   `runs/20260730-192625-scaled-sustained-e2e-v1/`. Do not judge causal
   convergence before 2,048 causal updates or stop before the full 4,096-window
   minimum.
-- [ ] Launch the prepared persistent supervisor. Continue in complete 4,096
+- [x] Launch the persistent convergence supervisor. Continue in complete 4,096
   blocks while the final 1,024 updates produce at least 1% safe improvement or
   while four-point plateau evidence is incomplete/contradictory; stop only on
   the declared plateau or the 24,576-step hard limit.

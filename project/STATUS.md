@@ -85,12 +85,14 @@ the fixed 16-episode reference manifest, which is expected to take roughly
 60–90 minutes before emitting the first validation metrics. Absence of early
 metrics is therefore not interpreted as a completed or failed run.
 
-An autonomous convergence supervisor is now implemented and focused-tested,
-but it has not yet been launched and did not modify or interrupt the active
-trainer. The prepared invocation monitors PID `37360`, waits for a
-tensor/protocol-verified 12,288-step completion, then removes the initial
-KeepAlive job before sequentially resuming `last.pt` in complete 4,096-update
-blocks:
+The autonomous convergence supervisor was launched at
+`2026-07-30T20:44:38Z` from committed revision `3c03e5a`. LaunchAgent
+`com.polceanum.orpheus.convergence-20260730-192625` reported state `running`
+with supervisor PID `41396`, while the one and only trainer remained PID
+`37360`. It monitors that trainer without modifying or interrupting it, waits
+for a tensor/protocol-verified 12,288-step completion, then removes the
+initial KeepAlive job before sequentially resuming `last.pt` in complete
+4,096-update blocks:
 
 ```bash
 PYTHONPATH=. conda run --no-capture-output -n orpheus python \
@@ -112,6 +114,13 @@ demonstrated plateau remains a plateau; otherwise the result is truthfully
 `limit_hit`. The script persists events/state/report files, reattaches to an
 exact in-place extension after restart, prevents overlapping trainers, and
 records an initial-PID or child failure without an infinite automatic retry.
+Its persistent event log is
+`runs/20260730-192625-scaled-sustained-e2e-v1/convergence_supervisor.jsonl`;
+the first two verified events are `supervisor_started` and
+`waiting_for_segment`. Standard output/error are
+`/private/tmp/20260730-192625-convergence-supervisor.stdout.log` and
+`/private/tmp/20260730-192625-convergence-supervisor.stderr.log`. The latter
+was empty after launch.
 
 Focused verification after this implementation:
 
@@ -127,7 +136,10 @@ PYTHONPATH=. conda run --no-capture-output -n orpheus pytest \
   tests/integration/test_trainer_checkpoint_integrity.py -q
 ```
 
-Result: Ruff passed and `17 passed in 3.73 s`.
+Result: Ruff passed and `17 passed in 3.54 s`. The complete repository suite
+then reported `304 passed, 4 skipped in 108.06 s`; all skips were the expected
+sandbox-visible MPS conditionals, while the real trainer continued on direct
+MPS.
 
 ### Environment and validation
 

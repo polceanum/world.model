@@ -1242,7 +1242,7 @@
 ## ADR-059 — Continue sustained training with verified plateau evidence
 
 - **Date:** 2026-07-30
-- **Status:** accepted; supervisor implemented, launch pending
+- **Status:** accepted; supervisor active
 - **Context:** A fixed 12,288-update process cannot determine in advance
   whether the broad validation objective has plateaued. Manual ad-hoc
   extensions would invite short-run decisions, training-loss selection, or
@@ -1273,7 +1273,9 @@
   tensor-linked selector checkpoints, numbered accepted/rejected validation
   candidates, and a validation protocol hash that intentionally excludes the
   training budget. Focused convergence/provenance tests and existing
-  checkpoint-integrity tests report `17 passed`.
+  checkpoint-integrity tests report `17 passed`. The persistent LaunchAgent
+  started successfully beside the existing trainer with one supervisor and
+  one trainer process, and wrote its initial waiting event without errors.
 - **Consequences:** The campaign can run unattended without weakening its
   scientific stopping rule, and interrupted supervision can recover without
   overlapping the active trainer. `limit_hit` is explicitly a safety-budget
