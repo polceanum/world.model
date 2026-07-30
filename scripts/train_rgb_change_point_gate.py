@@ -67,6 +67,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lateral-variance-ceiling", type=float, default=25.0)
     parser.add_argument("--lateral-gain-power", type=float, default=2.0)
     parser.add_argument("--lateral-maximum-delta", type=float, default=5.0)
+    parser.add_argument("--fit-gravity-intervention", action="store_true")
+    parser.add_argument("--gravity-hidden-features", type=int, default=4)
+    parser.add_argument("--gravity-fit-steps", type=int, default=2000)
+    parser.add_argument("--gravity-learning-rate", type=float, default=0.005)
+    parser.add_argument("--gravity-weight-decay", type=float, default=0.2)
+    parser.add_argument("--gravity-gain-sparsity", type=float, default=0.1)
+    parser.add_argument("--gravity-variance-floor", type=float, default=0.04)
+    parser.add_argument("--gravity-variance-ceiling", type=float, default=25.0)
+    parser.add_argument("--gravity-gain-power", type=float, default=2.0)
+    parser.add_argument("--gravity-maximum-delta", type=float, default=5.0)
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     return parser.parse_args()
 
@@ -107,6 +117,11 @@ def collect_examples(
     lateral_target: list[Tensor] = []
     lateral_prior_variance: list[Tensor] = []
     lateral_confidence: list[Tensor] = []
+    gravity_features: list[Tensor] = []
+    gravity_prior: list[Tensor] = []
+    gravity_target: list[Tensor] = []
+    gravity_prior_variance: list[Tensor] = []
+    gravity_confidence: list[Tensor] = []
     eligible_count = 0
     collision_count = 0
     jump_count = 0
@@ -146,6 +161,13 @@ def collect_examples(
             )
             direct_confidence = measurements.auxiliary.get("trajectory_direct_confidence")
             camera_lateral_axis = measurements.auxiliary.get("trajectory_camera_lateral_axis")
+            current_gravity_features = measurements.auxiliary.get(
+                "trajectory_gravity_intervention_features"
+            )
+            gravity_feature_valid = measurements.auxiliary.get(
+                "trajectory_gravity_intervention_feature_valid_mask"
+            )
+            gravity_axis = measurements.auxiliary.get("trajectory_gravity_axis")
             if (
                 not isinstance(gate_features, Tensor)
                 or not isinstance(feature_valid, Tensor)
@@ -156,13 +178,17 @@ def collect_examples(
                 or not isinstance(direct_prior_velocity_log_variance, Tensor)
                 or not isinstance(direct_confidence, Tensor)
                 or not isinstance(camera_lateral_axis, Tensor)
+                or not isinstance(current_gravity_features, Tensor)
+                or not isinstance(gravity_feature_valid, Tensor)
+                or not isinstance(gravity_axis, Tensor)
             ):
                 raise RuntimeError(
                     "RGB runtime did not expose aligned intervention training features"
                 )
             valid = feature_valid.bool() & matched & belief.objects.active
             lateral_valid = lateral_feature_valid.bool() & matched & belief.objects.active
-            if (valid | lateral_valid).any():
+            gravity_valid = gravity_feature_valid.bool() & matched & belief.objects.active
+            if (valid | lateral_valid | gravity_valid).any():
                 aligned_target = torch.zeros_like(valid)
                 aligned_collision = torch.zeros_like(valid)
                 aligned_outgoing_prior = torch.zeros_like(
@@ -176,12 +202,19 @@ def collect_examples(
                     direct_prior_velocity * camera_lateral_axis[:, None, :]
                 ).sum(dim=-1)
                 aligned_lateral_target = torch.zeros_like(aligned_lateral_prior)
+                aligned_gravity_prior = (direct_prior_velocity * gravity_axis[:, None, :]).sum(
+                    dim=-1
+                )
+                aligned_gravity_target = torch.zeros_like(aligned_gravity_prior)
                 aligned_lateral_prior_variance = (
                     direct_prior_velocity_log_variance.exp()
                     * camera_lateral_axis[:, None, :].square()
                 ).sum(dim=-1)
+                # Gravity features use the same exact timestamp triplet.
+                # Include their rows even when another experimental path has a
+                # stricter validity mask.
                 for belief_slot_tensor in torch.nonzero(
-                    valid[0] | lateral_valid[0],
+                    valid[0] | lateral_valid[0] | gravity_valid[0],
                     as_tuple=False,
                 ).flatten():
                     belief_slot = int(belief_slot_tensor)
@@ -227,6 +260,9 @@ def collect_examples(
                         batch["objects"]["velocity"][0, end_index, target_slot]
                         * camera_lateral_axis[0]
                     ).sum()
+                    aligned_gravity_target[0, belief_slot] = (
+                        batch["objects"]["velocity"][0, end_index, target_slot] * gravity_axis[0]
+                    ).sum()
                 if valid.any():
                     features.append(
                         gate_features.masked_select(valid.unsqueeze(-1)).reshape(
@@ -249,6 +285,23 @@ def collect_examples(
                         aligned_lateral_prior_variance.masked_select(lateral_valid)
                     )
                     lateral_confidence.append(direct_confidence.masked_select(lateral_valid))
+                if gravity_valid.any():
+                    gravity_features.append(
+                        current_gravity_features.masked_select(gravity_valid.unsqueeze(-1)).reshape(
+                            -1, 21
+                        )
+                    )
+                    gravity_prior.append(aligned_gravity_prior.masked_select(gravity_valid))
+                    gravity_target.append(aligned_gravity_target.masked_select(gravity_valid))
+                    gravity_prior_variance.append(
+                        (
+                            direct_prior_velocity_log_variance.exp()
+                            * gravity_axis[:, None, :].square()
+                        )
+                        .sum(dim=-1)
+                        .masked_select(gravity_valid)
+                    )
+                    gravity_confidence.append(direct_confidence.masked_select(gravity_valid))
                 eligible_count += int(valid.sum().cpu())
                 collision_count += int(aligned_collision.masked_select(valid).sum().cpu())
                 jump_count += int(aligned_target.masked_select(valid).sum().cpu())
@@ -285,6 +338,19 @@ def collect_examples(
                 "lateral_target_delta": (concatenated_lateral_target - concatenated_lateral_prior),
                 "lateral_prior_variance": torch.cat(lateral_prior_variance).cpu(),
                 "lateral_confidence": torch.cat(lateral_confidence).cpu(),
+            }
+        )
+    if gravity_features:
+        concatenated_gravity_prior = torch.cat(gravity_prior).cpu()
+        concatenated_gravity_target = torch.cat(gravity_target).cpu()
+        examples.update(
+            {
+                "gravity_features": torch.cat(gravity_features).cpu(),
+                "gravity_prior": concatenated_gravity_prior,
+                "gravity_target": concatenated_gravity_target,
+                "gravity_target_delta": (concatenated_gravity_target - concatenated_gravity_prior),
+                "gravity_prior_variance": torch.cat(gravity_prior_variance).cpu(),
+                "gravity_confidence": torch.cat(gravity_confidence).cpu(),
             }
         )
     return examples
@@ -549,7 +615,79 @@ def main() -> int:
             "temporal_velocity_lateral_intervention_maximum_delta": (lateral.maximum_delta),
         }
 
-    enable_change_point_runtime = args.fit_outgoing_proposal or not args.fit_lateral_intervention
+    gravity_metrics: dict[str, float] = {}
+    gravity_updates: dict[str, Any] = {}
+    if args.fit_gravity_intervention:
+        required_gravity_fields = {
+            "gravity_features",
+            "gravity_target_delta",
+            "gravity_prior_variance",
+            "gravity_confidence",
+        }
+        missing_gravity_fields = required_gravity_fields - set(train_examples)
+        missing_gravity_fields |= required_gravity_fields - set(validation_examples)
+        if missing_gravity_fields:
+            raise ValueError(
+                "cached features do not contain gravity intervention targets: "
+                + ", ".join(sorted(missing_gravity_fields))
+            )
+        gravity_intervention, gravity_metrics = fit_mlp_lateral_velocity_intervention(
+            train_examples["gravity_features"],
+            train_examples["gravity_target_delta"],
+            train_examples["gravity_prior_variance"],
+            train_examples["gravity_confidence"],
+            validation_examples["gravity_features"],
+            validation_examples["gravity_target_delta"],
+            validation_examples["gravity_prior_variance"],
+            validation_examples["gravity_confidence"],
+            hidden_features=args.gravity_hidden_features,
+            steps=args.gravity_fit_steps,
+            learning_rate=args.gravity_learning_rate,
+            weight_decay=args.gravity_weight_decay,
+            gain_sparsity=args.gravity_gain_sparsity,
+            variance_floor=args.gravity_variance_floor,
+            variance_ceiling=args.gravity_variance_ceiling,
+            gain_power=args.gravity_gain_power,
+            maximum_delta=args.gravity_maximum_delta,
+            robust_clip_norm=config.model.filter.robust_clip,
+            seed=config.project.seed,
+        )
+        gravity_metrics.update(
+            {
+                "gain_sparsity": args.gravity_gain_sparsity,
+                "learning_rate": args.gravity_learning_rate,
+                "weight_decay": args.gravity_weight_decay,
+            }
+        )
+        gravity_updates = {
+            "temporal_velocity_gravity_intervention_enabled": True,
+            "temporal_velocity_gravity_intervention_hidden_weights": (
+                gravity_intervention.hidden_weights
+            ),
+            "temporal_velocity_gravity_intervention_hidden_bias": (
+                gravity_intervention.hidden_bias
+            ),
+            "temporal_velocity_gravity_intervention_output_weights": (
+                gravity_intervention.output_weights
+            ),
+            "temporal_velocity_gravity_intervention_output_bias": (
+                gravity_intervention.output_bias
+            ),
+            "temporal_velocity_gravity_intervention_variance_floor": (
+                gravity_intervention.variance_floor
+            ),
+            "temporal_velocity_gravity_intervention_variance_ceiling": (
+                gravity_intervention.variance_ceiling
+            ),
+            "temporal_velocity_gravity_intervention_gain_power": (gravity_intervention.gain_power),
+            "temporal_velocity_gravity_intervention_maximum_delta": (
+                gravity_intervention.maximum_delta
+            ),
+        }
+
+    enable_change_point_runtime = args.fit_outgoing_proposal or not (
+        args.fit_lateral_intervention or args.fit_gravity_intervention
+    )
     gate_rgb = replace(
         config.model.rgb,
         temporal_velocity_post_event_gravity_axis_enabled=(enable_change_point_runtime),
@@ -559,6 +697,7 @@ def main() -> int:
         **gate_updates,
         **proposal_updates,
         **lateral_updates,
+        **gravity_updates,
     )
     gate_config = replace(config, model=replace(config.model, rgb=gate_rgb))
     gate_config.validate()
@@ -576,6 +715,10 @@ def main() -> int:
         **{
             f"lateral_velocity_intervention_{name}": value
             for name, value in lateral_metrics.items()
+        },
+        **{
+            f"gravity_velocity_intervention_{name}": value
+            for name, value in gravity_metrics.items()
         },
     }
     temporary = checkpoint_path.with_suffix(".pt.tmp")
@@ -620,11 +763,18 @@ def main() -> int:
             )
             for key, value in lateral_updates.items()
         },
+        "gravity_intervention": {
+            key.removeprefix("temporal_velocity_gravity_intervention_"): (
+                list(value) if isinstance(value, tuple) else value
+            )
+            for key, value in gravity_updates.items()
+        },
         "train_collection": train_collection,
         "validation_collection": validation_collection,
         "metrics": metrics,
         "proposal_metrics": proposal_metrics,
         "lateral_metrics": lateral_metrics,
+        "gravity_metrics": gravity_metrics,
     }
     (output / "report.json").write_text(
         json.dumps(report, indent=2),
@@ -661,6 +811,19 @@ def main() -> int:
                         f"`{proposal_metrics['calibrated_variance_mps2']:.6f}` m2/s2",
                     )
                     if proposal_metrics
+                    else ()
+                ),
+                *(
+                    (
+                        "- gravity validation prior/posterior RMSE: "
+                        f"`{gravity_metrics['validation_prior_rmse_mps']:.6f}` / "
+                        f"`{gravity_metrics['validation_posterior_rmse_mps']:.6f}` m/s",
+                        "- gravity validation positive-improvement rate: "
+                        f"`{gravity_metrics['validation_positive_improvement_rate']:.6f}`",
+                        "- gravity validation mean soft gain: "
+                        f"`{gravity_metrics['validation_mean_soft_gain']:.6f}`",
+                    )
+                    if gravity_metrics
                     else ()
                 ),
                 *(

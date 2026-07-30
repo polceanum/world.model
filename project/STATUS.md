@@ -11,6 +11,76 @@ shared-model profile, plus a quality-aware persistent-ID multi-frame
 point/scale depth observer;
 collision, occlusion, identification, and full-MPS acceptance remain open
 
+## 2026-07-30 — on-policy gravity-axis correction rejected
+
+The dominant y/gravity velocity error is now addressed by a separate,
+disabled-by-default intervention path. The RGB temporal observer exports a
+21-value causal feature vector: acceleration-compensated gravity-axis
+kinematics, camera-lateral context, contact probability, the exact pre-filter
+gravity prior and variance, and an acceleration-aware RGB slope residual and
+variance. A tiny axis-local MLP proposes only a gravity-axis velocity delta and
+soft measurement gain. Non-gravity means are preserved and their measurement
+variance is explicitly unobserved, preventing an early implementation from
+silently contracting x covariance and changing association.
+
+The first balanced MPS collection produced 543 training and 398 disjoint
+validation windows. A one-unit regularized head reduced held-out post-filter
+gravity residual RMSE `2.222436 → 1.771491 m/s`, but repeated runtime
+application shifted its own input distribution. After correcting the
+gravity-only covariance contract, it improved seed `100017` current position
+and 0.1-second forecast but regressed y velocity.
+
+One dataset-aggregation pass then collected 498 training and 373 validation
+windows while rolling out the first head. The on-policy refit reduced its
+held-out prior/post-filter RMSE `2.113796 → 1.854939 m/s`. On seed `100017`,
+it improved current position `0.702313 → 0.686879 m`, total velocity
+`1.148770 → 1.108480 m/s`, y velocity `1.941731 → 1.882283 m/s`, and
+0.1-second forecast `0.715284 → 0.712301 m`.
+
+The protocol-matched two-episode block rejected promotion. Current y position
+improved `0.335656 → 0.291913 m` (`13.03%`), current position improved
+`0.684258 → 0.669713 m`, 0.1-second forecast improved
+`0.698125 → 0.690724 m`, and collision-conditioned 0.1-second forecast
+improved `0.216634 → 0.187418 m`. However, y velocity regressed
+`1.902265 → 1.979012 m/s`, detection recall fell
+`0.687500 → 0.586806`, collision F1 fell `0.271186 → 0.218750`, and overall
+forecast RMSE regressed at 0.25/0.50/0.75/1.00 seconds by
+`1.03%/3.55%/1.95%/1.24%`. The scaled default and accepted checkpoint remain
+unchanged.
+
+The next accuracy target is end-to-end intervention training through the
+persistent association/ROI loop and recursive horizons, with detection
+coverage and identity stability in the selection objective. Per-update
+post-filter supervision, even with one on-policy aggregation pass, is
+insufficient.
+
+Primary artifacts:
+
+- baseline-prior aligned caches and initial fit:
+  `runs/20260730-101936-rgb-gravity-intervention-aligned-8x8-v1/`;
+- stable regularized baseline-prior fit:
+  `runs/20260730-103853-rgb-gravity-intervention-regularized-v2/`;
+- on-policy collection/refit:
+  `runs/20260730-105512-rgb-gravity-intervention-on-policy-8x8-v4/`;
+- fast on-policy report:
+  `runs/20260730-105512-rgb-gravity-intervention-on-policy-8x8-v4/evaluation/20260730-112140-gravity-fast-offset17/report.md`;
+- protocol-matched multihorizon report:
+  `runs/20260730-105512-rgb-gravity-intervention-on-policy-8x8-v4/evaluation/20260730-113746-gravity-select2-offset16-frames48/report.md`.
+
+Validation used:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff format .
+PYTHONPATH=. conda run --no-capture-output -n orpheus python -m ruff check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest
+```
+
+Ruff formatted one file and passed all 167 files. The sandboxed suite reported
+`267 passed, 4 skipped in 99.18 s`; all four hardware-conditional tests passed
+directly on Apple MPS (`4 passed in 3.04 s`). The collection, on-policy
+aggregation, and runtime evaluations used Apple MPS; cached tiny-head sweeps
+used CPU.
+
 ## 2026-07-30 — intervention-aware lateral correction rejected
 
 The RGB trajectory path now exports the exact pre-direct-correction velocity,

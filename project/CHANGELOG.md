@@ -4,6 +4,15 @@
 
 ### Added
 
+- A disabled-by-default gravity-axis RGB velocity intervention with 21 causal
+  gravity/lateral/contact/prior/candidate features, acceleration-aware slope
+  context, soft uncertainty gain, and strictly unobserved non-gravity
+  covariance.
+- On-policy feature collection from an intervention-enabled checkpoint,
+  enabling a dataset-aggregation refit against the belief distribution created
+  by the correction itself.
+- Gravity-intervention evaluator diagnostics for eligible features and soft
+  gain activation.
 - A disabled-by-default intervention-aware camera-lateral RGB velocity
   proposal using exact pre-correction belief state, 19 causal axis-local/joint
   features, a bounded delta, continuous soft abstention through measurement

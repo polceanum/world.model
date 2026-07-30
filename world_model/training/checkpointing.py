@@ -73,6 +73,15 @@ _RGB_LEGACY_DEFAULT_FIELDS = (
     "temporal_velocity_lateral_intervention_variance_ceiling",
     "temporal_velocity_lateral_intervention_gain_power",
     "temporal_velocity_lateral_intervention_maximum_delta",
+    "temporal_velocity_gravity_intervention_enabled",
+    "temporal_velocity_gravity_intervention_hidden_weights",
+    "temporal_velocity_gravity_intervention_hidden_bias",
+    "temporal_velocity_gravity_intervention_output_weights",
+    "temporal_velocity_gravity_intervention_output_bias",
+    "temporal_velocity_gravity_intervention_variance_floor",
+    "temporal_velocity_gravity_intervention_variance_ceiling",
+    "temporal_velocity_gravity_intervention_gain_power",
+    "temporal_velocity_gravity_intervention_maximum_delta",
     "temporal_velocity_measurement_position_blend",
     "temporal_velocity_position_innovation_coupling",
     "temporal_position_enabled",
@@ -130,6 +139,10 @@ def _model_checkpoint_semantics(value: object) -> object:
             "temporal_velocity_lateral_intervention_hidden_bias",
             "temporal_velocity_lateral_intervention_output_weights",
             "temporal_velocity_lateral_intervention_output_bias",
+            "temporal_velocity_gravity_intervention_hidden_weights",
+            "temporal_velocity_gravity_intervention_hidden_bias",
+            "temporal_velocity_gravity_intervention_output_weights",
+            "temporal_velocity_gravity_intervention_output_bias",
         ):
             coefficients = normalized_rgb.get(coefficient_field)
             if isinstance(coefficients, list):

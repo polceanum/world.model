@@ -1157,3 +1157,40 @@
   The next accuracy target is the much larger gravity-axis velocity error,
   using an axis-local acceleration-aware correction with joint collision
   context and recursive multihorizon acceptance.
+
+## ADR-057 — Aggregate on-policy gravity corrections, but require observability preservation
+
+- **Date:** 2026-07-30
+- **Status:** workflow accepted; runtime policy rejected
+- **Context:** Ordinary accepted RGB velocity evidence is camera-lateral only,
+  leaving the dominant gravity-axis velocity mostly under analytic dynamics.
+  A raw acceleration-aware RGB slope is noisier than the prior, while a learned
+  residual fitted on baseline priors changes the distribution it sees when
+  repeatedly applied.
+- **Decision:** Add a separate gravity-only intervention head over 21 causal
+  features: gravity and lateral three-point kinematics, contact probability,
+  exact pre-filter gravity velocity/variance, and acceleration-aware candidate
+  residual/variance. Preserve non-gravity means and mark their measurement
+  variance unobserved. Fit the actual robust diagonal filter intervention.
+  Permit collection from an intervention-enabled checkpoint for one-step
+  dataset aggregation. Keep the feature disabled in the shared configuration
+  unless current velocity, detection/identity, and every selected recursive
+  horizon pass paired evaluation.
+- **Alternatives considered:** expose the raw y slope continuously; update all
+  velocity axes together; accept current-position gains despite worse
+  velocity; weaken a failing head only through fixed variance; train forever
+  on baseline priors.
+- **Evidence:** The baseline-prior fit reduced held-out gravity residual RMSE
+  `2.222436 → 1.771491 m/s`. One on-policy pass collected 498/373 train/
+  validation windows and reduced held-out RMSE `2.113796 → 1.854939 m/s`.
+  Seed `100017` improved current position, y/total velocity, and 0.1-second
+  forecast. On the paired `100016–100017` block, current y position improved
+  `13.03%` and collision-conditioned 0.1-second forecast improved `13.49%`,
+  but y velocity regressed `4.03%`, detection recall fell `14.65%`, collision
+  F1 fell `19.34%`, and overall 0.25–1.0-second forecasts regressed.
+- **Consequences:** The repository can reproduce baseline-prior and on-policy
+  axis-local intervention experiments without oracle runtime state or
+  cross-axis covariance leakage. The failed paired result shows that local
+  post-filter objectives and one DAgger-style pass do not capture future
+  observability. The next target must train through association, ROI
+  scheduling, identity, and recursive horizon losses.

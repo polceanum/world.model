@@ -242,10 +242,15 @@
   learned abstention/gain objective; do not reuse the gravity-only gate as a
   proxy for camera-lateral collision evidence. Reject it after the paired
   0.5–1.0-second forecast regressed despite offline and short-horizon gains.
-- [ ] Reduce the dominant gravity-axis velocity error with an acceleration-
+- [x] Implement and evaluate an acceleration-
   aware axis-local proposal, joint collision context, calibrated uncertainty,
-  and recursive multihorizon training. Do not disturb the better lateral and
-  camera-depth axes.
+  gravity-only covariance, and one on-policy dataset-aggregation pass. Reject
+  promotion after the paired block regressed velocity, detection, and selected
+  longer horizons despite strong current/short-horizon y gains.
+- [ ] Train observation interventions through the persistent
+  association/ROI feedback loop and recursive 0.1–1.0-second losses. Include
+  detection coverage and identity stability in selection so a locally useful
+  state correction cannot degrade future observability.
 - [ ] Raise shared-model collision F1 and reduce identity switches on a larger
   balanced test manifest; the current 16-episode result is only
   `0.320388` F1 with three switches.

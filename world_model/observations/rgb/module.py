@@ -114,6 +114,15 @@ class RGBObservationConfig:
     temporal_velocity_lateral_intervention_variance_ceiling: float = 25.0
     temporal_velocity_lateral_intervention_gain_power: float = 2.0
     temporal_velocity_lateral_intervention_maximum_delta: float = 5.0
+    temporal_velocity_gravity_intervention_enabled: bool = False
+    temporal_velocity_gravity_intervention_hidden_weights: tuple[float, ...] = ()
+    temporal_velocity_gravity_intervention_hidden_bias: tuple[float, ...] = ()
+    temporal_velocity_gravity_intervention_output_weights: tuple[float, ...] = ()
+    temporal_velocity_gravity_intervention_output_bias: tuple[float, float] = (0.0, 0.0)
+    temporal_velocity_gravity_intervention_variance_floor: float = 0.04
+    temporal_velocity_gravity_intervention_variance_ceiling: float = 25.0
+    temporal_velocity_gravity_intervention_gain_power: float = 2.0
+    temporal_velocity_gravity_intervention_maximum_delta: float = 5.0
     temporal_velocity_measurement_position_blend: float = 0.0
     temporal_velocity_position_innovation_coupling: bool = False
     temporal_position_enabled: bool = False
@@ -345,6 +354,47 @@ class RGBObservationConfig:
             or self.temporal_velocity_lateral_intervention_maximum_delta <= 0
         ):
             raise ValueError("lateral intervention maximum delta must be finite and positive")
+        gravity_hidden = len(self.temporal_velocity_gravity_intervention_hidden_bias)
+        if self.temporal_velocity_gravity_intervention_enabled and (
+            not self.temporal_velocity_enabled
+            or not self.temporal_velocity_lateral_only
+            or gravity_hidden <= 0
+            or len(self.temporal_velocity_gravity_intervention_hidden_weights)
+            != 21 * gravity_hidden
+            or len(self.temporal_velocity_gravity_intervention_output_weights) != 2 * gravity_hidden
+        ):
+            raise ValueError(
+                "gravity velocity intervention requires lateral-only temporal velocity "
+                "and consistent twenty-one-input, two-output MLP coefficients"
+            )
+        gravity_coefficients = (
+            self.temporal_velocity_gravity_intervention_hidden_weights,
+            self.temporal_velocity_gravity_intervention_hidden_bias,
+            self.temporal_velocity_gravity_intervention_output_weights,
+            self.temporal_velocity_gravity_intervention_output_bias,
+        )
+        if not all(math.isfinite(value) for values in gravity_coefficients for value in values):
+            raise ValueError("gravity velocity intervention coefficients must be finite")
+        if (
+            not math.isfinite(self.temporal_velocity_gravity_intervention_variance_floor)
+            or not math.isfinite(self.temporal_velocity_gravity_intervention_variance_ceiling)
+            or not 0
+            < self.temporal_velocity_gravity_intervention_variance_floor
+            <= self.temporal_velocity_gravity_intervention_variance_ceiling
+        ):
+            raise ValueError(
+                "gravity intervention variance bounds must be finite, positive, and ordered"
+            )
+        if (
+            not math.isfinite(self.temporal_velocity_gravity_intervention_gain_power)
+            or self.temporal_velocity_gravity_intervention_gain_power < 1
+        ):
+            raise ValueError("gravity intervention gain power must be finite and at least one")
+        if (
+            not math.isfinite(self.temporal_velocity_gravity_intervention_maximum_delta)
+            or self.temporal_velocity_gravity_intervention_maximum_delta <= 0
+        ):
+            raise ValueError("gravity intervention maximum delta must be finite and positive")
         if (
             not math.isfinite(self.temporal_velocity_change_point_probability_threshold)
             or not 0.0 < self.temporal_velocity_change_point_probability_threshold < 1.0
@@ -1149,6 +1199,29 @@ class RGBObservationModule(ObservationModule):
         prior_lateral_variance = (
             prior_velocity_log_variance.exp() * camera_lateral_axis[:, None, :].square()
         ).sum(dim=-1)
+        (
+            continuous_gravity_velocity,
+            continuous_gravity_velocity_log_variance,
+            continuous_gravity_velocity_valid,
+        ) = history.least_squares_velocity(
+            minimum_dt=self.config.temporal_velocity_min_dt,
+            minimum_samples=self.config.temporal_velocity_min_samples,
+            variance_scale=self.config.temporal_velocity_variance_scale,
+            variance_floor=self.config.temporal_velocity_variance_floor,
+            variance_ceiling=self.config.temporal_velocity_variance_ceiling,
+            query_timestamp=measured.timestamp,
+            known_acceleration=posterior.gravity,
+        )
+        prior_gravity_velocity = (posterior.objects.velocity * gravity_axis[:, None, :]).sum(dim=-1)
+        prior_gravity_variance = (
+            prior_velocity_log_variance.exp() * gravity_axis[:, None, :].square()
+        ).sum(dim=-1)
+        candidate_gravity_velocity = (continuous_gravity_velocity * gravity_axis[:, None, :]).sum(
+            dim=-1
+        )
+        candidate_gravity_variance = (
+            continuous_gravity_velocity_log_variance.exp() * gravity_axis[:, None, :].square()
+        ).sum(dim=-1)
         lateral_intervention_features = torch.cat(
             (
                 lateral_features,
@@ -1205,6 +1278,75 @@ class RGBObservationModule(ObservationModule):
                     self.config.temporal_velocity_lateral_intervention_gain_power
                 )
             ).clamp(max=self.config.temporal_velocity_lateral_intervention_variance_ceiling)
+        gravity_intervention_features = torch.cat(
+            (
+                learned_features,
+                lateral_features,
+                contact_probability.unsqueeze(-1),
+                (prior_gravity_velocity / 5.0).unsqueeze(-1),
+                (prior_gravity_variance.clamp_min(1.0e-8).log() / 8.0)
+                .clamp(-2.0, 2.0)
+                .unsqueeze(-1),
+                ((candidate_gravity_velocity - prior_gravity_velocity) / 5.0)
+                .clamp(-4.0, 4.0)
+                .unsqueeze(-1),
+                (candidate_gravity_variance.clamp_min(1.0e-8).log() / 8.0)
+                .clamp(-2.0, 2.0)
+                .unsqueeze(-1),
+            ),
+            dim=-1,
+        )
+        gravity_intervention_valid = (
+            learned_feature_valid
+            & lateral_feature_valid
+            & continuous_gravity_velocity_valid
+            & observed_mask
+            & active_mask
+        )
+        gravity_intervention_delta = posterior.objects.position.new_zeros(active_mask.shape)
+        gravity_intervention_gain = posterior.objects.position.new_zeros(active_mask.shape)
+        gravity_intervention_variance = posterior.objects.position.new_full(
+            active_mask.shape,
+            self.config.temporal_velocity_gravity_intervention_variance_ceiling,
+        )
+        if self.config.temporal_velocity_gravity_intervention_enabled:
+            gravity_hidden_bias = posterior.objects.position.new_tensor(
+                self.config.temporal_velocity_gravity_intervention_hidden_bias
+            )
+            gravity_hidden_weights = posterior.objects.position.new_tensor(
+                self.config.temporal_velocity_gravity_intervention_hidden_weights
+            ).reshape(
+                gravity_hidden_bias.numel(),
+                gravity_intervention_features.shape[-1],
+            )
+            gravity_output_weights = posterior.objects.position.new_tensor(
+                self.config.temporal_velocity_gravity_intervention_output_weights
+            ).reshape(2, gravity_hidden_bias.numel())
+            gravity_output_bias = posterior.objects.position.new_tensor(
+                self.config.temporal_velocity_gravity_intervention_output_bias
+            )
+            gravity_output = F.linear(
+                F.silu(
+                    F.linear(
+                        gravity_intervention_features,
+                        gravity_hidden_weights,
+                        gravity_hidden_bias,
+                    )
+                ),
+                gravity_output_weights,
+                gravity_output_bias,
+            )
+            gravity_intervention_delta = gravity_output[..., 0].clamp(
+                -self.config.temporal_velocity_gravity_intervention_maximum_delta,
+                self.config.temporal_velocity_gravity_intervention_maximum_delta,
+            )
+            gravity_intervention_gain = gravity_output[..., 1].sigmoid()
+            gravity_intervention_variance = (
+                self.config.temporal_velocity_gravity_intervention_variance_floor
+                / gravity_intervention_gain.clamp_min(1.0e-4).pow(
+                    self.config.temporal_velocity_gravity_intervention_gain_power
+                )
+            ).clamp(max=self.config.temporal_velocity_gravity_intervention_variance_ceiling)
         learned_weights = posterior.objects.position.new_tensor(
             self.config.temporal_velocity_change_point_linear_weights
         )
@@ -1349,6 +1491,14 @@ class RGBObservationModule(ObservationModule):
                 "trajectory_direct_prior_velocity_log_variance": (prior_velocity_log_variance),
                 "trajectory_direct_confidence": confidence,
                 "trajectory_camera_lateral_axis": camera_lateral_axis,
+                "trajectory_gravity_intervention_features": gravity_intervention_features,
+                "trajectory_gravity_intervention_feature_valid_mask": (gravity_intervention_valid),
+                "trajectory_gravity_intervention_delta": gravity_intervention_delta,
+                "trajectory_gravity_intervention_gain": gravity_intervention_gain,
+                "trajectory_gravity_intervention_variance": gravity_intervention_variance,
+                "trajectory_gravity_candidate_velocity": candidate_gravity_velocity,
+                "trajectory_gravity_candidate_variance": candidate_gravity_variance,
+                "trajectory_gravity_axis": gravity_axis,
             }
         )
         velocity, velocity_log_variance, velocity_valid_mask = history.least_squares_velocity(
@@ -1585,6 +1735,44 @@ class RGBObservationModule(ObservationModule):
                 velocity_log_variance,
             )
             velocity_valid_mask = velocity_valid_mask | lateral_intervention_valid
+
+        if self.config.temporal_velocity_gravity_intervention_enabled:
+            gravity_base_velocity = torch.where(
+                velocity_valid_mask.unsqueeze(-1),
+                velocity,
+                posterior.objects.velocity,
+            )
+            current_gravity_component = (gravity_base_velocity * gravity_axis[:, None, :]).sum(
+                dim=-1
+            )
+            proposed_gravity_component = prior_gravity_velocity + gravity_intervention_delta
+            gravity_proposed_velocity = gravity_base_velocity + gravity_axis[:, None, :] * (
+                proposed_gravity_component - current_gravity_component
+            ).unsqueeze(-1)
+            velocity = torch.where(
+                gravity_intervention_valid.unsqueeze(-1),
+                gravity_proposed_velocity,
+                velocity,
+            )
+            gravity_observable = gravity_axis[:, None, :].square() >= 1.0e-4
+            gravity_projected_variance = gravity_intervention_variance.unsqueeze(-1) / gravity_axis[
+                :, None, :
+            ].square().clamp_min(1.0e-4)
+            gravity_projected_variance = torch.where(
+                gravity_observable,
+                gravity_projected_variance,
+                torch.full_like(
+                    gravity_projected_variance,
+                    self.config.temporal_velocity_unobserved_variance,
+                ),
+            )
+            gravity_only_log_variance = gravity_projected_variance.log()
+            velocity_log_variance = torch.where(
+                gravity_intervention_valid.unsqueeze(-1),
+                gravity_only_log_variance,
+                velocity_log_variance,
+            )
+            velocity_valid_mask = velocity_valid_mask | gravity_intervention_valid
 
         measurement_velocity = measured.values.new_zeros((*measured.values.shape[:2], 3))
         measurement_log_variance = measured.values.new_full(

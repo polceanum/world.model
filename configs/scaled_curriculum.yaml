@@ -103,6 +103,18 @@ model:
     temporal_velocity_lateral_intervention_variance_ceiling: 25.0
     temporal_velocity_lateral_intervention_gain_power: 2.0
     temporal_velocity_lateral_intervention_maximum_delta: 5.0
+    # Gravity-axis residual head is trained separately so it cannot perturb the
+    # better camera-lateral/depth components. It remains opt-in until paired
+    # recursive validation improves y velocity and every selected horizon.
+    temporal_velocity_gravity_intervention_enabled: false
+    temporal_velocity_gravity_intervention_hidden_weights: []
+    temporal_velocity_gravity_intervention_hidden_bias: []
+    temporal_velocity_gravity_intervention_output_weights: []
+    temporal_velocity_gravity_intervention_output_bias: [0.0, 0.0]
+    temporal_velocity_gravity_intervention_variance_floor: 0.04
+    temporal_velocity_gravity_intervention_variance_ceiling: 25.0
+    temporal_velocity_gravity_intervention_gain_power: 2.0
+    temporal_velocity_gravity_intervention_maximum_delta: 5.0
     temporal_velocity_post_event_min_samples: 2
     temporal_velocity_measurement_position_blend: 0.125
     temporal_velocity_position_innovation_coupling: false

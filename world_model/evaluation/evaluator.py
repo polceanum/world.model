@@ -607,6 +607,9 @@ def evaluate_checkpoint(
     lateral_intervention_gain_sum = 0.0
     lateral_intervention_feature_count = 0
     lateral_intervention_gain_above_half_count = 0
+    gravity_intervention_gain_sum = 0.0
+    gravity_intervention_feature_count = 0
+    gravity_intervention_gain_above_half_count = 0
     forecast_target_count: dict[str, int] = {}
     forecast_tracked_count: dict[str, int] = {}
     forecast_active_count: dict[str, int] = {}
@@ -743,6 +746,29 @@ def evaluate_checkpoint(
                         lateral_intervention_gain_sum += float(selected_gain.sum().detach().cpu())
                         lateral_intervention_feature_count += int(selected_gain.numel())
                         lateral_intervention_gain_above_half_count += int(
+                            (selected_gain >= 0.5).sum().detach().cpu()
+                        )
+                    gravity_gain = last_measurements.auxiliary.get(
+                        "trajectory_gravity_intervention_gain"
+                    )
+                    gravity_valid = last_measurements.auxiliary.get(
+                        "trajectory_gravity_intervention_feature_valid_mask"
+                    )
+                    if gravity_gain is not None or gravity_valid is not None:
+                        if (
+                            gravity_gain is None
+                            or gravity_valid is None
+                            or gravity_gain.shape != gravity_valid.shape
+                            or gravity_valid.dtype != torch.bool
+                        ):
+                            raise ValueError(
+                                "gravity intervention gain/valid diagnostics "
+                                "must be aligned [B,N] tensors"
+                            )
+                        selected_gain = gravity_gain.masked_select(gravity_valid)
+                        gravity_intervention_gain_sum += float(selected_gain.sum().detach().cpu())
+                        gravity_intervention_feature_count += int(selected_gain.numel())
+                        gravity_intervention_gain_above_half_count += int(
                             (selected_gain >= 0.5).sum().detach().cpu()
                         )
                 if model.diagnostics.oracle_used:
@@ -1217,6 +1243,15 @@ def evaluate_checkpoint(
             ),
             "lateral_intervention_gain_above_half_count": float(
                 lateral_intervention_gain_above_half_count
+            ),
+            "gravity_intervention_feature_count": float(gravity_intervention_feature_count),
+            "gravity_intervention_mean_soft_gain": (
+                gravity_intervention_gain_sum / gravity_intervention_feature_count
+                if gravity_intervention_feature_count
+                else None
+            ),
+            "gravity_intervention_gain_above_half_count": float(
+                gravity_intervention_gain_above_half_count
             ),
             f"distance_gated_matched_object_frames@{detection_threshold_label}": float(
                 distance_gated_matched_object_frames

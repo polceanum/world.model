@@ -609,7 +609,10 @@ def fit_mlp_lateral_velocity_intervention(
     # The normalization is folded back into the first layer below, keeping the
     # deployed runtime contract as a plain MLP over the original 19 features.
     feature_mean = train_features.mean(dim=0)
-    feature_scale = train_features.std(dim=0).clamp_min(1.0e-3)
+    # Do not amplify nearly constant diagnostics into enormous deployed
+    # coefficients. Their small train-set variation is not evidence of a
+    # stable causal effect and is especially brittle under new scenarios.
+    feature_scale = train_features.std(dim=0).clamp_min(5.0e-2)
     normalized_train_features = (train_features - feature_mean) / feature_scale
     normalized_validation_features = (validation_features - feature_mean) / feature_scale
 
