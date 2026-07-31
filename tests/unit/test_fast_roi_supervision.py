@@ -355,6 +355,8 @@ def test_bounded_rollout_anchors_reuse_posterior_and_emit_physical_metrics(
     assert result.metrics["physical_state_velocity_coordinate_count"] > 0
     assert result.metrics["physical_rollout_position@0.050s_coordinate_count"] > 0
     assert result.metrics["physical_rollout_velocity@0.050s_coordinate_count"] > 0
+    for axis_name in ("x", "y", "z"):
+        assert f"rollout_position_{axis_name}@0.050s" in result.metrics
     assert result.metrics["physical_target_object_frames"] == 4.0
     assert "physical_collision_f1_proxy" in result.metrics
     assert "physical_identity_switches" in result.metrics

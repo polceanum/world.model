@@ -7,6 +7,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 import torch
 
 from world_model.utils.config import load_config, save_resolved_config
@@ -208,6 +209,16 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
     ]
     assert closed_loop_records
     assert closed_loop_records[-1]["fast_path_supervised"] == 1.0
+    assert (
+        closed_loop_records[-1]["gradient_norm_pre_clip"]
+        == closed_loop_records[-1]["gradient_norm"]
+    )
+    assert 0.0 < closed_loop_records[-1]["gradient_clip_coefficient"] <= 1.0
+    assert closed_loop_records[-1]["gradient_norm_applied"] == pytest.approx(
+        closed_loop_records[-1]["gradient_norm_pre_clip"]
+        * closed_loop_records[-1]["gradient_clip_coefficient"]
+    )
+    assert closed_loop_records[-1]["gradient_norm_applied"] <= 1.0 + 1.0e-6
 
     _run(
         "train.py",

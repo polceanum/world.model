@@ -706,6 +706,22 @@ def _result_metrics(
     return metrics
 
 
+def _gradient_clip_diagnostics(
+    pre_clip_gradient_norm: float,
+    maximum_gradient_norm: float,
+) -> tuple[float, float]:
+    """Mirror PyTorch clipping and return ``(coefficient, applied_norm)``."""
+
+    gradient_clip_coefficient = min(
+        1.0,
+        maximum_gradient_norm / (pre_clip_gradient_norm + 1.0e-6),
+    )
+    return (
+        gradient_clip_coefficient,
+        pre_clip_gradient_norm * gradient_clip_coefficient,
+    )
+
+
 def _rollout_validation_protocol_is_compatible(
     payload: Mapping[str, Any],
     config: OrpheusConfig,
@@ -809,6 +825,7 @@ def set_closed_loop_trainable_scope(
         model.updater.requires_grad_(True)
         if model.identifier is not None:
             model.identifier.requires_grad_(True)
+        _freeze_disconnected_training_heads(model)
         return
     if scope == "state_dynamics_roi":
         model.dynamics.requires_grad_(True)
@@ -820,11 +837,31 @@ def set_closed_loop_trainable_scope(
         if roi_updater is None:
             raise TypeError("RGB module is missing roi_updater")
         roi_updater.requires_grad_(True)
+        _freeze_disconnected_training_heads(model)
         return
     raise ValueError(
         "closed-loop trainable scope must be 'all', 'dynamics', "
         "'state_dynamics', or 'state_dynamics_roi'"
     )
+
+
+def _freeze_disconnected_training_heads(model: OnlineWorldModel) -> None:
+    """Keep scoped trainability truthful until these outputs have objectives.
+
+    The ROI event vector is persisted in measurement auxiliary data but is not
+    yet consumed by the fast corrector.  Identifier variance controls slow
+    uncertainty contraction at runtime, but no calibrated slow-uncertainty
+    objective currently reaches it.  Retain both modules in checkpoints while
+    excluding their disconnected tensors from autograd updates.
+    """
+
+    rgb_module = model.observation_modules["rgb"]
+    roi_updater = getattr(rgb_module, "roi_updater", None)
+    event_head = getattr(roi_updater, "event_head", None)
+    if event_head is not None:
+        event_head.requires_grad_(False)
+    if model.identifier is not None:
+        model.identifier.variance_head.requires_grad_(False)
 
 
 def _mean_batch_results(
@@ -1504,6 +1541,9 @@ def train_from_config(
                     for horizon in config.evaluation.horizons_seconds
                 ),
                 long_horizon_probability=(config.training.long_horizon_window_probability),
+                joint_collision_long_horizon_sampling=(
+                    config.training.joint_collision_long_horizon_sampling
+                ),
             )
             result = run_closed_loop_batch(
                 model,
@@ -1536,6 +1576,14 @@ def train_from_config(
             learning_rate=learning_rate,
             gradient_norm=float(gradient_norm_tensor.detach().cpu()),
         )
+        pre_clip_gradient_norm = float(gradient_norm_tensor.detach().cpu())
+        gradient_clip_coefficient, applied_gradient_norm = _gradient_clip_diagnostics(
+            pre_clip_gradient_norm,
+            float(config.training.grad_clip_norm),
+        )
+        last_metrics["gradient_norm_pre_clip"] = pre_clip_gradient_norm
+        last_metrics["gradient_clip_coefficient"] = gradient_clip_coefficient
+        last_metrics["gradient_norm_applied"] = applied_gradient_norm
         last_metrics["global_perception_trainable"] = float(global_perception_trainable)
         should_log = (
             completed_step % max(1, config.training.log_every) == 0
@@ -1550,7 +1598,8 @@ def train_from_config(
             print(
                 f"step={completed_step}/{config.training.steps} "
                 f"phase={result.phase} loss={record['loss_total']:.6f} "
-                f"grad={record['gradient_norm']:.4f}",
+                f"grad_preclip={record['gradient_norm_pre_clip']:.4f} "
+                f"grad_applied={record['gradient_norm_applied']:.4f}",
                 flush=True,
             )
 

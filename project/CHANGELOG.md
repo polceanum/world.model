@@ -4,6 +4,17 @@
 
 ### Added
 
+- Per-axis per-horizon rollout loss records and fixed-denominator aggregation,
+  matching the existing global multistep objective instead of renormalizing
+  short-only x/y/z windows to full strength.
+- Joint collision/maximum-horizon window sampling that satisfies both intents
+  when possible and preserves a sampled long-horizon example when a collision
+  is too late.
+- Explicit `gradient_norm_pre_clip`, `gradient_clip_coefficient`, and
+  `gradient_norm_applied` training metrics so clipped batch-one updates are not
+  misread as exploding gradients.
+- A finite-state/optimizer/loss audit of the active sustained MPS campaign,
+  including the exact reason the first causal candidate was rejected.
 - A provenance-verifying convergence supervisor for the sustained MPS
   campaign. It monitors the existing trainer, removes its completed KeepAlive
   job only after artifact verification, resumes `last.pt` sequentially in
@@ -151,6 +162,10 @@
 
 ### Changed after integration audit
 
+- Restricted closed-loop scopes now freeze the checkpoint-compatible ROI event
+  and identifier variance heads while their outputs have no end-to-end
+  objective. The active sustained campaign keeps its original semantics for
+  protocol integrity; corrected behavior is the default for new configs.
 - The scaled curriculum enables the confirmed multi-frame camera-depth
   observer. Across two disjoint paired two-episode MPS blocks, current
   position RMSE and every 0.1–1.0-second recursive position horizon improved;

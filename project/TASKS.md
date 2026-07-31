@@ -30,6 +30,20 @@
   blocks while the final 1,024 updates produce at least 1% safe improvement or
   while four-point plateau evidence is incomplete/contradictory; stop only on
   the declared plateau or the 24,576-step hard limit.
+- [x] Audit the apparently unstable causal loss, checkpoint/optimizer state,
+  phase handoff, clipping, and first broad validation. Confirm finite state and
+  batch-one hard-window variance rather than numerical divergence.
+- [x] Correct axis-specific rollout losses to use the fixed global configured
+  horizon denominator, add joint collision/maximum-horizon sampling, and make
+  pre-clip versus applied gradient norms explicit.
+- [x] Freeze the checkpoint-compatible ROI event and identifier variance heads
+  in restricted training scopes while they have no end-to-end objective.
+- [ ] After the active legacy-semantics minimum completes, run a new
+  timestamped 4,096-window causal campaign with
+  `normalize_rollout_axes_over_configured_horizons=true` and
+  `joint_collision_long_horizon_sampling=true`; compare it against the exact
+  fixed reference and strongest numbered candidate on at least 64 fresh
+  balanced validation episodes.
 - [ ] Confirm the selected checkpoint on at least 64 fresh balanced validation
   episodes, report every scenario/horizon, then use the reserved test split
   only if all broad gates pass.
@@ -360,3 +374,8 @@
   validation-only prior future rollout while retaining all posterior anchors.
 - [ ] Add gradient checkpointing or optimizer accumulation if eight-step,
   batch-one causal updates remain the throughput bottleneck.
+- [ ] Connect ROI `measured_event_features` to the fast corrector through a
+  zero-initialized checkpoint-migrated adapter, then require nonzero finite
+  event-head gradients and broad recursive improvement before enabling it.
+- [ ] Add an observable latent-space calibration objective for slow
+  restitution/drag uncertainty before unfreezing the identifier variance head.

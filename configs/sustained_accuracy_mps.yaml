@@ -153,6 +153,11 @@ training:
   perturbation_velocity_std: 0.20
   collision_window_probability: 0.40
   long_horizon_window_probability: 0.50
+  # This live campaign began before the corrected axis-horizon and joint
+  # sampling semantics existed. Keep any automatic in-place continuation
+  # protocol-compatible; the next timestamped campaign enables both fixes.
+  normalize_rollout_axes_over_configured_horizons: false
+  joint_collision_long_horizon_sampling: false
   collision_positive_weight_max: 10.0
   horizon_weights: [1.0, 1.5, 2.0, 2.5, 3.0]
   loss_weights:

@@ -197,6 +197,37 @@ def test_closed_loop_trainable_scope_is_explicit() -> None:
         )
 
 
+@pytest.mark.parametrize("value", ["0.0", "-1.0", ".inf"])
+def test_gradient_clip_norm_is_finite_and_positive(value: str) -> None:
+    with pytest.raises(ValueError, match="grad_clip_norm"):
+        load_config(
+            "configs/tiny_overfit.yaml",
+            overrides=[f"training.grad_clip_norm={value}"],
+        )
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "normalize_rollout_axes_over_configured_horizons",
+        "joint_collision_long_horizon_sampling",
+    ],
+)
+def test_horizon_sampling_controls_are_boolean(field: str) -> None:
+    with pytest.raises(ValueError, match=field):
+        load_config(
+            "configs/tiny_overfit.yaml",
+            overrides=[f"training.{field}=not-a-boolean"],
+        )
+
+
+def test_active_sustained_campaign_pins_legacy_horizon_semantics() -> None:
+    config = load_config("configs/sustained_accuracy_mps.yaml")
+
+    assert not config.training.normalize_rollout_axes_over_configured_horizons
+    assert not config.training.joint_collision_long_horizon_sampling
+
+
 def test_collision_positive_weight_is_at_least_one() -> None:
     with pytest.raises(ValueError, match="collision_positive_weight_max"):
         load_config(

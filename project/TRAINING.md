@@ -13,9 +13,13 @@ then optimizes the selected window.
 Closed-loop windows are sampled across the complete episode. With the default
 `collision_window_probability: 0.50`, an eligible window is conditioned to
 contain a labelled collision with probability 0.5; the label chooses the loss
-window only and is never passed to the RGB runtime. Position and velocity losses
-are separate for both current state and future rollout. Current default physical
-weights are
+window only and is never passed to the RGB runtime. Collision and
+maximum-horizon intents are sampled independently by default. A compatible
+window satisfies both; if a collision is too late, a sampled long-horizon
+window is retained. Position and velocity losses are separate for both current
+state and future rollout. Aggregate and x/y/z rollout losses all use the fixed
+total configured horizon denominator, so a short-only window cannot be
+renormalized to full multistep weight. Current default physical weights are
 `state_position: 2.0`, `state_velocity: 0.25`,
 `rollout_position: 4.0`, and `rollout_velocity: 0.1`, so velocity units cannot
 silently dominate physical-position checkpoint quality.
@@ -67,6 +71,15 @@ rgb_world_position_nll: 0.05
 
 The small NLL weights prevent variance fitting from overwhelming metric
 localization while retaining an uncertainty-training signal.
+
+Training logs retain legacy `gradient_norm` as the norm returned before
+clipping and additionally report `gradient_norm_pre_clip` and
+`gradient_norm_applied`, plus the exact `gradient_clip_coefficient`. The
+applied norm is bounded by `grad_clip_norm` and is the relevant
+update-magnitude diagnostic. Raw per-batch total loss remains heterogeneous at
+batch one because scenario, object count, association support, events, and
+available horizons vary; checkpoint decisions use the fixed broad validation
+manifest instead.
 
 At the phase boundary the trainer restores the best localized measurement
 weights, starts fresh causal AdamW moments, and applies
@@ -193,6 +206,13 @@ anchor evaluates every configured horizon supported from its timestamp. The
 window sampler mixes collision-conditioned and long-horizon windows so all
 declared 0.1–1.0-second horizons receive campaign-wide support. Validation
 remains unbounded and scores all eligible posterior anchors.
+
+The campaign launched on 2026-07-30 predates the corrected per-axis global
+horizon normalization and joint sampler. Its config explicitly keeps both
+legacy controls false so an automatic in-place continuation cannot change the
+training protocol halfway through. New configurations default both controls
+true. The corrected objective must be evaluated in a separate timestamped
+campaign; no accuracy gain is inferred from the implementation alone.
 
 ```bash
 python train.py \

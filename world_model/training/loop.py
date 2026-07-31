@@ -909,7 +909,20 @@ def _globally_weight_horizon_details(
         unique_horizons.append((frame_offset / config.simulator.frame_rate, float(weight)))
     configured_weight_total = sum(weight for _, weight in unique_horizons)
 
-    for name in ("rollout_position", "rollout_velocity", "correction_future"):
+    globally_normalized_names = [
+        "rollout_position",
+        "rollout_velocity",
+        "correction_future",
+    ]
+    if config.training.normalize_rollout_axes_over_configured_horizons:
+        globally_normalized_names.extend(
+            (
+                "rollout_position_x",
+                "rollout_position_y",
+                "rollout_position_z",
+            )
+        )
+    for name in globally_normalized_names:
         values: list[Tensor] = []
         weights: list[float] = []
         for seconds, weight in unique_horizons:
@@ -1079,13 +1092,18 @@ def _rollout_loss_result(
             valid,
         )
         for axis_index, axis_name in enumerate(("x", "y", "z")):
-            position_axis_losses[axis_name].append(
-                masked_huber(
-                    target_positions[:, query_index, :, axis_index],
-                    target_position[:, :, axis_index],
-                    valid,
-                )
+            axis_loss = masked_huber(
+                target_positions[:, query_index, :, axis_index],
+                target_position[:, :, axis_index],
+                valid,
             )
+            position_axis_losses[axis_name].append(axis_loss)
+            horizon_losses[
+                rollout_horizon_loss_key(
+                    f"rollout_position_{axis_name}",
+                    query_seconds[query_index],
+                )
+            ] = axis_loss
         velocity_loss = masked_huber(
             target_velocities[:, query_index],
             target_velocity,
@@ -1320,14 +1338,16 @@ def select_closed_loop_window(
     maximum_rollout_frame_offset: int | None = None,
     minimum_rollout_frame_offset: int | None = None,
     long_horizon_probability: float = 0.0,
+    joint_collision_long_horizon_sampling: bool = False,
 ) -> int:
     """Sample a valid TBPTT window, preferentially covering collision frames.
 
     The returned start is stochastic under the trainer's seeded Python RNG.
-    Collision conditioning has first priority so late events remain trainable.
-    Among the remaining windows, long-horizon conditioning can require the
-    first anchor to support the maximum configured rollout. Labels select only
-    the loss window; they are never passed to the RGB runtime.
+    Under legacy sampling, collision conditioning has first priority so late
+    events remain trainable.  Joint sampling draws both intents independently:
+    a window satisfying both is used when possible, while an incompatible late
+    collision cannot erase a sampled maximum-horizon example. Labels select
+    only the loss window; they are never passed to the RGB runtime.
     """
 
     rgb = batch.get("rgb")
@@ -1340,6 +1360,8 @@ def select_closed_loop_window(
         raise ValueError("event_condition_probability must lie in [0, 1]")
     if not 0.0 <= long_horizon_probability <= 1.0:
         raise ValueError("long_horizon_probability must lie in [0, 1]")
+    if not isinstance(joint_collision_long_horizon_sampling, bool):
+        raise ValueError("joint_collision_long_horizon_sampling must be boolean")
     if maximum_rollout_frame_offset is not None and maximum_rollout_frame_offset <= 0:
         raise ValueError("maximum_rollout_frame_offset must be positive")
     if minimum_rollout_frame_offset is not None and minimum_rollout_frame_offset <= 0:
@@ -1377,17 +1399,46 @@ def select_closed_loop_window(
         collision_frames = (
             torch.nonzero(collision_by_frame, as_tuple=False).flatten().detach().cpu().tolist()
         )
+    condition_on_long_horizon = False
+    if joint_collision_long_horizon_sampling:
+        condition_on_long_horizon = long_horizon_probability >= 1.0 or (
+            long_horizon_probability > 0.0 and random.random() < long_horizon_probability
+        )
     if collision_frames and random.random() < event_condition_probability:
-        event_frame = int(random.choice(collision_frames))
-        minimum_start = max(0, event_frame - window_steps + 1)
-        maximum_event_start = min(maximum_start, event_frame)
-        if event_frame > 0:
-            maximum_event_start = min(maximum_event_start, event_frame - 1)
-        if minimum_start <= maximum_event_start:
-            return random.randint(minimum_start, maximum_event_start)
-    condition_on_long_horizon = long_horizon_probability >= 1.0 or (
-        long_horizon_probability > 0.0 and random.random() < long_horizon_probability
-    )
+        compatible_collision_frames = collision_frames
+        last_eligible_anchor: int | None = None
+        if (
+            joint_collision_long_horizon_sampling
+            and condition_on_long_horizon
+            and maximum_rollout_frame_offset is not None
+        ):
+            last_eligible_anchor = total_frames - maximum_rollout_frame_offset - 1
+            if last_eligible_anchor < 0:
+                raise ValueError("maximum rollout frame offset exceeds the episode")
+            compatible_collision_frames = [
+                event_frame
+                for event_frame in collision_frames
+                if max(0, event_frame - window_steps + 1)
+                <= min(
+                    maximum_start,
+                    event_frame - 1 if event_frame > 0 else event_frame,
+                    last_eligible_anchor,
+                )
+            ]
+        if compatible_collision_frames:
+            event_frame = int(random.choice(compatible_collision_frames))
+            minimum_start = max(0, event_frame - window_steps + 1)
+            maximum_event_start = min(maximum_start, event_frame)
+            if event_frame > 0:
+                maximum_event_start = min(maximum_event_start, event_frame - 1)
+            if last_eligible_anchor is not None:
+                maximum_event_start = min(maximum_event_start, last_eligible_anchor)
+            if minimum_start <= maximum_event_start:
+                return random.randint(minimum_start, maximum_event_start)
+    if not joint_collision_long_horizon_sampling:
+        condition_on_long_horizon = long_horizon_probability >= 1.0 or (
+            long_horizon_probability > 0.0 and random.random() < long_horizon_probability
+        )
     if condition_on_long_horizon and maximum_rollout_frame_offset is not None:
         last_eligible_anchor = total_frames - maximum_rollout_frame_offset - 1
         if last_eligible_anchor < 0:

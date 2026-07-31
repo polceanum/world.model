@@ -21,6 +21,7 @@ from world_model.training.loop import (
     select_closed_loop_window,
 )
 from world_model.training.trainer import (
+    _gradient_clip_diagnostics,
     _rollout_selection_improves,
     _rollout_selection_is_compatible,
     _rollout_selection_metrics,
@@ -111,6 +112,26 @@ def test_dynamics_only_scope_preserves_rgb_and_filter_weights() -> None:
     assert all(parameter.requires_grad for parameter in model.parameters())
 
 
+@pytest.mark.parametrize(
+    ("pre_clip", "maximum", "expected_coefficient", "expected_applied"),
+    [
+        (0.0, 1.0, 1.0, 0.0),
+        (0.5, 1.0, 1.0, 0.5),
+        (2.0, 1.0, 1.0 / (2.0 + 1.0e-6), 2.0 / (2.0 + 1.0e-6)),
+    ],
+)
+def test_gradient_clip_diagnostics_match_pytorch_coefficient(
+    pre_clip: float,
+    maximum: float,
+    expected_coefficient: float,
+    expected_applied: float,
+) -> None:
+    coefficient, applied = _gradient_clip_diagnostics(pre_clip, maximum)
+
+    assert coefficient == pytest.approx(expected_coefficient)
+    assert applied == pytest.approx(expected_applied)
+
+
 def test_state_dynamics_scope_freezes_rgb_and_trains_filter_dynamics_identifier() -> None:
     model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
 
@@ -119,7 +140,14 @@ def test_state_dynamics_scope_freezes_rgb_and_trains_filter_dynamics_identifier(
     assert all(parameter.requires_grad for parameter in model.dynamics.parameters())
     assert all(parameter.requires_grad for parameter in model.updater.parameters())
     assert model.identifier is not None
-    assert all(parameter.requires_grad for parameter in model.identifier.parameters())
+    assert all(
+        parameter.requires_grad
+        for name, parameter in model.identifier.named_parameters()
+        if not name.startswith("variance_head.")
+    )
+    assert not any(
+        parameter.requires_grad for parameter in model.identifier.variance_head.parameters()
+    )
     assert not any(parameter.requires_grad for parameter in model.observation_modules.parameters())
 
 
@@ -132,8 +160,20 @@ def test_state_dynamics_roi_scope_trains_fast_rgb_without_global_perception() ->
     assert all(parameter.requires_grad for parameter in model.dynamics.parameters())
     assert all(parameter.requires_grad for parameter in model.updater.parameters())
     assert model.identifier is not None
-    assert all(parameter.requires_grad for parameter in model.identifier.parameters())
-    assert all(parameter.requires_grad for parameter in rgb.roi_updater.parameters())
+    assert all(
+        parameter.requires_grad
+        for name, parameter in model.identifier.named_parameters()
+        if not name.startswith("variance_head.")
+    )
+    assert not any(
+        parameter.requires_grad for parameter in model.identifier.variance_head.parameters()
+    )
+    assert all(
+        parameter.requires_grad
+        for name, parameter in rgb.roi_updater.named_parameters()
+        if not name.startswith("event_head.")
+    )
+    assert not any(parameter.requires_grad for parameter in rgb.roi_updater.event_head.parameters())
     assert not any(parameter.requires_grad for parameter in rgb.backbone.parameters())
     assert not any(parameter.requires_grad for parameter in rgb.global_detector.parameters())
 
@@ -220,6 +260,9 @@ def test_rollout_horizons_are_weighted_after_per_horizon_averaging() -> None:
         rollout_horizon_loss_key("rollout_position", 0.1): torch.tensor(1.0),
         rollout_horizon_loss_key("rollout_position", 0.25): torch.tensor(2.0),
         rollout_horizon_loss_key("rollout_position", 0.5): torch.tensor(4.0),
+        rollout_horizon_loss_key("rollout_position_x", 0.1): torch.tensor(2.0),
+        rollout_horizon_loss_key("rollout_position_x", 0.25): torch.tensor(4.0),
+        rollout_horizon_loss_key("rollout_position_x", 0.5): torch.tensor(8.0),
         rollout_horizon_loss_key("rollout_velocity", 0.1): torch.tensor(3.0),
         rollout_horizon_loss_key("rollout_velocity", 0.25): torch.tensor(3.0),
         rollout_horizon_loss_key("rollout_velocity", 0.5): torch.tensor(3.0),
@@ -232,6 +275,10 @@ def test_rollout_horizons_are_weighted_after_per_horizon_averaging() -> None:
         torch.tensor((1.0 * 1.0 + 1.5 * 2.0 + 2.0 * 4.0) / 4.5),
     )
     torch.testing.assert_close(balanced["rollout_velocity"], torch.tensor(3.0))
+    torch.testing.assert_close(
+        balanced["rollout_position_x"],
+        torch.tensor((1.0 * 2.0 + 1.5 * 4.0 + 2.0 * 8.0) / 4.5),
+    )
 
 
 def test_missing_long_horizon_does_not_renormalize_short_losses() -> None:
@@ -239,6 +286,8 @@ def test_missing_long_horizon_does_not_renormalize_short_losses() -> None:
     details = {
         rollout_horizon_loss_key("rollout_position", 0.1): torch.tensor(1.0),
         rollout_horizon_loss_key("rollout_position", 0.25): torch.tensor(2.0),
+        rollout_horizon_loss_key("rollout_position_x", 0.1): torch.tensor(2.0),
+        rollout_horizon_loss_key("rollout_position_x", 0.25): torch.tensor(4.0),
     }
 
     balanced = _globally_weight_horizon_details(details, config, torch.zeros(()))
@@ -247,6 +296,51 @@ def test_missing_long_horizon_does_not_renormalize_short_losses() -> None:
         balanced["rollout_position"],
         torch.tensor((1.0 * 1.0 + 1.5 * 2.0) / 4.5),
     )
+    torch.testing.assert_close(
+        balanced["rollout_position_x"],
+        torch.tensor((1.0 * 2.0 + 1.5 * 4.0) / 4.5),
+    )
+
+
+def test_legacy_axis_horizon_normalization_remains_explicitly_available() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["training.normalize_rollout_axes_over_configured_horizons=false"],
+    )
+    details = {
+        "rollout_position_x": torch.tensor(7.0),
+        rollout_horizon_loss_key("rollout_position_x", 0.1): torch.tensor(2.0),
+        rollout_horizon_loss_key("rollout_position_x", 0.25): torch.tensor(4.0),
+    }
+
+    balanced = _globally_weight_horizon_details(details, config, torch.zeros(()))
+
+    torch.testing.assert_close(balanced["rollout_position_x"], torch.tensor(7.0))
+
+
+def test_axis_weighted_total_uses_fixed_configured_horizon_denominator() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    details = {
+        "rollout_position_x": torch.tensor(7.0),
+        rollout_horizon_loss_key("rollout_position_x", 0.1): torch.tensor(2.0),
+        rollout_horizon_loss_key("rollout_position_x", 0.25): torch.tensor(4.0),
+    }
+
+    balanced = _globally_weight_horizon_details(details, config, torch.zeros(()))
+    terms = _group_closed_loop_terms(balanced, torch.zeros(()))
+    total = _weighted_closed_loop_total(
+        terms,
+        {
+            "rollout_position_x": 1.0,
+            "rollout_position_y": 0.0,
+            "rollout_position_z": 0.0,
+            "rollout_velocity": 0.0,
+        },
+    )
+
+    expected = torch.tensor((1.0 * 2.0 + 1.5 * 4.0) / 4.5)
+    torch.testing.assert_close(balanced["rollout_position_x"], expected)
+    torch.testing.assert_close(total, expected)
 
 
 def test_rollout_anchor_limit_spreads_work_and_preserves_earliest_anchor() -> None:
@@ -414,6 +508,79 @@ def test_collision_conditioning_takes_priority_over_long_horizon_window() -> Non
 
     assert start == 24
     assert start <= 31 < start + 8
+
+
+def test_joint_sampling_preserves_long_horizon_when_collision_is_too_late() -> None:
+    batch = {
+        "rgb": torch.zeros((1, 32, 3, 8, 8)),
+        "events": {
+            "collision": torch.zeros((1, 32, 2), dtype=torch.bool),
+        },
+    }
+    batch["events"]["collision"][0, 31, 0] = True
+    random.seed(23)
+
+    start = select_closed_loop_window(
+        batch,
+        8,
+        event_condition_probability=1.0,
+        maximum_rollout_frame_offset=20,
+        long_horizon_probability=1.0,
+        joint_collision_long_horizon_sampling=True,
+    )
+
+    assert 0 <= start <= 11
+    assert not (start <= 31 < start + 8)
+
+
+def test_joint_sampling_covers_collision_and_long_horizon_when_compatible() -> None:
+    batch = {
+        "rgb": torch.zeros((1, 32, 3, 8, 8)),
+        "events": {
+            "collision": torch.zeros((1, 32, 2), dtype=torch.bool),
+        },
+    }
+    batch["events"]["collision"][0, 7, 0] = True
+    random.seed(31)
+
+    start = select_closed_loop_window(
+        batch,
+        8,
+        event_condition_probability=1.0,
+        maximum_rollout_frame_offset=20,
+        long_horizon_probability=1.0,
+        joint_collision_long_horizon_sampling=True,
+    )
+
+    assert 0 <= start <= 7
+    assert start <= 7 < start + 8
+    assert start <= 11
+
+
+def test_joint_sampling_selects_a_compatible_collision_before_falling_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    batch = {
+        "rgb": torch.zeros((1, 32, 3, 8, 8)),
+        "events": {
+            "collision": torch.zeros((1, 32, 2), dtype=torch.bool),
+        },
+    }
+    batch["events"]["collision"][0, 7, 0] = True
+    batch["events"]["collision"][0, 31, 0] = True
+    monkeypatch.setattr(random, "choice", max)
+
+    start = select_closed_loop_window(
+        batch,
+        8,
+        event_condition_probability=1.0,
+        maximum_rollout_frame_offset=20,
+        long_horizon_probability=1.0,
+        joint_collision_long_horizon_sampling=True,
+    )
+
+    assert start <= 7 < start + 8
+    assert start <= 11
 
 
 def test_closed_loop_window_always_keeps_a_future_rollout_anchor() -> None:

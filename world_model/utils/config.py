@@ -281,6 +281,14 @@ class TrainingConfig:
     perturbation_velocity_std: float = 0.20
     collision_window_probability: float = 0.50
     long_horizon_window_probability: float = 0.50
+    # Keep axis-specific rollout objectives on the same fixed global horizon
+    # denominator as the aggregate position objective.  Disabling this is a
+    # legacy-compatibility escape hatch for an already-running campaign.
+    normalize_rollout_axes_over_configured_horizons: bool = True
+    # When collision and maximum-horizon sampling are both requested, retain a
+    # maximum-horizon-capable window.  If one window can cover both constraints
+    # it does; otherwise the long-horizon request wins over a late collision.
+    joint_collision_long_horizon_sampling: bool = True
     # ``None`` preserves the historical behavior of scoring every eligible
     # frame in a TBPTT window. Long-running profiles may bound the expensive
     # recursive rollouts while still ingesting and supervising every frame.
@@ -802,6 +810,8 @@ class OrpheusConfig:
             )
         if self.training.tbptt_steps <= 0:
             raise ValueError("training.tbptt_steps must be positive")
+        if not math.isfinite(self.training.grad_clip_norm) or self.training.grad_clip_norm <= 0:
+            raise ValueError("training.grad_clip_norm must be finite and positive")
         if self.training.measurement_validation_frames <= 0:
             raise ValueError("training.measurement_validation_frames must be positive")
         if not 0 <= self.training.perturbation_probability <= 1:
@@ -820,6 +830,15 @@ class OrpheusConfig:
             raise ValueError("training.collision_window_probability must lie in [0, 1]")
         if not 0 <= self.training.long_horizon_window_probability <= 1:
             raise ValueError("training.long_horizon_window_probability must lie in [0, 1]")
+        if not isinstance(
+            self.training.normalize_rollout_axes_over_configured_horizons,
+            bool,
+        ):
+            raise ValueError(
+                "training.normalize_rollout_axes_over_configured_horizons must be boolean"
+            )
+        if not isinstance(self.training.joint_collision_long_horizon_sampling, bool):
+            raise ValueError("training.joint_collision_long_horizon_sampling must be boolean")
         if (
             self.training.rollout_anchors_per_window is not None
             and self.training.rollout_anchors_per_window <= 0

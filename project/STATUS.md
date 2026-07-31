@@ -1,6 +1,6 @@
 # Project status
 
-**Date:** 2026-07-30
+**Date:** 2026-07-31
 **Specification:** `PROJECT_SPEC.md` 1.4
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
@@ -11,6 +11,106 @@ shared-model profile, plus a quality-aware persistent-ID multi-frame
 point/scale depth observer; a sustained shared-model MPS campaign is active,
 but collision, occlusion, identification, convergence, and full acceptance
 remain open
+
+## 2026-07-31 — sustained-loss stability and horizon-objective audit
+
+The active MPS trainer and convergence supervisor remain healthy as PIDs
+`37360` and `41396`. At the audit cutoff, training had reached step `8776`
+(`584/4096` causal updates); it subsequently logged at least step `8792`. The
+latest durable checkpoint at the cutoff was
+`runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/last.pt` at step
+`8768`. All logged values, all 177 model tensors, and all AdamW moments were
+finite. Every one of the 87 causal optimizer states reported step `576`,
+exactly matching `8768 - 8192`; learning rate remained `5e-6`.
+
+The apparent console instability is primarily heterogeneous batch-one noise,
+not numerical divergence. Across 73 logged causal rows, total loss had median
+`9.325`, mean `9.472`, 95th percentile `19.00`, and maximum `29.91`.
+Measurement supervision correlated `0.969` with total loss and dominated hard
+low-match ROI windows. Logged `gradient_norm` was the value returned before
+clipping: 71/73 rows exceeded `1.0`, but every applied update was clipped to
+the configured norm. Block loss means declined overall rather than exploding.
+
+The first causal validation at step `8704` improved the fixed reference's
+weighted score by `0.543%`, current position RMSE by `1.445%`, velocity RMSE
+by `2.816%`, gated target coverage by `10.865%`, precision by `11.521%`, and
+collision F1 by `5.042%`. Position RMSE improved at 0.10/0.25/0.50/0.75
+seconds by `1.93% / 3.40% / 2.91% / 0.77%`. It was correctly rejected because
+1.00-second RMSE regressed `2.445%`, only `0.004311 m` beyond the declared 2%
+guardrail. The safe imported incumbent remains selected. One validation after
+only 512 causal updates is neither convergence nor evidence to interrupt the
+declared 4,096-window minimum.
+
+The audit did find one real objective bug: the configured x/y/z rollout losses
+were normalized over only the horizons available in each sampled window,
+whereas the aggregate position loss used the fixed total configured horizon
+weight. Short-only windows therefore received full axis-loss scale and
+underweighted the rare 1.00-second target; only 26/73 logged windows exposed a
+one-second target. The corrected implementation now emits per-axis
+per-horizon terms, uses the fixed configured denominator, and can sample
+collision and maximum-horizon intents jointly. When a late collision cannot
+fit in a maximum-horizon-capable window, the sampled long-horizon example is
+retained instead of being silently lost.
+
+The code also distinguishes `gradient_norm_pre_clip` from
+`gradient_norm_applied` and records the exact `gradient_clip_coefficient`.
+Four objectively disconnected tensors—the ROI event head and identifier
+variance head weights/biases—remain checkpoint-compatible but are frozen in
+restricted closed-loop scopes until their outputs receive explicit
+corrector/calibration objectives.
+
+The already-running campaign deliberately retains both legacy controls as
+`false` in `configs/sustained_accuracy_mps.yaml`. Its Python process already
+loaded those semantics, and any automatic in-place extension must remain
+comparable. New profiles default to the corrected behavior. After the active
+minimum completes, the next timestamped causal campaign should initialize from
+a validation-proven candidate, set `rgb_pretrain_steps=0`, enable both controls,
+and complete a new 4,096-window balanced pass before any promotion claim.
+
+Focused verification completed while the MPS trainer continued:
+
+```bash
+conda run -n orpheus ruff check \
+  world_model/training/loop.py world_model/training/trainer.py \
+  world_model/utils/config.py tests/unit/test_training_schedule.py \
+  tests/unit/test_config.py
+conda run -n orpheus pytest -q \
+  tests/unit/test_training_schedule.py \
+  tests/unit/test_fast_roi_supervision.py \
+  tests/unit/test_config.py \
+  tests/integration/test_cli_smoke.py
+git diff --check
+```
+
+Ruff and `git diff --check` passed. The final combined
+config/schedule/fast-ROI/CLI subset reported `108 passed in 53.90 s`.
+Compileall passed, and the corrected causal-only dry run resolved 4,096
+batch-one draws over all eight scenarios with RGB-only runtime.
+
+```bash
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-stability-pycache PYTHONPATH=. \
+  conda run -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+PYTHONPATH=. conda run -n orpheus python train.py \
+  --config configs/sustained_accuracy_mps.yaml --dry-run --device cpu \
+  --set training.rgb_pretrain_steps=0 --set training.steps=4096 \
+  --set training.normalize_rollout_axes_over_configured_horizons=true \
+  --set training.joint_collision_long_horizon_sampling=true
+PYTHONPATH=. conda run -n orpheus pytest
+PYTHONPATH=. conda run -n orpheus pytest -q \
+  tests/integration/test_rgb_measurements.py \
+  tests/unit/test_association.py \
+  tests/unit/test_evaluation_parameter_update_metrics.py \
+  tests/unit/test_modal_dynamics.py
+```
+
+The final sandboxed full suite reported
+`318 passed, 4 skipped in 118.34 s`; all four skips were the expected
+MPS-availability conditionals. The same four files then passed with direct MPS
+access (`21 passed in 3.09 s`). The active trainer and supervisor remained the
+only training/supervision processes and were still healthy after verification.
+No corrected-objective training metric exists yet, so this change is not
+claimed as an accuracy promotion.
 
 ## 2026-07-30 — sustained shared-model campaign preflight
 

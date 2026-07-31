@@ -1282,3 +1282,49 @@
   outcome. Neither `plateau` nor `limit_hit` promotes a model by itself: at
   least 64 fresh balanced validation episodes and all broad guardrails remain
   required before reserved-test evaluation.
+
+## ADR-060 — Fix global axis-horizon weighting without mutating a live protocol
+
+- **Date:** 2026-07-31
+- **Status:** implementation accepted; corrected campaign pending
+- **Context:** Batch-one losses in the sustained run varied sharply. A complete
+  numerical audit found finite weights, gradients, and optimizer moments, but
+  also found that the actively optimized x/y/z rollout-position losses did not
+  implement ADR-030. Aggregate position used the fixed total configured
+  horizon denominator; each axis was renormalized over only the horizons
+  available in one sampled window. Collision conditioning also returned before
+  long-horizon intent was sampled, leaving only 26/73 logged windows with a
+  one-second target. The first causal validation improved every broad metric
+  and the first four horizons but missed the one-second guardrail by
+  `0.004311 m`.
+- **Decision:** Emit per-axis per-horizon losses and aggregate x/y/z over the
+  same fixed configured denominator as aggregate position. Sample collision
+  and maximum-horizon intent independently; satisfy both when possible, and
+  retain long-horizon intent when a late collision makes the conjunction
+  impossible. Log both the pre-clip gradient norm and the bounded applied norm.
+  Keep the two behaviors configurable only to preserve the already-running
+  campaign: its base profile explicitly records both legacy values as false,
+  while new configurations default true. Do not interrupt, reinterpret, or
+  silently change that live run. Freeze the unused ROI event head and
+  objective-disconnected identifier variance head in restricted adaptation
+  scopes without deleting their checkpoint tensors.
+- **Alternatives considered:** diagnose divergence from individual raw losses;
+  raise or lower the learning rate mid-run; weaken the broad one-second
+  guardrail; mix corrected objective semantics into an in-place continuation;
+  discard collision sampling; claim a code-level fix as measured accuracy.
+- **Evidence:** Through step 8776, all 73 logged causal rows and all checkpoint
+  tensors/moments were finite. Median/maximum total loss were `9.325/29.91`;
+  71/73 pre-clip norms exceeded one but every update was clipped. Step 8704
+  improved weighted score `0.543%`, current position `1.445%`, velocity
+  `2.816%`, gated coverage `10.865%`, precision `11.521%`, collision F1
+  `5.042%`, and 0.10–0.75-second forecasts, while one-second RMSE regressed
+  `2.445%`. The final repository suite reports `318 passed, 4 skipped`, with
+  all four hardware-conditional files passing directly on MPS.
+- **Consequences:** Raw console loss remains expected to vary across object
+  counts, scenarios, matches, events, and horizon support, but future logs
+  expose the actual clipped update magnitude. The active campaign remains a
+  valid legacy-objective experiment. A separate timestamped corrected campaign
+  must complete balanced coverage and broad validation before this fix can be
+  credited with improved physical accuracy. ROI event features and slow
+  uncertainty calibration remain explicit follow-up model tasks rather than
+  nominally trainable dead heads.
