@@ -123,6 +123,49 @@ The no-op CLI result truthfully reports
 ephemeral inspection fields are not written over the original campaign
 summary.
 
+Exact final verification commands:
+
+```bash
+PYTHONPATH=. conda run -n orpheus pytest -q
+
+PYTHONPATH=. conda run -n orpheus pytest -q \
+  tests/integration/test_rgb_measurements.py \
+  tests/unit/test_association.py::test_association_transfers_cost_to_cpu_without_mps_float64 \
+  tests/unit/test_evaluation_parameter_update_metrics.py::test_directional_parameter_metrics_transfer_before_float64_accumulation \
+  tests/unit/test_modal_dynamics.py::test_modal_device_when_available
+
+PYTHONPATH=. conda run -n orpheus ruff check .
+PYTHONPATH=. conda run -n orpheus ruff format --check .
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-pycache-final PYTHONPATH=. \
+  conda run -n orpheus python -m compileall \
+  train.py evaluate.py demo.py scripts world_model tests
+git diff --check
+
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/sustained_accuracy_mps_v2.yaml \
+  --initialize-from \
+    runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/best_measurement.pt \
+  --run-name audit-v2-final-verified-smoke \
+  --device mps \
+  --set training.steps=3 \
+  --set training.rgb_pretrain_steps=1 \
+  --set training.train_episodes=4 \
+  --set training.validation_episodes=2 \
+  --set training.batch_size=2 \
+  --set training.eval_every=2 \
+  --set training.checkpoint_every=1 \
+  --set training.log_every=1 \
+  --set training.num_workers=0 \
+  --set training.validation_rollout_anchors_per_episode=2 \
+  --set training.measurement_validation_frames=2
+```
+
+The exact no-op used the same config and overrides with
+`--resume runs/20260801-231521-audit-v2-final-verified-smoke/checkpoints/last.pt`
+in place of `--initialize-from` and `--run-name`. The accelerator tests and
+training commands above ran outside the restricted process sandbox, where
+host MPS is available.
+
 Earlier bounded smokes remain failure/audit artifacts, not current evidence.
 In particular, `runs/20260801-223113-audit-v2-final-smoke/` stopped before its
 first update after exposing the data-dependent MPS gradient fault.
