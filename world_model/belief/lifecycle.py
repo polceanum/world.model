@@ -26,8 +26,13 @@ class LifecycleConfig:
     removal_existence_logit: float = -6.0
     # Kept last so existing positional construction remains compatible.
     occluded_existence_delta: float = -0.04
-    missed_log_variance_growth: float = 0.08
-    maximum_fast_log_variance: float = 8.0
+    initial_radius: float = 0.1
+    initial_mass: float = 1.0
+    initial_restitution: float = 0.7
+    initial_drag: float = 0.05
+    initial_friction: float = 0.2
+    initial_log_variance: float = 0.0
+    max_occluded_steps: int = 60
 
 
 class ObjectLifecycle:
@@ -37,13 +42,23 @@ class ObjectLifecycle:
         self.config = config or LifecycleConfig()
         if self.config.max_missed_steps < 1:
             raise ValueError("max_missed_steps must be positive")
+        if self.config.max_occluded_steps < self.config.max_missed_steps:
+            raise ValueError("max_occluded_steps must be no smaller than max_missed_steps")
         if not (self.config.missed_existence_delta <= self.config.occluded_existence_delta <= 0.0):
             raise ValueError(
                 "occluded_existence_delta must be nonpositive and no stronger "
                 "than missed_existence_delta"
             )
-        if self.config.missed_log_variance_growth < 0:
-            raise ValueError("missed_log_variance_growth must be nonnegative")
+        if self.config.initial_radius <= 0 or self.config.initial_mass <= 0:
+            raise ValueError("initial radius and mass must be positive")
+        if self.config.initial_drag <= 0:
+            raise ValueError("initial drag must be positive")
+        if not 0.0 < self.config.initial_restitution < 1.0:
+            raise ValueError("initial restitution must lie strictly in (0,1)")
+        if not 0.0 < self.config.initial_friction < 1.0:
+            raise ValueError("initial friction must lie strictly in (0,1)")
+        if not math.isfinite(self.config.initial_log_variance):
+            raise ValueError("initial log variance must be finite")
 
     def update_visibility(
         self,
@@ -63,10 +78,17 @@ class ObjectLifecycle:
         missed = objects.active & ~observed_mask
         occluded_miss = missed & occluded_mask
         visible_miss = missed & ~occluded_mask
+        was_occluded = objects.mode == MotionMode.OCCLUDED
+        observability_transition = missed & (occluded_miss != was_occluded)
+        incremented_missed_steps = objects.missed_steps + missed.to(objects.missed_steps.dtype)
         missed_steps = torch.where(
             observed,
             torch.zeros_like(objects.missed_steps),
-            objects.missed_steps + missed.to(objects.missed_steps.dtype),
+            torch.where(
+                observability_transition,
+                torch.ones_like(objects.missed_steps),
+                incremented_missed_steps,
+            ),
         )
         age_steps = objects.age_steps + objects.active.to(objects.age_steps.dtype)
         existence = (
@@ -80,13 +102,9 @@ class ObjectLifecycle:
             + observed.to(objects.visibility_logit.dtype) * self.config.observed_visibility_delta
             + missed.to(objects.visibility_logit.dtype) * self.config.missed_visibility_delta
         )
-        fast_log_variance = (
-            objects.fast_log_variance
-            + missed.unsqueeze(-1).to(objects.fast_log_variance.dtype)
-            * self.config.missed_log_variance_growth
-        ).clamp_max(self.config.maximum_fast_log_variance)
         remove = objects.active & (
-            (missed_steps > self.config.max_missed_steps)
+            (visible_miss & (missed_steps > self.config.max_missed_steps))
+            | (occluded_miss & (missed_steps > self.config.max_occluded_steps))
             | (existence < self.config.removal_existence_logit)
         )
         active = objects.active & ~remove
@@ -95,7 +113,6 @@ class ObjectLifecycle:
         occluded_logits = torch.full_like(modes, -4.0)
         occluded_logits[..., MotionMode.OCCLUDED] = 4.0
         modes = torch.where(occluded_miss.unsqueeze(-1), occluded_logits, modes)
-        was_occluded = objects.mode == MotionMode.OCCLUDED
         left_occlusion = was_occluded & ~occluded_miss
         free_logits = torch.full_like(modes, -4.0)
         free_logits[..., MotionMode.FREE] = 4.0
@@ -109,7 +126,6 @@ class ObjectLifecycle:
             active=active,
             existence_logit=existence,
             visibility_logit=visibility,
-            fast_log_variance=fast_log_variance,
             missed_steps=missed_steps,
             age_steps=age_steps,
             motion_mode_logits=modes,
@@ -191,11 +207,57 @@ class ObjectLifecycle:
                 candidates[batch_index],
                 as_tuple=False,
             ).flatten()
+            if candidates_b.numel() > 1:
+                # Slot capacity is deliberately bounded.  When discovery
+                # produces more qualified unmatched measurements than free
+                # slots, retain the strongest evidence rather than whichever
+                # proposal happened to have the lowest query index.  Stable
+                # sorting keeps equal-confidence allocation deterministic.
+                candidate_order = torch.argsort(
+                    confidence[batch_index, candidates_b],
+                    descending=True,
+                    stable=True,
+                )
+                candidates_b = candidates_b[candidate_order]
             for slot, measurement_index in zip(
                 slots.tolist(),
                 candidates_b.tolist(),
                 strict=False,
             ):
+                # An inactive slot may have belonged to an entirely different
+                # object. Reset every identity-specific fast, slow, learned, and
+                # uncertainty field before applying the new measurement so no
+                # physical parameter or recurrent memory crosses identities.
+                updated.position[batch_index, slot].zero_()
+                updated.velocity[batch_index, slot].zero_()
+                updated.orientation[batch_index, slot].zero_()
+                updated.orientation[batch_index, slot, 3] = 1.0
+                updated.angular_velocity[batch_index, slot].zero_()
+                updated.geometry[batch_index, slot].zero_()
+                updated.geometry[batch_index, slot, 0] = self.config.initial_radius
+                updated.appearance[batch_index, slot].zero_()
+                updated.residual_dynamics[batch_index, slot].zero_()
+                updated.modal_state[batch_index, slot].zero_()
+                updated.modal_frequency[batch_index, slot].zero_()
+                updated.modal_decay_raw[batch_index, slot].zero_()
+                updated.log_mass[batch_index, slot].fill_(math.log(self.config.initial_mass))
+                updated.restitution_logit[batch_index, slot].fill_(
+                    math.log(
+                        self.config.initial_restitution / (1.0 - self.config.initial_restitution)
+                    )
+                )
+                updated.log_drag[batch_index, slot].fill_(math.log(self.config.initial_drag))
+                updated.friction_logit[batch_index, slot].fill_(
+                    math.log(self.config.initial_friction / (1.0 - self.config.initial_friction))
+                )
+                updated.motion_mode_logits[batch_index, slot].fill_(-4.0)
+                updated.visibility_logit[batch_index, slot] = 0.0
+                updated.age_steps[batch_index, slot] = 0
+                updated.missed_steps[batch_index, slot] = 0
+                updated.fast_log_variance[batch_index, slot].fill_(self.config.initial_log_variance)
+                updated.slow_log_variance[batch_index, slot].fill_(self.config.initial_log_variance)
+                updated.parameter_memory[batch_index, slot].zero_()
+
                 updated.active[batch_index, slot] = True
                 updated.object_id[batch_index, slot] = next_id[batch_index]
                 next_id[batch_index] += 1
@@ -208,9 +270,6 @@ class ObjectLifecycle:
                 )[batch_index, measurement_index]
                 updated.position[batch_index, slot] = world_position[batch_index, measurement_index]
                 updated.velocity[batch_index, slot] = world_velocity[batch_index, measurement_index]
-                updated.orientation[batch_index, slot].zero_()
-                updated.orientation[batch_index, slot, 3] = 1.0
-                updated.angular_velocity[batch_index, slot].zero_()
                 if world_radius is not None:
                     updated.geometry[batch_index, slot, :1] = world_radius[
                         batch_index, measurement_index
@@ -220,11 +279,7 @@ class ObjectLifecycle:
                     updated.appearance[batch_index, slot] = appearance / torch.linalg.vector_norm(
                         appearance
                     ).clamp_min(1e-8)
-                updated.modal_state[batch_index, slot].zero_()
-                updated.motion_mode_logits[batch_index, slot].fill_(-4.0)
                 updated.motion_mode_logits[batch_index, slot, MotionMode.CREATED] = 4.0
-                updated.age_steps[batch_index, slot] = 0
-                updated.missed_steps[batch_index, slot] = 0
                 if world_log_variance is not None:
                     updated.fast_log_variance[batch_index, slot, :3] = world_log_variance[
                         batch_index, measurement_index, :3

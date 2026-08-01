@@ -192,6 +192,7 @@ class OnlineWorldModel(nn.Module):
                     backbone_channels=tuple(rgb_config.backbone_channels),
                     feature_dim=rgb_config.feature_dim,
                     appearance_dim=state_config.appearance_dim,
+                    global_detector_cpu_on_mps=(config.device.global_detector_cpu_on_mps),
                     roi_size=rgb_config.roi_size,
                     roi_hidden_dim=config.model.filter.hidden_dim,
                     fast_depth_residual_enabled=(rgb_config.fast_depth_residual_enabled),
@@ -405,6 +406,7 @@ class OnlineWorldModel(nn.Module):
             mahalanobis_gate=association_config.mahalanobis_gate,
             maximum_cost=association_config.maximum_cost,
             ambiguity_margin=association_config.ambiguity_margin,
+            minimum_measurement_confidence=(association_config.minimum_measurement_confidence),
         )
         filter_config = config.model.filter
         updater = BeliefUpdater(
@@ -416,16 +418,23 @@ class OnlineWorldModel(nn.Module):
                 minimum_log_variance=filter_config.min_log_variance,
                 maximum_log_variance=filter_config.max_log_variance,
                 learned_residual_scale=filter_config.learned_residual_scale,
+                missed_fast_variance_increment=(filter_config.missed_variance_growth),
+                observed_confidence_threshold=(association_config.minimum_measurement_confidence),
             ),
         )
         lifecycle_config = config.model.lifecycle
         lifecycle = ObjectLifecycle(
             LifecycleConfig(
                 max_missed_steps=lifecycle_config.max_missed_steps,
+                max_occluded_steps=lifecycle_config.max_occluded_steps,
                 missed_existence_delta=-lifecycle_config.existence_decay,
                 occluded_existence_delta=(-lifecycle_config.occlusion_existence_decay),
-                missed_log_variance_growth=filter_config.missed_variance_growth,
-                maximum_fast_log_variance=state_config.fast_log_variance_max,
+                initial_radius=factory.initial_radius,
+                initial_mass=factory.initial_mass,
+                initial_restitution=factory.initial_restitution,
+                initial_drag=factory.initial_drag,
+                initial_friction=factory.initial_friction,
+                initial_log_variance=factory.initial_log_variance,
             )
         )
         identification_config = config.model.identification
@@ -602,6 +611,7 @@ class OnlineWorldModel(nn.Module):
         packet: ObservationPacket,
         posterior: WorldBelief,
         prediction_dt: Tensor,
+        prior_interval_collision_mask: Tensor | None = None,
     ) -> WorldBelief:
         started = time.perf_counter()
         if self.identifier is not None:
@@ -631,6 +641,14 @@ class OnlineWorldModel(nn.Module):
             metadata=packet.metadata,
         )
         predicted = module.project(posterior, sensor_context)
+        predicted.validate()
+        if self.strict_timestamps and not torch.equal(
+            predicted.timestamp,
+            posterior.timestamp,
+        ):
+            raise ValueError(
+                "predicted measurement timestamp must equal the propagated belief timestamp"
+            )
         scheduler_context = self.diagnostics.scheduler_context(packet.sensor_id)
         mode = self.scheduler.choose(
             packet=packet,
@@ -665,6 +683,30 @@ class OnlineWorldModel(nn.Module):
             self.state.caches[packet.sensor_id] = new_cache
         else:
             return posterior
+        measurements.validate()
+        expected_measurement_timestamp = posterior.timestamp.new_full(
+            posterior.timestamp.shape,
+            packet.timestamp,
+        )
+        if self.strict_timestamps and not torch.equal(
+            measurements.timestamp,
+            expected_measurement_timestamp,
+        ):
+            raise ValueError("measurement timestamp must equal its observation packet timestamp")
+        if prior_interval_collision_mask is not None:
+            expected = posterior.objects.active.shape
+            if (
+                prior_interval_collision_mask.shape != expected
+                or prior_interval_collision_mask.dtype is not torch.bool
+            ):
+                raise ValueError("prior interval collision mask must be boolean belief-slot [B,N]")
+            measurements = replace(
+                measurements,
+                auxiliary={
+                    **measurements.auxiliary,
+                    "prior_interval_collision_mask": (prior_interval_collision_mask),
+                },
+            )
         active_before = int(posterior.objects.active.sum().detach().cpu())
         association = self.associator.match(posterior, measurements, predicted)
         innovation = module.innovation(measurements, predicted, association)
@@ -699,7 +741,9 @@ class OnlineWorldModel(nn.Module):
             if self.updater.last_diagnostics is not None
             else torch.zeros_like(posterior.objects.active)
         )
-        predicted_occluded = predicted.auxiliary.get("fully_occluded_mask")
+        predicted_occluded = predicted.auxiliary.get("unobservable_mask")
+        if predicted_occluded is None:
+            predicted_occluded = predicted.auxiliary.get("fully_occluded_mask")
         if predicted_occluded is None:
             predicted_occluded = torch.zeros_like(observed_mask)
         posterior = self.lifecycle.update_visibility(
@@ -720,6 +764,7 @@ class OnlineWorldModel(nn.Module):
             innovation,
             association,
             surprise,
+            interval_collision_mask=prior_interval_collision_mask,
         )
         if self.identifier is not None:
             posterior = self.identifier.update(
@@ -791,14 +836,60 @@ class OnlineWorldModel(nn.Module):
                     f"belief timestamp {float(current_timestamp.min()):.9g}"
                 )
             dt = requested - current_timestamp
-            prior = self.dynamics.predict(current, dt)
+            predict_step = getattr(self.dynamics, "predict_step", None)
+            prior_interval_collision_mask: Tensor | None = None
+            if callable(predict_step):
+                propagation = predict_step(current, dt)
+                prior = propagation.belief
+                pair_collision = propagation.auxiliary.get("pair_collision")
+                boundary_collision = propagation.auxiliary.get("boundary_collision")
+                ground_collision = propagation.auxiliary.get("ground_collision")
+                if pair_collision is not None and (
+                    boundary_collision is not None or ground_collision is not None
+                ):
+                    expected_pair = (
+                        current.batch_size,
+                        current.objects.max_objects,
+                        current.objects.max_objects,
+                    )
+                    if (
+                        pair_collision.shape != expected_pair
+                        or pair_collision.dtype is not torch.bool
+                    ):
+                        raise ValueError("dynamics pair_collision must be boolean [B,N,N]")
+                    if boundary_collision is not None:
+                        if (
+                            boundary_collision.ndim != 3
+                            or boundary_collision.shape[:2] != current.objects.active.shape
+                            or boundary_collision.dtype is not torch.bool
+                        ):
+                            raise ValueError("dynamics boundary_collision must be boolean [B,N,P]")
+                        boundary_collision_mask = boundary_collision.any(dim=-1)
+                    else:
+                        assert ground_collision is not None
+                        if (
+                            ground_collision.shape != current.objects.active.shape
+                            or ground_collision.dtype is not torch.bool
+                        ):
+                            raise ValueError("dynamics ground_collision must be boolean [B,N]")
+                        boundary_collision_mask = ground_collision
+                    prior_interval_collision_mask = (
+                        pair_collision.any(dim=-1) | boundary_collision_mask
+                    )
+            else:
+                prior = self.dynamics.predict(current, dt)
             posterior = prior
             for packet_index, packet in enumerate(self._order_group(group)):
                 # Elapsed-time evidence belongs to the first assimilation only.
                 # Later modalities at the same timestamp correct that posterior
                 # without applying temporal position→velocity coupling twice.
                 packet_dt = dt if packet_index == 0 else torch.zeros_like(dt)
-                posterior = self._ingest_one(packet, posterior, packet_dt)
+                posterior = self._ingest_one(
+                    packet,
+                    posterior,
+                    packet_dt,
+                    prior_interval_collision_mask,
+                )
             self.state.belief = posterior.with_timestamp(timestamp)
             self.state.ingest_count += 1
         assert self.state.belief is not None

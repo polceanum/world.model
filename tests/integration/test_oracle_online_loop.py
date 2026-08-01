@@ -38,6 +38,27 @@ def _packet(timestamp: float, x_position: float) -> ObservationPacket:
     )
 
 
+def _pair_packet(
+    timestamp: float,
+    positions: torch.Tensor,
+    velocities: torch.Tensor,
+) -> ObservationPacket:
+    return ObservationPacket(
+        modality="debug_oracle",
+        sensor_id="state",
+        timestamp=timestamp,
+        payload={
+            "position": positions,
+            "velocity": velocities,
+            "active": torch.tensor([True, True]),
+            "id": torch.tensor([50, 51]),
+            "radius": torch.tensor([[0.1], [0.1]]),
+        },
+        calibration={},
+        frame_id="world",
+    )
+
+
 def test_oracle_debug_loop_corrects_perturbation_and_keeps_persistent_id() -> None:
     model = OnlineWorldModel.from_config(_oracle_config(), device="cpu")
     initial = model.ingest(_packet(0.0, 0.0))
@@ -74,3 +95,39 @@ def test_online_loop_rejects_delayed_oracle_packet() -> None:
         assert "precedes current belief" in str(error)
     else:
         raise AssertionError("delayed observation should be rejected")
+
+
+def test_runtime_preserves_collision_that_occurs_between_observation_times() -> None:
+    model = OnlineWorldModel.from_config(_oracle_config(), device="cpu")
+    model.ingest(
+        _pair_packet(
+            0.0,
+            torch.tensor([[-0.15, 1.0, 0.0], [0.15, 1.0, 0.0]]),
+            torch.tensor([[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]]),
+        )
+    )
+    assert model.belief is not None
+    objects = model.belief.objects.clone()
+    objects.position[0, :2] = torch.tensor([[-0.15, 1.0, 0.0], [0.15, 1.0, 0.0]])
+    objects.velocity[0, :2] = torch.tensor([[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]])
+    objects.geometry[0, :2, 0] = 0.1
+    objects.log_drag[0, :2].fill_(-16.0)
+    objects.fast_log_variance[0, :2].fill_(-10.0)
+    model.state.belief = model.belief.replace(
+        objects=objects,
+        gravity=torch.zeros_like(model.belief.gravity),
+    )
+    model.ingest(
+        _pair_packet(
+            0.06,
+            torch.tensor([[-0.107, 1.0, 0.0], [0.107, 1.0, 0.0]]),
+            torch.tensor([[-0.7, 0.0, 0.0], [0.7, 0.0, 0.0]]),
+        )
+    )
+
+    assert model.last_measurements is not None
+    interval_collision = model.last_measurements.auxiliary["prior_interval_collision_mask"]
+    assert interval_collision[0, :2].all()
+    # Endpoint mode remains a state-at-time contract rather than being
+    # overwritten with an event that occurred earlier in the interval.
+    assert not (model.belief.objects.mode[0, :2] == 3).all()

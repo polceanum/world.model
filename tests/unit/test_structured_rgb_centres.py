@@ -14,7 +14,11 @@ from world_model.observations import (
     PredictedMeasurements,
     SensorContext,
 )
-from world_model.observations.rgb import RGBObservationConfig, RGBObservationModule
+from world_model.observations.rgb import (
+    GlobalDetectorOutput,
+    RGBObservationConfig,
+    RGBObservationModule,
+)
 from world_model.observations.rgb import module as rgb_module
 from world_model.observations.rgb.structured_centres import (
     structured_disc_centres,
@@ -62,6 +66,81 @@ def _paint_block(
         height=image.shape[-2],
         dtype=image.dtype,
     )
+
+
+def _global_structured_measurement(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    image: torch.Tensor,
+    proposal_centres: torch.Tensor,
+) -> tuple[MeasurementSet, GlobalDetectorOutput]:
+    query_count = proposal_centres.shape[1]
+    module = RGBObservationModule(
+        RGBObservationConfig(
+            max_objects=query_count,
+            birth_extra_queries=0,
+            backbone_channels=(8, 16, 24, 32),
+            feature_dim=16,
+            appearance_dim=8,
+            structured_disc_center_enabled=True,
+            structured_disc_depth_relative_std=0.05,
+        )
+    )
+    learned_log_radius = image.new_full((1, query_count, 1), math.log(0.5))
+    learned_depth_residual = image.new_full((1, query_count, 1), 0.2)
+    learned_log_variance = (
+        image.new_tensor((-1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0))
+        .view(1, 1, 7)
+        .expand(1, query_count, 7)
+    )
+    detector_output = GlobalDetectorOutput(
+        centre=proposal_centres,
+        log_radius=learned_log_radius,
+        inverse_depth_residual=learned_depth_residual,
+        colour=image.new_full((1, query_count, 3), 0.5),
+        existence_logits=image.new_full((1, query_count), 8.0),
+        visibility_logits=image.new_full((1, query_count), 8.0),
+        log_variance=learned_log_variance,
+        appearance=image.new_zeros((1, query_count, 8)),
+        query_features=image.new_zeros((1, query_count, 16)),
+        attention=image.new_zeros((1, query_count, 1)),
+    )
+    monkeypatch.setattr(
+        module.global_detector,
+        "forward",
+        lambda feature_map: detector_output,
+    )
+    height, width = image.shape[-2:]
+    intrinsics = image.new_tensor(
+        (
+            (30.0, 0.0, (width - 1) / 2.0),
+            (0.0, 30.0, (height - 1) / 2.0),
+            (0.0, 0.0, 1.0),
+        )
+    )
+    world_from_camera = torch.eye(4, dtype=image.dtype, device=image.device)
+    packet = ObservationPacket(
+        modality="rgb",
+        sensor_id="camera",
+        timestamp=0.1,
+        payload=image,
+        calibration={
+            "intrinsics": intrinsics.unsqueeze(0),
+            "world_from_camera": world_from_camera.unsqueeze(0),
+        },
+        frame_id="camera:camera",
+    )
+    measurement = module.initialise_measurements(
+        [packet],
+        ObservationContext(
+            timestamp=packet.timestamp,
+            calibration=packet.calibration,
+            frame_id=packet.frame_id,
+            max_objects=query_count,
+            device=image.device,
+        ),
+    )
+    return measurement, detector_output
 
 
 def test_localizes_exact_foreground_component_centres_from_rgb_pixels() -> None:
@@ -192,6 +271,141 @@ def test_global_component_touching_image_boundary_keeps_centre_but_rejects_scale
     assert result.valid_mask.tolist() == [[True]]
     assert result.depth_valid_mask.tolist() == [[False]]
     torch.testing.assert_close(result.centres[0, 0], centre)
+
+
+def test_global_rgb_touching_components_refine_centres_without_overwriting_depth_scale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    height = width = 15
+    image = torch.zeros((1, 3, height, width), dtype=torch.float32)
+    pixel_y, pixel_x = torch.meshgrid(
+        torch.arange(height),
+        torch.arange(width),
+        indexing="ij",
+    )
+    centres_pixels = ((5, 7), (9, 7))
+    for (centre_x, centre_y), colour in zip(
+        centres_pixels,
+        ((0.9, 0.2, 0.1), (0.1, 0.5, 0.9)),
+        strict=True,
+    ):
+        disc = (pixel_x - centre_x).square() + (pixel_y - centre_y).square() <= 2**2
+        image[0, :, disc] = torch.tensor(colour).unsqueeze(-1)
+    proposals = torch.stack(
+        [
+            _normalized_pixel(
+                x=centre_x,
+                y=centre_y,
+                width=width,
+                height=height,
+            )
+            for centre_x, centre_y in centres_pixels
+        ]
+    ).unsqueeze(0)
+    structured = structured_disc_centres(image, proposals)
+    measurement, detector = _global_structured_measurement(
+        monkeypatch,
+        image=image,
+        proposal_centres=proposals,
+    )
+
+    assert structured.valid_mask.tolist() == [[True, True]]
+    assert structured.depth_valid_mask.tolist() == [[False, False]]
+    assert measurement.auxiliary["structured_centre_valid"].tolist() == [[True, True]]
+    assert measurement.auxiliary["structured_depth_valid"].tolist() == [[False, False]]
+    torch.testing.assert_close(measurement.values[..., :2], structured.centres)
+    torch.testing.assert_close(measurement.values[..., 2:3], detector.log_radius)
+    expected_inverse_depth = detector.log_radius.exp().squeeze(-1) * (0.5 * min(height, width)) / (
+        30.0 * 0.15
+    ) + detector.inverse_depth_residual.squeeze(-1)
+    torch.testing.assert_close(measurement.values[..., 3], expected_inverse_depth)
+    torch.testing.assert_close(
+        measurement.log_variance[..., 2:4],
+        detector.log_variance[..., 2:4],
+    )
+
+
+def test_global_rgb_truncated_component_refines_centre_without_overwriting_depth_scale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    height = width = 21
+    image = torch.zeros((1, 3, height, width), dtype=torch.float32)
+    proposal = _paint_block(
+        image,
+        batch_index=0,
+        top=7,
+        left=0,
+        height=7,
+        width=5,
+        colour=(0.9, 0.2, 0.1),
+    ).reshape(1, 1, 2)
+    structured = structured_disc_centres(image, proposal)
+    measurement, detector = _global_structured_measurement(
+        monkeypatch,
+        image=image,
+        proposal_centres=proposal + torch.tensor([[[0.02, -0.01]]]),
+    )
+
+    assert structured.valid_mask.tolist() == [[True]]
+    assert structured.depth_valid_mask.tolist() == [[False]]
+    assert measurement.auxiliary["structured_centre_valid"].tolist() == [[True]]
+    assert measurement.auxiliary["structured_depth_valid"].tolist() == [[False]]
+    torch.testing.assert_close(measurement.values[0, 0, :2], structured.centres[0, 0])
+    torch.testing.assert_close(measurement.values[..., 2:3], detector.log_radius)
+    expected_inverse_depth = detector.log_radius.exp().squeeze(-1) * (0.5 * min(height, width)) / (
+        30.0 * 0.15
+    ) + detector.inverse_depth_residual.squeeze(-1)
+    torch.testing.assert_close(measurement.values[..., 3], expected_inverse_depth)
+    torch.testing.assert_close(
+        measurement.log_variance[..., 2:4],
+        detector.log_variance[..., 2:4],
+    )
+
+
+def test_global_rgb_isolated_component_uses_observed_depth_scale_and_tight_covariance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    height = width = 21
+    image = torch.zeros((1, 3, height, width), dtype=torch.float32)
+    proposal = _paint_block(
+        image,
+        batch_index=0,
+        top=8,
+        left=8,
+        height=5,
+        width=5,
+        colour=(0.9, 0.2, 0.1),
+    ).reshape(1, 1, 2)
+    structured = structured_disc_centres(image, proposal)
+    measurement, detector = _global_structured_measurement(
+        monkeypatch,
+        image=image,
+        proposal_centres=proposal,
+    )
+
+    assert structured.valid_mask.tolist() == [[True]]
+    assert structured.depth_valid_mask.tolist() == [[True]]
+    assert measurement.auxiliary["structured_centre_valid"].tolist() == [[True]]
+    assert measurement.auxiliary["structured_depth_valid"].tolist() == [[True]]
+    observed_log_radius = (
+        (structured.radius_pixels / (0.5 * min(height, width))).log().unsqueeze(-1)
+    )
+    torch.testing.assert_close(measurement.values[..., 2:3], observed_log_radius)
+    expected_inverse_depth = structured.radius_pixels / (30.0 * 0.15)
+    torch.testing.assert_close(measurement.values[..., 3], expected_inverse_depth)
+    relative_variance = 0.05**2
+    expected_log_variance = torch.stack(
+        (
+            torch.full_like(expected_inverse_depth, math.log(relative_variance)),
+            (expected_inverse_depth.square() * relative_variance).log(),
+        ),
+        dim=-1,
+    )
+    torch.testing.assert_close(
+        measurement.log_variance[..., 2:4],
+        expected_log_variance,
+    )
+    assert not torch.allclose(measurement.values[..., 2:3], detector.log_radius)
 
 
 def test_rejects_bright_speckle_noise_below_minimum_component_size() -> None:

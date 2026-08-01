@@ -22,10 +22,11 @@
   that waits for the full minimum, resumes only `last.pt` in non-overlapping
   4,096-update blocks, records failures, and distinguishes a demonstrated
   plateau from a 24,576-step budget limit.
-- [ ] Complete the active 12,288-update sustained MPS campaign at
-  `runs/20260730-192625-scaled-sustained-e2e-v1/`. Do not judge causal
-  convergence before 2,048 causal updates or stop before the full 4,096-window
-  minimum.
+- [x] Preserve and supersede the legacy 12,288-update campaign at
+  `runs/20260730-192625-scaled-sustained-e2e-v1/` after proving its perception
+  handoff restored step-zero weights and its deterministic long-horizon
+  objective contained non-identifiable targets. It stopped at logged step
+  `9400`; do not describe it as converged.
 - [x] Launch the persistent convergence supervisor. Continue in complete 4,096
   blocks while the final 1,024 updates produce at least 1% safe improvement or
   while four-point plateau evidence is incomplete/contradictory; stop only on
@@ -38,12 +39,44 @@
   pre-clip versus applied gradient norms explicit.
 - [x] Freeze the checkpoint-compatible ROI event and identifier variance heads
   in restricted training scopes while they have no end-to-end objective.
-- [ ] After the active legacy-semantics minimum completes, run a new
-  timestamped 4,096-window causal campaign with
-  `normalize_rollout_axes_over_configured_horizons=true` and
-  `joint_collision_long_horizon_sampling=true`; compare it against the exact
-  fixed reference and strongest numbered candidate on at least 64 fresh
-  balanced validation episodes.
+- [x] Separate the guardrail-safe deployment incumbent from the mutable phase-
+  handoff candidate so downstream causal losses retain and repair useful RGB
+  perception gains.
+- [x] Add mature/cold forecast support, scene-wide censoring after hidden
+  external actuation, forecast NLL, velocity correction guards, per-axis and
+  per-scenario selection evidence, and exact structured rejection reasons.
+- [x] Make exact resume preserve the absolute next sample, CPU/MPS RNG,
+  immutable process-start provenance, objective/data semantics, and exact
+  additive counts.
+- [x] Fix simulator/render confounds: independent RNG streams, stable resting
+  contact, true glancing impacts, compositional OOD ranges, and consistent
+  pair restitution in simulator and analytic dynamics.
+- [x] Add `configs/sustained_accuracy_mps_v2.yaml` with 40-frame mature
+  one-second support, batch two, 16,384 unique training episodes, corrected
+  horizon semantics, and bounded deterministic trend-validation anchors.
+- [x] Complete the bounded-anchor MPS handoff smoke, inspect every produced
+  checkpoint/metric, and record its exact wall time. It is wiring evidence,
+  not a promotion comparison. The final three-update run is
+  `runs/20260801-231521-audit-v2-final-verified-smoke/`; it completed in
+  `109.1528 s`, wrote a completed terminal-validation marker, and passed a
+  byte-preserving exact no-op resume.
+- [x] Reproduce and fix the data-dependent PyTorch 2.10 MPS detector-gradient
+  failure. Keep CNN/ROI work on MPS, pin only the proposal transformer to CPU,
+  and prove finite mixed-device gradients, clipping, two optimizer steps, and
+  checkpoint restore.
+- [x] Detach RGB covariance linearization coordinates from mean heads; keep
+  variance-head calibration differentiable.
+- [x] Recover interrupted final validation without optimizer updates, restrict
+  in-place resume to `checkpoints/last.pt`, and deserialize hybrid checkpoints
+  on CPU to preserve optimizer ownership and accelerator memory.
+- [ ] Launch the timestamped v2 MPS campaign from the preserved step-8192
+  `best_measurement.pt`. Complete the full declared RGB and causal phases; do
+  not change its objective, simulator, manifests, or validation protocol
+  in-place.
+- [ ] Compare v2 against the exact legacy reference and strongest numbered
+  candidates on at least 64 fresh balanced episodes, with every
+  axis/scenario/horizon, cold/mature, event, lifecycle, uncertainty, and
+  stochastic/deterministic metric reported.
 - [ ] Confirm the selected checkpoint on at least 64 fresh balanced validation
   episodes, report every scenario/horizon, then use the reserved test split
   only if all broad gates pass.

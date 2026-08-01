@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, is_dataclass, replace
 from typing import Any
@@ -66,6 +67,7 @@ class SphereWorldConfig:
     ensured_pair_height_range: tuple[float, float] = (1.1, 1.35)
     ensured_pair_surface_gap_range: tuple[float, float] = (0.75, 0.9)
     ensured_pair_speed_range: tuple[float, float] = (0.85, 1.25)
+    ensured_pair_lateral_offset_range: tuple[float, float] = (0.0, 0.0)
     camera_motion: str = "fixed"
     camera_fov_degrees: float = 48.0
     camera_translation_amplitude: float = 0.35
@@ -119,6 +121,7 @@ class SphereWorldConfig:
             "ensured_pair_height_range",
             "ensured_pair_surface_gap_range",
             "ensured_pair_speed_range",
+            "ensured_pair_lateral_offset_range",
             "external_impulse_range",
         ):
             lower, upper = getattr(self, name)
@@ -210,6 +213,7 @@ class SphereWorldConfig:
             "ensured_pair_height_range",
             "ensured_pair_surface_gap_range",
             "ensured_pair_speed_range",
+            "ensured_pair_lateral_offset_range",
             "external_impulse_range",
         ):
             if range_name in values:
@@ -303,6 +307,7 @@ class SphereWorldConfig:
                 drag_range=(0.005, 0.08),
                 friction_range=(0.01, 0.08),
                 initial_speed_range=(1.1, 1.8),
+                ensured_pair_lateral_offset_range=(0.18, 0.32),
                 external_impulse_probability=0.0,
             )
         if scenario == "heavy_light_impacts":
@@ -340,9 +345,20 @@ class SphereWorld:
         self.seed = int(seed)
         base_config = SphereWorldConfig.from_config(config)
         self.scenario_name = base_config.scenario_for_seed(self.seed)
-        self.config = base_config.for_scenario(self.scenario_name)
+        # Scenario ranges define the in-distribution physical regime. Apply the
+        # held-out distribution last so scenario-specific replacements cannot
+        # silently overwrite the OOD restitution/drag contract.
+        self.config = base_config.for_scenario(self.scenario_name).for_distribution(
+            base_config.distribution
+        )
+        self.config.validate()
         self.generator = torch.Generator(device="cpu")
         self.generator.manual_seed(self.seed & 0x7FFF_FFFF_FFFF_FFFF)
+        # Rendering can consume a frame-sized number of random samples. Keep it
+        # independent from the physical/lifecycle stream so changing only
+        # observation noise cannot change future external impulses.
+        self.render_generator = torch.Generator(device="cpu")
+        self.render_generator.manual_seed((self.seed + 104_729) & 0x7FFF_FFFF_FFFF_FFFF)
         self.camera = CameraTrajectory(
             CameraTrajectoryConfig(
                 image_size=self.config.image_size,
@@ -408,6 +424,13 @@ class SphereWorld:
         if count >= 2 and config.ensure_collision:
             pair_height = float(_uniform(self.generator, (), config.ensured_pair_height_range))
             pair_z = float(_uniform(self.generator, (), (-0.25, 0.25)))
+            lateral_offset = float(
+                _uniform(
+                    self.generator,
+                    (),
+                    config.ensured_pair_lateral_offset_range,
+                )
+            )
             surface_gap = float(
                 _uniform(
                     self.generator,
@@ -415,9 +438,18 @@ class SphereWorld:
                     config.ensured_pair_surface_gap_range,
                 )
             )
-            half_separation = 0.5 * (float(radius[0, 0] + radius[1, 0]) + surface_gap)
-            position[0] = torch.tensor([-half_separation, pair_height, pair_z])
-            position[1] = torch.tensor([half_separation, pair_height, pair_z])
+            center_distance = float(radius[0, 0] + radius[1, 0]) + surface_gap
+            if lateral_offset >= center_distance:
+                raise ValueError("ensured pair lateral offset must be below center separation")
+            half_separation = 0.5 * math.sqrt(
+                center_distance * center_distance - lateral_offset * lateral_offset
+            )
+            position[0] = torch.tensor(
+                [-half_separation, pair_height, pair_z - 0.5 * lateral_offset]
+            )
+            position[1] = torch.tensor(
+                [half_separation, pair_height, pair_z + 0.5 * lateral_offset]
+            )
             speed = float(_uniform(self.generator, (), config.ensured_pair_speed_range))
             velocity[0] = torch.tensor([speed, 0.15, 0.0])
             velocity[1] = torch.tensor([-speed, 0.15, 0.0])
@@ -659,7 +691,7 @@ class SphereWorld:
             self.config.image_size,
             edge_softness_pixels=self.config.edge_softness_pixels,
             noise_std=self.config.render_noise_std,
-            generator=self.generator,
+            generator=self.render_generator,
         )
 
     def reset(self) -> None:

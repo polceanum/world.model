@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import replace
 
@@ -22,6 +23,7 @@ from world_model.training.loop import (
 )
 from world_model.training.trainer import (
     _gradient_clip_diagnostics,
+    _mean_batch_results,
     _rollout_selection_improves,
     _rollout_selection_is_compatible,
     _rollout_selection_metrics,
@@ -109,7 +111,13 @@ def test_dynamics_only_scope_preserves_rgb_and_filter_weights() -> None:
     )
 
     set_closed_loop_trainable_scope(model, scope="all")
-    assert all(parameter.requires_grad for parameter in model.parameters())
+    for name, parameter in model.named_parameters():
+        disconnected = (
+            ".roi_updater.event_head." in name
+            or "updater.learned_corrector.visibility_head." in name
+            or "identifier.variance_head." in name
+        )
+        assert parameter.requires_grad is (not disconnected), name
 
 
 @pytest.mark.parametrize(
@@ -138,7 +146,15 @@ def test_state_dynamics_scope_freezes_rgb_and_trains_filter_dynamics_identifier(
     set_closed_loop_trainable_scope(model, scope="state_dynamics")
 
     assert all(parameter.requires_grad for parameter in model.dynamics.parameters())
-    assert all(parameter.requires_grad for parameter in model.updater.parameters())
+    assert all(
+        parameter.requires_grad
+        for name, parameter in model.updater.named_parameters()
+        if not name.startswith("learned_corrector.visibility_head.")
+    )
+    assert not any(
+        parameter.requires_grad
+        for parameter in model.updater.learned_corrector.visibility_head.parameters()
+    )
     assert model.identifier is not None
     assert all(
         parameter.requires_grad
@@ -158,7 +174,15 @@ def test_state_dynamics_roi_scope_trains_fast_rgb_without_global_perception() ->
     set_closed_loop_trainable_scope(model, scope="state_dynamics_roi")
 
     assert all(parameter.requires_grad for parameter in model.dynamics.parameters())
-    assert all(parameter.requires_grad for parameter in model.updater.parameters())
+    assert all(
+        parameter.requires_grad
+        for name, parameter in model.updater.named_parameters()
+        if not name.startswith("learned_corrector.visibility_head.")
+    )
+    assert not any(
+        parameter.requires_grad
+        for parameter in model.updater.learned_corrector.visibility_head.parameters()
+    )
     assert model.identifier is not None
     assert all(
         parameter.requires_grad
@@ -464,6 +488,27 @@ def test_closed_loop_window_can_be_conditioned_on_collision() -> None:
     assert start <= 7 < start + 4
 
 
+def test_collision_conditioning_aligns_event_to_shortest_rollout_endpoint() -> None:
+    batch = {
+        "rgb": torch.zeros((1, 16, 3, 8, 8)),
+        "events": {
+            "collision": torch.zeros((1, 16, 2), dtype=torch.bool),
+        },
+    }
+    batch["events"]["collision"][0, 7, 0] = True
+
+    start = select_closed_loop_window(
+        batch,
+        4,
+        event_condition_probability=1.0,
+        minimum_rollout_frame_offset=2,
+        maximum_rollout_frame_offset=10,
+    )
+
+    assert start == 5
+    assert start + 2 == 7
+
+
 def test_closed_loop_window_can_require_a_maximum_horizon_anchor() -> None:
     batch = {
         "rgb": torch.zeros((2, 16, 3, 8, 8)),
@@ -557,6 +602,31 @@ def test_joint_sampling_covers_collision_and_long_horizon_when_compatible() -> N
     assert start <= 11
 
 
+def test_collision_conditioning_prioritizes_scarce_pair_interactions() -> None:
+    batch = {
+        "rgb": torch.zeros((1, 32, 3, 8, 8)),
+        "events": {
+            "collision": torch.zeros((1, 32, 2), dtype=torch.bool),
+            "pair_collision": torch.zeros((1, 32, 2, 2), dtype=torch.bool),
+        },
+    }
+    # A common boundary event occurs early, while the rare object interaction
+    # occurs later. A fully conditioned draw must train on the latter.
+    batch["events"]["collision"][0, 5, 0] = True
+    batch["events"]["collision"][0, 20, 0] = True
+    batch["events"]["pair_collision"][0, 20, 0, 1] = True
+    random.seed(37)
+
+    start = select_closed_loop_window(
+        batch,
+        4,
+        event_condition_probability=1.0,
+    )
+
+    assert start <= 20 < start + 4
+    assert not (start <= 5 < start + 4)
+
+
 def test_joint_sampling_selects_a_compatible_collision_before_falling_back(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -643,7 +713,7 @@ def _broad_checkpoint_metrics() -> dict[str, float]:
     selection = _rollout_selection_metrics(_physical_selection_metrics(), config)
     return {
         "best_rollout_validated": 1.0,
-        "rollout_selection_metric_version": 3.0,
+        "rollout_selection_metric_version": 4.0,
         **selection.checkpoint_metrics(),
         **_validation_protocol_checkpoint_metrics(config),
     }
@@ -838,7 +908,11 @@ def test_closed_loop_validation_uses_the_full_episode(
     config = load_config("configs/tiny_overfit.yaml")
     config = replace(
         config,
-        training=replace(config.training, tbptt_steps=3),
+        training=replace(
+            config.training,
+            tbptt_steps=3,
+            validation_rollout_anchors_per_episode=5,
+        ),
     )
     model = _ModeOnlyModel()
     batch = {
@@ -851,6 +925,7 @@ def test_closed_loop_validation_uses_the_full_episode(
     assert observed["window_start"] == 0
     assert observed["window_steps"] == 9
     assert observed["apply_perturbations"] is False
+    assert observed["rollout_anchors_per_window"] == 5
     assert model.training
 
 
@@ -904,3 +979,22 @@ def test_validation_aggregates_every_loader_batch_by_episode_count(
     assert result.metrics["validation_collision_f1"] == 1.0
     assert result.metrics["validation_id_switch_rate"] == 0.0
     assert result.metrics["validation_position_rmse@0.500s"] == pytest.approx(2.5**0.5)
+
+
+def test_validation_averages_conditional_diagnostics_over_present_support() -> None:
+    first = _result(1.0)
+    second = _result(4.0)
+    second.loss_terms = {}
+    second.metrics.pop("value")
+    second.metrics["second_only"] = 6.0
+    first.metrics["unsupported"] = float("nan")
+
+    result = _mean_batch_results([first, second], weights=[2.0, 1.0])
+
+    torch.testing.assert_close(result.total_loss, torch.tensor(2.0))
+    # A diagnostic omitted because its support is absent is not a zero sample
+    # and therefore does not dilute the supported episode.
+    torch.testing.assert_close(result.loss_terms["rollout"], torch.tensor(1.0))
+    assert result.metrics["value"] == 1.0
+    assert result.metrics["second_only"] == 6.0
+    assert math.isnan(result.metrics["unsupported"])

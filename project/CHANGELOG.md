@@ -2,6 +2,88 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-01 convergence-integrity audit
+
+- Reproduced a data-dependent PyTorch 2.10 MPS failure where finite
+  `2x96x64x64` RGB backbone features generated NaN attention/MLP weight
+  gradients. Added a configurable hybrid workaround that retains CNN/ROI work
+  on MPS and executes only the global proposal transformer on CPU through
+  differentiable copies; selector protocol hashes and resume semantics include
+  the execution flag.
+- Changed training resume, evaluation, demo, and RGB gate fitting to
+  deserialize checkpoints on CPU. This preserves CPU AdamW scalar steps and
+  owner-device moments in the mixed optimizer and avoids placing an unused
+  saved optimizer on MPS.
+- Detached RGB covariance linearization centres/depths from mean heads while
+  preserving variance-head gradients, closing a second route by which
+  calibration/filter covariance could alter position predictions.
+- Added recoverable terminal validation, a durable completion marker,
+  last-checkpoint-only in-place resume, and byte-preserving completed-run
+  inspection semantics.
+- Restricted runtime-qualified Hungarian assignment to lifecycle-confident
+  proposals and retained confident false positives on target-empty frames.
+- Completed the final hybrid smoke at
+  `runs/20260801-231521-audit-v2-final-verified-smoke/`: one finite RGB update,
+  two finite closed-loop updates, terminal validation, finite model/optimizer
+  checkpoint, and byte-identical no-op resume with truthful zero-update CLI
+  reporting. It is not an accuracy claim.
+- Preserved and superseded the legacy sustained run after proving that its
+  phase handoff discarded all 8,192 RGB updates from the mutable causal path;
+  deployment rejection and optimisation continuation are now separate.
+- Added `configs/sustained_accuracy_mps_v2.yaml` with 40-frame mature
+  one-second support, batch two, 16,384 training episodes, corrected global
+  horizon weighting, forecast NLL, and bounded hashed trend-validation anchors.
+- Added deterministic absolute-step batch sampling compatible with the legacy
+  DataLoader stream, strict semantic resume validation, MPS RNG round-trip,
+  immutable launch-time source provenance, and exact additive metric totals.
+- Added mature/cold forecast accounting, scene-wide deterministic censoring
+  after unseen external actuation, distinct position/velocity correction
+  objectives, per-axis/per-horizon/per-scenario/per-seed metrics, structured
+  selection rejection reasons, and context-rich training logs.
+- Prioritized scarce pair collisions in conditioned windows and removed
+  frozen global-perception loss from the causal optimized total.
+- Wired RGB appearance supervision and froze the learned corrector visibility
+  head whose output is overwritten by explicit RGB visibility.
+- Propagated world XYZ belief covariance through the pinhole Jacobian before
+  RGB association instead of comparing metre-squared variance with normalized
+  image and inverse-depth residuals.
+- Removed an absolute fast-ROI centre clamp that corrupted valid partially
+  offscreen priors.
+- Made filter uncertainty the sole missed-track variance authority and changed
+  measurement-quality gating from optimistic maximum confidence to a
+  conservative cap, including per-axis/direct-velocity support.
+- Fixed repeated low-speed ground bounce chatter, made the glancing scenario
+  genuinely oblique, aligned analytic pair restitution with the simulator,
+  preserved OOD ranges after named-scenario resolution, and isolated render
+  RNG from physics/lifecycle/actuation RNG.
+- Rejected the currently unimplemented `birth_confirmations != 1` setting
+  instead of silently accepting a dead configuration value.
+- Preserved collision evidence across dynamics substeps and separated endpoint
+  contact from interval pair/boundary collision; floor support, walls, ceiling,
+  and sleeping now have distinct tested semantics.
+- Corrected association/innovation slot mappings, confidence gating, recycled
+  belief-state resets, timestamp/finite contracts, projected ROI covariance,
+  out-of-view lifecycle handling, and one-authority miss uncertainty.
+- Replaced MAE-only perception selection with a versioned runtime-qualified
+  MAE/recall/precision/F1 selector using exact pooled counts. Capacity-limited
+  births now prefer the strongest qualified proposal.
+- Removed unsupported zero objectives, detached already-supervised state and
+  structured-RGB mean paths from their variance-calibration NLLs, and aligned
+  collision-conditioned samples to a scored event endpoint.
+- Added phase-specific MPS/CPU execution with exact device/handoff markers,
+  executable-source fingerprints, tensor-linked measurement selector
+  artifacts, and no-op resume preservation.
+- Changed ID-switch evaluation to use an independent framewise geometric match
+  instead of the training-only locked target mapping that could report zero
+  switches after a real track swap.
+- Advanced the specification to 1.6 and simulator metadata to
+  `sphere_world_v3` for the corrected event/contact physics contract.
+- Expanded the specification with identifiable-target, safe-incumbent,
+  exact-resume, RNG-isolation, and convergence-evidence contracts.
+- Verification results are recorded in `project/STATUS.md` after the final
+  hybrid-device smoke; short smokes remain wiring evidence rather than
+  accuracy claims.
+
 ### Added
 
 - Per-axis per-horizon rollout loss records and fixed-denominator aggregation,

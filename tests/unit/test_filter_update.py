@@ -5,10 +5,12 @@ from dataclasses import replace
 import pytest
 import torch
 
-from world_model.belief import NUM_MOTION_MODES, BeliefFactory
+from world_model.belief import NUM_MOTION_MODES, BeliefFactory, ObjectLifecycle
 from world_model.filtering import (
     BeliefUpdater,
     BeliefUpdaterConfig,
+    FilterUncertainty,
+    FilterUncertaintyConfig,
     diagonal_kalman_update,
 )
 from world_model.fusion import (
@@ -51,6 +53,34 @@ def test_zero_innovation_leaves_mean_and_outlier_is_robustly_clipped() -> None:
     )
     assert torch.equal(zero.mean, prior)
     assert torch.linalg.vector_norm(outlier.mean) < 3.0
+
+
+def test_filter_is_single_authority_for_missed_track_uncertainty() -> None:
+    factory = BeliefFactory(max_objects=2)
+    belief = factory.create()
+    belief = belief.replace(
+        objects=belief.objects.replace(
+            active=torch.tensor([[True, False]]),
+            object_id=torch.tensor([[4, -1]]),
+        )
+    )
+    increment = 0.125
+    uncertainty = FilterUncertainty(
+        FilterUncertaintyConfig(missed_fast_variance_increment=increment)
+    )
+
+    posterior = uncertainty.missed(belief, torch.tensor([[True, False]]))
+
+    prior_variance = belief.objects.fast_log_variance.exp()
+    posterior_variance = posterior.objects.fast_log_variance.exp()
+    torch.testing.assert_close(
+        posterior_variance[0, 0],
+        prior_variance[0, 0] + increment,
+    )
+    torch.testing.assert_close(
+        posterior_variance[0, 1],
+        prior_variance[0, 1],
+    )
 
 
 def test_oracle_position_update_reduces_error_without_resetting_identity() -> None:
@@ -172,6 +202,43 @@ def _rgb_position_update_case() -> tuple[
     return belief, measurement, predicted, association
 
 
+def test_weak_association_does_not_confirm_track_lifecycle() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    measured = replace(
+        measured,
+        existence_logits=torch.full_like(measured.existence_logits, -20.0),
+    )
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(enable_learned_corrector=False),
+    )
+
+    posterior = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+    )
+    assert updater.last_diagnostics is not None
+    assert not updater.last_diagnostics.observed_mask.any()
+
+    accounted = ObjectLifecycle().update_visibility(
+        posterior,
+        updater.last_diagnostics.observed_mask,
+    )
+    assert accounted.objects.missed_steps[0, 0] == 1
+    assert accounted.objects.existence_logit[0, 0] < belief.objects.existence_logit[0, 0]
+
+
 def test_rgb_temporal_position_coupling_estimates_directional_velocity() -> None:
     belief, measured, predicted, association = _rgb_position_update_case()
     innovation = build_innovation(
@@ -199,6 +266,56 @@ def test_rgb_temporal_position_coupling_estimates_directional_velocity() -> None
     prior_future_x = belief.objects.position[0, 0, 0] + belief.objects.velocity[0, 0, 0]
     posterior_future_x = posterior.objects.position[0, 0, 0] + posterior.objects.velocity[0, 0, 0]
     assert (posterior_future_x - target_future_x).abs() < (prior_future_x - target_future_x).abs()
+
+
+def test_position_quality_conservatively_caps_each_axis() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    measured_values = torch.ones_like(measured.values)
+    measured = replace(
+        measured,
+        values=measured_values,
+        existence_logits=torch.zeros_like(measured.existence_logits),
+        auxiliary={
+            **measured.auxiliary,
+            "world_position": measured_values,
+            "position_confidence": torch.tensor([[[1.0, 0.01, 0.0]]]),
+        },
+    )
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(enable_learned_corrector=False),
+    )
+
+    posterior = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+    )
+
+    # High quality cannot promote a 0.5 existence confidence.
+    assert 0.45 < posterior.objects.position[0, 0, 0] < 0.55
+    assert 0.0 < posterior.objects.position[0, 0, 1] < 0.02
+    torch.testing.assert_close(
+        posterior.objects.position[0, 0, 2],
+        torch.tensor(0.0),
+    )
+    # Indirect position-to-velocity evidence obeys the same position quality.
+    assert posterior.objects.velocity[0, 0, 0] > 0.2
+    assert posterior.objects.velocity[0, 0, 1].abs() < 0.01
+    torch.testing.assert_close(
+        posterior.objects.velocity[0, 0, 2],
+        torch.tensor(0.0),
+    )
 
 
 def test_surprise_weight_does_not_double_clip_analytic_position_update() -> None:

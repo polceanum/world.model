@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import torch
@@ -136,9 +137,9 @@ class InteractionGraph(nn.Module):
         inverse_mass = objects.mass.squeeze(-1).reciprocal()
         inverse_mass_sum = inverse_mass[:, :, None] + inverse_mass[:, None, :]
         inverse_mass_difference = (inverse_mass[:, :, None] - inverse_mass[:, None, :]).abs()
-        restitution_mean = 0.5 * (
-            objects.restitution.squeeze(-1)[:, :, None]
-            + objects.restitution.squeeze(-1)[:, None, :]
+        pair_restitution = torch.minimum(
+            objects.restitution.squeeze(-1)[:, :, None],
+            objects.restitution.squeeze(-1)[:, None, :],
         )
         friction_mean = 0.5 * (
             objects.friction.squeeze(-1)[:, :, None] + objects.friction.squeeze(-1)[:, None, :]
@@ -158,7 +159,7 @@ class InteractionGraph(nn.Module):
                 radius_difference,
                 inverse_mass_sum,
                 inverse_mass_difference,
-                restitution_mean,
+                pair_restitution,
                 friction_mean,
                 pair_position_variance,
                 position_std,
@@ -202,9 +203,13 @@ class InteractionGraph(nn.Module):
         impulse_multiplier_raw = symmetric(edge_values[..., 4])
         impulse_additive_raw = symmetric(edge_values[..., 5])
         edge_mask = upper_mask | upper_mask.transpose(1, 2)
+        # Zero network output must preserve the analytic uncertainty baseline.
+        # Represent this as a smooth signed residual around softplus(0), rather
+        # than an always-positive softplus whose zero logit would inject 0.693
+        # units of untrained noise per edge.
         edge_process_noise = (
-            torch.nn.functional.softplus(symmetric(edge_values[..., 6])) * edge_mask
-        )
+            torch.nn.functional.softplus(symmetric(edge_values[..., 6])) - math.log(2.0)
+        ) * edge_mask
         interaction_density = edge_mask.sum(dim=-1).to(objects.position.dtype)
 
         mean_uncertainty = objects.fast_log_variance.exp().mean(dim=-1)

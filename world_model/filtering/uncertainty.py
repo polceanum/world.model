@@ -20,6 +20,12 @@ class FilterUncertaintyConfig:
 class FilterUncertainty:
     def __init__(self, config: FilterUncertaintyConfig | None = None) -> None:
         self.config = config or FilterUncertaintyConfig()
+        if self.config.missed_fast_variance_increment < 0:
+            raise ValueError("missed_fast_variance_increment must be nonnegative")
+        if self.config.ambiguous_variance_increment < 0:
+            raise ValueError("ambiguous_variance_increment must be nonnegative")
+        if self.config.minimum_log_variance > self.config.maximum_log_variance:
+            raise ValueError("minimum_log_variance cannot exceed maximum_log_variance")
 
     def missed(self, belief: WorldBelief, missed_mask: torch.Tensor) -> WorldBelief:
         if missed_mask.shape != belief.objects.active.shape:

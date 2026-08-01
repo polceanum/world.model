@@ -1328,3 +1328,234 @@
   credited with improved physical accuracy. ROI event features and slow
   uncertainty calibration remain explicit follow-up model tasks rather than
   nominally trainable dead heads.
+
+## ADR-061 — Separate deployment safety from the mutable optimisation trajectory
+
+- **Date:** 2026-08-01
+- **Status:** accepted and implemented
+- **Context:** The sustained step-8192 perception candidate improved weighted
+  selection score `15.69%`, one-second RMSE `33.13%`, target coverage `23.28%`,
+  and collision F1 `31.45%`, but velocity regressed `4.44%` and correctly
+  failed the 2% deployment guard. The trainer then reloaded the safe step-zero
+  checkpoint before causal training. Exact tensor comparison showed 79/84
+  global RGB tensors changed at handoff and 0/84 differed from step zero in
+  every later causal checkpoint.
+- **Decision:** A rejected candidate does not replace the safe deployment
+  incumbent, but a finite candidate remains the mutable optimisation state so
+  downstream objectives can repair its failed guardrail. Persist the fixed
+  reference, moving incumbent, candidate tensor hash, acceptance, and every
+  structured rejection reason separately. Do not conflate checkpoint
+  selection with phase-state rollback.
+- **Alternatives considered:** weaken the velocity guard; always deploy the
+  primary-score winner; always roll training back to the safe incumbent;
+  discard the completed perception phase and restart.
+- **Consequences:** Safety gates retain their meaning without erasing useful
+  representation learning. A later candidate still needs all broad
+  guardrails; continuing from it is not promotion.
+
+## ADR-062 — Optimise deterministic futures only while causally identifiable
+
+- **Date:** 2026-08-01
+- **Status:** accepted and implemented
+- **Context:** At 20 Hz and 24 frames, only anchors 0–3 support a one-second
+  target, while temporal velocity becomes observable around frame three.
+  Random restitution/mass/drag are not visually identifiable before contact.
+  The impulse scenario has a `92.24%` chance of an unseen intervention within
+  one second, and coupled contacts can transfer that intervention to any
+  object. Exact point/event targets after it are mutually incompatible.
+- **Decision:** Separate cold and mature tracks. Train deterministic position,
+  velocity, event, and posterior-improvement losses only on mature support
+  before any unseen scene actuation. Continue Gaussian forecast likelihood on
+  realised stochastic outcomes so uncertainty can widen. Use 40-frame
+  episodes, fixed configured horizon denominators, and explicit support counts.
+- **Alternatives considered:** hardcode constant velocity; remove stochastic
+  scenarios; train all realised point targets; ignore cold-start error; weaken
+  one-second selection.
+- **Consequences:** The model remains free to learn arbitrary dynamics, but is
+  no longer pushed toward an average of impossible futures. Cold-start,
+  pre-identification, stochastic, and mature deterministic performance must be
+  reported separately.
+
+## ADR-063 — Make continuation, simulation, and trend validation reproducible
+
+- **Date:** 2026-08-01
+- **Status:** accepted and implemented
+- **Context:** Resume replayed an early shuffled permutation, MPS RNG was not
+  saved, and long-running checkpoints sampled whatever Git commit was current
+  at save time. Rendering and physics shared a generator, so changing only
+  render noise changed later impulses and trajectories by up to `0.733 m` in
+  the regression fixture. Full all-anchor 40-frame trend validation was also
+  operationally excessive.
+- **Decision:** Address training samples by absolute optimiser step while
+  exactly reproducing the legacy DataLoader draw stream. Save/restore CPU,
+  CUDA, and MPS RNG where applicable. Validate exact resume semantics before
+  overwriting run metadata and use weights-only initialization for changed
+  protocols. Capture source provenance once at launch. Give rendering an
+  independent deterministic generator. Validate batch-one episodes with exact
+  seed/scenario attribution and a hashed deterministic bounded spread of
+  forecast anchors; use a separate larger balanced promotion manifest.
+- **Alternatives considered:** serialize DataLoader prefetch internals; allow
+  arbitrary resume overrides; query live Git state at every save; seed render
+  noise from the physics stream; validate every anchor at every checkpoint.
+- **Consequences:** Interrupted training has a well-defined next sample and
+  source identity, renderer ablations are physically paired, counts are exact,
+  and frequent validation is affordable. Changing the anchor count or any
+  objective/data field invalidates selector compatibility.
+
+## ADR-064 — Preserve interval events and distinguish floor support from boundaries
+
+- **Date:** 2026-08-01
+- **Status:** accepted and implemented
+- **Context:** The dynamics rollout previously exposed only the final
+  substep's collision result. A fast impact that separated before the
+  observation endpoint therefore disappeared before temporal-history and
+  parameter-observability gates consumed it. Separately, every analytic plane
+  contact was collapsed into `ground_contact`, so a slow side-wall or ceiling
+  contact could cancel tangential motion or preserve sleeping state.
+- **Decision:** OR pair and boundary collision evidence across every numerical
+  substep while retaining endpoint contact separately. Propagate both through
+  zero-step, rollout, runtime, temporal-history, and observability contracts.
+  Tag environment planes explicitly; only the lower vertical support plane is
+  ground. Cancel sub-threshold inward normal velocity as a constraint but do
+  not invent sleep from one substep or erase tangential sliding.
+- **Alternatives considered:** lower event thresholds; infer collisions from
+  the final motion mode; call every static plane ground; keep simulator and
+  belief sleep semantics intentionally different.
+- **Consequences:** A collision remains causally available at the next RGB
+  update, while wall/ceiling interactions stay real boundary events. Slow
+  floor settling no longer produces repeated bounce labels, and side-wall
+  contact cannot freeze an otherwise free trajectory.
+
+## ADR-065 — Select perception on lifecycle-qualified pooled evidence
+
+- **Date:** 2026-08-01
+- **Status:** accepted and implemented
+- **Context:** Measurement validation used the detector's lower confidence
+  threshold and selected the smallest localization loss. A proposal could look
+  accurate in isolation while never crossing the lifecycle birth threshold,
+  so improved MAE could hide collapsed runtime recall. Frame/episode averages
+  also gave ratios unequal denominators.
+- **Decision:** Evaluate proposals at `lifecycle.birth_confidence`; pool
+  additive true positives, targets, proposals, matched counts, and absolute
+  errors before deriving runtime MAE, recall, precision, and F1. Restrict the
+  assignment itself to lifecycle-qualified proposals so a low-confidence
+  localization cannot steal a target; count confident proposals on empty
+  target frames as false positives. Select with a versioned broad score plus
+  MAE/recall/precision non-regression gates. A candidate with no qualified
+  localization support is unusable. Allocate capacity-constrained births by
+  stable descending confidence and reset every identity-specific field when
+  recycling a slot.
+- **Alternatives considered:** keep MAE-only selection; lower the runtime birth
+  threshold to match training; average per-frame F1; allocate by query index.
+- **Consequences:** `best_measurement.pt` now means usable discovery evidence,
+  not merely a well-localized sub-threshold query. Recall and precision cannot
+  silently collapse during perception pretraining.
+
+## ADR-066 — Normalize only supported objectives and separate mean from calibration
+
+- **Date:** 2026-08-01
+- **Status:** accepted and implemented
+- **Context:** Unsupported state/parameter/horizon terms were represented by
+  differentiable zeros and then averaged across TBPTT frames, diluting the
+  rare event and parameter gradients. State and structured-RGB calibration
+  NLLs also duplicated their explicit robust mean gradients with an
+  inverse-variance multiplier; a one-batch audit measured this as the dominant
+  state gradient, while the first corrected smoke still exposed RGB NLL as a
+  hard-frame gradient confound. Collision-conditioned windows often contained
+  an event without placing it at any scored endpoint.
+- **Decision:** Omit unsupported terms and average each objective only across
+  its real support. Keep fixed configured horizon denominators where selection
+  is fixed-weight. Detach the already-supervised mean error inside state and
+  structured-RGB calibration NLLs while retaining their variance gradients.
+  Also linearize RGB world covariance at detached centre/depth coordinates so
+  covariance objectives cannot reach mean heads through the Jacobian; leave
+  forecast NLL as a proper distributional score. Align a feasible sampled
+  collision with the shortest scored event endpoint.
+- **Alternatives considered:** tune learning rate/clip norm around the biased
+  objective; increase parameter weights without fixing support; remove NLL;
+  count any collision anywhere in a window as a positive endpoint.
+- **Consequences:** Batch composition still causes truthful stochastic loss
+  variation, but it no longer changes an objective merely by adding
+  unsupported zero examples. Calibration and mean fitting no longer fight
+  through duplicate gradients.
+
+## ADR-067 — Make phase-device continuation and selector linkage explicit
+
+- **Date:** 2026-08-01
+- **Status:** accepted and implemented
+- **Context:** On this Mac the CNN-heavy perception phase benefits from MPS,
+  while a matched branch-heavy causal update was about nine times faster on
+  CPU. A single device policy wasted days. The first hybrid implementation
+  then exposed continuation hazards: both sides of the phase boundary can
+  write the same completed step, documentation-only commits invalidated the
+  whole-worktree hash, external config paths could disable Git provenance,
+  `best_measurement.pt` was not tensor-linked, and a zero-update resume could
+  rewrite an MPS checkpoint as CPU.
+- **Decision:** Resolve and record measurement and closed-loop devices
+  independently in the immutable protocol. At the boundary, reset optimizer
+  moments, move once, and clear runtime caches. Use an explicit handoff marker
+  to interpret equal-step checkpoints. Hash executable training source content
+  independently of commit/docs while retaining full Git provenance. Verify
+  measurement and rollout selector files by protocol, tensor hash, step, and
+  actual device, copying and re-verifying linked artifacts for a new run
+  directory. Never reserialize an already-complete exact resume.
+- **Alternatives considered:** run all phases on MPS; run all phases on CPU;
+  permit arbitrary resume device changes; rely on filenames/metric flags;
+  reject every commit after launch; rewrite no-op checkpoints for convenience.
+- **Consequences:** The default remains one simple training command, but each
+  phase uses the measured faster backend. A pause/resume cannot silently
+  change numerical semantics or lose the selected perception state, while
+  documentation may still advance during a multi-day campaign.
+
+## ADR-068 — Pin the proposal transformer to CPU on PyTorch 2.10 MPS
+
+- **Date:** 2026-08-01
+- **Status:** accepted and implemented
+- **Context:** The final hybrid smoke failed before its first optimizer update
+  despite a finite scalar loss. On the exact seeds `1,2`, a finite contiguous
+  `2x96x64x64` MPS backbone feature map generated NaN gradients in eight
+  attention/feed-forward matrix weights. The same weights/features were fully
+  finite on CPU. Random or constant MPS features did not reproduce it, and a
+  replacement token-linear implementation produced unacceptable MPS/CPU
+  forward disagreement.
+- **Decision:** Keep the convolutional backbone and fast ROI path on MPS, but
+  pin the small global proposal transformer to CPU when
+  `device.global_detector_cpu_on_mps=true`. Copy its feature input to CPU and
+  every output back to the image device without detaching autograd. Include
+  the flag in measurement/rollout protocol hashes and exact-resume config
+  comparison, with missing legacy fields normalized to the historical
+  `false` behavior.
+- **Alternatives considered:** run the entire measurement phase on CPU;
+  replace attention with an unverified custom projection; ignore the finite
+  loss and clip non-finite gradients; disable global detector training.
+- **Consequences:** The main convolutional workload still uses MPS and the
+  architecture/tensor contracts are unchanged, but the measurement phase is
+  explicitly hybrid rather than whole-model MPS. The exact failing batch now
+  has zero non-finite gradients and completes AdamW. A host regression covers
+  both device gradients, clipping, checkpoint restore, and a second update.
+
+## ADR-069 — Recover terminal validation and deserialize checkpoints on CPU
+
+- **Date:** 2026-08-01
+- **Status:** accepted and implemented
+- **Context:** An interruption after the final optimizer checkpoint but before
+  validation left no way to distinguish complete from pending validation. An
+  in-place resume from selector/numbered artifacts could overwrite historical
+  source-run state. Mapping a hybrid checkpoint directly to MPS also moved
+  non-capturable Adam scalar steps there, while evaluation/demo mapped a full
+  unused optimizer onto accelerator memory.
+- **Decision:** Save `final_validation_completed=0` before terminal validation
+  and `1` only after it succeeds. Exact resume recovers a pending validation
+  with zero optimizer updates. Permit in-place resume only from the exact
+  `checkpoints/last.pt`; require a new run or weights-only initialization for
+  other artifacts. Deserialize trainer, evaluator, demo, and gate-fitting
+  checkpoints on CPU, then let state loading copy weights/moments to their
+  owning parameter devices. Preserve legacy/completed no-op checkpoint and
+  summary bytes.
+- **Alternatives considered:** treat the final prevalidation checkpoint as
+  complete; always rerun terminal validation; permit any checkpoint to define
+  its parent run; map the whole payload to the active accelerator.
+- **Consequences:** Completion is durable and recoverable without accidental
+  extra training. Historical selector files cannot be silently overwritten.
+  Hybrid Adam steps stay on CPU, moments follow parameter owners, and
+  evaluation does not duplicate optimizer-sized accelerator storage.

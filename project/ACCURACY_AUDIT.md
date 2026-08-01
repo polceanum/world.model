@@ -1,6 +1,6 @@
 # Accuracy audit
 
-**Evidence cut-off:** 2026-07-30  
+**Evidence cut-off:** 2026-08-01
 **Scope:** existing RGB-only checkpoints, reports, resolved configurations, and
 training logs in this repository
 
@@ -30,6 +30,123 @@ nominal 48,000-update run, closed-loop throughput and checkpoint selection must
 be corrected so the campaign is computationally credible and cannot select a
 position-only win that regresses velocity, detection, identity, events, or
 calibration.
+
+## 2026-08-01 convergence-integrity audit
+
+The first sustained scaled campaign is now preserved as a legacy-protocol
+control and was manually superseded at logged step `9400` (latest durable
+checkpoint observed during the audit: step `9344`). It was neither numerically
+divergent nor broadly converged. The evidence below comes from the retained
+[metrics stream](../runs/20260730-192625-scaled-sustained-e2e-v1/metrics.jsonl),
+[supervisor log](../runs/20260730-192625-scaled-sustained-e2e-v1/convergence_supervisor.jsonl),
+and linked validation checkpoints in that run.
+
+On the exact 16-episode validation manifest:
+
+| Step/candidate | Validation loss | Selection score | Position | Velocity | 1.00 s | Target coverage | F1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| imported step 0 | `9.9637` | `0.860012` | `1.0352` | `1.3672` | `0.9686` | `0.3685` | `0.1664` |
+| measurement handoff, step 8192 | `9.8397` | `0.725038` | `0.9770` | `1.4278` | `0.6477` | `0.4542` | `0.2188` |
+| causal step 8704 | `9.0768` | `0.855345` | `1.0202` | `1.3287` | `0.9923` | `0.4085` | `0.1748` |
+| causal step 9216 | `8.5636` | `0.849660` | `1.0290` | `1.2348` | `0.9980` | `0.3791` | `0.2092` |
+
+The step-8192 value uses the same validation objective, but it is a
+measurement-phase handoff rather than a point on the causal-optimisation
+trend. The full 0.10/0.25/0.50/0.75/1.00-second RMSE vectors were
+`0.8851/0.7672/0.7780/0.8410/0.9686` at step 0,
+`0.8679/0.7777/0.7456/0.7127/0.6477` at the handoff, and
+`0.8676/0.7281/0.7416/0.8239/0.9980` at causal step 9216.
+
+The causal path therefore learned real velocity/event structure: step 0 to
+9216 improved validation loss `14.1%`, velocity `9.68%`, and collision F1
+`25.7%`. It simultaneously regressed one-second position `3.03%` and
+0.10/0.25/0.50/0.75-second forecast-coverage calibration from
+`0.8734/0.8566/0.8123/0.7386` to `0.8485/0.8287/0.7843/0.7168`. With only two
+causal validations, the declared four-point plateau test could not be
+evaluated. This is real but traded-off learning, not broad convergence.
+
+The critical defect was the phase handoff. Step 8192 changed `79/84` global RGB
+tensors and improved the selection score `15.69%`, one-second RMSE `33.13%`,
+target coverage `23.28%`, and collision F1 `31.45%`; velocity regressed `4.44%`
+and correctly failed the 2% deployment guard. The old trainer then reloaded
+the step-zero safe checkpoint. Global RGB tensors at steps 8704, 9216, and
+`last.pt` were bit-identical to step zero, proving that all 8192 perception
+updates were discarded from the mutable causal trajectory.
+
+Raw loss wobble was dominated by heterogeneous perception failures, not NaNs:
+across 150 causal log rows, total loss had median/mean/max
+`9.134/9.595/29.908`, correlation with measurement loss was `0.9666`, and
+`146/150` pre-clip gradients exceeded the unit clip threshold. The median
+effective clip coefficient was `0.2043`. All 177 model tensors, Adam moments,
+and optimiser steps were finite and internally consistent. Batch-one variation
+therefore explains much of the visible noise, while near-universal clipping
+makes each update unusually sensitive to the current batch composition.
+
+The old profile also mismatched training support to selection. Across those
+150 rows, the 0.10/0.25/0.50/0.75/1.00-second objectives had support in
+`150/129/114/89/57` rows. Legacy per-window normalization turned the configured
+selection weights of `10/15/20/25/30%` into mean effective shares of
+`28.55/21.83/21.10/17.12/11.40%`. The 24-frame, 20 Hz episodes also supplied
+only four possible one-second anchors; temporal velocity becomes observable at
+about frame three, leaving three of those four anchors cold.
+
+Some requested futures were not point-identifiable at all. In the impulse
+scenario, the probability of at least one unseen intervention within one
+second is `1 - 0.88^20 = 92.24%`, so an exact deterministic post-impulse target
+cannot be inferred from the anchor. Mass, restitution, and drag were sampled
+independently of appearance, so exact pre-contact post-collision outcomes also
+cannot be inferred before an interaction makes those parameters observable.
+
+The corrected implementation and
+`configs/sustained_accuracy_mps_v2.yaml` address these confounds:
+
+- retain a safe deployment incumbent while continuing optimisation from a
+  stronger finite handoff candidate;
+- use 40 frames, mature anchors, fixed global horizon denominators, and joint
+  long-horizon/pair-collision sampling;
+- censor deterministic coupled-scene targets after hidden actuation while
+  training forecast NLL;
+- use unit-correct projected association covariance, stable resting contact,
+  genuinely glancing impacts, simulator/model-consistent pair restitution,
+  compositional OOD ranges, and independent render/physics RNG;
+- preserve pair and boundary collision evidence over complete observation
+  intervals, distinguish floor support from walls/ceiling, and prevent a
+  single slow contact from inventing sleep;
+- select perception with lifecycle-qualified pooled MAE/recall/precision/F1,
+  allocate scarce birth slots by confidence, and reset all identity-specific
+  state when a slot is recycled;
+- omit unsupported loss terms, calibrate state variance without duplicating
+  its supervised mean gradient, and align collision-conditioned windows with
+  an actually scored event endpoint;
+- fix filter/lifecycle uncertainty ownership, structured-depth validity and
+  edge process noise; supervise appearance and velocity correction explicitly
+  while excluding frozen or structurally dead objectives;
+- preserve exact absolute-step sampling with `StepIndexedBatchSampler`, CPU/MPS
+  RNG, immutable process-start provenance, linked selector tensor hashes,
+  exact additive counts, and structured rejection reasons;
+- report axis/scenario/seed and cold/mature attribution under a hashed bounded
+  trend-validation anchor protocol, with ID switches measured from an
+  independent framewise association rather than the training-only locked
+  target map.
+- restrict runtime-qualified assignment to lifecycle-confident proposals,
+  retain false positives on target-empty frames, and version the changed
+  selector semantics;
+- detach RGB covariance linearization coordinates from mean heads while
+  keeping variance calibration trainable;
+- use a tested hybrid measurement placement on this PyTorch 2.10 host
+  (CNN/ROI MPS, proposal transformer CPU) after reproducing data-dependent NaN
+  MPS matrix gradients, and deserialize checkpoints on CPU to preserve hybrid
+  optimizer ownership;
+- recover interrupted terminal validation without training, restrict
+  in-place resume to the exact `last.pt`, and preserve completed no-op artifacts
+  byte-for-byte.
+
+These are correctness and experimental-integrity fixes. They are not yet
+evidence that v2 achieves higher held-out accuracy. Corrected long-run evidence
+is still pending; no v2 convergence or promotion claim is made here. The
+three-update smoke in
+`runs/20260801-231521-audit-v2-final-verified-smoke/` proves finite two-phase
+execution, selection, terminal checkpointing, and exact no-op resume only.
 
 ## Rules for comparing evidence
 

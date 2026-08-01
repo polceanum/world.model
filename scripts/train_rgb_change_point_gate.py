@@ -371,7 +371,7 @@ def main() -> int:
     payload = load_checkpoint(
         args.checkpoint,
         model=model,
-        map_location=device_info.device,
+        map_location="cpu",
         expected_config=config,
     )
     if args.train_cache:

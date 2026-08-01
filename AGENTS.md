@@ -66,3 +66,37 @@ Working rules:
   calibration guardrails. Apply non-regression checks against both the moving
   incumbent and a fixed pre-campaign reference, and retain numbered validation
   snapshots with verifiable weight and protocol provenance.
+- Keep the guardrail-safe deployment incumbent separate from the mutable
+  optimisation trajectory. A candidate rejected for deployment may still be
+  the correct state from which causal training repairs the failed guardrail.
+- Apply deterministic point/event losses only to futures identifiable from the
+  causal anchor. After an unseen external actuation, train calibrated forecast
+  likelihood but censor deterministic targets for the coupled scene.
+- Isolate renderer RNG from physics/lifecycle/actuation RNG. A render-only
+  configuration change must leave the physical trajectory and event labels
+  exactly unchanged for the same seed.
+- Treat `--resume` as exact continuation: preserve the absolute next sample,
+  optimiser and CPU/MPS RNG, objective/data protocol, and launch-time source
+  provenance. Use `--initialize-from` for a changed curriculum.
+- Preserve collision evidence across every dynamics substep in an observation
+  interval. Keep endpoint contact separate from interval collision, and never
+  classify side-wall or ceiling support as ground/sleep.
+- Select perception checkpoints with the same confidence/lifecycle semantics
+  used by runtime births. Pool additive measurement counts/errors before
+  deriving MAE, recall, precision, or F1.
+- Omit unsupported objectives rather than averaging fabricated zero examples.
+  Use uncertainty calibration to train variance without duplicating an
+  explicitly supervised state-mean gradient.
+- A configured phase-specific device switch is part of the resolved protocol,
+  not a resume override. Exact resume must verify and preserve every linked
+  selector artefact; a no-op inspection must not rewrite a durable checkpoint.
+- Preserve the tested PyTorch 2.10 MPS workaround: backbone and ROI tensors
+  stay on MPS, but the small global proposal transformer is pinned to CPU
+  through differentiable copies when
+  `device.global_detector_cpu_on_mps=true`. Do not describe that phase as
+  whole-model MPS execution or remove the fallback without matched finite-
+  gradient and accuracy evidence.
+- Deserialize training, evaluation, and demo checkpoints on CPU, then let
+  state loading place tensors on their owners. This preserves CPU Adam step
+  scalars for the hybrid optimizer and avoids copying unused optimizer moments
+  to accelerator memory.

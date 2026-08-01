@@ -66,7 +66,10 @@ class Associator:
         mahalanobis_gate: float = 25.0,
         maximum_cost: float = 30.0,
         ambiguity_margin: float = 0.5,
+        minimum_measurement_confidence: float = 0.5,
     ) -> None:
+        if not 0.0 <= minimum_measurement_confidence <= 1.0:
+            raise ValueError("minimum_measurement_confidence must lie in [0,1]")
         self.geometry_weight = geometry_weight
         self.appearance_weight = appearance_weight
         self.existence_weight = existence_weight
@@ -74,6 +77,7 @@ class Associator:
         self.mahalanobis_gate = mahalanobis_gate
         self.maximum_cost = maximum_cost
         self.ambiguity_margin = ambiguity_margin
+        self.minimum_measurement_confidence = minimum_measurement_confidence
 
     def cost_matrix(
         self,
@@ -88,6 +92,7 @@ class Associator:
             existence_weight=self.existence_weight,
             geometry_dimensions=self.geometry_dimensions,
             mahalanobis_gate=self.mahalanobis_gate,
+            minimum_measurement_confidence=self.minimum_measurement_confidence,
         )
         return cost
 
@@ -97,37 +102,61 @@ class Associator:
         measurements: MeasurementSet,
         predicted: PredictedMeasurements,
     ) -> AssociationResult:
-        del belief  # predicted.valid_mask is the sensor-visible belief subset.
         measurements.validate()
         predicted.validate()
+        if belief.batch_size != predicted.values.shape[0]:
+            raise ValueError("belief and predicted measurement batch sizes differ")
         cost = self.cost_matrix(measurements, predicted)
-        batch, object_count, measurement_count = cost.shape
-        pair_capacity = min(object_count, measurement_count)
+        batch, prediction_count, measurement_count = cost.shape
+        belief_count = belief.objects.max_objects
+        pair_capacity = min(prediction_count, measurement_count)
         device = cost.device
         belief_indices = torch.full((batch, pair_capacity), -1, dtype=torch.int64, device=device)
         measurement_indices = torch.full_like(belief_indices, -1)
         pair_mask = torch.zeros((batch, pair_capacity), dtype=torch.bool, device=device)
         pair_cost = torch.full((batch, pair_capacity), torch.inf, dtype=cost.dtype, device=device)
         ambiguous = torch.zeros_like(pair_mask)
-        unmatched_beliefs = predicted.valid_mask.clone()
+        unmatched_beliefs = torch.zeros_like(belief.objects.active)
         unmatched_measurements = measurements.measurement_mask.clone()
+
+        for batch_index in range(batch):
+            valid_prediction_rows = torch.nonzero(
+                predicted.valid_mask[batch_index],
+                as_tuple=False,
+            ).flatten()
+            mapped_beliefs = predicted.belief_indices[
+                batch_index,
+                valid_prediction_rows,
+            ]
+            if bool(torch.any((mapped_beliefs < 0) | (mapped_beliefs >= belief_count))):
+                raise ValueError("valid predicted rows must map to an in-range belief slot")
+            if mapped_beliefs.unique().numel() != mapped_beliefs.numel():
+                raise ValueError("valid predicted rows must map to unique belief slots")
+            if mapped_beliefs.numel():
+                if not bool(belief.objects.active[batch_index, mapped_beliefs].all()):
+                    raise ValueError("valid predicted rows must map to active belief slots")
+                mapped_ids = belief.objects.object_id[batch_index, mapped_beliefs]
+                predicted_ids = predicted.object_ids[batch_index, valid_prediction_rows]
+                if not torch.equal(mapped_ids, predicted_ids):
+                    raise ValueError("predicted object IDs do not match their mapped belief slots")
+                unmatched_beliefs[batch_index, mapped_beliefs] = True
 
         # Transfer before SciPy matching.  MPS does not implement float64, so
         # asking `.to(cpu, float64)` in one operation can attempt the cast on
         # the source device.  SciPy's matcher accepts CPU float32 directly.
         detached = cost.detach().to(device="cpu", dtype=torch.float32).numpy()
         for batch_index in range(batch):
-            valid_beliefs = torch.nonzero(
+            valid_prediction_rows = torch.nonzero(
                 predicted.valid_mask[batch_index], as_tuple=False
             ).flatten()
             valid_measurements = torch.nonzero(
                 measurements.measurement_mask[batch_index], as_tuple=False
             ).flatten()
-            if valid_beliefs.numel() == 0 or valid_measurements.numel() == 0:
+            if valid_prediction_rows.numel() == 0 or valid_measurements.numel() == 0:
                 continue
-            belief_np = valid_beliefs.cpu().numpy()
+            prediction_np = valid_prediction_rows.cpu().numpy()
             measurement_np = valid_measurements.cpu().numpy()
-            subcost = detached[batch_index][np.ix_(belief_np, measurement_np)]
+            subcost = detached[batch_index][np.ix_(prediction_np, measurement_np)]
             # scipy rejects infeasible all-inf rows/columns. A large finite
             # sentinel permits assignment; gated pairs are rejected below.
             finite_subcost = np.where(
@@ -138,7 +167,8 @@ class Associator:
             rows, columns = linear_sum_assignment(finite_subcost)
             output_index = 0
             for row, column in zip(rows.tolist(), columns.tolist(), strict=True):
-                belief_index = int(belief_np[row])
+                prediction_index = int(prediction_np[row])
+                belief_index = int(predicted.belief_indices[batch_index, prediction_index].item())
                 measurement_index = int(measurement_np[column])
                 selected_cost = float(subcost[row, column])
                 if (
@@ -151,7 +181,7 @@ class Associator:
                 measurement_indices[batch_index, output_index] = measurement_index
                 pair_mask[batch_index, output_index] = True
                 pair_cost[batch_index, output_index] = cost[
-                    batch_index, belief_index, measurement_index
+                    batch_index, prediction_index, measurement_index
                 ]
                 competing = np.concatenate(
                     (

@@ -191,6 +191,57 @@ mistaken for the full protocol.
 
 ## Sustained shared-model accuracy campaign
 
+### Corrected v2 campaign
+
+The 1 August convergence-integrity audit superseded the active legacy campaign
+without deleting it. Use the corrected profile for new training:
+
+```bash
+python train.py \
+  --config configs/sustained_accuracy_mps_v2.yaml \
+  --initialize-from \
+    runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/best_measurement.pt \
+  --run-name "$(date -u +%Y%m%d-%H%M%S)-scaled-sustained-v2" \
+  --device mps
+```
+
+This is a new weights-only curriculum, not `--resume`. It has 40 frames,
+batch two, 16,384 unique training episodes, 8,192 measurement updates, 8,192
+causal updates, explicit mature/cold and stochastic/deterministic support,
+fixed global horizon denominators, forecast NLL, and deterministic bounded
+trend-validation anchors. The safe deployment incumbent remains separate from
+the mutable phase-handoff trajectory. Promotion still requires at least 64
+fresh balanced episodes and every broad guardrail.
+
+`device.preference=mps` applies to the convolution-heavy measurement phase.
+`device.closed_loop_preference=cpu` switches the same persistent model at the
+phase boundary after resetting causal optimizer moments and runtime caches. A
+matched batch-two benchmark measured approximately `9.16 s` data generation,
+`7.15 s` forward, and `2.70 s` backward on CPU; the equivalent branch-heavy
+causal update was about nine times slower in device compute on MPS. This is a
+backend choice, not an architectural fork. Both devices, the handoff state,
+and selector artifacts are part of the exact-resume protocol.
+
+On PyTorch 2.10, `device.global_detector_cpu_on_mps=true` keeps the CNN and
+fast ROI computation on MPS but pins only the small global proposal transformer
+to CPU. The exact finite batch with seeds `1,2` and a `2x96x64x64` backbone
+feature map produced NaN MPS weight gradients in all attention/MLP matrix
+weights; the CPU block gives byte-identical detector outputs, finite gradients
+back through the MPS feature copy, and finite AdamW updates. This execution
+flag is part of measurement and rollout selector protocol hashes and exact
+resume semantics.
+
+Checkpoints are deserialized on CPU. Model loading copies weights to the
+existing phase placement, while optimizer loading puts Adam moments on each
+parameter owner and keeps non-capturable scalar steps on CPU. Evaluation and
+demos use the same CPU-deserialization rule so a saved optimizer is not
+duplicated in accelerator memory. In-place exact resume accepts only the
+source run's `checkpoints/last.pt`; selector/numbered checkpoints require a new
+run or `--initialize-from`. A pending terminal-validation marker is recoverable
+without an optimizer update.
+
+### Preserved legacy campaign
+
 `configs/sustained_accuracy_mps.yaml` is the tractable successor to launching
 the nominal 48,000-step profile unchanged on one Mac. It retains the same
 1.90M-parameter architecture and all eight scenario families, initializes from
@@ -210,9 +261,11 @@ remains unbounded and scores all eligible posterior anchors.
 The campaign launched on 2026-07-30 predates the corrected per-axis global
 horizon normalization and joint sampler. Its config explicitly keeps both
 legacy controls false so an automatic in-place continuation cannot change the
-training protocol halfway through. New configurations default both controls
-true. The corrected objective must be evaluated in a separate timestamped
-campaign; no accuracy gain is inferred from the implementation alone.
+training protocol halfway through. It was manually superseded at logged step
+9400 after the audit proved that the old handoff discarded all perception
+updates from its mutable causal path. Its artifacts remain valid historical
+evidence, but its supervisor and trainer are stopped and it must not be
+extended or described as converged.
 
 ```bash
 python train.py \
@@ -255,7 +308,8 @@ under `runs/<run>/convergence/`; machine-readable events, state, and the final
 decision are written to `convergence_supervisor.jsonl`,
 `convergence_supervisor_state.json`, and `convergence_report.json`.
 
-For the active campaign, the supervisor was launched persistently with these
+For the preserved legacy campaign, the supervisor was launched persistently
+with these
 arguments:
 
 ```bash
@@ -270,7 +324,6 @@ PYTHONPATH=. conda run --no-capture-output -n orpheus python \
   --maximum-total-steps 24576
 ```
 
-Run that command through a persistent macOS LaunchAgent with `RunAtLoad=true`
-and `KeepAlive.SuccessfulExit=false`; do not launch a second copy manually.
+That historical job has been booted out. Do not relaunch it.
 The selected checkpoint still requires balanced fresh-validation confirmation
 of at least 64 episodes before the reserved test split is used.

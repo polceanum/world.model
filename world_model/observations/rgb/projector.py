@@ -290,6 +290,80 @@ def backproject_rgb_log_variance(
     ).log()
 
 
+def project_world_position_log_variance(
+    world_position_log_variance: Tensor,
+    camera_position: Tensor,
+    world_from_camera: Tensor,
+    intrinsics: Tensor,
+    image_size: tuple[int, int],
+    *,
+    output_dimensions: int,
+    variance_floor: float = 1.0e-4,
+    maximum_log_variance: float = 5.0,
+) -> Tensor:
+    """Propagate diagonal world XYZ uncertainty into RGB measurement units.
+
+    Association compares normalized image centres, log projected radius, and
+    inverse depth. Copying metre-squared state variance into those coordinates
+    makes Mahalanobis gates depend on arbitrary units. This first-order pinhole
+    Jacobian keeps every predicted covariance in the units of its measurement.
+    Appearance dimensions have no kinematic covariance and receive the
+    configured numerical floor.
+    """
+
+    if world_position_log_variance.shape != camera_position.shape:
+        raise ValueError("world position log variance and camera position must both be [B,N,3]")
+    if output_dimensions < 4:
+        raise ValueError("RGB predicted measurement must contain at least four dimensions")
+    if variance_floor <= 0:
+        raise ValueError("variance_floor must be positive")
+    world_variance = world_position_log_variance.exp()
+    camera_from_world = invert_transform(world_from_camera)
+    camera_rotation = camera_from_world[:, :3, :3]
+    camera_variance = torch.einsum(
+        "bij,bnj->bni",
+        camera_rotation.square(),
+        world_variance,
+    )
+    height, width = image_size
+    depth = camera_position[..., 2].clamp_min(1.0e-4)
+    camera_x = camera_position[..., 0]
+    camera_y = camera_position[..., 1]
+    fx = intrinsics[:, None, 0, 0]
+    fy = intrinsics[:, None, 1, 1]
+    x_scale = 2.0 * fx / max(width - 1, 1)
+    y_scale = 2.0 * fy / max(height - 1, 1)
+    inverse_depth = depth.reciprocal()
+    inverse_depth_squared = inverse_depth.square()
+    variance_x = camera_variance[..., 0]
+    variance_y = camera_variance[..., 1]
+    variance_z = camera_variance[..., 2]
+    centre_x_variance = (x_scale * inverse_depth).square() * variance_x + (
+        x_scale * camera_x * inverse_depth_squared
+    ).square() * variance_z
+    centre_y_variance = (y_scale * inverse_depth).square() * variance_y + (
+        y_scale * camera_y * inverse_depth_squared
+    ).square() * variance_z
+    log_radius_variance = inverse_depth_squared * variance_z
+    inverse_depth_variance = inverse_depth_squared.square() * variance_z
+    geometric = torch.stack(
+        (
+            centre_x_variance,
+            centre_y_variance,
+            log_radius_variance,
+            inverse_depth_variance,
+        ),
+        dim=-1,
+    )
+    if output_dimensions > 4:
+        appearance = geometric.new_full(
+            (*geometric.shape[:-1], output_dimensions - 4),
+            variance_floor,
+        )
+        geometric = torch.cat((geometric, appearance), dim=-1)
+    return geometric.clamp_min(variance_floor).log().clamp_max(maximum_log_variance)
+
+
 @dataclass(frozen=True)
 class RGBProjectorConfig:
     default_radius: float = 0.15
@@ -352,20 +426,27 @@ class RGBMeasurementProjector(nn.Module):
             dim=-1,
         )
         if objects.fast_log_variance.shape[-1] >= 3:
-            position_variance = objects.fast_log_variance[..., :3].exp().mean(dim=-1)
+            position_log_variance = objects.fast_log_variance[..., :3]
         else:
-            position_variance = position.new_full(
-                (batch, object_count), self.config.measurement_variance_floor
+            position_log_variance = position.new_full(
+                (batch, object_count, 3),
+                math.log(self.config.measurement_variance_floor),
             )
-        base_variance = (
-            position_variance.unsqueeze(-1)
-            .expand(-1, -1, values.shape[-1])
-            .clamp_min(self.config.measurement_variance_floor)
+        log_variance = project_world_position_log_variance(
+            position_log_variance,
+            camera_position,
+            world_from_camera,
+            intrinsics,
+            sensor_context.image_size,
+            output_dimensions=values.shape[-1],
+            variance_floor=self.config.measurement_variance_floor,
         )
-        log_variance = base_variance.log().clamp(-10.0, 5.0)
-        roi_uncertainty = (
-            self.config.uncertainty_roi_scale * position_variance.sqrt() * inverse_depth
-        )
+        # ROI coordinates are normalized image coordinates, so expand them
+        # using projected centre uncertainty in those same units. A
+        # metre-space standard deviation times inverse depth omits focal length
+        # and silently under-covers tracks as camera intrinsics change.
+        centre_standard_deviation = log_variance[..., :2].exp().sqrt().amax(dim=-1)
+        roi_uncertainty = self.config.uncertainty_roi_scale * centre_standard_deviation
         roi_radius = (normalised_radius + roi_uncertainty).clamp(
             self.config.minimum_roi_radius,
             self.config.maximum_roi_radius,
@@ -410,6 +491,7 @@ class RGBMeasurementProjector(nn.Module):
             & projectable
             & (geometric_visible_fraction <= self.config.full_occlusion_visible_fraction)
         )
+        unobservable = objects.active & (~projectable | fully_occluded)
         valid_mask = objects.active & projectable & ~fully_occluded
         rois = torch.where(valid_mask.unsqueeze(-1), rois, torch.zeros_like(rois))
         expected_visibility = (
@@ -446,6 +528,7 @@ class RGBMeasurementProjector(nn.Module):
                 "occlusion_fraction": occlusion_fraction,
                 "occluded_mask": fully_occluded,
                 "fully_occluded_mask": fully_occluded,
+                "unobservable_mask": unobservable,
                 "pairwise_occlusion_fraction": pairwise_occlusion,
             },
         )

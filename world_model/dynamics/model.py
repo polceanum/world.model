@@ -50,6 +50,8 @@ class DynamicsConfig:
     penetration_slop: float = 1e-4
     max_penetration_correction: float = 0.05
     contact_confidence_sigma: float = 0.0
+    pair_collision_speed_epsilon: float = 1.0e-4
+    boundary_collision_speed_epsilon: float = 0.1
     sleep_speed: float = 0.02
     world_bounds: tuple[tuple[float, float], ...] | None = None
 
@@ -79,6 +81,15 @@ class DynamicsConfig:
             raise ValueError("invalid log variance bounds")
         if self.contact_confidence_sigma < 0:
             raise ValueError("contact_confidence_sigma must be nonnegative")
+        for name, value in (
+            ("pair_collision_speed_epsilon", self.pair_collision_speed_epsilon),
+            (
+                "boundary_collision_speed_epsilon",
+                self.boundary_collision_speed_epsilon,
+            ),
+        ):
+            if value < 0 or not math.isfinite(value):
+                raise ValueError(f"{name} must be finite and nonnegative")
         if self.world_bounds is not None and (
             len(self.world_bounds) != 3
             or any(len(bounds) != 2 or bounds[0] >= bounds[1] for bounds in self.world_bounds)
@@ -121,6 +132,8 @@ class DynamicsModel(nn.Module):
             penetration_slop=self.config.penetration_slop,
             max_position_correction=self.config.max_penetration_correction,
             contact_confidence_sigma=self.config.contact_confidence_sigma,
+            collision_speed_epsilon=self.config.pair_collision_speed_epsilon,
+            boundary_collision_speed_epsilon=(self.config.boundary_collision_speed_epsilon),
         )
         self.events = EventModel(
             resolver,
@@ -146,6 +159,7 @@ class DynamicsModel(nn.Module):
                     normal=(0.0, 1.0, 0.0),
                     offset=self.config.ground_height,
                     name="ground",
+                    is_ground=True,
                 ),
             )
         planes: list[ContactPlane] = []
@@ -160,6 +174,7 @@ class DynamicsModel(nn.Module):
                     normal=tuple(lower_normal),
                     offset=float(lower),
                     name=f"{axis_names[axis]}_minimum",
+                    is_ground=axis == 1,
                 )
             )
             planes.append(
@@ -167,6 +182,7 @@ class DynamicsModel(nn.Module):
                     normal=tuple(upper_normal),
                     offset=float(-upper),
                     name=f"{axis_names[axis]}_maximum",
+                    is_ground=False,
                 )
             )
         return tuple(planes)
@@ -204,6 +220,8 @@ class DynamicsModel(nn.Module):
             penetration_slop=float(dynamics.penetration_slop),
             max_penetration_correction=float(dynamics.max_penetration_correction),
             contact_confidence_sigma=float(dynamics.contact_confidence_sigma),
+            pair_collision_speed_epsilon=(float(dynamics.pair_collision_speed_epsilon)),
+            boundary_collision_speed_epsilon=(float(dynamics.boundary_collision_speed_epsilon)),
             sleep_speed=float(dynamics.sleep_speed),
             world_bounds=(
                 tuple((float(bounds[0]), float(bounds[1])) for bounds in simulator.world_bounds)
@@ -279,11 +297,18 @@ class DynamicsModel(nn.Module):
             external_acceleration=external_acceleration,
         )
         events = self.events(objects, interaction)
+        # Preserve the fixed uncertainty-network input shape while making the
+        # graph's zero-centred edge-noise residual operational. Pair count
+        # describes how many interactions are possible; the additional term
+        # learns whether those interactions need more or less process noise.
+        interaction_uncertainty = (
+            interaction.interaction_density + interaction.edge_process_noise.sum(dim=-1)
+        ).clamp_min(0.0)
         uncertainty = self.uncertainty(
             events.objects,
             dt,
             event_logits=events.event_logits,
-            interaction_density=interaction.interaction_density,
+            interaction_density=interaction_uncertainty,
             residual_acceleration=total_residual,
         )
         update_batch = dt > 0
@@ -301,6 +326,8 @@ class DynamicsModel(nn.Module):
             {
                 "pair_contact": events.contacts.pair_contact,
                 "pair_collision": events.contacts.pair_collision,
+                "boundary_contact": events.contacts.boundary_contact,
+                "boundary_collision": events.contacts.boundary_collision,
                 "ground_contact": events.contacts.ground_contact,
                 "ground_collision": events.contacts.ground_collision,
                 "pair_impulse": events.contacts.pair_impulse,
@@ -308,6 +335,7 @@ class DynamicsModel(nn.Module):
                 "mean_penetration": events.contacts.mean_penetration,
                 "action_reaction_residual": (events.contacts.action_reaction_residual),
                 "process_variance": uncertainty.process_variance,
+                "edge_process_noise": interaction.edge_process_noise,
                 "residual_acceleration": total_residual,
             },
             update_batch,
@@ -352,8 +380,7 @@ class DynamicsModel(nn.Module):
             output[name] = torch.where(mask, value, torch.zeros_like(value))
         return output
 
-    @staticmethod
-    def _zero_step(belief: WorldBelief) -> RolloutStep:
+    def _zero_step(self, belief: WorldBelief) -> RolloutStep:
         objects = belief.objects
         batch, count = objects.active.shape
         event_logits = objects.motion_mode_logits.clone()
@@ -375,6 +402,20 @@ class DynamicsModel(nn.Module):
                 device=belief.device,
                 dtype=torch.bool,
             ),
+            "boundary_contact": torch.zeros(
+                batch,
+                count,
+                len(self.events.resolver.plane_names),
+                device=belief.device,
+                dtype=torch.bool,
+            ),
+            "boundary_collision": torch.zeros(
+                batch,
+                count,
+                len(self.events.resolver.plane_names),
+                device=belief.device,
+                dtype=torch.bool,
+            ),
             "ground_contact": torch.zeros_like(objects.active),
             "ground_collision": torch.zeros_like(objects.active),
             "pair_impulse": objects.position.new_zeros(batch, count, count),
@@ -386,6 +427,7 @@ class DynamicsModel(nn.Module):
                 count,
                 objects.fast_state_dim,
             ),
+            "edge_process_noise": objects.position.new_zeros(batch, count, count),
             "residual_acceleration": objects.position.new_zeros(batch, count, 3),
         }
         return RolloutStep(
@@ -414,6 +456,7 @@ class DynamicsModel(nn.Module):
         result: RolloutStep | None = None
         interval_collision_logits: Tensor | None = None
         interval_pair_collision: Tensor | None = None
+        interval_boundary_collision: Tensor | None = None
         interval_ground_collision: Tensor | None = None
         interval_pair_impulse: Tensor | None = None
         interval_max_penetration: Tensor | None = None
@@ -433,6 +476,7 @@ class DynamicsModel(nn.Module):
             if interval_collision_logits is None:
                 interval_collision_logits = collision_logits
                 interval_pair_collision = result.auxiliary["pair_collision"]
+                interval_boundary_collision = result.auxiliary["boundary_collision"]
                 interval_ground_collision = result.auxiliary["ground_collision"]
                 interval_pair_impulse = result.auxiliary["pair_impulse"]
                 interval_max_penetration = result.auxiliary["max_penetration"]
@@ -443,6 +487,9 @@ class DynamicsModel(nn.Module):
                 )
                 interval_pair_collision = (
                     interval_pair_collision | result.auxiliary["pair_collision"]
+                )
+                interval_boundary_collision = (
+                    interval_boundary_collision | result.auxiliary["boundary_collision"]
                 )
                 interval_ground_collision = (
                     interval_ground_collision | result.auxiliary["ground_collision"]
@@ -458,6 +505,7 @@ class DynamicsModel(nn.Module):
         assert result is not None
         assert interval_collision_logits is not None
         assert interval_pair_collision is not None
+        assert interval_boundary_collision is not None
         assert interval_ground_collision is not None
         assert interval_pair_impulse is not None
         assert interval_max_penetration is not None
@@ -472,6 +520,7 @@ class DynamicsModel(nn.Module):
         auxiliary.update(
             {
                 "pair_collision": interval_pair_collision,
+                "boundary_collision": interval_boundary_collision,
                 "ground_collision": interval_ground_collision,
                 "pair_impulse": interval_pair_impulse,
                 "max_penetration": interval_max_penetration,
@@ -490,7 +539,16 @@ class DynamicsModel(nn.Module):
     ) -> WorldBelief:
         """Predict a new belief after elapsed seconds without mutating input."""
 
-        return self._predict_step(belief, dt).belief
+        return self.predict_step(belief, dt).belief
+
+    def predict_step(
+        self,
+        belief: WorldBelief,
+        dt: float | Tensor,
+    ) -> RolloutStep:
+        """Return the endpoint belief plus events over the elapsed interval."""
+
+        return self._predict_step(belief, dt)
 
     def rollout(
         self,

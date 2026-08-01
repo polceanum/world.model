@@ -61,8 +61,16 @@ class MeasurementSet:
             raise ValueError("class_logits must begin with shape [B, M]")
         if not torch.isfinite(self.values).all():
             raise ValueError("measurement values contain NaN or Inf")
+        if not torch.isfinite(self.timestamp).all():
+            raise ValueError("measurement timestamp contains NaN or Inf")
         if not torch.isfinite(self.log_variance).all():
             raise ValueError("measurement log variances contain NaN or Inf")
+        if not torch.isfinite(self.existence_logits).all():
+            raise ValueError("measurement existence logits contain NaN or Inf")
+        if self.appearance is not None and not torch.isfinite(self.appearance).all():
+            raise ValueError("measurement appearance contains NaN or Inf")
+        if self.class_logits is not None and not torch.isfinite(self.class_logits).all():
+            raise ValueError("measurement class logits contain NaN or Inf")
 
     def to(self, *args: object, **kwargs: object) -> MeasurementSet:
         """Return a device/dtype converted copy without changing integer masks."""
@@ -129,7 +137,15 @@ class PredictedMeasurements:
     def validate(self) -> None:
         if self.values.ndim != 3:
             raise ValueError("predicted values must have shape [B, N, D]")
-        batch, objects, _ = self.values.shape
+        batch, objects, dimensions = self.values.shape
+        if self.timestamp.shape != (batch,):
+            raise ValueError("predicted timestamp must have shape [B]")
+        if self.log_variance.shape not in {
+            self.values.shape,
+            (batch, objects, 1),
+            (1, 1, dimensions),
+        }:
+            raise ValueError("predicted log_variance must be [B,N,D], [B,N,1], or [1,1,D]")
         for name, tensor in (
             ("object_ids", self.object_ids),
             ("belief_indices", self.belief_indices),
@@ -140,10 +156,22 @@ class PredictedMeasurements:
                 raise ValueError(f"{name} must have shape [B, N]")
         if self.valid_mask.dtype != torch.bool:
             raise TypeError("predicted valid_mask must be torch.bool")
+        if self.object_ids.dtype != torch.int64:
+            raise TypeError("predicted object_ids must use torch.int64")
+        if self.belief_indices.dtype != torch.int64:
+            raise TypeError("predicted belief_indices must use torch.int64")
         if self.rois is not None and self.rois.shape != (batch, objects, 4):
             raise ValueError("predicted rois must have shape [B, N, 4]")
         if not torch.isfinite(self.values).all():
             raise ValueError("predicted measurement contains NaN or Inf")
+        if not torch.isfinite(self.timestamp).all():
+            raise ValueError("predicted timestamp contains NaN or Inf")
+        if not torch.isfinite(self.log_variance).all():
+            raise ValueError("predicted log variances contain NaN or Inf")
+        if not torch.isfinite(self.visibility).all():
+            raise ValueError("predicted visibility contains NaN or Inf")
+        if self.appearance is not None and not torch.isfinite(self.appearance).all():
+            raise ValueError("predicted appearance contains NaN or Inf")
 
 
 @dataclass

@@ -10,7 +10,7 @@ import re
 import shutil
 import time
 from collections.abc import Iterator, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -26,9 +26,17 @@ from world_model.datasets import (
 )
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator.sphere_world import SphereWorldConfig
-from world_model.training.checkpointing import load_checkpoint, save_checkpoint
+from world_model.training.checkpointing import (
+    capture_git_metadata,
+    load_checkpoint,
+    load_model_weights,
+    save_checkpoint,
+    validate_checkpoint_config,
+    validate_training_resume_config,
+)
 from world_model.training.logging import MetricsLogger
 from world_model.training.loop import (
+    _MEASUREMENT_SELECTION_DISTANCE_THRESHOLD_M,
     _PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M,
     TrainingBatchResult,
     move_batch_to_device,
@@ -37,6 +45,7 @@ from world_model.training.loop import (
     run_closed_loop_batch,
     select_closed_loop_window,
 )
+from world_model.training.sampling import StepIndexedBatchSampler
 from world_model.utils.artifacts import timestamped_artifact_path
 from world_model.utils.config import OrpheusConfig, save_resolved_config
 from world_model.utils.device import DeviceInfo, select_device
@@ -46,12 +55,214 @@ from world_model.utils.version import SIMULATOR_VERSION
 
 _SAFE_RUN_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _ROLLOUT_SELECTION_MIN_DELTA = 1.0e-5
-_ROLLOUT_SELECTION_METRIC_VERSION = 3.0
+_ROLLOUT_SELECTION_METRIC_VERSION = 4.0
 _ROLLOUT_SELECTION_RELATIVE_GUARDRAIL = 0.02
 _ROLLOUT_SELECTION_COVERAGE_TOLERANCE = 0.005
 _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE = 0.02
-_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 1
+_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 5
 _NOMINAL_POSITION_COVERAGE = 0.90
+_MEASUREMENT_SELECTION_MIN_DELTA = 1.0e-5
+_MEASUREMENT_SELECTION_METRIC_VERSION = 3.0
+_MEASUREMENT_SELECTION_RELATIVE_GUARDRAIL = 0.02
+_MEASUREMENT_SELECTION_RECALL_TOLERANCE = 0.005
+_MEASUREMENT_VALIDATION_PROTOCOL_VERSION = 2
+_MEASUREMENT_ADDITIVE_METRICS = frozenset(
+    {
+        "rgb_runtime_birth_true_positive_count_at_0_5m",
+        "rgb_runtime_birth_target_count",
+        "rgb_runtime_birth_proposal_count",
+        "rgb_runtime_birth_world_position_absolute_error_sum_m",
+        "rgb_runtime_birth_matched_proposal_count",
+        "rgb_world_position_absolute_error_sum_m",
+        "rgb_world_position_matched_proposal_count",
+    }
+)
+
+
+@dataclass(frozen=True)
+class _MeasurementSelectionMetrics:
+    """Runtime-usable RGB discovery metrics for perception retention."""
+
+    score: float
+    world_position_mae_m: float
+    all_proposal_world_position_mae_m: float
+    runtime_birth_recall: float
+    runtime_birth_precision: float
+    runtime_birth_f1: float
+
+    def validation_metrics(self) -> dict[str, float]:
+        return {
+            "validation_measurement_selection_score": self.score,
+            "validation_runtime_birth_world_position_mae_m": self.world_position_mae_m,
+            "validation_all_proposal_world_position_mae_m": (
+                self.all_proposal_world_position_mae_m
+            ),
+            "validation_runtime_birth_recall_at_0_5m": self.runtime_birth_recall,
+            "validation_runtime_birth_precision_at_0_5m": self.runtime_birth_precision,
+            "validation_runtime_birth_f1_at_0_5m": self.runtime_birth_f1,
+        }
+
+    def checkpoint_metrics(self) -> dict[str, float]:
+        return {
+            "best_measurement_selection_score": self.score,
+            # This compatibility alias now names the declared broad selector.
+            "best_measurement_loss": self.score,
+            "best_measurement_world_position_mae_m": self.world_position_mae_m,
+            "best_measurement_all_proposal_world_position_mae_m": (
+                self.all_proposal_world_position_mae_m
+            ),
+            "best_measurement_runtime_birth_recall_at_0_5m": self.runtime_birth_recall,
+            "best_measurement_runtime_birth_precision_at_0_5m": self.runtime_birth_precision,
+            "best_measurement_runtime_birth_f1_at_0_5m": self.runtime_birth_f1,
+            "measurement_selection_metric_version": _MEASUREMENT_SELECTION_METRIC_VERSION,
+        }
+
+
+def _measurement_selection_metrics(
+    metrics: Mapping[str, float],
+) -> _MeasurementSelectionMetrics | None:
+    """Build a broad selector from proposals that can enter runtime state.
+
+    ``None`` means the candidate produced no finite, lifecycle-qualified
+    localization evidence.  It remains a valid training iterate but cannot be
+    called the best deployable perception checkpoint.
+    """
+
+    required = {
+        "world_position_mae_m": "rgb_runtime_birth_world_position_mae_m",
+        "all_proposal_world_position_mae_m": "rgb_world_position_mae_m",
+        "runtime_birth_recall": "rgb_runtime_birth_recall_at_0_5m",
+        "runtime_birth_precision": "rgb_runtime_birth_precision_at_0_5m",
+        "runtime_birth_f1": "rgb_runtime_birth_f1_at_0_5m",
+    }
+    missing = [key for key in required.values() if key not in metrics]
+    if missing:
+        raise RuntimeError(
+            "RGB measurement validation did not report runtime selection metrics: "
+            + ", ".join(sorted(missing))
+        )
+    values = {name: float(metrics[key]) for name, key in required.items()}
+    for name in ("runtime_birth_recall", "runtime_birth_precision", "runtime_birth_f1"):
+        value = values[name]
+        if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+            raise ValueError(f"measurement validation {name} must lie in [0,1]")
+    if not math.isfinite(values["world_position_mae_m"]) or not math.isfinite(
+        values["all_proposal_world_position_mae_m"]
+    ):
+        return None
+    if values["world_position_mae_m"] < 0 or values["all_proposal_world_position_mae_m"] < 0:
+        raise ValueError("measurement validation position MAE must be nonnegative")
+
+    score = (
+        values["world_position_mae_m"] / _MEASUREMENT_SELECTION_DISTANCE_THRESHOLD_M
+        + (1.0 - values["runtime_birth_recall"])
+        + (1.0 - values["runtime_birth_precision"])
+    )
+    return _MeasurementSelectionMetrics(
+        score=score,
+        world_position_mae_m=values["world_position_mae_m"],
+        all_proposal_world_position_mae_m=values["all_proposal_world_position_mae_m"],
+        runtime_birth_recall=values["runtime_birth_recall"],
+        runtime_birth_precision=values["runtime_birth_precision"],
+        runtime_birth_f1=values["runtime_birth_f1"],
+    )
+
+
+def _measurement_selection_from_checkpoint(
+    metrics: Mapping[str, Any],
+) -> _MeasurementSelectionMetrics | None:
+    """Restore only checkpoints written with the broad runtime selector."""
+
+    if float(metrics.get("measurement_selection_metric_version", -1.0)) != (
+        _MEASUREMENT_SELECTION_METRIC_VERSION
+    ):
+        return None
+    aliases = {
+        "rgb_runtime_birth_world_position_mae_m": ("best_measurement_world_position_mae_m"),
+        "rgb_world_position_mae_m": "best_measurement_all_proposal_world_position_mae_m",
+        "rgb_runtime_birth_recall_at_0_5m": ("best_measurement_runtime_birth_recall_at_0_5m"),
+        "rgb_runtime_birth_precision_at_0_5m": ("best_measurement_runtime_birth_precision_at_0_5m"),
+        "rgb_runtime_birth_f1_at_0_5m": "best_measurement_runtime_birth_f1_at_0_5m",
+    }
+    if any(checkpoint_key not in metrics for checkpoint_key in aliases.values()):
+        return None
+    restored = _measurement_selection_metrics(
+        {
+            metric_key: float(metrics[checkpoint_key])
+            for metric_key, checkpoint_key in aliases.items()
+        }
+    )
+    if restored is None:
+        return None
+    stored_score = metrics.get("best_measurement_selection_score")
+    if stored_score is None or not math.isclose(
+        float(stored_score),
+        restored.score,
+        rel_tol=1.0e-6,
+        abs_tol=1.0e-8,
+    ):
+        return None
+    return restored
+
+
+def _measurement_selection_guardrail_failures(
+    candidate: _MeasurementSelectionMetrics,
+    incumbent: _MeasurementSelectionMetrics,
+) -> list[dict[str, float | str]]:
+    """Describe runtime discovery regressions hidden by a scalar score."""
+
+    maximum_ratio = 1.0 + _MEASUREMENT_SELECTION_RELATIVE_GUARDRAIL
+    minimum_ratio = 1.0 - _MEASUREMENT_SELECTION_RELATIVE_GUARDRAIL
+    failures: list[dict[str, float | str]] = []
+    limits = (
+        (
+            "world_position_mae_m",
+            candidate.world_position_mae_m,
+            incumbent.world_position_mae_m,
+            incumbent.world_position_mae_m * maximum_ratio,
+            "maximum",
+        ),
+        (
+            "runtime_birth_recall_at_0_5m",
+            candidate.runtime_birth_recall,
+            incumbent.runtime_birth_recall,
+            incumbent.runtime_birth_recall - _MEASUREMENT_SELECTION_RECALL_TOLERANCE,
+            "minimum",
+        ),
+        (
+            "runtime_birth_precision_at_0_5m",
+            candidate.runtime_birth_precision,
+            incumbent.runtime_birth_precision,
+            incumbent.runtime_birth_precision * minimum_ratio,
+            "minimum",
+        ),
+    )
+    for name, value, reference, limit, direction in limits:
+        failed = value > limit if direction == "maximum" else value < limit
+        if failed:
+            failures.append(
+                {
+                    "metric": name,
+                    "direction": direction,
+                    "candidate": value,
+                    "reference": reference,
+                    "limit": limit,
+                    "delta": value - reference,
+                }
+            )
+    return failures
+
+
+def _measurement_selection_improves(
+    candidate: _MeasurementSelectionMetrics,
+    incumbent: _MeasurementSelectionMetrics,
+) -> bool:
+    """Require a better broad score without losing runtime discovery."""
+
+    return (
+        candidate.score < incumbent.score - _MEASUREMENT_SELECTION_MIN_DELTA
+        and not _measurement_selection_guardrail_failures(candidate, incumbent)
+    )
 
 
 @dataclass(frozen=True)
@@ -69,6 +280,8 @@ class _RolloutSelectionMetrics:
     position_calibration_error90: float
     horizon_position_rmse_m: dict[str, float]
     horizon_forecast_target_coverage: dict[str, float]
+    axis_position_rmse_m: dict[str, float] = field(default_factory=dict)
+    horizon_axis_position_rmse_m: dict[str, dict[str, float]] = field(default_factory=dict)
 
     def validation_metrics(self) -> dict[str, float]:
         return {
@@ -88,6 +301,15 @@ class _RolloutSelectionMetrics:
             **{
                 f"validation_forecast_target_coverage@{suffix}": value
                 for suffix, value in self.horizon_forecast_target_coverage.items()
+            },
+            **{
+                f"validation_position_rmse_{axis}_m": value
+                for axis, value in self.axis_position_rmse_m.items()
+            },
+            **{
+                f"validation_position_rmse_{axis}@{suffix}": value
+                for axis, horizons in self.horizon_axis_position_rmse_m.items()
+                for suffix, value in horizons.items()
             },
         }
 
@@ -113,6 +335,15 @@ class _RolloutSelectionMetrics:
             **{
                 f"{prefix}_forecast_target_coverage@{suffix}": value
                 for suffix, value in self.horizon_forecast_target_coverage.items()
+            },
+            **{
+                f"{prefix}_position_rmse_{axis}_m": value
+                for axis, value in self.axis_position_rmse_m.items()
+            },
+            **{
+                f"{prefix}_position_rmse_{axis}@{suffix}": value
+                for axis, horizons in self.horizon_axis_position_rmse_m.items()
+                for suffix, value in horizons.items()
             },
         }
 
@@ -159,16 +390,26 @@ def _rollout_validation_protocol_from_mapping(
     simulator = config_mapping.get("simulator")
     model = config_mapping.get("model")
     runtime = config_mapping.get("runtime")
+    device = config_mapping.get("device")
     evaluation = config_mapping.get("evaluation")
     training = config_mapping.get("training")
     project = config_mapping.get("project")
     if not all(
         isinstance(section, Mapping)
-        for section in (simulator, model, runtime, evaluation, training, project)
+        for section in (
+            simulator,
+            model,
+            runtime,
+            device,
+            evaluation,
+            training,
+            project,
+        )
     ):
         raise ValueError("validation protocol requires complete resolved config sections")
     assert isinstance(training, Mapping)
     assert isinstance(project, Mapping)
+    assert isinstance(device, Mapping)
     validation_episodes = int(training["validation_episodes"])
     if validation_episodes <= 0:
         raise ValueError("training.validation_episodes must be positive")
@@ -186,16 +427,25 @@ def _rollout_validation_protocol_from_mapping(
         "evaluation": dict(evaluation),
         "selection": {
             "horizon_weights": training["horizon_weights"],
+            "rollout_anchors_per_episode": training.get("validation_rollout_anchors_per_episode"),
             "metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
             "prediction_distance_threshold_m": (_PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M),
         },
         "execution": {
             "project_seed": project["seed"],
             "deterministic": project["deterministic"],
-            "validation_batch_size": min(
-                int(training["batch_size"]),
-                validation_episodes,
+            "measurement_device_preference": device["preference"],
+            "closed_loop_device_preference": device.get(
+                "closed_loop_preference",
+                "same",
             ),
+            "global_detector_cpu_on_mps": device.get(
+                "global_detector_cpu_on_mps",
+                False,
+            ),
+            # Batch-one validation permits exact per-seed and per-scenario
+            # attribution while keeping pooled additive metrics unchanged.
+            "validation_batch_size": 1,
         },
         "validation_seed_manifest": {
             "split": manifest.split,
@@ -210,6 +460,89 @@ def _rollout_validation_protocol(config: OrpheusConfig) -> dict[str, Any]:
 
 def _rollout_validation_protocol_hash(config: OrpheusConfig) -> str:
     return _canonical_hash(_rollout_validation_protocol(config))
+
+
+def _measurement_validation_protocol_from_mapping(
+    config_mapping: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Resolve every field that can change RGB measurement selection."""
+
+    simulator = config_mapping.get("simulator")
+    model = config_mapping.get("model")
+    runtime = config_mapping.get("runtime")
+    device = config_mapping.get("device")
+    training = config_mapping.get("training")
+    project = config_mapping.get("project")
+    if not all(
+        isinstance(section, Mapping)
+        for section in (simulator, model, runtime, device, training, project)
+    ):
+        raise ValueError("measurement protocol requires complete resolved config sections")
+    assert isinstance(training, Mapping)
+    assert isinstance(project, Mapping)
+    assert isinstance(device, Mapping)
+    validation_episodes = int(training["validation_episodes"])
+    if validation_episodes <= 0:
+        raise ValueError("training.validation_episodes must be positive")
+    manifest = make_seed_manifest("validation", validation_episodes)
+    return {
+        "protocol_version": _MEASUREMENT_VALIDATION_PROTOCOL_VERSION,
+        "simulator_version": SIMULATOR_VERSION,
+        "simulator": dict(simulator),
+        "resolved_sphere_world": asdict(SphereWorldConfig.from_config(config_mapping)),
+        "model": dict(model),
+        "runtime": dict(runtime),
+        "selection": {
+            "measurement_validation_frames": training["measurement_validation_frames"],
+            "metric_version": _MEASUREMENT_SELECTION_METRIC_VERSION,
+            "prediction_distance_threshold_m": (_MEASUREMENT_SELECTION_DISTANCE_THRESHOLD_M),
+        },
+        "execution": {
+            "project_seed": project["seed"],
+            "deterministic": project["deterministic"],
+            "measurement_device_preference": device["preference"],
+            "global_detector_cpu_on_mps": device.get(
+                "global_detector_cpu_on_mps",
+                False,
+            ),
+            "validation_batch_size": 1,
+        },
+        "validation_seed_manifest": {
+            "split": manifest.split,
+            "seeds": list(manifest.seeds),
+        },
+    }
+
+
+def _measurement_validation_protocol_hash(config: OrpheusConfig) -> str:
+    return _canonical_hash(_measurement_validation_protocol_from_mapping(config.to_dict()))
+
+
+def _measurement_validation_protocol_is_compatible(
+    payload: Mapping[str, Any],
+    config: OrpheusConfig,
+    *,
+    expected_device: str | torch.device | None = None,
+) -> bool:
+    """Require exact measurement-selection data, metric, and device semantics."""
+
+    metrics = payload.get("metrics")
+    checkpoint_config = payload.get("config")
+    if not isinstance(metrics, Mapping) or not isinstance(checkpoint_config, Mapping):
+        return False
+    stored_hash = metrics.get("measurement_validation_protocol_hash")
+    if not isinstance(stored_hash, str):
+        return False
+    if expected_device is not None and payload.get("device") != str(expected_device):
+        return False
+    try:
+        checkpoint_hash = _canonical_hash(
+            _measurement_validation_protocol_from_mapping(checkpoint_config)
+        )
+        requested_hash = _measurement_validation_protocol_hash(config)
+    except (KeyError, TypeError, ValueError):
+        return False
+    return stored_hash == checkpoint_hash == requested_hash
 
 
 def _validation_protocol_checkpoint_metrics(config: OrpheusConfig) -> dict[str, Any]:
@@ -262,6 +595,32 @@ def _rollout_selection_metrics(
             missing.append(metric_key)
             continue
         horizon_coverage_values[suffix] = float(metrics[metric_key])
+    axis_values: dict[str, float] = {}
+    horizon_axis_values: dict[str, dict[str, float]] = {}
+    available_axis_metrics = [
+        f"validation_position_rmse_{axis}_m" in metrics for axis in ("x", "y", "z")
+    ]
+    if any(available_axis_metrics):
+        if not all(available_axis_metrics):
+            missing.extend(
+                f"validation_position_rmse_{axis}_m"
+                for axis, available in zip(
+                    ("x", "y", "z"),
+                    available_axis_metrics,
+                    strict=True,
+                )
+                if not available
+            )
+        else:
+            for axis in ("x", "y", "z"):
+                axis_values[axis] = float(metrics[f"validation_position_rmse_{axis}_m"])
+                horizon_axis_values[axis] = {}
+                for suffix, _ in _selection_horizon_keys(config):
+                    metric_key = f"validation_position_rmse_{axis}@{suffix}"
+                    if metric_key not in metrics:
+                        missing.append(metric_key)
+                    else:
+                        horizon_axis_values[axis][suffix] = float(metrics[metric_key])
     if missing:
         raise RuntimeError(
             "closed-loop validation did not report broad selection metrics: "
@@ -273,6 +632,8 @@ def _rollout_selection_metrics(
         *values.values(),
         *horizon_values.values(),
         *horizon_coverage_values.values(),
+        *axis_values.values(),
+        *(value for horizons in horizon_axis_values.values() for value in horizons.values()),
     ]
     if any(not math.isfinite(value) for value in finite_values):
         raise FloatingPointError("closed-loop broad selection metrics must all be finite")
@@ -280,6 +641,10 @@ def _rollout_selection_metrics(
         raise ValueError("physical validation RMSE metrics must be nonnegative")
     if any(value < 0 for value in horizon_values.values()):
         raise ValueError("per-horizon validation RMSE metrics must be nonnegative")
+    if any(value < 0 for value in axis_values.values()) or any(
+        value < 0 for horizons in horizon_axis_values.values() for value in horizons.values()
+    ):
+        raise ValueError("per-axis validation RMSE metrics must be nonnegative")
     for name in (
         "target_coverage",
         "prediction_precision",
@@ -312,6 +677,8 @@ def _rollout_selection_metrics(
         ),
         horizon_position_rmse_m=horizon_values,
         horizon_forecast_target_coverage=horizon_coverage_values,
+        axis_position_rmse_m=axis_values,
+        horizon_axis_position_rmse_m=horizon_axis_values,
     )
 
 
@@ -346,6 +713,23 @@ def _rollout_selection_from_checkpoint(
         if coverage_key not in metrics:
             return None
         translated[f"validation_forecast_target_coverage@{suffix}"] = float(metrics[coverage_key])
+    axis_checkpoint_keys = [f"{prefix}_position_rmse_{axis}_m" for axis in ("x", "y", "z")]
+    if any(key in metrics for key in axis_checkpoint_keys):
+        if not all(key in metrics for key in axis_checkpoint_keys):
+            return None
+        for axis, checkpoint_key in zip(
+            ("x", "y", "z"),
+            axis_checkpoint_keys,
+            strict=True,
+        ):
+            translated[f"validation_position_rmse_{axis}_m"] = float(metrics[checkpoint_key])
+            for suffix, _ in _selection_horizon_keys(config):
+                horizon_key = f"{prefix}_position_rmse_{axis}@{suffix}"
+                if horizon_key not in metrics:
+                    return None
+                translated[f"validation_position_rmse_{axis}@{suffix}"] = float(
+                    metrics[horizon_key]
+                )
     restored = _rollout_selection_metrics(translated, config)
     stored_score = metrics.get(f"{prefix}_selection_score")
     if stored_score is None or not math.isclose(
@@ -358,44 +742,154 @@ def _rollout_selection_from_checkpoint(
     return restored
 
 
+def _rollout_selection_guardrail_failures(
+    candidate: _RolloutSelectionMetrics,
+    reference: _RolloutSelectionMetrics,
+) -> list[dict[str, float | str]]:
+    """Describe every material regression against a physical reference."""
+
+    maximum_ratio = 1.0 + _ROLLOUT_SELECTION_RELATIVE_GUARDRAIL
+    minimum_ratio = 1.0 - _ROLLOUT_SELECTION_RELATIVE_GUARDRAIL
+    failures: list[dict[str, float | str]] = []
+
+    def maximum(name: str, value: float, reference_value: float, limit: float) -> None:
+        if value > limit:
+            failures.append(
+                {
+                    "metric": name,
+                    "direction": "maximum",
+                    "candidate": value,
+                    "reference": reference_value,
+                    "limit": limit,
+                    "delta": value - reference_value,
+                }
+            )
+
+    def minimum(name: str, value: float, reference_value: float, limit: float) -> None:
+        if value < limit:
+            failures.append(
+                {
+                    "metric": name,
+                    "direction": "minimum",
+                    "candidate": value,
+                    "reference": reference_value,
+                    "limit": limit,
+                    "delta": value - reference_value,
+                }
+            )
+
+    maximum(
+        "position_rmse_m",
+        candidate.position_rmse_m,
+        reference.position_rmse_m,
+        reference.position_rmse_m * maximum_ratio,
+    )
+    maximum(
+        "velocity_rmse_mps",
+        candidate.velocity_rmse_mps,
+        reference.velocity_rmse_mps,
+        reference.velocity_rmse_mps * maximum_ratio,
+    )
+    minimum(
+        "target_coverage",
+        candidate.target_coverage,
+        reference.target_coverage,
+        reference.target_coverage - _ROLLOUT_SELECTION_COVERAGE_TOLERANCE,
+    )
+    minimum(
+        "prediction_precision",
+        candidate.prediction_precision,
+        reference.prediction_precision,
+        reference.prediction_precision * minimum_ratio,
+    )
+    minimum(
+        "collision_f1",
+        candidate.collision_f1,
+        reference.collision_f1,
+        reference.collision_f1 * minimum_ratio,
+    )
+    maximum(
+        "id_switch_rate",
+        candidate.id_switch_rate,
+        reference.id_switch_rate,
+        reference.id_switch_rate + _ROLLOUT_SELECTION_COVERAGE_TOLERANCE,
+    )
+    maximum(
+        "position_calibration_error90",
+        candidate.position_calibration_error90,
+        reference.position_calibration_error90,
+        (reference.position_calibration_error90 + _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE),
+    )
+    if reference.axis_position_rmse_m:
+        if set(candidate.axis_position_rmse_m) != set(reference.axis_position_rmse_m):
+            failures.append(
+                {
+                    "metric": "axis_position_rmse_schema",
+                    "direction": "required",
+                    "candidate": float(len(candidate.axis_position_rmse_m)),
+                    "reference": float(len(reference.axis_position_rmse_m)),
+                    "limit": float(len(reference.axis_position_rmse_m)),
+                    "delta": float(
+                        len(candidate.axis_position_rmse_m) - len(reference.axis_position_rmse_m)
+                    ),
+                }
+            )
+        else:
+            for axis, reference_value in reference.axis_position_rmse_m.items():
+                maximum(
+                    f"position_rmse_{axis}_m",
+                    candidate.axis_position_rmse_m[axis],
+                    reference_value,
+                    reference_value * maximum_ratio,
+                )
+            for axis, reference_horizons in reference.horizon_axis_position_rmse_m.items():
+                candidate_horizons = candidate.horizon_axis_position_rmse_m.get(
+                    axis,
+                    {},
+                )
+                if set(candidate_horizons) != set(reference_horizons):
+                    failures.append(
+                        {
+                            "metric": f"horizon_axis_position_rmse_{axis}_schema",
+                            "direction": "required",
+                            "candidate": float(len(candidate_horizons)),
+                            "reference": float(len(reference_horizons)),
+                            "limit": float(len(reference_horizons)),
+                            "delta": float(len(candidate_horizons) - len(reference_horizons)),
+                        }
+                    )
+                    continue
+                for suffix, reference_value in reference_horizons.items():
+                    maximum(
+                        f"position_rmse_{axis}@{suffix}",
+                        candidate_horizons[suffix],
+                        reference_value,
+                        reference_value * maximum_ratio,
+                    )
+    for suffix, reference_value in reference.horizon_position_rmse_m.items():
+        maximum(
+            f"position_rmse@{suffix}",
+            candidate.horizon_position_rmse_m[suffix],
+            reference_value,
+            reference_value * maximum_ratio,
+        )
+    for suffix, reference_value in reference.horizon_forecast_target_coverage.items():
+        minimum(
+            f"forecast_target_coverage@{suffix}",
+            candidate.horizon_forecast_target_coverage[suffix],
+            reference_value,
+            reference_value - _ROLLOUT_SELECTION_COVERAGE_TOLERANCE,
+        )
+    return failures
+
+
 def _rollout_selection_passes_guardrails(
     candidate: _RolloutSelectionMetrics,
     reference: _RolloutSelectionMetrics,
 ) -> bool:
     """Reject material regression against one broad physical reference."""
 
-    maximum_ratio = 1.0 + _ROLLOUT_SELECTION_RELATIVE_GUARDRAIL
-    minimum_ratio = 1.0 - _ROLLOUT_SELECTION_RELATIVE_GUARDRAIL
-    if candidate.position_rmse_m > reference.position_rmse_m * maximum_ratio:
-        return False
-    if candidate.velocity_rmse_mps > reference.velocity_rmse_mps * maximum_ratio:
-        return False
-    if candidate.target_coverage < (
-        reference.target_coverage - _ROLLOUT_SELECTION_COVERAGE_TOLERANCE
-    ):
-        return False
-    if candidate.prediction_precision < reference.prediction_precision * minimum_ratio:
-        return False
-    if candidate.collision_f1 < reference.collision_f1 * minimum_ratio:
-        return False
-    if candidate.id_switch_rate > (
-        reference.id_switch_rate + _ROLLOUT_SELECTION_COVERAGE_TOLERANCE
-    ):
-        return False
-    if candidate.position_calibration_error90 > (
-        reference.position_calibration_error90 + _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE
-    ):
-        return False
-    if any(
-        candidate.horizon_position_rmse_m[suffix] > reference_value * maximum_ratio
-        for suffix, reference_value in reference.horizon_position_rmse_m.items()
-    ):
-        return False
-    return all(
-        candidate.horizon_forecast_target_coverage[suffix]
-        >= reference_value - _ROLLOUT_SELECTION_COVERAGE_TOLERANCE
-        for suffix, reference_value in reference.horizon_forecast_target_coverage.items()
-    )
+    return not _rollout_selection_guardrail_failures(candidate, reference)
 
 
 def _rollout_selection_improves(
@@ -417,7 +911,7 @@ def _rollout_validation_checkpoint_metrics(
     *,
     config: OrpheusConfig,
     accepted: bool,
-    best_measurement: float | None,
+    best_measurement: _MeasurementSelectionMetrics | None,
     checkpoint_model_state_hash: str,
     incumbent_model_state_hash: str,
     incumbent_step: int,
@@ -426,6 +920,29 @@ def _rollout_validation_checkpoint_metrics(
 ) -> dict[str, Any]:
     """Build truthful metadata shared by best and numbered validation saves."""
 
+    guardrail_failures = _rollout_selection_guardrail_failures(
+        candidate,
+        reference,
+    )
+    incumbent_guardrail_failures = _rollout_selection_guardrail_failures(
+        candidate,
+        incumbent,
+    )
+    rejection_reasons: list[dict[str, Any]] = [
+        *incumbent_guardrail_failures,
+        *(failure for failure in guardrail_failures if failure not in incumbent_guardrail_failures),
+    ]
+    if not accepted and candidate.score >= incumbent.score - _ROLLOUT_SELECTION_MIN_DELTA:
+        rejection_reasons.append(
+            {
+                "metric": "selection_score",
+                "direction": "minimum_improvement",
+                "candidate": candidate.score,
+                "reference": incumbent.score,
+                "limit": incumbent.score - _ROLLOUT_SELECTION_MIN_DELTA,
+                "delta": candidate.score - incumbent.score,
+            }
+        )
     metrics: dict[str, Any] = {
         "validation_total_loss": float(validation.total_loss.detach().cpu()),
         "validation_rollout_loss": float(
@@ -435,6 +952,10 @@ def _rollout_validation_checkpoint_metrics(
             validation.loss_terms.get("rollout_position", validation.total_loss).detach().cpu()
         ),
         "selection_accepted": float(accepted),
+        "selection_rejection_reason_count": float(len(rejection_reasons)),
+        "selection_rejection_reasons": rejection_reasons,
+        "selection_reference_guardrail_failures": guardrail_failures,
+        "selection_incumbent_guardrail_failures": incumbent_guardrail_failures,
         "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
         "best_rollout_validated": 1.0,
         "best_measurement_validated": float(best_measurement is not None),
@@ -454,8 +975,7 @@ def _rollout_validation_checkpoint_metrics(
         "rollout_reference_validated": 1.0,
     }
     if best_measurement is not None:
-        metrics["best_measurement_loss"] = best_measurement
-        metrics["best_measurement_world_position_mae_m"] = best_measurement
+        metrics.update(best_measurement.checkpoint_metrics())
     return metrics
 
 
@@ -489,6 +1009,102 @@ def _current_model_state_hash(model: OnlineWorldModel) -> str:
     return _model_state_hash(model.state_dict())
 
 
+def _verified_measurement_checkpoint(
+    path: Path,
+    config: OrpheusConfig,
+    *,
+    expected_model_state_hash: str | None,
+    expected_step: int | None,
+    expected_device: str | torch.device | None = None,
+) -> tuple[_MeasurementSelectionMetrics, str, int] | None:
+    """Verify that a measurement selector names the weights it actually stores."""
+
+    if not path.is_file():
+        return None
+    try:
+        payload = torch.load(path, map_location="cpu", weights_only=False)
+        if not isinstance(payload, Mapping):
+            return None
+        metrics = payload.get("metrics")
+        model_state = payload.get("model_state")
+        if not isinstance(metrics, Mapping) or not isinstance(model_state, Mapping):
+            return None
+        if not _measurement_validation_protocol_is_compatible(
+            payload,
+            config,
+            expected_device=expected_device,
+        ):
+            return None
+        selection = _measurement_selection_from_checkpoint(metrics)
+        if selection is None:
+            return None
+        if float(metrics.get("checkpoint_contains_best_measurement_weights", 0.0)) != 1.0:
+            return None
+        model_state_hash = _model_state_hash(model_state)
+        if metrics.get("checkpoint_model_state_hash") != model_state_hash:
+            return None
+        if metrics.get("best_measurement_model_state_hash") != model_state_hash:
+            return None
+        checkpoint_step = int(payload["step"])
+        if int(float(metrics.get("best_measurement_checkpoint_step", -1.0))) != checkpoint_step:
+            return None
+        if expected_model_state_hash is not None and (
+            model_state_hash != expected_model_state_hash
+        ):
+            return None
+        if expected_step is not None and checkpoint_step != expected_step:
+            return None
+    except (KeyError, RuntimeError, TypeError, ValueError):
+        return None
+    return selection, model_state_hash, checkpoint_step
+
+
+def _preserve_resume_measurement_checkpoint(
+    resume_path: str | Path,
+    destination: Path,
+    config: OrpheusConfig,
+    *,
+    resume_metrics: Mapping[str, Any],
+    expected_device: str | torch.device | None = None,
+) -> tuple[_MeasurementSelectionMetrics, str, int] | None:
+    """Copy a linked RGB selector only after metric/tensor verification."""
+
+    expected_hash = resume_metrics.get("best_measurement_model_state_hash")
+    expected_step_value = resume_metrics.get("best_measurement_checkpoint_step")
+    if not isinstance(expected_hash, str) or expected_step_value is None:
+        return None
+    try:
+        expected_step = int(float(expected_step_value))
+    except (TypeError, ValueError):
+        return None
+    resumed = Path(resume_path).expanduser().resolve()
+    source = (
+        resumed.parent / "best_measurement.pt" if resumed.parent.name == "checkpoints" else resumed
+    )
+    verified = _verified_measurement_checkpoint(
+        source,
+        config,
+        expected_model_state_hash=expected_hash,
+        expected_step=expected_step,
+        expected_device=expected_device,
+    )
+    if verified is None:
+        return None
+    if source != destination.resolve():
+        shutil.copy2(source, destination)
+        copied = _verified_measurement_checkpoint(
+            destination,
+            config,
+            expected_model_state_hash=expected_hash,
+            expected_step=expected_step,
+            expected_device=expected_device,
+        )
+        if copied is None:
+            return None
+        verified = copied
+    return verified
+
+
 def _verified_selector_checkpoint(
     path: Path,
     config: OrpheusConfig,
@@ -496,6 +1112,7 @@ def _verified_selector_checkpoint(
     prefix: str,
     expected_model_state_hash: str | None,
     expected_step: int | None,
+    expected_device: str | torch.device | None = None,
 ) -> tuple[_RolloutSelectionMetrics, str, int] | None:
     """Verify that selector metadata and the checkpoint's actual weights agree."""
 
@@ -509,7 +1126,11 @@ def _verified_selector_checkpoint(
         model_state = payload.get("model_state")
         if not isinstance(metrics, Mapping) or not isinstance(model_state, Mapping):
             return None
-        if not _rollout_validation_protocol_is_compatible(payload, config):
+        if not _rollout_validation_protocol_is_compatible(
+            payload,
+            config,
+            expected_device=expected_device,
+        ):
             return None
         selection = _rollout_selection_from_checkpoint(
             metrics,
@@ -546,6 +1167,7 @@ def _preserve_resume_selector_checkpoint(
     *,
     prefix: str,
     resume_metrics: Mapping[str, Any],
+    expected_device: str | torch.device | None = None,
 ) -> tuple[_RolloutSelectionMetrics, str, int] | None:
     """Copy a linked selector checkpoint only after weights/provenance verification."""
 
@@ -565,6 +1187,7 @@ def _preserve_resume_selector_checkpoint(
         prefix=prefix,
         expected_model_state_hash=expected_hash,
         expected_step=expected_step,
+        expected_device=expected_device,
     )
     if verified is None:
         return None
@@ -576,6 +1199,7 @@ def _preserve_resume_selector_checkpoint(
             prefix=prefix,
             expected_model_state_hash=expected_hash,
             expected_step=expected_step,
+            expected_device=expected_device,
         )
         if copied is None:
             return None
@@ -626,8 +1250,13 @@ def _resolve_run_directory(
 ) -> Path:
     if resume_path is not None and run_name is None:
         checkpoint = Path(resume_path).expanduser().resolve()
-        if checkpoint.parent.name == "checkpoints":
-            return checkpoint.parent.parent
+        if checkpoint.parent.name != "checkpoints" or checkpoint.name != "last.pt":
+            raise ValueError(
+                "an in-place exact resume requires the source run's exact "
+                "checkpoints/last.pt; resume from a selector or numbered "
+                "checkpoint with --run-name, or use --initialize-from"
+            )
+        return checkpoint.parent.parent
     selected = (
         timestamped_artifact_path(run_name).name if run_name is not None else _new_run_name(config)
     )
@@ -656,6 +1285,9 @@ def _make_loader(
     split: str,
     episodes: int,
     shuffle: bool,
+    start_step: int | None = None,
+    stop_step: int | None = None,
+    batch_size_override: int | None = None,
 ) -> DataLoader[dict[str, Any]]:
     dataset = SyntheticSphereDataset(
         config,
@@ -663,11 +1295,37 @@ def _make_loader(
         num_episodes=episodes,
         memory_cache=config.training.fixed_dataset,
     )
+    if (start_step is None) != (stop_step is None):
+        raise ValueError("start_step and stop_step must be supplied together")
+    requested_batch_size = (
+        config.training.batch_size if batch_size_override is None else batch_size_override
+    )
+    if requested_batch_size <= 0:
+        raise ValueError("batch_size_override must be positive")
+    batch_size = min(requested_batch_size, max(1, episodes))
+    if start_step is not None and stop_step is not None:
+        batch_sampler = StepIndexedBatchSampler(
+            dataset_size=len(dataset),
+            batch_size=batch_size,
+            seed=config.project.seed + (0 if split == "train" else 10_000),
+            shuffle=shuffle,
+            start_step=start_step,
+            stop_step=stop_step,
+        )
+        worker_generator = torch.Generator(device="cpu")
+        worker_generator.manual_seed(config.project.seed + (20_000 if split == "train" else 30_000))
+        return DataLoader(
+            dataset,
+            batch_sampler=batch_sampler,
+            num_workers=config.training.num_workers,
+            collate_fn=collate_episodes,
+            generator=worker_generator,
+        )
     generator = torch.Generator(device="cpu")
     generator.manual_seed(config.project.seed + (0 if split == "train" else 10_000))
     return DataLoader(
         dataset,
-        batch_size=min(config.training.batch_size, max(1, episodes)),
+        batch_size=batch_size,
         shuffle=shuffle,
         num_workers=config.training.num_workers,
         collate_fn=collate_episodes,
@@ -725,6 +1383,8 @@ def _gradient_clip_diagnostics(
 def _rollout_validation_protocol_is_compatible(
     payload: Mapping[str, Any],
     config: OrpheusConfig,
+    *,
+    expected_device: str | torch.device | None = None,
 ) -> bool:
     """Require an exact canonical match for the deterministic validation split."""
 
@@ -734,6 +1394,8 @@ def _rollout_validation_protocol_is_compatible(
         return False
     stored_hash = metrics.get("rollout_validation_protocol_hash")
     if not isinstance(stored_hash, str):
+        return False
+    if expected_device is not None and payload.get("device") != str(expected_device):
         return False
     try:
         checkpoint_hash = _canonical_hash(
@@ -815,6 +1477,7 @@ def set_closed_loop_trainable_scope(
 
     if scope == "all":
         model.requires_grad_(True)
+        _freeze_disconnected_training_heads(model)
         return
     model.requires_grad_(False)
     if scope == "dynamics":
@@ -860,6 +1523,14 @@ def _freeze_disconnected_training_heads(model: OnlineWorldModel) -> None:
     event_head = getattr(roi_updater, "event_head", None)
     if event_head is not None:
         event_head.requires_grad_(False)
+    learned_corrector = getattr(model.updater, "learned_corrector", None)
+    corrector_visibility_head = getattr(learned_corrector, "visibility_head", None)
+    if corrector_visibility_head is not None:
+        # RGB supplies an explicit visibility measurement after the learned
+        # correction, so the current runtime deliberately overwrites this
+        # delta.  Do not advertise or optimise a parameter with no path to the
+        # posterior or objective.
+        corrector_visibility_head.requires_grad_(False)
     if model.identifier is not None:
         model.identifier.variance_head.requires_grad_(False)
 
@@ -881,12 +1552,69 @@ def _mean_batch_results(
     phase = results[0].phase
     if any(result.phase != phase for result in results):
         raise ValueError("validation results must share a phase")
-    term_names = set(results[0].loss_terms)
-    if any(set(result.loss_terms) != term_names for result in results):
-        raise ValueError("validation results must share loss terms")
-    metric_names = set(results[0].metrics)
-    if any(set(result.metrics) != metric_names for result in results):
-        raise ValueError("validation results must share metrics")
+    term_names = set().union(*(result.loss_terms for result in results))
+    metric_names = set().union(*(result.metrics for result in results))
+
+    def mean_present_term(name: str) -> Tensor:
+        present = [
+            (result.loss_terms[name], float(weight))
+            for result, weight in zip(results, weights, strict=True)
+            if name in result.loss_terms
+        ]
+        present_weight = sum(weight for _, weight in present)
+        return torch.stack([value * weight for value, weight in present]).sum() / present_weight
+
+    def mean_present_metric(name: str) -> float:
+        present = [
+            (float(result.metrics[name]), float(weight))
+            for result, weight in zip(results, weights, strict=True)
+            if name in result.metrics and math.isfinite(float(result.metrics[name]))
+        ]
+        if not present:
+            return math.nan
+        if name in _MEASUREMENT_ADDITIVE_METRICS:
+            # These values already count every object/proposal in their batch.
+            # Summing (without multiplying by batch size again) permits exact
+            # pooling across frames, episodes, and nested aggregation calls.
+            return sum(value for value, _ in present)
+        present_weight = sum(weight for _, weight in present)
+        return sum(value * weight for value, weight in present) / present_weight
+
+    aggregate_metrics = {name: mean_present_metric(name) for name in sorted(metric_names)}
+    measurement_count_keys = {
+        "true_positive": "rgb_runtime_birth_true_positive_count_at_0_5m",
+        "target": "rgb_runtime_birth_target_count",
+        "proposal": "rgb_runtime_birth_proposal_count",
+        "runtime_error": "rgb_runtime_birth_world_position_absolute_error_sum_m",
+        "runtime_matched": "rgb_runtime_birth_matched_proposal_count",
+        "all_error": "rgb_world_position_absolute_error_sum_m",
+        "all_matched": "rgb_world_position_matched_proposal_count",
+    }
+    if all(key in aggregate_metrics for key in measurement_count_keys.values()):
+        counts = {name: aggregate_metrics[key] for name, key in measurement_count_keys.items()}
+        recall = counts["true_positive"] / max(counts["target"], 1.0)
+        precision = counts["true_positive"] / max(counts["proposal"], 1.0)
+        f1 = 2.0 * recall * precision / max(recall + precision, 1.0e-8)
+        runtime_mae = (
+            counts["runtime_error"] / counts["runtime_matched"]
+            if counts["runtime_matched"] > 0
+            else math.inf
+        )
+        all_mae = (
+            counts["all_error"] / counts["all_matched"] if counts["all_matched"] > 0 else math.inf
+        )
+        aggregate_metrics.update(
+            {
+                "rgb_detection_recall_at_0_5m": recall,
+                "rgb_detection_precision_at_0_5m": precision,
+                "rgb_runtime_birth_recall_at_0_5m": recall,
+                "rgb_runtime_birth_precision_at_0_5m": precision,
+                "rgb_runtime_birth_f1_at_0_5m": f1,
+                "rgb_runtime_birth_world_position_mae_m": runtime_mae,
+                "rgb_world_position_mae_m": all_mae,
+            }
+        )
+
     return TrainingBatchResult(
         total_loss=(
             torch.stack(
@@ -897,28 +1625,8 @@ def _mean_batch_results(
             ).sum()
             / total_weight
         ),
-        loss_terms={
-            name: (
-                torch.stack(
-                    [
-                        result.loss_terms[name] * float(weight)
-                        for result, weight in zip(results, weights, strict=True)
-                    ]
-                ).sum()
-                / total_weight
-            )
-            for name in sorted(term_names)
-        },
-        metrics={
-            name: float(
-                sum(
-                    result.metrics[name] * float(weight)
-                    for result, weight in zip(results, weights, strict=True)
-                )
-                / total_weight
-            )
-            for name in sorted(metric_names)
-        },
+        loss_terms={name: mean_present_term(name) for name in sorted(term_names)},
+        metrics=aggregate_metrics,
         phase=phase,
     )
 
@@ -943,7 +1651,7 @@ def _validation_step(
                 window_steps=int(batch["rgb"].shape[1]),
                 apply_perturbations=False,
                 include_measurement_supervision=True,
-                rollout_anchors_per_window=None,
+                rollout_anchors_per_window=(config.training.validation_rollout_anchors_per_episode),
                 compute_future_correction=False,
             )
         else:
@@ -990,7 +1698,7 @@ def _aggregate_physical_validation_metrics(
             if name.startswith("physical_") and (
                 name.endswith("_sse")
                 or name.endswith("_count")
-                or (name.startswith("physical_forecast_") and "_count@" in name)
+                or "_count@" in name
                 or name
                 in {
                     "physical_target_object_frames",
@@ -1005,7 +1713,14 @@ def _aggregate_physical_validation_metrics(
                 }
             ):
                 additive[name] = additive.get(name, 0.0) + float(value)
-    return physical_validation_metrics(additive, config)
+    # Preserve the exact split totals as well as ratios derived from them.
+    # Averaging per-batch ``*_count`` diagnostics produces fractional values
+    # and makes checkpoint audit trails misleading even when the ratios happen
+    # to be recomputed correctly.
+    return {
+        **additive,
+        **physical_validation_metrics(additive, config),
+    }
 
 
 @torch.no_grad()
@@ -1021,6 +1736,9 @@ def _validation_loader_result(
 
     results: list[TrainingBatchResult] = []
     batch_sizes: list[float] = []
+    scenarios: list[str] = []
+    seeds: list[int] = []
+    attribution_available = True
     for raw_batch in loader:
         _check_batch_major(raw_batch)
         batch = move_batch_to_device(raw_batch, device)
@@ -1036,6 +1754,24 @@ def _validation_loader_result(
             phase = "closed-loop" if closed_loop else "measurement"
             raise FloatingPointError(f"nonfinite {phase} validation loss")
         batch_sizes.append(float(batch["rgb"].shape[0]))
+        metadata = raw_batch.get("metadata")
+        scenario_values = metadata.get("scenario") if isinstance(metadata, Mapping) else None
+        seed_values = raw_batch.get("seed")
+        if (
+            not isinstance(scenario_values, list)
+            or len(scenario_values) != 1
+            or not isinstance(seed_values, Tensor)
+            or seed_values.numel() != 1
+        ):
+            # Production validation loaders are deliberately batch-one and
+            # always provide this metadata.  Keep the aggregation helper
+            # usable for synthetic/custom loaders while making the absence of
+            # per-episode attribution explicit instead of rejecting otherwise
+            # valid pooled metrics.
+            attribution_available = False
+        else:
+            scenarios.append(str(scenario_values[0]))
+            seeds.append(int(seed_values.item()))
     aggregate = _mean_batch_results(results, weights=batch_sizes)
     if closed_loop:
         aggregate.metrics.update(
@@ -1044,6 +1780,41 @@ def _validation_loader_result(
                 config,
             )
         )
+        aggregate.metrics["validation_attribution_available"] = float(
+            attribution_available and len(scenarios) == len(results)
+        )
+        if attribution_available and len(scenarios) == len(results):
+            by_scenario: dict[str, list[TrainingBatchResult]] = {}
+            for scenario, result in zip(scenarios, results, strict=True):
+                by_scenario.setdefault(scenario, []).append(result)
+            for scenario, scenario_results in sorted(by_scenario.items()):
+                slug = re.sub(r"[^a-z0-9]+", "_", scenario.lower()).strip("_")
+                aggregate.metrics[f"scenario_{slug}_episode_count"] = float(len(scenario_results))
+                try:
+                    derived = _aggregate_physical_validation_metrics(
+                        scenario_results,
+                        config,
+                    )
+                except RuntimeError:
+                    aggregate.metrics[f"scenario_{slug}_selection_metric_supported"] = 0.0
+                    continue
+                aggregate.metrics[f"scenario_{slug}_selection_metric_supported"] = 1.0
+                for name, value in derived.items():
+                    if name.startswith("validation_"):
+                        aggregate.metrics[f"scenario_{slug}_{name}"] = value
+            for seed, result in zip(seeds, results, strict=True):
+                try:
+                    derived = _aggregate_physical_validation_metrics(
+                        [result],
+                        config,
+                    )
+                except RuntimeError:
+                    aggregate.metrics[f"seed_{seed}_selection_metric_supported"] = 0.0
+                    continue
+                aggregate.metrics[f"seed_{seed}_selection_metric_supported"] = 1.0
+                for name, value in derived.items():
+                    if name.startswith("validation_"):
+                        aggregate.metrics[f"seed_{seed}_{name}"] = value
     return aggregate
 
 
@@ -1052,14 +1823,60 @@ def _write_run_metadata(
     *,
     config: OrpheusConfig,
     device_info: DeviceInfo,
+    active_start_device: torch.device,
+    measurement_device: torch.device,
+    closed_loop_device: torch.device,
     resume_path: str | Path | None,
     initialize_from_path: str | Path | None,
-) -> None:
+    source_provenance: Mapping[str, Any],
+) -> dict[str, Any]:
+    now = datetime.now(timezone.utc).isoformat()
+    existing: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (OSError, json.JSONDecodeError):
+            # The atomic rewrite below repairs malformed metadata while the
+            # durable checkpoint remains the authority for training state.
+            existing = {}
+    resolved_resume_path = (
+        None if resume_path is None else str(Path(resume_path).expanduser().resolve())
+    )
+    requested_initialization_path = (
+        None
+        if initialize_from_path is None
+        else str(Path(initialize_from_path).expanduser().resolve())
+    )
+    preserved_initialization_path = existing.get(
+        "initialize_from_path",
+        requested_initialization_path,
+    )
+    initial_source_provenance = existing.get(
+        "initial_source_provenance",
+        existing.get("source_provenance", dict(source_provenance)),
+    )
+    resume_history = existing.get("resume_history", [])
+    resume_history = [] if not isinstance(resume_history, list) else list(resume_history)
+    if resolved_resume_path is not None:
+        resume_history.append(
+            {
+                "resumed_utc": now,
+                "resume_path": resolved_resume_path,
+                "active_start_device": str(active_start_device),
+                "source_provenance": dict(source_provenance),
+            }
+        )
     payload = {
-        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "created_utc": existing.get("created_utc", now),
+        "last_invocation_utc": now,
         "project": config.project.name,
         "seed": config.project.seed,
-        "device": str(device_info.device),
+        "device": str(active_start_device),
+        "initial_device": existing.get("initial_device", str(active_start_device)),
+        "measurement_device": str(measurement_device),
+        "closed_loop_device": str(closed_loop_device),
         "torch_version": device_info.torch_version,
         "mps_built": device_info.mps_built,
         "mps_available": device_info.mps_available,
@@ -1067,14 +1884,215 @@ def _write_run_metadata(
         "precision": device_info.precision,
         "runtime_modality": config.runtime.modality,
         "debug_oracle_enabled": config.runtime.enable_debug_oracle,
-        "resume_path": None if resume_path is None else str(Path(resume_path).resolve()),
-        "initialize_from_path": (
-            None
-            if initialize_from_path is None
-            else str(Path(initialize_from_path).expanduser().resolve())
-        ),
+        "resume_path": resolved_resume_path,
+        "resume_history": resume_history,
+        "initialize_from_path": preserved_initialization_path,
+        "source_provenance": initial_source_provenance,
+        "initial_source_provenance": initial_source_provenance,
+        "latest_source_provenance": dict(source_provenance),
     }
     atomic_write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return payload
+
+
+def _configured_device_without_availability_check(preference: str) -> torch.device:
+    """Return an unused phase's configured device without requiring hardware."""
+
+    if preference == "auto":
+        # ``auto`` never requires a particular unavailable backend.
+        return select_device("auto").device
+    return torch.device(preference)
+
+
+def _validate_exact_resume_source(
+    payload: Mapping[str, Any],
+    current_source: Mapping[str, Any],
+) -> None:
+    """Reject an exact resume when executable source provenance changed."""
+
+    stored_source = payload.get("git")
+    if not isinstance(stored_source, Mapping):
+        return
+    stored_runtime_fingerprint = stored_source.get("runtime_source_fingerprint")
+    current_runtime_fingerprint = current_source.get("runtime_source_fingerprint")
+    if isinstance(stored_runtime_fingerprint, str):
+        if not isinstance(current_runtime_fingerprint, str):
+            raise ValueError(
+                "current executable source fingerprint is unavailable; "
+                "use --initialize-from when exact source identity cannot be proven"
+            )
+        if stored_runtime_fingerprint != current_runtime_fingerprint:
+            raise ValueError(
+                "checkpoint executable source differs from this exact resume; "
+                "restore the same runtime source or use --initialize-from"
+            )
+        # Commit and whole-worktree provenance remain available for audit, but
+        # documentation/test-only changes do not alter numerical continuation.
+        return
+    stored_fingerprint = stored_source.get("worktree_fingerprint")
+    current_fingerprint = current_source.get("worktree_fingerprint")
+    if isinstance(stored_fingerprint, str) and isinstance(current_fingerprint, str):
+        if stored_fingerprint != current_fingerprint:
+            raise ValueError(
+                "checkpoint source worktree differs from this exact resume; "
+                "commit the same source or use --initialize-from"
+            )
+        return
+    stored_commit = stored_source.get("commit")
+    current_commit = current_source.get("commit")
+    if isinstance(stored_commit, str) and isinstance(current_commit, str):
+        if stored_commit != current_commit:
+            raise ValueError(
+                "checkpoint source commit differs from this exact resume; "
+                "use --initialize-from for a source-code transfer"
+            )
+        if bool(stored_source.get("dirty")) or bool(current_source.get("dirty")):
+            raise ValueError(
+                "legacy dirty source cannot be proven identical for exact resume; "
+                "use --initialize-from"
+            )
+
+
+def _expected_resume_checkpoint_devices(
+    payload: Mapping[str, Any],
+    config: OrpheusConfig,
+    *,
+    measurement_device: torch.device,
+    closed_loop_device: torch.device,
+) -> frozenset[torch.device]:
+    """Return valid actual devices for the checkpoint's durable phase state."""
+
+    step = int(payload.get("step", -1))
+    if step < 0:
+        raise ValueError("checkpoint step must be a nonnegative integer")
+    boundary = int(config.training.rgb_pretrain_steps)
+    metrics = payload.get("metrics")
+    metrics = metrics if isinstance(metrics, Mapping) else {}
+    # Imported incumbents are validated on the causal device before RGB
+    # pretraining starts. Their numbered/selector checkpoints are therefore
+    # closed-loop-device artifacts even when their completed step is zero.
+    contains_closed_loop_validation = (
+        "rollout_selection_metric_version" in metrics
+        and "validation_rollout_selection_score" in metrics
+    )
+    if contains_closed_loop_validation:
+        return frozenset({closed_loop_device})
+    if step < boundary:
+        return frozenset({measurement_device})
+    if step > boundary or boundary == 0:
+        return frozenset({closed_loop_device})
+
+    marker = metrics.get("measurement_handoff_completed")
+    if marker is None:
+        # Legacy boundary checkpoints did not distinguish the last measurement
+        # save from a completed causal handoff at the same numeric step.
+        return frozenset({measurement_device, closed_loop_device})
+    try:
+        marker_value = float(marker)
+    except (TypeError, ValueError) as error:
+        raise ValueError("checkpoint measurement handoff marker is invalid") from error
+    if marker_value not in {0.0, 1.0}:
+        raise ValueError("checkpoint measurement handoff marker must be 0 or 1")
+    return frozenset({closed_loop_device if marker_value == 1.0 else measurement_device})
+
+
+def _resume_requires_final_validation(
+    payload: Mapping[str, Any],
+    config: OrpheusConfig,
+) -> bool:
+    """Return whether a durable terminal iterate still needs validation.
+
+    Checkpoints predating the marker remain inspection-only no-ops when they
+    already equal the configured training budget. This preserves their bytes
+    and avoids guessing whether historical validation actually ran.
+    """
+
+    metrics = payload.get("metrics")
+    metrics = metrics if isinstance(metrics, Mapping) else {}
+    marker = metrics.get("final_validation_completed")
+    if marker is None:
+        return False
+    try:
+        marker_value = float(marker)
+    except (TypeError, ValueError) as error:
+        raise ValueError("checkpoint final validation marker is invalid") from error
+    if marker_value not in {0.0, 1.0}:
+        raise ValueError("checkpoint final validation marker must be 0 or 1")
+    return marker_value == 0.0 and int(payload.get("step", -1)) == int(config.training.steps)
+
+
+def _resolve_training_devices(
+    config: OrpheusConfig,
+    *,
+    start_step: int,
+    initialize_from: bool,
+    final_validation_required: bool = False,
+    measurement_device_info: DeviceInfo | None = None,
+) -> tuple[DeviceInfo, torch.device, torch.device, torch.device]:
+    """Resolve only devices required by the remaining training phases.
+
+    A causal-only run configured to use CPU must remain runnable when an unused
+    perception preference (for example MPS) is unavailable. Conversely, a
+    measurement-only run does not need to initialize an unused causal backend.
+    """
+
+    measurement_required = start_step < min(
+        config.training.steps,
+        config.training.rgb_pretrain_steps,
+    ) or (final_validation_required and start_step <= config.training.rgb_pretrain_steps)
+    causal_required = (
+        initialize_from
+        or (max(start_step, config.training.rgb_pretrain_steps) < config.training.steps)
+        or (final_validation_required and start_step > config.training.rgb_pretrain_steps)
+    )
+    measurement_info: DeviceInfo | None = None
+    closed_loop_info: DeviceInfo | None = None
+
+    if measurement_required or (causal_required and config.device.closed_loop_preference == "same"):
+        measurement_info = measurement_device_info or select_device(config.device.preference)
+        measurement_device = measurement_info.device
+    else:
+        measurement_device = _configured_device_without_availability_check(config.device.preference)
+
+    if config.device.closed_loop_preference == "same":
+        closed_loop_device = measurement_device
+        closed_loop_info = measurement_info
+    elif causal_required:
+        closed_loop_info = select_device(config.device.closed_loop_preference)
+        closed_loop_device = closed_loop_info.device
+    else:
+        closed_loop_device = _configured_device_without_availability_check(
+            config.device.closed_loop_preference
+        )
+
+    if measurement_required:
+        if measurement_info is None:
+            raise AssertionError("measurement phase did not resolve an execution device")
+        return (
+            measurement_info,
+            measurement_device,
+            closed_loop_device,
+            measurement_device,
+        )
+    if causal_required:
+        if closed_loop_info is None:
+            raise AssertionError("causal phase did not resolve an execution device")
+        return (
+            closed_loop_info,
+            measurement_device,
+            closed_loop_device,
+            closed_loop_device,
+        )
+
+    # An already-complete resume performs no numerical work. Keep checkpoint
+    # inspection available even if its historical accelerator is absent.
+    inactive_info = select_device("cpu")
+    return (
+        inactive_info,
+        measurement_device,
+        closed_loop_device,
+        torch.device("cpu"),
+    )
 
 
 def train_from_config(
@@ -1100,17 +2118,75 @@ def train_from_config(
         )
     if config.runtime.enable_debug_oracle:
         raise ValueError("RGB training cannot enable privileged debug_oracle input")
-    resolved_device = device_info or select_device(config.device.preference)
-    device = resolved_device.device
     seed_everything(
         config.project.seed,
         deterministic=config.project.deterministic,
     )
+    source_root = Path(__file__).resolve().parents[2]
+    source_provenance = capture_git_metadata(source_root)
     run_directory = _resolve_run_directory(
         config,
         run_name=run_name,
         resume_path=resume_path,
     )
+    resume_step_hint: int | None = None
+    resume_config_payload: Mapping[str, Any] | None = None
+    final_validation_recovery_pending = False
+    if resume_path is not None:
+        # Reject an accidental curriculum/data/objective change before
+        # overwriting any metadata in the existing run directory.  The later
+        # load restores tensors and RNG; this lightweight CPU read establishes
+        # that ``--resume`` is truly an exact continuation first.
+        resume_source = Path(resume_path).expanduser().resolve()
+        if not resume_source.is_file():
+            raise FileNotFoundError(f"Checkpoint not found: {resume_source}")
+        resume_config_payload = torch.load(
+            resume_source,
+            map_location="cpu",
+            weights_only=False,
+        )
+        if not isinstance(resume_config_payload, Mapping):
+            raise ValueError("checkpoint payload must be a mapping")
+        validate_checkpoint_config(resume_config_payload, config)
+        validate_training_resume_config(resume_config_payload, config)
+        _validate_exact_resume_source(
+            resume_config_payload,
+            source_provenance,
+        )
+        resume_step_hint = int(resume_config_payload.get("step", -1))
+        if resume_step_hint < 0:
+            raise ValueError("checkpoint step must be a nonnegative integer")
+        final_validation_recovery_pending = _resume_requires_final_validation(
+            resume_config_payload,
+            config,
+        )
+    resolved_device, measurement_device, closed_loop_device, device = _resolve_training_devices(
+        config,
+        start_step=resume_step_hint or 0,
+        initialize_from=initialize_from_path is not None,
+        final_validation_required=final_validation_recovery_pending,
+        measurement_device_info=device_info,
+    )
+    if resume_config_payload is not None and resume_step_hint is not None:
+        checkpoint_device = resume_config_payload.get("device")
+        expected_checkpoint_devices = _expected_resume_checkpoint_devices(
+            resume_config_payload,
+            config,
+            measurement_device=measurement_device,
+            closed_loop_device=closed_loop_device,
+        )
+        if checkpoint_device not in {
+            str(expected_device) for expected_device in expected_checkpoint_devices
+        }:
+            expected_devices = ", ".join(
+                sorted(str(expected_device) for expected_device in expected_checkpoint_devices)
+            )
+            raise ValueError(
+                "checkpoint execution device does not match this exact resume "
+                f"(checkpoint={checkpoint_device!r}, "
+                f"expected one of [{expected_devices}]); use "
+                "--initialize-from for a device/backend transfer"
+            )
     if run_directory.exists() and resume_path is None:
         occupied = any(
             (run_directory / name).exists()
@@ -1128,42 +2204,38 @@ def train_from_config(
     last_path = checkpoint_directory / "last.pt"
     resolved_config_path = run_directory / "config.resolved.yaml"
     save_resolved_config(config, resolved_config_path)
-    _write_run_metadata(
+    run_metadata = _write_run_metadata(
         run_directory / "run_metadata.json",
         config=config,
         device_info=resolved_device,
+        active_start_device=device,
+        measurement_device=measurement_device,
+        closed_loop_device=closed_loop_device,
         resume_path=resume_path,
         initialize_from_path=initialize_from_path,
+        source_provenance=source_provenance,
     )
 
-    train_loader = _make_loader(
-        config,
-        split="train",
-        episodes=config.training.train_episodes,
-        shuffle=not config.training.fixed_dataset,
-    )
     validation_loader = _make_loader(
         config,
         split="validation",
         episodes=config.training.validation_episodes,
         shuffle=False,
+        batch_size_override=1,
     )
-    train_iterator = iter(train_loader)
     model = OnlineWorldModel.from_config(config, device=device)
-    initialized_from: str | None = None
+    initialized_from_value = run_metadata.get("initialize_from_path")
+    initialized_from = (
+        str(initialized_from_value) if isinstance(initialized_from_value, str) else None
+    )
     if initialize_from_path is not None:
         source = Path(initialize_from_path).expanduser().resolve()
         if not source.is_file():
             raise FileNotFoundError(f"Initialization checkpoint not found: {source}")
-        initialization_payload = torch.load(
+        load_model_weights(
             source,
-            map_location=device,
-            weights_only=False,
+            model=model,
         )
-        model_state = initialization_payload.get("model_state")
-        if not isinstance(model_state, Mapping):
-            raise ValueError("initialization checkpoint does not contain model_state")
-        model.load_state_dict(model_state, strict=True)
         initialized_from = str(source)
     model_parameter_count = sum(parameter.numel() for parameter in model.parameters())
     model.train()
@@ -1180,23 +2252,31 @@ def train_from_config(
     reference_rollout_selection: _RolloutSelectionMetrics | None = None
     reference_rollout_model_state_hash: str | None = None
     reference_rollout_step: int | None = None
-    best_measurement = math.inf
+    best_measurement_selection: _MeasurementSelectionMetrics | None = None
+    best_measurement_model_state_hash: str | None = None
+    best_measurement_step: int | None = None
     best_rollout_validated = False
     best_measurement_validated = False
+    measurement_handoff_completed = config.training.rgb_pretrain_steps == 0
     resumed_from: str | None = None
+    resume_metrics: Mapping[str, Any] = {}
     if resume_path is not None:
         payload = load_checkpoint(
             resume_path,
             model=model,
             optimizer=optimizer,
-            map_location=device,
+            # Load storage on CPU and let ``load_state_dict`` place tensors
+            # against their owning parameters. This matters for the hybrid
+            # MPS-backbone/CPU-detector optimizer: PyTorch deliberately leaves
+            # non-capturable Adam scalar step counters on the map device.
+            map_location="cpu",
             restore_rng=True,
             expected_config=config,
         )
         start_step = int(payload["step"])
-        resume_metrics = payload.get("metrics", {})
-        if not isinstance(resume_metrics, Mapping):
-            resume_metrics = {}
+        raw_resume_metrics = payload.get("metrics", {})
+        if isinstance(raw_resume_metrics, Mapping):
+            resume_metrics = raw_resume_metrics
         best_rollout_validated = bool(float(resume_metrics.get("best_rollout_validated", 0.0)))
         best_measurement_validated = bool(
             float(resume_metrics.get("best_measurement_validated", 0.0))
@@ -1208,6 +2288,7 @@ def train_from_config(
                 config,
                 prefix="best_rollout",
                 resume_metrics=resume_metrics,
+                expected_device=closed_loop_device,
             )
             preserved_reference = _preserve_resume_selector_checkpoint(
                 resume_path,
@@ -1215,10 +2296,36 @@ def train_from_config(
                 config,
                 prefix="reference_rollout",
                 resume_metrics=resume_metrics,
+                expected_device=closed_loop_device,
             )
             # Moving-best metadata is useful only when both linked files prove
             # the actual incumbent and the fixed anti-ratcheting reference.
             if preserved_best is None or preserved_reference is None:
+                linked_rollout_format = (
+                    float(
+                        resume_metrics.get(
+                            "rollout_selection_metric_version",
+                            -1.0,
+                        )
+                    )
+                    == _ROLLOUT_SELECTION_METRIC_VERSION
+                    and isinstance(
+                        resume_metrics.get("best_rollout_model_state_hash"),
+                        str,
+                    )
+                    and resume_metrics.get("best_rollout_checkpoint_step") is not None
+                    and isinstance(
+                        resume_metrics.get("reference_rollout_model_state_hash"),
+                        str,
+                    )
+                    and resume_metrics.get("reference_rollout_checkpoint_step") is not None
+                )
+                if linked_rollout_format:
+                    raise ValueError(
+                        "exact resume declared linked rollout selector artifacts, "
+                        "but best_rollout.pt or reference_rollout.pt is missing "
+                        "or failed protocol/tensor verification"
+                    )
                 best_rollout_validated = False
             else:
                 (
@@ -1232,15 +2339,58 @@ def train_from_config(
                     reference_rollout_step,
                 ) = preserved_reference
                 best_rollout = best_rollout_selection.score
+        stored_handoff_completed = resume_metrics.get("measurement_handoff_completed")
+        if stored_handoff_completed is not None:
+            measurement_handoff_completed = bool(float(stored_handoff_completed))
+        elif (
+            best_rollout_selection is not None
+            and config.training.rgb_pretrain_steps > 0
+            and start_step <= config.training.rgb_pretrain_steps
+        ):
+            # Migration for initialized runs checkpointed before this explicit
+            # flag existed. Their retained selector proves an imported
+            # reference, and the boundary has not yet been crossed.
+            measurement_handoff_completed = False
         if best_measurement_validated:
-            localization_metric = resume_metrics.get("best_measurement_world_position_mae_m")
-            if localization_metric is None:
-                # Older checkpoints selected on the summed (possibly negative)
-                # measurement objective.  Keep them loadable, but require a new
-                # calibrated localization validation before calling one best.
+            restored_measurement = _preserve_resume_measurement_checkpoint(
+                resume_path,
+                best_measurement_path,
+                config,
+                resume_metrics=resume_metrics,
+                expected_device=measurement_device,
+            )
+            if restored_measurement is None:
+                linked_measurement_format = (
+                    float(
+                        resume_metrics.get(
+                            "measurement_selection_metric_version",
+                            -1.0,
+                        )
+                    )
+                    == _MEASUREMENT_SELECTION_METRIC_VERSION
+                    and isinstance(
+                        resume_metrics.get("best_measurement_model_state_hash"),
+                        str,
+                    )
+                    and resume_metrics.get("best_measurement_checkpoint_step") is not None
+                )
+                if linked_measurement_format:
+                    raise ValueError(
+                        "exact resume declared a linked measurement selector "
+                        "artifact, but best_measurement.pt is missing or failed "
+                        "protocol/tensor verification"
+                    )
+                # Older checkpoints used MAE alone and did not prove that their
+                # proposals crossed the runtime lifecycle gate. Keep them
+                # loadable, but require a new broad validation before calling
+                # one the best measurement checkpoint.
                 best_measurement_validated = False
             else:
-                best_measurement = float(localization_metric)
+                (
+                    best_measurement_selection,
+                    best_measurement_model_state_hash,
+                    best_measurement_step,
+                ) = restored_measurement
         resumed_from = str(Path(resume_path).expanduser().resolve())
         if start_step > config.training.steps:
             raise ValueError(
@@ -1248,9 +2398,42 @@ def train_from_config(
                 f"({start_step} > {config.training.steps})"
             )
 
+    train_loader = _make_loader(
+        config,
+        split="train",
+        episodes=config.training.train_episodes,
+        shuffle=not config.training.fixed_dataset,
+        start_step=start_step,
+        stop_step=config.training.steps,
+    )
+    train_iterator = iter(train_loader)
+    train_batches_per_epoch = math.ceil(
+        config.training.train_episodes
+        / min(config.training.batch_size, config.training.train_episodes)
+    )
+
     logger = MetricsLogger(run_directory / "metrics.jsonl")
     last_metrics: dict[str, float | str] = {}
     started = time.perf_counter()
+
+    def retained_measurement_selector_metrics(
+        *,
+        checkpoint_model_state_hash: str | None = None,
+    ) -> dict[str, Any]:
+        if best_measurement_selection is None:
+            return {"best_measurement_validated": 0.0}
+        if best_measurement_model_state_hash is None or best_measurement_step is None:
+            raise AssertionError("measurement selector is missing weight provenance")
+        return {
+            "best_measurement_validated": 1.0,
+            **best_measurement_selection.checkpoint_metrics(),
+            "measurement_validation_protocol_hash": (_measurement_validation_protocol_hash(config)),
+            "best_measurement_model_state_hash": best_measurement_model_state_hash,
+            "best_measurement_checkpoint_step": float(best_measurement_step),
+            "checkpoint_contains_best_measurement_weights": float(
+                checkpoint_model_state_hash == best_measurement_model_state_hash
+            ),
+        }
 
     def validate_closed_loop_incumbent(
         *,
@@ -1273,11 +2456,6 @@ def train_from_config(
         validation_metrics = _result_metrics(
             validation,
             learning_rate=learning_rate,
-        )
-        logger.log(
-            step=completed_step,
-            split=split,
-            metrics=validation_metrics,
         )
         candidate = _rollout_selection_metrics(validation.metrics, config)
         candidate_model_state_hash = _current_model_state_hash(model)
@@ -1319,12 +2497,18 @@ def train_from_config(
             reference_rollout_selection,
             config=config,
             accepted=accepted,
-            best_measurement=(best_measurement if best_measurement_validated else None),
+            best_measurement=(best_measurement_selection if best_measurement_validated else None),
             checkpoint_model_state_hash=candidate_model_state_hash,
             incumbent_model_state_hash=best_rollout_model_state_hash,
             incumbent_step=best_rollout_step,
             reference_model_state_hash=reference_rollout_model_state_hash,
             reference_step=reference_rollout_step,
+        )
+        checkpoint_metrics["measurement_handoff_completed"] = float(measurement_handoff_completed)
+        checkpoint_metrics.update(
+            retained_measurement_selector_metrics(
+                checkpoint_model_state_hash=candidate_model_state_hash,
+            )
         )
         checkpoint_metrics.update(
             {
@@ -1332,6 +2516,39 @@ def train_from_config(
                 for name, value in validation.metrics.items()
                 if name.startswith("rollout_position@")
             }
+        )
+        # Put the selector decision in the human-facing JSONL as well as the
+        # tensor-verified numbered checkpoint.  Previously the row was written
+        # before selection, so an active campaign exposed its validation curve
+        # but not whether or why each point was rejected.
+        validation_metrics.update(
+            {
+                "validation_rollout_selection_score": candidate.score,
+                "selection_accepted": float(accepted),
+                "selection_rejection_reason_count": checkpoint_metrics[
+                    "selection_rejection_reason_count"
+                ],
+                "selection_rejection_reasons_json": json.dumps(
+                    checkpoint_metrics["selection_rejection_reasons"],
+                    sort_keys=True,
+                ),
+                "selection_reference_guardrail_failures_json": json.dumps(
+                    checkpoint_metrics["selection_reference_guardrail_failures"],
+                    sort_keys=True,
+                ),
+                "selection_incumbent_guardrail_failures_json": json.dumps(
+                    checkpoint_metrics["selection_incumbent_guardrail_failures"],
+                    sort_keys=True,
+                ),
+                "best_rollout_selection_score": best_rollout_selection.score,
+                "best_rollout_checkpoint_step": float(best_rollout_step),
+                "reference_rollout_checkpoint_step": float(reference_rollout_step),
+            }
+        )
+        logger.log(
+            step=completed_step,
+            split=split,
+            metrics=validation_metrics,
         )
         save_checkpoint(
             checkpoint_directory / f"validation_step_{completed_step:06d}.pt",
@@ -1341,6 +2558,7 @@ def train_from_config(
             step=completed_step,
             metrics=checkpoint_metrics,
             device=str(device),
+            source_provenance=source_provenance,
         )
         if established_reference:
             save_checkpoint(
@@ -1351,6 +2569,7 @@ def train_from_config(
                 step=completed_step,
                 metrics=checkpoint_metrics,
                 device=str(device),
+                source_provenance=source_provenance,
             )
         if accepted:
             save_checkpoint(
@@ -1361,6 +2580,7 @@ def train_from_config(
                 step=completed_step,
                 metrics=checkpoint_metrics,
                 device=str(device),
+                source_provenance=source_provenance,
             )
         return validation, accepted
 
@@ -1371,7 +2591,9 @@ def train_from_config(
             "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
             "checkpoint_contains_best_rollout_weights": 0.0,
             "checkpoint_contains_reference_rollout_weights": 0.0,
+            "measurement_handoff_completed": float(measurement_handoff_completed),
             **_validation_protocol_checkpoint_metrics(config),
+            **retained_measurement_selector_metrics(),
         }
         if best_rollout_selection is not None:
             if best_rollout_model_state_hash is None or best_rollout_step is None:
@@ -1389,8 +2611,137 @@ def train_from_config(
             metrics["reference_rollout_checkpoint_step"] = float(reference_rollout_step)
         return metrics
 
+    def validate_measurement_incumbent(
+        *,
+        completed_step: int,
+        learning_rate: float,
+        split: str,
+    ) -> tuple[TrainingBatchResult, bool]:
+        nonlocal best_measurement_selection, best_measurement_validated
+        nonlocal best_measurement_model_state_hash, best_measurement_step
+
+        validation = _validation_loader_result(
+            model,
+            validation_loader,
+            config,
+            device=device,
+            closed_loop=False,
+        )
+        validation_metrics = _result_metrics(
+            validation,
+            learning_rate=learning_rate,
+        )
+        if validation.phase != "rgb_pretrain" or "measurement" not in validation.loss_terms:
+            raise RuntimeError("measurement validation returned an unexpected phase")
+        measurement_candidate = _measurement_selection_metrics(validation.metrics)
+        measurement_rejection_reasons: list[dict[str, float | str]] = []
+        if measurement_candidate is None:
+            measurement_accepted = False
+            measurement_rejection_reasons.append(
+                {
+                    "metric": "runtime_usable_localization",
+                    "direction": "required",
+                    "candidate": 0.0,
+                    "reference": 1.0,
+                    "limit": 1.0,
+                    "delta": -1.0,
+                }
+            )
+        elif best_measurement_selection is None:
+            measurement_accepted = True
+        else:
+            measurement_rejection_reasons.extend(
+                _measurement_selection_guardrail_failures(
+                    measurement_candidate,
+                    best_measurement_selection,
+                )
+            )
+            if (
+                measurement_candidate.score
+                >= best_measurement_selection.score - _MEASUREMENT_SELECTION_MIN_DELTA
+            ):
+                measurement_rejection_reasons.append(
+                    {
+                        "metric": "measurement_selection_score",
+                        "direction": "minimum_improvement",
+                        "candidate": measurement_candidate.score,
+                        "reference": best_measurement_selection.score,
+                        "limit": (
+                            best_measurement_selection.score - _MEASUREMENT_SELECTION_MIN_DELTA
+                        ),
+                        "delta": (measurement_candidate.score - best_measurement_selection.score),
+                    }
+                )
+            measurement_accepted = _measurement_selection_improves(
+                measurement_candidate,
+                best_measurement_selection,
+            )
+        if measurement_accepted:
+            if measurement_candidate is None:
+                raise AssertionError("an unusable measurement candidate was accepted")
+            best_measurement_selection = measurement_candidate
+            best_measurement_model_state_hash = _current_model_state_hash(model)
+            best_measurement_step = completed_step
+            best_measurement_validated = True
+        validation_metrics.update(
+            {
+                "measurement_selection_usable": float(measurement_candidate is not None),
+                "measurement_selection_accepted": float(measurement_accepted),
+                "measurement_selection_rejection_reason_count": float(
+                    len(measurement_rejection_reasons)
+                ),
+                "measurement_selection_rejection_reasons_json": json.dumps(
+                    measurement_rejection_reasons,
+                    sort_keys=True,
+                ),
+            }
+        )
+        if measurement_candidate is not None:
+            validation_metrics.update(measurement_candidate.validation_metrics())
+        if best_measurement_selection is not None:
+            validation_metrics["best_measurement_selection_score"] = (
+                best_measurement_selection.score
+            )
+        logger.log(
+            step=completed_step,
+            split=split,
+            metrics=validation_metrics,
+        )
+        if measurement_accepted:
+            if (
+                best_measurement_selection is None
+                or best_measurement_model_state_hash is None
+                or best_measurement_step is None
+            ):
+                raise AssertionError("accepted measurement selector is missing provenance")
+            save_checkpoint(
+                best_measurement_path,
+                model=model,
+                optimizer=optimizer,
+                config=config,
+                step=completed_step,
+                metrics={
+                    "validation_total_loss": float(validation.total_loss.detach().cpu()),
+                    "validation_measurement_loss": float(
+                        validation.loss_terms["measurement"].detach().cpu()
+                    ),
+                    **best_measurement_selection.validation_metrics(),
+                    **retained_selector_metrics(),
+                    "checkpoint_model_state_hash": best_measurement_model_state_hash,
+                    "checkpoint_contains_best_measurement_weights": 1.0,
+                },
+                device=str(device),
+                source_provenance=source_provenance,
+            )
+        return validation, measurement_accepted
+
     imported_incumbent = initialize_from_path is not None
     if imported_incumbent:
+        validation_source_device = device
+        if device != closed_loop_device:
+            model.to(closed_loop_device)
+            model.reset()
+            device = closed_loop_device
         _, accepted = validate_closed_loop_incumbent(
             completed_step=start_step,
             learning_rate=float(optimizer.param_groups[0]["lr"]),
@@ -1402,9 +2753,13 @@ def train_from_config(
             f"preserved imported runtime as broad closed-loop incumbent (score={best_rollout:.6f})",
             flush=True,
         )
+        if start_step < config.training.rgb_pretrain_steps and device != validation_source_device:
+            model.to(validation_source_device)
+            model.reset()
+            device = validation_source_device
     measurement_handoff_pending = (
-        imported_incumbent
-        and start_step < config.training.rgb_pretrain_steps < config.training.steps
+        not measurement_handoff_completed
+        and start_step <= config.training.rgb_pretrain_steps < config.training.steps
     )
 
     for step in range(start_step, config.training.steps):
@@ -1417,18 +2772,20 @@ def train_from_config(
             # Enter the downstream stage from the best calibrated perception
             # state, not merely the final pretraining iterate.  Heteroscedastic
             # objectives can improve NLL while physical localization regresses.
-            load_checkpoint(
+            load_model_weights(
                 best_measurement_path,
                 model=model,
-                optimizer=None,
-                map_location=device,
-                restore_rng=False,
                 expected_config=config,
             )
             restored_measurement_candidate = True
+            if best_measurement_selection is None:
+                raise AssertionError("validated measurement checkpoint has no selector metrics")
             print(
-                "restored best RGB localization checkpoint for closed-loop handoff "
-                f"(world_mae={best_measurement:.6f}m)",
+                "restored best runtime-usable RGB checkpoint for closed-loop handoff "
+                f"(score={best_measurement_selection.score:.6f}, "
+                f"world_mae={best_measurement_selection.world_position_mae_m:.6f}m, "
+                f"recall={best_measurement_selection.runtime_birth_recall:.4f}, "
+                f"precision={best_measurement_selection.runtime_birth_precision:.4f})",
                 flush=True,
             )
         if step == config.training.rgb_pretrain_steps:
@@ -1439,8 +2796,20 @@ def train_from_config(
                 ),
                 weight_decay=config.training.weight_decay,
             )
+            if device != closed_loop_device:
+                # The phase boundary already resets AdamW moments. Move the
+                # persistent model exactly once, clear transient runtime
+                # caches, and keep every selector validation on the causal
+                # device recorded in the protocol hash.
+                model.to(closed_loop_device)
+                model.reset()
+                device = closed_loop_device
         if step == config.training.rgb_pretrain_steps and measurement_handoff_pending:
-            if restored_measurement_candidate:
+            # Mark this before validation. If validation is interrupted, the
+            # durable pre-boundary checkpoint still says pending and resume
+            # retries it; any checkpoint written by validation says complete.
+            measurement_handoff_completed = True
+            if restored_measurement_candidate and best_rollout_selection is not None:
                 _, accepted = validate_closed_loop_incumbent(
                     completed_step=step,
                     learning_rate=float(optimizer.param_groups[0]["lr"]),
@@ -1448,26 +2817,20 @@ def train_from_config(
                 )
             else:
                 accepted = False
-            if accepted:
+            if best_rollout_selection is None:
+                # The fresh run establishes its first broad incumbent below.
+                pass
+            elif accepted:
                 print(
                     "promoted measurement handoff after broad closed-loop validation "
                     f"(score={best_rollout:.6f})",
                     flush=True,
                 )
             else:
-                if not best_rollout_path.is_file():
-                    raise RuntimeError("imported rollout incumbent checkpoint is missing")
-                load_checkpoint(
-                    best_rollout_path,
-                    model=model,
-                    optimizer=None,
-                    map_location=device,
-                    restore_rng=False,
-                    expected_config=config,
-                )
                 print(
-                    "restored imported runtime because the measurement handoff "
-                    "did not satisfy broad accuracy guardrails",
+                    "retained the imported runtime as the safe deployment incumbent; "
+                    "causal optimisation continues from the stronger measurement "
+                    "candidate so downstream losses can repair failed guardrails",
                     flush=True,
                 )
             measurement_handoff_pending = False
@@ -1505,7 +2868,7 @@ def train_from_config(
             target_learning_rate = config.training.learning_rate
             frame_index = measurement_pretrain_frame_index(
                 step,
-                loader_batches=len(train_loader),
+                loader_batches=train_batches_per_epoch,
                 total_frames=int(batch["rgb"].shape[1]),
                 fixed_dataset=config.training.fixed_dataset,
             )
@@ -1585,6 +2948,16 @@ def train_from_config(
         last_metrics["gradient_clip_coefficient"] = gradient_clip_coefficient
         last_metrics["gradient_norm_applied"] = applied_gradient_norm
         last_metrics["global_perception_trainable"] = float(global_perception_trainable)
+        episode_seeds = raw_batch.get("seed")
+        if isinstance(episode_seeds, Tensor):
+            last_metrics["episode_seeds"] = ",".join(
+                str(int(value)) for value in episode_seeds.detach().cpu().flatten().tolist()
+            )
+        metadata = raw_batch.get("metadata")
+        if isinstance(metadata, Mapping):
+            scenarios = metadata.get("scenario")
+            if isinstance(scenarios, list):
+                last_metrics["scenario_names"] = ",".join(str(item) for item in scenarios)
         should_log = (
             completed_step % max(1, config.training.log_every) == 0
             or completed_step == config.training.steps
@@ -1609,19 +2982,17 @@ def train_from_config(
             or completed_step == config.training.steps
         )
         if should_validate and completed_step == config.training.steps:
-            # Closed-loop validation can be much more expensive than the final
-            # optimiser update. Persist those weights first so an interrupted
-            # validation does not discard a successfully completed run.
+            # Final validation can be much more expensive than the final
+            # optimiser update. Persist those weights first, explicitly marked
+            # pending, so an interrupted validation can be resumed without
+            # repeating an update or pretending the run was fully validated.
             prevalidation_metrics = {
                 key: float(value)
                 for key, value in last_metrics.items()
                 if isinstance(value, (int, float)) and math.isfinite(float(value))
             }
             prevalidation_metrics.update(retained_selector_metrics())
-            prevalidation_metrics["best_measurement_validated"] = float(best_measurement_validated)
-            if best_measurement_validated:
-                prevalidation_metrics["best_measurement_loss"] = best_measurement
-                prevalidation_metrics["best_measurement_world_position_mae_m"] = best_measurement
+            prevalidation_metrics["final_validation_completed"] = 0.0
             save_checkpoint(
                 last_path,
                 model=model,
@@ -1630,6 +3001,7 @@ def train_from_config(
                 step=completed_step,
                 metrics=prevalidation_metrics,
                 device=str(device),
+                source_provenance=source_provenance,
             )
         if should_validate:
             if completed_step > config.training.rgb_pretrain_steps:
@@ -1639,51 +3011,11 @@ def train_from_config(
                     split="validation",
                 )
             else:
-                validation = _validation_loader_result(
-                    model,
-                    validation_loader,
-                    config,
-                    device=device,
-                    closed_loop=False,
-                )
-                validation_metrics = _result_metrics(
-                    validation,
+                validate_measurement_incumbent(
+                    completed_step=completed_step,
                     learning_rate=learning_rate,
-                )
-                logger.log(
-                    step=completed_step,
                     split="validation",
-                    metrics=validation_metrics,
                 )
-                if validation.phase != "rgb_pretrain" or "measurement" not in validation.loss_terms:
-                    raise RuntimeError("measurement validation returned an unexpected phase")
-                measurement_metric = validation.metrics.get("rgb_world_position_mae_m")
-                if measurement_metric is None:
-                    raise RuntimeError(
-                        "RGB pretraining validation did not report world localization MAE"
-                    )
-                if math.isfinite(measurement_metric) and measurement_metric < best_measurement:
-                    best_measurement = measurement_metric
-                    best_measurement_validated = True
-                    save_checkpoint(
-                        best_measurement_path,
-                        model=model,
-                        optimizer=optimizer,
-                        config=config,
-                        step=completed_step,
-                        metrics={
-                            "validation_total_loss": float(validation.total_loss.detach().cpu()),
-                            "validation_measurement_loss": float(
-                                validation.loss_terms["measurement"].detach().cpu()
-                            ),
-                            "validation_world_position_mae_m": best_measurement,
-                            "best_measurement_loss": best_measurement,
-                            "best_measurement_world_position_mae_m": best_measurement,
-                            "best_measurement_validated": 1.0,
-                            **retained_selector_metrics(),
-                        },
-                        device=str(device),
-                    )
 
         should_checkpoint = (
             config.training.checkpoint_every > 0
@@ -1696,10 +3028,8 @@ def train_from_config(
                 if isinstance(value, (int, float)) and math.isfinite(float(value))
             }
             checkpoint_metrics.update(retained_selector_metrics())
-            checkpoint_metrics["best_measurement_validated"] = float(best_measurement_validated)
-            if best_measurement_validated:
-                checkpoint_metrics["best_measurement_loss"] = best_measurement
-                checkpoint_metrics["best_measurement_world_position_mae_m"] = best_measurement
+            if completed_step == config.training.steps and should_validate:
+                checkpoint_metrics["final_validation_completed"] = 1.0
             save_checkpoint(
                 last_path,
                 model=model,
@@ -1708,27 +3038,86 @@ def train_from_config(
                 step=completed_step,
                 metrics=checkpoint_metrics,
                 device=str(device),
+                source_provenance=source_provenance,
             )
 
-    if config.training.steps == start_step:
-        # A zero-step or already-complete resume is still a valid, inspectable
-        # local checkpoint rather than a silently empty run.
-        selection_metrics = {
-            "best_measurement_validated": float(best_measurement_validated),
-            **retained_selector_metrics(),
+    final_validation_recovered = False
+    if final_validation_recovery_pending:
+        recovery_learning_rate = float(optimizer.param_groups[0]["lr"])
+        if start_step > config.training.rgb_pretrain_steps:
+            final_validation, _ = validate_closed_loop_incumbent(
+                completed_step=start_step,
+                learning_rate=recovery_learning_rate,
+                split="validation_recovery",
+            )
+        else:
+            final_validation, _ = validate_measurement_incumbent(
+                completed_step=start_step,
+                learning_rate=recovery_learning_rate,
+                split="validation_recovery",
+            )
+        last_metrics = {
+            key: value
+            for key, value in resume_metrics.items()
+            if isinstance(value, str)
+            or (isinstance(value, (int, float)) and math.isfinite(float(value)))
         }
-        if best_measurement_validated:
-            selection_metrics["best_measurement_loss"] = best_measurement
-            selection_metrics["best_measurement_world_position_mae_m"] = best_measurement
+        last_metrics["final_validation_completed"] = 1.0
+        last_metrics["final_validation_loss_total"] = float(
+            final_validation.total_loss.detach().cpu()
+        )
+        last_metrics["final_validation_phase"] = final_validation.phase
+        recovery_checkpoint_metrics = {
+            key: float(value)
+            for key, value in resume_metrics.items()
+            if isinstance(value, (int, float)) and math.isfinite(float(value))
+        }
+        recovery_checkpoint_metrics.update(retained_selector_metrics())
+        recovery_checkpoint_metrics.update(
+            {
+                "final_validation_completed": 1.0,
+                "final_validation_loss_total": float(final_validation.total_loss.detach().cpu()),
+            }
+        )
         save_checkpoint(
             last_path,
             model=model,
             optimizer=optimizer,
             config=config,
             step=start_step,
-            metrics=selection_metrics,
+            metrics=recovery_checkpoint_metrics,
             device=str(device),
+            source_provenance=source_provenance,
         )
+        final_validation_recovered = True
+
+    no_op_exact_resume = (
+        resume_path is not None
+        and config.training.steps == start_step
+        and not final_validation_recovered
+    )
+    if config.training.steps == start_step:
+        # A zero-step or already-complete resume is still a valid, inspectable
+        # local checkpoint rather than a silently empty run. Never deserialize
+        # and rewrite an already-complete exact resume on the inspection CPU:
+        # doing so would replace its historical phase device and accelerator RNG
+        # and make a later extension fail exact-resume validation.
+        if resume_path is None:
+            selection_metrics = retained_selector_metrics()
+            save_checkpoint(
+                last_path,
+                model=model,
+                optimizer=optimizer,
+                config=config,
+                step=start_step,
+                metrics=selection_metrics,
+                device=str(device),
+                source_provenance=source_provenance,
+            )
+        elif not final_validation_recovered:
+            resume_source = Path(resume_path).expanduser().resolve()
+            if resume_source != last_path.resolve():
+                shutil.copy2(resume_source, last_path)
 
     elapsed = time.perf_counter() - started
     verified_best_rollout = (
@@ -1738,6 +3127,7 @@ def train_from_config(
             prefix="best_rollout",
             expected_model_state_hash=best_rollout_model_state_hash,
             expected_step=best_rollout_step,
+            expected_device=closed_loop_device,
         )
         if best_rollout_validated
         else None
@@ -1749,23 +3139,32 @@ def train_from_config(
             prefix="reference_rollout",
             expected_model_state_hash=reference_rollout_model_state_hash,
             expected_step=reference_rollout_step,
+            expected_device=closed_loop_device,
         )
         if reference_rollout_selection is not None
+        else None
+    )
+    verified_best_measurement = (
+        _verified_measurement_checkpoint(
+            best_measurement_path,
+            config,
+            expected_model_state_hash=best_measurement_model_state_hash,
+            expected_step=best_measurement_step,
+            expected_device=measurement_device,
+        )
+        if best_measurement_validated
         else None
     )
     has_best_rollout_checkpoint = (
         verified_best_rollout is not None and verified_reference_rollout is not None
     )
-    has_best_measurement_checkpoint = best_measurement_validated and best_measurement_path.is_file()
+    has_best_measurement_checkpoint = verified_best_measurement is not None
     if has_best_rollout_checkpoint:
         # Leave the in-memory runtime at the verified incumbent. ``last.pt``
         # intentionally remains the resumable final iterate.
-        load_checkpoint(
+        load_model_weights(
             best_rollout_path,
             model=model,
-            optimizer=None,
-            map_location=device,
-            restore_rng=False,
             expected_config=config,
         )
         selected_checkpoint = best_rollout_path
@@ -1790,7 +3189,7 @@ def train_from_config(
             str(best_measurement_path) if has_best_measurement_checkpoint else None
         ),
         "best_rollout_validated": has_best_rollout_checkpoint,
-        "best_measurement_validated": best_measurement_validated,
+        "best_measurement_validated": has_best_measurement_checkpoint,
         "best_rollout_loss": best_rollout if has_best_rollout_checkpoint else None,
         "best_rollout_position_loss": (best_rollout if has_best_rollout_checkpoint else None),
         "best_rollout_position_rmse_m": (
@@ -1838,9 +3237,34 @@ def train_from_config(
         ),
         "rollout_validation_protocol_hash": _rollout_validation_protocol_hash(config),
         "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
-        "best_measurement_loss": (best_measurement if best_measurement_validated else None),
+        "measurement_selection_metric_version": _MEASUREMENT_SELECTION_METRIC_VERSION,
+        "best_measurement_loss": (
+            best_measurement_selection.score if best_measurement_selection is not None else None
+        ),
         "best_measurement_world_position_mae_m": (
-            best_measurement if best_measurement_validated else None
+            best_measurement_selection.world_position_mae_m
+            if best_measurement_selection is not None
+            else None
+        ),
+        "best_measurement_all_proposal_world_position_mae_m": (
+            best_measurement_selection.all_proposal_world_position_mae_m
+            if best_measurement_selection is not None
+            else None
+        ),
+        "best_measurement_runtime_birth_recall_at_0_5m": (
+            best_measurement_selection.runtime_birth_recall
+            if best_measurement_selection is not None
+            else None
+        ),
+        "best_measurement_runtime_birth_precision_at_0_5m": (
+            best_measurement_selection.runtime_birth_precision
+            if best_measurement_selection is not None
+            else None
+        ),
+        "best_measurement_runtime_birth_f1_at_0_5m": (
+            best_measurement_selection.runtime_birth_f1
+            if best_measurement_selection is not None
+            else None
         ),
         "completed_steps": config.training.steps,
         "model_parameter_count": model_parameter_count,
@@ -1853,16 +3277,62 @@ def train_from_config(
         "scenario_families": list(config.simulator.scenario_mixture),
         "rgb_pretrain_steps": min(config.training.steps, config.training.rgb_pretrain_steps),
         "closed_loop_steps": max(0, config.training.steps - config.training.rgb_pretrain_steps),
-        "device": str(device),
+        "device": (
+            str(resume_config_payload.get("device", device))
+            if no_op_exact_resume and resume_config_payload is not None
+            else str(device)
+        ),
+        "measurement_device": str(measurement_device),
+        "closed_loop_device": str(closed_loop_device),
         "precision": resolved_device.precision,
         "elapsed_seconds": elapsed,
+        "no_op_exact_resume": no_op_exact_resume,
+        "final_validation_recovered": final_validation_recovered,
+        "optimizer_updates_this_invocation": config.training.steps - start_step,
         "resumed_from": resumed_from,
         "initialized_from": initialized_from,
-        "last_metrics": last_metrics,
+        "last_metrics": (dict(resume_metrics) if no_op_exact_resume else last_metrics),
         "oracle_runtime_input_used": False,
     }
+    summary_path = run_directory / "train_summary.json"
+    same_run_resume = False
+    if resume_path is not None:
+        resume_source = Path(resume_path).expanduser().resolve()
+        same_run_resume = (
+            resume_source.parent.name == "checkpoints"
+            and resume_source.parent.parent == run_directory
+        )
+    if no_op_exact_resume and same_run_resume and summary_path.is_file():
+        # A completed run's summary is scientific evidence for the invocation
+        # that performed its optimiser updates. A later no-op inspection may
+        # append run_metadata resume history, but must not replace elapsed time,
+        # final metrics, or selected-artifact evidence with an empty segment.
+        try:
+            existing_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ValueError(
+                "existing completed-run summary is unreadable; refusing to "
+                "overwrite its evidence during a no-op exact resume"
+            ) from error
+        if not isinstance(existing_summary, dict):
+            raise ValueError(
+                "existing completed-run summary is not a JSON object; refusing "
+                "to overwrite it during a no-op exact resume"
+            )
+        # Preserve the durable campaign evidence byte-for-byte, but make the
+        # ephemeral CLI result truthful about this inspection invocation.
+        inspection_result = dict(existing_summary)
+        inspection_result.update(
+            {
+                "no_op_exact_resume": True,
+                "optimizer_updates_this_invocation": 0,
+                "resume_inspection_elapsed_seconds": elapsed,
+                "resumed_from": str(Path(resume_path).expanduser().resolve()),
+            }
+        )
+        return inspection_result
     atomic_write_text(
-        run_directory / "train_summary.json",
+        summary_path,
         json.dumps(result_payload, indent=2, sort_keys=True) + "\n",
     )
     return result_payload

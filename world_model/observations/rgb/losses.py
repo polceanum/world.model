@@ -11,8 +11,18 @@ def gaussian_nll(
     target: Tensor,
     log_variance: Tensor,
     mask: Tensor,
+    *,
+    detach_mean_error: bool = False,
 ) -> Tensor:
-    loss = 0.5 * ((prediction - target).square() * (-log_variance).exp() + log_variance)
+    squared_error = (prediction - target).square()
+    if detach_mean_error:
+        # Geometry/colour/world-position means already have explicit robust
+        # objectives.  This term is their uncertainty-calibration objective;
+        # allowing its inverse-variance factor to backpropagate into the same
+        # mean duplicated and frequently dominated the useful mean gradient on
+        # hard tracking frames.
+        squared_error = squared_error.detach()
+    loss = 0.5 * (squared_error * (-log_variance).exp() + log_variance)
     expanded_mask = mask.unsqueeze(-1).expand_as(loss)
     return loss.masked_select(expanded_mask).mean() if expanded_mask.any() else loss.sum() * 0
 
@@ -46,7 +56,13 @@ def rgb_measurement_losses(
     else:
         geometry = predicted.sum() * 0
         colour = predicted.sum() * 0
-    nll = gaussian_nll(predicted, target, log_variance, matched)
+    nll = gaussian_nll(
+        predicted,
+        target,
+        log_variance,
+        matched,
+        detach_mean_error=True,
+    )
     losses = {
         "rgb_existence": existence,
         "rgb_geometry": geometry,
@@ -83,6 +99,7 @@ def rgb_measurement_losses(
                 target_world,
                 world_log_variance,
                 matched,
+                detach_mean_error=True,
             )
     if "visibility_logits" in outputs and "visibility" in targets:
         losses["rgb_visibility"] = (

@@ -279,6 +279,9 @@ def test_runtime_threads_complete_dynamics_configuration() -> None:
     assert model.lifecycle.config.occluded_existence_delta == pytest.approx(
         -config.model.lifecycle.occlusion_existence_decay
     )
+    assert model.updater.uncertainty.config.missed_fast_variance_increment == pytest.approx(
+        config.model.filter.missed_variance_growth
+    )
 
 
 def test_synthetic_episode_runs_through_rgb_only_online_path() -> None:

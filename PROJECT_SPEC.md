@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.4
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026
+**Version:** 1.6
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5240,6 +5240,222 @@ Changing these sizes must not change dataclass semantics or runtime flow.
 - [ ] latency.
 - [ ] held-out RGB-only report.
 - [ ] visual demo.
+
+---
+
+# Part XXVII — Convergence-integrity amendment
+
+## 163. Identifiable deterministic targets
+
+Point forecasts and discrete event targets are valid optimisation targets only
+while the requested future is identifiable from the causal belief available at
+the anchor.
+
+- A newly discovered track without enough timestamped observations for
+  velocity is a cold-start forecast. Report it separately and train calibrated
+  distributional uncertainty; do not let it dominate mature deterministic
+  trajectory fitting.
+- A future random intervention that is not present in the anchor observation
+  makes the coupled scene stochastic until a later observation exposes it.
+  Censor deterministic position, velocity, event, and correction-improvement
+  losses across that hidden intervention. Continue to train forecast
+  likelihood and calibration on its realised outcome.
+- A hidden physical parameter may justify a broad predictive distribution
+  before it becomes observable. Exact pre-event point accuracy and
+  post-event system-identification accuracy must be reported separately.
+
+This rule does not hardcode constant velocity or one physics law. It prevents
+the model from being trained toward the mean of mutually incompatible futures
+while preserving a learned probabilistic prior over those futures.
+
+## 164. Safe deployment versus mutable optimisation state
+
+A guardrail-safe deployment incumbent and the weights from which optimisation
+continues are distinct roles.
+
+- A candidate that improves the primary objective but fails a safety guardrail
+  must not replace the deployment incumbent.
+- The same rejection must not automatically discard the candidate from the
+  mutable training trajectory. Downstream causal objectives must be allowed to
+  repair its failed guardrail unless the candidate is nonfinite or otherwise
+  invalid.
+- Checkpoints must record the exact incumbent, fixed reference, mutable
+  candidate, rejection reasons, validation protocol, and tensor provenance.
+
+Phase handoffs must therefore preserve useful perception learning even when
+the first closed-loop validation says it is not yet safe to deploy.
+
+## 165. Exact continuation and simulator isolation
+
+An exact resume must preserve architecture, data protocol, objective,
+simulator, seed, validation semantics, optimiser state, CPU/accelerator RNG,
+and the next absolute-step sample. A changed curriculum or objective is a
+weights-only initialization into a new timestamped run, not a resume.
+
+Source provenance is captured once when the process starts and reused by every
+checkpoint. A long-running process must not claim that later worktree commits
+were the source it loaded.
+
+Independent simulator subsystems use independent deterministic RNG streams.
+Changing render noise, image settings, or renderer implementation must not
+change initial physics, lifecycle, external actuation, or event trajectories
+for the same physical seed.
+
+## 166. Convergence evidence
+
+Raw batch loss is not a convergence criterion when batches vary in object
+count, visibility, lifecycle, scenario, event support, or forecast horizons.
+Training must record the sampled seed/scenario/context, pre-clip and applied
+gradient norms, exact additive support, and immutable source/data provenance.
+
+Trend validation must:
+
+- use an explicit fixed seed manifest and batch-one per-episode attribution;
+- report pooled and per-axis, per-horizon, per-scenario, cold/mature, and
+  deterministic/stochastic metrics;
+- use deterministic forecast-anchor support recorded in the protocol hash;
+- retain exact count totals rather than averages of per-batch counts.
+
+Frequent trend validation may use a deterministic spread of bounded forecast
+anchors while ingesting and scoring every current observation. Promotion
+requires a separately declared larger balanced manifest and all broad
+guardrails. Four or more comparable corrected-protocol validations are needed
+for a plateau claim; a finite hard budget without that evidence is not
+convergence.
+
+---
+
+# Part XXVIII — Runtime and continuation integrity amendment
+
+## 167. Interval evidence is part of the causal state transition
+
+Events that occur between two observation timestamps must survive until the
+observation at the end of that interval is assimilated. A collision/contact
+flag is an interval reduction, not merely the state of the final numerical
+substep.
+
+- Dynamics must OR discrete collision evidence across every substep in the
+  interval while retaining endpoint contact separately.
+- Rollout event logits scored at a requested observation endpoint must
+  describe the matching preceding simulator interval.
+- Zero-duration propagation contains no new event even when the source belief
+  is currently in an event mode.
+- Temporal measurement histories and slow-parameter observability gates may
+  reset/open from interval evidence; they must not depend on the last substep
+  still overlapping.
+
+## 168. Floor support, boundary collision, and sleep are distinct
+
+Only the lower vertical support plane is ground. Side walls and the ceiling
+are boundary contacts/collisions and must never be converted into ground
+support or sleep.
+
+A sub-threshold inward normal velocity at a supporting plane is cancelled as
+a resting constraint while tangential velocity remains active. A single slow
+substep must not invent sleeping state. The learned belief dynamics may
+preserve an already inferred sleeping posterior only while floor-supported;
+the simulator requires sustained support for its configured duration.
+
+## 169. Runtime-usable perception defines measurement selection
+
+Perception checkpoints are selected on proposals that can actually enter the
+persistent runtime, using the same lifecycle birth-confidence threshold.
+Selection must pool additive true-positive, target, proposal, matched, and
+absolute-error totals before deriving:
+
+- runtime-qualified world-position MAE;
+- recall;
+- precision;
+- F1.
+
+Localization without lifecycle-qualified recall is not a deployable
+perception result. A candidate with no qualified match cannot be promoted.
+The assignment used to derive runtime-qualified evidence must itself exclude
+proposals below the lifecycle confidence threshold; a low-confidence accurate
+proposal cannot consume a target before an actually usable proposal is
+matched. Conversely, a confident proposal on a frame with no visible target
+is a false positive and must remain in the pooled precision denominator.
+When qualified unmatched proposals exceed free belief slots, allocation is
+confidence-ordered with deterministic tie handling. Every recycled slot must
+reset all identity-specific fast, slow, modal, residual, uncertainty, and
+memory fields before receiving a new monotonic object ID.
+
+## 170. Supported objectives and uncertainty calibration
+
+Loss aggregation must not treat an unsupported frame/horizon/parameter as a
+zero-valued training example. Average each objective only over observations
+that supply its causal support, then apply the declared fixed horizon
+denominator where selection uses fixed horizon weights.
+
+When state position or a structured RGB measurement already has an explicit
+robust mean objective, its calibration NLL uses the observed squared error as
+a detached target for variance. This prevents the same mean error from being
+optimized twice, once with an unbounded inverse-variance multiplier. Forecast
+likelihood remains a proper distributional objective and may update its
+predictive mean and variance.
+
+World-space covariance propagated from RGB is linearized at detached image
+centre/depth coordinates while remaining differentiable with respect to the
+predicted measurement variance. A calibration or filter-covariance objective
+must not update the centre, radius, or depth mean heads through the covariance
+Jacobian.
+
+Collision-conditioned sampling must place a labelled collision at a scored
+forecast endpoint whenever the requested event and horizon constraints are
+jointly feasible; merely placing an event somewhere inside an unscored window
+does not provide a positive event target.
+
+## 171. Phase devices and exact continuation artefacts
+
+One training invocation may use different configured devices by phase when
+that is an explicit resolved-config choice. The current profile uses MPS for
+the convolution-heavy RGB phase and CPU for the branch-heavy persistent
+closed-loop phase. The phase boundary resets optimizer moments, moves the
+model once, clears runtime caches, and records both devices in the validation
+protocol. This is not permission to change devices during an exact resume.
+
+Exact continuation additionally requires:
+
+- a runtime-source content fingerprint independent of documentation-only Git
+  changes, plus complete worktree/commit provenance for audit;
+- an explicit phase/handoff marker when two devices can legitimately write
+  checkpoints at the same completed step;
+- tensor hash, step, selector-version, device, and file linkage for retained
+  measurement and rollout checkpoints;
+- copying and re-verifying linked selector artefacts when continuation writes
+  to another run directory;
+- no rewrite of a completed checkpoint during a zero-update inspection.
+
+Only the exact `checkpoints/last.pt` may be resumed in place. A selector or
+numbered checkpoint requires a new run name or weights-only initialization so
+historical source artifacts cannot be overwritten. A checkpoint saved before
+terminal validation records that validation as pending; exact resume must
+recover the missing validation without an optimizer update and then persist a
+completed marker. Legacy completed checkpoints without this marker retain
+byte-preserving no-op behavior.
+
+If a required linked artefact is missing or fails verification, exact resume
+must fail loudly. A changed executable source, objective, data protocol, or
+device policy uses weights-only initialization into a new timestamped run.
+
+## 172. Narrow MPS execution workarounds remain explicit
+
+Backend workarounds may move a small operation to CPU without changing the
+model/data contracts, but the resolved execution policy and validation
+protocol must record the move. For PyTorch 2.10 on the current Apple host, the
+convolutional RGB backbone and ROI updater remain on MPS while the small global
+proposal transformer executes on CPU through differentiable feature/output
+copies. This avoids a reproduced data-dependent NaN weight-gradient kernel on
+finite full-resolution features.
+
+The workaround is configurable as
+`device.global_detector_cpu_on_mps`, defaults on for MPS, and may be disabled
+only as an explicit changed execution protocol. Tests must cover finite
+nonzero gradients on both devices, global clipping, optimizer updates,
+checkpoint round-trip, and a second update after restore. Training resume,
+evaluation, and demos deserialize checkpoints on CPU and let model/optimizer
+state loading place only required tensors on their owners; they must not map a
+saved full optimizer onto MPS merely to evaluate or visualize weights.
 
 ---
 

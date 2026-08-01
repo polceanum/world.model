@@ -67,6 +67,19 @@ def test_collision_observes_restitution_and_mass_ratio() -> None:
     assert observability.drag.item() < 1.0e-3
 
 
+def test_interval_collision_observes_restitution_after_endpoint_returns_free() -> None:
+    belief, innovation, association = _case(MotionMode.FREE)
+    observability = ObservabilityEstimator()(
+        belief,
+        innovation,
+        association,
+        interval_collision_mask=torch.tensor([[True]]),
+    )
+
+    assert observability.restitution.item() > 0.5
+    assert observability.mass_ratio.item() > 0.5
+
+
 def test_ambiguous_association_gates_all_parameter_updates() -> None:
     belief, innovation, association = _case(MotionMode.COLLISION, ambiguous=True)
     observability = ObservabilityEstimator()(belief, innovation, association)

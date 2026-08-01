@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
+import torch
+
+from world_model.training.trainer import _resolve_training_devices
 from world_model.utils.config import load_config
-from world_model.utils.device import select_device
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,9 +43,28 @@ def main() -> int:
     if args.seed is not None:
         overrides.append(f"project.seed={args.seed}")
     config = load_config(args.config, overrides=overrides)
-    device = select_device(config.device.preference)
 
     if args.dry_run:
+        resume_step = 0
+        if args.resume is not None:
+            resume_source = Path(args.resume).expanduser().resolve()
+            if not resume_source.is_file():
+                raise FileNotFoundError(f"Checkpoint not found: {resume_source}")
+            payload = torch.load(
+                resume_source,
+                map_location="cpu",
+                weights_only=False,
+            )
+            resume_step = int(payload.get("step", -1))
+            if resume_step < 0:
+                raise ValueError("checkpoint step must be a nonnegative integer")
+        device_info, measurement_device, closed_loop_device, active_device = (
+            _resolve_training_devices(
+                config,
+                start_step=resume_step,
+                initialize_from=args.initialize_from is not None,
+            )
+        )
         print(
             json.dumps(
                 {
@@ -52,10 +74,12 @@ def main() -> int:
                     "run_name": args.run_name,
                     "resume": args.resume,
                     "initialize_from": args.initialize_from,
-                    "device": str(device.device),
-                    "torch": device.torch_version,
-                    "mps_built": device.mps_built,
-                    "mps_available": device.mps_available,
+                    "device": str(active_device),
+                    "measurement_device": str(measurement_device),
+                    "closed_loop_device": str(closed_loop_device),
+                    "torch": device_info.torch_version,
+                    "mps_built": device_info.mps_built,
+                    "mps_available": device_info.mps_available,
                     "simulator": config.simulator.type,
                     "image_size": config.simulator.image_size,
                     "sequence_frames": config.simulator.sequence_frames,
@@ -88,7 +112,6 @@ def main() -> int:
         run_name=args.run_name,
         resume_path=args.resume,
         initialize_from_path=args.initialize_from,
-        device_info=device,
     )
     print(json.dumps(result, indent=2, default=str))
     return 0

@@ -41,6 +41,7 @@ from world_model.training.perturbations import perturb_belief
 from world_model.utils.config import OrpheusConfig
 
 _PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M = 0.5
+_MEASUREMENT_SELECTION_DISTANCE_THRESHOLD_M = 0.5
 
 
 @dataclass
@@ -227,6 +228,14 @@ def physical_validation_metrics(
             "physical_position_coverage90_coordinate_count",
         ),
     }
+    for axis_name in ("x", "y", "z"):
+        axis_sse = f"physical_state_position_{axis_name}_sse"
+        axis_count = f"physical_state_position_{axis_name}_coordinate_count"
+        if axis_sse in additive_metrics and axis_count in additive_metrics:
+            output[f"validation_position_rmse_{axis_name}_m"] = rmse(
+                axis_sse,
+                axis_count,
+            )
     true_positive = required("physical_collision_true_positive_count")
     false_positive = required("physical_collision_false_positive_count")
     false_negative = required("physical_collision_false_negative_count")
@@ -247,6 +256,13 @@ def physical_validation_metrics(
             f"physical_rollout_position{physical_suffix}_sse",
             f"physical_rollout_position{physical_suffix}_coordinate_count",
         )
+        for axis_name in ("x", "y", "z"):
+            axis_sse = f"physical_rollout_position_{axis_name}{physical_suffix}_sse"
+            axis_count = f"physical_rollout_position_{axis_name}{physical_suffix}_coordinate_count"
+            if axis_sse in additive_metrics and axis_count in additive_metrics:
+                output[f"validation_position_rmse_{axis_name}{physical_suffix}"] = rmse(
+                    axis_sse, axis_count
+                )
         output[f"validation_forecast_target_coverage{physical_suffix}"] = bounded_ratio(
             f"physical_forecast_active_count{physical_suffix}",
             f"physical_forecast_target_count{physical_suffix}",
@@ -491,6 +507,40 @@ def _add_world_position_supervision(
         outputs["world_position_log_variance"] = world_log_variance
 
 
+def _add_appearance_supervision(
+    outputs: dict[str, Tensor],
+    targets: dict[str, Tensor],
+    measurements: MeasurementSet,
+    batch: Mapping[str, Any],
+    frame_index: int,
+    target_indices: Tensor,
+) -> None:
+    """Train the runtime association embedding from RGB colour identity.
+
+    Simulator albedo is a training-only label.  It is embedded into the
+    modality's existing appearance dimension, so runtime association still
+    consumes only RGB-derived embeddings and no privileged state.
+    """
+
+    if measurements.appearance is None:
+        return
+    target_objects = batch.get("objects")
+    if not isinstance(target_objects, Mapping):
+        raise ValueError("appearance supervision requires batch.objects")
+    target_albedo = target_objects.get("albedo")
+    if not isinstance(target_albedo, Tensor):
+        raise ValueError("appearance supervision requires batch.objects.albedo")
+    aligned_albedo = gather_target_slots(
+        target_albedo[:, frame_index],
+        target_indices,
+    )
+    appearance_target = torch.zeros_like(measurements.appearance)
+    dimensions = min(aligned_albedo.shape[-1], appearance_target.shape[-1])
+    appearance_target[..., :dimensions] = aligned_albedo[..., :dimensions]
+    outputs["appearance"] = measurements.appearance
+    targets["appearance"] = F.normalize(appearance_target, dim=-1)
+
+
 def supervised_measurement_losses(
     module: torch.nn.Module,
     measurements: MeasurementSet,
@@ -527,6 +577,14 @@ def supervised_measurement_losses(
         "visibility": aligned_visibility,
     }
     _add_world_position_supervision(
+        outputs,
+        targets,
+        measurements,
+        batch,
+        frame_index,
+        target_indices,
+    )
+    _add_appearance_supervision(
         outputs,
         targets,
         measurements,
@@ -605,6 +663,14 @@ def supervised_slot_measurement_losses(
         frame_index,
         target_indices,
     )
+    _add_appearance_supervision(
+        outputs,
+        targets,
+        measurements,
+        batch,
+        frame_index,
+        target_indices,
+    )
     masks = {
         "matched": supervised,
         "existence": supervised,
@@ -621,18 +687,23 @@ def measurement_localization_metrics(
     batch: Mapping[str, Any],
     frame_index: int,
     *,
-    existence_threshold: float,
-    distance_threshold_m: float = 0.5,
+    birth_confidence_threshold: float,
+    distance_threshold_m: float = _MEASUREMENT_SELECTION_DISTANCE_THRESHOLD_M,
 ) -> dict[str, float]:
-    """Report calibrated proposal accuracy in sensor and world coordinates.
+    """Report calibrated proposal accuracy at the runtime birth threshold.
 
     The training objective contains differently scaled terms and a Gaussian NLL
     that may legitimately be negative.  Those values are useful optimisation
     diagnostics, but they are not a truthful checkpoint-selection proxy for
-    localization.  This metric uses the same transparent Hungarian alignment
-    and the calibrated RGB backprojection used by the runtime.
+    localization.  Recall, precision, and runtime-qualified position error use
+    the lifecycle confidence gate that determines whether an unmatched proposal
+    can actually become persistent belief state.
     """
 
+    if not 0.0 <= birth_confidence_threshold <= 1.0:
+        raise ValueError("birth_confidence_threshold must lie in [0,1]")
+    if distance_threshold_m <= 0:
+        raise ValueError("distance_threshold_m must be positive")
     target_values, target_mask, _ = _target_measurement_values(batch, frame_index)
     aligned, matched, target_indices = match_measurements_to_targets(
         measurements.values,
@@ -640,14 +711,6 @@ def measurement_localization_metrics(
         target_mask,
         existence_logits=measurements.existence_logits,
     )
-    if not matched.any():
-        return {
-            "rgb_centre_mae_normalized": math.inf,
-            "rgb_inverse_depth_mae": math.inf,
-            "rgb_world_position_mae_m": math.inf,
-            "rgb_detection_recall_at_0_5m": 0.0,
-            "rgb_detection_precision_at_0_5m": 0.0,
-        }
     predicted_world = measurements.auxiliary.get("world_position")
     if not isinstance(predicted_world, Tensor):
         raise ValueError("RGB measurements require auxiliary.world_position")
@@ -658,18 +721,65 @@ def measurement_localization_metrics(
     world_error = torch.linalg.vector_norm(predicted_world - target_world, dim=-1)
     sensor_error = (measurements.values - aligned).abs()
     confident = measurements.measurement_mask & (
-        measurements.existence_logits.sigmoid() >= existence_threshold
+        measurements.existence_logits.sigmoid() >= birth_confidence_threshold
     )
-    close = matched & (world_error <= distance_threshold_m)
-    true_positive = (close & confident).sum()
-    target_count = target_mask.sum().clamp_min(1)
-    proposal_count = confident.sum().clamp_min(1)
+    _, runtime_matched, runtime_target_indices = match_measurements_to_targets(
+        measurements.values,
+        target_values,
+        target_mask,
+        existence_logits=measurements.existence_logits,
+        proposal_mask=confident,
+    )
+    runtime_target_world = gather_target_slots(
+        batch["objects"]["position"][:, frame_index],
+        runtime_target_indices,
+    )
+    runtime_world_error = torch.linalg.vector_norm(
+        predicted_world - runtime_target_world,
+        dim=-1,
+    )
+    close = runtime_matched & (runtime_world_error <= distance_threshold_m)
+    true_positive = close.sum()
+    raw_target_count = target_mask.sum()
+    raw_proposal_count = confident.sum()
+    target_count = raw_target_count.clamp_min(1)
+    proposal_count = raw_proposal_count.clamp_min(1)
+    recall = true_positive / target_count
+    precision = true_positive / proposal_count
+    f1 = (2.0 * recall * precision) / (recall + precision).clamp_min(1.0e-8)
+    runtime_world_position_mae = (
+        float(runtime_world_error[runtime_matched].mean().cpu())
+        if runtime_matched.any()
+        else math.inf
+    )
     return {
-        "rgb_centre_mae_normalized": float(sensor_error[..., :2][matched].mean().cpu()),
-        "rgb_inverse_depth_mae": float(sensor_error[..., 3][matched].mean().cpu()),
-        "rgb_world_position_mae_m": float(world_error[matched].mean().cpu()),
-        "rgb_detection_recall_at_0_5m": float((true_positive / target_count).cpu()),
-        "rgb_detection_precision_at_0_5m": float((true_positive / proposal_count).cpu()),
+        "rgb_centre_mae_normalized": (
+            float(sensor_error[..., :2][matched].mean().cpu()) if matched.any() else math.inf
+        ),
+        "rgb_inverse_depth_mae": (
+            float(sensor_error[..., 3][matched].mean().cpu()) if matched.any() else math.inf
+        ),
+        "rgb_world_position_mae_m": (
+            float(world_error[matched].mean().cpu()) if matched.any() else math.inf
+        ),
+        # Retain the established aliases, now evaluated with deployment/runtime
+        # birth semantics rather than the detector's lower training threshold.
+        "rgb_detection_recall_at_0_5m": float(recall.cpu()),
+        "rgb_detection_precision_at_0_5m": float(precision.cpu()),
+        "rgb_runtime_birth_world_position_mae_m": runtime_world_position_mae,
+        "rgb_runtime_birth_recall_at_0_5m": float(recall.cpu()),
+        "rgb_runtime_birth_precision_at_0_5m": float(precision.cpu()),
+        "rgb_runtime_birth_f1_at_0_5m": float(f1.cpu()),
+        "rgb_runtime_birth_true_positive_count_at_0_5m": float(true_positive.cpu()),
+        "rgb_runtime_birth_target_count": float(raw_target_count.cpu()),
+        "rgb_runtime_birth_proposal_count": float(raw_proposal_count.cpu()),
+        "rgb_runtime_birth_world_position_absolute_error_sum_m": float(
+            runtime_world_error[runtime_matched].sum().cpu()
+        ),
+        "rgb_runtime_birth_matched_proposal_count": float(runtime_matched.sum().cpu()),
+        "rgb_world_position_absolute_error_sum_m": float(world_error[matched].sum().cpu()),
+        "rgb_world_position_matched_proposal_count": float(matched.sum().cpu()),
+        "rgb_runtime_birth_confidence_threshold": birth_confidence_threshold,
     }
 
 
@@ -724,11 +834,17 @@ def pretrain_rgb_measurements(
             measurements,
             batch,
             frame_index,
-            existence_threshold=config.model.rgb.existence_threshold,
+            birth_confidence_threshold=config.model.lifecycle.birth_confidence,
         )
     )
     metrics["proposals_above_birth_threshold"] = float(
-        (measurements.existence_logits.sigmoid().detach() >= config.model.rgb.existence_threshold)
+        (
+            measurements.measurement_mask
+            & (
+                measurements.existence_logits.sigmoid().detach()
+                >= config.model.lifecycle.birth_confidence
+            )
+        )
         .sum()
         .cpu()
     )
@@ -783,6 +899,54 @@ def match_belief_to_targets(
         indices[batch_index, selected_beliefs] = selected_targets
         matched[batch_index, selected_beliefs] = True
     return indices, matched
+
+
+def _update_geometric_identity_metrics(
+    belief: WorldBelief,
+    target_ids: Tensor,
+    target_indices: Tensor,
+    matched: Tensor,
+    previous_predicted_id_for_target: list[dict[int, int]],
+) -> tuple[int, int]:
+    """Count track-ID changes under an independent framewise association.
+
+    Training targets deliberately use :class:`PersistentTargetMatcher` so an
+    identity swap is punished as state error instead of silently relabelling
+    supervision.  Reusing that locked mapping for the ID-switch metric,
+    however, made a geometric swap look like zero switches (usually only
+    coverage fell).  This helper consumes a fresh framewise Hungarian match
+    and compares the persistent runtime IDs assigned to each simulator target.
+    """
+
+    objects = belief.objects
+    if target_ids.ndim != 2 or target_ids.shape[0] != belief.batch_size:
+        raise ValueError("target_ids must have shape [B,N]")
+    if target_indices.shape != objects.active.shape or matched.shape != objects.active.shape:
+        raise ValueError("target_indices and matched must have belief-slot shape [B,N]")
+    if matched.dtype is not torch.bool:
+        raise TypeError("matched must be torch.bool")
+    if len(previous_predicted_id_for_target) != belief.batch_size:
+        raise ValueError("identity history must contain one mapping per batch item")
+
+    switches = 0
+    associations = 0
+    for batch_index in range(belief.batch_size):
+        for belief_slot_tensor in torch.nonzero(
+            matched[batch_index],
+            as_tuple=False,
+        ).flatten():
+            belief_slot = int(belief_slot_tensor)
+            target_slot = int(target_indices[batch_index, belief_slot])
+            target_id = int(target_ids[batch_index, target_slot])
+            predicted_id = int(objects.object_id[batch_index, belief_slot].detach().cpu())
+            if target_id < 0 or predicted_id < 0:
+                continue
+            associations += 1
+            previous = previous_predicted_id_for_target[batch_index].get(target_id)
+            if previous is not None and previous != predicted_id:
+                switches += 1
+            previous_predicted_id_for_target[batch_index][target_id] = predicted_id
+    return switches, associations
 
 
 def _mean_losses(losses: list[Tensor], reference: Tensor) -> Tensor:
@@ -860,6 +1024,7 @@ def _select_rollout_anchor_frames(
     candidates = [
         frame_index
         for frame_index in range(window_start, window_stop)
+        if frame_index >= config.training.minimum_rollout_age_steps
         if _valid_rollout_offsets(config, frame_index, total_frames)[0]
     ]
     if rollout_anchors_per_window is None or rollout_anchors_per_window >= len(candidates):
@@ -878,6 +1043,45 @@ def rollout_horizon_loss_key(name: str, seconds: float) -> str:
     """Return the stable metric key for one physical rollout horizon."""
 
     return f"{name}@{seconds:.3f}s"
+
+
+def _future_predictable_mask(
+    batch: Mapping[str, Any],
+    *,
+    anchor_index: int,
+    target_index: int,
+    target_indices: Tensor,
+) -> Tensor:
+    """Return target-aligned support before any unseen external actuation.
+
+    Random future impulses are intentionally not present in RGB at the anchor.
+    Point losses after such an intervention have no deterministic target and
+    teach only an average of mutually incompatible futures.
+    """
+
+    events = batch.get("events")
+    if not isinstance(events, Mapping):
+        raise ValueError("closed-loop training requires batch.events")
+    externally_actuated = events.get("externally_actuated")
+    if not isinstance(externally_actuated, Tensor):
+        return torch.ones_like(target_indices, dtype=torch.bool)
+    if externally_actuated.ndim != 3:
+        raise ValueError("events.externally_actuated must have shape [B,T,N]")
+    # Dynamics are coupled: an unobserved impulse on one object can change any
+    # other object's target through a subsequent interaction.  Censoring only
+    # the directly actuated slot would still train deterministic pair/event
+    # targets that are conditional on hidden future input.  Keep the complete
+    # scene stochastic until the next observation has exposed the actuation.
+    scene_intervened = (
+        externally_actuated[
+            :,
+            anchor_index + 1 : target_index + 1,
+        ]
+        .bool()
+        .flatten(start_dim=1)
+        .any(dim=1)
+    )
+    return ~scene_intervened[:, None].expand_as(target_indices)
 
 
 def _globally_weight_horizon_details(
@@ -912,7 +1116,9 @@ def _globally_weight_horizon_details(
     globally_normalized_names = [
         "rollout_position",
         "rollout_velocity",
+        "rollout_position_nll",
         "correction_future",
+        "correction_future_velocity",
     ]
     if config.training.normalize_rollout_axes_over_configured_horizons:
         globally_normalized_names.extend(
@@ -941,6 +1147,7 @@ def _globally_weight_horizon_details(
 def _belief_state_losses(
     belief: WorldBelief,
     batch: Mapping[str, Any],
+    config: OrpheusConfig,
     frame_index: int,
     *,
     indices: Tensor | None = None,
@@ -967,6 +1174,7 @@ def _belief_state_losses(
         aligned_position,
         objects.fast_log_variance[..., :3],
         matched,
+        detach_mean_error=True,
     )
     existence_target = matched.to(objects.existence_logit.dtype)
     existence = F.binary_cross_entropy_with_logits(
@@ -975,7 +1183,7 @@ def _belief_state_losses(
     )
 
     speed = torch.linalg.vector_norm(aligned_velocity, dim=-1)
-    drag_observable = matched & (speed >= 0.25)
+    drag_observable = matched & (speed >= config.model.identification.drag_speed_threshold)
     collision_seen = batch["events"]["collision"][:, : frame_index + 1].any(dim=1)
     aligned_collision_seen = (
         gather_target_slots(collision_seen.unsqueeze(-1), indices).squeeze(-1).bool()
@@ -985,21 +1193,34 @@ def _belief_state_losses(
     aligned_restitution = gather_target_slots(
         target_objects["restitution"][:, frame_index], indices
     )
-    parameter_drag = masked_huber(objects.drag, aligned_drag, drag_observable)
-    parameter_restitution = masked_huber(
-        objects.restitution,
-        aligned_restitution,
-        restitution_observable,
-    )
+    losses: dict[str, Tensor] = {
+        "existence_belief": existence,
+    }
+    # Omit unsupported objectives instead of appending differentiable zeros.
+    # Window-level averaging then normalizes over informative frames rather
+    # than diluting rare state/parameter evidence by the TBPTT length.
+    if matched.any():
+        losses.update(
+            {
+                "state_position": state_position,
+                "state_velocity": state_velocity,
+                "uncertainty_position_nll": uncertainty,
+            }
+        )
+    if drag_observable.any():
+        losses["parameter_drag"] = masked_huber(
+            objects.drag,
+            aligned_drag,
+            drag_observable,
+        )
+    if restitution_observable.any():
+        losses["parameter_restitution"] = masked_huber(
+            objects.restitution,
+            aligned_restitution,
+            restitution_observable,
+        )
     return (
-        {
-            "state_position": state_position,
-            "state_velocity": state_velocity,
-            "uncertainty_position_nll": uncertainty,
-            "existence_belief": existence,
-            "parameter_drag": parameter_drag,
-            "parameter_restitution": parameter_restitution,
-        },
+        losses,
         indices,
         matched,
     )
@@ -1026,6 +1247,7 @@ def _rollout_loss_result(
             losses={
                 "rollout_position": reference.sum() * 0,
                 "rollout_velocity": reference.sum() * 0,
+                "rollout_position_nll": reference.sum() * 0,
                 "event_collision": reference.sum() * 0,
             },
             frame_offsets=[],
@@ -1063,6 +1285,9 @@ def _rollout_loss_result(
         "z": [],
     }
     velocity_losses: list[Tensor] = []
+    position_nll_losses: list[Tensor] = []
+    point_horizon_weights: list[float] = []
+    position_nll_weights: list[float] = []
     horizon_losses: dict[str, Tensor] = {}
     event_losses: list[Tensor] = []
     event_weights: list[float] = []
@@ -1080,6 +1305,15 @@ def _rollout_loss_result(
         # A dropped/deactivated forecast remains an error. Mask only by the
         # common target support so lifecycle collapse cannot lower the loss.
         valid = matched & future_active
+        predictable = _future_predictable_mask(
+            batch,
+            anchor_index=frame_index,
+            target_index=target_index,
+            target_indices=indices,
+        )
+        point_valid = valid & predictable
+        mature = belief.objects.age_steps >= config.training.minimum_rollout_age_steps
+        loss_valid = point_valid & mature
         target_position = gather_target_slots(
             batch["objects"]["position"][:, target_index], indices
         )
@@ -1089,53 +1323,93 @@ def _rollout_loss_result(
         position_loss = masked_huber(
             target_positions[:, query_index],
             target_position,
-            valid,
+            loss_valid,
         )
-        for axis_index, axis_name in enumerate(("x", "y", "z")):
-            axis_loss = masked_huber(
-                target_positions[:, query_index, :, axis_index],
-                target_position[:, :, axis_index],
-                valid,
-            )
-            position_axis_losses[axis_name].append(axis_loss)
-            horizon_losses[
-                rollout_horizon_loss_key(
-                    f"rollout_position_{axis_name}",
-                    query_seconds[query_index],
-                )
-            ] = axis_loss
         velocity_loss = masked_huber(
             target_velocities[:, query_index],
             target_velocity,
+            loss_valid,
+        )
+        position_nll = gaussian_nll(
+            target_positions[:, query_index],
+            target_position,
+            target_position_log_variance[:, query_index],
+            # An unseen intervention has no deterministic point target, but
+            # its outcome still teaches the predictive distribution to widen.
             valid,
         )
-        position_losses.append(position_loss)
-        velocity_losses.append(velocity_loss)
         seconds = query_seconds[query_index]
-        horizon_losses[rollout_horizon_loss_key("rollout_position", seconds)] = position_loss
-        horizon_losses[rollout_horizon_loss_key("rollout_velocity", seconds)] = velocity_loss
+        # Do not represent an unsupported horizon as a zero-valued training
+        # example. Downstream aggregation averages each horizon across anchors;
+        # inserting cold/censored/unmatched zeros there silently shrinks real
+        # gradients as the fraction of unsupported anchors changes.
+        if loss_valid.any():
+            point_horizon_weights.append(horizon_weights[query_index])
+            position_losses.append(position_loss)
+            velocity_losses.append(velocity_loss)
+            horizon_losses[rollout_horizon_loss_key("rollout_position", seconds)] = position_loss
+            horizon_losses[rollout_horizon_loss_key("rollout_velocity", seconds)] = velocity_loss
+            for axis_index, axis_name in enumerate(("x", "y", "z")):
+                axis_loss = masked_huber(
+                    target_positions[:, query_index, :, axis_index],
+                    target_position[:, :, axis_index],
+                    loss_valid,
+                )
+                position_axis_losses[axis_name].append(axis_loss)
+                horizon_losses[
+                    rollout_horizon_loss_key(
+                        f"rollout_position_{axis_name}",
+                        seconds,
+                    )
+                ] = axis_loss
+        if valid.any():
+            position_nll_weights.append(horizon_weights[query_index])
+            position_nll_losses.append(position_nll)
+            horizon_losses[rollout_horizon_loss_key("rollout_position_nll", seconds)] = position_nll
         horizon_suffix = f"@{seconds:.3f}s"
         _add_squared_error_metrics(
             physical_metrics,
             prefix=f"physical_rollout_position{horizon_suffix}",
             prediction=target_positions[:, query_index],
             target=target_position,
-            mask=valid,
+            mask=point_valid,
         )
+        for axis_index, axis_name in enumerate(("x", "y", "z")):
+            _add_squared_error_metrics(
+                physical_metrics,
+                prefix=f"physical_rollout_position_{axis_name}{horizon_suffix}",
+                prediction=target_positions[:, query_index, :, axis_index],
+                target=target_position[:, :, axis_index],
+                mask=point_valid,
+            )
         _add_gaussian_coverage_metrics(
             physical_metrics,
             prefix=f"physical_rollout_position_coverage90{horizon_suffix}",
             mean=target_positions[:, query_index],
             target=target_position,
             log_variance=target_position_log_variance[:, query_index],
-            mask=valid,
+            mask=point_valid,
         )
         _add_squared_error_metrics(
             physical_metrics,
             prefix=f"physical_rollout_velocity{horizon_suffix}",
             prediction=target_velocities[:, query_index],
             target=target_velocity,
-            mask=valid,
+            mask=point_valid,
+        )
+        _add_squared_error_metrics(
+            physical_metrics,
+            prefix=f"physical_rollout_mature_position{horizon_suffix}",
+            prediction=target_positions[:, query_index],
+            target=target_position,
+            mask=point_valid & mature,
+        )
+        _add_squared_error_metrics(
+            physical_metrics,
+            prefix=f"physical_rollout_cold_start_position{horizon_suffix}",
+            prediction=target_positions[:, query_index],
+            target=target_position,
+            mask=point_valid & ~mature,
         )
         physical_metrics[f"physical_forecast_target_count{horizon_suffix}"] = float(
             batch["objects"]["active"][:, target_index].sum().detach().cpu()
@@ -1145,6 +1419,12 @@ def _rollout_loss_result(
         )
         physical_metrics[f"physical_forecast_active_count{horizon_suffix}"] = float(
             (valid & target_active_mask[:, query_index]).sum().detach().cpu()
+        )
+        physical_metrics[f"physical_rollout_predictable_target_count{horizon_suffix}"] = float(
+            point_valid.sum().detach().cpu()
+        )
+        physical_metrics[f"physical_rollout_censored_external_actuation_count{horizon_suffix}"] = (
+            float((valid & ~predictable).sum().detach().cpu())
         )
         for confusion_name in (
             "true_positive",
@@ -1167,12 +1447,12 @@ def _rollout_loss_result(
             # The expanded rollout query plan makes this endpoint logit cover
             # the same interval, independent of the other forecast horizons.
             event_scores = target_event_logits[:, query_index, :, MotionMode.COLLISION]
-            if valid.any():
+            if loss_valid.any():
                 event_losses.append(
                     balanced_binary_cross_entropy(
                         event_scores,
                         event_target,
-                        valid,
+                        loss_valid,
                         maximum_positive_weight=(config.training.collision_positive_weight_max),
                     )
                 )
@@ -1188,7 +1468,7 @@ def _rollout_loss_result(
                 for confusion_name, confusion_mask in confusion.items():
                     physical_metrics[
                         f"physical_collision_{confusion_name}_count{horizon_suffix}"
-                    ] = float((confusion_mask & valid).sum().cpu())
+                    ] = float((confusion_mask & loss_valid).sum().cpu())
 
     def weighted_mean(losses: list[Tensor], weights: list[float]) -> Tensor:
         if not losses:
@@ -1198,15 +1478,25 @@ def _rollout_loss_result(
 
     return _RolloutLossResult(
         losses={
-            "rollout_position": weighted_mean(position_losses, horizon_weights),
+            "rollout_position": weighted_mean(
+                position_losses,
+                point_horizon_weights,
+            ),
             **{
                 f"rollout_position_{axis_name}": weighted_mean(
                     axis_losses,
-                    horizon_weights,
+                    point_horizon_weights,
                 )
                 for axis_name, axis_losses in position_axis_losses.items()
             },
-            "rollout_velocity": weighted_mean(velocity_losses, horizon_weights),
+            "rollout_velocity": weighted_mean(
+                velocity_losses,
+                point_horizon_weights,
+            ),
+            "rollout_position_nll": weighted_mean(
+                position_nll_losses,
+                position_nll_weights,
+            ),
             "event_collision": weighted_mean(event_losses, event_weights),
             **horizon_losses,
         },
@@ -1262,6 +1552,18 @@ def _group_closed_loop_terms(
         )
     }
     rollout_velocity = details.get("rollout_velocity", reference.sum() * 0)
+    correction_position = total(
+        "correction_current",
+        "correction_future",
+    )
+    correction_velocity = total(
+        "correction_current_velocity",
+        "correction_future_velocity",
+    )
+    correction_regularization = details.get(
+        "correction_magnitude",
+        reference.sum() * 0,
+    )
     return {
         "measurement": details.get("measurement", reference.sum() * 0),
         "state_position": state_position,
@@ -1270,17 +1572,27 @@ def _group_closed_loop_terms(
         "rollout_position": rollout_position,
         **rollout_position_axes,
         "rollout_velocity": rollout_velocity,
+        "rollout_nll": details.get(
+            "rollout_position_nll",
+            reference.sum() * 0,
+        ),
         "rollout": total("rollout_position", "rollout_velocity"),
         "event": details.get("event_collision", reference.sum() * 0),
         "parameter": total("parameter_drag", "parameter_restitution"),
         "existence": details.get("existence_belief", reference.sum() * 0),
         "uncertainty": details.get("uncertainty_position_nll", reference.sum() * 0),
-        # Retain the specification's small correction-sparsity regulariser,
-        # but pair it with explicit guards against harmful posterior updates.
-        "correction": total(
-            "correction_magnitude",
-            "correction_current",
-            "correction_future",
+        "correction_position": correction_position,
+        "correction_velocity": correction_velocity,
+        "correction_regularization": correction_regularization,
+        # Backward-compatible aggregate for profiles that predate explicit
+        # position/velocity correction objectives.
+        "correction": _mean_losses(
+            [
+                correction_position,
+                correction_velocity,
+                correction_regularization,
+            ],
+            reference,
         ),
     }
 
@@ -1302,6 +1614,11 @@ def _weighted_closed_loop_total(
     aggregate_families = {
         "state": ("state_position", "state_velocity"),
         "rollout": ("rollout_position", "rollout_velocity"),
+        "correction": (
+            "correction_position",
+            "correction_velocity",
+            "correction_regularization",
+        ),
     }
     rollout_position_axes = (
         "rollout_position_x",
@@ -1309,6 +1626,11 @@ def _weighted_closed_loop_total(
         "rollout_position_z",
     )
     use_axis_position = any(name in weights for name in rollout_position_axes)
+    # Optional objectives added after older explicit YAML profiles were
+    # written must be opt-in by exact key.  Letting ``weighted_total`` fall
+    # back from ``rollout_nll`` to an absent ``rollout`` key assigns weight
+    # 1.0, fifty times the declared default 0.02.
+    optional_exact_weight_terms = {"rollout_nll"}
     selected: dict[str, Tensor] = {
         name: value
         for name, value in terms.items()
@@ -1316,6 +1638,7 @@ def _weighted_closed_loop_total(
         not in {component for components in aggregate_families.values() for component in components}
         and name not in aggregate_families
         and name not in rollout_position_axes
+        and not (name in optional_exact_weight_terms and name not in weights)
     }
     for aggregate, components in aggregate_families.items():
         if any(component in weights for component in components):
@@ -1383,15 +1706,22 @@ def select_closed_loop_window(
 
     events = batch.get("events")
     collision = events.get("collision") if isinstance(events, Mapping) else None
+    pair_collision = events.get("pair_collision") if isinstance(events, Mapping) else None
     collision_frames: list[int] = []
-    if isinstance(collision, Tensor):
-        if collision.ndim < 2 or tuple(collision.shape[:2]) != tuple(rgb.shape[:2]):
-            raise ValueError("events.collision must begin with batch/time axes [B,T]")
+    collision_source = pair_collision if isinstance(pair_collision, Tensor) else collision
+    if isinstance(collision_source, Tensor):
+        if collision_source.ndim < 2 or tuple(collision_source.shape[:2]) != tuple(rgb.shape[:2]):
+            source_name = (
+                "events.pair_collision"
+                if collision_source is pair_collision
+                else "events.collision"
+            )
+            raise ValueError(f"{source_name} must begin with batch/time axes [B,T]")
         collision_by_frame = (
-            collision.bool()
+            collision_source.bool()
             .reshape(
-                collision.shape[0],
-                collision.shape[1],
+                collision_source.shape[0],
+                collision_source.shape[1],
                 -1,
             )
             .any(dim=(0, 2))
@@ -1399,6 +1729,22 @@ def select_closed_loop_window(
         collision_frames = (
             torch.nonzero(collision_by_frame, as_tuple=False).flatten().detach().cpu().tolist()
         )
+        # Pair interactions are the scarce, causally informative examples.
+        # If an episode contains none, retain the historical boundary/any-event
+        # fallback so collision-conditioned sampling still has useful support.
+        if (
+            not collision_frames
+            and collision_source is pair_collision
+            and isinstance(collision, Tensor)
+        ):
+            if collision.ndim < 2 or tuple(collision.shape[:2]) != tuple(rgb.shape[:2]):
+                raise ValueError("events.collision must begin with batch/time axes [B,T]")
+            collision_by_frame = (
+                collision.bool().reshape(collision.shape[0], collision.shape[1], -1).any(dim=(0, 2))
+            )
+            collision_frames = (
+                torch.nonzero(collision_by_frame, as_tuple=False).flatten().detach().cpu().tolist()
+            )
     condition_on_long_horizon = False
     if joint_collision_long_horizon_sampling:
         condition_on_long_horizon = long_horizon_probability >= 1.0 or (
@@ -1434,6 +1780,14 @@ def select_closed_loop_window(
             if last_eligible_anchor is not None:
                 maximum_event_start = min(maximum_event_start, last_eligible_anchor)
             if minimum_start <= maximum_event_start:
+                if minimum_rollout_frame_offset is not None:
+                    aligned_start = event_frame - minimum_rollout_frame_offset
+                    if minimum_start <= aligned_start <= maximum_event_start:
+                        # The trainer scores rollout events at configured
+                        # horizon endpoints. Align the scarce collision to the
+                        # shortest endpoint so a conditioned window actually
+                        # contributes a positive event BCE target.
+                        return aligned_start
                 return random.randint(minimum_start, maximum_event_start)
     if not joint_collision_long_horizon_sampling:
         condition_on_long_horizon = long_horizon_probability >= 1.0 or (
@@ -1525,6 +1879,8 @@ def run_closed_loop_batch(
     detail_lists: dict[str, list[Tensor]] = {}
     current_correction_improvements: list[float] = []
     future_correction_improvements: list[float] = []
+    current_velocity_correction_improvements: list[float] = []
+    future_velocity_correction_improvements: list[float] = []
     perturbed_updates = 0
     matched_count = 0
     target_object_frames = 0
@@ -1551,6 +1907,8 @@ def run_closed_loop_batch(
         score_rollout = frame_index in rollout_anchor_set
         prior_belief: WorldBelief | None = None
         prior_rollout = None
+        prior_rollout_positions: Tensor | None = None
+        prior_rollout_velocities: Tensor | None = None
         frame_offsets: list[int] = []
         query_seconds: list[float] = []
         if model.belief is not None:
@@ -1579,11 +1937,26 @@ def run_closed_loop_batch(
                     total_frames,
                 )
                 if frame_offsets and compute_future_correction:
-                    prior_rollout = model.dynamics.rollout(
-                        prior,
-                        query_seconds,
-                        return_events=False,
+                    event_query_plan = observation_window_query_plan(
+                        frame_offsets,
+                        frame_rate=config.simulator.frame_rate,
                     )
+                    # This trajectory is only the detached reference for the
+                    # posterior-improvement hinge and scalar diagnostics.
+                    # Building its recursive autograd graph roughly doubles
+                    # rollout memory without contributing any gradient.
+                    with torch.no_grad():
+                        prior_rollout = model.dynamics.rollout(
+                            prior,
+                            event_query_plan.query_seconds,
+                            return_events=False,
+                        )
+                        prior_rollout_positions = event_query_plan.select_target_endpoints(
+                            prior_rollout.positions
+                        )
+                        prior_rollout_velocities = event_query_plan.select_target_endpoints(
+                            prior_rollout.velocities
+                        )
             if include_measurement_supervision:
                 module = model.observation_modules["rgb"]
                 predicted = module.project(
@@ -1660,6 +2033,7 @@ def run_closed_loop_batch(
         current, indices, matched = _belief_state_losses(
             belief,
             batch,
+            config,
             frame_index,
             indices=indices,
             matched=matched,
@@ -1693,6 +2067,14 @@ def run_closed_loop_batch(
             target=aligned_position,
             mask=matched,
         )
+        for axis_index, axis_name in enumerate(("x", "y", "z")):
+            _add_squared_error_metrics(
+                state_physical,
+                prefix=f"physical_state_position_{axis_name}",
+                prediction=belief.objects.position[..., axis_index],
+                target=aligned_position[..., axis_index],
+                mask=matched,
+            )
         _add_squared_error_metrics(
             state_physical,
             prefix="physical_state_velocity",
@@ -1711,47 +2093,41 @@ def run_closed_loop_batch(
         _accumulate_float_metrics(physical_metrics, state_physical)
         target_ids = batch["objects"].get("id")
         if isinstance(target_ids, Tensor):
-            for batch_index in range(batch_size):
-                belief_slots = torch.nonzero(
-                    matched[batch_index],
-                    as_tuple=False,
-                ).flatten()
-                for belief_slot_tensor in belief_slots:
-                    belief_slot = int(belief_slot_tensor)
-                    target_slot = int(indices[batch_index, belief_slot])
-                    target_id = int(target_ids[batch_index, frame_index, target_slot])
-                    predicted_id = int(
-                        belief.objects.object_id[batch_index, belief_slot].detach().cpu()
-                    )
-                    if target_id < 0 or predicted_id < 0:
-                        continue
-                    object_frame_associations += 1
-                    previous = last_predicted_id_for_target[batch_index].get(target_id)
-                    if previous is not None and previous != predicted_id:
-                        identity_switches += 1
-                    last_predicted_id_for_target[batch_index][target_id] = predicted_id
-                distance_gated_belief_slots = torch.nonzero(
-                    distance_gated_matched[batch_index],
-                    as_tuple=False,
-                ).flatten()
-                for belief_slot_tensor in distance_gated_belief_slots:
-                    belief_slot = int(belief_slot_tensor)
-                    target_slot = int(indices[batch_index, belief_slot])
-                    target_id = int(target_ids[batch_index, frame_index, target_slot])
-                    predicted_id = int(
-                        belief.objects.object_id[batch_index, belief_slot].detach().cpu()
-                    )
-                    if target_id < 0 or predicted_id < 0:
-                        continue
-                    distance_gated_object_frame_associations += 1
-                    previous = last_distance_gated_predicted_id_for_target[batch_index].get(
-                        target_id
-                    )
-                    if previous is not None and previous != predicted_id:
-                        distance_gated_identity_switches += 1
-                    last_distance_gated_predicted_id_for_target[batch_index][target_id] = (
-                        predicted_id
-                    )
+            # Identity metrics require an independent framewise association.
+            # The locked training matcher above intentionally refuses to
+            # relabel a swapped track and therefore cannot itself reveal an
+            # ID switch.
+            identity_indices, identity_matched = match_belief_to_targets(
+                belief,
+                batch["objects"]["position"][:, frame_index],
+                batch["objects"]["active"][:, frame_index].bool(),
+            )
+            identity_distance_gated = _distance_gate_physical_matches(
+                belief.objects.position,
+                gather_target_slots(
+                    batch["objects"]["position"][:, frame_index],
+                    identity_indices,
+                ),
+                identity_matched,
+            )
+            switches, associations = _update_geometric_identity_metrics(
+                belief,
+                target_ids[:, frame_index],
+                identity_indices,
+                identity_matched,
+                last_predicted_id_for_target,
+            )
+            identity_switches += switches
+            object_frame_associations += associations
+            switches, associations = _update_geometric_identity_metrics(
+                belief,
+                target_ids[:, frame_index],
+                identity_indices,
+                identity_distance_gated,
+                last_distance_gated_predicted_id_for_target,
+            )
+            distance_gated_identity_switches += switches
+            distance_gated_object_frame_associations += associations
         for name, value in current.items():
             add(name, value)
         if prior_belief is not None:
@@ -1772,10 +2148,35 @@ def run_closed_loop_batch(
                     correction_valid,
                 ),
             )
+            prior_current_velocity_error = torch.linalg.vector_norm(
+                prior_belief.objects.velocity - aligned_velocity,
+                dim=-1,
+            )
+            posterior_current_velocity_error = torch.linalg.vector_norm(
+                belief.objects.velocity - aligned_velocity,
+                dim=-1,
+            )
+            add(
+                "correction_current_velocity",
+                posterior_improvement_hinge(
+                    posterior_current_velocity_error,
+                    prior_current_velocity_error,
+                    correction_valid,
+                ),
+            )
             if correction_valid.any():
                 current_correction_improvements.append(
                     float(
                         (prior_current_error - posterior_current_error)
+                        .masked_select(correction_valid)
+                        .mean()
+                        .detach()
+                        .cpu()
+                    )
+                )
+                current_velocity_correction_improvements.append(
+                    float(
+                        (prior_current_velocity_error - posterior_current_velocity_error)
                         .masked_select(correction_valid)
                         .mean()
                         .detach()
@@ -1802,16 +2203,24 @@ def run_closed_loop_batch(
 
         if (
             prior_rollout is not None
+            and prior_rollout_positions is not None
+            and prior_rollout_velocities is not None
             and rollout_result is not None
             and rollout_result.positions is not None
             and frame_offsets
         ):
             deltas: list[Tensor] = []
             correction_losses: list[Tensor] = []
+            velocity_deltas: list[Tensor] = []
+            velocity_correction_losses: list[Tensor] = []
             for query_index, frame_offset in enumerate(frame_offsets):
                 target_index = frame_index + frame_offset
                 target_position = gather_target_slots(
                     batch["objects"]["position"][:, target_index], indices
+                )
+                target_velocity = gather_target_slots(
+                    batch["objects"]["velocity"][:, target_index],
+                    indices,
                 )
                 future_active = (
                     gather_target_slots(
@@ -1822,9 +2231,16 @@ def run_closed_loop_batch(
                     .bool()
                 )
                 valid = matched & future_active & prior_belief.objects.active
+                valid &= _future_predictable_mask(
+                    batch,
+                    anchor_index=frame_index,
+                    target_index=target_index,
+                    target_indices=indices,
+                )
+                valid &= belief.objects.age_steps >= config.training.minimum_rollout_age_steps
                 if valid.any():
                     prior_error = torch.linalg.vector_norm(
-                        prior_rollout.positions[:, query_index] - target_position,
+                        prior_rollout_positions[:, query_index] - target_position,
                         dim=-1,
                     )
                     posterior_error = torch.linalg.vector_norm(
@@ -1846,11 +2262,46 @@ def run_closed_loop_batch(
                         ),
                         correction_losses[-1],
                     )
+                    prior_velocity_error = torch.linalg.vector_norm(
+                        prior_rollout_velocities[:, query_index] - target_velocity,
+                        dim=-1,
+                    )
+                    posterior_velocity_error = torch.linalg.vector_norm(
+                        rollout_result.velocities[:, query_index] - target_velocity,
+                        dim=-1,
+                    )
+                    velocity_deltas.append(
+                        (prior_velocity_error - posterior_velocity_error)
+                        .masked_select(valid)
+                        .mean()
+                    )
+                    velocity_correction_losses.append(
+                        posterior_improvement_hinge(
+                            posterior_velocity_error,
+                            prior_velocity_error,
+                            valid,
+                        )
+                    )
+                    add(
+                        rollout_horizon_loss_key(
+                            "correction_future_velocity",
+                            query_seconds[query_index],
+                        ),
+                        velocity_correction_losses[-1],
+                    )
             if deltas:
                 future_correction_improvements.append(
                     float(torch.stack(deltas).mean().detach().cpu())
                 )
                 add("correction_future", torch.stack(correction_losses).mean())
+            if velocity_deltas:
+                future_velocity_correction_improvements.append(
+                    float(torch.stack(velocity_deltas).mean().detach().cpu())
+                )
+                add(
+                    "correction_future_velocity",
+                    torch.stack(velocity_correction_losses).mean(),
+                )
 
         diagnostics = model.updater.last_diagnostics
         if diagnostics is not None and diagnostics.correction_norm.numel() > 0:
@@ -1865,12 +2316,18 @@ def run_closed_loop_batch(
                 _observation_context(packet, config, training=True),
             )
             supervised = supervised_measurement_losses(module, measurements, batch, frame_index)
+            global_measurement = _weighted_measurement_total(
+                supervised,
+                config.training.measurement_loss_weights,
+            )
+            global_trainable = torch.is_grad_enabled() and any(
+                parameter.requires_grad
+                for component_name in ("backbone", "global_detector")
+                for parameter in getattr(module, component_name).parameters()
+            )
             add(
-                "measurement",
-                _weighted_measurement_total(
-                    supervised,
-                    config.training.measurement_loss_weights,
-                ),
+                "measurement" if global_trainable else "frozen_global_measurement",
+                global_measurement,
             )
             for name, value in supervised.items():
                 add(name, value)
@@ -1889,10 +2346,25 @@ def run_closed_loop_batch(
     metrics.update(physical_metrics)
     metrics.update(
         {
+            "window_start_frame": float(window_start),
+            "window_stop_frame": float(window_stop),
+            "rollout_anchor_min_frame": (
+                float(min(rollout_anchor_frames)) if rollout_anchor_frames else math.nan
+            ),
+            "rollout_anchor_max_frame": (
+                float(max(rollout_anchor_frames)) if rollout_anchor_frames else math.nan
+            ),
             "rollout_anchor_count": float(len(rollout_anchor_frames)),
             "rollout_anchor_candidate_count": float(
                 sum(
-                    bool(_valid_rollout_offsets(config, frame_index, total_frames)[0])
+                    frame_index >= config.training.minimum_rollout_age_steps
+                    and bool(
+                        _valid_rollout_offsets(
+                            config,
+                            frame_index,
+                            total_frames,
+                        )[0]
+                    )
                     for frame_index in range(window_start, window_stop)
                 )
             ),
@@ -1911,6 +2383,36 @@ def run_closed_loop_batch(
             "physical_distance_gated_identity_switches": float(distance_gated_identity_switches),
             "physical_distance_gated_object_frame_associations": float(
                 distance_gated_object_frame_associations
+            ),
+            "window_pair_collision_interval_count": float(
+                batch["events"]["pair_collision"][:, window_start:window_stop]
+                .bool()
+                .flatten(start_dim=2)
+                .any(dim=-1)
+                .sum()
+                .detach()
+                .cpu()
+            ),
+            "window_ground_collision_object_count": float(
+                batch["events"]["ground_collision"][:, window_start:window_stop]
+                .bool()
+                .sum()
+                .detach()
+                .cpu()
+            ),
+            "window_wall_collision_count": float(
+                batch["events"]["wall_collision"][:, window_start:window_stop]
+                .bool()
+                .sum()
+                .detach()
+                .cpu()
+            ),
+            "window_external_actuation_object_count": float(
+                batch["events"]["externally_actuated"][:, window_start:window_stop]
+                .bool()
+                .sum()
+                .detach()
+                .cpu()
             ),
         }
     )
@@ -2073,9 +2575,25 @@ def run_closed_loop_batch(
                 if current_correction_improvements
                 else math.nan
             ),
+            "current_velocity_correction_improvement_mps": (
+                float(
+                    sum(current_velocity_correction_improvements)
+                    / len(current_velocity_correction_improvements)
+                )
+                if current_velocity_correction_improvements
+                else math.nan
+            ),
             "future_correction_improvement_m": (
                 float(sum(future_correction_improvements) / len(future_correction_improvements))
                 if future_correction_improvements
+                else math.nan
+            ),
+            "future_velocity_correction_improvement_mps": (
+                float(
+                    sum(future_velocity_correction_improvements)
+                    / len(future_velocity_correction_improvements)
+                )
+                if future_velocity_correction_improvements
                 else math.nan
             ),
             "correction_improvement_m": (

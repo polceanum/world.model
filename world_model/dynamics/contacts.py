@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
@@ -19,6 +20,7 @@ class ContactPlane:
     normal: tuple[float, float, float]
     offset: float = 0.0
     name: str = "ground"
+    is_ground: bool | None = None
 
 
 @dataclass
@@ -26,6 +28,8 @@ class ContactResult:
     objects: ObjectBeliefTensor
     pair_contact: Tensor
     pair_collision: Tensor
+    boundary_contact: Tensor
+    boundary_collision: Tensor
     ground_contact: Tensor
     ground_collision: Tensor
     pair_impulse: Tensor
@@ -43,6 +47,7 @@ class SphereContactResolver(nn.Module):
         *,
         contact_margin: float = 1e-3,
         collision_speed_epsilon: float = 1e-4,
+        boundary_collision_speed_epsilon: float = 0.1,
         penetration_fraction: float = 0.8,
         penetration_slop: float = 1e-4,
         max_position_correction: float = 0.05,
@@ -63,9 +68,25 @@ class SphereContactResolver(nn.Module):
             "plane_offsets",
             torch.tensor([item.offset for item in selected], dtype=torch.float32),
         )
+        self.register_buffer(
+            "ground_plane_mask",
+            torch.tensor(
+                [
+                    (
+                        item.is_ground
+                        if item.is_ground is not None
+                        else item.name in {"ground", "floor", "y_minimum"}
+                    )
+                    for item in selected
+                ],
+                dtype=torch.bool,
+            ),
+            persistent=False,
+        )
         self.plane_names = tuple(item.name for item in selected)
         self.contact_margin = contact_margin
         self.collision_speed_epsilon = collision_speed_epsilon
+        self.boundary_collision_speed_epsilon = boundary_collision_speed_epsilon
         self.penetration_fraction = penetration_fraction
         self.penetration_slop = penetration_slop
         self.max_position_correction = max_position_correction
@@ -73,6 +94,12 @@ class SphereContactResolver(nn.Module):
         self.max_impulse_additive_residual = max_impulse_additive_residual
         if contact_confidence_sigma < 0:
             raise ValueError("contact_confidence_sigma must be nonnegative")
+        if collision_speed_epsilon < 0 or not math.isfinite(collision_speed_epsilon):
+            raise ValueError("collision_speed_epsilon must be finite and nonnegative")
+        if boundary_collision_speed_epsilon < 0 or not math.isfinite(
+            boundary_collision_speed_epsilon
+        ):
+            raise ValueError("boundary_collision_speed_epsilon must be finite and nonnegative")
         self.contact_confidence_sigma = contact_confidence_sigma
 
     def forward(
@@ -90,7 +117,14 @@ class SphereContactResolver(nn.Module):
         pair = self._resolve_pairs(objects, graph)
         pair_objects, pair_contact, pair_collision, pair_impulse, pair_penetration, residual = pair
         plane = self._resolve_planes(pair_objects)
-        plane_objects, ground_contact, ground_collision, plane_penetration = plane
+        (
+            plane_objects,
+            boundary_contact,
+            boundary_collision,
+            ground_contact,
+            ground_collision,
+            plane_penetration,
+        ) = plane
         all_penetration = torch.cat(
             (
                 pair_penetration.flatten(start_dim=1),
@@ -102,6 +136,8 @@ class SphereContactResolver(nn.Module):
             objects=plane_objects,
             pair_contact=pair_contact,
             pair_collision=pair_collision,
+            boundary_contact=boundary_contact,
+            boundary_collision=boundary_collision,
             ground_contact=ground_contact,
             ground_collision=ground_collision,
             pair_impulse=pair_impulse,
@@ -138,9 +174,9 @@ class SphereContactResolver(nn.Module):
 
         inverse_mass = objects.mass.squeeze(-1).reciprocal()
         inverse_mass_sum = (inverse_mass[:, :, None] + inverse_mass[:, None, :]).clamp_min(1e-8)
-        restitution = 0.5 * (
-            objects.restitution.squeeze(-1)[:, :, None]
-            + objects.restitution.squeeze(-1)[:, None, :]
+        restitution = torch.minimum(
+            objects.restitution.squeeze(-1)[:, :, None],
+            objects.restitution.squeeze(-1)[:, None, :],
         )
         impulse = (-(1.0 + restitution) * relative_normal_velocity / inverse_mass_sum).clamp_min(
             0.0
@@ -206,7 +242,7 @@ class SphereContactResolver(nn.Module):
     def _resolve_planes(
         self,
         objects: ObjectBeliefTensor,
-    ) -> tuple[ObjectBeliefTensor, Tensor, Tensor, Tensor]:
+    ) -> tuple[ObjectBeliefTensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
         normals = self.plane_normals.to(
             device=objects.position.device,
             dtype=objects.position.dtype,
@@ -226,11 +262,14 @@ class SphereContactResolver(nn.Module):
         confident_gap = gap + self.contact_confidence_sigma * gap_sigma
         normal_velocity = torch.einsum("bnc,pc->bnp", objects.velocity, normals)
         contact = objects.active.unsqueeze(-1) & (confident_gap <= self.contact_margin)
-        collision = contact & (normal_velocity < -self.collision_speed_epsilon)
+        collision = contact & (normal_velocity < -self.boundary_collision_speed_epsilon)
+        resting_inward = contact & (normal_velocity < 0.0) & ~collision
         penetration = (-gap).clamp_min(0.0) * contact
 
         restitution = objects.restitution
-        delta_normal_speed = (-(1.0 + restitution) * normal_velocity).clamp_min(0.0) * collision
+        collision_delta = (-(1.0 + restitution) * normal_velocity).clamp_min(0.0) * collision
+        resting_delta = (-normal_velocity).clamp_min(0.0) * resting_inward
+        delta_normal_speed = collision_delta + resting_delta
         delta_velocity_normal = torch.einsum("bnp,pc->bnc", delta_normal_speed, normals)
         velocity_after_normal = objects.velocity + delta_velocity_normal
 
@@ -264,9 +303,14 @@ class SphereContactResolver(nn.Module):
             position=torch.where(active_f, position, objects.position),
             velocity=torch.where(active_f, velocity, objects.velocity),
         )
+        ground_plane_mask = self.ground_plane_mask.to(device=objects.position.device)
+        ground_contact = (contact & ground_plane_mask).any(dim=-1)
+        ground_collision = (collision & ground_plane_mask).any(dim=-1)
         return (
             updated,
-            contact.any(dim=-1),
-            collision.any(dim=-1),
+            contact,
+            collision,
+            ground_contact,
+            ground_collision,
             penetration,
         )

@@ -122,6 +122,7 @@ class PhysicsConfig:
     position_correction: float = 0.8
     penetration_slop: float = 1.0e-4
     max_position_correction: float = 0.08
+    boundary_collision_speed_epsilon: float = 0.1
     sleep_speed: float = 0.035
     sleep_after_seconds: float = 0.35
     wake_impulse: float = 0.02
@@ -138,6 +139,11 @@ class PhysicsConfig:
             raise ValueError("bounds must be increasing [3, 2] x/y/z limits")
         if self.sleep_speed < 0 or self.sleep_after_seconds < 0:
             raise ValueError("sleep thresholds must be nonnegative")
+        if (
+            not math.isfinite(self.boundary_collision_speed_epsilon)
+            or self.boundary_collision_speed_epsilon < 0
+        ):
+            raise ValueError("boundary collision speed epsilon must be finite and nonnegative")
 
 
 @dataclass(frozen=True)
@@ -314,6 +320,7 @@ def advance_spheres(
                 bounds,
                 friction=state.friction,
                 active=active,
+                collision_speed_epsilon=config.boundary_collision_speed_epsilon,
             )
             position, velocity = boundary_result.position, boundary_result.velocity
             pair_result = resolve_sphere_sphere_collisions(

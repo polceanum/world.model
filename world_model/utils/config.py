@@ -25,6 +25,14 @@ class ProjectConfig:
 @dataclass(frozen=True)
 class DeviceConfig:
     preference: str = "auto"
+    # Branch-heavy sequential filtering can be slower on MPS than CPU even
+    # when batched CNN pretraining benefits from MPS. ``same`` preserves the
+    # historical single-device behavior.
+    closed_loop_preference: str = "same"
+    # PyTorch 2.10 MPS may emit data-dependent NaN matrix gradients in the
+    # small proposal transformer. Keep CNNs on MPS but execute that block on
+    # CPU through differentiable device copies.
+    global_detector_cpu_on_mps: bool = True
     cuda_amp: bool = True
     mps_float32: bool = True
     compile: bool = False
@@ -53,6 +61,7 @@ class SimulatorConfig:
     ensured_pair_height_range: tuple[float, float] = (1.1, 1.35)
     ensured_pair_surface_gap_range: tuple[float, float] = (0.75, 0.9)
     ensured_pair_speed_range: tuple[float, float] = (0.85, 1.25)
+    ensured_pair_lateral_offset_range: tuple[float, float] = (0.0, 0.0)
     gravity: tuple[float, float, float] = (0.0, -9.81, 0.0)
     camera_motion: str = "orbit"
     known_camera_pose: bool = True
@@ -193,6 +202,8 @@ class DynamicsConfig:
     penetration_slop: float = 1e-3
     max_penetration_correction: float = 0.08
     contact_confidence_sigma: float = 0.25
+    pair_collision_speed_epsilon: float = 1.0e-4
+    boundary_collision_speed_epsilon: float = 0.1
     sleep_speed: float = 0.05
     allow_large_substep: bool = False
 
@@ -215,6 +226,7 @@ class AssociationConfig:
     mahalanobis_gate: float = 16.0
     maximum_cost: float = 25.0
     ambiguity_margin: float = 0.02
+    minimum_measurement_confidence: float = 0.45
 
 
 @dataclass(frozen=True)
@@ -222,6 +234,7 @@ class LifecycleConfig:
     birth_confidence: float = 0.55
     birth_confirmations: int = 1
     max_missed_steps: int = 12
+    max_occluded_steps: int = 60
     existence_decay: float = 0.35
     occlusion_existence_decay: float = 0.04
 
@@ -289,10 +302,17 @@ class TrainingConfig:
     # maximum-horizon-capable window.  If one window can cover both constraints
     # it does; otherwise the long-horizon request wins over a late collision.
     joint_collision_long_horizon_sampling: bool = True
+    # Point forecasts before this per-track age are treated as cold-start
+    # distributional supervision rather than deterministic trajectory targets.
+    minimum_rollout_age_steps: int = 0
     # ``None`` preserves the historical behavior of scoring every eligible
     # frame in a TBPTT window. Long-running profiles may bound the expensive
     # recursive rollouts while still ingesting and supervising every frame.
     rollout_anchors_per_window: int | None = None
+    # Trend validation still ingests and scores every current frame, but may
+    # use a deterministic spread of forecast anchors. Full promotion
+    # evaluation remains a separate, larger manifest.
+    validation_rollout_anchors_per_episode: int | None = None
     collision_positive_weight_max: float = 10.0
     horizon_weights: tuple[float, ...] = (1.0, 1.0, 1.2, 1.5, 1.5)
     measurement_loss_weights: dict[str, float] = field(
@@ -315,6 +335,7 @@ class TrainingConfig:
             "state_velocity": 0.25,
             "rollout_position": 4.0,
             "rollout_velocity": 0.1,
+            "rollout_nll": 0.02,
             "event": 0.2,
             "parameter": 0.1,
             "existence": 0.2,
@@ -380,6 +401,25 @@ class OrpheusConfig:
             raise ValueError("modal_count must be nonnegative and modal_dim positive")
         if model.lifecycle.max_missed_steps <= 0:
             raise ValueError("model.lifecycle.max_missed_steps must be positive")
+        if model.lifecycle.max_occluded_steps < model.lifecycle.max_missed_steps:
+            raise ValueError(
+                "model.lifecycle.max_occluded_steps must be no smaller than "
+                "model.lifecycle.max_missed_steps"
+            )
+        if not 0.0 <= model.association.minimum_measurement_confidence <= 1.0:
+            raise ValueError("model.association.minimum_measurement_confidence must lie in [0,1]")
+        for name, value in (
+            (
+                "pair_collision_speed_epsilon",
+                model.dynamics.pair_collision_speed_epsilon,
+            ),
+            (
+                "boundary_collision_speed_epsilon",
+                model.dynamics.boundary_collision_speed_epsilon,
+            ),
+        ):
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"model.dynamics.{name} must be finite and nonnegative")
         if (
             not math.isfinite(model.rgb.temporal_velocity_min_dt)
             or model.rgb.temporal_velocity_min_dt <= 0
@@ -713,6 +753,11 @@ class OrpheusConfig:
                 "model.lifecycle occlusion_existence_decay must lie between "
                 "zero and existence_decay"
             )
+        if model.lifecycle.birth_confirmations != 1:
+            raise ValueError(
+                "model.lifecycle.birth_confirmations currently supports only 1; "
+                "multi-frame tentative birth state is not implemented"
+            )
         if model.dynamics.max_substep <= 0:
             raise ValueError("model.dynamics.max_substep must be positive")
         if model.dynamics.contact_confidence_sigma < 0:
@@ -733,6 +778,10 @@ class OrpheusConfig:
             ("ensured_pair_height", simulator.ensured_pair_height_range),
             ("ensured_pair_surface_gap", simulator.ensured_pair_surface_gap_range),
             ("ensured_pair_speed", simulator.ensured_pair_speed_range),
+            (
+                "ensured_pair_lateral_offset",
+                simulator.ensured_pair_lateral_offset_range,
+            ),
             ("external_impulse", simulator.external_impulse_range),
         ):
             if len(bounds) != 2 or bounds[0] > bounds[1]:
@@ -758,6 +807,18 @@ class OrpheusConfig:
             raise ValueError(f"unsupported simulator scenarios: {sorted(unknown_scenarios)}")
         if self.device.preference not in {"auto", "cpu", "mps", "cuda"}:
             raise ValueError(f"Unsupported device preference {self.device.preference!r}")
+        if not isinstance(self.device.global_detector_cpu_on_mps, bool):
+            raise ValueError("device.global_detector_cpu_on_mps must be boolean")
+        if self.device.closed_loop_preference not in {
+            "same",
+            "auto",
+            "cpu",
+            "mps",
+            "cuda",
+        }:
+            raise ValueError(
+                f"Unsupported closed-loop device preference {self.device.closed_loop_preference!r}"
+            )
         if self.runtime.modality not in {"rgb", "debug_oracle"}:
             raise ValueError(f"Unsupported runtime modality {self.runtime.modality!r}")
         if not self.runtime.strict_timestamps:
@@ -773,6 +834,15 @@ class OrpheusConfig:
             raise ValueError("RGB-only evaluation cannot enable debug oracle input")
         if any(horizon <= 0 for horizon in self.evaluation.horizons_seconds):
             raise ValueError("evaluation horizons must be positive")
+        quantized_horizons = [
+            max(1, int(round(float(horizon) * simulator.frame_rate)))
+            for horizon in self.evaluation.horizons_seconds
+        ]
+        if len(set(quantized_horizons)) != len(quantized_horizons):
+            raise ValueError(
+                "evaluation horizons must map to unique observation-frame offsets "
+                "at simulator.frame_rate"
+            )
         if len(self.training.horizon_weights) != len(self.evaluation.horizons_seconds):
             raise ValueError("training.horizon_weights must match evaluation.horizons_seconds")
         if any(weight <= 0 for weight in self.training.horizon_weights):
@@ -839,11 +909,29 @@ class OrpheusConfig:
             )
         if not isinstance(self.training.joint_collision_long_horizon_sampling, bool):
             raise ValueError("training.joint_collision_long_horizon_sampling must be boolean")
+        if self.training.minimum_rollout_age_steps < 0:
+            raise ValueError("training.minimum_rollout_age_steps must be nonnegative")
+        maximum_rollout_offset = max(quantized_horizons)
+        if (
+            self.training.minimum_rollout_age_steps + maximum_rollout_offset
+            >= simulator.sequence_frames
+        ):
+            raise ValueError(
+                "simulator.sequence_frames must exceed "
+                "training.minimum_rollout_age_steps plus the maximum forecast offset"
+            )
         if (
             self.training.rollout_anchors_per_window is not None
             and self.training.rollout_anchors_per_window <= 0
         ):
             raise ValueError("training.rollout_anchors_per_window must be positive or null")
+        if (
+            self.training.validation_rollout_anchors_per_episode is not None
+            and self.training.validation_rollout_anchors_per_episode <= 0
+        ):
+            raise ValueError(
+                "training.validation_rollout_anchors_per_episode must be positive or null"
+            )
         if self.training.collision_positive_weight_max < 1:
             raise ValueError("training.collision_positive_weight_max must be at least one")
 

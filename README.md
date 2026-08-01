@@ -107,19 +107,32 @@ For the multi-day shared-model accuracy campaign:
 
 ```bash
 python train.py \
-  --config configs/sustained_accuracy_mps.yaml \
+  --config configs/sustained_accuracy_mps_v2.yaml \
   --initialize-from \
-    runs/20260729-084712-scaled-point-scale-trajectory-v1/checkpoints/runtime_ablation.pt \
-  --run-name scaled-sustained-e2e-v1 \
+    runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/best_measurement.pt \
+  --run-name "$(date -u +%Y%m%d-%H%M%S)-scaled-sustained-v2" \
   --device mps
 ```
 
-This profile runs two full measurement passes and one full causal pass over the
-balanced eight-scenario pool. It preserves a fixed initialization reference,
-keeps every numbered validation candidate, and will not promote a lower
-position score that materially regresses velocity, detection, lifecycle,
-events, identity, or calibration. See `project/ACCURACY_AUDIT.md` and
-`project/TRAINING.md` for the evidence and continuation rule.
+This profile runs one 16,384-episode measurement pass and one independently
+shuffled causal pass over the balanced eight-scenario pool. It uses mature
+40-frame forecast anchors, preserves a fixed initialization reference, keeps
+every numbered validation candidate, and will not promote a lower position
+score that materially regresses velocity, detection, lifecycle, events,
+identity, any axis/horizon, or calibration. The older
+`configs/sustained_accuracy_mps.yaml` and its run are retained only as the
+legacy-objective audit control. See `project/ACCURACY_AUDIT.md` and
+`project/TRAINING.md` for exact evidence.
+
+The v2 profile runs the convolutional RGB backbone and ROI path on MPS, pins
+the small global proposal transformer to CPU through differentiable copies,
+and switches the full persistent model to CPU at the causal boundary. The
+proposal fallback avoids a reproduced PyTorch 2.10 MPS NaN-gradient kernel on
+finite full-resolution features; a matched benchmark found the branch-heavy
+online filter/dynamics backward pass substantially faster on CPU on this Mac.
+`--resume` preserves both configured phase devices and the exact absolute
+sample/RNG/source protocol. Use `--initialize-from` for a changed device,
+objective, curriculum, or source implementation.
 
 For checkpoint selection without reusing trainer-validation or test seeds:
 
@@ -181,10 +194,12 @@ result is
 These generated artifacts are gitignored. The seven-regime interaction
 curriculum is configured in `configs/tiny_interactions.yaml`.
 
-PyTorch 2.10.0 in the existing environment is MPS-enabled. A reduced explicit
-MPS training smoke has exercised both global RGB and differentiable fast ROI
-backward paths. The full 3,000-step `toy_mps` protocol remains an overnight
-experiment, not a result claimed here.
+PyTorch 2.10.0 in the existing environment is MPS-enabled. The corrected
+two-phase smoke at
+`runs/20260801-231521-audit-v2-final-verified-smoke/` exercised one hybrid RGB
+update, two persistent causal updates, selector validation, checkpoint
+round-trip, and byte-preserving no-op resume. It is wiring evidence, not an
+accuracy or convergence result. See `project/STATUS.md` for exact values.
 
 ## Documentation
 

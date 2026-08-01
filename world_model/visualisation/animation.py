@@ -569,7 +569,9 @@ def create_demo(
     checkpoint = load_checkpoint(
         checkpoint_path,
         model=model,
-        map_location=device_info.device,
+        # Demo checkpoints may contain a full optimizer. Deserialize on CPU
+        # and copy only model weights to the configured runtime devices.
+        map_location="cpu",
         expected_config=config,
     )
     model.eval()

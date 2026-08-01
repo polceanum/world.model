@@ -210,6 +210,7 @@ def resolve_axis_aligned_boundaries(
     friction: Tensor | None = None,
     active: Tensor | None = None,
     contact_tolerance: float = 1.0e-4,
+    collision_speed_epsilon: float = 0.1,
 ) -> BoundaryCollisionResult:
     """Resolve sphere contacts with an axis-aligned 3-D box.
 
@@ -239,6 +240,8 @@ def resolve_axis_aligned_boundaries(
         raise ValueError("bounds must have shape [3, 2] in x/y/z order")
     if bool(torch.any(bounds_tensor[:, 1] <= bounds_tensor[:, 0])):
         raise ValueError("every upper world bound must exceed its lower bound")
+    if collision_speed_epsilon < 0:
+        raise ValueError("collision_speed_epsilon must be nonnegative")
 
     updated_position = position.clone()
     updated_velocity = velocity.clone()
@@ -272,7 +275,8 @@ def resolve_axis_aligned_boundaries(
         normal = torch.zeros_like(updated_velocity)
         normal[:, axis] = inward_sign
         normal_speed = (updated_velocity * normal).sum(dim=-1)
-        plane_collision = plane_contact & (normal_speed < 0.0)
+        plane_collision = plane_contact & (normal_speed < -collision_speed_epsilon)
+        resting_inward = plane_contact & (normal_speed < 0.0) & ~plane_collision
         normal_impulse = torch.where(
             plane_collision,
             -(1.0 + restitution_1d.clamp(0.0, 1.0)) * normal_speed * mass_1d,
@@ -280,6 +284,14 @@ def resolve_axis_aligned_boundaries(
         )
         updated_velocity = (
             updated_velocity + (normal_impulse / mass_1d.clamp_min(1.0e-12)).unsqueeze(-1) * normal
+        )
+        # Gravity introduces a small inward speed on every semi-implicit
+        # substep. Treat sub-threshold inward motion as a resting constraint,
+        # not a fresh restitution impact, while leaving tangential sliding
+        # untouched.
+        updated_velocity = updated_velocity - (
+            torch.where(resting_inward, normal_speed, torch.zeros_like(normal_speed)).unsqueeze(-1)
+            * normal
         )
 
         tangent_velocity = updated_velocity - (

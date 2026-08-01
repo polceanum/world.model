@@ -68,6 +68,8 @@ class ObservabilityEstimator:
         innovation: InnovationSet,
         association: AssociationResult,
         cause: SurpriseAssessment | None = None,
+        *,
+        interval_collision_mask: Tensor | None = None,
     ) -> Observability:
         objects = belief.objects
         batch, object_count = objects.active.shape
@@ -105,6 +107,20 @@ class ObservabilityEstimator:
             collision_evidence = torch.maximum(collision, physical_event)
         else:
             collision_evidence = collision
+        if interval_collision_mask is not None:
+            if (
+                interval_collision_mask.shape != objects.active.shape
+                or interval_collision_mask.dtype is not torch.bool
+            ):
+                raise ValueError("interval_collision_mask must be boolean belief-slot [B,N]")
+            interval_collision = interval_collision_mask[
+                batch_index,
+                object_index,
+            ].to(dtype)
+            collision_evidence = torch.maximum(
+                collision_evidence,
+                interval_collision,
+            )
         interaction = torch.maximum(pair, collision_evidence)
         free_history = (
             objects.age_steps[batch_index, object_index] >= self.config.minimum_free_steps

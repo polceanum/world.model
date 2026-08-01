@@ -77,6 +77,7 @@ def build_cost_matrix(
     existence_weight: float = 0.05,
     geometry_dimensions: int = 4,
     mahalanobis_gate: float = 25.0,
+    minimum_measurement_confidence: float = 0.0,
 ) -> tuple[Tensor, Tensor]:
     geometry, squared_mahalanobis = geometry_mahalanobis_cost(
         measured,
@@ -91,6 +92,7 @@ def build_cost_matrix(
     possible = (
         predicted.valid_mask[:, :, None]
         & measured.measurement_mask[:, None, :]
+        & (measured.existence_logits.sigmoid()[:, None, :] >= minimum_measurement_confidence)
         & (squared_mahalanobis <= mahalanobis_gate)
     )
     return cost.masked_fill(~possible, torch.inf), squared_mahalanobis

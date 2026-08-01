@@ -213,6 +213,64 @@ def test_known_acceleration_fit_estimates_velocity_at_query_time() -> None:
     torch.testing.assert_close(compensated, expected_velocity, atol=1.0e-10, rtol=0.0)
 
 
+def test_known_acceleration_fit_broadcasts_query_per_batch_not_per_object() -> None:
+    object_ids = torch.tensor([[11, 12, 13], [21, 22, 23]])
+    history = _empty_history(object_ids, history_size=5)
+    acceleration = torch.tensor(
+        [[0.0, -10.0, 0.0], [1.0, -4.0, 0.5]],
+        dtype=torch.float64,
+    )
+    initial_velocity = torch.tensor(
+        [
+            [[0.4, 2.0, -0.3], [0.1, 1.0, 0.2], [-0.2, 0.5, 0.7]],
+            [[-0.5, 1.5, 0.4], [0.8, -0.2, -0.1], [0.3, 0.9, -0.6]],
+        ],
+        dtype=torch.float64,
+    )
+    initial_position = torch.tensor(
+        [
+            [[0.1, 0.4, 2.0], [0.3, 0.2, 2.2], [-0.2, 0.5, 1.8]],
+            [[0.6, 0.1, 2.4], [-0.4, 0.7, 2.1], [0.2, -0.1, 1.9]],
+        ],
+        dtype=torch.float64,
+    )
+    for base_timestamp in (0.0, 0.05, 0.1, 0.15, 0.2):
+        timestamp = torch.tensor(
+            [base_timestamp, base_timestamp + 0.03],
+            dtype=torch.float64,
+        )
+        positions = (
+            initial_position
+            + initial_velocity * timestamp[:, None, None]
+            + 0.5 * acceleration[:, None, :] * timestamp[:, None, None].square()
+        )
+        history = history.append(
+            object_ids=object_ids,
+            active_mask=torch.ones_like(object_ids, dtype=torch.bool),
+            observed_mask=torch.ones_like(object_ids, dtype=torch.bool),
+            scale_valid_mask=torch.ones_like(object_ids, dtype=torch.bool),
+            reset_mask=None,
+            timestamp=timestamp,
+            positions=positions,
+            position_log_variance=torch.full_like(positions, math.log(1.0e-4)),
+            minimum_dt=1.0e-3,
+        )
+
+    query_timestamp = torch.tensor([0.2, 0.23], dtype=torch.float64)
+    estimate, _, valid = history.least_squares_velocity(
+        minimum_dt=1.0e-3,
+        minimum_samples=3,
+        variance_scale=1.0,
+        variance_floor=1.0e-4,
+        query_timestamp=query_timestamp,
+        known_acceleration=acceleration,
+    )
+
+    expected = initial_velocity + acceleration[:, None, :] * query_timestamp[:, None, None]
+    assert valid.all()
+    torch.testing.assert_close(estimate, expected, atol=1.0e-10, rtol=0.0)
+
+
 def test_kinematic_change_point_rejects_smooth_ballistic_motion() -> None:
     object_ids = torch.tensor([[17]])
     history = _empty_history(object_ids)
@@ -760,6 +818,73 @@ def test_rgb_module_emits_post_correction_evidence_and_measurement_annotations()
         measured.auxiliary["world_velocity"],
         expected_velocity,
     )
+
+
+def test_rgb_history_resets_on_prior_interval_collision_not_only_endpoint_mode() -> None:
+    factory = BeliefFactory(max_objects=1, appearance_dim=4)
+    base = factory.create()
+    belief = base.replace(
+        objects=base.objects.replace(
+            active=torch.tensor([[True]]),
+            object_id=torch.tensor([[12]]),
+            existence_logit=torch.tensor([[8.0]]),
+        )
+    )
+    module = RGBObservationModule(
+        RGBObservationConfig(
+            max_objects=1,
+            backbone_channels=(8, 16, 24, 32),
+            feature_dim=16,
+            appearance_dim=4,
+            roi_size=8,
+            roi_hidden_dim=16,
+            temporal_velocity_enabled=True,
+            temporal_velocity_history_size=3,
+            temporal_velocity_reset_on_collision=True,
+        )
+    )
+    association = AssociationResult(
+        belief_indices=torch.tensor([[0]]),
+        measurement_indices=torch.tensor([[0]]),
+        pair_mask=torch.tensor([[True]]),
+        pair_cost=torch.tensor([[0.0]]),
+        unmatched_beliefs=torch.tensor([[False]]),
+        unmatched_measurements=torch.tensor([[False]]),
+        ambiguous=torch.tensor([[False]]),
+    )
+    history = None
+    for timestamp in (0.0, 0.05, 0.1):
+        current = belief.replace(
+            objects=belief.objects.replace(position=torch.tensor([[[timestamp, 0.0, 0.0]]]))
+        )
+        auxiliary = {}
+        if timestamp == 0.1:
+            auxiliary["prior_interval_collision_mask"] = torch.tensor([[True]])
+        measured = MeasurementSet(
+            modality="rgb",
+            sensor_id="camera",
+            timestamp=torch.tensor([timestamp]),
+            values=torch.zeros(1, 1, 7),
+            log_variance=torch.zeros(1, 1, 7),
+            existence_logits=torch.tensor([[8.0]]),
+            measurement_mask=torch.tensor([[True]]),
+            appearance=None,
+            class_logits=None,
+            frame_id="camera:camera",
+            supported_state_fields=("position",),
+            auxiliary=auxiliary,
+        )
+        _, history = module.update_temporal_history(
+            posterior=current,
+            measured=measured,
+            association=association,
+            history=history,
+        )
+
+    assert isinstance(history, RGBTemporalPositionHistory)
+    assert history.has_reset.item()
+    assert history.valid_mask.sum().item() == 1
+    assert history.post_reset_sample_count.item() == 1
 
 
 def test_rgb_module_emits_depth_only_multiframe_position_evidence() -> None:

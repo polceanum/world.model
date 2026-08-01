@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -181,6 +182,28 @@ def test_closed_loop_learning_rate_scale_is_bounded(scale: float) -> None:
         )
 
 
+def test_closed_loop_device_preference_is_explicit() -> None:
+    with pytest.raises(ValueError, match="closed-loop device preference"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=["device.closed_loop_preference=tpu"],
+        )
+
+
+def test_global_detector_cpu_on_mps_requires_boolean() -> None:
+    config = load_config(CONFIG_DIR / "toy_smoke.yaml")
+    invalid = replace(
+        config,
+        device=replace(
+            config.device,
+            global_detector_cpu_on_mps="false",  # type: ignore[arg-type]
+        ),
+    )
+
+    with pytest.raises(ValueError, match="global_detector_cpu_on_mps must be boolean"):
+        invalid.validate()
+
+
 def test_closed_loop_global_trainable_steps_is_nonnegative() -> None:
     with pytest.raises(ValueError, match="closed_loop_global_trainable_steps"):
         load_config(
@@ -194,6 +217,14 @@ def test_closed_loop_trainable_scope_is_explicit() -> None:
         load_config(
             CONFIG_DIR / "tiny_overfit.yaml",
             overrides=["training.closed_loop_trainable_scope=perception"],
+        )
+
+
+def test_unimplemented_birth_confirmation_count_is_rejected() -> None:
+    with pytest.raises(ValueError, match="birth_confirmations currently supports only 1"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=["model.lifecycle.birth_confirmations=2"],
         )
 
 
@@ -261,6 +292,17 @@ def test_rollout_anchors_per_window_accepts_bounded_training_value() -> None:
     )
 
     assert config.training.rollout_anchors_per_window == 2
+
+
+def test_validation_rollout_anchors_must_be_positive_or_null() -> None:
+    with pytest.raises(
+        ValueError,
+        match="validation_rollout_anchors_per_episode",
+    ):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=["training.validation_rollout_anchors_per_episode=0"],
+        )
 
 
 @pytest.mark.parametrize(

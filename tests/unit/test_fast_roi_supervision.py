@@ -320,6 +320,35 @@ def test_mid_episode_window_burns_in_the_causal_prefix() -> None:
     torch.testing.assert_close(model.belief.timestamp, batch["timestamps"][:, -1])
 
 
+def test_closed_loop_temporal_observer_supports_multiple_scenes_per_batch() -> None:
+    config = _closed_loop_config()
+    config = replace(
+        config,
+        training=replace(config.training, batch_size=2),
+    )
+    batch = collate_episodes(
+        [
+            generate_episode(config, seed=7),
+            generate_episode(config, seed=8),
+        ]
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+
+    result = run_closed_loop_batch(
+        model,
+        batch,
+        config,
+        window_steps=4,
+        apply_perturbations=False,
+        include_measurement_supervision=True,
+    )
+
+    assert torch.isfinite(result.total_loss)
+    assert model.belief is not None
+    assert model.belief.batch_size == 2
+    torch.testing.assert_close(model.belief.timestamp, batch["timestamps"][:, -1])
+
+
 def test_bounded_rollout_anchors_reuse_posterior_and_emit_physical_metrics(
     monkeypatch: Any,
 ) -> None:
@@ -373,6 +402,12 @@ def test_bounded_rollout_anchors_reuse_posterior_and_emit_physical_metrics(
         "validation_position_coverage90",
         "validation_position_rmse@0.050s",
         "validation_forecast_target_coverage@0.050s",
+        "validation_position_rmse_x_m",
+        "validation_position_rmse_y_m",
+        "validation_position_rmse_z_m",
+        "validation_position_rmse_x@0.050s",
+        "validation_position_rmse_y@0.050s",
+        "validation_position_rmse_z@0.050s",
     }
 
 

@@ -42,6 +42,8 @@ class BeliefUpdaterConfig:
     velocity_from_position_variance_scale: float = 2.0
     maximum_velocity_from_position_delta: float = 6.0
     minimum_velocity_dt: float = 1.0e-4
+    missed_fast_variance_increment: float = 0.05
+    observed_confidence_threshold: float = 0.5
 
 
 @dataclass
@@ -71,6 +73,8 @@ class BeliefUpdater(nn.Module):
     ) -> None:
         super().__init__()
         self.config = config or BeliefUpdaterConfig()
+        if not 0.0 <= self.config.observed_confidence_threshold <= 1.0:
+            raise ValueError("observed_confidence_threshold must lie in [0,1]")
         self.learned_corrector = (
             LearnedFastCorrector(
                 fast_state_dim=fast_state_dim,
@@ -82,6 +86,7 @@ class BeliefUpdater(nn.Module):
         )
         self.uncertainty = FilterUncertainty(
             FilterUncertaintyConfig(
+                missed_fast_variance_increment=(self.config.missed_fast_variance_increment),
                 minimum_log_variance=self.config.minimum_log_variance,
                 maximum_log_variance=self.config.maximum_log_variance,
             )
@@ -180,16 +185,38 @@ class BeliefUpdater(nn.Module):
         position_confidence = confidence
         reported_position_confidence = measured.auxiliary.get("position_confidence")
         if reported_position_confidence is not None:
-            if reported_position_confidence.shape != measured.measurement_mask.shape:
-                raise ValueError("auxiliary.position_confidence must have shape [B,M]")
+            scalar_shape = measured.measurement_mask.shape
+            axis_shapes = {
+                (*scalar_shape, 1),
+                (*scalar_shape, 3),
+            }
+            if (
+                reported_position_confidence.shape != scalar_shape
+                and reported_position_confidence.shape not in axis_shapes
+            ):
+                raise ValueError(
+                    "auxiliary.position_confidence must have shape [B,M], [B,M,1], or [B,M,3]"
+                )
+            if not torch.isfinite(reported_position_confidence).all():
+                raise ValueError("auxiliary.position_confidence must be finite")
             measurement_index = association.measurement_indices[batch_index, pair_index]
-            position_confidence = torch.maximum(
-                position_confidence,
-                reported_position_confidence[
-                    batch_index,
-                    measurement_index,
-                ].clamp(0.0, 1.0),
-            )
+            position_quality = reported_position_confidence[
+                batch_index,
+                measurement_index,
+            ].clamp(0.0, 1.0)
+            # Localization quality is a conservative cap: it may reduce the
+            # existence/association confidence but can never promote it. Using
+            # a minimum also avoids squaring confidence for observers whose
+            # default quality estimate aliases existence confidence. The
+            # optional trailing dimension permits an observer to downweight a
+            # noisy depth/world axis without suppressing precise lateral axes.
+            if position_quality.ndim == confidence.ndim + 1:
+                position_confidence = torch.minimum(
+                    confidence.unsqueeze(-1),
+                    position_quality,
+                )
+            else:
+                position_confidence = torch.minimum(confidence, position_quality)
         position = innovation.auxiliary.get("measured_world_position")
         if position is None:
             raise ValueError(
@@ -289,7 +316,10 @@ class BeliefUpdater(nn.Module):
                 * self.config.velocity_from_position_variance_scale
             )
             velocity_measurement_lv = velocity_measurement_variance.clamp_min(1.0e-10).log()
-            velocity_confidence = confidence * valid_elapsed.to(confidence.dtype)
+            elapsed_confidence = valid_elapsed.to(confidence.dtype)
+            if position_confidence.ndim == elapsed_confidence.ndim + 1:
+                elapsed_confidence = elapsed_confidence.unsqueeze(-1)
+            velocity_confidence = position_confidence * elapsed_confidence
             analytic_velocity = diagonal_kalman_update(
                 prior_velocity,
                 log_variance[batch_index, belief_index, velocity_slice],
@@ -384,7 +414,8 @@ class BeliefUpdater(nn.Module):
             visibility_logits[batch_index, belief_index] = measured_visibility[
                 batch_index, measurement_indices
             ]
-        observed_mask[batch_index, belief_index] = True
+        observed = confidence >= self.config.observed_confidence_threshold
+        observed_mask[batch_index[observed], belief_index[observed]] = True
 
         if measured.appearance is not None:
             appearance = objects.appearance.clone()

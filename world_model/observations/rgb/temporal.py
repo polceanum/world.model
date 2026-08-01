@@ -451,7 +451,12 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 raise ValueError("query_timestamp must have shape [B]")
             if known_acceleration.shape != (*self.object_ids.shape[:1], 3):
                 raise ValueError("known_acceleration must have shape [B,3]")
-            time_from_query = self.timestamps - query_timestamp.unsqueeze(-1)
+            # ``timestamps`` is [B, N, H].  Keep the batch coordinate in the
+            # leading dimension and broadcast the per-scene query over object
+            # slots and history samples.  ``unsqueeze(-1)`` alone produces
+            # [B, 1], which accidentally treats B as the object dimension and
+            # only works when B == 1 (or, misleadingly, B == N).
+            time_from_query = self.timestamps - query_timestamp[:, None, None]
             positions = positions - 0.5 * known_acceleration[:, None, None, :] * (
                 time_from_query[..., None].square()
             )

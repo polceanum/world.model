@@ -1,16 +1,130 @@
 # Project status
 
-**Date:** 2026-07-31
-**Specification:** `PROJECT_SPEC.md` 1.4
+**Date:** 2026-08-01
+**Specification:** `PROJECT_SPEC.md` 1.6
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
 stable forecast-history visualisation, axis-resolved diagnostics, an
 invariant-tested familiar reference-pair regime, and one balanced eight-regime
 shared-model profile, plus a quality-aware persistent-ID multi-frame
-point/scale depth observer; a sustained shared-model MPS campaign is active,
-but collision, occlusion, identification, convergence, and full acceptance
-remain open
+point/scale depth observer; the first sustained campaign is preserved as a
+superseded legacy-objective control after a convergence-integrity audit; the
+corrected v2 runtime now passes a real hybrid MPS/CPU two-phase smoke, but no
+corrected long campaign or broad promotion result exists yet; collision,
+occlusion, identification, convergence, and full acceptance remain open
+
+## 2026-08-01 — complete convergence-integrity audit and corrected v2 path
+
+The legacy campaign
+`runs/20260730-192625-scaled-sustained-e2e-v1/` was manually superseded at
+logged step `9400`; its trainer, supervisor, and launchd KeepAlive job were
+stopped without deleting any artifacts. It is not a converged result. Fixed
+16-episode validation improved loss `9.9637 → 8.5636`, velocity
+`1.3672 → 1.2348 m/s`, and collision F1 `0.1664 → 0.2092`, while one-second
+RMSE regressed `0.9686 → 0.9980 m` and forecast-calibration coverage regressed.
+Only two causal validations existed.
+
+The audit proved that the step-8192 perception candidate was discarded from
+the mutable training path after correctly failing only the velocity deployment
+guard. It changed `79/84` global RGB tensors and scored `0.725038` versus the
+step-zero `0.860012`, including one-second RMSE
+`0.968568 → 0.647654 m`; later causal checkpoints restored all 84 global RGB
+tensors exactly to step zero. The trainer now keeps the old safe incumbent for
+deployment but continues causal optimisation from the finite stronger
+candidate.
+
+Additional convergence-affecting fixes now implemented are:
+
+- absolute-step deterministic sampling and exact resume compatibility, with
+  MPS RNG and immutable process-start Git provenance;
+- a strict resume semantic diff before any run metadata is overwritten;
+- fixed-denominator axis/horizon loss, pair-collision-prioritized windows,
+  mature/cold forecast separation, scene-wide deterministic censoring after
+  unseen actuation, and explicit forecast NLL;
+- distinct position/velocity correction objectives and frozen disconnected
+  heads;
+- exact validation counts, per-axis/scenario/seed attribution, structured
+  rejection reasons, and bounded deterministic trend-validation anchors;
+- unit-correct pinhole projection of world covariance into association
+  measurement coordinates;
+- filter-only miss uncertainty growth and conservative position-quality gates;
+- independent render and physical RNG streams, stable low-speed ground
+  contact, true glancing offsets, compositional OOD ranges, and identical
+  simulator/model pair-restitution combination;
+- appearance supervision for RGB association embeddings and removal of frozen
+  global losses from the optimized causal objective;
+- lifecycle-qualified assignment before Hungarian matching, including
+  confident false-positive accounting on target-empty frames;
+- recoverable terminal validation, strict last-checkpoint-only in-place resume,
+  and CPU checkpoint deserialization so hybrid optimizer ownership and
+  accelerator memory remain correct;
+- detached covariance-linearization coordinates, preventing calibration or
+  filter-covariance objectives from leaking into RGB position/depth heads;
+- a narrowly scoped PyTorch 2.10 workaround: the RGB backbone and ROI path run
+  on MPS, while the small global proposal transformer runs on CPU through
+  differentiable copies because the exact finite 64x64 MPS feature batch
+  reproducibly generated NaN matrix-weight gradients.
+
+The replacement profile is
+`configs/sustained_accuracy_mps_v2.yaml`: 40 frames, batch two, 16,384 unique
+training episodes, 8,192 RGB plus 8,192 causal updates, 32 balanced trend
+episodes, and a deterministic bounded rollout-anchor manifest. The profile
+retains the eight shared scenarios and one shared checkpoint.
+
+Environment and verification:
+
+```text
+conda environment: orpheus
+Python: 3.10.20
+PyTorch: 2.10.0
+MPS built/available outside sandbox: true/true
+CPU suite: 412 passed, 6 skipped in 95.16 s
+host accelerator regression set: 17 passed in 7.66 s
+focused config/checkpoint/protocol/covariance suite: 97 passed in 10.70 s
+exact formerly failing MPS batch: finite loss and 0 non-finite gradients;
+  pre-clip norm 6.897703; AdamW step finite
+Ruff check: passed
+Ruff format check: 176 files already formatted
+compileall: passed for entry points, scripts, world_model, and tests
+git diff --check: passed
+```
+
+The final bounded-anchor smoke is
+`runs/20260801-231521-audit-v2-final-verified-smoke/`. It completed one real
+RGB-pretrain update and two persistent closed-loop updates in `109.1528 s`.
+The RGB update had finite loss `1.201544` and pre-clip gradient norm `8.488681`;
+the two causal updates had finite losses `8.742573` and `2.106336` with
+pre-clip norms `3.482935` and `2.472007`. MPS executed the backbone/ROI path,
+CPU executed the proposal transformer, and the causal phase ran on CPU.
+
+The imported broad incumbent on the deliberately tiny two-episode validation
+manifest remains selected: score `0.768465`, position `1.031542 m`, velocity
+`1.644270 m/s`, and one-second RMSE `0.767462 m`. The mutable handoff candidate
+scored `0.383917` with one-second RMSE `0.456663 m`, but was correctly rejected
+for calibration, x-axis, y-at-0.75-second, and forecast-coverage guardrails.
+This is strong wiring/selection evidence, not an accuracy comparison: two
+validation episodes and three optimizer updates cannot establish convergence.
+
+`last.pt` is step three, records `final_validation_completed=1`, and every
+model and AdamW tensor is finite. An exact completed-run resume performed zero
+updates and preserved both durable files byte-for-byte:
+
+```text
+last.pt SHA-256:
+  5e7196a5a0dbe6ff9d40b7ff6b031c1cd4636f1ec815473f0a568abc85d013d6
+train_summary.json SHA-256:
+  157be114a86327102bfb5aaceda0af2a13016994796c8ffb5751d5b6aa814f71
+```
+
+The no-op CLI result truthfully reports
+`no_op_exact_resume=true` and `optimizer_updates_this_invocation=0`; those
+ephemeral inspection fields are not written over the original campaign
+summary.
+
+Earlier bounded smokes remain failure/audit artifacts, not current evidence.
+In particular, `runs/20260801-223113-audit-v2-final-smoke/` stopped before its
+first update after exposing the data-dependent MPS gradient fault.
 
 ## 2026-07-31 — sustained-loss stability and horizon-objective audit
 

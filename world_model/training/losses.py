@@ -24,9 +24,18 @@ def gaussian_nll(
     target: Tensor,
     log_variance: Tensor,
     mask: Tensor,
+    *,
+    detach_mean_error: bool = False,
 ) -> Tensor:
     log_variance = log_variance.clamp(-12.0, 8.0)
-    term = 0.5 * ((mean - target).square() * (-log_variance).exp() + log_variance)
+    squared_error = (mean - target).square()
+    if detach_mean_error:
+        # Calibration losses should not duplicate an already-supervised mean
+        # gradient with an inverse-variance multiplier. The observed error is
+        # retained for the variance gradient; only its path into ``mean`` is
+        # stopped.
+        squared_error = squared_error.detach()
+    term = 0.5 * (squared_error * (-log_variance).exp() + log_variance)
     return masked_mean(term, mask)
 
 

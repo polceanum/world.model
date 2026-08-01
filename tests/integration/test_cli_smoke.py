@@ -138,6 +138,48 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         )["step"]
         == 1
     )
+    initialized_checkpoint = initialized_run / "checkpoints" / "last.pt"
+    initialized_before_resume = torch.load(
+        initialized_checkpoint,
+        map_location="cpu",
+        weights_only=False,
+    )
+    assert initialized_before_resume["metrics"]["measurement_handoff_completed"] == 0.0
+
+    _run(
+        "train.py",
+        "--config",
+        str(config_path),
+        "--resume",
+        str(initialized_checkpoint),
+        "--set",
+        "training.steps=2",
+    )
+    initialized_records = [
+        json.loads(line)
+        for line in (initialized_run / "metrics.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert any(
+        record.get("split") == "validation_measurement_handoff" for record in initialized_records
+    )
+    initialized_after_resume = torch.load(
+        initialized_checkpoint,
+        map_location="cpu",
+        weights_only=False,
+    )
+    assert initialized_after_resume["metrics"]["measurement_handoff_completed"] == 1.0
+    resumed_initialized_summary = json.loads(
+        (initialized_run / "train_summary.json").read_text(encoding="utf-8")
+    )
+    assert resumed_initialized_summary["initialized_from"] == str(checkpoint.resolve())
+    initialized_metadata = json.loads(
+        (initialized_run / "run_metadata.json").read_text(encoding="utf-8")
+    )
+    assert initialized_metadata["initialize_from_path"] == str(checkpoint.resolve())
+    assert len(initialized_metadata["resume_history"]) == 1
+    assert initialized_metadata["resume_history"][0]["resume_path"] == str(
+        initialized_checkpoint.resolve()
+    )
 
     _run(
         "train.py",
@@ -163,7 +205,7 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         == best_rollout_payload["metrics"]["best_rollout_position_loss"]
         == best_rollout_payload["metrics"]["best_rollout_selection_score"]
     )
-    assert best_rollout_payload["metrics"]["rollout_selection_metric_version"] == 3.0
+    assert best_rollout_payload["metrics"]["rollout_selection_metric_version"] == 4.0
     assert "best_rollout_velocity_rmse_mps" in best_rollout_payload["metrics"]
     assert "best_rollout_target_coverage" in best_rollout_payload["metrics"]
     assert "best_rollout_prediction_precision" in best_rollout_payload["metrics"]
@@ -207,6 +249,19 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         for record in training_records
         if record.get("split") == "train" and record.get("phase") == "closed_loop_rgb"
     ]
+    closed_loop_validation_records = [
+        record
+        for record in training_records
+        if record.get("split", "").startswith("validation")
+        and record.get("phase") == "closed_loop_rgb"
+    ]
+    assert closed_loop_validation_records
+    assert all(
+        record["selection_accepted"] in {0.0, 1.0}
+        and record["selection_rejection_reason_count"] >= 0.0
+        and isinstance(json.loads(record["selection_rejection_reasons_json"]), list)
+        for record in closed_loop_validation_records
+    )
     assert closed_loop_records
     assert closed_loop_records[-1]["fast_path_supervised"] == 1.0
     assert (

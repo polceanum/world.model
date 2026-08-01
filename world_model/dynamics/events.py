@@ -76,13 +76,14 @@ class EventModel(nn.Module):
         )
         pair_contact_node = contacts.pair_contact.any(dim=-1)
         pair_collision_node = contacts.pair_collision.any(dim=-1)
+        boundary_collision_node = contacts.boundary_collision.any(dim=-1)
         pair_score = torch.where(
             pair_contact_node,
             torch.full_like(updated.visibility_logit, 4.0),
             torch.full_like(updated.visibility_logit, -4.0),
         )
         collision_score = torch.where(
-            pair_collision_node | contacts.ground_collision,
+            pair_collision_node | boundary_collision_node,
             torch.full_like(updated.visibility_logit, 6.0),
             torch.full_like(updated.visibility_logit, -4.0),
         )
@@ -100,8 +101,17 @@ class EventModel(nn.Module):
         logits[..., MotionMode.COLLISION] = collision_score
 
         speed = torch.linalg.vector_norm(updated.velocity, dim=-1)
+        # The simulator requires sustained floor support before entering
+        # sleep. The belief has no simulator-only substep counter, so dynamics
+        # may preserve a supported SLEEPING posterior but must not invent one
+        # from a single slow contact. Ground-contact constraints still remove
+        # inward normal speed while low tangential motion remains observable.
         sleeping = (
-            contacts.ground_contact & (speed < self.sleep_speed_threshold) & ~pair_collision_node
+            (objects.mode == int(MotionMode.SLEEPING))
+            & contacts.ground_contact
+            & (speed < self.sleep_speed_threshold)
+            & ~pair_collision_node
+            & ~boundary_collision_node
         )
         logits[..., MotionMode.SLEEPING] = torch.where(
             sleeping,

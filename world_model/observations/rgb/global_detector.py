@@ -23,6 +23,22 @@ class GlobalDetectorOutput:
     query_features: Tensor
     attention: Tensor
 
+    def to(self, device: torch.device | str) -> GlobalDetectorOutput:
+        """Move proposal tensors while preserving the autograd copy path."""
+
+        return GlobalDetectorOutput(
+            centre=self.centre.to(device),
+            log_radius=self.log_radius.to(device),
+            inverse_depth_residual=self.inverse_depth_residual.to(device),
+            colour=self.colour.to(device),
+            existence_logits=self.existence_logits.to(device),
+            visibility_logits=self.visibility_logits.to(device),
+            log_variance=self.log_variance.to(device),
+            appearance=self.appearance.to(device),
+            query_features=self.query_features.to(device),
+            attention=self.attention.to(device),
+        )
+
 
 def _anchor_grid(query_count: int) -> Tensor:
     side = int(math.ceil(math.sqrt(query_count)))

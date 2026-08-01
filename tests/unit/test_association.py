@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from world_model.belief import BeliefFactory
-from world_model.fusion import Associator
+from world_model.fusion import Associator, build_innovation
 from world_model.observations import MeasurementSet, PredictedMeasurements
 
 
@@ -110,3 +110,64 @@ def test_association_transfers_cost_to_cpu_without_mps_float64() -> None:
     result = Associator().match(belief, measurements, predicted)
     assert result.pair_mask.device.type == "mps"
     assert result.pair_mask.sum().item() == 2
+
+
+def test_association_maps_reordered_prediction_rows_to_persistent_belief_slots() -> None:
+    belief = BeliefFactory(max_objects=3, appearance_dim=4).create()
+    objects = belief.objects.replace(
+        active=torch.tensor([[True, False, True]]),
+        object_id=torch.tensor([[10, -1, 12]]),
+    )
+    belief = belief.replace(objects=objects)
+    # Projection rows are deliberately ordered [slot 2, slot 0].
+    predicted_values = torch.tensor([[[2.0, 0.0, -1.0, 0.4], [0.0, 0.0, -1.0, 0.5]]])
+    predicted = PredictedMeasurements(
+        modality="rgb",
+        sensor_id="camera",
+        timestamp=belief.timestamp,
+        values=predicted_values,
+        log_variance=torch.full_like(predicted_values, -4.0),
+        object_ids=torch.tensor([[12, 10]]),
+        belief_indices=torch.tensor([[2, 0]]),
+        valid_mask=torch.tensor([[True, True]]),
+        visibility=torch.ones(1, 2),
+    )
+    measured = _measurements(torch.tensor([[[0.0, 0.0, -1.0, 0.5], [2.0, 0.0, -1.0, 0.4]]]))
+
+    result = Associator().match(belief, measured, predicted)
+    pairs = {
+        (int(belief_index), int(measurement_index))
+        for belief_index, measurement_index, valid in zip(
+            result.belief_indices[0],
+            result.measurement_indices[0],
+            result.pair_mask[0],
+            strict=True,
+        )
+        if bool(valid)
+    }
+
+    assert pairs == {(0, 0), (2, 1)}
+    assert result.unmatched_beliefs.shape == belief.objects.active.shape
+    assert not result.unmatched_beliefs.any()
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=result,
+        modality_index=0,
+    )
+    torch.testing.assert_close(
+        innovation.residual[result.pair_mask],
+        torch.zeros_like(innovation.residual[result.pair_mask]),
+    )
+
+
+def test_association_rejects_near_zero_existence_even_with_exact_geometry() -> None:
+    belief, predicted = _belief_and_prediction()
+    measured = _measurements(predicted.values[:, :1].clone())
+    measured.existence_logits.fill_(-20.0)
+
+    result = Associator().match(belief, measured, predicted)
+
+    assert not result.pair_mask.any()
+    assert result.unmatched_measurements[0, 0]
+    assert result.unmatched_beliefs[0, :2].all()

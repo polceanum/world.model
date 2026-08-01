@@ -30,6 +30,21 @@ def _expand_variance(log_variance: Tensor, values: Tensor) -> Tensor:
     return torch.broadcast_to(log_variance, values.shape)
 
 
+def _prediction_rows_for_associations(
+    predicted: PredictedMeasurements,
+    association: AssociationResult,
+) -> Tensor:
+    """Map persistent belief-slot assignments back to prediction-row order."""
+
+    matches = predicted.belief_indices[:, :, None] == association.belief_indices[:, None, :]
+    matches = matches & predicted.valid_mask[:, :, None] & association.pair_mask[:, None, :]
+    match_count = matches.sum(dim=1)
+    invalid = association.pair_mask & (match_count != 1)
+    if bool(invalid.any()):
+        raise ValueError("each associated belief slot must map to exactly one valid predicted row")
+    return matches.to(torch.int64).argmax(dim=1)
+
+
 def build_innovation(
     *,
     measured: MeasurementSet,
@@ -40,6 +55,7 @@ def build_innovation(
 ) -> InnovationSet:
     dims = min(measured.values.shape[-1], predicted.values.shape[-1])
     pair_mask = association.pair_mask
+    prediction_indices = _prediction_rows_for_associations(predicted, association)
     measured_values = gather_pairs(
         measured.values[..., :dims],
         association.measurement_indices,
@@ -47,7 +63,7 @@ def build_innovation(
     )
     predicted_values = gather_pairs(
         predicted.values[..., :dims],
-        association.belief_indices,
+        prediction_indices,
         pair_mask,
     )
     measured_lv = gather_pairs(
@@ -57,7 +73,7 @@ def build_innovation(
     )
     predicted_lv = gather_pairs(
         _expand_variance(predicted.log_variance, predicted.values)[..., :dims],
-        association.belief_indices,
+        prediction_indices,
         pair_mask,
     )
     variance = (measured_lv.exp() + predicted_lv.exp()).clamp_min(1.0e-8)
@@ -96,9 +112,7 @@ def build_innovation(
             )
     for key, value in predicted.auxiliary.items():
         if value.ndim >= 2 and value.shape[:2] == predicted.values.shape[:2]:
-            auxiliary[f"predicted_{key}"] = gather_pairs(
-                value, association.belief_indices, pair_mask
-            )
+            auxiliary[f"predicted_{key}"] = gather_pairs(value, prediction_indices, pair_mask)
     modality_indices = torch.full(
         pair_mask.shape,
         modality_index,

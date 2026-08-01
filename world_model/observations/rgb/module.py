@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -57,6 +57,7 @@ class RGBObservationConfig:
     backbone_channels: tuple[int, int, int, int] = (32, 64, 96, 128)
     feature_dim: int = 64
     appearance_dim: int = 32
+    global_detector_cpu_on_mps: bool = True
     roi_size: int = 20
     roi_hidden_dim: int = 96
     fast_depth_residual_enabled: bool = False
@@ -532,6 +533,27 @@ class RGBObservationModule(ObservationModule):
             )
         )
 
+    def _apply(
+        self,
+        fn: Callable[[Tensor], Tensor],
+        recurse: bool = True,
+    ) -> RGBObservationModule:
+        """Apply device/dtype moves while retaining the explicit MPS workaround.
+
+        PyTorch 2.10's MPS linear weight-gradient kernel produces
+        data-dependent NaNs in this detector for some perfectly finite
+        full-resolution backbone features. Keeping only the small proposal
+        transformer on CPU preserves correct forward/backward semantics while
+        the convolution-heavy backbone and ROI path stay on MPS.
+        """
+
+        super()._apply(fn, recurse=recurse)
+        if self.config.global_detector_cpu_on_mps:
+            backbone_device = next(self.backbone.parameters()).device
+            if backbone_device.type == "mps":
+                self.global_detector.to(device="cpu")
+        return self
+
     def validate_packet(self, packet: ObservationPacket) -> None:
         if packet.modality != self.modality_name:
             raise ValueError(f"RGB module received modality {packet.modality!r}, expected 'rgb'")
@@ -571,7 +593,11 @@ class RGBObservationModule(ObservationModule):
         packet: ObservationPacket,
     ) -> MeasurementSet:
         feature_pyramid = self.backbone(image)
-        output = self.global_detector(feature_pyramid["full"])
+        detector_device = next(self.global_detector.parameters()).device
+        detector_features = feature_pyramid["full"].to(device=detector_device)
+        output = self.global_detector(detector_features)
+        if detector_device != image.device:
+            output = output.to(image.device)
         batch = image.shape[0]
         image_size = (image.shape[-2], image.shape[-1])
         world_from_camera, intrinsics = calibration_tensors(
@@ -611,7 +637,7 @@ class RGBObservationModule(ObservationModule):
             ).clamp_min(1.0e-4)
             structured_log_radius = normalized_radius.log().unsqueeze(-1)
             log_radius = torch.where(
-                structured.valid_mask.unsqueeze(-1),
+                structured.depth_valid_mask.unsqueeze(-1),
                 output.log_radius + (structured_log_radius - output.log_radius).detach(),
                 output.log_radius,
             )
@@ -634,7 +660,7 @@ class RGBObservationModule(ObservationModule):
                 torch.zeros_like(output.inverse_depth_residual),
             )
             inverse_depth = torch.where(
-                structured_valid,
+                structured_depth_valid,
                 analytic_inverse_depth,
                 inverse_depth,
             )
@@ -677,19 +703,19 @@ class RGBObservationModule(ObservationModule):
                     math.log(relative_variance),
                 )
                 inverse_depth_log_variance = (
-                    (inverse_depth.square() * relative_variance)
+                    (inverse_depth.detach().square() * relative_variance)
                     .clamp_min(1.0e-10)
                     .log()
                     .unsqueeze(-1)
                 )
                 measurement_log_variance = measurement_log_variance.clone()
                 measurement_log_variance[..., 2:3] = torch.where(
-                    structured_valid.unsqueeze(-1),
+                    structured_depth_valid.unsqueeze(-1),
                     radius_log_variance,
                     measurement_log_variance[..., 2:3],
                 )
                 measurement_log_variance[..., 3:4] = torch.where(
-                    structured_valid.unsqueeze(-1),
+                    structured_depth_valid.unsqueeze(-1),
                     inverse_depth_log_variance,
                     measurement_log_variance[..., 3:4],
                 )
@@ -700,7 +726,7 @@ class RGBObservationModule(ObservationModule):
             image_size,
         )
         world_position_log_variance = backproject_rgb_log_variance(
-            values,
+            values.detach(),
             measurement_log_variance,
             world_from_camera,
             intrinsics,
@@ -926,7 +952,9 @@ class RGBObservationModule(ObservationModule):
                     math.log(relative_variance),
                 )
                 inverse_depth_log_variance = (
-                    (values[..., 3:4].square() * relative_variance).clamp_min(1.0e-10).log()
+                    (values[..., 3:4].detach().square() * relative_variance)
+                    .clamp_min(1.0e-10)
+                    .log()
                 )
                 depth_valid = structured_depth_valid.unsqueeze(-1)
                 measurement_log_variance = measurement_log_variance.clone()
@@ -947,7 +975,7 @@ class RGBObservationModule(ObservationModule):
             image_size,
         )
         world_position_log_variance = backproject_rgb_log_variance(
-            values,
+            values.detach(),
             measurement_log_variance,
             world_from_camera,
             intrinsics,
@@ -1040,10 +1068,16 @@ class RGBObservationModule(ObservationModule):
         if batch_index.numel():
             belief_index = association.belief_indices[batch_index, pair_index]
             measurement_index = association.measurement_indices[batch_index, pair_index]
-            nonambiguous = ~association.ambiguous[batch_index, pair_index]
-            accepted_batch = batch_index[nonambiguous]
-            accepted_belief = belief_index[nonambiguous]
-            accepted_measurement = measurement_index[nonambiguous]
+            measurement_confidence = measured.existence_logits[
+                batch_index,
+                measurement_index,
+            ].sigmoid()
+            accepted = ~association.ambiguous[batch_index, pair_index] & (
+                measurement_confidence >= self.config.proposal_threshold
+            )
+            accepted_batch = batch_index[accepted]
+            accepted_belief = belief_index[accepted]
+            accepted_measurement = measurement_index[accepted]
             observed_mask[accepted_batch, accepted_belief] = True
             confidence[accepted_batch, accepted_belief] = measured.existence_logits[
                 accepted_batch,
@@ -1141,6 +1175,14 @@ class RGBObservationModule(ObservationModule):
             reset_mask = posterior.objects.motion_mode_logits.argmax(dim=-1) == int(
                 MotionMode.COLLISION
             )
+            prior_interval_collision = measured.auxiliary.get("prior_interval_collision_mask")
+            if prior_interval_collision is not None:
+                if (
+                    prior_interval_collision.shape != active_mask.shape
+                    or prior_interval_collision.dtype is not torch.bool
+                ):
+                    raise ValueError("RGB prior_interval_collision_mask must be boolean [B,N]")
+                reset_mask = reset_mask | prior_interval_collision
         history = history.append(
             object_ids=object_ids,
             active_mask=active_mask,

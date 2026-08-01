@@ -533,7 +533,10 @@ def evaluate_checkpoint(
     payload = load_checkpoint(
         checkpoint,
         model=model,
-        map_location=device,
+        # Keep unused optimizer moments off the accelerator; model loading
+        # copies only the needed weights to their owning (possibly hybrid)
+        # devices.
+        map_location="cpu",
         expected_config=config,
     )
     model.eval()

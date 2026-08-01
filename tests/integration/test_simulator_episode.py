@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import torch
 
 from world_model.datasets import (
@@ -156,6 +158,41 @@ def test_seeded_scenario_mixture_exercises_distinct_physical_regimes() -> None:
     assert torch.all(episode["objects"]["drag"][0, active, 0] >= 0.18)
 
 
+def test_glancing_scenario_has_nonzero_impact_parameter_and_collides() -> None:
+    config = SphereWorldConfig(
+        image_size=(16, 16),
+        frame_rate=30.0,
+        physics_rate=120.0,
+        sequence_frames=48,
+        min_objects=2,
+        max_objects=2,
+        padding_max_objects=2,
+        camera_motion="fixed",
+        render_noise_std=0.0,
+        ensure_collision=True,
+        scenario_mixture=("glancing_impacts",),
+    )
+    episode = generate_episode(config, seed=0)
+    initial_position = episode["objects"]["position"][0, :2]
+    initial_velocity = episode["objects"]["velocity"][0, :2]
+    relative_position = initial_position[1] - initial_position[0]
+    relative_velocity = initial_velocity[1] - initial_velocity[0]
+    impact_parameter = torch.linalg.vector_norm(
+        torch.linalg.cross(relative_position, relative_velocity, dim=0)
+    ) / torch.linalg.vector_norm(relative_velocity)
+    radial_velocity = (
+        torch.dot(relative_velocity, relative_position)
+        / torch.dot(relative_position, relative_position)
+        * relative_position
+    )
+    tangential_speed = torch.linalg.vector_norm(relative_velocity - radial_velocity)
+
+    assert episode["metadata"]["scenario"] == "glancing_impacts"
+    assert impact_parameter > 0.15
+    assert tangential_speed > 0.1
+    assert episode["events"]["pair_collision"].any()
+
+
 def test_dataset_splits_and_collation_preserve_batch_time_object_order() -> None:
     config = _test_config()
     train_manifest = make_seed_manifest("train", 2)
@@ -195,3 +232,58 @@ def test_ood_split_uses_explicit_held_out_parameter_combination() -> None:
     assert torch.all(restitution <= 0.4)
     assert torch.all(drag >= 0.19)
     assert episode["metadata"]["distribution"] == "ood"
+
+
+def test_ood_ranges_take_precedence_over_named_scenario_ranges() -> None:
+    config = replace(
+        _test_config(),
+        scenario_mixture=("elastic_pairs",),
+    )
+    dataset = SyntheticSphereDataset(
+        config,
+        split="ood",
+        num_episodes=1,
+    )
+    episode = dataset[0]
+    active = episode["objects"]["active"][0]
+    restitution = episode["objects"]["restitution"][0, active, 0]
+    drag = episode["objects"]["drag"][0, active, 0]
+
+    assert episode["metadata"]["scenario"] == "elastic_pairs"
+    assert episode["metadata"]["distribution"] == "ood"
+    assert torch.all((restitution >= 0.18) & (restitution <= 0.4))
+    assert torch.all((drag >= 0.19) & (drag <= 0.32))
+
+
+def test_render_noise_does_not_change_physical_trajectory_or_events() -> None:
+    clean_config = SphereWorldConfig(
+        image_size=(8, 8),
+        sequence_frames=20,
+        min_objects=2,
+        max_objects=2,
+        padding_max_objects=2,
+        scenario_mixture=("impulse_perturbation",),
+        render_noise_std=0.0,
+    )
+    noisy_config = replace(clean_config, render_noise_std=0.1)
+    clean = generate_episode(clean_config, seed=0)
+    noisy = generate_episode(noisy_config, seed=0)
+
+    torch.testing.assert_close(
+        clean["objects"]["position"],
+        noisy["objects"]["position"],
+        rtol=0,
+        atol=0,
+    )
+    torch.testing.assert_close(
+        clean["objects"]["velocity"],
+        noisy["objects"]["velocity"],
+        rtol=0,
+        atol=0,
+    )
+    assert torch.equal(
+        clean["events"]["external_impulse"],
+        noisy["events"]["external_impulse"],
+    )
+    assert torch.equal(clean["events"]["collision"], noisy["events"]["collision"])
+    assert not torch.equal(clean["rgb"], noisy["rgb"])

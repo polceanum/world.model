@@ -6,6 +6,8 @@ project:
 
 device:
   preference: auto
+  closed_loop_preference: same
+  global_detector_cpu_on_mps: true
   cuda_amp: true
   mps_float32: true
   compile: false
@@ -24,6 +26,7 @@ simulator:
   restitution_range: [0.45, 0.9]
   drag_range: [0.01, 0.16]
   friction_range: [0.05, 0.35]
+  ensured_pair_lateral_offset_range: [0.0, 0.0]
   gravity: [0.0, -9.81, 0.0]
   camera_motion: orbit
   known_camera_pose: true
@@ -74,6 +77,8 @@ model:
     penetration_slop: 0.001
     max_penetration_correction: 0.08
     contact_confidence_sigma: 0.25
+    pair_collision_speed_epsilon: 0.0001
+    boundary_collision_speed_epsilon: 0.1
     sleep_speed: 0.05
     allow_large_substep: false
   filter:
@@ -90,10 +95,12 @@ model:
     mahalanobis_gate: 16.0
     maximum_cost: 25.0
     ambiguity_margin: 0.02
+    minimum_measurement_confidence: 0.45
   lifecycle:
     birth_confidence: 0.55
     birth_confirmations: 1
     max_missed_steps: 12
+    max_occluded_steps: 60
     existence_decay: 0.35
     occlusion_existence_decay: 0.04
   identification:
@@ -135,6 +142,8 @@ training:
   long_horizon_window_probability: 0.50
   normalize_rollout_axes_over_configured_horizons: true
   joint_collision_long_horizon_sampling: true
+  minimum_rollout_age_steps: 0
+  validation_rollout_anchors_per_episode: null
   collision_positive_weight_max: 10.0
   horizon_weights: [1.0, 1.0, 1.2, 1.5, 1.5]
   measurement_loss_weights:
@@ -153,6 +162,7 @@ training:
     state_velocity: 0.25
     rollout_position: 4.0
     rollout_velocity: 0.1
+    rollout_nll: 0.02
     event: 0.2
     parameter: 0.1
     existence: 0.2

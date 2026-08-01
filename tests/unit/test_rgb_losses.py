@@ -56,3 +56,28 @@ def test_raw_centre_shape_must_match_measurement_centres() -> None:
         assert "raw_centre" in str(error)
     else:
         raise AssertionError("mismatched raw centre shape was accepted")
+
+
+def test_measurement_nll_calibrates_variance_without_duplicate_mean_gradient() -> None:
+    prediction = torch.tensor(
+        [[[1.0, -1.0, 0.5, 0.2, 0.8, 0.3, 0.1]]],
+        requires_grad=True,
+    )
+    log_variance = torch.zeros_like(prediction, requires_grad=True)
+    outputs = {
+        "values": prediction,
+        "log_variance": log_variance,
+        "existence_logits": torch.ones((1, 1), requires_grad=True),
+    }
+    targets = {"values": torch.zeros_like(prediction)}
+    masks = {
+        "matched": torch.ones((1, 1), dtype=torch.bool),
+        "existence": torch.ones((1, 1), dtype=torch.bool),
+    }
+
+    losses = rgb_measurement_losses(outputs, targets, masks)
+    losses["rgb_nll"].backward()
+
+    assert prediction.grad is None or torch.count_nonzero(prediction.grad) == 0
+    assert log_variance.grad is not None
+    assert torch.count_nonzero(log_variance.grad) > 0

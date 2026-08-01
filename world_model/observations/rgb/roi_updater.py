@@ -33,6 +33,77 @@ def make_roi_grid(
     return minimum + unit * (maximum - minimum)
 
 
+def _sample_rois_native_bilinear(
+    feature_map: Tensor,
+    grid: Tensor,
+) -> Tensor:
+    """Apply align-corners bilinear sampling without ``grid_sample``.
+
+    This gather-based implementation exists for MPS training, where the
+    validated PyTorch build does not provide ``grid_sampler_2d_backward``. It
+    preserves zero padding and gradients to both the feature map and sampling
+    coordinates while keeping every tensor on the accelerator.
+    """
+
+    batch, channels, height, width = feature_map.shape
+    if grid.ndim != 5 or grid.shape[0] != batch or grid.shape[-1] != 2:
+        raise ValueError("grid must have shape [B, N, S, S, 2]")
+    objects, output_height, output_width = grid.shape[1:4]
+    x = (grid[..., 0] + 1.0) * ((width - 1) / 2.0)
+    y = (grid[..., 1] + 1.0) * ((height - 1) / 2.0)
+    x0 = torch.floor(x)
+    y0 = torch.floor(y)
+    x1 = x0 + 1.0
+    y1 = y0 + 1.0
+    x_fraction = x - x0
+    y_fraction = y - y0
+    flattened_features = feature_map.reshape(batch, channels, height * width)
+
+    def gather(x_index: Tensor, y_index: Tensor) -> Tensor:
+        valid = (x_index >= 0) & (x_index < width) & (y_index >= 0) & (y_index < height)
+        linear_index = (
+            y_index.clamp(0, height - 1).to(torch.int64) * width
+            + x_index.clamp(0, width - 1).to(torch.int64)
+        ).reshape(batch, -1)
+        gathered = torch.gather(
+            flattened_features,
+            dim=2,
+            index=linear_index[:, None].expand(-1, channels, -1),
+        )
+        return gathered * valid.reshape(batch, 1, -1).to(feature_map.dtype)
+
+    top_left = gather(x0, y0)
+    top_right = gather(x1, y0)
+    bottom_left = gather(x0, y1)
+    bottom_right = gather(x1, y1)
+    top_left_weight = ((1.0 - x_fraction) * (1.0 - y_fraction)).reshape(batch, 1, -1)
+    top_right_weight = (x_fraction * (1.0 - y_fraction)).reshape(batch, 1, -1)
+    bottom_left_weight = ((1.0 - x_fraction) * y_fraction).reshape(batch, 1, -1)
+    bottom_right_weight = (x_fraction * y_fraction).reshape(batch, 1, -1)
+    sampled = (
+        top_left * top_left_weight
+        + top_right * top_right_weight
+        + bottom_left * bottom_left_weight
+        + bottom_right * bottom_right_weight
+    )
+    return (
+        sampled.reshape(batch, channels, objects, output_height, output_width)
+        .permute(0, 2, 1, 3, 4)
+        .contiguous()
+    )
+
+
+def _uses_native_mps_gradient_sampler(
+    *,
+    training: bool,
+    gradient_enabled: bool,
+    device_type: str,
+) -> bool:
+    """Return whether ROI sampling needs the MPS backward-compatible path."""
+
+    return training and gradient_enabled and device_type == "mps"
+
+
 def sample_rois(
     feature_map: Tensor,
     rois: Tensor,
@@ -44,11 +115,10 @@ def sample_rois(
 
     PyTorch's MPS backend supports ``grid_sample`` forward but, as of the
     project's validated PyTorch 2.10 build, not
-    ``aten::grid_sampler_2d_backward``.  During MPS training only, the small ROI
-    sampling operation therefore runs on CPU and copies its result back.  The
-    device-copy operations remain in the autograd graph, so gradients return to
-    both the MPS feature map and projected ROI coordinates.  CPU, CUDA, and MPS
-    inference use the native path unchanged.
+    ``aten::grid_sampler_2d_backward``. During gradient-enabled MPS training
+    only, a gather-based bilinear equivalent keeps the operation and its
+    gradients on MPS. CPU, CUDA, and all inference/no-grad calls use
+    ``grid_sample`` unchanged.
     """
 
     if feature_map.ndim != 4:
@@ -58,24 +128,25 @@ def sample_rois(
         raise ValueError("ROI batch must match feature map")
     objects = rois.shape[1]
     grid = make_roi_grid(rois, output_size)
+    if _uses_native_mps_gradient_sampler(
+        training=training,
+        gradient_enabled=torch.is_grad_enabled(),
+        device_type=feature_map.device.type,
+    ):
+        return _sample_rois_native_bilinear(feature_map, grid)
     expanded_features = (
         feature_map[:, None]
         .expand(batch, objects, channels, *feature_map.shape[-2:])
         .reshape(batch * objects, channels, *feature_map.shape[-2:])
     )
     flattened_grid = grid.reshape(batch * objects, output_size, output_size, 2)
-    mps_training_fallback = training and feature_map.device.type == "mps"
-    sampling_features = expanded_features.cpu() if mps_training_fallback else expanded_features
-    sampling_grid = flattened_grid.cpu() if mps_training_fallback else flattened_grid
     sampled = F.grid_sample(
-        sampling_features,
-        sampling_grid,
+        expanded_features,
+        flattened_grid,
         mode="bilinear",
         padding_mode="zeros",
         align_corners=True,
     )
-    if mps_training_fallback:
-        sampled = sampled.to(feature_map.device)
     return sampled.reshape(batch, objects, channels, output_size, output_size)
 
 
@@ -225,7 +296,12 @@ class FastROIUpdater(nn.Module):
         values = predicted_values + delta * scale
         values = torch.cat(
             (
-                values[..., :2].clamp(-1.25, 1.25),
+                # A projected ROI may remain valid while its sphere centre is
+                # outside the image; the visible rim still carries residual
+                # evidence. The delta is already bounded, so clipping the
+                # absolute centre here silently moved such priors toward the
+                # frame and created impossible off-crop supervision.
+                values[..., :2],
                 values[..., 2:3].clamp(-8.0, 1.0),
                 values[..., 3:4].clamp(1.0e-3, 20.0),
                 values[..., 4:7].clamp(0.0, 1.0),
