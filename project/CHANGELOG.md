@@ -27,6 +27,10 @@
   two finite closed-loop updates, terminal validation, finite model/optimizer
   checkpoint, and byte-identical no-op resume with truthful zero-update CLI
   reporting. It is not an accuracy claim.
+- Committed and pushed the corrected source as `df98f63`, then launched the
+  clean-source v2 campaign and its bounded convergence supervisor at
+  `runs/20260801-232229-scaled-sustained-v2/`. Launch health is recorded, but
+  no long-run accuracy or convergence result is claimed yet.
 - Preserved and superseded the legacy sustained run after proving that its
   phase handoff discarded all 8,192 RGB updates from the mutable causal path;
   deployment rejection and optimisation continuation are now separate.

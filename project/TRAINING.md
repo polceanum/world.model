@@ -240,6 +240,15 @@ source run's `checkpoints/last.pt`; selector/numbered checkpoints require a new
 run or `--initialize-from`. A pending terminal-validation marker is recoverable
 without an optimizer update.
 
+The clean-source v2 campaign is active at
+`runs/20260801-232229-scaled-sustained-v2/` from commit `df98f63`. Its submitted
+trainer job is
+`com.polceanum.orpheus.sustained-v2-20260801-232229`; the paired supervisor is
+`com.polceanum.orpheus.convergence-v2-20260801-232229`. The supervisor waits
+for the complete 16,384-step segment, then applies only verified 4,096-step
+extensions up to 24,576 total steps. Treat the initial 32-episode validation
+latency as expected and consult `project/STATUS.md` for current PID/log paths.
+
 ### Preserved legacy campaign
 
 `configs/sustained_accuracy_mps.yaml` is the tractable successor to launching

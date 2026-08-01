@@ -69,10 +69,14 @@
 - [x] Recover interrupted final validation without optimizer updates, restrict
   in-place resume to `checkpoints/last.pt`, and deserialize hybrid checkpoints
   on CPU to preserve optimizer ownership and accelerator memory.
-- [ ] Launch the timestamped v2 MPS campaign from the preserved step-8192
-  `best_measurement.pt`. Complete the full declared RGB and causal phases; do
-  not change its objective, simulator, manifests, or validation protocol
-  in-place.
+- [x] Launch the timestamped v2 MPS campaign from the preserved step-8192
+  `best_measurement.pt` using clean source `df98f63`. The trainer and
+  convergence supervisor are active for
+  `runs/20260801-232229-scaled-sustained-v2/`.
+- [ ] Complete the full declared RGB and causal phases; do not change its
+  objective, simulator, manifests, validation protocol, or executable source
+  in-place. Require verified terminal artifacts and the declared supervisor
+  decision.
 - [ ] Compare v2 against the exact legacy reference and strongest numbered
   candidates on at least 64 fresh balanced episodes, with every
   axis/scenario/horizon, cold/mature, event, lifecycle, uncertainty, and

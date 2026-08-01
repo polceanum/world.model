@@ -10,9 +10,10 @@ invariant-tested familiar reference-pair regime, and one balanced eight-regime
 shared-model profile, plus a quality-aware persistent-ID multi-frame
 point/scale depth observer; the first sustained campaign is preserved as a
 superseded legacy-objective control after a convergence-integrity audit; the
-corrected v2 runtime now passes a real hybrid MPS/CPU two-phase smoke, but no
-corrected long campaign or broad promotion result exists yet; collision,
-occlusion, identification, convergence, and full acceptance remain open
+corrected v2 runtime now passes a real hybrid MPS/CPU two-phase smoke and its
+long campaign is active, but no corrected long-run or broad promotion result
+exists yet; collision, occlusion, identification, convergence, and full
+acceptance remain open
 
 ## 2026-08-01 — complete convergence-integrity audit and corrected v2 path
 
@@ -125,6 +126,44 @@ summary.
 Earlier bounded smokes remain failure/audit artifacts, not current evidence.
 In particular, `runs/20260801-223113-audit-v2-final-smoke/` stopped before its
 first update after exposing the data-dependent MPS gradient fault.
+
+### Corrected sustained v2 campaign is active
+
+The corrected campaign launched from clean committed source
+`df98f637b39607db5ede78dfeafab9ca61ef7d50` at
+`2026-08-01T23:23:46Z`:
+
+```text
+run: runs/20260801-232229-scaled-sustained-v2/
+trainer LaunchAgent:
+  com.polceanum.orpheus.sustained-v2-20260801-232229
+trainer PID at verification: 9889
+trainer stdout:
+  /private/tmp/20260801-232229-scaled-sustained-v2.stdout.log
+trainer stderr:
+  /private/tmp/20260801-232229-scaled-sustained-v2.stderr.log
+supervisor LaunchAgent:
+  com.polceanum.orpheus.convergence-v2-20260801-232229
+supervisor PID at verification: 9980
+supervisor stdout:
+  /private/tmp/20260801-232229-convergence-v2.stdout.log
+supervisor stderr:
+  /private/tmp/20260801-232229-convergence-v2.stderr.log
+```
+
+`run_metadata.json` records dirty `false`, runtime-source fingerprint
+`d6039706f3fd97296cd4f2ff1bf84b4cfd4ec5d9124fdfd597d665e23b11c132`,
+MPS built/available `true/true`, measurement device `mps`, closed-loop device
+`cpu`, RGB runtime, and oracle disabled. Both submitted jobs were verified
+`running`. The supervisor persisted `supervisor_started` and
+`waiting_for_segment` events for the 16,384-step minimum, with 4,096-step
+extensions and a 24,576-step hard limit.
+
+The trainer begins with the fixed 32-episode broad validation, so absence of an
+early training-step log is expected. This launch is not convergence evidence.
+Do not edit executable source or the resolved numerical protocol while it is
+running; inspect `metrics.jsonl`, `train_summary.json`, and the supervisor
+report before making any accuracy claim.
 
 ## 2026-07-31 — sustained-loss stability and horizon-objective audit
 
