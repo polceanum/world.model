@@ -664,25 +664,47 @@ def test_rgb_runtime_controls_are_semantic_with_legacy_defaults() -> None:
         validate_checkpoint_config(payload, architecture_change)
 
 
-def test_runtime_invariant_semantics_migrate_legacy_checkpoint() -> None:
+def test_runtime_invariant_semantics_preserve_historical_contact_defaults() -> None:
     config = _small_config()
-    payload = {"config": config.to_dict()}
-    legacy_payload = deepcopy(payload)
-    legacy_payload["config"]["model"]["dynamics"].pop("contact_confidence_sigma")
-    legacy_payload["config"]["model"]["dynamics"].pop("pair_collision_speed_epsilon")
-    legacy_payload["config"]["model"]["dynamics"].pop("boundary_collision_speed_epsilon")
-    legacy_payload["config"]["model"]["association"].pop("minimum_measurement_confidence")
-    legacy_payload["config"]["model"]["lifecycle"].pop("max_occluded_steps")
-
-    validate_checkpoint_config(payload, config)
-    validate_checkpoint_config(legacy_payload, config)
-
-    changed = replace(
+    historical = replace(
         config,
         model=replace(
             config.model,
             dynamics=replace(
                 config.model.dynamics,
+                contact_margin=1.0e-3,
+                boundary_contact_tolerance=1.0e-3,
+                contact_confidence_sigma=0.25,
+                pair_collision_speed_epsilon=1.0e-4,
+                boundary_collision_speed_epsilon=0.1,
+            ),
+        ),
+    )
+    historical.validate()
+    payload = {"config": historical.to_dict()}
+    legacy_payload = deepcopy(payload)
+    for field_name in (
+        "contact_margin",
+        "boundary_contact_tolerance",
+        "contact_confidence_sigma",
+        "pair_collision_speed_epsilon",
+        "boundary_collision_speed_epsilon",
+    ):
+        legacy_payload["config"]["model"]["dynamics"].pop(field_name)
+    legacy_payload["config"]["model"]["association"].pop("minimum_measurement_confidence")
+    legacy_payload["config"]["model"]["lifecycle"].pop("max_occluded_steps")
+
+    validate_checkpoint_config(payload, historical)
+    validate_checkpoint_config(legacy_payload, historical)
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(legacy_payload, config)
+
+    changed = replace(
+        historical,
+        model=replace(
+            historical.model,
+            dynamics=replace(
+                historical.model.dynamics,
                 contact_confidence_sigma=0.5,
             ),
         ),
@@ -694,11 +716,11 @@ def test_runtime_invariant_semantics_migrate_legacy_checkpoint() -> None:
         validate_checkpoint_config(legacy_payload, changed)
 
     association_change = replace(
-        config,
+        historical,
         model=replace(
-            config.model,
+            historical.model,
             association=replace(
-                config.model.association,
+                historical.model.association,
                 minimum_measurement_confidence=0.25,
             ),
         ),

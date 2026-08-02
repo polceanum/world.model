@@ -1,7 +1,8 @@
 """Objective plateau decisions for sustained closed-loop training campaigns.
 
-The convergence decision deliberately consumes only validation-selected,
-guardrail-safe checkpoints. Training loss is not a convergence signal.
+Safe extension uses only validation-selected checkpoints. Plateau evidence
+also considers raw primary scores from rejected candidates when their causal
+training support is valid; training loss is never a convergence signal.
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ from typing import Any
 import torch
 
 from world_model.training.trainer import (
+    _ROLLOUT_SELECTION_METRIC_VERSION,
+    _finite_nonnegative_integer,
     _model_state_hash,
     _rollout_validation_protocol_hash,
     _verified_selector_checkpoint,
@@ -33,6 +36,7 @@ class ValidationCandidate:
     step: int
     score: float
     accepted: bool
+    training_support_passed: bool
     model_state_hash: str
     checkpoint_path: str
 
@@ -73,6 +77,7 @@ class ConvergenceDecision:
     plateau_candidate_steps: tuple[int, ...]
     plateau_candidate_scores: tuple[float, ...]
     plateau_candidate_accepted: tuple[bool, ...]
+    plateau_candidate_training_support_passed: tuple[bool, ...]
     plateau_primary_gain: float | None
     minimum_relative_gain: float
     maximum_total_steps: int
@@ -96,10 +101,7 @@ def _integer_metric(metrics: Mapping[str, Any], key: str) -> int:
     value = metrics.get(key)
     if value is None:
         raise ValueError(f"checkpoint is missing {key}")
-    parsed = float(value)
-    if not math.isfinite(parsed) or not parsed.is_integer():
-        raise ValueError(f"checkpoint {key} must be a finite integer")
-    return int(parsed)
+    return _finite_nonnegative_integer(value, name=key)
 
 
 def _validation_candidate(path: Path, *, protocol_hash: str) -> ValidationCandidate:
@@ -110,7 +112,10 @@ def _validation_candidate(path: Path, *, protocol_hash: str) -> ValidationCandid
         raise ValueError(f"unexpected validation checkpoint name: {path.name}")
     filename_step = int(match.group(1))
     payload = _load_mapping(path)
-    checkpoint_step = int(payload.get("step", -1))
+    checkpoint_step = _finite_nonnegative_integer(
+        payload.get("step"),
+        name="step",
+    )
     if checkpoint_step != filename_step:
         raise ValueError(
             f"validation checkpoint step mismatch: {path.name} contains {checkpoint_step}"
@@ -121,10 +126,21 @@ def _validation_candidate(path: Path, *, protocol_hash: str) -> ValidationCandid
         raise ValueError(f"validation checkpoint lacks metrics/model_state: {path}")
     if metrics.get("rollout_validation_protocol_hash") != protocol_hash:
         raise ValueError(f"validation protocol changed within campaign: {path}")
+    if float(metrics.get("rollout_selection_metric_version", math.nan)) != (
+        _ROLLOUT_SELECTION_METRIC_VERSION
+    ):
+        raise ValueError(f"validation selector metric version changed within campaign: {path}")
     accepted_value = float(metrics.get("selection_accepted", math.nan))
     if accepted_value not in {0.0, 1.0}:
         raise ValueError(f"validation checkpoint has invalid acceptance state: {path}")
     accepted = accepted_value == 1.0
+    support_required_value = float(metrics.get("selection_training_support_required", math.nan))
+    support_passed_value = float(metrics.get("selection_training_support_passed", math.nan))
+    if support_required_value not in {0.0, 1.0} or support_passed_value not in {0.0, 1.0}:
+        raise ValueError(f"validation checkpoint has invalid training-support state: {path}")
+    training_support_passed = support_passed_value == 1.0
+    if accepted and not training_support_passed:
+        raise ValueError(f"accepted validation checkpoint failed training support: {path}")
     score = float(metrics.get("validation_rollout_selection_score", math.nan))
     if not math.isfinite(score) or score < 0:
         raise ValueError(f"validation checkpoint has an invalid physical score: {path}")
@@ -151,6 +167,7 @@ def _validation_candidate(path: Path, *, protocol_hash: str) -> ValidationCandid
         step=checkpoint_step,
         score=score,
         accepted=accepted,
+        training_support_passed=training_support_passed,
         model_state_hash=actual_hash,
         checkpoint_path=str(path.resolve()),
     )
@@ -174,16 +191,23 @@ def inspect_completed_campaign(
         ) from error
     if not isinstance(summary, Mapping):
         raise ValueError("training summary must contain a JSON object")
-    completed_steps = int(summary.get("completed_steps", -1))
-    if completed_steps < 0:
-        raise ValueError("training summary has no valid completed_steps")
+    completed_steps = _finite_nonnegative_integer(
+        summary.get("completed_steps"),
+        name="completed_steps",
+    )
 
     checkpoint_directory = run_path / "checkpoints"
     last_path = checkpoint_directory / "last.pt"
     if not last_path.is_file():
         raise CampaignIncompleteError(f"resumable checkpoint does not exist: {last_path}")
     last_payload = _load_mapping(last_path)
-    if int(last_payload.get("step", -1)) != completed_steps:
+    if (
+        _finite_nonnegative_integer(
+            last_payload.get("step"),
+            name="step",
+        )
+        != completed_steps
+    ):
         raise CampaignIncompleteError(
             "training summary and resumable checkpoint do not share a completed step"
         )
@@ -299,6 +323,7 @@ def decide_continuation(
             plateau_candidate_steps=(),
             plateau_candidate_scores=(),
             plateau_candidate_accepted=(),
+            plateau_candidate_training_support_passed=(),
             plateau_primary_gain=None,
             minimum_relative_gain=minimum_relative_gain,
             maximum_total_steps=maximum_total_steps,
@@ -327,8 +352,16 @@ def decide_continuation(
     )
     plateau_prior = [item for item in inspection.accepted_validations if item.step <= plateau_start]
     plateau_prior_best = min(plateau_prior, key=lambda item: item.score) if plateau_prior else None
+    # A support-collapsed candidate can report a deceptively low conditional
+    # RMSE by tracking only easy objects. Ordinary supported rejections still
+    # supply the raw primary-score evidence required by ADR-059.
+    recent_supported_candidates = tuple(
+        item for item in recent_candidates if item.training_support_passed
+    )
     recent_candidate_best = (
-        min(recent_candidates, key=lambda item: item.score) if recent_candidates else None
+        min(recent_supported_candidates, key=lambda item: item.score)
+        if recent_supported_candidates
+        else None
     )
     plateau_primary_gain = (
         (plateau_prior_best.score - recent_candidate_best.score) / plateau_prior_best.score
@@ -352,6 +385,9 @@ def decide_continuation(
         "plateau_candidate_steps": tuple(item.step for item in recent_candidates),
         "plateau_candidate_scores": tuple(item.score for item in recent_candidates),
         "plateau_candidate_accepted": tuple(item.accepted for item in recent_candidates),
+        "plateau_candidate_training_support_passed": tuple(
+            item.training_support_passed for item in recent_candidates
+        ),
         "plateau_primary_gain": plateau_primary_gain,
         "minimum_relative_gain": minimum_relative_gain,
         "maximum_total_steps": maximum_total_steps,
@@ -365,13 +401,16 @@ def decide_continuation(
     complete_plateau_window = tuple(item.step for item in recent_candidates) == (
         expected_recent_steps
     )
+    complete_supported_plateau_window = complete_plateau_window and all(
+        item.training_support_passed for item in recent_candidates
+    )
     no_recent_acceptance = complete_plateau_window and not any(
         item.accepted for item in recent_candidates
     )
     subthreshold_primary_gain = (
         plateau_primary_gain is not None and plateau_primary_gain < minimum_relative_gain
     )
-    if no_recent_acceptance and subthreshold_primary_gain:
+    if complete_supported_plateau_window and no_recent_acceptance and subthreshold_primary_gain:
         return ConvergenceDecision(
             status="plateau",
             reason=(

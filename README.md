@@ -107,24 +107,25 @@ For the multi-day shared-model accuracy campaign:
 
 ```bash
 python train.py \
-  --config configs/sustained_accuracy_mps_v2.yaml \
+  --config configs/sustained_accuracy_mps_v3.yaml \
   --initialize-from \
     runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/best_measurement.pt \
-  --run-name "$(date -u +%Y%m%d-%H%M%S)-scaled-sustained-v2" \
+  --run-name "$(date -u +%Y%m%d-%H%M%S)-scaled-sustained-v3" \
   --device mps
 ```
 
-This profile runs one 16,384-episode measurement pass and one independently
-shuffled causal pass over the balanced eight-scenario pool. It uses mature
-40-frame forecast anchors, preserves a fixed initialization reference, keeps
-every numbered validation candidate, and will not promote a lower position
-score that materially regresses velocity, detection, lifecycle, events,
-identity, any axis/horizon, or calibration. The older
-`configs/sustained_accuracy_mps.yaml` and its run are retained only as the
-legacy-objective audit control. See `project/ACCURACY_AUDIT.md` and
-`project/TRAINING.md` for exact evidence.
+This profile runs 8,192 paired global/fast RGB updates followed by 8,192
+supported causal updates over the balanced eight-scenario pool. It uses
+40-frame mature forecast anchors, keeps the imported reference separate from
+the mutable training state, skips unsupported causal draws instead of
+consuming empty optimizer steps, and applies an interaction-local clip before
+the whole-model clip. Promotion checks velocity, detection, lifecycle, events,
+identity, every axis/horizon, calibration, coverage, and scenario support.
+The v1/v2 profiles and runs remain audit controls; neither is a convergence
+result. See `project/ACCURACY_AUDIT.md` and `project/TRAINING.md` for exact
+evidence and the required medium qualification before a sustained launch.
 
-The v2 profile runs the convolutional RGB backbone and ROI path on MPS, pins
+The v3 profile runs the convolutional RGB backbone and ROI path on MPS, pins
 the small global proposal transformer to CPU through differentiable copies,
 and switches the full persistent model to CPU at the causal boundary. The
 proposal fallback avoids a reproduced PyTorch 2.10 MPS NaN-gradient kernel on

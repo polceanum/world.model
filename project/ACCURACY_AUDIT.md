@@ -1,6 +1,6 @@
 # Accuracy audit
 
-**Evidence cut-off:** 2026-08-01
+**Evidence cut-off:** 2026-08-02
 **Scope:** existing RGB-only checkpoints, reports, resolved configurations, and
 training logs in this repository
 
@@ -23,13 +23,79 @@ into one accuracy claim:
    and evaluated after little or no shared-model adaptation. Their offline or
    one-seed gains did not survive the full online feedback loop.
 
-The justified next decision is therefore one sustained, end-to-end scaled
-campaign initialized from the current scaled point/scale checkpoint, with all
-experimental intervention heads disabled initially. Before committing to the
-nominal 48,000-update run, closed-loop throughput and checkpoint selection must
-be corrected so the campaign is computationally credible and cannot select a
-position-only win that regresses velocity, detection, identity, events, or
-calibration.
+The justified next decision is a medium supported-gradient qualification of
+the audited v3 protocol, followed by one sustained, end-to-end shared campaign
+only if support, coverage, gradient, and broad validation trends remain
+healthy. The experimental intervention heads remain disabled. No existing v1,
+v2, or v3-smoke artifact establishes broad scaled convergence.
+
+## 2026-08-02 supported-causal convergence audit
+
+The v2 campaign
+`runs/20260801-232229-scaled-sustained-v2/` was stopped and preserved at logged
+step `9576`. It remained finite, but it was not optimizing the declared causal
+problem reliably:
+
+- 121 of 173 logged causal rows (`69.94%`) had an exactly zero pre-clip
+  gradient while consuming scheduled updates;
+- distance-gated current target coverage fell from `0.287539` at the imported
+  reference to `0.044805` at the measurement handoff;
+- one-second forecast target coverage fell from `0.761458` to `0.052734`;
+- low conditional position RMSE was therefore measured on a small surviving
+  subset rather than demonstrating accurate persistent prediction.
+
+The implementation audit found multiple root causes rather than one learning-
+rate problem. Causal batches could optimize global discovery with no
+trajectory support; inactive factory queries supplied a constant existence
+loss; fast ROI confidence had no empty-crop negatives; unsupported crops
+trained attributes and exact geometry; fast false positives were absent from
+selector precision; global/fast direct losses had support-dependent relative
+weight; and unsupported event/physical terms appeared as zero examples.
+Checkpoint viability and rollback also did not make support collapse distinct
+from an ordinary broad-score rejection.
+
+Contact and identification audits found further target inconsistency. Analytic
+contacts differed from the simulator in resolution order, iteration count,
+corner sequencing, friction, inverse-mass position correction, restitution,
+and event accumulation. Drag and restitution supervision could be derived
+without two accepted observations, across an unclean interval, from the wrong
+boundary object, or from an unidentifiable member-specific pair coefficient.
+The repaired randomized three-sphere differential has maximum disagreement
+`5.96e-08 m` in position and `1.79e-07 m/s` in velocity.
+
+After these repairs, an exact hard-window decomposition exposed the largest
+remaining optimization instability. The learned interaction block contributed
+norm `85.7563` of raw whole-model norm `85.8882`. A single global clip to `2.0`
+would scale all unrelated gradients by about `0.0233`. The v3 protocol first
+clips that recursive learned subsystem to `1.0`, leaving pre-global norm
+`4.8616`, then applies the whole-model `2.0` clip. Both stages and the original
+raw norms are logged.
+
+The first hierarchical-clipping four-update hybrid smoke,
+`runs/20260802-110951-convergence-v3-hierarchical-clip-smoke/`, completed two
+paired RGB and two causal updates in `213.0543 s`. The causal updates had real
+trajectory/fast-slot support `115/24` and `92/32`, with no unsupported retry
+and no oracle runtime input. It retained the imported safe incumbent. Its
+two-episode validation and two-update measurement metrics are wiring evidence,
+not an accuracy comparison.
+
+The subsequent final-tree smoke,
+`runs/20260802-121629-convergence-v3-final-audit-smoke/`, added explicit
+scenario-aware selection and valid-unmapped ROI negatives. It completed in
+`244.8993 s` with causal trajectory/fast-slot support `122/32` and `161/38`.
+After two causal updates the fixed `reference_pairs` pooled score moved
+`0.558737 → 0.548741`, but current target coverage moved
+`0.350 → 0.315` and 0.1-second forecast coverage
+`0.800 → 0.700`. The candidate was therefore rejected by both pooled and
+scenario-slice guardrails. This is the desired truthful outcome: a small
+conditional score gain is not promoted as broad improvement.
+
+`configs/sustained_accuracy_mps_v3.yaml` now declares one shared
+eight-scenario model with 8,192 paired RGB and 8,192 supported causal updates.
+The next admissible evidence is a medium qualification followed by at least
+four comparable corrected-protocol validations and a 64-or-more-episode fresh
+balanced confirmation. A finite loss or exhausted budget alone is not
+convergence.
 
 ## 2026-08-01 convergence-integrity audit
 
@@ -97,7 +163,7 @@ cannot be inferred from the anchor. Mass, restitution, and drag were sampled
 independently of appearance, so exact pre-contact post-collision outcomes also
 cannot be inferred before an interaction makes those parameters observable.
 
-The corrected implementation and
+The 1 August corrected implementation and
 `configs/sustained_accuracy_mps_v2.yaml` address these confounds:
 
 - retain a safe deployment incumbent while continuing optimisation from a
@@ -141,9 +207,10 @@ The corrected implementation and
   in-place resume to the exact `last.pt`, and preserve completed no-op artifacts
   byte-for-byte.
 
-These are correctness and experimental-integrity fixes. They are not yet
-evidence that v2 achieves higher held-out accuracy. Corrected long-run evidence
-is still pending; no v2 convergence or promotion claim is made here. The
+These were correctness and experimental-integrity fixes, not evidence that v2
+achieved higher held-out accuracy. The later 2 August audit above found
+additional optimizer-support, coverage, fast-ROI, contact, and gradient-scaling
+failures, stopped v2, and replaced it with the v3 protocol. The
 three-update smoke in
 `runs/20260801-231521-audit-v2-final-verified-smoke/` proves finite two-phase
 execution, selection, terminal checkpointing, and exact no-op resume only.

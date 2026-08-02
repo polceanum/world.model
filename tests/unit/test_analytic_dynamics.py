@@ -167,7 +167,10 @@ def test_rollout_collision_logits_cover_each_prediction_segment() -> None:
     assert trajectory.auxiliary["pair_collision"][0, 0, 0, 1]
     assert not trajectory.auxiliary["pair_collision"][0, 1].any()
     assert trajectory.auxiliary["pair_impulse"][0, 0, 0, 1] > 0
-    assert trajectory.motion_mode_logits[0, 0, 0].argmax() == MotionMode.FREE
+    # The first endpoint retains a small solver-consistent overlap while the
+    # spheres separate, so it is contact but no longer the interval collision
+    # mode. The second endpoint has separated fully.
+    assert trajectory.motion_mode_logits[0, 0, 0].argmax() == MotionMode.PAIR_CONTACT
     assert trajectory.motion_mode_logits[0, 1, 0].argmax() == MotionMode.FREE
 
 

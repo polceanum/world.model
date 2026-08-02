@@ -66,6 +66,11 @@ Working rules:
   calibration guardrails. Apply non-regression checks against both the moving
   incumbent and a fixed pre-campaign reference, and retain numbered validation
   snapshots with verifiable weight and protocol provenance.
+- Require every declared scenario to have explicit current/horizon validation
+  support and its own persisted broad guardrails. A better pooled score cannot
+  promote a candidate that loses support or materially regresses one scenario.
+  Keep balanced scenario lists unique so their fixed seed residues really
+  visit every declared family.
 - Keep the guardrail-safe deployment incumbent separate from the mutable
   optimisation trajectory. A candidate rejected for deployment may still be
   the correct state from which causal training repairs the failed guardrail.
@@ -87,6 +92,22 @@ Working rules:
 - Omit unsupported objectives rather than averaging fabricated zero examples.
   Use uncertainty calibration to train variance without duplicating an
   explicitly supervised state-mean gradient.
+- Do not consume a causal optimizer step from global auxiliary perception
+  alone. Require explicit differentiable trajectory/state/parameter support or
+  a valid persistent fast-ROI slot; count deterministic skipped draws
+  separately from completed updates and bound retries.
+- Keep fast-ROI identity, crop, exact-geometry, existence, and visibility
+  support distinct. Valid empty crops train negative existence/visibility,
+  unsupported attributes are omitted, and every eligible confident false
+  positive remains in selector precision.
+- Derive slow drag/restitution supervision only from accepted runtime
+  observations across clean causally observable intervals. Simulator track
+  existence may map supervision/evaluation identities, but it must not open a
+  runtime parameter gate by itself.
+- Preserve hierarchical gradient evidence when the recursive interaction
+  network is locally clipped before the whole model: log raw subsystem and
+  total norms, both coefficients, the pre-global norm, total coefficient, and
+  final applied norm. Treat both clip limits as resume/protocol semantics.
 - A configured phase-specific device switch is part of the resolved protocol,
   not a resume override. Exact resume must verify and preserve every linked
   selector artefact; a no-op inspection must not rewrite a durable checkpoint.

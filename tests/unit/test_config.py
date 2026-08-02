@@ -6,6 +6,7 @@ import torch
 
 from world_model.datasets.splits import SPLIT_SEED_RANGES
 from world_model.observations.rgb.structured_centres import structured_disc_centres
+from world_model.simulator.physics import PhysicsConfig
 from world_model.utils.config import load_config
 
 CONFIG_DIR = Path(__file__).parents[2] / "configs"
@@ -24,6 +25,19 @@ def test_profiles_resolve_and_validate(path: Path) -> None:
     assert config.simulator.split_ood_start == SPLIT_SEED_RANGES["ood"][0]
 
 
+def test_sustained_v3_analytic_contacts_match_reference_solver_thresholds() -> None:
+    config = load_config(CONFIG_DIR / "sustained_accuracy_mps_v3.yaml")
+    dynamics = config.model.dynamics
+    physics = PhysicsConfig()
+
+    assert dynamics.contact_margin == 0.0
+    assert dynamics.boundary_contact_tolerance == pytest.approx(1.0e-4)
+    assert dynamics.penetration_slop == pytest.approx(physics.penetration_slop)
+    assert dynamics.max_penetration_correction == pytest.approx(physics.max_position_correction)
+    assert dynamics.contact_confidence_sigma == 0.0
+    assert dynamics.pair_collision_speed_epsilon == pytest.approx(1.0e-7)
+
+
 def test_dotted_override_is_typed(tmp_path: Path) -> None:
     config = load_config(
         CONFIG_DIR / "toy_smoke.yaml",
@@ -40,6 +54,7 @@ def test_simulator_scenario_mixture_is_typed_and_validated() -> None:
             "simulator.scenario_mixture=[elastic_pairs,damped_contacts,impulse_perturbation]",
             "simulator.initial_speed_range=[0.2,1.8]",
             "simulator.external_impulse_range=[0.1,0.9]",
+            "training.validation_episodes=3",
         ],
     )
     assert config.simulator.scenario_mixture == (
@@ -54,6 +69,15 @@ def test_simulator_scenario_mixture_is_typed_and_validated() -> None:
         load_config(
             CONFIG_DIR / "toy_smoke.yaml",
             overrides=["simulator.scenario_mixture=[unknown]"],
+        )
+
+    with pytest.raises(ValueError, match="validation_episodes must cover every"):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=[
+                "simulator.scenario_mixture=[baseline,elastic_pairs,damped_contacts]",
+                "training.validation_episodes=2",
+            ],
         )
 
 
@@ -220,6 +244,57 @@ def test_closed_loop_trainable_scope_is_explicit() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "field",
+    [
+        "handoff_minimum_target_coverage",
+        "handoff_minimum_forecast_coverage",
+        "handoff_minimum_reference_coverage_ratio",
+    ],
+)
+@pytest.mark.parametrize("value", ["-0.1", "1.1", ".inf"])
+def test_handoff_coverage_controls_are_probabilities(
+    field: str,
+    value: str,
+) -> None:
+    with pytest.raises(ValueError, match=field):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.{field}={value}"],
+        )
+
+
+def test_no_gradient_retry_bound_is_nonnegative() -> None:
+    with pytest.raises(
+        ValueError,
+        match="maximum_no_gradient_batches_per_update",
+    ):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=["training.maximum_no_gradient_batches_per_update=-1"],
+        )
+
+
+@pytest.mark.parametrize("value", ["-1.0", ".inf"])
+def test_minimum_effective_gradient_norm_is_finite_and_nonnegative(
+    value: str,
+) -> None:
+    with pytest.raises(ValueError, match="minimum_effective_gradient_norm"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.minimum_effective_gradient_norm={value}"],
+        )
+
+
+@pytest.mark.parametrize("value", ["0.0", "-1.0", ".inf"])
+def test_fast_roi_pretrain_weight_is_finite_and_positive(value: str) -> None:
+    with pytest.raises(ValueError, match="fast_roi_pretrain_weight"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.fast_roi_pretrain_weight={value}"],
+        )
+
+
 def test_unimplemented_birth_confirmation_count_is_rejected() -> None:
     with pytest.raises(ValueError, match="birth_confirmations currently supports only 1"):
         load_config(
@@ -234,6 +309,29 @@ def test_gradient_clip_norm_is_finite_and_positive(value: str) -> None:
         load_config(
             "configs/tiny_overfit.yaml",
             overrides=[f"training.grad_clip_norm={value}"],
+        )
+
+
+@pytest.mark.parametrize("value", ["0.0", "-1.0", ".inf"])
+def test_interaction_gradient_clip_norm_is_finite_and_positive(
+    value: str,
+) -> None:
+    with pytest.raises(ValueError, match="interaction_grad_clip_norm"):
+        load_config(
+            "configs/tiny_overfit.yaml",
+            overrides=[f"training.interaction_grad_clip_norm={value}"],
+        )
+
+
+@pytest.mark.parametrize("value", ["true", "1.5", "-1"])
+def test_maximum_no_gradient_batches_must_be_nonnegative_integer(value: str) -> None:
+    with pytest.raises(
+        ValueError,
+        match="maximum_no_gradient_batches_per_update must be a nonnegative integer",
+    ):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.maximum_no_gradient_batches_per_update={value}"],
         )
 
 
@@ -330,6 +428,35 @@ def test_measurement_loss_weights_are_nonnegative() -> None:
         load_config(
             CONFIG_DIR / "tiny_overfit.yaml",
             overrides=["training.measurement_loss_weights={rgb_world_position: -1.0}"],
+        )
+
+
+@pytest.mark.parametrize("value", ["-.inf", ".nan", "-1.0"])
+def test_closed_loop_loss_weights_are_finite_and_nonnegative(value: str) -> None:
+    with pytest.raises(ValueError, match="loss_weights"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.loss_weights={{measurement: {value}}}"],
+        )
+
+
+@pytest.mark.parametrize("value", ["-1", "true", "1.5"])
+def test_rgb_pretrain_steps_must_be_a_nonnegative_integer(value: str) -> None:
+    with pytest.raises(ValueError, match="rgb_pretrain_steps.*nonnegative integer"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.rgb_pretrain_steps={value}"],
+        )
+
+
+def test_scenario_mixture_rejects_duplicates_that_break_validation_coverage() -> None:
+    with pytest.raises(ValueError, match="scenario_mixture.*unique"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[
+                "simulator.scenario_mixture=[elastic_pairs,baseline,baseline]",
+                "training.validation_episodes=2",
+            ],
         )
 
 

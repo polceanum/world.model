@@ -17,7 +17,6 @@ from torch import Tensor, nn
 
 from world_model.utils.config import (
     AssociationConfig,
-    DynamicsConfig,
     LifecycleConfig,
     OrpheusConfig,
     RGBConfig,
@@ -110,11 +109,17 @@ _RGB_LEGACY_DEFAULT_FIELDS = (
     "structured_disc_position_confidence",
 )
 
-_DYNAMICS_MIGRATION_DEFAULT_FIELDS = (
-    "contact_confidence_sigma",
-    "pair_collision_speed_epsilon",
-    "boundary_collision_speed_epsilon",
-)
+_DYNAMICS_LEGACY_DEFAULTS = {
+    # These are the actual resolver/config defaults used before each field was
+    # persisted. They deliberately do not track today's corrected reference
+    # physics defaults; otherwise an old checkpoint would be mislabelled as
+    # runtime-compatible after its contact semantics changed.
+    "contact_margin": 1.0e-3,
+    "boundary_contact_tolerance": 1.0e-3,
+    "contact_confidence_sigma": 0.25,
+    "pair_collision_speed_epsilon": 1.0e-4,
+    "boundary_collision_speed_epsilon": 0.1,
+}
 _ASSOCIATION_MIGRATION_DEFAULT_FIELDS = ("minimum_measurement_confidence",)
 _LIFECYCLE_MIGRATION_DEFAULT_FIELDS = ("max_occluded_steps",)
 
@@ -246,9 +251,8 @@ def _model_checkpoint_semantics(value: object) -> object:
     dynamics = model.get("dynamics")
     if isinstance(dynamics, Mapping):
         normalized_dynamics = dict(dynamics)
-        defaults = DynamicsConfig()
-        for field_name in _DYNAMICS_MIGRATION_DEFAULT_FIELDS:
-            normalized_dynamics.setdefault(field_name, getattr(defaults, field_name))
+        for field_name, historical_value in _DYNAMICS_LEGACY_DEFAULTS.items():
+            normalized_dynamics.setdefault(field_name, historical_value)
         model["dynamics"] = normalized_dynamics
     association = model.get("association")
     if isinstance(association, Mapping):

@@ -199,10 +199,12 @@ class DynamicsConfig:
     process_noise_velocity: float = 2e-3
     modal_acceleration_scale: float = 0.25
     residual_acceleration_scale: float = 0.5
-    penetration_slop: float = 1e-3
+    contact_margin: float = 0.0
+    boundary_contact_tolerance: float = 1.0e-4
+    penetration_slop: float = 1e-4
     max_penetration_correction: float = 0.08
-    contact_confidence_sigma: float = 0.25
-    pair_collision_speed_epsilon: float = 1.0e-4
+    contact_confidence_sigma: float = 0.0
+    pair_collision_speed_epsilon: float = 1.0e-7
     boundary_collision_speed_epsilon: float = 0.1
     sleep_speed: float = 0.05
     allow_large_substep: bool = False
@@ -277,9 +279,25 @@ class TrainingConfig:
     closed_loop_learning_rate_scale: float = 0.1
     closed_loop_global_trainable_steps: int = 50
     closed_loop_trainable_scope: str = "all"
+    # A measurement-only checkpoint may score well on the few proposals that
+    # survive lifecycle gating while destroying the persistent runtime's
+    # training support.  At the stage boundary, require both absolute and
+    # reference-relative current/future coverage before using that candidate
+    # as the mutable causal starting point.
+    handoff_minimum_target_coverage: float = 0.05
+    handoff_minimum_forecast_coverage: float = 0.05
+    handoff_minimum_reference_coverage_ratio: float = 0.50
+    # Unsupported causal windows are data draws, not optimiser updates.
+    # Resample deterministically up to this bound and then fail loudly.
+    maximum_no_gradient_batches_per_update: int = 32
+    minimum_effective_gradient_norm: float = 1.0e-12
     weight_decay: float = 1e-4
     tbptt_steps: int = 24
     grad_clip_norm: float = 1.0
+    # Recursive multi-horizon losses can amplify the same learned interaction
+    # residual across many substeps. Bound that subsystem before the global
+    # clip so one edge-Jacobian spike cannot suppress unrelated gradients.
+    interaction_grad_clip_norm: float = 1.0
     checkpoint_every: int = 100
     eval_every: int = 100
     log_every: int = 10
@@ -288,6 +306,7 @@ class TrainingConfig:
     num_workers: int = 0
     fixed_dataset: bool = False
     rgb_pretrain_steps: int = 100
+    fast_roi_pretrain_weight: float = 1.0
     measurement_validation_frames: int = 8
     perturbation_probability: float = 0.25
     perturbation_position_std: float = 0.12
@@ -760,8 +779,16 @@ class OrpheusConfig:
             )
         if model.dynamics.max_substep <= 0:
             raise ValueError("model.dynamics.max_substep must be positive")
-        if model.dynamics.contact_confidence_sigma < 0:
-            raise ValueError("model.dynamics.contact_confidence_sigma must be nonnegative")
+        for name, value in (
+            ("contact_margin", model.dynamics.contact_margin),
+            (
+                "boundary_contact_tolerance",
+                model.dynamics.boundary_contact_tolerance,
+            ),
+            ("contact_confidence_sigma", model.dynamics.contact_confidence_sigma),
+        ):
+            if value < 0 or not math.isfinite(value):
+                raise ValueError(f"model.dynamics.{name} must be finite and nonnegative")
         observation_dt = 1.0 / simulator.frame_rate
         if model.dynamics.max_substep > observation_dt and not model.dynamics.allow_large_substep:
             raise ValueError(
@@ -854,6 +881,11 @@ class OrpheusConfig:
             raise ValueError(
                 "training.measurement_loss_weights must be nonempty, finite, and nonnegative"
             )
+        if not self.training.loss_weights or any(
+            not math.isfinite(weight) or weight < 0
+            for weight in self.training.loss_weights.values()
+        ):
+            raise ValueError("training.loss_weights must be nonempty, finite, and nonnegative")
         episode_duration = (simulator.sequence_frames - 1) / simulator.frame_rate
         if max(self.evaluation.horizons_seconds) > episode_duration + 1e-9:
             raise ValueError(
@@ -862,6 +894,23 @@ class OrpheusConfig:
             )
         if self.training.batch_size <= 0 or self.training.steps < 0:
             raise ValueError("training batch_size must be positive and steps nonnegative")
+        if (
+            isinstance(self.training.rgb_pretrain_steps, bool)
+            or not isinstance(self.training.rgb_pretrain_steps, int)
+            or self.training.rgb_pretrain_steps < 0
+        ):
+            raise ValueError("training.rgb_pretrain_steps must be a nonnegative integer")
+        if self.training.train_episodes <= 0 or self.training.validation_episodes <= 0:
+            raise ValueError("training train_episodes and validation_episodes must be positive")
+        if len(set(simulator.scenario_mixture)) != len(simulator.scenario_mixture):
+            raise ValueError(
+                "simulator.scenario_mixture must contain unique scenario names "
+                "for deterministic balanced validation"
+            )
+        if self.training.validation_episodes < len(simulator.scenario_mixture):
+            raise ValueError(
+                "training.validation_episodes must cover every simulator scenario at least once"
+            )
         if self.training.learning_rate <= 0:
             raise ValueError("training.learning_rate must be positive")
         if not 0 < self.training.closed_loop_learning_rate_scale <= 1:
@@ -878,12 +927,53 @@ class OrpheusConfig:
                 "training.closed_loop_trainable_scope must be "
                 "'all', 'dynamics', 'state_dynamics', or 'state_dynamics_roi'"
             )
+        for name, value in (
+            (
+                "handoff_minimum_target_coverage",
+                self.training.handoff_minimum_target_coverage,
+            ),
+            (
+                "handoff_minimum_forecast_coverage",
+                self.training.handoff_minimum_forecast_coverage,
+            ),
+            (
+                "handoff_minimum_reference_coverage_ratio",
+                self.training.handoff_minimum_reference_coverage_ratio,
+            ),
+        ):
+            if not math.isfinite(value) or not 0 <= value <= 1:
+                raise ValueError(f"training.{name} must lie in [0, 1]")
+        if (
+            isinstance(self.training.maximum_no_gradient_batches_per_update, bool)
+            or not isinstance(self.training.maximum_no_gradient_batches_per_update, int)
+            or self.training.maximum_no_gradient_batches_per_update < 0
+        ):
+            raise ValueError(
+                "training.maximum_no_gradient_batches_per_update must be a nonnegative integer"
+            )
+        if (
+            not math.isfinite(self.training.minimum_effective_gradient_norm)
+            or self.training.minimum_effective_gradient_norm < 0
+        ):
+            raise ValueError(
+                "training.minimum_effective_gradient_norm must be finite and nonnegative"
+            )
         if self.training.tbptt_steps <= 0:
             raise ValueError("training.tbptt_steps must be positive")
         if not math.isfinite(self.training.grad_clip_norm) or self.training.grad_clip_norm <= 0:
             raise ValueError("training.grad_clip_norm must be finite and positive")
+        if (
+            not math.isfinite(self.training.interaction_grad_clip_norm)
+            or self.training.interaction_grad_clip_norm <= 0
+        ):
+            raise ValueError("training.interaction_grad_clip_norm must be finite and positive")
         if self.training.measurement_validation_frames <= 0:
             raise ValueError("training.measurement_validation_frames must be positive")
+        if (
+            not math.isfinite(self.training.fast_roi_pretrain_weight)
+            or self.training.fast_roi_pretrain_weight <= 0
+        ):
+            raise ValueError("training.fast_roi_pretrain_weight must be finite and positive")
         if not 0 <= self.training.perturbation_probability <= 1:
             raise ValueError("training.perturbation_probability must lie in [0, 1]")
         if (

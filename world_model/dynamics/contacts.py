@@ -26,11 +26,17 @@ class ContactPlane:
 @dataclass
 class ContactResult:
     objects: ObjectBeliefTensor
+    # Endpoint contact from the final solver iteration drives persistent
+    # motion modes. The interval fields retain any contact encountered while
+    # resolving the substep for diagnostics/labels.
     pair_contact: Tensor
+    interval_pair_contact: Tensor
     pair_collision: Tensor
     boundary_contact: Tensor
+    interval_boundary_contact: Tensor
     boundary_collision: Tensor
     ground_contact: Tensor
+    interval_ground_contact: Tensor
     ground_collision: Tensor
     pair_impulse: Tensor
     max_penetration: Tensor
@@ -45,9 +51,11 @@ class SphereContactResolver(nn.Module):
         self,
         planes: Sequence[ContactPlane] | None = None,
         *,
-        contact_margin: float = 1e-3,
-        collision_speed_epsilon: float = 1e-4,
+        contact_margin: float = 0.0,
+        boundary_contact_tolerance: float | None = 1.0e-4,
+        collision_speed_epsilon: float = 1e-7,
         boundary_collision_speed_epsilon: float = 0.1,
+        solver_iterations: int = 2,
         penetration_fraction: float = 0.8,
         penetration_slop: float = 1e-4,
         max_position_correction: float = 0.05,
@@ -85,8 +93,12 @@ class SphereContactResolver(nn.Module):
         )
         self.plane_names = tuple(item.name for item in selected)
         self.contact_margin = contact_margin
+        self.boundary_contact_tolerance = (
+            contact_margin if boundary_contact_tolerance is None else boundary_contact_tolerance
+        )
         self.collision_speed_epsilon = collision_speed_epsilon
         self.boundary_collision_speed_epsilon = boundary_collision_speed_epsilon
+        self.solver_iterations = solver_iterations
         self.penetration_fraction = penetration_fraction
         self.penetration_slop = penetration_slop
         self.max_position_correction = max_position_correction
@@ -100,6 +112,14 @@ class SphereContactResolver(nn.Module):
             boundary_collision_speed_epsilon
         ):
             raise ValueError("boundary_collision_speed_epsilon must be finite and nonnegative")
+        if self.boundary_contact_tolerance < 0 or not math.isfinite(
+            self.boundary_contact_tolerance
+        ):
+            raise ValueError("boundary_contact_tolerance must be finite and nonnegative")
+        if contact_margin < 0 or not math.isfinite(contact_margin):
+            raise ValueError("contact_margin must be finite and nonnegative")
+        if solver_iterations < 1:
+            raise ValueError("solver_iterations must be at least one")
         self.contact_confidence_sigma = contact_confidence_sigma
 
     def forward(
@@ -114,17 +134,82 @@ class SphereContactResolver(nn.Module):
         objects: ObjectBeliefTensor,
         graph: InteractionOutput | None = None,
     ) -> ContactResult:
-        pair = self._resolve_pairs(objects, graph)
-        pair_objects, pair_contact, pair_collision, pair_impulse, pair_penetration, residual = pair
-        plane = self._resolve_planes(pair_objects)
-        (
-            plane_objects,
-            boundary_contact,
-            boundary_collision,
-            ground_contact,
-            ground_collision,
-            plane_penetration,
-        ) = plane
+        """Resolve contacts with the same iteration order as the simulator.
+
+        The reference simulator resolves every boundary before sphere pairs and
+        repeats that sequence for each solver iteration.  Matching that order is
+        important for compound contacts: a wall projection can create or remove
+        a pair overlap, while a pair impulse can push a body into a boundary for
+        the next iteration.
+        """
+
+        batch, count = objects.active.shape
+        plane_count = len(self.plane_names)
+        pair_contact = torch.zeros(
+            batch,
+            count,
+            count,
+            dtype=torch.bool,
+            device=objects.position.device,
+        )
+        interval_pair_contact = torch.zeros_like(pair_contact)
+        pair_collision = torch.zeros_like(pair_contact)
+        boundary_contact = torch.zeros(
+            batch,
+            count,
+            plane_count,
+            dtype=torch.bool,
+            device=objects.position.device,
+        )
+        interval_boundary_contact = torch.zeros_like(boundary_contact)
+        boundary_collision = torch.zeros_like(boundary_contact)
+        pair_impulse = objects.position.new_zeros(batch, count, count)
+        pair_penetration = objects.position.new_zeros(batch, count, count)
+        plane_penetration = objects.position.new_zeros(batch, count, plane_count)
+        residual = objects.position.new_zeros(batch)
+        updated = objects
+
+        for _ in range(self.solver_iterations):
+            (
+                updated,
+                iteration_boundary_contact,
+                iteration_boundary_collision,
+                _,
+                _,
+                iteration_plane_penetration,
+            ) = self._resolve_planes(updated)
+            (
+                updated,
+                iteration_pair_contact,
+                iteration_pair_collision,
+                iteration_pair_impulse,
+                iteration_pair_penetration,
+                iteration_residual,
+            ) = self._resolve_pairs(updated, graph)
+            boundary_contact = iteration_boundary_contact
+            interval_boundary_contact = interval_boundary_contact | iteration_boundary_contact
+            boundary_collision = boundary_collision | iteration_boundary_collision
+            pair_contact = iteration_pair_contact
+            interval_pair_contact = interval_pair_contact | iteration_pair_contact
+            pair_collision = pair_collision | iteration_pair_collision
+            pair_impulse = torch.maximum(pair_impulse, iteration_pair_impulse)
+            pair_penetration = torch.maximum(pair_penetration, iteration_pair_penetration)
+            plane_penetration = torch.maximum(
+                plane_penetration,
+                iteration_plane_penetration,
+            )
+            residual = torch.maximum(residual, iteration_residual)
+
+        # Solver-occurrence contact is interval evidence. Persistent motion
+        # modes need contact at the fully resolved endpoint, after the final
+        # pair correction has had a chance to move an object onto or away from
+        # a boundary.
+        pair_contact = self._measure_pair_contact(updated)
+        boundary_contact = self._measure_boundary_contact(updated)
+        ground_plane_mask = self.ground_plane_mask.to(device=objects.position.device)
+        ground_contact = (boundary_contact & ground_plane_mask).any(dim=-1)
+        interval_ground_contact = (interval_boundary_contact & ground_plane_mask).any(dim=-1)
+        ground_collision = (boundary_collision & ground_plane_mask).any(dim=-1)
         all_penetration = torch.cat(
             (
                 pair_penetration.flatten(start_dim=1),
@@ -133,18 +218,64 @@ class SphereContactResolver(nn.Module):
             dim=-1,
         )
         return ContactResult(
-            objects=plane_objects,
+            objects=updated,
             pair_contact=pair_contact,
+            interval_pair_contact=interval_pair_contact,
             pair_collision=pair_collision,
             boundary_contact=boundary_contact,
+            interval_boundary_contact=interval_boundary_contact,
             boundary_collision=boundary_collision,
             ground_contact=ground_contact,
+            interval_ground_contact=interval_ground_contact,
             ground_collision=ground_collision,
             pair_impulse=pair_impulse,
             max_penetration=all_penetration.max(dim=-1).values,
             mean_penetration=all_penetration.mean(dim=-1),
             action_reaction_residual=residual,
         )
+
+    def _measure_pair_contact(self, objects: ObjectBeliefTensor) -> Tensor:
+        """Measure symmetric pair contact without applying another jump."""
+
+        _, count = objects.active.shape
+        rel_position = objects.position[:, None, :, :] - objects.position[:, :, None, :]
+        distance = torch.linalg.vector_norm(rel_position, dim=-1).clamp_min(1e-7)
+        normal = rel_position / distance.unsqueeze(-1)
+        radius = objects.radius.squeeze(-1)
+        gap = distance - radius[:, :, None] - radius[:, None, :]
+        position_variance = objects.fast_log_variance[..., :3].exp()
+        relative_variance = position_variance[:, :, None, :] + position_variance[:, None, :, :]
+        gap_sigma = (relative_variance * normal.square()).sum(dim=-1).sqrt()
+        confident_gap = gap + self.contact_confidence_sigma * gap_sigma
+        upper = torch.triu(
+            torch.ones(count, count, device=objects.active.device, dtype=torch.bool),
+            diagonal=1,
+        ).unsqueeze(0)
+        active_pair = objects.active[:, :, None] & objects.active[:, None, :]
+        contact_upper = active_pair & upper & (confident_gap < self.contact_margin)
+        return contact_upper | contact_upper.transpose(1, 2)
+
+    def _measure_boundary_contact(self, objects: ObjectBeliefTensor) -> Tensor:
+        """Measure all endpoint plane contacts without applying another jump."""
+
+        normals = self.plane_normals.to(
+            device=objects.position.device,
+            dtype=objects.position.dtype,
+        )
+        offsets = self.plane_offsets.to(
+            device=objects.position.device,
+            dtype=objects.position.dtype,
+        )
+        signed_center = torch.einsum("bnc,pc->bnp", objects.position, normals)
+        gap = signed_center - offsets[None, None, :] - objects.radius
+        position_variance = objects.fast_log_variance[..., :3].exp()
+        gap_sigma = torch.einsum(
+            "bnc,pc->bnp",
+            position_variance,
+            normals.square(),
+        ).sqrt()
+        confident_gap = gap + self.contact_confidence_sigma * gap_sigma
+        return objects.active.unsqueeze(-1) & (confident_gap <= self.boundary_contact_tolerance)
 
     def _resolve_pairs(
         self,
@@ -169,7 +300,7 @@ class SphereContactResolver(nn.Module):
         relative_variance = position_variance[:, :, None, :] + position_variance[:, None, :, :]
         gap_sigma = (relative_variance * normal.square()).sum(dim=-1).sqrt()
         confident_gap = gap + self.contact_confidence_sigma * gap_sigma
-        contact_upper = active_pair & upper & (confident_gap <= self.contact_margin)
+        contact_upper = active_pair & upper & (confident_gap < self.contact_margin)
         collision_upper = contact_upper & (relative_normal_velocity < -self.collision_speed_epsilon)
 
         inverse_mass = objects.mass.squeeze(-1).reciprocal()
@@ -192,8 +323,9 @@ class SphereContactResolver(nn.Module):
         rel_tangent = rel_velocity - relative_normal_velocity.unsqueeze(-1) * normal
         tangent_speed = torch.linalg.vector_norm(rel_tangent, dim=-1)
         tangent_direction = rel_tangent / tangent_speed.clamp_min(1e-7).unsqueeze(-1)
-        friction = 0.5 * (
-            objects.friction.squeeze(-1)[:, :, None] + objects.friction.squeeze(-1)[:, None, :]
+        friction = torch.sqrt(
+            objects.friction.squeeze(-1)[:, :, None].clamp_min(0.0)
+            * objects.friction.squeeze(-1)[:, None, :].clamp_min(0.0)
         )
         friction_impulse = torch.minimum(
             friction * impulse,
@@ -207,18 +339,27 @@ class SphereContactResolver(nn.Module):
         momentum_change = pair_momentum.sum(dim=2)
         velocity = objects.velocity + momentum_change * inverse_mass.unsqueeze(-1)
 
-        correction_depth = (
-            (penetration - self.penetration_slop).clamp_min(0.0) * self.penetration_fraction
+        correction_scale = (
+            self.penetration_fraction
+            * (penetration - self.penetration_slop).clamp_min(0.0)
+            / inverse_mass_sum
         ).clamp_max(self.max_position_correction)
-        correction_scale = correction_depth / inverse_mass_sum
-        position_i_upper = (
+        position_first_upper = (
             -correction_scale.unsqueeze(-1)
             * inverse_mass[:, :, None, None]
             * normal
             * contact_upper.unsqueeze(-1)
         )
-        pair_position_change = position_i_upper - position_i_upper.transpose(1, 2)
-        position = objects.position + pair_position_change.sum(dim=2)
+        position_second_upper = (
+            correction_scale.unsqueeze(-1)
+            * inverse_mass[:, None, :, None]
+            * normal
+            * contact_upper.unsqueeze(-1)
+        )
+        # Unlike an impulse, positional projection is not equal-and-opposite:
+        # each body's displacement is weighted by its own inverse mass.
+        position_change = position_first_upper.sum(dim=2) + position_second_upper.sum(dim=1)
+        position = objects.position + position_change
         active_f = objects.active.unsqueeze(-1)
         updated = replace(
             objects,
@@ -251,52 +392,60 @@ class SphereContactResolver(nn.Module):
             device=objects.position.device,
             dtype=objects.position.dtype,
         )
-        signed_center = torch.einsum("bnc,pc->bnp", objects.position, normals)
-        gap = signed_center - offsets[None, None, :] - objects.radius
         position_variance = objects.fast_log_variance[..., :3].exp()
-        gap_sigma = torch.einsum(
-            "bnc,pc->bnp",
-            position_variance,
-            normals.square(),
-        ).sqrt()
-        confident_gap = gap + self.contact_confidence_sigma * gap_sigma
-        normal_velocity = torch.einsum("bnc,pc->bnp", objects.velocity, normals)
-        contact = objects.active.unsqueeze(-1) & (confident_gap <= self.contact_margin)
-        collision = contact & (normal_velocity < -self.boundary_collision_speed_epsilon)
-        resting_inward = contact & (normal_velocity < 0.0) & ~collision
-        penetration = (-gap).clamp_min(0.0) * contact
+        position = objects.position
+        velocity = objects.velocity
+        contacts: list[Tensor] = []
+        collisions: list[Tensor] = []
+        penetrations: list[Tensor] = []
 
-        restitution = objects.restitution
-        collision_delta = (-(1.0 + restitution) * normal_velocity).clamp_min(0.0) * collision
-        resting_delta = (-normal_velocity).clamp_min(0.0) * resting_inward
-        delta_normal_speed = collision_delta + resting_delta
-        delta_velocity_normal = torch.einsum("bnp,pc->bnc", delta_normal_speed, normals)
-        velocity_after_normal = objects.velocity + delta_velocity_normal
+        # Resolve planes sequentially.  This duplicates the simulator's stable
+        # x-min/x-max/floor/ceiling/z-min/z-max behaviour and avoids summing
+        # multiple independently computed friction impulses at corners.
+        for plane_index in range(normals.shape[0]):
+            normal = normals[plane_index]
+            offset = offsets[plane_index]
+            signed_center = (position * normal).sum(dim=-1)
+            gap = signed_center - offset - objects.radius.squeeze(-1)
+            gap_sigma = (position_variance * normal.square()).sum(dim=-1).sqrt()
+            confident_gap = gap + self.contact_confidence_sigma * gap_sigma
+            contact = objects.active & (confident_gap <= self.boundary_contact_tolerance)
+            normal_velocity = (velocity * normal).sum(dim=-1)
+            collision = contact & (normal_velocity < -self.boundary_collision_speed_epsilon)
+            resting_inward = contact & (normal_velocity < 0.0) & ~collision
+            penetration = (-gap).clamp_min(0.0) * contact
 
-        # Coulomb-like bounded tangential damping for simultaneous planes.
-        projected = torch.einsum("bnc,pc->bnp", velocity_after_normal, normals)
-        tangential = (
-            velocity_after_normal[:, :, None, :]
-            - projected.unsqueeze(-1) * normals[None, None, :, :]
-        )
-        tangent_speed = torch.linalg.vector_norm(tangential, dim=-1)
-        normal_impulse_speed = delta_normal_speed
-        reduction = torch.minimum(
-            tangent_speed,
-            objects.friction * normal_impulse_speed,
-        )
-        delta_tangent = (
-            -tangential
-            / tangent_speed.clamp_min(1e-7).unsqueeze(-1)
-            * reduction.unsqueeze(-1)
-            * collision.unsqueeze(-1)
-        ).sum(dim=2)
-        velocity = velocity_after_normal + delta_tangent
+            collision_delta = (
+                -(1.0 + objects.restitution.squeeze(-1)) * normal_velocity
+            ).clamp_min(0.0) * collision
+            resting_delta = (-normal_velocity).clamp_min(0.0) * resting_inward
+            delta_normal_speed = collision_delta + resting_delta
+            velocity = velocity + delta_normal_speed.unsqueeze(-1) * normal
 
-        correction = (
-            (penetration - self.penetration_slop).clamp_min(0.0) * self.penetration_fraction
-        ).clamp_max(self.max_position_correction)
-        position = objects.position + torch.einsum("bnp,pc->bnc", correction, normals)
+            tangential = velocity - (velocity * normal).sum(dim=-1).unsqueeze(-1) * normal
+            tangent_speed = torch.linalg.vector_norm(tangential, dim=-1)
+            reduction = torch.minimum(
+                tangent_speed,
+                objects.friction.squeeze(-1).clamp_min(0.0) * delta_normal_speed,
+            )
+            velocity = velocity + (
+                -tangential
+                / tangent_speed.clamp_min(1e-7).unsqueeze(-1)
+                * reduction.unsqueeze(-1)
+                * collision.unsqueeze(-1)
+            )
+
+            # Simulator boundaries are hard constraints: project the complete
+            # penetration, rather than applying the pair solver's soft,
+            # inverse-mass-weighted correction.
+            position = position + penetration.unsqueeze(-1) * normal
+            contacts.append(contact)
+            collisions.append(collision)
+            penetrations.append(penetration)
+
+        contact = torch.stack(contacts, dim=-1)
+        collision = torch.stack(collisions, dim=-1)
+        penetration = torch.stack(penetrations, dim=-1)
         active_f = objects.active.unsqueeze(-1)
         updated = replace(
             objects,

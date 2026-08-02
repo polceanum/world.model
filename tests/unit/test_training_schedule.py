@@ -22,11 +22,19 @@ from world_model.training.loop import (
     select_closed_loop_window,
 )
 from world_model.training.trainer import (
+    _ROLLOUT_SELECTION_METRIC_VERSION,
+    _causal_training_support,
+    _clip_training_gradients,
+    _finite_nonnegative_integer,
     _gradient_clip_diagnostics,
+    _handoff_training_support_failures,
+    _has_effective_gradient,
     _mean_batch_results,
     _rollout_selection_improves,
     _rollout_selection_is_compatible,
     _rollout_selection_metrics,
+    _rollout_selection_passes_guardrails,
+    _selection_scenario_slugs,
     _validation_loader_result,
     _validation_protocol_checkpoint_metrics,
     _validation_step,
@@ -37,12 +45,12 @@ from world_model.training.trainer import (
 from world_model.utils.config import load_config
 
 
-def test_fixed_pretraining_sweeps_every_frame_for_every_loader_batch() -> None:
+def test_fixed_pretraining_sweeps_every_adjacent_pair_for_every_loader_batch() -> None:
     loader_batches = 4
     total_frames = 16
     visited = {batch_index: [] for batch_index in range(loader_batches)}
 
-    for step in range(loader_batches * total_frames):
+    for step in range(loader_batches * (total_frames - 1)):
         batch_index = step % loader_batches
         visited[batch_index].append(
             measurement_pretrain_frame_index(
@@ -53,13 +61,13 @@ def test_fixed_pretraining_sweeps_every_frame_for_every_loader_batch() -> None:
             )
         )
 
-    expected = list(range(total_frames))
+    expected = list(range(total_frames - 1))
     assert all(frame_indices == expected for frame_indices in visited.values())
 
 
-def test_pretraining_frame_index_rejects_empty_axes() -> None:
-    for loader_batches, total_frames in ((0, 16), (4, 0)):
-        with pytest.raises(ValueError, match="must be positive"):
+def test_pretraining_frame_index_requires_a_batch_and_rgb_pair() -> None:
+    for loader_batches, total_frames in ((0, 16), (4, 0), (4, 1)):
+        with pytest.raises(ValueError, match="RGB pair"):
             measurement_pretrain_frame_index(
                 0,
                 loader_batches=loader_batches,
@@ -79,16 +87,31 @@ def test_streaming_pretraining_samples_a_valid_frame() -> None:
         for step in range(32)
     }
     assert sampled
-    assert sampled <= set(range(7))
+    assert sampled <= set(range(6))
 
 
-def test_global_perception_freeze_leaves_fast_roi_trainable() -> None:
+def test_global_perception_freeze_leaves_shared_fast_encoder_trainable() -> None:
     model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
     rgb = model.observation_modules["rgb"]
 
     set_global_perception_trainable(model, trainable=False)
 
-    assert not any(parameter.requires_grad for parameter in rgb.backbone.parameters())
+    assert all(
+        parameter.requires_grad
+        for stage in rgb.backbone.stages[:2]
+        for parameter in stage.parameters()
+    )
+    assert all(parameter.requires_grad for parameter in rgb.backbone.fast_projection.parameters())
+    assert not any(
+        parameter.requires_grad
+        for stage in rgb.backbone.stages[2:]
+        for parameter in stage.parameters()
+    )
+    assert not any(
+        parameter.requires_grad
+        for projection in rgb.backbone.projections
+        for parameter in projection.parameters()
+    )
     assert not any(parameter.requires_grad for parameter in rgb.global_detector.parameters())
     assert all(parameter.requires_grad for parameter in rgb.roi_updater.parameters())
     assert isinstance(rgb.roi_updater, nn.Module)
@@ -138,6 +161,169 @@ def test_gradient_clip_diagnostics_match_pytorch_coefficient(
 
     assert coefficient == pytest.approx(expected_coefficient)
     assert applied == pytest.approx(expected_applied)
+
+
+def test_interaction_gradients_are_bounded_before_global_clipping() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            grad_clip_norm=10.0,
+            interaction_grad_clip_norm=1.0,
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    interaction_parameters = list(model.dynamics.interactions.parameters())
+    interaction_ids = {id(parameter) for parameter in interaction_parameters}
+    other_parameters = [
+        parameter for parameter in model.parameters() if id(parameter) not in interaction_ids
+    ]
+    interaction = interaction_parameters[0]
+    other = other_parameters[0]
+    interaction.grad = torch.ones_like(interaction)
+    interaction.grad.mul_(3.0 / interaction.grad.norm())
+    other.grad = torch.ones_like(other)
+    other.grad.mul_(4.0 / other.grad.norm())
+
+    diagnostics = _clip_training_gradients(model, config)
+
+    assert diagnostics["interaction_gradient_norm_pre_clip"] == pytest.approx(3.0)
+    assert diagnostics["interaction_gradient_norm_applied_before_global_clip"] == pytest.approx(
+        1.0, abs=1.0e-6
+    )
+    assert diagnostics["gradient_norm_pre_clip"] == pytest.approx(5.0, abs=1.0e-5)
+    assert diagnostics["gradient_norm_pre_global_clip"] == pytest.approx(
+        math.sqrt(17.0),
+        abs=1.0e-5,
+    )
+    assert diagnostics["gradient_norm_applied"] == pytest.approx(
+        math.sqrt(17.0),
+        abs=1.0e-5,
+    )
+    assert interaction.grad.norm().item() == pytest.approx(1.0, abs=1.0e-6)
+    assert other.grad.norm().item() == pytest.approx(4.0, abs=1.0e-6)
+
+
+def test_effective_gradient_threshold_is_strict() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    threshold = config.training.minimum_effective_gradient_norm
+
+    assert not _has_effective_gradient(0.0, config)
+    assert not _has_effective_gradient(threshold, config)
+    assert _has_effective_gradient(threshold * 2.0 + 1.0e-15, config)
+
+
+def test_causal_support_excludes_global_only_measurement_gradient() -> None:
+    parameter = torch.nn.Parameter(torch.tensor(1.0))
+    global_loss = parameter.square()
+    unsupported = TrainingBatchResult(
+        total_loss=global_loss,
+        loss_terms={"measurement": global_loss},
+        metrics={
+            "matched_object_frames": 0.0,
+            "fast_supervised_frames": 0.0,
+            "fast_supervised_slots": 0.0,
+        },
+        phase="closed_loop_rgb",
+    )
+    supported_trajectory = TrainingBatchResult(
+        total_loss=global_loss,
+        loss_terms={"measurement": global_loss, "state": global_loss},
+        metrics={
+            "matched_object_frames": 2.0,
+            "fast_supervised_frames": 0.0,
+        },
+        phase="closed_loop_rgb",
+    )
+    supported_fast = TrainingBatchResult(
+        total_loss=global_loss,
+        loss_terms={"measurement": global_loss},
+        metrics={
+            "matched_object_frames": 0.0,
+            "fast_supervised_frames": 1.0,
+            "fast_supervised_slots": 1.0,
+        },
+        phase="closed_loop_rgb",
+        support_terms={"fast_measurement": global_loss},
+    )
+
+    assert _causal_training_support(unsupported) == (False, 0.0, 0.0, 0.0)
+    assert _causal_training_support(supported_trajectory) == (True, 2.0, 0.0, 1.0)
+    assert _causal_training_support(supported_fast) == (True, 0.0, 1.0, 0.0)
+
+
+def test_zero_weight_trajectory_term_cannot_make_global_auxiliary_causal() -> None:
+    global_loss = torch.tensor(1.0, requires_grad=True)
+    trajectory_loss = torch.tensor(2.0, requires_grad=True)
+    result = TrainingBatchResult(
+        total_loss=global_loss + 0.0 * trajectory_loss,
+        loss_terms={
+            "measurement": global_loss,
+            "state_position": trajectory_loss,
+        },
+        metrics={
+            "matched_object_frames": 2.0,
+            "fast_supervised_slots": 0.0,
+        },
+        phase="closed_loop_rgb",
+    )
+
+    assert _causal_training_support(result) == (False, 2.0, 0.0, 0.0)
+
+
+def test_differentiable_trajectory_term_without_physical_support_is_not_causal() -> None:
+    trajectory_loss = torch.tensor(2.0, requires_grad=True)
+    result = TrainingBatchResult(
+        total_loss=trajectory_loss,
+        loss_terms={"state_position": trajectory_loss},
+        metrics={
+            "matched_object_frames": 0.0,
+            "fast_supervised_slots": 0.0,
+        },
+        phase="closed_loop_rgb",
+    )
+
+    assert _causal_training_support(result) == (False, 0.0, 0.0, 1.0)
+
+
+def test_active_false_track_existence_negative_is_explicit_causal_support() -> None:
+    existence_loss = torch.tensor(0.5, requires_grad=True)
+    result = TrainingBatchResult(
+        total_loss=existence_loss,
+        loss_terms={"existence": existence_loss},
+        metrics={
+            "matched_object_frames": 0.0,
+            "existence_negative_supervision_object_frames": 3.0,
+            "fast_supervised_slots": 0.0,
+        },
+        phase="closed_loop_rgb",
+    )
+
+    assert _causal_training_support(result) == (True, 3.0, 0.0, 1.0)
+
+
+def test_global_measurement_cannot_impersonate_supported_fast_roi_gradient() -> None:
+    global_loss = torch.tensor(1.0, requires_grad=True)
+    fast_loss = torch.tensor(2.0, requires_grad=True)
+    result = TrainingBatchResult(
+        total_loss=global_loss + 0.0 * fast_loss,
+        loss_terms={"measurement": global_loss},
+        metrics={
+            "matched_object_frames": 0.0,
+            "fast_supervised_slots": 2.0,
+        },
+        phase="closed_loop_rgb",
+        support_terms={"fast_measurement": fast_loss},
+    )
+
+    assert _causal_training_support(result) == (False, 0.0, 2.0, 0.0)
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf, -1, 1.5, "2", True])
+def test_resume_counter_parser_rejects_nonfinite_or_noninteger_values(value) -> None:
+    with pytest.raises(ValueError, match="finite nonnegative integer"):
+        _finite_nonnegative_integer(value, name="counter")
 
 
 def test_state_dynamics_scope_freezes_rgb_and_trains_filter_dynamics_identifier() -> None:
@@ -198,7 +384,22 @@ def test_state_dynamics_roi_scope_trains_fast_rgb_without_global_perception() ->
         if not name.startswith("event_head.")
     )
     assert not any(parameter.requires_grad for parameter in rgb.roi_updater.event_head.parameters())
-    assert not any(parameter.requires_grad for parameter in rgb.backbone.parameters())
+    assert all(
+        parameter.requires_grad
+        for stage in rgb.backbone.stages[:2]
+        for parameter in stage.parameters()
+    )
+    assert all(parameter.requires_grad for parameter in rgb.backbone.fast_projection.parameters())
+    assert not any(
+        parameter.requires_grad
+        for stage in rgb.backbone.stages[2:]
+        for parameter in stage.parameters()
+    )
+    assert not any(
+        parameter.requires_grad
+        for projection in rgb.backbone.projections
+        for parameter in projection.parameters()
+    )
     assert not any(parameter.requires_grad for parameter in rgb.global_detector.parameters())
 
 
@@ -708,12 +909,40 @@ def _physical_selection_metrics(
     }
 
 
+def _with_scenario_selection_metrics(
+    metrics: dict[str, float],
+    config,
+    *,
+    scenario_metrics: dict[str, dict[str, float]] | None = None,
+    unsupported: set[str] | None = None,
+) -> dict[str, float]:
+    """Attach the exact per-scenario fields emitted by broad validation."""
+
+    output = dict(metrics)
+    base = {name: value for name, value in metrics.items() if name.startswith("validation_")}
+    scenario_metrics = scenario_metrics or {}
+    unsupported = unsupported or set()
+    for scenario in _selection_scenario_slugs(config):
+        prefix = f"scenario_{scenario}_"
+        output[f"{prefix}episode_count"] = 1.0
+        output[f"{prefix}selection_metric_supported"] = float(scenario not in unsupported)
+        if scenario in unsupported:
+            continue
+        selected = scenario_metrics.get(scenario, base)
+        output.update({f"{prefix}{name}": value for name, value in selected.items()})
+    return output
+
+
 def _broad_checkpoint_metrics() -> dict[str, float]:
     config = load_config("configs/tiny_overfit.yaml")
-    selection = _rollout_selection_metrics(_physical_selection_metrics(), config)
+    selection = _rollout_selection_metrics(
+        _with_scenario_selection_metrics(_physical_selection_metrics(), config),
+        config,
+        require_scenarios=True,
+    )
     return {
         "best_rollout_validated": 1.0,
-        "rollout_selection_metric_version": 4.0,
+        "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
         **selection.checkpoint_metrics(),
         **_validation_protocol_checkpoint_metrics(config),
     }
@@ -779,6 +1008,119 @@ def test_rollout_selection_accepts_score_gain_within_guardrails() -> None:
     assert _rollout_selection_improves(candidate, incumbent)
 
 
+def test_rollout_selection_rejects_aggregate_gain_with_unsupported_scenario() -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        simulator=replace(
+            source.simulator,
+            scenario_mixture=("baseline", "elastic_pairs"),
+        ),
+    )
+    incumbent = _rollout_selection_metrics(
+        _with_scenario_selection_metrics(_physical_selection_metrics(), config),
+        config,
+        require_scenarios=True,
+    )
+    candidate = _rollout_selection_metrics(
+        _with_scenario_selection_metrics(
+            _physical_selection_metrics(horizons=(0.30, 0.20, 0.10)),
+            config,
+            unsupported={"elastic_pairs"},
+        ),
+        config,
+        require_scenarios=True,
+    )
+
+    assert candidate.score < incumbent.score
+    assert not _rollout_selection_improves(candidate, incumbent)
+    assert not _rollout_selection_passes_guardrails(candidate, incumbent)
+    failures = _handoff_training_support_failures(candidate, incumbent, config)
+    assert "scenario_elastic_pairs_selection_support" in {
+        str(failure["metric"]) for failure in failures
+    }
+
+
+def test_rollout_selection_rejects_aggregate_gain_with_scenario_regression() -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        simulator=replace(
+            source.simulator,
+            scenario_mixture=("baseline", "elastic_pairs"),
+        ),
+    )
+    incumbent_metrics = _physical_selection_metrics()
+    candidate_metrics = _physical_selection_metrics(horizons=(0.30, 0.20, 0.10))
+    regressed_scenario = _physical_selection_metrics(
+        coverage=0.70,
+        horizons=(0.50, 0.40, 0.30),
+        forecast_coverage=(0.70, 0.70, 0.70),
+    )
+    incumbent = _rollout_selection_metrics(
+        _with_scenario_selection_metrics(incumbent_metrics, config),
+        config,
+        require_scenarios=True,
+    )
+    candidate = _rollout_selection_metrics(
+        _with_scenario_selection_metrics(
+            candidate_metrics,
+            config,
+            scenario_metrics={"elastic_pairs": regressed_scenario},
+        ),
+        config,
+        require_scenarios=True,
+    )
+
+    assert candidate.score < incumbent.score
+    assert not _rollout_selection_improves(candidate, incumbent)
+
+
+def test_handoff_rejects_conditionally_accurate_candidate_with_collapsed_coverage() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    reference = _rollout_selection_metrics(
+        _physical_selection_metrics(
+            coverage=0.80,
+            forecast_coverage=(0.80, 0.78, 0.75),
+        ),
+        config,
+    )
+    candidate = _rollout_selection_metrics(
+        _physical_selection_metrics(
+            position=0.10,
+            coverage=0.06,
+            horizons=(0.10, 0.09, 0.08),
+            forecast_coverage=(0.09, 0.08, 0.07),
+        ),
+        config,
+    )
+
+    failures = _handoff_training_support_failures(candidate, reference, config)
+
+    assert candidate.score < reference.score
+    assert {failure["metric"] for failure in failures} == {
+        "target_coverage",
+        "forecast_target_coverage@0.100s",
+        "forecast_target_coverage@0.250s",
+        "forecast_target_coverage@0.500s",
+    }
+
+
+def test_handoff_accepts_coverage_that_preserves_training_support() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    reference = _rollout_selection_metrics(_physical_selection_metrics(), config)
+    candidate = _rollout_selection_metrics(
+        _physical_selection_metrics(
+            coverage=0.60,
+            forecast_coverage=(0.55, 0.50, 0.48),
+            horizons=(0.30, 0.20, 0.10),
+        ),
+        config,
+    )
+
+    assert not _handoff_training_support_failures(candidate, reference, config)
+
+
 def test_rollout_selection_requires_complete_finite_physical_metrics() -> None:
     config = load_config("configs/tiny_overfit.yaml")
     missing = _physical_selection_metrics()
@@ -807,6 +1149,19 @@ def test_legacy_rollout_score_is_not_reused_after_objective_fix() -> None:
     assert not _rollout_selection_is_compatible(payload, config)
     payload["metrics"].update(_broad_checkpoint_metrics())
     assert _rollout_selection_is_compatible(payload, config)
+
+
+def test_rollout_checkpoint_without_declared_scenario_support_is_not_reused() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    metrics = _broad_checkpoint_metrics()
+    scenario = _selection_scenario_slugs(config)[0]
+    del metrics[f"best_rollout_scenario_{scenario}_selection_supported"]
+    payload = {
+        "config": config.to_dict(),
+        "metrics": metrics,
+    }
+
+    assert not _rollout_selection_is_compatible(payload, config)
 
 
 @pytest.mark.parametrize(

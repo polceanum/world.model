@@ -10,8 +10,9 @@ import re
 import shutil
 import time
 from collections.abc import Iterator, Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
+from numbers import Real
 from pathlib import Path
 from typing import Any
 
@@ -54,18 +55,19 @@ from world_model.utils.seeds import seed_everything
 from world_model.utils.version import SIMULATOR_VERSION
 
 _SAFE_RUN_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_NUMBERED_VALIDATION_CHECKPOINT = re.compile(r"validation_step_(\d+)\.pt$")
 _ROLLOUT_SELECTION_MIN_DELTA = 1.0e-5
-_ROLLOUT_SELECTION_METRIC_VERSION = 4.0
+_ROLLOUT_SELECTION_METRIC_VERSION = 5.0
 _ROLLOUT_SELECTION_RELATIVE_GUARDRAIL = 0.02
 _ROLLOUT_SELECTION_COVERAGE_TOLERANCE = 0.005
 _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE = 0.02
-_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 5
+_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 8
 _NOMINAL_POSITION_COVERAGE = 0.90
 _MEASUREMENT_SELECTION_MIN_DELTA = 1.0e-5
-_MEASUREMENT_SELECTION_METRIC_VERSION = 3.0
+_MEASUREMENT_SELECTION_METRIC_VERSION = 5.0
 _MEASUREMENT_SELECTION_RELATIVE_GUARDRAIL = 0.02
 _MEASUREMENT_SELECTION_RECALL_TOLERANCE = 0.005
-_MEASUREMENT_VALIDATION_PROTOCOL_VERSION = 2
+_MEASUREMENT_VALIDATION_PROTOCOL_VERSION = 4
 _MEASUREMENT_ADDITIVE_METRICS = frozenset(
     {
         "rgb_runtime_birth_true_positive_count_at_0_5m",
@@ -75,6 +77,37 @@ _MEASUREMENT_ADDITIVE_METRICS = frozenset(
         "rgb_runtime_birth_matched_proposal_count",
         "rgb_world_position_absolute_error_sum_m",
         "rgb_world_position_matched_proposal_count",
+        "rgb_fast_bootstrap_matched_target_count",
+        "rgb_fast_bootstrap_target_count",
+        "rgb_fast_roi_supported_target_count",
+        "rgb_fast_roi_target_count",
+        "rgb_fast_roi_eligible_proposal_count",
+        "rgb_fast_roi_world_position_absolute_error_sum_m",
+        "rgb_fast_roi_world_position_matched_count",
+        "rgb_fast_prior_world_position_absolute_error_sum_m",
+        "rgb_fast_prior_world_position_matched_count",
+        "rgb_fast_roi_confident_proposal_count",
+        "rgb_fast_roi_true_positive_count_at_0_5m",
+    }
+)
+_CAUSAL_TRAJECTORY_LOSS_TERMS = frozenset(
+    {
+        "state_position",
+        "state_velocity",
+        "state",
+        "rollout_position",
+        "rollout_position_x",
+        "rollout_position_y",
+        "rollout_position_z",
+        "rollout_velocity",
+        "rollout_nll",
+        "rollout",
+        "event",
+        "parameter",
+        "existence",
+        "uncertainty",
+        "correction_position",
+        "correction_velocity",
     }
 )
 
@@ -89,6 +122,13 @@ class _MeasurementSelectionMetrics:
     runtime_birth_recall: float
     runtime_birth_precision: float
     runtime_birth_f1: float
+    fast_bootstrap_target_coverage: float
+    fast_roi_target_coverage: float
+    fast_roi_world_position_mae_m: float
+    fast_roi_recall: float
+    fast_roi_precision: float
+    fast_roi_f1: float
+    fast_roi_improvement_m: float
 
     def validation_metrics(self) -> dict[str, float]:
         return {
@@ -100,6 +140,13 @@ class _MeasurementSelectionMetrics:
             "validation_runtime_birth_recall_at_0_5m": self.runtime_birth_recall,
             "validation_runtime_birth_precision_at_0_5m": self.runtime_birth_precision,
             "validation_runtime_birth_f1_at_0_5m": self.runtime_birth_f1,
+            "validation_fast_bootstrap_target_coverage": (self.fast_bootstrap_target_coverage),
+            "validation_fast_roi_target_coverage": self.fast_roi_target_coverage,
+            "validation_fast_roi_world_position_mae_m": (self.fast_roi_world_position_mae_m),
+            "validation_fast_roi_recall_at_0_5m": self.fast_roi_recall,
+            "validation_fast_roi_precision_at_0_5m": self.fast_roi_precision,
+            "validation_fast_roi_f1_at_0_5m": self.fast_roi_f1,
+            "validation_fast_roi_improvement_m": self.fast_roi_improvement_m,
         }
 
     def checkpoint_metrics(self) -> dict[str, float]:
@@ -114,6 +161,15 @@ class _MeasurementSelectionMetrics:
             "best_measurement_runtime_birth_recall_at_0_5m": self.runtime_birth_recall,
             "best_measurement_runtime_birth_precision_at_0_5m": self.runtime_birth_precision,
             "best_measurement_runtime_birth_f1_at_0_5m": self.runtime_birth_f1,
+            "best_measurement_fast_bootstrap_target_coverage": (
+                self.fast_bootstrap_target_coverage
+            ),
+            "best_measurement_fast_roi_target_coverage": self.fast_roi_target_coverage,
+            "best_measurement_fast_roi_world_position_mae_m": (self.fast_roi_world_position_mae_m),
+            "best_measurement_fast_roi_recall_at_0_5m": self.fast_roi_recall,
+            "best_measurement_fast_roi_precision_at_0_5m": self.fast_roi_precision,
+            "best_measurement_fast_roi_f1_at_0_5m": self.fast_roi_f1,
+            "best_measurement_fast_roi_improvement_m": self.fast_roi_improvement_m,
             "measurement_selection_metric_version": _MEASUREMENT_SELECTION_METRIC_VERSION,
         }
 
@@ -134,6 +190,13 @@ def _measurement_selection_metrics(
         "runtime_birth_recall": "rgb_runtime_birth_recall_at_0_5m",
         "runtime_birth_precision": "rgb_runtime_birth_precision_at_0_5m",
         "runtime_birth_f1": "rgb_runtime_birth_f1_at_0_5m",
+        "fast_bootstrap_target_coverage": "rgb_fast_bootstrap_target_coverage",
+        "fast_roi_target_coverage": "rgb_fast_roi_target_coverage",
+        "fast_roi_world_position_mae_m": "rgb_fast_roi_world_position_mae_m",
+        "fast_roi_recall": "rgb_fast_roi_recall_at_0_5m",
+        "fast_roi_precision": "rgb_fast_roi_precision_at_0_5m",
+        "fast_roi_f1": "rgb_fast_roi_f1_at_0_5m",
+        "fast_roi_improvement_m": "rgb_fast_roi_improvement_m",
     }
     missing = [key for key in required.values() if key not in metrics]
     if missing:
@@ -142,21 +205,48 @@ def _measurement_selection_metrics(
             + ", ".join(sorted(missing))
         )
     values = {name: float(metrics[key]) for name, key in required.items()}
-    for name in ("runtime_birth_recall", "runtime_birth_precision", "runtime_birth_f1"):
+    for name in (
+        "runtime_birth_recall",
+        "runtime_birth_precision",
+        "runtime_birth_f1",
+        "fast_bootstrap_target_coverage",
+        "fast_roi_target_coverage",
+        "fast_roi_recall",
+        "fast_roi_precision",
+        "fast_roi_f1",
+    ):
         value = values[name]
         if not math.isfinite(value) or not 0.0 <= value <= 1.0:
             raise ValueError(f"measurement validation {name} must lie in [0,1]")
-    if not math.isfinite(values["world_position_mae_m"]) or not math.isfinite(
-        values["all_proposal_world_position_mae_m"]
+    if any(
+        not math.isfinite(values[name])
+        for name in (
+            "world_position_mae_m",
+            "all_proposal_world_position_mae_m",
+            "fast_roi_world_position_mae_m",
+            "fast_roi_improvement_m",
+        )
     ):
         return None
-    if values["world_position_mae_m"] < 0 or values["all_proposal_world_position_mae_m"] < 0:
+    if any(
+        values[name] < 0
+        for name in (
+            "world_position_mae_m",
+            "all_proposal_world_position_mae_m",
+            "fast_roi_world_position_mae_m",
+        )
+    ):
         raise ValueError("measurement validation position MAE must be nonnegative")
 
     score = (
         values["world_position_mae_m"] / _MEASUREMENT_SELECTION_DISTANCE_THRESHOLD_M
         + (1.0 - values["runtime_birth_recall"])
         + (1.0 - values["runtime_birth_precision"])
+        + values["fast_roi_world_position_mae_m"] / _MEASUREMENT_SELECTION_DISTANCE_THRESHOLD_M
+        + (1.0 - values["fast_bootstrap_target_coverage"])
+        + (1.0 - values["fast_roi_target_coverage"])
+        + (1.0 - values["fast_roi_recall"])
+        + (1.0 - values["fast_roi_precision"])
     )
     return _MeasurementSelectionMetrics(
         score=score,
@@ -165,6 +255,13 @@ def _measurement_selection_metrics(
         runtime_birth_recall=values["runtime_birth_recall"],
         runtime_birth_precision=values["runtime_birth_precision"],
         runtime_birth_f1=values["runtime_birth_f1"],
+        fast_bootstrap_target_coverage=values["fast_bootstrap_target_coverage"],
+        fast_roi_target_coverage=values["fast_roi_target_coverage"],
+        fast_roi_world_position_mae_m=values["fast_roi_world_position_mae_m"],
+        fast_roi_recall=values["fast_roi_recall"],
+        fast_roi_precision=values["fast_roi_precision"],
+        fast_roi_f1=values["fast_roi_f1"],
+        fast_roi_improvement_m=values["fast_roi_improvement_m"],
     )
 
 
@@ -183,6 +280,13 @@ def _measurement_selection_from_checkpoint(
         "rgb_runtime_birth_recall_at_0_5m": ("best_measurement_runtime_birth_recall_at_0_5m"),
         "rgb_runtime_birth_precision_at_0_5m": ("best_measurement_runtime_birth_precision_at_0_5m"),
         "rgb_runtime_birth_f1_at_0_5m": "best_measurement_runtime_birth_f1_at_0_5m",
+        "rgb_fast_bootstrap_target_coverage": ("best_measurement_fast_bootstrap_target_coverage"),
+        "rgb_fast_roi_target_coverage": "best_measurement_fast_roi_target_coverage",
+        "rgb_fast_roi_world_position_mae_m": ("best_measurement_fast_roi_world_position_mae_m"),
+        "rgb_fast_roi_recall_at_0_5m": ("best_measurement_fast_roi_recall_at_0_5m"),
+        "rgb_fast_roi_precision_at_0_5m": ("best_measurement_fast_roi_precision_at_0_5m"),
+        "rgb_fast_roi_f1_at_0_5m": "best_measurement_fast_roi_f1_at_0_5m",
+        "rgb_fast_roi_improvement_m": "best_measurement_fast_roi_improvement_m",
     }
     if any(checkpoint_key not in metrics for checkpoint_key in aliases.values()):
         return None
@@ -236,6 +340,48 @@ def _measurement_selection_guardrail_failures(
             incumbent.runtime_birth_precision * minimum_ratio,
             "minimum",
         ),
+        (
+            "fast_bootstrap_target_coverage",
+            candidate.fast_bootstrap_target_coverage,
+            incumbent.fast_bootstrap_target_coverage,
+            incumbent.fast_bootstrap_target_coverage - _MEASUREMENT_SELECTION_RECALL_TOLERANCE,
+            "minimum",
+        ),
+        (
+            "fast_roi_target_coverage",
+            candidate.fast_roi_target_coverage,
+            incumbent.fast_roi_target_coverage,
+            incumbent.fast_roi_target_coverage - _MEASUREMENT_SELECTION_RECALL_TOLERANCE,
+            "minimum",
+        ),
+        (
+            "fast_roi_world_position_mae_m",
+            candidate.fast_roi_world_position_mae_m,
+            incumbent.fast_roi_world_position_mae_m,
+            incumbent.fast_roi_world_position_mae_m * maximum_ratio,
+            "maximum",
+        ),
+        (
+            "fast_roi_recall_at_0_5m",
+            candidate.fast_roi_recall,
+            incumbent.fast_roi_recall,
+            incumbent.fast_roi_recall - _MEASUREMENT_SELECTION_RECALL_TOLERANCE,
+            "minimum",
+        ),
+        (
+            "fast_roi_precision_at_0_5m",
+            candidate.fast_roi_precision,
+            incumbent.fast_roi_precision,
+            incumbent.fast_roi_precision * minimum_ratio,
+            "minimum",
+        ),
+        (
+            "fast_roi_improvement_m",
+            candidate.fast_roi_improvement_m,
+            incumbent.fast_roi_improvement_m,
+            incumbent.fast_roi_improvement_m - 0.005,
+            "minimum",
+        ),
     )
     for name, value, reference, limit, direction in limits:
         failed = value > limit if direction == "maximum" else value < limit
@@ -282,9 +428,13 @@ class _RolloutSelectionMetrics:
     horizon_forecast_target_coverage: dict[str, float]
     axis_position_rmse_m: dict[str, float] = field(default_factory=dict)
     horizon_axis_position_rmse_m: dict[str, dict[str, float]] = field(default_factory=dict)
+    # Every declared scenario is represented explicitly. ``None`` means that
+    # the fixed validation slice had no complete physical forecast support and
+    # therefore cannot authorize promotion.
+    scenario_slices: dict[str, _RolloutSelectionMetrics | None] = field(default_factory=dict)
 
     def validation_metrics(self) -> dict[str, float]:
-        return {
+        metrics = {
             "validation_rollout_selection_score": self.score,
             "validation_position_rmse_m": self.position_rmse_m,
             "validation_velocity_rmse_mps": self.velocity_rmse_mps,
@@ -312,9 +462,19 @@ class _RolloutSelectionMetrics:
                 for suffix, value in horizons.items()
             },
         }
+        for scenario, selection in sorted(self.scenario_slices.items()):
+            metrics[f"validation_scenario_{scenario}_selection_supported"] = float(
+                selection is not None
+            )
+            if selection is None:
+                continue
+            for name, value in selection.validation_metrics().items():
+                suffix = name.removeprefix("validation_")
+                metrics[f"validation_scenario_{scenario}_{suffix}"] = value
+        return metrics
 
     def checkpoint_metrics(self, *, prefix: str = "best_rollout") -> dict[str, float]:
-        return {
+        metrics = {
             f"{prefix}_selection_score": self.score,
             # Retain the original public alias while making its physical,
             # horizon-weighted meaning explicit in the adjacent fields.
@@ -346,6 +506,12 @@ class _RolloutSelectionMetrics:
                 for suffix, value in horizons.items()
             },
         }
+        for scenario, selection in sorted(self.scenario_slices.items()):
+            scenario_prefix = f"{prefix}_scenario_{scenario}"
+            metrics[f"{scenario_prefix}_selection_supported"] = float(selection is not None)
+            if selection is not None:
+                metrics.update(selection.checkpoint_metrics(prefix=scenario_prefix))
+        return metrics
 
 
 def _selection_horizon_keys(config: OrpheusConfig) -> list[tuple[str, float]]:
@@ -368,6 +534,27 @@ def _selection_horizon_keys(config: OrpheusConfig) -> list[tuple[str, float]]:
         seen.add(suffix)
         selected.append((suffix, float(weight)))
     return selected
+
+
+def _selection_scenario_slugs(config: OrpheusConfig) -> tuple[str, ...]:
+    """Return unique stable slugs for every declared validation scenario."""
+
+    slugs: list[str] = []
+    scenario_by_slug: dict[str, str] = {}
+    for scenario in config.simulator.scenario_mixture:
+        slug = re.sub(r"[^a-z0-9]+", "_", scenario.lower()).strip("_")
+        if not slug:
+            raise ValueError(f"scenario name has no stable slug: {scenario!r}")
+        previous = scenario_by_slug.get(slug)
+        if previous is not None and previous != scenario:
+            raise ValueError(
+                "scenario names collide after metric slug normalization: "
+                f"{previous!r} and {scenario!r}"
+            )
+        scenario_by_slug[slug] = scenario
+        if slug not in slugs:
+            slugs.append(slug)
+    return tuple(slugs)
 
 
 def _canonical_hash(value: Mapping[str, Any]) -> str:
@@ -430,6 +617,21 @@ def _rollout_validation_protocol_from_mapping(
             "rollout_anchors_per_episode": training.get("validation_rollout_anchors_per_episode"),
             "metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
             "prediction_distance_threshold_m": (_PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M),
+            "training_viability": {
+                "handoff_minimum_target_coverage": training["handoff_minimum_target_coverage"],
+                "handoff_minimum_forecast_coverage": training["handoff_minimum_forecast_coverage"],
+                "handoff_minimum_reference_coverage_ratio": training[
+                    "handoff_minimum_reference_coverage_ratio"
+                ],
+            },
+        },
+        "optimization_stability": {
+            "grad_clip_norm": training["grad_clip_norm"],
+            "interaction_grad_clip_norm": training["interaction_grad_clip_norm"],
+            "minimum_effective_gradient_norm": training["minimum_effective_gradient_norm"],
+            "maximum_no_gradient_batches_per_update": training[
+                "maximum_no_gradient_batches_per_update"
+            ],
         },
         "execution": {
             "project_seed": project["seed"],
@@ -494,6 +696,7 @@ def _measurement_validation_protocol_from_mapping(
         "runtime": dict(runtime),
         "selection": {
             "measurement_validation_frames": training["measurement_validation_frames"],
+            "fast_roi_pretrain_weight": training["fast_roi_pretrain_weight"],
             "metric_version": _MEASUREMENT_SELECTION_METRIC_VERSION,
             "prediction_distance_threshold_m": (_MEASUREMENT_SELECTION_DISTANCE_THRESHOLD_M),
         },
@@ -563,6 +766,8 @@ def _validation_protocol_checkpoint_metrics(config: OrpheusConfig) -> dict[str, 
 def _rollout_selection_metrics(
     metrics: Mapping[str, float],
     config: OrpheusConfig,
+    *,
+    require_scenarios: bool = False,
 ) -> _RolloutSelectionMetrics:
     """Extract a complete finite physical checkpoint-selection summary."""
 
@@ -663,7 +868,7 @@ def _rollout_selection_metrics(
         sum(value * weight for value, weight in zip(weighted_values, weights, strict=True))
         / weight_total
     )
-    return _RolloutSelectionMetrics(
+    selection = _RolloutSelectionMetrics(
         score=score,
         position_rmse_m=values["position_rmse_m"],
         velocity_rmse_mps=values["velocity_rmse_mps"],
@@ -680,6 +885,42 @@ def _rollout_selection_metrics(
         axis_position_rmse_m=axis_values,
         horizon_axis_position_rmse_m=horizon_axis_values,
     )
+    if not require_scenarios:
+        return selection
+
+    scenario_slices: dict[str, _RolloutSelectionMetrics | None] = {}
+    for scenario in _selection_scenario_slugs(config):
+        metric_prefix = f"scenario_{scenario}_"
+        episode_count_key = f"{metric_prefix}episode_count"
+        support_key = f"{metric_prefix}selection_metric_supported"
+        missing_scenario_keys = [
+            key for key in (episode_count_key, support_key) if key not in metrics
+        ]
+        if missing_scenario_keys:
+            raise RuntimeError(
+                "closed-loop validation did not report declared scenario support: "
+                + ", ".join(missing_scenario_keys)
+            )
+        episode_count = float(metrics[episode_count_key])
+        if not math.isfinite(episode_count) or episode_count <= 0:
+            raise ValueError(f"declared scenario {scenario!r} must contain validation episodes")
+        support_value = float(metrics[support_key])
+        if not math.isfinite(support_value) or support_value not in {0.0, 1.0}:
+            raise ValueError(f"declared scenario {scenario!r} has an invalid support marker")
+        if support_value == 0.0:
+            scenario_slices[scenario] = None
+            continue
+        scenario_metrics = {
+            name.removeprefix(metric_prefix): float(value)
+            for name, value in metrics.items()
+            if name.startswith(f"{metric_prefix}validation_")
+        }
+        scenario_slices[scenario] = _rollout_selection_metrics(
+            scenario_metrics,
+            config,
+            require_scenarios=False,
+        )
+    return replace(selection, scenario_slices=scenario_slices)
 
 
 def _rollout_selection_from_checkpoint(
@@ -687,6 +928,7 @@ def _rollout_selection_from_checkpoint(
     config: OrpheusConfig,
     *,
     prefix: str = "best_rollout",
+    include_scenarios: bool = True,
 ) -> _RolloutSelectionMetrics | None:
     """Restore the broad incumbent required to guard a resumed run."""
 
@@ -739,7 +981,34 @@ def _rollout_selection_from_checkpoint(
         abs_tol=1.0e-8,
     ):
         return None
-    return restored
+    if not include_scenarios:
+        return restored
+
+    scenario_slices: dict[str, _RolloutSelectionMetrics | None] = {}
+    for scenario in _selection_scenario_slugs(config):
+        scenario_prefix = f"{prefix}_scenario_{scenario}"
+        support_key = f"{scenario_prefix}_selection_supported"
+        if support_key not in metrics:
+            return None
+        try:
+            support_value = float(metrics[support_key])
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(support_value) or support_value not in {0.0, 1.0}:
+            return None
+        if support_value == 0.0:
+            scenario_slices[scenario] = None
+            continue
+        scenario_selection = _rollout_selection_from_checkpoint(
+            metrics,
+            config,
+            prefix=scenario_prefix,
+            include_scenarios=False,
+        )
+        if scenario_selection is None:
+            return None
+        scenario_slices[scenario] = scenario_selection
+    return replace(restored, scenario_slices=scenario_slices)
 
 
 def _rollout_selection_guardrail_failures(
@@ -880,6 +1149,47 @@ def _rollout_selection_guardrail_failures(
             reference_value,
             reference_value - _ROLLOUT_SELECTION_COVERAGE_TOLERANCE,
         )
+    if set(candidate.scenario_slices) != set(reference.scenario_slices):
+        failures.append(
+            {
+                "metric": "scenario_selection_schema",
+                "direction": "required",
+                "candidate": float(len(candidate.scenario_slices)),
+                "reference": float(len(reference.scenario_slices)),
+                "limit": float(len(reference.scenario_slices)),
+                "delta": float(len(candidate.scenario_slices) - len(reference.scenario_slices)),
+            }
+        )
+        return failures
+    for scenario, reference_scenario in sorted(reference.scenario_slices.items()):
+        candidate_scenario = candidate.scenario_slices[scenario]
+        if candidate_scenario is None:
+            failures.append(
+                {
+                    "metric": f"scenario_{scenario}_selection_support",
+                    "direction": "required",
+                    "candidate": 0.0,
+                    "reference": float(reference_scenario is not None),
+                    "limit": 1.0,
+                    "delta": -float(reference_scenario is not None),
+                }
+            )
+            continue
+        # A reference without scenario support cannot establish a numerical
+        # non-regression limit. The candidate must still restore that support;
+        # subsequent accepted incumbents then provide complete guardrails.
+        if reference_scenario is None:
+            continue
+        for failure in _rollout_selection_guardrail_failures(
+            candidate_scenario,
+            reference_scenario,
+        ):
+            failures.append(
+                {
+                    **failure,
+                    "metric": f"scenario_{scenario}_{failure['metric']}",
+                }
+            )
     return failures
 
 
@@ -903,6 +1213,256 @@ def _rollout_selection_improves(
     return _rollout_selection_passes_guardrails(candidate, incumbent)
 
 
+def _handoff_training_support_failures(
+    candidate: _RolloutSelectionMetrics,
+    reference: _RolloutSelectionMetrics,
+    config: OrpheusConfig,
+) -> list[dict[str, float | str]]:
+    """Return coverage failures that would starve downstream causal learning.
+
+    A measurement-only selector is intentionally allowed to optimize proposal
+    quality.  It is not allowed to become the mutable causal source when the
+    resulting persistent runtime tracks only a small conditional subset: in
+    that state the ROI, filter, and rollout losses are absent and a frozen
+    global detector cannot repair the handoff.
+    """
+
+    failures: list[dict[str, float | str]] = []
+    ratio = config.training.handoff_minimum_reference_coverage_ratio
+
+    def require(name: str, value: float, reference_value: float, absolute: float) -> None:
+        limit = max(absolute, reference_value * ratio)
+        if value < limit:
+            failures.append(
+                {
+                    "metric": name,
+                    "direction": "minimum",
+                    "candidate": value,
+                    "reference": reference_value,
+                    "limit": limit,
+                    "delta": value - reference_value,
+                }
+            )
+
+    require(
+        "target_coverage",
+        candidate.target_coverage,
+        reference.target_coverage,
+        config.training.handoff_minimum_target_coverage,
+    )
+    if set(candidate.horizon_forecast_target_coverage) != set(
+        reference.horizon_forecast_target_coverage
+    ):
+        failures.append(
+            {
+                "metric": "forecast_target_coverage_schema",
+                "direction": "required",
+                "candidate": float(len(candidate.horizon_forecast_target_coverage)),
+                "reference": float(len(reference.horizon_forecast_target_coverage)),
+                "limit": float(len(reference.horizon_forecast_target_coverage)),
+                "delta": float(
+                    len(candidate.horizon_forecast_target_coverage)
+                    - len(reference.horizon_forecast_target_coverage)
+                ),
+            }
+        )
+        return failures
+    for suffix, reference_value in reference.horizon_forecast_target_coverage.items():
+        require(
+            f"forecast_target_coverage@{suffix}",
+            candidate.horizon_forecast_target_coverage[suffix],
+            reference_value,
+            config.training.handoff_minimum_forecast_coverage,
+        )
+    if set(candidate.scenario_slices) != set(reference.scenario_slices):
+        failures.append(
+            {
+                "metric": "scenario_selection_schema",
+                "direction": "required",
+                "candidate": float(len(candidate.scenario_slices)),
+                "reference": float(len(reference.scenario_slices)),
+                "limit": float(len(reference.scenario_slices)),
+                "delta": float(len(candidate.scenario_slices) - len(reference.scenario_slices)),
+            }
+        )
+        return failures
+    for scenario, reference_scenario in sorted(reference.scenario_slices.items()):
+        candidate_scenario = candidate.scenario_slices[scenario]
+        if candidate_scenario is None:
+            failures.append(
+                {
+                    "metric": f"scenario_{scenario}_selection_support",
+                    "direction": "required",
+                    "candidate": 0.0,
+                    "reference": float(reference_scenario is not None),
+                    "limit": 1.0,
+                    "delta": -float(reference_scenario is not None),
+                }
+            )
+            continue
+        reference_target_coverage = (
+            0.0 if reference_scenario is None else reference_scenario.target_coverage
+        )
+        require(
+            f"scenario_{scenario}_target_coverage",
+            candidate_scenario.target_coverage,
+            reference_target_coverage,
+            config.training.handoff_minimum_target_coverage,
+        )
+        reference_horizons = (
+            {}
+            if reference_scenario is None
+            else reference_scenario.horizon_forecast_target_coverage
+        )
+        for (
+            suffix,
+            candidate_coverage,
+        ) in candidate_scenario.horizon_forecast_target_coverage.items():
+            require(
+                f"scenario_{scenario}_forecast_target_coverage@{suffix}",
+                candidate_coverage,
+                reference_horizons.get(suffix, 0.0),
+                config.training.handoff_minimum_forecast_coverage,
+            )
+    return failures
+
+
+def _has_effective_gradient(
+    gradient_norm: float,
+    config: OrpheusConfig,
+) -> bool:
+    """Whether a consumed batch produced an optimizer-relevant gradient."""
+
+    return gradient_norm > config.training.minimum_effective_gradient_norm
+
+
+def _finite_nonnegative_integer(value: Any, *, name: str) -> int:
+    """Parse a durable counter without silently truncating corrupt metadata."""
+
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise ValueError(f"checkpoint {name} must be a finite nonnegative integer")
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed < 0.0 or not parsed.is_integer():
+        raise ValueError(f"checkpoint {name} must be a finite nonnegative integer")
+    return int(parsed)
+
+
+def _binary_checkpoint_marker(value: Any, *, name: str) -> bool:
+    """Parse a durable boolean marker with no truthy-number coercion."""
+
+    if isinstance(value, bool):
+        return value
+    if not isinstance(value, Real):
+        raise ValueError(f"checkpoint {name} must be exactly 0 or 1")
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed not in {0.0, 1.0}:
+        raise ValueError(f"checkpoint {name} must be exactly 0 or 1")
+    return parsed == 1.0
+
+
+def _causal_training_support(
+    result: TrainingBatchResult,
+) -> tuple[bool, float, float, float]:
+    """Return explicit trajectory/fast support for one causal optimizer draw.
+
+    The closed-loop objective retains a global-discovery measurement term as
+    an anti-drift auxiliary.  Its gradient alone is not evidence that the
+    persistent predict/correct/rollout path participated in the batch.  A
+    causal update therefore needs a differentiable trajectory term backed by
+    matched object/forecast support, or a differentiable fast-ROI measurement
+    term backed by an actual projected ROI.
+    """
+
+    if result.phase != "closed_loop_rgb":
+        return False, 0.0, 0.0, 0.0
+    matched_support = max(
+        0.0,
+        float(
+            result.metrics.get(
+                "physical_matched_object_frames",
+                result.metrics.get("matched_object_frames", 0.0),
+            )
+        ),
+    )
+    forecast_support = sum(
+        max(0.0, float(value))
+        for name, value in result.metrics.items()
+        if name.startswith("physical_rollout_position@")
+        and name.endswith("_coordinate_count")
+        and math.isfinite(float(value))
+    )
+    existence_negative_support = max(
+        0.0,
+        float(
+            result.metrics.get(
+                "existence_negative_supervision_object_frames",
+                0.0,
+            )
+        ),
+    )
+    trajectory_support = matched_support + forecast_support + existence_negative_support
+    candidate_trajectory_terms = [
+        (name, value)
+        for name, value in result.loss_terms.items()
+        if name in _CAUSAL_TRAJECTORY_LOSS_TERMS and value.requires_grad
+    ]
+    contributing_trajectory_terms: list[str] = []
+    if result.total_loss.requires_grad and candidate_trajectory_terms:
+        # Inspect the shallow weighted-loss graph before the real backward.
+        # ``requires_grad`` alone is insufficient: a configured zero weight
+        # leaves a differentiable term in ``loss_terms`` while contributing no
+        # causal gradient to ``total_loss``.
+        unique_terms: list[Tensor] = []
+        term_names_by_identity: dict[int, list[str]] = {}
+        for name, value in candidate_trajectory_terms:
+            identity = id(value)
+            term_names_by_identity.setdefault(identity, []).append(name)
+            if len(term_names_by_identity[identity]) == 1:
+                unique_terms.append(value)
+        derivatives = torch.autograd.grad(
+            result.total_loss,
+            unique_terms,
+            retain_graph=True,
+            allow_unused=True,
+        )
+        for value, derivative in zip(unique_terms, derivatives, strict=True):
+            if (
+                derivative is not None
+                and bool(torch.isfinite(derivative).all())
+                and bool(torch.any(derivative != 0))
+            ):
+                contributing_trajectory_terms.extend(term_names_by_identity[id(value)])
+    trajectory_differentiable = bool(contributing_trajectory_terms)
+    objective_term_support = float(len(contributing_trajectory_terms))
+    fast_support_metric = (
+        "fast_supervised_slots"
+        if "fast_supervised_slots" in result.metrics
+        else "fast_supervised_frames"
+    )
+    fast_support = max(0.0, float(result.metrics.get(fast_support_metric, 0.0)))
+    fast_measurement = result.support_terms.get("fast_measurement")
+    fast_differentiable = False
+    if (
+        fast_support > 0.0
+        and fast_measurement is not None
+        and fast_measurement.requires_grad
+        and result.total_loss.requires_grad
+    ):
+        (measurement_derivative,) = torch.autograd.grad(
+            result.total_loss,
+            (fast_measurement,),
+            retain_graph=True,
+            allow_unused=True,
+        )
+        fast_differentiable = (
+            measurement_derivative is not None
+            and bool(torch.isfinite(measurement_derivative).all())
+            and bool(torch.any(measurement_derivative != 0))
+        )
+    supported = (trajectory_support > 0.0 and trajectory_differentiable) or fast_differentiable
+    return supported, trajectory_support, fast_support, objective_term_support
+
+
 def _rollout_validation_checkpoint_metrics(
     validation: TrainingBatchResult,
     candidate: _RolloutSelectionMetrics,
@@ -911,6 +1471,8 @@ def _rollout_validation_checkpoint_metrics(
     *,
     config: OrpheusConfig,
     accepted: bool,
+    training_support_required: bool,
+    training_support_failures: list[dict[str, float | str]],
     best_measurement: _MeasurementSelectionMetrics | None,
     checkpoint_model_state_hash: str,
     incumbent_model_state_hash: str,
@@ -931,6 +1493,11 @@ def _rollout_validation_checkpoint_metrics(
     rejection_reasons: list[dict[str, Any]] = [
         *incumbent_guardrail_failures,
         *(failure for failure in guardrail_failures if failure not in incumbent_guardrail_failures),
+        *(
+            failure
+            for failure in training_support_failures
+            if failure not in incumbent_guardrail_failures and failure not in guardrail_failures
+        ),
     ]
     if not accepted and candidate.score >= incumbent.score - _ROLLOUT_SELECTION_MIN_DELTA:
         rejection_reasons.append(
@@ -956,6 +1523,11 @@ def _rollout_validation_checkpoint_metrics(
         "selection_rejection_reasons": rejection_reasons,
         "selection_reference_guardrail_failures": guardrail_failures,
         "selection_incumbent_guardrail_failures": incumbent_guardrail_failures,
+        "selection_training_support_failures": training_support_failures,
+        "selection_training_support_required": float(training_support_required),
+        "selection_training_support_passed": float(
+            not training_support_required or not training_support_failures
+        ),
         "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
         "best_rollout_validated": 1.0,
         "best_measurement_validated": float(best_measurement is not None),
@@ -1045,8 +1617,15 @@ def _verified_measurement_checkpoint(
             return None
         if metrics.get("best_measurement_model_state_hash") != model_state_hash:
             return None
-        checkpoint_step = int(payload["step"])
-        if int(float(metrics.get("best_measurement_checkpoint_step", -1.0))) != checkpoint_step:
+        checkpoint_step = _finite_nonnegative_integer(
+            payload.get("step"),
+            name="step",
+        )
+        linked_step = _finite_nonnegative_integer(
+            metrics.get("best_measurement_checkpoint_step"),
+            name="best_measurement_checkpoint_step",
+        )
+        if linked_step != checkpoint_step:
             return None
         if expected_model_state_hash is not None and (
             model_state_hash != expected_model_state_hash
@@ -1074,8 +1653,11 @@ def _preserve_resume_measurement_checkpoint(
     if not isinstance(expected_hash, str) or expected_step_value is None:
         return None
     try:
-        expected_step = int(float(expected_step_value))
-    except (TypeError, ValueError):
+        expected_step = _finite_nonnegative_integer(
+            expected_step_value,
+            name="best_measurement_checkpoint_step",
+        )
+    except ValueError:
         return None
     resumed = Path(resume_path).expanduser().resolve()
     source = (
@@ -1132,6 +1714,10 @@ def _verified_selector_checkpoint(
             expected_device=expected_device,
         ):
             return None
+        if float(metrics.get("rollout_selection_metric_version", -1.0)) != (
+            _ROLLOUT_SELECTION_METRIC_VERSION
+        ):
+            return None
         selection = _rollout_selection_from_checkpoint(
             metrics,
             config,
@@ -1146,8 +1732,15 @@ def _verified_selector_checkpoint(
             return None
         if metrics.get(f"{prefix}_model_state_hash") != model_state_hash:
             return None
-        checkpoint_step = int(payload["step"])
-        if int(float(metrics.get(f"{prefix}_checkpoint_step", -1.0))) != checkpoint_step:
+        checkpoint_step = _finite_nonnegative_integer(
+            payload.get("step"),
+            name="step",
+        )
+        linked_step = _finite_nonnegative_integer(
+            metrics.get(f"{prefix}_checkpoint_step"),
+            name=f"{prefix}_checkpoint_step",
+        )
+        if linked_step != checkpoint_step:
             return None
         if expected_model_state_hash is not None and (
             model_state_hash != expected_model_state_hash
@@ -1176,8 +1769,11 @@ def _preserve_resume_selector_checkpoint(
     if not isinstance(expected_hash, str) or expected_step_value is None:
         return None
     try:
-        expected_step = int(float(expected_step_value))
-    except (TypeError, ValueError):
+        expected_step = _finite_nonnegative_integer(
+            expected_step_value,
+            name=f"{prefix}_checkpoint_step",
+        )
+    except ValueError:
         return None
     resumed = Path(resume_path).expanduser().resolve()
     source = resumed.parent / f"{prefix}.pt" if resumed.parent.name == "checkpoints" else resumed
@@ -1205,6 +1801,130 @@ def _preserve_resume_selector_checkpoint(
             return None
         verified = copied
     return verified
+
+
+def _verified_accepted_validation_checkpoint(
+    path: Path,
+    config: OrpheusConfig,
+    *,
+    maximum_step: int,
+    expected_device: str | torch.device | None = None,
+) -> tuple[int, str] | None:
+    """Verify an accepted numbered checkpoint before retaining its history."""
+
+    match = _NUMBERED_VALIDATION_CHECKPOINT.fullmatch(path.name)
+    if match is None or not path.is_file():
+        return None
+    filename_step = int(match.group(1))
+    if filename_step > maximum_step:
+        return None
+    try:
+        payload = torch.load(path, map_location="cpu", weights_only=False)
+        if not isinstance(payload, Mapping):
+            return None
+        checkpoint_step = _finite_nonnegative_integer(
+            payload.get("step"),
+            name="step",
+        )
+        if checkpoint_step != filename_step:
+            return None
+        metrics = payload.get("metrics")
+        model_state = payload.get("model_state")
+        if not isinstance(metrics, Mapping) or not isinstance(model_state, Mapping):
+            return None
+        if not _rollout_validation_protocol_is_compatible(
+            payload,
+            config,
+            expected_device=expected_device,
+        ):
+            return None
+        if float(metrics.get("selection_accepted", 0.0)) != 1.0:
+            return None
+        if float(metrics.get("checkpoint_contains_best_rollout_weights", 0.0)) != 1.0:
+            return None
+        linked_step = _finite_nonnegative_integer(
+            metrics.get("best_rollout_checkpoint_step"),
+            name="best_rollout_checkpoint_step",
+        )
+        if linked_step != checkpoint_step:
+            return None
+        model_state_hash = _model_state_hash(model_state)
+        if metrics.get("checkpoint_model_state_hash") != model_state_hash:
+            return None
+        if metrics.get("best_rollout_model_state_hash") != model_state_hash:
+            return None
+        selection = _rollout_selection_from_checkpoint(metrics, config)
+        if selection is None:
+            return None
+    except (KeyError, RuntimeError, TypeError, ValueError):
+        return None
+    return checkpoint_step, model_state_hash
+
+
+def _preserve_resume_validation_history(
+    resume_path: str | Path,
+    destination_directory: Path,
+    config: OrpheusConfig,
+    *,
+    resume_step: int,
+    expected_device: str | torch.device | None = None,
+) -> tuple[Path, ...]:
+    """Copy tensor-verified accepted numbered history into a branched run."""
+
+    resumed = Path(resume_path).expanduser().resolve()
+    source_directory = resumed.parent if resumed.parent.name == "checkpoints" else None
+    if source_directory is None:
+        return ()
+    destination_directory = destination_directory.resolve()
+    if source_directory == destination_directory:
+        return tuple(
+            path
+            for path in sorted(destination_directory.glob("validation_step_*.pt"))
+            if _verified_accepted_validation_checkpoint(
+                path,
+                config,
+                maximum_step=resume_step,
+                expected_device=expected_device,
+            )
+            is not None
+        )
+    preserved: list[Path] = []
+    for source in sorted(source_directory.glob("validation_step_*.pt")):
+        verified = _verified_accepted_validation_checkpoint(
+            source,
+            config,
+            maximum_step=resume_step,
+            expected_device=expected_device,
+        )
+        if verified is None:
+            continue
+        destination = destination_directory / source.name
+        if destination.exists():
+            copied = _verified_accepted_validation_checkpoint(
+                destination,
+                config,
+                maximum_step=resume_step,
+                expected_device=expected_device,
+            )
+            if copied != verified:
+                raise ValueError(
+                    "branched run contains a conflicting numbered validation "
+                    f"checkpoint: {destination}"
+                )
+        else:
+            shutil.copy2(source, destination)
+            copied = _verified_accepted_validation_checkpoint(
+                destination,
+                config,
+                maximum_step=resume_step,
+                expected_device=expected_device,
+            )
+            if copied != verified:
+                raise RuntimeError(
+                    f"copied numbered validation checkpoint failed verification: {destination}"
+                )
+        preserved.append(destination)
+    return tuple(preserved)
 
 
 def _fresh_causal_optimizer_state(
@@ -1380,6 +2100,68 @@ def _gradient_clip_diagnostics(
     )
 
 
+def _clip_training_gradients(
+    model: OnlineWorldModel,
+    config: OrpheusConfig,
+) -> dict[str, float]:
+    """Clip learned interactions locally, then clip the complete model.
+
+    A learned edge residual is reused at every recursive dynamics substep.
+    Its raw gradient can therefore be much larger than otherwise healthy
+    perception/filter/rollout gradients. A single global clip would shrink
+    every subsystem by that outlier's coefficient. The local cap preserves
+    the full forward dynamics capacity while preventing one residual module
+    from monopolizing an optimizer update.
+
+    ``clip_grad_norm_`` returns the norm before its own mutation. Since the
+    interaction parameters are a strict subset of the complete model, the raw
+    whole-model norm can be reconstructed exactly from the two returned norms.
+    """
+
+    interaction_pre_clip_tensor = torch.nn.utils.clip_grad_norm_(
+        model.dynamics.interactions.parameters(),
+        config.training.interaction_grad_clip_norm,
+        error_if_nonfinite=False,
+    )
+    if not bool(torch.isfinite(interaction_pre_clip_tensor)):
+        raise FloatingPointError("nonfinite learned-interaction gradient norm")
+    interaction_pre_clip = float(interaction_pre_clip_tensor.detach().cpu())
+    interaction_coefficient, interaction_applied = _gradient_clip_diagnostics(
+        interaction_pre_clip,
+        config.training.interaction_grad_clip_norm,
+    )
+
+    pre_global_clip_tensor = torch.nn.utils.clip_grad_norm_(
+        model.parameters(),
+        config.training.grad_clip_norm,
+        error_if_nonfinite=False,
+    )
+    if not bool(torch.isfinite(pre_global_clip_tensor)):
+        raise FloatingPointError("nonfinite whole-model gradient norm")
+    pre_global_clip = float(pre_global_clip_tensor.detach().cpu())
+    global_coefficient, applied = _gradient_clip_diagnostics(
+        pre_global_clip,
+        config.training.grad_clip_norm,
+    )
+    raw_squared = (
+        pre_global_clip * pre_global_clip
+        - interaction_applied * interaction_applied
+        + interaction_pre_clip * interaction_pre_clip
+    )
+    raw = math.sqrt(max(0.0, raw_squared))
+    total_coefficient = applied / raw if raw > 0.0 else 1.0
+    return {
+        "gradient_norm_pre_clip": raw,
+        "interaction_gradient_norm_pre_clip": interaction_pre_clip,
+        "interaction_gradient_clip_coefficient": interaction_coefficient,
+        "interaction_gradient_norm_applied_before_global_clip": interaction_applied,
+        "gradient_norm_pre_global_clip": pre_global_clip,
+        "gradient_clip_coefficient": global_coefficient,
+        "gradient_total_clip_coefficient": total_coefficient,
+        "gradient_norm_applied": applied,
+    }
+
+
 def _rollout_validation_protocol_is_compatible(
     payload: Mapping[str, Any],
     config: OrpheusConfig,
@@ -1391,6 +2173,12 @@ def _rollout_validation_protocol_is_compatible(
     metrics = payload.get("metrics")
     checkpoint_config = payload.get("config")
     if not isinstance(metrics, Mapping) or not isinstance(checkpoint_config, Mapping):
+        return False
+    try:
+        selector_metric_version = float(metrics.get("rollout_selection_metric_version", math.nan))
+    except (TypeError, ValueError):
+        return False
+    if selector_metric_version != _ROLLOUT_SELECTION_METRIC_VERSION:
         return False
     stored_hash = metrics.get("rollout_validation_protocol_hash")
     if not isinstance(stored_hash, str):
@@ -1438,19 +2226,22 @@ def measurement_pretrain_frame_index(
     total_frames: int,
     fixed_dataset: bool,
 ) -> int:
-    """Choose an RGB pretraining frame without coupling batches to parity.
+    """Choose an adjacent-pair anchor without coupling batches to parity.
 
-    For a fixed dataset, every batch sees frame 0 before every batch sees frame
-    1, and so on.  The previous ``step % total_frames`` rule coupled loader
-    position and frame parity, so some episodes could never see half of their
-    frames.  Streaming/shuffled datasets retain independently sampled frames.
+    Stage B jointly trains global discovery at this frame and the fast ROI
+    update at ``frame + 1``. For a fixed dataset, every batch sees anchor zero
+    before every batch sees anchor one, and so on. Streaming/shuffled datasets
+    retain independently sampled adjacent pairs.
     """
 
-    if loader_batches <= 0 or total_frames <= 0:
-        raise ValueError("loader_batches and total_frames must be positive")
+    if loader_batches <= 0 or total_frames < 2:
+        raise ValueError(
+            "loader_batches must be positive and total_frames must contain an RGB pair"
+        )
+    pair_count = total_frames - 1
     if fixed_dataset:
-        return (step // loader_batches) % total_frames
-    return random.randrange(total_frames)
+        return (step // loader_batches) % pair_count
+    return random.randrange(pair_count)
 
 
 def set_global_perception_trainable(
@@ -1458,14 +2249,27 @@ def set_global_perception_trainable(
     *,
     trainable: bool,
 ) -> None:
-    """Freeze or unfreeze full-frame RGB discovery without disabling fast ROI."""
+    """Control global-exclusive RGB modules without disabling the fast encoder.
+
+    Backbone stages zero and one are shared by both paths, and
+    ``fast_projection`` is ROI-only.  Freezing the entire backbone silently
+    reduced ``state_dynamics_roi`` to the ROI output head and prevented the
+    causal objective from adapting its visual features.
+    """
 
     module = model.observation_modules["rgb"]
-    for component_name in ("backbone", "global_detector"):
-        component = getattr(module, component_name, None)
-        if component is None:
-            raise TypeError(f"RGB module is missing {component_name}")
-        component.requires_grad_(trainable)
+    backbone = getattr(module, "backbone", None)
+    global_detector = getattr(module, "global_detector", None)
+    if backbone is None or global_detector is None:
+        raise TypeError("RGB module is missing backbone or global_detector")
+    global_detector.requires_grad_(trainable)
+    if trainable:
+        backbone.requires_grad_(True)
+        return
+    for stage in backbone.stages[2:]:
+        stage.requires_grad_(False)
+    for projection in backbone.projections:
+        projection.requires_grad_(False)
 
 
 def set_closed_loop_trainable_scope(
@@ -1499,6 +2303,12 @@ def set_closed_loop_trainable_scope(
         roi_updater = getattr(rgb_module, "roi_updater", None)
         if roi_updater is None:
             raise TypeError("RGB module is missing roi_updater")
+        backbone = getattr(rgb_module, "backbone", None)
+        if backbone is None:
+            raise TypeError("RGB module is missing backbone")
+        for stage in backbone.stages[:2]:
+            stage.requires_grad_(True)
+        backbone.fast_projection.requires_grad_(True)
         roi_updater.requires_grad_(True)
         _freeze_disconnected_training_heads(model)
         return
@@ -1614,6 +2424,52 @@ def _mean_batch_results(
                 "rgb_world_position_mae_m": all_mae,
             }
         )
+    fast_count_keys = {
+        "bootstrap_matched": "rgb_fast_bootstrap_matched_target_count",
+        "bootstrap_target": "rgb_fast_bootstrap_target_count",
+        "roi_supported": "rgb_fast_roi_supported_target_count",
+        "roi_target": "rgb_fast_roi_target_count",
+        "eligible": "rgb_fast_roi_eligible_proposal_count",
+        "roi_error": "rgb_fast_roi_world_position_absolute_error_sum_m",
+        "roi_matched": "rgb_fast_roi_world_position_matched_count",
+        "prior_error": "rgb_fast_prior_world_position_absolute_error_sum_m",
+        "prior_matched": "rgb_fast_prior_world_position_matched_count",
+        "confident": "rgb_fast_roi_confident_proposal_count",
+        "true_positive": "rgb_fast_roi_true_positive_count_at_0_5m",
+    }
+    if all(key in aggregate_metrics for key in fast_count_keys.values()):
+        counts = {name: aggregate_metrics[key] for name, key in fast_count_keys.items()}
+        bootstrap_coverage = counts["bootstrap_matched"] / max(
+            counts["bootstrap_target"],
+            1.0,
+        )
+        roi_coverage = counts["roi_supported"] / max(counts["roi_target"], 1.0)
+        roi_recall = counts["true_positive"] / max(counts["roi_target"], 1.0)
+        roi_precision = counts["true_positive"] / max(counts["confident"], 1.0)
+        roi_f1 = 2.0 * roi_recall * roi_precision / max(roi_recall + roi_precision, 1.0e-8)
+        roi_mae = (
+            counts["roi_error"] / counts["roi_matched"] if counts["roi_matched"] > 0 else math.inf
+        )
+        prior_mae = (
+            counts["prior_error"] / counts["prior_matched"]
+            if counts["prior_matched"] > 0
+            else math.inf
+        )
+        improvement = (
+            prior_mae - roi_mae if math.isfinite(prior_mae) and math.isfinite(roi_mae) else math.nan
+        )
+        aggregate_metrics.update(
+            {
+                "rgb_fast_bootstrap_target_coverage": bootstrap_coverage,
+                "rgb_fast_roi_target_coverage": roi_coverage,
+                "rgb_fast_roi_world_position_mae_m": roi_mae,
+                "rgb_fast_prior_world_position_mae_m": prior_mae,
+                "rgb_fast_roi_improvement_m": improvement,
+                "rgb_fast_roi_recall_at_0_5m": roi_recall,
+                "rgb_fast_roi_precision_at_0_5m": roi_precision,
+                "rgb_fast_roi_f1_at_0_5m": roi_f1,
+            }
+        )
 
     return TrainingBatchResult(
         total_loss=(
@@ -1656,15 +2512,18 @@ def _validation_step(
             )
         else:
             total_frames = int(batch["rgb"].shape[1])
+            if total_frames < 2:
+                raise ValueError("measurement validation requires an adjacent RGB pair")
+            pair_count = total_frames - 1
             frame_count = min(
-                total_frames,
+                pair_count,
                 config.training.measurement_validation_frames,
             )
-            if frame_count == total_frames:
-                frame_indices = list(range(total_frames))
+            if frame_count == pair_count:
+                frame_indices = list(range(pair_count))
             else:
                 frame_indices = (
-                    torch.linspace(0, total_frames - 1, frame_count)
+                    torch.linspace(0, pair_count - 1, frame_count)
                     .round()
                     .to(dtype=torch.int64)
                     .unique(sorted=True)
@@ -1962,9 +2821,7 @@ def _expected_resume_checkpoint_devices(
 ) -> frozenset[torch.device]:
     """Return valid actual devices for the checkpoint's durable phase state."""
 
-    step = int(payload.get("step", -1))
-    if step < 0:
-        raise ValueError("checkpoint step must be a nonnegative integer")
+    step = _finite_nonnegative_integer(payload.get("step"), name="step")
     boundary = int(config.training.rgb_pretrain_steps)
     metrics = payload.get("metrics")
     metrics = metrics if isinstance(metrics, Mapping) else {}
@@ -2018,7 +2875,10 @@ def _resume_requires_final_validation(
         raise ValueError("checkpoint final validation marker is invalid") from error
     if marker_value not in {0.0, 1.0}:
         raise ValueError("checkpoint final validation marker must be 0 or 1")
-    return marker_value == 0.0 and int(payload.get("step", -1)) == int(config.training.steps)
+    return marker_value == 0.0 and _finite_nonnegative_integer(
+        payload.get("step"),
+        name="step",
+    ) == int(config.training.steps)
 
 
 def _resolve_training_devices(
@@ -2153,9 +3013,10 @@ def train_from_config(
             resume_config_payload,
             source_provenance,
         )
-        resume_step_hint = int(resume_config_payload.get("step", -1))
-        if resume_step_hint < 0:
-            raise ValueError("checkpoint step must be a nonnegative integer")
+        resume_step_hint = _finite_nonnegative_integer(
+            resume_config_payload.get("step"),
+            name="step",
+        )
         final_validation_recovery_pending = _resume_requires_final_validation(
             resume_config_payload,
             config,
@@ -2198,6 +3059,15 @@ def train_from_config(
             )
     checkpoint_directory = run_directory / "checkpoints"
     checkpoint_directory.mkdir(parents=True, exist_ok=True)
+    preserved_validation_history: tuple[Path, ...] = ()
+    if resume_path is not None and resume_step_hint is not None:
+        preserved_validation_history = _preserve_resume_validation_history(
+            resume_path,
+            checkpoint_directory,
+            config,
+            resume_step=resume_step_hint,
+            expected_device=closed_loop_device,
+        )
     best_rollout_path = checkpoint_directory / "best_rollout.pt"
     reference_rollout_path = checkpoint_directory / "reference_rollout.pt"
     best_measurement_path = checkpoint_directory / "best_measurement.pt"
@@ -2260,6 +3130,9 @@ def train_from_config(
     measurement_handoff_completed = config.training.rgb_pretrain_steps == 0
     resumed_from: str | None = None
     resume_metrics: Mapping[str, Any] = {}
+    training_data_draw_step = 0
+    skipped_no_gradient_batches = 0
+    support_collapse_rollback_at_checkpoint = False
     if resume_path is not None:
         payload = load_checkpoint(
             resume_path,
@@ -2273,13 +3146,17 @@ def train_from_config(
             restore_rng=True,
             expected_config=config,
         )
-        start_step = int(payload["step"])
+        start_step = _finite_nonnegative_integer(payload.get("step"), name="step")
         raw_resume_metrics = payload.get("metrics", {})
         if isinstance(raw_resume_metrics, Mapping):
             resume_metrics = raw_resume_metrics
-        best_rollout_validated = bool(float(resume_metrics.get("best_rollout_validated", 0.0)))
-        best_measurement_validated = bool(
-            float(resume_metrics.get("best_measurement_validated", 0.0))
+        best_rollout_validated = _binary_checkpoint_marker(
+            resume_metrics.get("best_rollout_validated", 0.0),
+            name="best_rollout_validated",
+        )
+        best_measurement_validated = _binary_checkpoint_marker(
+            resume_metrics.get("best_measurement_validated", 0.0),
+            name="best_measurement_validated",
         )
         if best_rollout_validated:
             preserved_best = _preserve_resume_selector_checkpoint(
@@ -2341,7 +3218,10 @@ def train_from_config(
                 best_rollout = best_rollout_selection.score
         stored_handoff_completed = resume_metrics.get("measurement_handoff_completed")
         if stored_handoff_completed is not None:
-            measurement_handoff_completed = bool(float(stored_handoff_completed))
+            measurement_handoff_completed = _binary_checkpoint_marker(
+                stored_handoff_completed,
+                name="measurement_handoff_completed",
+            )
         elif (
             best_rollout_selection is not None
             and config.training.rgb_pretrain_steps > 0
@@ -2392,19 +3272,42 @@ def train_from_config(
                     best_measurement_step,
                 ) = restored_measurement
         resumed_from = str(Path(resume_path).expanduser().resolve())
+        training_data_draw_step = _finite_nonnegative_integer(
+            resume_metrics.get("training_data_draw_step", start_step),
+            name="training_data_draw_step",
+        )
+        skipped_no_gradient_batches = _finite_nonnegative_integer(
+            resume_metrics.get("skipped_no_gradient_batches", 0.0),
+            name="skipped_no_gradient_batches",
+        )
+        expected_data_draw_step = start_step + skipped_no_gradient_batches
+        if training_data_draw_step != expected_data_draw_step:
+            raise ValueError(
+                "checkpoint data-progress invariant failed: "
+                "training_data_draw_step must equal optimizer step plus "
+                "skipped_no_gradient_batches "
+                f"({training_data_draw_step} != {start_step} + "
+                f"{skipped_no_gradient_batches})"
+            )
         if start_step > config.training.steps:
             raise ValueError(
                 "checkpoint step exceeds configured training.steps "
                 f"({start_step} > {config.training.steps})"
             )
+    else:
+        training_data_draw_step = start_step
 
+    remaining_optimizer_updates = config.training.steps - start_step
+    maximum_remaining_batch_draws = remaining_optimizer_updates * (
+        config.training.maximum_no_gradient_batches_per_update + 1
+    )
     train_loader = _make_loader(
         config,
         split="train",
         episodes=config.training.train_episodes,
         shuffle=not config.training.fixed_dataset,
-        start_step=start_step,
-        stop_step=config.training.steps,
+        start_step=training_data_draw_step,
+        stop_step=training_data_draw_step + maximum_remaining_batch_draws,
     )
     train_iterator = iter(train_loader)
     train_batches_per_epoch = math.ceil(
@@ -2420,11 +3323,19 @@ def train_from_config(
         *,
         checkpoint_model_state_hash: str | None = None,
     ) -> dict[str, Any]:
+        data_progress = {
+            "training_data_draw_step": float(training_data_draw_step),
+            "skipped_no_gradient_batches": float(skipped_no_gradient_batches),
+        }
         if best_measurement_selection is None:
-            return {"best_measurement_validated": 0.0}
+            return {
+                **data_progress,
+                "best_measurement_validated": 0.0,
+            }
         if best_measurement_model_state_hash is None or best_measurement_step is None:
             raise AssertionError("measurement selector is missing weight provenance")
         return {
+            **data_progress,
             "best_measurement_validated": 1.0,
             **best_measurement_selection.checkpoint_metrics(),
             "measurement_validation_protocol_hash": (_measurement_validation_protocol_hash(config)),
@@ -2440,7 +3351,11 @@ def train_from_config(
         completed_step: int,
         learning_rate: float,
         split: str,
-    ) -> tuple[TrainingBatchResult, bool]:
+    ) -> tuple[
+        TrainingBatchResult,
+        bool,
+        list[dict[str, float | str]],
+    ]:
         nonlocal best_rollout, best_rollout_selection, best_rollout_validated
         nonlocal best_rollout_model_state_hash, best_rollout_step
         nonlocal reference_rollout_selection
@@ -2457,7 +3372,11 @@ def train_from_config(
             validation,
             learning_rate=learning_rate,
         )
-        candidate = _rollout_selection_metrics(validation.metrics, config)
+        candidate = _rollout_selection_metrics(
+            validation.metrics,
+            config,
+            require_scenarios=True,
+        )
         candidate_model_state_hash = _current_model_state_hash(model)
         established_reference = reference_rollout_selection is None
         if established_reference:
@@ -2470,14 +3389,113 @@ def train_from_config(
             or reference_rollout_step is None
         ):
             raise AssertionError("closed-loop validation did not establish a fixed reference")
-        accepted = best_rollout_selection is None or (
-            _rollout_selection_improves(
-                candidate,
-                best_rollout_selection,
-            )
-            and _rollout_selection_passes_guardrails(
+        training_support_required = config.training.steps > config.training.rgb_pretrain_steps
+        training_support_failures = (
+            _handoff_training_support_failures(
                 candidate,
                 reference_rollout_selection,
+                config,
+            )
+            if training_support_required
+            else []
+        )
+        if best_rollout_selection is None and training_support_failures:
+            checkpoint_metrics: dict[str, Any] = {
+                "validation_total_loss": float(validation.total_loss.detach().cpu()),
+                "validation_rollout_loss": float(
+                    validation.loss_terms.get("rollout", validation.total_loss).detach().cpu()
+                ),
+                "validation_rollout_position_loss": float(
+                    validation.loss_terms.get(
+                        "rollout_position",
+                        validation.total_loss,
+                    )
+                    .detach()
+                    .cpu()
+                ),
+                "selection_accepted": 0.0,
+                "selection_rejection_reason_count": float(len(training_support_failures)),
+                "selection_rejection_reasons": training_support_failures,
+                "selection_reference_guardrail_failures": [],
+                "selection_incumbent_guardrail_failures": [],
+                "selection_training_support_failures": training_support_failures,
+                "selection_training_support_required": 1.0,
+                "selection_training_support_passed": 0.0,
+                "rollout_selection_metric_version": (_ROLLOUT_SELECTION_METRIC_VERSION),
+                "best_rollout_validated": 0.0,
+                "rollout_reference_validated": 1.0,
+                "best_measurement_validated": float(best_measurement_selection is not None),
+                **candidate.validation_metrics(),
+                **reference_rollout_selection.checkpoint_metrics(prefix="reference_rollout"),
+                **_validation_protocol_checkpoint_metrics(config),
+                "checkpoint_model_state_hash": candidate_model_state_hash,
+                "checkpoint_contains_best_rollout_weights": 0.0,
+                "checkpoint_contains_reference_rollout_weights": 1.0,
+                "reference_rollout_model_state_hash": (reference_rollout_model_state_hash),
+                "reference_rollout_checkpoint_step": float(reference_rollout_step),
+                "measurement_handoff_completed": float(measurement_handoff_completed),
+            }
+            checkpoint_metrics.update(
+                retained_measurement_selector_metrics(
+                    checkpoint_model_state_hash=candidate_model_state_hash,
+                )
+            )
+            validation_metrics.update(
+                {
+                    "selection_accepted": 0.0,
+                    "selection_rejection_reason_count": float(len(training_support_failures)),
+                    "selection_rejection_reasons_json": json.dumps(
+                        training_support_failures,
+                        sort_keys=True,
+                    ),
+                    "selection_training_support_failure_count": float(
+                        len(training_support_failures)
+                    ),
+                    "selection_training_support_required": 1.0,
+                    "selection_training_support_failures_json": json.dumps(
+                        training_support_failures,
+                        sort_keys=True,
+                    ),
+                }
+            )
+            logger.log(
+                step=completed_step,
+                split=split,
+                metrics=validation_metrics,
+            )
+            save_checkpoint(
+                checkpoint_directory / f"validation_step_{completed_step:06d}.pt",
+                model=model,
+                optimizer=optimizer,
+                config=config,
+                step=completed_step,
+                metrics=checkpoint_metrics,
+                device=str(device),
+                source_provenance=source_provenance,
+            )
+            if established_reference:
+                save_checkpoint(
+                    reference_rollout_path,
+                    model=model,
+                    optimizer=optimizer,
+                    config=config,
+                    step=completed_step,
+                    metrics=checkpoint_metrics,
+                    device=str(device),
+                    source_provenance=source_provenance,
+                )
+            return validation, False, training_support_failures
+        accepted = not training_support_failures and (
+            best_rollout_selection is None
+            or (
+                _rollout_selection_improves(
+                    candidate,
+                    best_rollout_selection,
+                )
+                and _rollout_selection_passes_guardrails(
+                    candidate,
+                    reference_rollout_selection,
+                )
             )
         )
         if accepted:
@@ -2497,6 +3515,8 @@ def train_from_config(
             reference_rollout_selection,
             config=config,
             accepted=accepted,
+            training_support_required=training_support_required,
+            training_support_failures=training_support_failures,
             best_measurement=(best_measurement_selection if best_measurement_validated else None),
             checkpoint_model_state_hash=candidate_model_state_hash,
             incumbent_model_state_hash=best_rollout_model_state_hash,
@@ -2538,6 +3558,12 @@ def train_from_config(
                 ),
                 "selection_incumbent_guardrail_failures_json": json.dumps(
                     checkpoint_metrics["selection_incumbent_guardrail_failures"],
+                    sort_keys=True,
+                ),
+                "selection_training_support_failure_count": float(len(training_support_failures)),
+                "selection_training_support_required": float(training_support_required),
+                "selection_training_support_failures_json": json.dumps(
+                    training_support_failures,
                     sort_keys=True,
                 ),
                 "best_rollout_selection_score": best_rollout_selection.score,
@@ -2582,18 +3608,36 @@ def train_from_config(
                 device=str(device),
                 source_provenance=source_provenance,
             )
-        return validation, accepted
+        return validation, accepted, training_support_failures
 
     def retained_selector_metrics() -> dict[str, Any]:
+        current_model_state_hash = _current_model_state_hash(model)
         metrics: dict[str, Any] = {
             "best_rollout_validated": float(best_rollout_selection is not None),
             "rollout_reference_validated": float(reference_rollout_selection is not None),
             "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
-            "checkpoint_contains_best_rollout_weights": 0.0,
-            "checkpoint_contains_reference_rollout_weights": 0.0,
+            "checkpoint_model_state_hash": current_model_state_hash,
+            "checkpoint_contains_best_rollout_weights": float(
+                best_rollout_model_state_hash is not None
+                and current_model_state_hash == best_rollout_model_state_hash
+            ),
+            "checkpoint_contains_reference_rollout_weights": float(
+                reference_rollout_model_state_hash is not None
+                and current_model_state_hash == reference_rollout_model_state_hash
+            ),
+            "support_collapse_rollback_applied_at_checkpoint": float(
+                support_collapse_rollback_at_checkpoint
+            ),
+            "checkpoint_state_role": (
+                "restored_best_rollout"
+                if support_collapse_rollback_at_checkpoint
+                else "mutable_training_iterate"
+            ),
             "measurement_handoff_completed": float(measurement_handoff_completed),
             **_validation_protocol_checkpoint_metrics(config),
-            **retained_measurement_selector_metrics(),
+            **retained_measurement_selector_metrics(
+                checkpoint_model_state_hash=current_model_state_hash,
+            ),
         }
         if best_rollout_selection is not None:
             if best_rollout_model_state_hash is None or best_rollout_step is None:
@@ -2735,28 +3779,91 @@ def train_from_config(
             )
         return validation, measurement_accepted
 
+    def restore_safe_causal_incumbent(
+        *,
+        completed_step: int,
+        split: str,
+        support_failures: list[dict[str, float | str]],
+    ) -> None:
+        """Rollback a support-collapsed iterate and discard its Adam moments."""
+
+        nonlocal support_collapse_rollback_at_checkpoint
+        if not support_failures:
+            raise ValueError("causal rollback requires an explicit support failure")
+        if best_rollout_selection is None or not best_rollout_path.is_file():
+            raise RuntimeError(
+                "closed-loop validation collapsed training support, but no "
+                "tensor-verified broad incumbent is available for rollback"
+            )
+        load_model_weights(
+            best_rollout_path,
+            model=model,
+            expected_config=config,
+        )
+        model.reset()
+        _fresh_causal_optimizer_state(
+            optimizer,
+            learning_rate=(
+                config.training.learning_rate * config.training.closed_loop_learning_rate_scale
+            ),
+            weight_decay=config.training.weight_decay,
+        )
+        support_collapse_rollback_at_checkpoint = True
+        logger.log(
+            step=completed_step,
+            split=split,
+            metrics={
+                "support_collapse_rollback_applied": 1.0,
+                "support_collapse_failure_count": float(len(support_failures)),
+                "support_collapse_failures_json": json.dumps(
+                    support_failures,
+                    sort_keys=True,
+                ),
+                "restored_best_rollout_checkpoint_step": float(
+                    best_rollout_step if best_rollout_step is not None else -1
+                ),
+                "optimizer_state_reset": 1.0,
+                "training_data_draw_step": float(training_data_draw_step),
+            },
+        )
+
     imported_incumbent = initialize_from_path is not None
     if imported_incumbent:
         validation_source_device = device
-        if device != closed_loop_device:
-            model.to(closed_loop_device)
-            model.reset()
-            device = closed_loop_device
-        _, accepted = validate_closed_loop_incumbent(
-            completed_step=start_step,
-            learning_rate=float(optimizer.param_groups[0]["lr"]),
-            split="validation_initialization_incumbent",
-        )
-        if not accepted:
-            raise AssertionError("initialization validation must establish the first incumbent")
-        print(
-            f"preserved imported runtime as broad closed-loop incumbent (score={best_rollout:.6f})",
-            flush=True,
-        )
+        causal_phase_planned = config.training.steps > config.training.rgb_pretrain_steps
+        if causal_phase_planned:
+            if device != closed_loop_device:
+                model.to(closed_loop_device)
+                model.reset()
+                device = closed_loop_device
+            _, accepted, _ = validate_closed_loop_incumbent(
+                completed_step=start_step,
+                learning_rate=float(optimizer.param_groups[0]["lr"]),
+                split="validation_initialization_incumbent",
+            )
+            if not accepted:
+                raise AssertionError("initialization validation must establish the first incumbent")
+            print(
+                "preserved imported runtime as broad closed-loop incumbent "
+                f"(score={best_rollout:.6f})",
+                flush=True,
+            )
         if start_step < config.training.rgb_pretrain_steps and device != validation_source_device:
             model.to(validation_source_device)
             model.reset()
             device = validation_source_device
+        if start_step < config.training.rgb_pretrain_steps:
+            _, measurement_baseline_accepted = validate_measurement_incumbent(
+                completed_step=start_step,
+                learning_rate=float(optimizer.param_groups[0]["lr"]),
+                split="validation_initialization_measurement_incumbent",
+            )
+            if measurement_baseline_accepted:
+                print(
+                    "preserved imported runtime as the paired global/fast RGB "
+                    "measurement incumbent",
+                    flush=True,
+                )
     measurement_handoff_pending = (
         not measurement_handoff_completed
         and start_step <= config.training.rgb_pretrain_steps < config.training.steps
@@ -2764,6 +3871,7 @@ def train_from_config(
 
     for step in range(start_step, config.training.steps):
         restored_measurement_candidate = False
+        handoff_validation_performed = False
         if (
             step == config.training.rgb_pretrain_steps
             and best_measurement_validated
@@ -2785,7 +3893,11 @@ def train_from_config(
                 f"(score={best_measurement_selection.score:.6f}, "
                 f"world_mae={best_measurement_selection.world_position_mae_m:.6f}m, "
                 f"recall={best_measurement_selection.runtime_birth_recall:.4f}, "
-                f"precision={best_measurement_selection.runtime_birth_precision:.4f})",
+                f"precision={best_measurement_selection.runtime_birth_precision:.4f}, "
+                f"fast_roi_coverage="
+                f"{best_measurement_selection.fast_roi_target_coverage:.4f}, "
+                f"fast_roi_mae="
+                f"{best_measurement_selection.fast_roi_world_position_mae_m:.6f}m)",
                 flush=True,
             )
         if step == config.training.rgb_pretrain_steps:
@@ -2805,48 +3917,178 @@ def train_from_config(
                 model.reset()
                 device = closed_loop_device
         if step == config.training.rgb_pretrain_steps and measurement_handoff_pending:
-            # Mark this before validation. If validation is interrupted, the
-            # durable pre-boundary checkpoint still says pending and resume
-            # retries it; any checkpoint written by validation says complete.
-            measurement_handoff_completed = True
-            if restored_measurement_candidate and best_rollout_selection is not None:
-                _, accepted = validate_closed_loop_incumbent(
-                    completed_step=step,
-                    learning_rate=float(optimizer.param_groups[0]["lr"]),
-                    split="validation_measurement_handoff",
-                )
-            else:
-                accepted = False
+            # Keep the marker pending through validation and any rollback.
+            # A boundary checkpoint must never claim the handoff completed
+            # before the mutable causal source has actually been selected.
+            handoff_support_failures: list[dict[str, float | str]] = []
+            handoff_mutable_source = "measurement_candidate"
+            (
+                _,
+                accepted,
+                handoff_support_failures,
+            ) = validate_closed_loop_incumbent(
+                completed_step=step,
+                learning_rate=float(optimizer.param_groups[0]["lr"]),
+                split="validation_measurement_handoff",
+            )
+            handoff_validation_performed = True
             if best_rollout_selection is None:
                 # The fresh run establishes its first broad incumbent below.
                 pass
             elif accepted:
+                logger.log(
+                    step=step,
+                    split="training_control_measurement_handoff",
+                    metrics={
+                        "measurement_handoff_candidate_accepted": 1.0,
+                        "measurement_handoff_candidate_training_viable": 1.0,
+                        "measurement_handoff_mutable_source": handoff_mutable_source,
+                        "measurement_handoff_support_failure_count": 0.0,
+                        "measurement_handoff_support_failures_json": "[]",
+                        "training_data_draw_step": float(training_data_draw_step),
+                    },
+                )
                 print(
                     "promoted measurement handoff after broad closed-loop validation "
                     f"(score={best_rollout:.6f})",
                     flush=True,
                 )
-            else:
+            elif not restored_measurement_candidate:
+                if not best_rollout_path.is_file():
+                    raise RuntimeError(
+                        "no validated measurement handoff candidate is available "
+                        "and the retained broad incumbent checkpoint is missing"
+                    )
+                load_model_weights(
+                    best_rollout_path,
+                    model=model,
+                    expected_config=config,
+                )
+                model.reset()
+                _fresh_causal_optimizer_state(
+                    optimizer,
+                    learning_rate=(
+                        config.training.learning_rate
+                        * config.training.closed_loop_learning_rate_scale
+                    ),
+                    weight_decay=config.training.weight_decay,
+                )
+                handoff_mutable_source = "retained_broad_incumbent"
+                logger.log(
+                    step=step,
+                    split="training_control_measurement_handoff",
+                    metrics={
+                        "measurement_handoff_candidate_accepted": 0.0,
+                        "measurement_handoff_candidate_training_viable": 0.0,
+                        "measurement_handoff_mutable_source": handoff_mutable_source,
+                        "measurement_handoff_support_failure_count": 1.0,
+                        "measurement_handoff_support_failures_json": json.dumps(
+                            [
+                                {
+                                    "metric": "validated_measurement_candidate",
+                                    "direction": "required",
+                                    "candidate": 0.0,
+                                    "reference": 1.0,
+                                    "limit": 1.0,
+                                    "delta": -1.0,
+                                }
+                            ],
+                            sort_keys=True,
+                        ),
+                        "training_data_draw_step": float(training_data_draw_step),
+                    },
+                )
                 print(
-                    "retained the imported runtime as the safe deployment incumbent; "
-                    "causal optimisation continues from the stronger measurement "
-                    "candidate so downstream losses can repair failed guardrails",
+                    "no pair-validated RGB measurement candidate was available; "
+                    "restored the retained broad incumbent for causal training",
                     flush=True,
                 )
+            elif handoff_support_failures:
+                if not best_rollout_path.is_file():
+                    raise RuntimeError(
+                        "measurement handoff collapsed causal training support, "
+                        "but the retained broad incumbent checkpoint is missing"
+                    )
+                load_model_weights(
+                    best_rollout_path,
+                    model=model,
+                    expected_config=config,
+                )
+                model.reset()
+                _fresh_causal_optimizer_state(
+                    optimizer,
+                    learning_rate=(
+                        config.training.learning_rate
+                        * config.training.closed_loop_learning_rate_scale
+                    ),
+                    weight_decay=config.training.weight_decay,
+                )
+                handoff_mutable_source = "retained_broad_incumbent"
+                logger.log(
+                    step=step,
+                    split="training_control_measurement_handoff",
+                    metrics={
+                        "measurement_handoff_candidate_accepted": 0.0,
+                        "measurement_handoff_candidate_training_viable": 0.0,
+                        "measurement_handoff_mutable_source": handoff_mutable_source,
+                        "measurement_handoff_support_failure_count": float(
+                            len(handoff_support_failures)
+                        ),
+                        "measurement_handoff_support_failures_json": json.dumps(
+                            handoff_support_failures,
+                            sort_keys=True,
+                        ),
+                        "training_data_draw_step": float(training_data_draw_step),
+                    },
+                )
+                print(
+                    "rejected measurement candidate as a causal starting point "
+                    "because persistent tracking/forecast coverage collapsed; "
+                    "restored the retained broad incumbent for trainable support",
+                    flush=True,
+                )
+            else:
+                logger.log(
+                    step=step,
+                    split="training_control_measurement_handoff",
+                    metrics={
+                        "measurement_handoff_candidate_accepted": 0.0,
+                        "measurement_handoff_candidate_training_viable": 1.0,
+                        "measurement_handoff_mutable_source": handoff_mutable_source,
+                        "measurement_handoff_support_failure_count": 0.0,
+                        "measurement_handoff_support_failures_json": "[]",
+                        "training_data_draw_step": float(training_data_draw_step),
+                    },
+                )
+                print(
+                    "retained the imported runtime as the safe deployment incumbent; "
+                    "causal optimisation continues from the measurement candidate "
+                    "because its tracking support remains trainable",
+                    flush=True,
+                )
+            measurement_handoff_completed = True
             measurement_handoff_pending = False
-        if step >= config.training.rgb_pretrain_steps and best_rollout_selection is None:
-            validate_closed_loop_incumbent(
+        if (
+            step >= config.training.rgb_pretrain_steps
+            and best_rollout_selection is None
+            and not handoff_validation_performed
+        ):
+            _, established_incumbent, _ = validate_closed_loop_incumbent(
                 completed_step=step,
                 learning_rate=float(optimizer.param_groups[0]["lr"]),
                 split="validation_incumbent",
             )
-            print(
-                f"established broad closed-loop incumbent (score={best_rollout:.6f})",
-                flush=True,
-            )
-        raw_batch, train_iterator = _next_batch(train_loader, train_iterator)
-        _check_batch_major(raw_batch)
-        batch = move_batch_to_device(raw_batch, device)
+            if established_incumbent:
+                print(
+                    f"established broad closed-loop incumbent (score={best_rollout:.6f})",
+                    flush=True,
+                )
+            else:
+                print(
+                    "closed-loop candidate did not meet causal support floors; "
+                    "training continues without promoting a rollout incumbent",
+                    flush=True,
+                )
         global_perception_trainable = (
             step
             < config.training.rgb_pretrain_steps
@@ -2863,91 +4105,160 @@ def train_from_config(
             model,
             trainable=global_perception_trainable,
         )
-        optimizer.zero_grad(set_to_none=True)
-        if step < config.training.rgb_pretrain_steps:
-            target_learning_rate = config.training.learning_rate
-            frame_index = measurement_pretrain_frame_index(
-                step,
-                loader_batches=train_batches_per_epoch,
-                total_frames=int(batch["rgb"].shape[1]),
-                fixed_dataset=config.training.fixed_dataset,
-            )
-            result = pretrain_rgb_measurements(
-                model,
-                batch,
-                config,
-                frame_index=frame_index,
-            )
-        else:
-            target_learning_rate = (
-                config.training.learning_rate * config.training.closed_loop_learning_rate_scale
-            )
-            total_frames = int(batch["rgb"].shape[1])
-            window_steps = min(total_frames, config.training.tbptt_steps)
-            maximum_rollout_frame_offset = max(
-                max(
-                    1,
-                    int(round(horizon * config.simulator.frame_rate)),
+        no_gradient_attempts = 0
+        while True:
+            raw_batch, train_iterator = _next_batch(train_loader, train_iterator)
+            training_data_draw_step += 1
+            _check_batch_major(raw_batch)
+            batch = move_batch_to_device(raw_batch, device)
+            optimizer.zero_grad(set_to_none=True)
+            if step < config.training.rgb_pretrain_steps:
+                target_learning_rate = config.training.learning_rate
+                frame_index = measurement_pretrain_frame_index(
+                    step,
+                    loader_batches=train_batches_per_epoch,
+                    total_frames=int(batch["rgb"].shape[1]),
+                    fixed_dataset=config.training.fixed_dataset,
                 )
-                for horizon in config.evaluation.horizons_seconds
-            )
-            window_start = select_closed_loop_window(
-                batch,
-                window_steps,
-                event_condition_probability=(config.training.collision_window_probability),
-                maximum_rollout_frame_offset=maximum_rollout_frame_offset,
-                minimum_rollout_frame_offset=min(
+                result = pretrain_rgb_measurements(
+                    model,
+                    batch,
+                    config,
+                    frame_index=frame_index,
+                )
+            else:
+                target_learning_rate = (
+                    config.training.learning_rate * config.training.closed_loop_learning_rate_scale
+                )
+                total_frames = int(batch["rgb"].shape[1])
+                window_steps = min(total_frames, config.training.tbptt_steps)
+                maximum_rollout_frame_offset = max(
                     max(
                         1,
                         int(round(horizon * config.simulator.frame_rate)),
                     )
                     for horizon in config.evaluation.horizons_seconds
-                ),
-                long_horizon_probability=(config.training.long_horizon_window_probability),
-                joint_collision_long_horizon_sampling=(
-                    config.training.joint_collision_long_horizon_sampling
-                ),
-            )
-            result = run_closed_loop_batch(
-                model,
-                batch,
-                config,
-                window_start=window_start,
-                window_steps=window_steps,
-                apply_perturbations=True,
-                include_measurement_supervision=True,
-                rollout_anchors_per_window=(config.training.rollout_anchors_per_window),
-            )
-        for parameter_group in optimizer.param_groups:
-            parameter_group["lr"] = target_learning_rate
-        if not bool(torch.isfinite(result.total_loss)):
-            raise FloatingPointError(f"nonfinite {result.phase} loss at optimiser step {step}")
-        result.total_loss.backward()
-        gradient_norm_tensor = torch.nn.utils.clip_grad_norm_(
-            model.parameters(),
-            config.training.grad_clip_norm,
-            error_if_nonfinite=False,
-        )
-        if not bool(torch.isfinite(gradient_norm_tensor)):
+                )
+                window_start = select_closed_loop_window(
+                    batch,
+                    window_steps,
+                    event_condition_probability=(config.training.collision_window_probability),
+                    maximum_rollout_frame_offset=maximum_rollout_frame_offset,
+                    minimum_rollout_frame_offset=min(
+                        max(
+                            1,
+                            int(round(horizon * config.simulator.frame_rate)),
+                        )
+                        for horizon in config.evaluation.horizons_seconds
+                    ),
+                    long_horizon_probability=(config.training.long_horizon_window_probability),
+                    joint_collision_long_horizon_sampling=(
+                        config.training.joint_collision_long_horizon_sampling
+                    ),
+                )
+                result = run_closed_loop_batch(
+                    model,
+                    batch,
+                    config,
+                    window_start=window_start,
+                    window_steps=window_steps,
+                    apply_perturbations=True,
+                    include_measurement_supervision=True,
+                    rollout_anchors_per_window=(config.training.rollout_anchors_per_window),
+                )
+            for parameter_group in optimizer.param_groups:
+                parameter_group["lr"] = target_learning_rate
+            if not bool(torch.isfinite(result.total_loss)):
+                raise FloatingPointError(f"nonfinite {result.phase} loss at optimiser step {step}")
+            if step < config.training.rgb_pretrain_steps:
+                causal_support_present = True
+                causal_trajectory_support = 0.0
+                causal_fast_support = 0.0
+                causal_objective_term_support = 0.0
+            else:
+                (
+                    causal_support_present,
+                    causal_trajectory_support,
+                    causal_fast_support,
+                    causal_objective_term_support,
+                ) = _causal_training_support(result)
+            if result.total_loss.requires_grad and causal_support_present:
+                result.total_loss.backward()
+            try:
+                gradient_diagnostics = _clip_training_gradients(model, config)
+            except FloatingPointError as error:
+                optimizer.zero_grad(set_to_none=True)
+                raise FloatingPointError(f"{error} at optimiser step {step}") from error
+            pre_clip_gradient_norm = gradient_diagnostics["gradient_norm_pre_clip"]
+            effective_gradient_norm = gradient_diagnostics["gradient_norm_pre_global_clip"]
+            if _has_effective_gradient(effective_gradient_norm, config):
+                optimizer.step()
+                support_collapse_rollback_at_checkpoint = False
+                break
+
             optimizer.zero_grad(set_to_none=True)
-            raise FloatingPointError(f"nonfinite gradient norm at optimiser step {step}")
-        optimizer.step()
+            if step < config.training.rgb_pretrain_steps:
+                raise RuntimeError(
+                    "RGB measurement pretraining produced no effective gradient "
+                    f"at optimiser step {step}, data draw {training_data_draw_step - 1}"
+                )
+            skipped_no_gradient_batches += 1
+            no_gradient_attempts += 1
+            skipped_metrics = _result_metrics(
+                result,
+                learning_rate=target_learning_rate,
+                gradient_norm=pre_clip_gradient_norm,
+            )
+            skipped_metrics.update(
+                {
+                    **gradient_diagnostics,
+                    "optimizer_update_applied": 0.0,
+                    "causal_training_support_present": float(causal_support_present),
+                    "causal_trajectory_support_count": causal_trajectory_support,
+                    "causal_fast_support_count": causal_fast_support,
+                    "causal_objective_term_support_count": causal_objective_term_support,
+                    "training_data_draw_step": float(training_data_draw_step),
+                    "no_gradient_attempt_for_update": float(no_gradient_attempts),
+                    "skipped_no_gradient_batches": float(skipped_no_gradient_batches),
+                    "global_perception_trainable": float(global_perception_trainable),
+                }
+            )
+            logger.log(
+                step=step,
+                split="train_skipped_no_gradient",
+                metrics=skipped_metrics,
+            )
+            if no_gradient_attempts > config.training.maximum_no_gradient_batches_per_update:
+                raise RuntimeError(
+                    "causal training exhausted "
+                    "training.maximum_no_gradient_batches_per_update without "
+                    "an effective gradient at optimiser step "
+                    f"{step}; last data draw was {training_data_draw_step - 1}"
+                )
+
         completed_step = step + 1
+        if training_data_draw_step != completed_step + skipped_no_gradient_batches:
+            raise AssertionError(
+                "trainer data-progress invariant failed after optimizer update "
+                f"({training_data_draw_step} != {completed_step} + "
+                f"{skipped_no_gradient_batches})"
+            )
         learning_rate = float(optimizer.param_groups[0]["lr"])
         last_metrics = _result_metrics(
             result,
             learning_rate=learning_rate,
-            gradient_norm=float(gradient_norm_tensor.detach().cpu()),
+            gradient_norm=pre_clip_gradient_norm,
         )
-        pre_clip_gradient_norm = float(gradient_norm_tensor.detach().cpu())
-        gradient_clip_coefficient, applied_gradient_norm = _gradient_clip_diagnostics(
-            pre_clip_gradient_norm,
-            float(config.training.grad_clip_norm),
-        )
-        last_metrics["gradient_norm_pre_clip"] = pre_clip_gradient_norm
-        last_metrics["gradient_clip_coefficient"] = gradient_clip_coefficient
-        last_metrics["gradient_norm_applied"] = applied_gradient_norm
+        last_metrics.update(gradient_diagnostics)
         last_metrics["global_perception_trainable"] = float(global_perception_trainable)
+        last_metrics["optimizer_update_applied"] = 1.0
+        last_metrics["causal_training_support_present"] = float(causal_support_present)
+        last_metrics["causal_trajectory_support_count"] = causal_trajectory_support
+        last_metrics["causal_fast_support_count"] = causal_fast_support
+        last_metrics["causal_objective_term_support_count"] = causal_objective_term_support
+        last_metrics["training_data_draw_step"] = float(training_data_draw_step)
+        last_metrics["no_gradient_batches_before_update"] = float(no_gradient_attempts)
+        last_metrics["skipped_no_gradient_batches"] = float(skipped_no_gradient_batches)
         episode_seeds = raw_batch.get("seed")
         if isinstance(episode_seeds, Tensor):
             last_metrics["episode_seeds"] = ",".join(
@@ -3005,11 +4316,17 @@ def train_from_config(
             )
         if should_validate:
             if completed_step > config.training.rgb_pretrain_steps:
-                validate_closed_loop_incumbent(
+                _, _, validation_support_failures = validate_closed_loop_incumbent(
                     completed_step=completed_step,
                     learning_rate=learning_rate,
                     split="validation",
                 )
+                if validation_support_failures and best_rollout_selection is not None:
+                    restore_safe_causal_incumbent(
+                        completed_step=completed_step,
+                        split="training_control_support_collapse",
+                        support_failures=validation_support_failures,
+                    )
             else:
                 validate_measurement_incumbent(
                     completed_step=completed_step,
@@ -3045,11 +4362,21 @@ def train_from_config(
     if final_validation_recovery_pending:
         recovery_learning_rate = float(optimizer.param_groups[0]["lr"])
         if start_step > config.training.rgb_pretrain_steps:
-            final_validation, _ = validate_closed_loop_incumbent(
+            (
+                final_validation,
+                _,
+                recovery_support_failures,
+            ) = validate_closed_loop_incumbent(
                 completed_step=start_step,
                 learning_rate=recovery_learning_rate,
                 split="validation_recovery",
             )
+            if recovery_support_failures and best_rollout_selection is not None:
+                restore_safe_causal_incumbent(
+                    completed_step=start_step,
+                    split="training_control_support_collapse_recovery",
+                    support_failures=recovery_support_failures,
+                )
         else:
             final_validation, _ = validate_measurement_incumbent(
                 completed_step=start_step,
@@ -3266,11 +4593,49 @@ def train_from_config(
             if best_measurement_selection is not None
             else None
         ),
+        "best_measurement_fast_bootstrap_target_coverage": (
+            best_measurement_selection.fast_bootstrap_target_coverage
+            if best_measurement_selection is not None
+            else None
+        ),
+        "best_measurement_fast_roi_target_coverage": (
+            best_measurement_selection.fast_roi_target_coverage
+            if best_measurement_selection is not None
+            else None
+        ),
+        "best_measurement_fast_roi_world_position_mae_m": (
+            best_measurement_selection.fast_roi_world_position_mae_m
+            if best_measurement_selection is not None
+            else None
+        ),
+        "best_measurement_fast_roi_recall_at_0_5m": (
+            best_measurement_selection.fast_roi_recall
+            if best_measurement_selection is not None
+            else None
+        ),
+        "best_measurement_fast_roi_precision_at_0_5m": (
+            best_measurement_selection.fast_roi_precision
+            if best_measurement_selection is not None
+            else None
+        ),
+        "best_measurement_fast_roi_f1_at_0_5m": (
+            best_measurement_selection.fast_roi_f1
+            if best_measurement_selection is not None
+            else None
+        ),
+        "best_measurement_fast_roi_improvement_m": (
+            best_measurement_selection.fast_roi_improvement_m
+            if best_measurement_selection is not None
+            else None
+        ),
         "completed_steps": config.training.steps,
         "model_parameter_count": model_parameter_count,
         "planned_training_episode_draws": (config.training.steps * config.training.batch_size),
+        "training_batch_draws_total": training_data_draw_step,
+        "skipped_no_gradient_batches": skipped_no_gradient_batches,
+        "effective_training_episode_draws": (training_data_draw_step * config.training.batch_size),
         "nominal_dataset_passes": (
-            config.training.steps * config.training.batch_size / config.training.train_episodes
+            training_data_draw_step * config.training.batch_size / config.training.train_episodes
         ),
         "train_episodes": config.training.train_episodes,
         "validation_episodes": config.training.validation_episodes,
@@ -3290,6 +4655,10 @@ def train_from_config(
         "final_validation_recovered": final_validation_recovered,
         "optimizer_updates_this_invocation": config.training.steps - start_step,
         "resumed_from": resumed_from,
+        "preserved_accepted_validation_history": [
+            str(path) for path in preserved_validation_history
+        ],
+        "preserved_accepted_validation_count": len(preserved_validation_history),
         "initialized_from": initialized_from,
         "last_metrics": (dict(resume_metrics) if no_op_exact_resume else last_metrics),
         "oracle_runtime_input_used": False,

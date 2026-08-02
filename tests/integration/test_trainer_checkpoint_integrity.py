@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 import torch
@@ -9,13 +11,16 @@ from world_model.runtime import OnlineWorldModel
 from world_model.training.checkpointing import save_checkpoint
 from world_model.training.loop import TrainingBatchResult
 from world_model.training.trainer import (
+    _ROLLOUT_SELECTION_METRIC_VERSION,
     _current_model_state_hash,
     _expected_resume_checkpoint_devices,
     _fresh_causal_optimizer_state,
     _measurement_selection_metrics,
     _measurement_validation_protocol_hash,
+    _model_state_hash,
     _preserve_resume_measurement_checkpoint,
     _preserve_resume_selector_checkpoint,
+    _preserve_resume_validation_history,
     _resolve_run_directory,
     _resolve_training_devices,
     _rollout_selection_improves,
@@ -23,6 +28,7 @@ from world_model.training.trainer import (
     _rollout_selection_passes_guardrails,
     _rollout_validation_protocol_hash,
     _selection_horizon_keys,
+    _selection_scenario_slugs,
     _validate_exact_resume_source,
     _validation_protocol_checkpoint_metrics,
     _verified_measurement_checkpoint,
@@ -40,12 +46,13 @@ def _physical_metrics(
     velocity: float = 0.8,
     prediction_precision: float = 0.8,
     position_coverage90: float = 0.9,
+    target_coverage: float = 0.9,
     forecast_coverage: float = 0.9,
 ) -> dict[str, float]:
     metrics = {
         "validation_position_rmse_m": 0.4,
         "validation_velocity_rmse_mps": velocity,
-        "validation_target_coverage": 0.9,
+        "validation_target_coverage": target_coverage,
         "validation_prediction_precision": prediction_precision,
         "validation_collision_f1": 0.6,
         "validation_id_switch_rate": 0.01,
@@ -54,6 +61,12 @@ def _physical_metrics(
     for index, (suffix, _) in enumerate(_selection_horizon_keys(config)):
         metrics[f"validation_position_rmse@{suffix}"] = score_scale * (0.4 - index * 0.1)
         metrics[f"validation_forecast_target_coverage@{suffix}"] = forecast_coverage
+    base = dict(metrics)
+    for scenario in _selection_scenario_slugs(config):
+        prefix = f"scenario_{scenario}_"
+        metrics[f"{prefix}episode_count"] = 1.0
+        metrics[f"{prefix}selection_metric_supported"] = 1.0
+        metrics.update({f"{prefix}{name}": value for name, value in base.items()})
     return metrics
 
 
@@ -63,12 +76,17 @@ def _selector_checkpoint_metrics(
     *,
     step: int,
 ) -> dict[str, object]:
-    selection = _rollout_selection_metrics(_physical_metrics(config), config)
+    selection = _rollout_selection_metrics(
+        _physical_metrics(config),
+        config,
+        require_scenarios=True,
+    )
     model_hash = _current_model_state_hash(model)
     return {
+        "selection_accepted": 1.0,
         "best_rollout_validated": 1.0,
         "rollout_reference_validated": 1.0,
-        "rollout_selection_metric_version": 3.0,
+        "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
         **selection.checkpoint_metrics(),
         **selection.checkpoint_metrics(prefix="reference_rollout"),
         **_validation_protocol_checkpoint_metrics(config),
@@ -80,6 +98,76 @@ def _selector_checkpoint_metrics(
         "reference_rollout_model_state_hash": model_hash,
         "reference_rollout_checkpoint_step": float(step),
     }
+
+
+def test_branched_resume_preserves_only_verified_accepted_numbered_history(
+    tmp_path,
+) -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate)
+    source = tmp_path / "source" / "checkpoints"
+    destination = tmp_path / "branch" / "checkpoints"
+    source.mkdir(parents=True)
+    destination.mkdir(parents=True)
+
+    accepted_metrics = _selector_checkpoint_metrics(model, config, step=3)
+    save_checkpoint(
+        source / "validation_step_000003.pt",
+        model=model,
+        optimizer=optimizer,
+        config=config,
+        step=3,
+        metrics=accepted_metrics,
+        device="cpu",
+    )
+    rejected_metrics = {
+        **_selector_checkpoint_metrics(model, config, step=5),
+        "selection_accepted": 0.0,
+        "checkpoint_contains_best_rollout_weights": 0.0,
+    }
+    save_checkpoint(
+        source / "validation_step_000005.pt",
+        model=model,
+        optimizer=optimizer,
+        config=config,
+        step=5,
+        metrics=rejected_metrics,
+        device="cpu",
+    )
+    save_checkpoint(
+        source / "validation_step_000009.pt",
+        model=model,
+        optimizer=optimizer,
+        config=config,
+        step=9,
+        metrics=_selector_checkpoint_metrics(model, config, step=9),
+        device="cpu",
+    )
+    resume = save_checkpoint(
+        source / "last.pt",
+        model=model,
+        optimizer=optimizer,
+        config=config,
+        step=6,
+        metrics={},
+        device="cpu",
+    )
+
+    copied = _preserve_resume_validation_history(
+        resume,
+        destination,
+        config,
+        resume_step=6,
+        expected_device=torch.device("cpu"),
+    )
+
+    assert [path.name for path in copied] == ["validation_step_000003.pt"]
+    assert (destination / "validation_step_000003.pt").read_bytes() == (
+        source / "validation_step_000003.pt"
+    ).read_bytes()
+    assert not (destination / "validation_step_000005.pt").exists()
+    assert not (destination / "validation_step_000009.pt").exists()
 
 
 def test_validation_protocol_allows_only_training_step_extension() -> None:
@@ -115,6 +203,31 @@ def test_validation_protocol_allows_only_training_step_extension() -> None:
             global_detector_cpu_on_mps=not config.device.global_detector_cpu_on_mps,
         ),
     )
+    changed_handoff_support = replace(
+        config,
+        training=replace(
+            config.training,
+            handoff_minimum_target_coverage=(
+                config.training.handoff_minimum_target_coverage + 0.01
+            ),
+        ),
+    )
+    changed_gradient_stability = replace(
+        config,
+        training=replace(
+            config.training,
+            grad_clip_norm=config.training.grad_clip_norm * 2.0,
+        ),
+    )
+    changed_retry_bound = replace(
+        config,
+        training=replace(
+            config.training,
+            maximum_no_gradient_batches_per_update=(
+                config.training.maximum_no_gradient_batches_per_update + 1
+            ),
+        ),
+    )
 
     assert _rollout_validation_protocol_hash(extended) == (
         _rollout_validation_protocol_hash(config)
@@ -137,6 +250,15 @@ def test_validation_protocol_allows_only_training_step_extension() -> None:
         _rollout_validation_protocol_hash(config)
     )
     assert _rollout_validation_protocol_hash(changed_detector_execution) != (
+        _rollout_validation_protocol_hash(config)
+    )
+    assert _rollout_validation_protocol_hash(changed_handoff_support) != (
+        _rollout_validation_protocol_hash(config)
+    )
+    assert _rollout_validation_protocol_hash(changed_gradient_stability) != (
+        _rollout_validation_protocol_hash(config)
+    )
+    assert _rollout_validation_protocol_hash(changed_retry_bound) != (
         _rollout_validation_protocol_hash(config)
     )
     assert _measurement_validation_protocol_hash(changed_detector_execution) != (
@@ -385,7 +507,7 @@ def test_boundary_checkpoint_device_uses_handoff_marker_with_legacy_fallback() -
     assert expected(
         {
             "measurement_handoff_completed": 0.0,
-            "rollout_selection_metric_version": 4.0,
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
             "validation_rollout_selection_score": 0.5,
         }
     ) == frozenset({closed_loop})
@@ -402,6 +524,13 @@ def test_resume_copies_only_tensor_verified_measurement_selector(tmp_path) -> No
             "rgb_runtime_birth_recall_at_0_5m": 0.8,
             "rgb_runtime_birth_precision_at_0_5m": 0.75,
             "rgb_runtime_birth_f1_at_0_5m": 0.774,
+            "rgb_fast_bootstrap_target_coverage": 0.75,
+            "rgb_fast_roi_target_coverage": 0.70,
+            "rgb_fast_roi_world_position_mae_m": 0.20,
+            "rgb_fast_roi_recall_at_0_5m": 0.65,
+            "rgb_fast_roi_precision_at_0_5m": 0.75,
+            "rgb_fast_roi_f1_at_0_5m": 0.696,
+            "rgb_fast_roi_improvement_m": 0.05,
         }
     )
     assert selection is not None
@@ -496,6 +625,13 @@ def test_exact_resume_fails_loudly_when_linked_measurement_artifact_is_missing(
             "rgb_runtime_birth_recall_at_0_5m": 0.8,
             "rgb_runtime_birth_precision_at_0_5m": 0.75,
             "rgb_runtime_birth_f1_at_0_5m": 0.774,
+            "rgb_fast_bootstrap_target_coverage": 0.75,
+            "rgb_fast_roi_target_coverage": 0.70,
+            "rgb_fast_roi_world_position_mae_m": 0.20,
+            "rgb_fast_roi_recall_at_0_5m": 0.65,
+            "rgb_fast_roi_precision_at_0_5m": 0.75,
+            "rgb_fast_roi_f1_at_0_5m": 0.696,
+            "rgb_fast_roi_improvement_m": 0.05,
         }
     )
     assert selection is not None
@@ -541,7 +677,7 @@ def test_exact_resume_fails_loudly_when_linked_rollout_artifact_is_missing(
     )
     model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
     metrics = _selector_checkpoint_metrics(model, config, step=0)
-    metrics["rollout_selection_metric_version"] = 4.0
+    metrics["rollout_selection_metric_version"] = _ROLLOUT_SELECTION_METRIC_VERSION
     metrics["measurement_handoff_completed"] = 1.0
     checkpoint = save_checkpoint(
         tmp_path / "missing-rollout-selectors" / "checkpoints" / "last.pt",
@@ -676,6 +812,13 @@ def test_pending_final_validation_recovers_without_optimizer_update(
                 "rgb_runtime_birth_recall_at_0_5m": 0.8,
                 "rgb_runtime_birth_precision_at_0_5m": 0.75,
                 "rgb_runtime_birth_f1_at_0_5m": 0.774,
+                "rgb_fast_bootstrap_target_coverage": 0.75,
+                "rgb_fast_roi_target_coverage": 0.70,
+                "rgb_fast_roi_world_position_mae_m": 0.20,
+                "rgb_fast_roi_recall_at_0_5m": 0.65,
+                "rgb_fast_roi_precision_at_0_5m": 0.75,
+                "rgb_fast_roi_f1_at_0_5m": 0.696,
+                "rgb_fast_roi_improvement_m": 0.05,
             },
             phase="rgb_pretrain",
         )
@@ -701,3 +844,460 @@ def test_pending_final_validation_recovers_without_optimizer_update(
     assert result["final_validation_recovered"] is True
     assert result["last_metrics"]["loss_total"] == 2.5
     assert result["last_metrics"]["final_validation_phase"] == expected_phase
+
+
+def test_global_only_causal_draw_does_not_consume_optimizer_step(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        project=replace(source.project, output_dir=str(tmp_path / "runs")),
+        device=replace(
+            source.device,
+            preference="cpu",
+            closed_loop_preference="same",
+        ),
+        training=replace(
+            source.training,
+            steps=1,
+            rgb_pretrain_steps=0,
+            train_episodes=3,
+            validation_episodes=1,
+            batch_size=1,
+            eval_every=0,
+            checkpoint_every=1,
+            log_every=1,
+            maximum_no_gradient_batches_per_update=2,
+        ),
+    )
+    consumed_seeds: list[int] = []
+
+    def fake_validation(
+        _model,
+        _loader,
+        _config,
+        *,
+        device,
+        closed_loop,
+    ) -> TrainingBatchResult:
+        assert device == torch.device("cpu")
+        assert closed_loop
+        return TrainingBatchResult(
+            total_loss=torch.tensor(0.4),
+            loss_terms={"rollout": torch.tensor(0.4)},
+            metrics=_physical_metrics(config),
+            phase="closed_loop_rgb",
+        )
+
+    def fake_closed_loop(
+        model,
+        batch,
+        _config,
+        **_kwargs,
+    ) -> TrainingBatchResult:
+        consumed_seeds.append(int(batch["seed"].flatten()[0]))
+        parameter = next(parameter for parameter in model.parameters() if parameter.requires_grad)
+        loss = parameter.reshape(-1)[0] + 10.0
+        loss_terms = {"measurement": loss}
+        if len(consumed_seeds) > 1:
+            loss_terms["state"] = loss
+        return TrainingBatchResult(
+            total_loss=loss,
+            loss_terms=loss_terms,
+            metrics={"matched_object_frames": float(len(consumed_seeds) > 1)},
+            phase="closed_loop_rgb",
+        )
+
+    monkeypatch.setattr(
+        "world_model.training.trainer._validation_loader_result",
+        fake_validation,
+    )
+    monkeypatch.setattr(
+        "world_model.training.trainer.run_closed_loop_batch",
+        fake_closed_loop,
+    )
+
+    result = train_from_config(config, run_name="zero-gradient-resample")
+
+    assert len(consumed_seeds) == 2
+    assert result["completed_steps"] == 1
+    assert result["training_batch_draws_total"] == 2
+    assert result["skipped_no_gradient_batches"] == 1
+    payload = torch.load(
+        result["last_checkpoint"],
+        map_location="cpu",
+        weights_only=False,
+    )
+    assert payload["step"] == 1
+    assert payload["metrics"]["training_data_draw_step"] == 2.0
+    assert payload["metrics"]["skipped_no_gradient_batches"] == 1.0
+    records = [
+        json.loads(line)
+        for line in Path(result["metrics_jsonl"]).read_text(encoding="utf-8").splitlines()
+    ]
+    skipped = [record for record in records if record["split"] == "train_skipped_no_gradient"]
+    assert len(skipped) == 1
+    assert skipped[0]["optimizer_update_applied"] == 0.0
+    assert skipped[0]["causal_training_support_present"] == 0.0
+    assert skipped[0]["gradient_norm"] == 0.0
+
+
+def test_fresh_causal_run_records_but_does_not_promote_collapsed_incumbent(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        project=replace(source.project, output_dir=str(tmp_path / "runs")),
+        device=replace(
+            source.device,
+            preference="cpu",
+            closed_loop_preference="same",
+        ),
+        training=replace(
+            source.training,
+            steps=1,
+            rgb_pretrain_steps=0,
+            validation_episodes=1,
+        ),
+    )
+
+    def collapsed_validation(
+        _model,
+        _loader,
+        _config,
+        *,
+        device,
+        closed_loop,
+    ) -> TrainingBatchResult:
+        assert device == torch.device("cpu")
+        assert closed_loop
+        return TrainingBatchResult(
+            total_loss=torch.tensor(0.1),
+            loss_terms={"rollout": torch.tensor(0.1)},
+            metrics=_physical_metrics(
+                config,
+                target_coverage=0.01,
+                forecast_coverage=0.01,
+            ),
+            phase="closed_loop_rgb",
+        )
+
+    monkeypatch.setattr(
+        "world_model.training.trainer._validation_loader_result",
+        collapsed_validation,
+    )
+
+    def supported_closed_loop(model, _batch, _config, **_kwargs):
+        parameter = next(parameter for parameter in model.parameters() if parameter.requires_grad)
+        loss = parameter.reshape(-1)[0] + 10.0
+        return TrainingBatchResult(
+            total_loss=loss,
+            loss_terms={"state": loss},
+            metrics={"matched_object_frames": 1.0},
+            phase="closed_loop_rgb",
+        )
+
+    monkeypatch.setattr(
+        "world_model.training.trainer.run_closed_loop_batch",
+        supported_closed_loop,
+    )
+    result = train_from_config(config, run_name="fresh-collapsed")
+    numbered = torch.load(
+        Path(result["run_directory"]) / "checkpoints" / "validation_step_000000.pt",
+        map_location="cpu",
+        weights_only=False,
+    )
+
+    assert result["best_rollout_validated"] is False
+    assert numbered["metrics"]["selection_accepted"] == 0.0
+    assert numbered["metrics"]["selection_training_support_failures"]
+
+
+def test_only_support_collapse_rolls_back_mutable_causal_state(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        project=replace(source.project, output_dir=str(tmp_path / "runs")),
+        device=replace(
+            source.device,
+            preference="cpu",
+            closed_loop_preference="same",
+        ),
+        training=replace(
+            source.training,
+            steps=2,
+            rgb_pretrain_steps=0,
+            train_episodes=2,
+            validation_episodes=1,
+            batch_size=1,
+            eval_every=1,
+            checkpoint_every=1,
+            log_every=1,
+        ),
+    )
+    initial_model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
+    initial_optimizer = torch.optim.AdamW(
+        initial_model.parameters(),
+        lr=config.training.learning_rate,
+    )
+    initialize_from = save_checkpoint(
+        tmp_path / "initial.pt",
+        model=initial_model,
+        optimizer=initial_optimizer,
+        config=config,
+        step=0,
+        device="cpu",
+    )
+    validation_calls = 0
+
+    def fake_validation(
+        _model,
+        _loader,
+        _config,
+        *,
+        device,
+        closed_loop,
+    ) -> TrainingBatchResult:
+        nonlocal validation_calls
+        assert device == torch.device("cpu")
+        assert closed_loop
+        validation_calls += 1
+        if validation_calls == 1:
+            metrics = _physical_metrics(config, score_scale=1.0)
+        elif validation_calls == 2:
+            metrics = _physical_metrics(
+                config,
+                score_scale=0.2,
+                target_coverage=0.01,
+                forecast_coverage=0.01,
+            )
+        else:
+            metrics = _physical_metrics(config, score_scale=1.1)
+        return TrainingBatchResult(
+            total_loss=torch.tensor(0.4),
+            loss_terms={"rollout": torch.tensor(0.4)},
+            metrics=metrics,
+            phase="closed_loop_rgb",
+        )
+
+    def fake_closed_loop(
+        model,
+        _batch,
+        _config,
+        **_kwargs,
+    ) -> TrainingBatchResult:
+        parameter = next(parameter for parameter in model.parameters() if parameter.requires_grad)
+        loss = parameter.reshape(-1)[0] + 10.0
+        return TrainingBatchResult(
+            total_loss=loss,
+            loss_terms={"state": loss},
+            metrics={"matched_object_frames": 1.0},
+            phase="closed_loop_rgb",
+        )
+
+    monkeypatch.setattr(
+        "world_model.training.trainer._validation_loader_result",
+        fake_validation,
+    )
+    monkeypatch.setattr(
+        "world_model.training.trainer.run_closed_loop_batch",
+        fake_closed_loop,
+    )
+
+    result = train_from_config(
+        config,
+        run_name="support-collapse-rollback",
+        initialize_from_path=initialize_from,
+    )
+
+    records = [
+        json.loads(line)
+        for line in Path(result["metrics_jsonl"]).read_text(encoding="utf-8").splitlines()
+    ]
+    rollbacks = [
+        record for record in records if record["split"] == "training_control_support_collapse"
+    ]
+    assert len(rollbacks) == 1
+    assert rollbacks[0]["optimizer_state_reset"] == 1.0
+    numbered_one = torch.load(
+        Path(result["run_directory"]) / "checkpoints" / "validation_step_000001.pt",
+        map_location="cpu",
+        weights_only=False,
+    )
+    numbered_two = torch.load(
+        Path(result["run_directory"]) / "checkpoints" / "validation_step_000002.pt",
+        map_location="cpu",
+        weights_only=False,
+    )
+    assert numbered_one["metrics"]["selection_accepted"] == 0.0
+    assert numbered_one["metrics"]["selection_training_support_failures"]
+    assert numbered_two["metrics"]["selection_accepted"] == 0.0
+    assert numbered_two["metrics"]["selection_training_support_failures"] == []
+    last = torch.load(result["last_checkpoint"], map_location="cpu", weights_only=False)
+    best = torch.load(result["best_rollout_checkpoint"], map_location="cpu", weights_only=False)
+    assert (
+        _current_model_state_hash(initial_model) == best["metrics"]["best_rollout_model_state_hash"]
+    )
+    assert _model_state_hash(last["model_state"]) != _model_state_hash(best["model_state"])
+    assert last["metrics"]["checkpoint_contains_best_rollout_weights"] == 0.0
+    assert (
+        last["metrics"]["best_rollout_model_state_hash"]
+        == best["metrics"]["best_rollout_model_state_hash"]
+    )
+
+
+def test_terminal_support_collapse_checkpoint_truthfully_contains_restored_incumbent(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        project=replace(source.project, output_dir=str(tmp_path / "runs")),
+        device=replace(
+            source.device,
+            preference="cpu",
+            closed_loop_preference="same",
+        ),
+        training=replace(
+            source.training,
+            steps=1,
+            rgb_pretrain_steps=0,
+            train_episodes=1,
+            validation_episodes=1,
+            batch_size=1,
+            eval_every=1,
+            checkpoint_every=1,
+            log_every=1,
+        ),
+    )
+    initial_model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
+    initialize_from = save_checkpoint(
+        tmp_path / "terminal-initial.pt",
+        model=initial_model,
+        optimizer=None,
+        config=config,
+        step=0,
+        device="cpu",
+    )
+    validation_calls = 0
+
+    def fake_validation(
+        _model,
+        _loader,
+        _config,
+        *,
+        device,
+        closed_loop,
+    ) -> TrainingBatchResult:
+        nonlocal validation_calls
+        assert device == torch.device("cpu")
+        assert closed_loop
+        validation_calls += 1
+        metrics = (
+            _physical_metrics(config)
+            if validation_calls == 1
+            else _physical_metrics(
+                config,
+                score_scale=0.2,
+                target_coverage=0.01,
+                forecast_coverage=0.01,
+            )
+        )
+        return TrainingBatchResult(
+            total_loss=torch.tensor(0.4),
+            loss_terms={"rollout": torch.tensor(0.4)},
+            metrics=metrics,
+            phase="closed_loop_rgb",
+        )
+
+    def fake_closed_loop(model, _batch, _config, **_kwargs) -> TrainingBatchResult:
+        parameter = next(parameter for parameter in model.parameters() if parameter.requires_grad)
+        loss = parameter.reshape(-1)[0] + 10.0
+        return TrainingBatchResult(
+            total_loss=loss,
+            loss_terms={"state": loss},
+            metrics={"matched_object_frames": 1.0},
+            phase="closed_loop_rgb",
+        )
+
+    monkeypatch.setattr(
+        "world_model.training.trainer._validation_loader_result",
+        fake_validation,
+    )
+    monkeypatch.setattr(
+        "world_model.training.trainer.run_closed_loop_batch",
+        fake_closed_loop,
+    )
+
+    result = train_from_config(
+        config,
+        run_name="terminal-support-collapse",
+        initialize_from_path=initialize_from,
+    )
+    last = torch.load(result["last_checkpoint"], map_location="cpu", weights_only=False)
+    best = torch.load(result["best_rollout_checkpoint"], map_location="cpu", weights_only=False)
+    best_hash = _model_state_hash(best["model_state"])
+
+    assert _model_state_hash(last["model_state"]) == best_hash
+    assert last["metrics"]["checkpoint_model_state_hash"] == best_hash
+    assert last["metrics"]["checkpoint_contains_best_rollout_weights"] == 1.0
+    assert last["metrics"]["support_collapse_rollback_applied_at_checkpoint"] == 1.0
+    assert last["metrics"]["checkpoint_state_role"] == "restored_best_rollout"
+    assert last["metrics"]["final_validation_completed"] == 1.0
+    assert last["optimizer_state"]["state"] == {}
+
+
+@pytest.mark.parametrize(
+    ("data_draw_step", "skipped"),
+    [
+        (1.5, 0.0),
+        (1.0, 1.0),
+    ],
+)
+def test_exact_resume_rejects_corrupt_data_progress_counters(
+    tmp_path,
+    data_draw_step,
+    skipped,
+) -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        project=replace(source.project, output_dir=str(tmp_path / "runs")),
+        device=replace(
+            source.device,
+            preference="cpu",
+            closed_loop_preference="same",
+        ),
+        training=replace(
+            source.training,
+            steps=2,
+            rgb_pretrain_steps=0,
+            validation_episodes=1,
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate)
+    checkpoint = save_checkpoint(
+        tmp_path / "counter-source" / "checkpoints" / "last.pt",
+        model=model,
+        optimizer=optimizer,
+        config=config,
+        step=1,
+        metrics={
+            "measurement_handoff_completed": 1.0,
+            "training_data_draw_step": data_draw_step,
+            "skipped_no_gradient_batches": skipped,
+        },
+        device="cpu",
+    )
+
+    with pytest.raises(ValueError, match="finite nonnegative integer|data-progress invariant"):
+        train_from_config(config, resume_path=checkpoint)

@@ -1,7 +1,7 @@
 # Project status
 
-**Date:** 2026-08-01
-**Specification:** `PROJECT_SPEC.md` 1.6
+**Date:** 2026-08-02
+**Specification:** `PROJECT_SPEC.md` 1.7
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -10,10 +10,151 @@ invariant-tested familiar reference-pair regime, and one balanced eight-regime
 shared-model profile, plus a quality-aware persistent-ID multi-frame
 point/scale depth observer; the first sustained campaign is preserved as a
 superseded legacy-objective control after a convergence-integrity audit; the
-corrected v2 runtime now passes a real hybrid MPS/CPU two-phase smoke and its
-long campaign is active, but no corrected long-run or broad promotion result
-exists yet; collision, occlusion, identification, convergence, and full
-acceptance remain open
+corrected v2 campaign is also preserved and stopped after a second audit proved
+that unsupported rows consumed causal updates and coverage collapsed; the v3
+runtime now passes a real supported-gradient hybrid MPS/CPU smoke with
+hierarchical interaction clipping and scenario-aware rejection, but no v3
+long-run, convergence, or broad promotion result exists yet; collision,
+occlusion, identification, convergence, and full acceptance remain open
+
+## 2026-08-02 — supported-causal convergence repair and v3 qualification
+
+The supposedly corrected v2 campaign is finite but not a valid convergence
+trajectory. It was stopped at logged step `9576`, and both persistent jobs were
+removed without deleting artifacts:
+
+```text
+run: runs/20260801-232229-scaled-sustained-v2/
+stopped trainer: com.polceanum.orpheus.sustained-v2-20260801-232229
+stopped supervisor: com.polceanum.orpheus.convergence-v2-20260801-232229
+```
+
+Across its 173 logged causal training rows, 121 (`69.94%`) had an exactly zero
+pre-clip gradient. Those rows still consumed scheduled updates. The imported
+step-zero validation had current distance-gated target coverage `0.287539` and
+one-second forecast target coverage `0.761458`; at the step-8192 perception
+handoff those values had collapsed to `0.044805` and `0.052734`. Conditional
+RMSE among the few surviving tracks therefore understated the failure.
+
+The full audit found and repaired the following independent defects:
+
+- causal updates could be consumed by global auxiliary measurement loss with
+  no differentiable state, rollout, correction, parameter, or fast-slot
+  support;
+- inactive factory queries contributed a constant existence objective;
+- fast ROI confidence was positive-only, empty/unreliable crops supervised
+  unsupported attributes, false positives were absent from selector
+  precision, and pretraining never exercised the temporal cache;
+- global and fast measurement losses were diluted by support-dependent list
+  averaging, while unsupported event/physical terms appeared as zero-valued
+  examples or misleading zero RMSE;
+- the first unsupported rollout candidate could be labelled best, later
+  support collapse did not reliably restore a verified incumbent/reset Adam,
+  and handoff state could be committed before validation completed;
+- analytic contact order, iteration, corner handling, friction, positional
+  correction, restitution, and event reduction diverged from the simulator;
+- drag/restitution labels could use unobserved baselines, the wrong collision
+  object, or an unidentifiable member-specific pair coefficient.
+
+The repaired trainer now advances an optimizer update only with explicit
+causal trajectory/state/parameter support or supported persistent fast-ROI
+slots. Unsupported deterministic draws are counted, retry-bounded, and do not
+advance optimizer state. Fast ROI masks follow actual evidence; valid empty
+crops train only negative existence/visibility, all eligible confident
+outputs enter precision, adjacent frames exercise the cache, and global/fast
+losses are normalized independently. Absolute and reference-relative coverage
+floors reject collapsed candidates; later support collapse restores the
+verified incumbent and resets optimizer state.
+
+Randomized three-sphere simulator/model contact differential testing now has
+maximum position disagreement `5.96e-08 m` and velocity disagreement
+`1.79e-07 m/s`. Sleep onset is intentionally not mirrored by that one-step
+test because the simulator requires a sustained-contact counter.
+
+An exact hard-window gradient decomposition then exposed a separate stability
+problem: `dynamics.interactions` contributed norm `85.7563` of the total
+`85.8882`, dominated by the final edge-network layer. Whole-model clipping
+alone would scale every other gradient by about `0.0233`. The v3 protocol
+therefore clips the learned interaction subsystem to `1.0` before applying the
+whole-model `2.0` clip and logs raw subsystem/total, intermediate, and final
+norms and coefficients. This retains the forward interaction capacity and
+does not hardcode a physics law.
+
+The first hierarchical-clipping smoke was:
+
+```text
+runs/20260802-110951-convergence-v3-hierarchical-clip-smoke/
+completed updates: 4 (2 paired RGB, 2 persistent causal)
+episode draws: 8
+elapsed: 213.0543 s
+devices: paired RGB MPS/CPU hybrid; causal CPU
+oracle runtime input: false
+causal trajectory support: 115 then 92
+causal fast-slot support: 24 then 32
+unsupported retries: 0
+```
+
+The first causal update had raw/pre-global/final norms
+`4.599 / 4.599 / 2.0`. The hard second update had raw interaction/locally
+applied/pre-global/final norms
+`85.7563 / 1.0 / 4.8616 / 2.0`, with local coefficient `0.011661` and global
+coefficient `0.411388`. All four optimizer updates were finite and genuinely
+supported.
+
+The smoke retained the imported safe rollout incumbent. Its deliberately tiny
+two-episode validation measured selection score `0.567704`, current position
+RMSE `0.839461 m`, velocity RMSE `1.709358 m/s`, target coverage `0.38`,
+prediction precision `0.429379`, and horizon RMSE
+`0.764942/0.580586/0.459451/0.503248/0.621400 m`. The two-update measurement
+candidate had runtime birth recall/precision/F1
+`0.20/0.6667/0.3077` and fast-ROI target coverage/precision/F1
+`0.2667/1.0/0.4211`. These numbers only prove wiring and guardrails; they are
+too small for an accuracy comparison.
+
+The later final-tree audit also closed a broader selector hole: pooled metrics
+could improve while an entire configured scenario had no complete physical
+support. Rollout selector/checkpoint version `5.0` and validation protocol
+version `8` now persist every declared scenario slice, require current and all
+horizon support, and apply broad non-regression plus causal coverage floors
+inside each slice. The configuration rejects a validation budget smaller than
+the unique balanced scenario list, duplicate scenario entries, and invalid
+negative/non-integral RGB phase boundaries. Valid unmapped persistent ROI queries also
+now train negative existence/visibility and enter confidence precision; they
+cannot disappear from supervision merely because simulator matching found no
+target identity.
+
+The exact final-tree host smoke is:
+
+```text
+runs/20260802-121629-convergence-v3-final-audit-smoke/
+completed updates: 4 (2 paired RGB, 2 persistent causal)
+episode draws: 8
+elapsed: 244.8993 s
+devices: RGB backbone/ROI MPS, proposal transformer CPU, causal runtime CPU
+oracle runtime input: false
+causal trajectory support: 122 then 161
+causal fast-slot support: 32 then 38
+unsupported retries: 0
+selector/protocol: 5.0 / 8
+```
+
+All four updates were finite. Their raw/applied gradient norms were
+`5.8580/2.0`, `4.3546/2.0`, `3.6477/2.0`, and `3.9386/2.0`; the final causal
+interaction norm was `0.9617`, below its local `1.0` cap. The fixed
+`reference_pairs` slice had complete support at initialization, handoff, and
+terminal validation. After only two causal updates, the pooled score improved
+`0.558737 → 0.548741`, but current coverage fell `0.350 → 0.315` and
+0.1-second forecast coverage fell `0.800 → 0.700`. The selector correctly kept
+the imported incumbent and recorded both pooled and scenario-specific
+rejections. This is evidence that the new guard works, not an accuracy gain or
+convergence result.
+
+The new full profile is `configs/sustained_accuracy_mps_v3.yaml`: one shared
+eight-scenario model, 8,192 paired RGB updates, 8,192 supported causal updates,
+40-frame episodes, batch two, MPS measurement/CPU causal placement, global
+clip `2.0`, interaction clip `1.0`, and the existing broad rollout guardrails.
+A medium qualification and then at least four comparable long-run validations
+remain required. No v3 convergence or promotion is claimed.
 
 ## 2026-08-01 — complete convergence-integrity audit and corrected v2 path
 
@@ -80,13 +221,11 @@ conda environment: orpheus
 Python: 3.10.20
 PyTorch: 2.10.0
 MPS built/available outside sandbox: true/true
-CPU suite: 412 passed, 6 skipped in 95.16 s
-host accelerator regression set: 17 passed in 7.66 s
-focused config/checkpoint/protocol/covariance suite: 97 passed in 10.70 s
-exact formerly failing MPS batch: finite loss and 0 non-finite gradients;
-  pre-clip norm 6.897703; AdamW step finite
+CPU suite: 500 passed, 6 MPS-only skips in 139.38 s
+host accelerator regression set: 17 passed in 9.26 s
+focused final selector/checkpoint suites: 126 passed
 Ruff check: passed
-Ruff format check: 176 files already formatted
+Ruff format check: passed
 compileall: passed for entry points, scripts, world_model, and tests
 git diff --check: passed
 ```
@@ -142,14 +281,15 @@ PYTHONPYCACHEPREFIX=/private/tmp/orpheus-pycache-final PYTHONPATH=. \
 git diff --check
 
 PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
-  --config configs/sustained_accuracy_mps_v2.yaml \
+  --config configs/sustained_accuracy_mps_v3.yaml \
   --initialize-from \
     runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/best_measurement.pt \
-  --run-name audit-v2-final-verified-smoke \
+  --run-name convergence-v3-final-audit-smoke \
   --device mps \
-  --set training.steps=3 \
-  --set training.rgb_pretrain_steps=1 \
-  --set training.train_episodes=4 \
+  --set 'simulator.scenario_mixture=[reference_pairs]' \
+  --set training.steps=4 \
+  --set training.rgb_pretrain_steps=2 \
+  --set training.train_episodes=8 \
   --set training.validation_episodes=2 \
   --set training.batch_size=2 \
   --set training.eval_every=2 \
@@ -160,17 +300,16 @@ PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
   --set training.measurement_validation_frames=2
 ```
 
-The exact no-op used the same config and overrides with
-`--resume runs/20260801-231521-audit-v2-final-verified-smoke/checkpoints/last.pt`
-in place of `--initialize-from` and `--run-name`. The accelerator tests and
-training commands above ran outside the restricted process sandbox, where
-host MPS is available.
+The accelerator tests and training command above ran outside the restricted
+process sandbox, where host MPS is available. The older v2 no-op continuation
+evidence below remains valid for that historical checkpoint, but no v2
+artifact is compatible with the stricter v3 selector/contact protocol.
 
 Earlier bounded smokes remain failure/audit artifacts, not current evidence.
 In particular, `runs/20260801-223113-audit-v2-final-smoke/` stopped before its
 first update after exposing the data-dependent MPS gradient fault.
 
-### Corrected sustained v2 campaign is active
+### Corrected sustained v2 campaign was stopped and superseded
 
 The corrected campaign launched from clean committed source
 `df98f637b39607db5ede78dfeafab9ca61ef7d50` at
@@ -198,15 +337,14 @@ supervisor stderr:
 `d6039706f3fd97296cd4f2ff1bf84b4cfd4ec5d9124fdfd597d665e23b11c132`,
 MPS built/available `true/true`, measurement device `mps`, closed-loop device
 `cpu`, RGB runtime, and oracle disabled. Both submitted jobs were verified
-`running`. The supervisor persisted `supervisor_started` and
+`running` at launch. The supervisor persisted `supervisor_started` and
 `waiting_for_segment` events for the 16,384-step minimum, with 4,096-step
 extensions and a 24,576-step hard limit.
 
-The trainer begins with the fixed 32-episode broad validation, so absence of an
-early training-step log is expected. This launch is not convergence evidence.
-Do not edit executable source or the resolved numerical protocol while it is
-running; inspect `metrics.jsonl`, `train_summary.json`, and the supervisor
-report before making any accuracy claim.
+This block is historical launch evidence. On 2 August both LaunchAgents were
+booted out after the supported-gradient audit; the trainer stopped at logged
+step `9576` and must not be resumed under the changed v3 protocol. Its retained
+`metrics.jsonl` is an audit control, not convergence evidence.
 
 ## 2026-07-31 — sustained-loss stability and horizon-objective audit
 

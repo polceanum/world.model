@@ -33,7 +33,11 @@ quality. Fixed-dataset measurement training sweeps all frames independently of
 loader-batch position. Validation iterates the complete validation loader;
 closed-loop validation causally unrolls every full episode, while measurement
 validation uses the configured evenly spaced frames from every episode.
-Measurement checkpoints select by calibrated backprojected world-position MAE.
+Measurement checkpoints use the versioned runtime-qualified global-discovery
+and fast-ROI selector. It pools world-position error, target/proposal/match
+counts, recall, precision, F1, and fast bootstrap coverage using the same birth
+confidence and eligibility semantics as the persistent runtime. A confident
+false positive remains in the precision denominator.
 Rollout checkpoints use pooled physical metrics over the complete validation
 manifest. Their primary score is horizon-weighted position RMSE; a candidate
 must also remain within declared guardrails for current position and velocity,
@@ -50,12 +54,18 @@ metrics only when the linked files and hashes verify. This prevents a rejected
 `last.pt` or copied numbered snapshot from carrying better incumbent metrics
 without the corresponding model state.
 
-RGB supervision now includes metric-space position after calibrated
-backprojection. It uses a smooth-L1 (Huber) term plus a diagonal Gaussian NLL,
-in addition to existence, image geometry, colour, measurement NLL, visibility,
-and appearance losses. When structured disc centres replace learned centres in
-the forward pass, the unrefined learned centre is retained as `raw_centre` and
-receives its own smooth-L1 auxiliary loss. The default measurement weights are:
+RGB supervision includes metric-space position after calibrated
+backprojection. Supported targets use a smooth-L1 (Huber) term plus a diagonal
+Gaussian calibration NLL, in addition to evidence-backed existence, image
+geometry, colour, measurement NLL, visibility, and appearance losses. These
+terms are not assumed to share one validity mask: a valid empty fast ROI trains
+negative existence and visibility only, while unreliable geometry or absent
+crop evidence omits centre, depth, colour, appearance, world-position, and NLL
+targets. When structured disc centres replace learned centres in the forward
+pass, the supported unrefined learned centre is retained as `raw_centre` and
+receives its own smooth-L1 auxiliary loss. Global and fast objectives are
+support-normalized independently before their fixed configured combination.
+The default measurement weights are:
 
 ```yaml
 rgb_existence: 1.0
@@ -72,21 +82,30 @@ rgb_world_position_nll: 0.05
 The small NLL weights prevent variance fitting from overwhelming metric
 localization while retaining an uncertainty-training signal.
 
-Training logs retain legacy `gradient_norm` as the norm returned before
-clipping and additionally report `gradient_norm_pre_clip` and
-`gradient_norm_applied`, plus the exact `gradient_clip_coefficient`. The
-applied norm is bounded by `grad_clip_norm` and is the relevant
-update-magnitude diagnostic. Raw per-batch total loss remains heterogeneous at
-batch one because scenario, object count, association support, events, and
-available horizons vary; checkpoint decisions use the fixed broad validation
-manifest instead.
+Training logs retain legacy `gradient_norm` and
+`gradient_norm_pre_clip` as the raw whole-model norm. The sustained v3
+protocol first clips `dynamics.interactions` to
+`interaction_grad_clip_norm`, then computes `gradient_norm_pre_global_clip`
+and applies `grad_clip_norm` to the complete model. Logs expose the raw
+interaction norm, local coefficient/applied norm, pre-global norm, global and
+total coefficients, and final `gradient_norm_applied`. Raw per-batch total
+loss remains heterogeneous at batch one because scenario, object count,
+association support, events, and available horizons vary; checkpoint
+decisions use the fixed broad validation manifest instead.
 
-At the phase boundary the trainer restores the best localized measurement
-weights, starts fresh causal AdamW moments, and applies
+At the phase boundary the trainer carries the best supported measurement
+candidate into causal optimization, starts fresh causal AdamW moments, and applies
 `closed_loop_learning_rate_scale` (0.1 in current profiles) to protect
-perception while downstream filter/dynamics objectives begin. The restored
-measurement candidate must pass the same broad rollout guardrails or the fixed
-pre-campaign runtime is restored. Global discovery/backbone parameters remain trainable for
+perception while downstream filter/dynamics objectives begin. Ordinary broad
+rollout rejection retains the fixed safe deployment incumbent but does not
+discard a finite supported mutable measurement candidate. Explicit absolute or
+fixed-reference-relative support collapse instead restores the verified
+rollout incumbent and resets Adam. A causal optimizer step requires
+differentiable trajectory/state/parameter support or supported persistent
+fast-ROI slots; global auxiliary discovery alone cannot consume it.
+Unsupported draws advance the deterministic sample counter and retry up to the
+configured cap without advancing optimizer state. Global
+discovery/backbone parameters remain trainable for
 `closed_loop_global_trainable_steps`, then freeze while the ROI updater,
 filter, dynamics, and identifier continue learning. Fast ROI losses follow the
 persistent belief-slot assignment on every usable frame.
@@ -191,27 +210,31 @@ mistaken for the full protocol.
 
 ## Sustained shared-model accuracy campaign
 
-### Corrected v2 campaign
+### Supported v3 campaign
 
-The 1 August convergence-integrity audit superseded the active legacy campaign
-without deleting it. Use the corrected profile for new training:
+The 2 August supported-gradient audit stopped and preserved both earlier
+sustained protocols. Use the v3 profile for new training:
 
 ```bash
 python train.py \
-  --config configs/sustained_accuracy_mps_v2.yaml \
+  --config configs/sustained_accuracy_mps_v3.yaml \
   --initialize-from \
     runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/best_measurement.pt \
-  --run-name "$(date -u +%Y%m%d-%H%M%S)-scaled-sustained-v2" \
+  --run-name "$(date -u +%Y%m%d-%H%M%S)-scaled-sustained-v3" \
   --device mps
 ```
 
 This is a new weights-only curriculum, not `--resume`. It has 40 frames,
 batch two, 16,384 unique training episodes, 8,192 measurement updates, 8,192
-causal updates, explicit mature/cold and stochastic/deterministic support,
-fixed global horizon denominators, forecast NLL, and deterministic bounded
-trend-validation anchors. The safe deployment incumbent remains separate from
-the mutable phase-handoff trajectory. Promotion still requires at least 64
-fresh balanced episodes and every broad guardrail.
+supported causal updates, explicit mature/cold and
+stochastic/deterministic support, fixed global horizon denominators, forecast
+NLL, and deterministic bounded trend-validation anchors. It adds finite
+unsupported-draw retries, absolute/reference-relative coverage floors,
+separate global/fast measurement normalization, adjacent cached ROI training,
+and a `1.0` interaction-local clip before the `2.0` whole-model clip. The safe
+deployment incumbent remains separate from the mutable phase-handoff
+trajectory. Promotion still requires at least 64 fresh balanced episodes and
+every broad guardrail.
 
 `device.preference=mps` applies to the convolution-heavy measurement phase.
 `device.closed_loop_preference=cpu` switches the same persistent model at the
@@ -240,14 +263,38 @@ source run's `checkpoints/last.pt`; selector/numbered checkpoints require a new
 run or `--initialize-from`. A pending terminal-validation marker is recoverable
 without an optimizer update.
 
-The clean-source v2 campaign is active at
-`runs/20260801-232229-scaled-sustained-v2/` from commit `df98f63`. Its submitted
-trainer job is
-`com.polceanum.orpheus.sustained-v2-20260801-232229`; the paired supervisor is
-`com.polceanum.orpheus.convergence-v2-20260801-232229`. The supervisor waits
-for the complete 16,384-step segment, then applies only verified 4,096-step
-extensions up to 24,576 total steps. Treat the initial 32-episode validation
-latency as expected and consult `project/STATUS.md` for current PID/log paths.
+The v3 four-update qualification at
+`runs/20260802-110951-convergence-v3-hierarchical-clip-smoke/` proves finite
+hybrid execution, real causal support, hierarchical clipping, checkpointing,
+and selection wiring only. A medium qualification must pass before launching
+the full clean-source profile. Consult `project/STATUS.md` for current evidence
+and do not call a short run convergence.
+
+The final audited-tree smoke is
+`runs/20260802-121629-convergence-v3-final-audit-smoke/`. It reran two paired
+RGB and two causal updates after the contact, unmapped-ROI, support,
+checkpoint, and per-scenario selector repairs. The RGB phase used MPS for the
+backbone/ROI path and CPU for the proposal transformer; the causal phase used
+CPU. Both causal draws had real trajectory/fast-slot support (`122/32` and
+`161/38`), none was skipped, and the terminal checkpoint is complete.
+
+That smoke intentionally overrides the mixture to `reference_pairs` and uses
+two validation episodes, so it is a host execution/guardrail check rather than
+the required balanced qualification. Its terminal pooled score improved, but
+coverage regressed and selector version `5.0` rejected the candidate in both
+the pooled and scenario slice. The full/medium commands must retain all eight
+scenarios and at least one validation episode per scenario; the v3 profile
+uses 32.
+
+### Superseded v2 campaign
+
+`configs/sustained_accuracy_mps_v2.yaml` and
+`runs/20260801-232229-scaled-sustained-v2/` are retained audit controls. The
+trainer and supervisor were stopped at logged step `9576` after 121 of 173
+logged causal rows were found to have exactly zero gradient and the measurement
+handoff collapsed current/future coverage. Repairing optimizer support,
+selection semantics, and gradient scaling defines a new protocol, so v2 must
+not be resumed in place or compared as if it were a completed convergence run.
 
 ### Preserved legacy campaign
 

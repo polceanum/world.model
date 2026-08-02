@@ -23,9 +23,11 @@ from world_model.training.convergence import (
     inspect_completed_campaign,
 )
 from world_model.training.trainer import (
+    _ROLLOUT_SELECTION_METRIC_VERSION,
     _current_model_state_hash,
     _rollout_selection_metrics,
     _selection_horizon_keys,
+    _selection_scenario_slugs,
     _validation_protocol_checkpoint_metrics,
 )
 from world_model.utils.config import OrpheusConfig, load_config
@@ -34,12 +36,16 @@ from world_model.utils.config import OrpheusConfig, load_config
 def _inspection(
     completed_steps: int,
     candidates: list[tuple[int, float, bool]],
+    *,
+    support_failed_steps: set[int] | None = None,
 ) -> CampaignInspection:
+    support_failed_steps = support_failed_steps or set()
     validation_candidates = tuple(
         ValidationCandidate(
             step=step,
             score=score,
             accepted=accepted,
+            training_support_passed=step not in support_failed_steps,
             model_state_hash=f"hash-{step}",
             checkpoint_path=f"/run/checkpoints/validation_step_{step:06d}.pt",
         )
@@ -132,6 +138,82 @@ def test_four_consecutive_rejections_with_subthreshold_gain_are_a_plateau() -> N
     assert decision.plateau_primary_gain is not None
     assert decision.plateau_primary_gain < 0.01
     assert decision.plateau_candidate_accepted == (False, False, False, False)
+
+
+def test_supported_rejected_raw_gain_prevents_premature_plateau() -> None:
+    decision = _decision(
+        _inspection(
+            16384,
+            [
+                (0, 0.80, True),
+                (14336, 0.68, True),
+                (14848, 0.65, False),
+                (15360, 0.64, False),
+                (15872, 0.63, False),
+                (16384, 0.62, False),
+            ],
+        )
+    )
+
+    assert decision.status == "continue"
+    assert decision.plateau_primary_gain is not None
+    assert decision.plateau_primary_gain > 0.01
+
+
+def test_support_failed_conditional_score_collapse_is_not_convergence_progress() -> None:
+    decision = _decision(
+        _inspection(
+            16384,
+            [
+                (0, 0.80, True),
+                (14336, 0.68, True),
+                # These candidates look dramatically better only because
+                # their broad guardrails rejected them.
+                (14848, 0.30, False),
+                (15360, 0.25, False),
+                (15872, 0.20, False),
+                (16384, 0.15, False),
+            ],
+            support_failed_steps={14848, 15360, 15872, 16384},
+        )
+    )
+
+    assert decision.status == "continue"
+    assert decision.plateau_primary_gain is None
+    assert decision.plateau_candidate_accepted == (False, False, False, False)
+    assert decision.plateau_candidate_training_support_passed == (
+        False,
+        False,
+        False,
+        False,
+    )
+
+
+def test_plateau_gain_uses_supported_candidates_only() -> None:
+    decision = _decision(
+        _inspection(
+            16384,
+            [
+                (0, 0.80, True),
+                (14336, 0.68, True),
+                (14848, 0.10, False),
+                (15360, 0.679, False),
+                (15872, 0.678, False),
+                (16384, 0.677, False),
+            ],
+            support_failed_steps={14848},
+        )
+    )
+
+    assert decision.status == "continue"
+    assert decision.plateau_primary_gain is not None
+    assert decision.plateau_primary_gain < 0.01
+    assert decision.plateau_candidate_training_support_passed == (
+        False,
+        True,
+        True,
+        True,
+    )
 
 
 def test_accepted_candidate_at_tail_start_prevents_premature_plateau() -> None:
@@ -293,6 +375,12 @@ def _physical_metrics(config: OrpheusConfig, *, scale: float):
     for index, (suffix, _) in enumerate(_selection_horizon_keys(config)):
         metrics[f"validation_position_rmse@{suffix}"] = scale * (0.4 - 0.05 * index)
         metrics[f"validation_forecast_target_coverage@{suffix}"] = 0.9
+    base = dict(metrics)
+    for scenario in _selection_scenario_slugs(config):
+        prefix = f"scenario_{scenario}_"
+        metrics[f"{prefix}episode_count"] = 1.0
+        metrics[f"{prefix}selection_metric_supported"] = 1.0
+        metrics.update({f"{prefix}{name}": value for name, value in base.items()})
     return metrics
 
 
@@ -310,14 +398,25 @@ def _selector_metrics(
     candidate = _rollout_selection_metrics(
         _physical_metrics(config, scale=candidate_scale),
         config,
+        require_scenarios=True,
     )
-    best = _rollout_selection_metrics(_physical_metrics(config, scale=best_scale), config)
-    reference = _rollout_selection_metrics(_physical_metrics(config, scale=1.0), config)
+    best = _rollout_selection_metrics(
+        _physical_metrics(config, scale=best_scale),
+        config,
+        require_scenarios=True,
+    )
+    reference = _rollout_selection_metrics(
+        _physical_metrics(config, scale=1.0),
+        config,
+        require_scenarios=True,
+    )
     return {
         "selection_accepted": float(accepted),
+        "selection_training_support_required": 1.0,
+        "selection_training_support_passed": 1.0,
         "best_rollout_validated": 1.0,
         "rollout_reference_validated": 1.0,
-        "rollout_selection_metric_version": 3.0,
+        "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
         **candidate.validation_metrics(),
         **best.checkpoint_metrics(),
         **reference.checkpoint_metrics(prefix="reference_rollout"),

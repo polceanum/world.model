@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 from typing import Any
 
+import pytest
 import torch
 from torch import Tensor, nn
 
+import world_model.training.loop as training_loop
 from world_model.datasets import collate_episodes
 from world_model.observations import MeasurementSet
+from world_model.observations.rgb.losses import rgb_measurement_losses
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
 from world_model.training.loop import (
+    _fast_pair_metrics,
     physical_validation_metrics,
+    pretrain_rgb_measurements,
     run_closed_loop_batch,
     supervised_measurement_losses,
     supervised_slot_measurement_losses,
@@ -37,6 +43,19 @@ class _RecordingLossModule(nn.Module):
         self.masks = masks
         error = (outputs["values"] - targets["values"]).abs()
         return {"recorded_error": error[masks["matched"]].mean()}
+
+
+class _StructuredRecordingLossModule(_RecordingLossModule):
+    def training_losses(
+        self,
+        outputs: dict[str, Tensor],
+        targets: dict[str, Tensor],
+        masks: dict[str, Tensor],
+    ) -> dict[str, Tensor]:
+        self.outputs = outputs
+        self.targets = targets
+        self.masks = masks
+        return rgb_measurement_losses(outputs, targets, masks)
 
 
 def _batch() -> dict[str, Any]:
@@ -212,12 +231,54 @@ def test_global_proposals_pass_hungarian_aligned_metric_world_supervision() -> N
     )
 
 
+def test_global_exact_geometry_requires_reliable_visibility_and_an_in_frame_centre() -> None:
+    batch = _batch()
+    target_values = torch.cat(
+        (
+            batch["labels"]["projected_center"][:, 0],
+            batch["labels"]["log_apparent_radius_normalized"][:, 0].unsqueeze(-1),
+            batch["labels"]["inverse_depth"][:, 0].unsqueeze(-1),
+            batch["labels"]["albedo"][:, 0],
+        ),
+        dim=-1,
+    )
+    batch["labels"]["visible_fraction"][0, 0, 0] = 0.1
+    measurements = _measurements(target_values)
+    module = _RecordingLossModule()
+
+    supervised_measurement_losses(
+        module,
+        measurements,
+        batch,
+        frame_index=0,
+    )
+
+    assert module.masks["matched"].tolist() == [[True, True]]
+    assert module.masks["existence"].tolist() == [[True, True]]
+    assert module.masks["existence_valid"].tolist() == [[True, True]]
+    assert module.masks["geometry"].tolist() == [[False, True]]
+
+    batch["labels"]["projected_center"][0, 0, 1, 0] = 1.2
+    clipped_values = target_values.clone()
+    clipped_values[0, 1, 0] = 1.2
+    clipped_module = _RecordingLossModule()
+    supervised_measurement_losses(
+        clipped_module,
+        _measurements(clipped_values),
+        batch,
+        frame_index=0,
+    )
+
+    assert clipped_module.masks["matched"].tolist() == [[True, True]]
+    assert clipped_module.masks["geometry"].tolist() == [[False, False]]
+
+
 def test_fast_roi_supervision_masks_unusable_or_unmatched_slots() -> None:
     batch = _batch()
     batch["labels"]["visible"][0, 0, 1] = False
     measurements = _measurements(
         torch.zeros((1, 3, 7)),
-        mask=torch.tensor([[True, True, True]]),
+        mask=torch.tensor([[True, True, False]]),
     )
     module = _RecordingLossModule()
 
@@ -232,10 +293,190 @@ def test_fast_roi_supervision_masks_unusable_or_unmatched_slots() -> None:
 
     assert module.masks["matched"].tolist() == [[True, False, False]]
     assert module.masks["existence"].tolist() == [[True, False, False]]
+    # The mapped but invisible target is a valid empty-crop negative. The
+    # measurement-masked padding slot remains invalid.
+    assert module.masks["existence_valid"].tolist() == [[True, True, False]]
+    assert module.masks["visibility_valid"].tolist() == [[True, True, False]]
+    torch.testing.assert_close(
+        module.targets["visibility"],
+        torch.tensor([[0.9, 0.0, 0.0]]),
+    )
     torch.testing.assert_close(
         module.targets["values"][0, 2],
         torch.zeros(7),
     )
+
+
+def test_fast_roi_valid_unmapped_query_trains_only_negative_confidence() -> None:
+    batch = _batch()
+    values = torch.zeros((1, 3, 7), requires_grad=True)
+    measurements = _measurements(values)
+    measurements.log_variance = torch.zeros_like(values, requires_grad=True)
+    measurements.existence_logits = torch.tensor(
+        [[0.0, 0.0, 2.0]],
+        requires_grad=True,
+    )
+    measurements.auxiliary["visibility_logits"] = torch.tensor(
+        [[0.0, 0.0, 2.0]],
+        requires_grad=True,
+    )
+    module = _StructuredRecordingLossModule()
+
+    losses = supervised_slot_measurement_losses(
+        module,
+        measurements,
+        batch,
+        frame_index=0,
+        target_indices=torch.tensor([[0, 1, -1]], dtype=torch.int64),
+        matched_slots=torch.tensor([[True, True, False]]),
+    )
+
+    assert module.masks["slot_identity"].tolist() == [[True, True, False]]
+    assert module.masks["roi_valid"].tolist() == [[True, True, True]]
+    assert module.masks["crop_evidence"].tolist() == [[True, True, False]]
+    assert module.masks["existence"].tolist() == [[True, True, False]]
+    assert module.masks["existence_valid"].tolist() == [[True, True, True]]
+    assert module.masks["visibility_valid"].tolist() == [[True, True, True]]
+    assert module.targets["visibility"][0, 2].item() == 0.0
+
+    sum(losses.values()).backward()
+    # A high-confidence unmapped query receives a real gradient toward zero
+    # existence/visibility, while fabricated geometry/colour/NLL targets remain
+    # fully disconnected for that query.
+    assert measurements.existence_logits.grad is not None
+    assert measurements.existence_logits.grad[0, 2] > 0
+    visibility_logits = measurements.auxiliary["visibility_logits"]
+    assert visibility_logits.grad is not None
+    assert visibility_logits.grad[0, 2] > 0
+    assert values.grad is not None
+    torch.testing.assert_close(values.grad[0, 2], torch.zeros(7))
+    assert measurements.log_variance.grad is not None
+    torch.testing.assert_close(
+        measurements.log_variance.grad[0, 2],
+        torch.zeros(7),
+    )
+
+
+def test_fast_roi_exact_geometry_requires_target_pixel_support_in_crop() -> None:
+    batch = _batch()
+    measurements = _measurements(torch.zeros((1, 2, 7)))
+    module = _RecordingLossModule()
+
+    supervised_slot_measurement_losses(
+        module,
+        measurements,
+        batch,
+        frame_index=0,
+        target_indices=torch.tensor([[0, 1]], dtype=torch.int64),
+        matched_slots=torch.tensor([[True, True]]),
+        roi_bounds=torch.tensor(
+            [[[-1.0, -0.5, -0.6, 0.1], [-0.9, -0.9, -0.5, -0.5]]],
+        ),
+    )
+
+    assert module.masks["slot_identity"].tolist() == [[True, True]]
+    assert module.masks["roi_valid"].tolist() == [[True, True]]
+    assert module.masks["crop_evidence"].tolist() == [[True, False]]
+    assert module.masks["matched"].tolist() == [[True, False]]
+    assert module.masks["existence"].tolist() == [[True, False]]
+    assert module.masks["existence_valid"].tolist() == [[True, True]]
+    assert module.masks["visibility_valid"].tolist() == [[True, True]]
+    assert module.masks["geometry"].tolist() == [[True, False]]
+    assert module.targets["visibility"][0, 1].item() == 0.0
+
+
+def test_fast_roi_exact_geometry_also_requires_reliable_visibility_and_centre() -> None:
+    batch = _batch()
+    batch["labels"]["visible_fraction"][0, 0, 0] = 0.49
+    batch["labels"]["projected_center"][0, 0, 1, 0] = 1.1
+    measurements = _measurements(torch.zeros((1, 2, 7)))
+    module = _RecordingLossModule()
+
+    supervised_slot_measurement_losses(
+        module,
+        measurements,
+        batch,
+        frame_index=0,
+        target_indices=torch.tensor([[0, 1]], dtype=torch.int64),
+        matched_slots=torch.tensor([[True, True]]),
+        roi_bounds=torch.tensor(
+            [[[-1.0, -1.0, 0.0, 0.5], [0.0, -0.5, 1.5, 1.0]]],
+        ),
+    )
+
+    assert module.masks["crop_evidence"].tolist() == [[True, True]]
+    assert module.masks["geometry"].tolist() == [[False, False]]
+    assert module.masks["existence_valid"].tolist() == [[True, True]]
+
+
+def test_fast_roi_precision_counts_confident_empty_crop_outputs_as_false_positives() -> None:
+    batch = _batch()
+    target_world = batch["objects"]["position"][:, 0]
+    measurements = _measurements(
+        torch.zeros((1, 2, 7)),
+        world_position=target_world.clone(),
+    )
+    measurements = MeasurementSet(
+        modality=measurements.modality,
+        sensor_id=measurements.sensor_id,
+        timestamp=measurements.timestamp,
+        values=measurements.values,
+        log_variance=measurements.log_variance,
+        existence_logits=torch.full((1, 2), 10.0),
+        measurement_mask=measurements.measurement_mask,
+        appearance=measurements.appearance,
+        class_logits=measurements.class_logits,
+        frame_id=measurements.frame_id,
+        supported_state_fields=measurements.supported_state_fields,
+        auxiliary=measurements.auxiliary,
+    )
+    metrics = _fast_pair_metrics(
+        SimpleNamespace(
+            associator=SimpleNamespace(minimum_measurement_confidence=0.5),
+        ),
+        measurements,
+        SimpleNamespace(auxiliary={"world_position": target_world.clone()}),
+        batch,
+        0,
+        0,
+        torch.tensor([[0, 1]], dtype=torch.int64),
+        torch.tensor([[True, True]]),
+        torch.tensor([[True, True]]),
+        torch.tensor([[True, False]]),
+    )
+
+    assert metrics["rgb_fast_roi_confident_proposal_count"] == 2.0
+    assert metrics["rgb_fast_roi_true_positive_count_at_0_5m"] == 1.0
+    assert metrics["rgb_fast_roi_precision_at_0_5m"] == 0.5
+
+
+def test_fast_roi_precision_counts_confident_unmapped_query_as_false_positive() -> None:
+    batch = _batch()
+    target_world = batch["objects"]["position"][:, 0]
+    measurements = _measurements(
+        torch.zeros((1, 2, 7)),
+        world_position=target_world.clone(),
+    )
+    measurements.existence_logits.fill_(10.0)
+
+    metrics = _fast_pair_metrics(
+        SimpleNamespace(
+            associator=SimpleNamespace(minimum_measurement_confidence=0.5),
+        ),
+        measurements,
+        SimpleNamespace(auxiliary={"world_position": target_world.clone()}),
+        batch,
+        0,
+        0,
+        torch.tensor([[0, -1]], dtype=torch.int64),
+        torch.tensor([[True, False]]),
+        torch.tensor([[True, True]]),
+        torch.tensor([[True, False]]),
+    )
+
+    assert metrics["rgb_fast_roi_confident_proposal_count"] == 2.0
+    assert metrics["rgb_fast_roi_true_positive_count_at_0_5m"] == 1.0
+    assert metrics["rgb_fast_roi_precision_at_0_5m"] == 0.5
 
 
 def _closed_loop_config() -> Any:
@@ -280,6 +521,199 @@ def _closed_loop_config() -> Any:
     return config
 
 
+def test_stage_b_pair_uses_detached_rgb_birth_and_trains_both_perception_paths(
+    monkeypatch: Any,
+) -> None:
+    config = _closed_loop_config()
+    batch = collate_episodes([generate_episode(config, seed=7)])
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    lifecycle_calls = 0
+    fast_cache_inputs: list[Any] = []
+    original_birth = model.lifecycle.birth_from_measurements
+    rgb_module = model.observation_modules["rgb"]
+    original_encode = rgb_module.encode_measurements
+
+    def recording_birth(*args: Any, **kwargs: Any) -> Any:
+        nonlocal lifecycle_calls
+        lifecycle_calls += 1
+        measurements = args[1]
+        assert isinstance(measurements, MeasurementSet)
+        assert not measurements.values.requires_grad
+        assert measurements.values.grad_fn is None
+        return original_birth(*args, **kwargs)
+
+    def keep_runtime_birth_mapping(
+        belief: Any,
+        batch_value: Any,
+        frame_index: int,
+    ) -> tuple[Tensor, Tensor]:
+        del batch_value, frame_index
+        matched = belief.objects.active.clone()
+        indices = torch.where(
+            matched,
+            torch.zeros_like(belief.objects.object_id),
+            torch.full_like(belief.objects.object_id, -1),
+        )
+        return indices, matched
+
+    def retain_valid_crops(
+        batch_value: Any,
+        frame_index: int,
+        predicted: Any,
+        target_indices: Tensor,
+        anchor_matched: Tensor,
+    ) -> Tensor:
+        del batch_value, frame_index, target_indices
+        return anchor_matched & predicted.valid_mask
+
+    def recording_encode(
+        packets: Any,
+        prior: Any,
+        predicted: Any,
+        cache: Any,
+    ) -> Any:
+        fast_cache_inputs.append(cache)
+        return original_encode(packets, prior, predicted, cache)
+
+    monkeypatch.setattr(model.lifecycle, "birth_from_measurements", recording_birth)
+    # The plumbing test makes the support deterministic. Separate unit tests
+    # cover metric-distance and target-disc crop censoring.
+    monkeypatch.setattr(
+        training_loop,
+        "_distance_gated_anchor_targets",
+        keep_runtime_birth_mapping,
+    )
+    monkeypatch.setattr(training_loop, "_fast_pair_support", retain_valid_crops)
+    monkeypatch.setattr(rgb_module, "encode_measurements", recording_encode)
+
+    result = pretrain_rgb_measurements(
+        model,
+        batch,
+        config,
+        frame_index=0,
+    )
+    result.total_loss.backward()
+
+    rgb = model.observation_modules["rgb"]
+    assert lifecycle_calls == 1
+    assert result.metrics["rgb_pretrain_pair_anchor_frame"] == 0.0
+    assert result.metrics["rgb_pretrain_pair_current_frame"] == 1.0
+    assert result.metrics["rgb_pretrain_fast_frame_count"] == 2.0
+    assert result.metrics["rgb_pretrain_fast_last_frame"] == 2.0
+    assert result.metrics["fast_path_supervised"] == 1.0
+    assert result.metrics["fast_supervised_frames"] == 2.0
+    assert result.metrics["fast_supervised_slots"] >= 1.0
+    assert len(fast_cache_inputs) == 2
+    assert fast_cache_inputs[0] is None
+    assert fast_cache_inputs[1] is not None
+    for component in (
+        rgb.backbone.stages[0],
+        rgb.backbone.stages[1],
+        rgb.backbone.fast_projection,
+        rgb.roi_updater,
+        rgb.global_detector,
+    ):
+        assert any(
+            parameter.grad is not None
+            and torch.isfinite(parameter.grad).all()
+            and bool(torch.count_nonzero(parameter.grad))
+            for parameter in component.parameters()
+        )
+
+
+def test_stage_b_pair_trains_unmapped_valid_rgb_births_as_fast_negatives(
+    monkeypatch: Any,
+) -> None:
+    config = _closed_loop_config()
+    batch = collate_episodes([generate_episode(config, seed=7)])
+    model = OnlineWorldModel.from_config(config, device="cpu")
+
+    def reject_all_birth_mappings(
+        belief: Any,
+        batch_value: Any,
+        frame_index: int,
+    ) -> tuple[Tensor, Tensor]:
+        del batch_value, frame_index
+        return (
+            torch.full_like(belief.objects.object_id, -1),
+            torch.zeros_like(belief.objects.active),
+        )
+
+    monkeypatch.setattr(
+        training_loop,
+        "_distance_gated_anchor_targets",
+        reject_all_birth_mappings,
+    )
+    result = pretrain_rgb_measurements(
+        model,
+        batch,
+        config,
+        frame_index=0,
+    )
+    result.total_loss.backward()
+
+    rgb = model.observation_modules["rgb"]
+    assert result.metrics["fast_path_supervised"] == 1.0
+    assert result.metrics["rgb_fast_bootstrap_matched_target_count"] == 0.0
+    assert result.metrics["rgb_fast_roi_supported_target_count"] == 0.0
+    assert result.metrics["rgb_fast_roi_confident_proposal_count"] >= 0.0
+    assert "fast_rgb_existence" in result.metrics
+    assert "fast_rgb_visibility" in result.metrics
+    assert any(
+        parameter.grad is not None for parameter in rgb.backbone.fast_projection.parameters()
+    )
+    assert any(parameter.grad is not None for parameter in rgb.roi_updater.parameters())
+    assert any(parameter.grad is not None for parameter in rgb.global_detector.parameters())
+
+
+def test_stage_b_anchor_identity_mapping_uses_metric_distance_gate() -> None:
+    config = _closed_loop_config()
+    batch = collate_episodes([generate_episode(config, seed=7)])
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    belief = model.belief_factory.create(
+        batch_size=1,
+        timestamp=float(batch["timestamps"][0, 0]),
+        device="cpu",
+    )
+    target_position = batch["objects"]["position"][:, 0, 0]
+    position = belief.objects.position.clone()
+    position[:, 0] = target_position + torch.tensor([0.51, 0.0, 0.0])
+    active = belief.objects.active.clone()
+    active[:, 0] = True
+    object_id = belief.objects.object_id.clone()
+    object_id[:, 0] = 0
+    belief = belief.replace(
+        objects=belief.objects.replace(
+            position=position,
+            active=active,
+            object_id=object_id,
+        )
+    )
+
+    indices, matched = training_loop._distance_gated_anchor_targets(
+        belief,
+        batch,
+        0,
+    )
+
+    assert not matched.any()
+    assert (indices == -1).all()
+
+
+def test_stage_b_pair_rejects_anchor_without_an_adjacent_frame() -> None:
+    config = _closed_loop_config()
+    batch = collate_episodes([generate_episode(config, seed=7)])
+    model = OnlineWorldModel.from_config(config, device="cpu")
+
+    with pytest.raises(IndexError, match="adjacent successor"):
+        pretrain_rgb_measurements(
+            model,
+            batch,
+            config,
+            frame_index=int(batch["rgb"].shape[1]) - 1,
+        )
+
+
 def test_closed_loop_supervises_every_frame_with_a_usable_prior() -> None:
     config = _closed_loop_config()
     batch = collate_episodes([generate_episode(config, seed=7)])
@@ -296,6 +730,14 @@ def test_closed_loop_supervises_every_frame_with_a_usable_prior() -> None:
 
     assert result.metrics["fast_path_supervised"] == 1.0
     assert result.metrics["fast_supervised_frames"] == 3.0
+    # The runtime contains one mapped track and two valid false tracks. All
+    # three queries per frame now carry positive or negative ROI supervision.
+    assert result.metrics["fast_supervised_slots"] == 9.0
+    fast_weight = config.training.fast_roi_pretrain_weight
+    assert result.metrics["measurement"] == pytest.approx(
+        (result.metrics["measurement_global"] + fast_weight * result.metrics["measurement_fast"])
+        / (1.0 + fast_weight)
+    )
 
 
 def test_mid_episode_window_burns_in_the_causal_prefix() -> None:
@@ -315,7 +757,9 @@ def test_mid_episode_window_burns_in_the_causal_prefix() -> None:
 
     # Both trainable frames have a belief derived from frames 0..1. A cold
     # reset at frame 2 would leave only the final frame eligible for ROI loss.
+    # Each frame contains one mapped and two valid unmapped persistent queries.
     assert result.metrics["fast_supervised_frames"] == 2.0
+    assert result.metrics["fast_supervised_slots"] == 6.0
     assert model.belief is not None
     torch.testing.assert_close(model.belief.timestamp, batch["timestamps"][:, -1])
 

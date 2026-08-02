@@ -1198,7 +1198,7 @@
 ## ADR-058 — Train one sustained shared model behind fixed broad guardrails
 
 - **Date:** 2026-07-30
-- **Status:** accepted; campaign pending/computing
+- **Status:** policy accepted; v1/v2 instances superseded, v3 pending qualification
 - **Context:** The fixed-scale 1.90M-parameter model received only 1,024
   measurement episode draws and 16 rejected causal updates. Later intervention
   heads improved their local fit targets but regressed the recursive RGB loop.
@@ -1242,7 +1242,7 @@
 ## ADR-059 — Continue sustained training with verified plateau evidence
 
 - **Date:** 2026-07-30
-- **Status:** accepted; supervisor active
+- **Status:** policy accepted; no convergence supervisor currently active
 - **Context:** A fixed 12,288-update process cannot determine in advance
   whether the broad validation objective has plateaued. Manual ad-hoc
   extensions would invite short-run decisions, training-loss selection, or
@@ -1286,7 +1286,7 @@
 ## ADR-060 — Fix global axis-horizon weighting without mutating a live protocol
 
 - **Date:** 2026-07-31
-- **Status:** implementation accepted; corrected campaign pending
+- **Status:** implementation accepted; v1/v2 campaigns superseded, v3 pending qualification
 - **Context:** Batch-one losses in the sustained run varied sharply. A complete
   numerical audit found finite weights, gradients, and optimizer moments, but
   also found that the actively optimized x/y/z rollout-position losses did not
@@ -1322,9 +1322,10 @@
   all four hardware-conditional files passing directly on MPS.
 - **Consequences:** Raw console loss remains expected to vary across object
   counts, scenarios, matches, events, and horizon support, but future logs
-  expose the actual clipped update magnitude. The active campaign remains a
-  valid legacy-objective experiment. A separate timestamped corrected campaign
-  must complete balanced coverage and broad validation before this fix can be
+  expose the actual clipped update magnitude. The affected v1 campaign is a
+  preserved legacy-objective experiment; the later v2 campaign was also
+  superseded by ADR-070. A separate timestamped supported campaign must
+  complete balanced coverage and broad validation before this fix can be
   credited with improved physical accuracy. ROI event features and slow
   uncertainty calibration remain explicit follow-up model tasks rather than
   nominally trainable dead heads.
@@ -1559,3 +1560,54 @@
   extra training. Historical selector files cannot be silently overwritten.
   Hybrid Adam steps stay on CPU, moments follow parameter owners, and
   evaluation does not duplicate optimizer-sized accelerator storage.
+
+## ADR-070 — Require supported causal updates and clip recursive interactions hierarchically
+
+- **Date:** 2026-08-02
+- **Status:** accepted and implemented
+- **Context:** The corrected v2 campaign remained finite but did not constitute
+  meaningful convergence. Of 173 logged causal training rows, 121 (`69.94%`)
+  had an exactly zero pre-clip gradient while still consuming scheduled
+  updates. The measurement handoff also collapsed distance-gated current
+  target coverage from `0.28754` to `0.04480` and one-second forecast target
+  coverage from `0.76146` to `0.05273`. Direct inspection found positive-only
+  fast-ROI confidence supervision, invalid attribute targets on empty or
+  unreliable crops, false positives missing from selector precision, an
+  always-present inactive-query existence loss, and causal windows that could
+  optimize global auxiliary perception without any trajectory support. After
+  those repairs, an exact hard-window gradient audit found that
+  `dynamics.interactions` contributed `85.76` of a raw total norm `85.89`;
+  whole-model clipping alone reduced every other useful gradient by the same
+  roughly `0.0233` factor.
+- **Decision:** A causal optimizer update requires real differentiable
+  trajectory/state/parameter support or supported persistent fast-ROI slots.
+  Unsupported deterministic draws are counted and retried without advancing
+  optimizer state. Fast-ROI masks and objectives follow their actual evidence,
+  empty crops train only negative existence/visibility, selector precision
+  includes every eligible confident output, and global/fast losses are
+  support-normalized separately. Handoff and later candidates must satisfy
+  absolute and reference-relative coverage floors; support collapse restores
+  the verified incumbent and resets Adam. Clip the learned recursive
+  interaction block to `interaction_grad_clip_norm` before applying the
+  declared whole-model clip, and persist every raw/intermediate/applied norm
+  and coefficient. Persist and guard every declared scenario as a separate
+  selector slice; missing scenario support or a slice-level regression rejects
+  promotion even when the pooled score improves. Require unique entries in the
+  balanced scenario list and a nonnegative integral RGB phase boundary, so
+  deterministic validation coverage and handoff semantics cannot be bypassed
+  by a malformed resolved configuration.
+- **Alternatives considered:** lower the global learning rate around zero
+  support; regard zero-gradient rows as benign dataset variance; globally clip
+  the `85+` interaction spike; remove the interaction residual; promote
+  conditional low-RMSE candidates despite collapsed coverage; turn empty ROI
+  crops into zero-valued geometry targets.
+- **Consequences:** Completed updates now mean the model received causal
+  learning signal, rollout selection cannot reward disappearing predictions,
+  and hard contact windows cannot erase unrelated measurement/filter
+  gradients merely by dominating the global clip. The forward interaction
+  architecture remains unchanged. Raw batch loss and raw gradient spikes
+  remain diagnostics rather than convergence claims, and the v2 campaign is a
+  preserved invalid-optimization control rather than evidence to extend. The
+  final-tree smoke confirmed the stricter behavior: its step-four pooled score
+  improved `0.558737 → 0.548741`, but coverage fell and the candidate was
+  correctly rejected by both pooled and `reference_pairs` slice guardrails.

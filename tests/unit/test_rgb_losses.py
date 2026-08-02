@@ -81,3 +81,101 @@ def test_measurement_nll_calibrates_variance_without_duplicate_mean_gradient() -
     assert prediction.grad is None or torch.count_nonzero(prediction.grad) == 0
     assert log_variance.grad is not None
     assert torch.count_nonzero(log_variance.grad) > 0
+
+
+def test_unsupported_exact_geometry_retains_existence_and_uncertainty_training() -> None:
+    prediction = torch.full((1, 1, 7), 2.0, requires_grad=True)
+    log_variance = torch.zeros_like(prediction, requires_grad=True)
+    predicted_world = torch.full((1, 1, 3), 2.0, requires_grad=True)
+    world_log_variance = torch.zeros_like(predicted_world, requires_grad=True)
+    existence_logits = torch.zeros((1, 1), requires_grad=True)
+    outputs = {
+        "values": prediction,
+        "raw_centre": prediction[..., :2],
+        "log_variance": log_variance,
+        "existence_logits": existence_logits,
+        "world_position": predicted_world,
+        "world_position_log_variance": world_log_variance,
+    }
+    targets = {
+        "values": torch.zeros_like(prediction),
+        "world_position": torch.zeros_like(predicted_world),
+    }
+    masks = {
+        "matched": torch.ones((1, 1), dtype=torch.bool),
+        "existence": torch.ones((1, 1), dtype=torch.bool),
+        "geometry": torch.zeros((1, 1), dtype=torch.bool),
+    }
+
+    losses = rgb_measurement_losses(outputs, targets, masks)
+    (losses["rgb_nll"] + losses["rgb_world_position_nll"] + losses["rgb_existence"]).backward()
+
+    assert "rgb_geometry" not in losses
+    assert "rgb_raw_centre" not in losses
+    assert "rgb_world_position" not in losses
+    assert losses["rgb_nll"].item() > 0.0
+    assert losses["rgb_world_position_nll"].item() > 0.0
+    assert losses["rgb_existence"].item() > 0.0
+    assert prediction.grad is None
+    assert predicted_world.grad is None
+    assert torch.count_nonzero(log_variance.grad) > 0
+    assert torch.count_nonzero(world_log_variance.grad) > 0
+    assert torch.count_nonzero(existence_logits.grad) > 0
+
+
+def test_invalid_roi_slots_do_not_become_negative_existence_examples() -> None:
+    outputs, targets, masks = _loss_inputs()
+    masks["matched"] = torch.zeros((1, 1), dtype=torch.bool)
+    masks["existence"] = torch.zeros((1, 1), dtype=torch.bool)
+    masks["existence_valid"] = torch.zeros((1, 1), dtype=torch.bool)
+
+    losses = rgb_measurement_losses(outputs, targets, masks)
+
+    assert "rgb_existence" not in losses
+
+
+def test_valid_empty_roi_trains_only_existence_and_visibility_heads() -> None:
+    prediction = torch.full((1, 1, 7), 2.0, requires_grad=True)
+    log_variance = torch.zeros_like(prediction, requires_grad=True)
+    predicted_world = torch.full((1, 1, 3), 2.0, requires_grad=True)
+    world_log_variance = torch.zeros_like(predicted_world, requires_grad=True)
+    existence_logits = torch.zeros((1, 1), requires_grad=True)
+    visibility_logits = torch.zeros((1, 1), requires_grad=True)
+    outputs = {
+        "values": prediction,
+        "raw_centre": prediction[..., :2],
+        "log_variance": log_variance,
+        "existence_logits": existence_logits,
+        "visibility_logits": visibility_logits,
+        "world_position": predicted_world,
+        "world_position_log_variance": world_log_variance,
+    }
+    targets = {
+        "values": torch.zeros_like(prediction),
+        "visibility": torch.zeros((1, 1)),
+        "world_position": torch.zeros_like(predicted_world),
+    }
+    masks = {
+        "matched": torch.zeros((1, 1), dtype=torch.bool),
+        "existence": torch.zeros((1, 1), dtype=torch.bool),
+        "existence_valid": torch.ones((1, 1), dtype=torch.bool),
+        "visibility_valid": torch.ones((1, 1), dtype=torch.bool),
+        "geometry": torch.zeros((1, 1), dtype=torch.bool),
+    }
+
+    losses = rgb_measurement_losses(outputs, targets, masks)
+    sum(losses.values()).backward()
+
+    assert losses["rgb_existence"].item() > 0.0
+    assert losses["rgb_visibility"].item() > 0.0
+    assert "rgb_geometry" not in losses
+    assert "rgb_colour" not in losses
+    assert "rgb_nll" not in losses
+    assert "rgb_world_position" not in losses
+    assert "rgb_world_position_nll" not in losses
+    assert torch.count_nonzero(existence_logits.grad) > 0
+    assert torch.count_nonzero(visibility_logits.grad) > 0
+    assert prediction.grad is None
+    assert log_variance.grad is None
+    assert predicted_world.grad is None
+    assert world_log_variance.grad is None

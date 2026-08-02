@@ -345,6 +345,73 @@ def test_measurement_validation_pools_birth_counts_and_errors_exactly() -> None:
     assert math.isclose(aggregate.metrics["rgb_world_position_mae_m"], 0.91)
 
 
+def test_measurement_validation_pools_fast_pair_support_exactly() -> None:
+    def result(
+        *,
+        bootstrap_matched: float,
+        target_count: float,
+        supported: float,
+        true_positive: float,
+        error_sum: float,
+        prior_error_sum: float,
+    ) -> TrainingBatchResult:
+        return TrainingBatchResult(
+            total_loss=torch.zeros(()),
+            loss_terms={},
+            metrics={
+                "rgb_fast_bootstrap_matched_target_count": bootstrap_matched,
+                "rgb_fast_bootstrap_target_count": target_count,
+                "rgb_fast_roi_supported_target_count": supported,
+                "rgb_fast_roi_target_count": target_count,
+                "rgb_fast_roi_eligible_proposal_count": supported,
+                "rgb_fast_roi_world_position_absolute_error_sum_m": error_sum,
+                "rgb_fast_roi_world_position_matched_count": supported,
+                "rgb_fast_prior_world_position_absolute_error_sum_m": prior_error_sum,
+                "rgb_fast_prior_world_position_matched_count": supported,
+                "rgb_fast_roi_confident_proposal_count": supported,
+                "rgb_fast_roi_true_positive_count_at_0_5m": true_positive,
+            },
+            phase="rgb_pretrain",
+        )
+
+    aggregate = _mean_batch_results(
+        [
+            result(
+                bootstrap_matched=1.0,
+                target_count=1.0,
+                supported=1.0,
+                true_positive=1.0,
+                error_sum=0.1,
+                prior_error_sum=0.3,
+            ),
+            result(
+                bootstrap_matched=1.0,
+                target_count=9.0,
+                supported=2.0,
+                true_positive=1.0,
+                error_sum=0.8,
+                prior_error_sum=1.2,
+            ),
+        ]
+    )
+
+    assert aggregate.metrics["rgb_fast_bootstrap_target_coverage"] == 0.2
+    assert aggregate.metrics["rgb_fast_roi_target_coverage"] == 0.3
+    assert aggregate.metrics["rgb_fast_roi_recall_at_0_5m"] == 0.2
+    assert math.isclose(
+        aggregate.metrics["rgb_fast_roi_world_position_mae_m"],
+        0.3,
+    )
+    assert math.isclose(
+        aggregate.metrics["rgb_fast_prior_world_position_mae_m"],
+        0.5,
+    )
+    assert math.isclose(
+        aggregate.metrics["rgb_fast_roi_improvement_m"],
+        0.2,
+    )
+
+
 def test_state_uncertainty_nll_calibrates_variance_without_duplicate_mean_gradient() -> None:
     mean = torch.tensor([[[2.0, -1.0, 0.5]]], requires_grad=True)
     log_variance = torch.zeros_like(mean, requires_grad=True)
@@ -386,7 +453,46 @@ def test_unsupported_state_and_parameter_terms_are_omitted_not_zero_averaged() -
     )
 
     assert not matched.any()
+    assert losses == {}
+
+
+def test_existence_belief_supervises_only_causally_active_predictions() -> None:
+    belief = BeliefFactory(max_objects=2).create(batch_size=1)
+    existence_logit = torch.zeros((1, 2), requires_grad=True)
+    belief = belief.replace(
+        objects=belief.objects.replace(
+            active=torch.tensor([[True, False]]),
+            object_id=torch.tensor([[0, -1]], dtype=torch.int64),
+            existence_logit=existence_logit,
+        )
+    )
+    batch = {
+        "objects": {
+            "active": torch.zeros(1, 1, 2, dtype=torch.bool),
+            "position": torch.zeros(1, 1, 2, 3),
+            "velocity": torch.zeros(1, 1, 2, 3),
+            "drag": torch.zeros(1, 1, 2, 1),
+            "restitution": torch.zeros(1, 1, 2, 1),
+        },
+        "events": {
+            "collision": torch.zeros(1, 1, 2, dtype=torch.bool),
+        },
+    }
+
+    losses, _, matched = _belief_state_losses(
+        belief,
+        batch,
+        _single_horizon_config(),
+        frame_index=0,
+    )
+    losses["existence_belief"].backward()
+
+    assert not matched.any()
     assert set(losses) == {"existence_belief"}
+    torch.testing.assert_close(
+        existence_logit.grad,
+        torch.tensor([[0.5, 0.0]]),
+    )
 
 
 class _StaticRolloutDynamics:
@@ -490,9 +596,9 @@ def test_unseen_actuation_censors_the_coupled_scene_but_keeps_distribution_nll()
     )
 
     assert predictable.tolist() == [[False, False]]
-    assert result.losses["rollout_position"].item() == 0.0
-    assert result.losses["rollout_velocity"].item() == 0.0
-    assert result.losses["event_collision"].item() == 0.0
+    assert "rollout_position" not in result.losses
+    assert "rollout_velocity" not in result.losses
+    assert "event_collision" not in result.losses
     assert result.losses["rollout_position_nll"].item() > 0.0
     assert "rollout_position@0.050s" not in result.losses
     assert "rollout_velocity@0.050s" not in result.losses
@@ -549,7 +655,7 @@ def test_optional_rollout_nll_never_falls_back_to_unit_weight() -> None:
     }
     terms = _group_closed_loop_terms(details, torch.zeros(()))
 
-    assert terms["measurement"].item() == 0.0
+    assert "measurement" not in terms
     without_explicit_weight = _weighted_closed_loop_total(
         terms,
         {"measurement": 1.0},
@@ -659,6 +765,8 @@ def _measurement_metrics(
     world_mae: float,
     recall: float,
     precision: float,
+    fast_roi_coverage: float = 0.70,
+    fast_roi_mae: float = 0.20,
 ) -> dict[str, float]:
     f1 = 0.0 if recall + precision == 0 else 2.0 * recall * precision / (recall + precision)
     return {
@@ -667,6 +775,13 @@ def _measurement_metrics(
         "rgb_runtime_birth_recall_at_0_5m": recall,
         "rgb_runtime_birth_precision_at_0_5m": precision,
         "rgb_runtime_birth_f1_at_0_5m": f1,
+        "rgb_fast_bootstrap_target_coverage": 0.75,
+        "rgb_fast_roi_target_coverage": fast_roi_coverage,
+        "rgb_fast_roi_world_position_mae_m": fast_roi_mae,
+        "rgb_fast_roi_recall_at_0_5m": 0.65,
+        "rgb_fast_roi_precision_at_0_5m": 0.75,
+        "rgb_fast_roi_f1_at_0_5m": 0.6964285714,
+        "rgb_fast_roi_improvement_m": 0.05,
     }
 
 
@@ -699,6 +814,31 @@ def test_measurement_selector_can_promote_runtime_recall_not_only_mae() -> None:
 
     assert candidate.score < incumbent.score
     assert _measurement_selection_improves(candidate, incumbent)
+
+
+def test_measurement_selector_rejects_global_gain_with_fast_roi_collapse() -> None:
+    incumbent = _measurement_selection_metrics(
+        _measurement_metrics(world_mae=0.25, recall=0.75, precision=0.75)
+    )
+    candidate = _measurement_selection_metrics(
+        _measurement_metrics(
+            world_mae=0.10,
+            recall=0.90,
+            precision=0.90,
+            fast_roi_coverage=0.20,
+            fast_roi_mae=0.40,
+        )
+    )
+    assert incumbent is not None
+    assert candidate is not None
+
+    failures = _measurement_selection_guardrail_failures(candidate, incumbent)
+
+    assert not _measurement_selection_improves(candidate, incumbent)
+    assert {failure["metric"] for failure in failures} >= {
+        "fast_roi_target_coverage",
+        "fast_roi_world_position_mae_m",
+    }
 
 
 def test_measurement_selector_resume_requires_broad_versioned_metrics() -> None:

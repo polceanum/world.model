@@ -2,6 +2,67 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-02 supported-causal and convergence-stability audit
+
+- Stopped and preserved
+  `runs/20260801-232229-scaled-sustained-v2/` after proving that 121 of
+  173 logged causal rows had an exactly zero gradient and that its perception
+  handoff collapsed current and future target coverage. It is not a
+  convergence result and must not be resumed under the repaired protocol.
+- Require explicit differentiable trajectory/state/parameter support or valid
+  persistent fast-ROI slots before a causal optimizer update. Unsupported
+  deterministic draws advance the sample counter, are logged separately, and
+  retry only up to a configured finite bound.
+- Added absolute and fixed-reference-relative handoff/causal coverage floors.
+  The first unsupported candidate cannot become a synthetic best checkpoint;
+  later support collapse restores the verified rollout incumbent and resets
+  Adam while ordinary broad-score rejection retains a supported mutable
+  candidate.
+- Split fast-ROI supervision into identity, ROI, crop-evidence,
+  exact-geometry, existence, and visibility masks. Valid empty crops now train
+  only negative existence/visibility; unsupported attribute and likelihood
+  terms are omitted.
+- Count all eligible confident ROI outputs in selection precision, including
+  mapped empty crops and valid unmapped persistent tracks, train the fast
+  temporal cache on adjacent frames, and support-normalize global and fast
+  measurement objectives independently with a fixed weight.
+- Removed constant inactive factory-query existence supervision and
+  unsupported rollout/event zero terms. Unsupported physical RMSE diagnostics
+  now report missing support instead of a misleading `0.0`.
+- Aligned analytic contact resolution with the simulator's boundary-before-
+  pair order, two solver iterations, sequential corner handling, inverse-mass
+  position correction, geometric friction, restitution combination, and event
+  accumulation. A randomized three-sphere differential test now agrees within
+  floating-point tolerance.
+- Tightened online drag and restitution supervision to causally observed
+  pre/post evidence, clean intervals, the correct boundary object, and the
+  identifiable pair minimum. Runtime observation/birth evidence and
+  distance-gated target mapping are explicit.
+- Added hierarchical gradient clipping for the learned recursive interaction
+  network before whole-model clipping, with raw subsystem/total,
+  intermediate, coefficient, and final applied norms in every training log.
+  The hard smoke batch retained a pre-global norm `4.8616` after locally
+  reducing an interaction norm `85.7563` to `1.0`, then applied the global
+  `2.0` limit.
+- Made every declared scenario a versioned checkpoint-selection slice.
+  Promotion now requires complete scenario support and per-scenario broad
+  non-regression/coverage guardrails, so a better pooled score cannot conceal
+  a missing dynamics family. Balanced scenario lists must be unique and
+  validation budgets must cover every configured scenario.
+- Reject negative/non-integral RGB phase boundaries instead of silently
+  bypassing the paired-measurement phase and its validated handoff.
+- Added `configs/sustained_accuracy_mps_v3.yaml`, keeping one shared
+  eight-scenario model, hybrid MPS/CPU execution, 8,192 paired RGB updates,
+  8,192 supported causal updates, and the existing broad selection
+  guardrails. Short v3 runs are qualification evidence only, not convergence.
+- Completed the final-tree hybrid smoke at
+  `runs/20260802-121629-convergence-v3-final-audit-smoke/`: two MPS RGB
+  updates and two supported CPU causal updates, no skipped draw, version-5
+  scenario-aware selection, and a complete terminal checkpoint. Its
+  single-scenario two-episode metrics are wiring evidence only.
+- Advanced the specification to version 1.7 and added the supported-causal
+  optimization and hierarchical-gradient-stability contract.
+
 ### 2026-08-01 convergence-integrity audit
 
 - Reproduced a data-dependent PyTorch 2.10 MPS failure where finite
@@ -102,18 +163,18 @@
 - A finite-state/optimizer/loss audit of the active sustained MPS campaign,
   including the exact reason the first causal candidate was rejected.
 - A provenance-verifying convergence supervisor for the sustained MPS
-  campaign. It monitors the existing trainer, removes its completed KeepAlive
+  campaign. It monitored the then-existing trainer, removed its completed KeepAlive
   job only after artifact verification, resumes `last.pt` sequentially in
   complete causal blocks, survives supervisor restarts without overlapping
   trainers, and records child failures without infinite retries. The
-  supervisor is active as
+  historical supervisor ran as
   `com.polceanum.orpheus.convergence-20260730-192625`.
 - A strict four-validation plateau decision over accepted/rejected numbered
   candidates, with 1% recent-safe improvement continuation, inconclusive-
   evidence continuation, and a 24,576-step hard limit reported separately as
   `limit_hit` unless plateau is actually demonstrated.
-- The full 12,288-update sustained accuracy campaign is now running on Apple
-  MPS under the persistent macOS job
+- The original 12,288-update sustained accuracy campaign was launched on Apple
+  MPS under the historical persistent macOS job
   `com.polceanum.orpheus.sustained-20260730-192625`; its timestamp-first
   artifact root is `runs/20260730-192625-scaled-sustained-e2e-v1/`.
 - A sustained eight-scenario MPS accuracy profile with two complete

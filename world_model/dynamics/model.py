@@ -47,11 +47,14 @@ class DynamicsConfig:
     log_variance_min: float = -20.0
     log_variance_max: float = 10.0
     ground_height: float = 0.0
+    contact_margin: float = 0.0
+    boundary_contact_tolerance: float = 1.0e-4
     penetration_slop: float = 1e-4
     max_penetration_correction: float = 0.05
     contact_confidence_sigma: float = 0.0
-    pair_collision_speed_epsilon: float = 1.0e-4
+    pair_collision_speed_epsilon: float = 1.0e-7
     boundary_collision_speed_epsilon: float = 0.1
+    solver_iterations: int = 2
     sleep_speed: float = 0.02
     world_bounds: tuple[tuple[float, float], ...] | None = None
 
@@ -79,8 +82,13 @@ class DynamicsConfig:
                 raise ValueError(f"{name} must be positive")
         if self.log_variance_min >= self.log_variance_max:
             raise ValueError("invalid log variance bounds")
-        if self.contact_confidence_sigma < 0:
-            raise ValueError("contact_confidence_sigma must be nonnegative")
+        for name, value in (
+            ("contact_margin", self.contact_margin),
+            ("boundary_contact_tolerance", self.boundary_contact_tolerance),
+            ("contact_confidence_sigma", self.contact_confidence_sigma),
+        ):
+            if value < 0 or not math.isfinite(value):
+                raise ValueError(f"{name} must be finite and nonnegative")
         for name, value in (
             ("pair_collision_speed_epsilon", self.pair_collision_speed_epsilon),
             (
@@ -90,6 +98,8 @@ class DynamicsConfig:
         ):
             if value < 0 or not math.isfinite(value):
                 raise ValueError(f"{name} must be finite and nonnegative")
+        if self.solver_iterations < 1:
+            raise ValueError("solver_iterations must be at least one")
         if self.world_bounds is not None and (
             len(self.world_bounds) != 3
             or any(len(bounds) != 2 or bounds[0] >= bounds[1] for bounds in self.world_bounds)
@@ -129,11 +139,14 @@ class DynamicsModel(nn.Module):
         )
         resolver = SphereContactResolver(
             planes=self._environment_planes(),
+            contact_margin=self.config.contact_margin,
+            boundary_contact_tolerance=self.config.boundary_contact_tolerance,
             penetration_slop=self.config.penetration_slop,
             max_position_correction=self.config.max_penetration_correction,
             contact_confidence_sigma=self.config.contact_confidence_sigma,
             collision_speed_epsilon=self.config.pair_collision_speed_epsilon,
             boundary_collision_speed_epsilon=(self.config.boundary_collision_speed_epsilon),
+            solver_iterations=self.config.solver_iterations,
         )
         self.events = EventModel(
             resolver,
@@ -217,11 +230,16 @@ class DynamicsModel(nn.Module):
             log_variance_min=float(state.fast_log_variance_min),
             log_variance_max=float(state.fast_log_variance_max),
             ground_height=ground_height,
+            contact_margin=float(dynamics.contact_margin),
+            boundary_contact_tolerance=float(dynamics.boundary_contact_tolerance),
             penetration_slop=float(dynamics.penetration_slop),
             max_penetration_correction=float(dynamics.max_penetration_correction),
             contact_confidence_sigma=float(dynamics.contact_confidence_sigma),
             pair_collision_speed_epsilon=(float(dynamics.pair_collision_speed_epsilon)),
             boundary_collision_speed_epsilon=(float(dynamics.boundary_collision_speed_epsilon)),
+            solver_iterations=(
+                int(getattr(simulator, "solver_iterations", 2)) if simulator is not None else 2
+            ),
             sleep_speed=float(dynamics.sleep_speed),
             world_bounds=(
                 tuple((float(bounds[0]), float(bounds[1])) for bounds in simulator.world_bounds)
@@ -325,10 +343,13 @@ class DynamicsModel(nn.Module):
         auxiliary = self._mask_auxiliary(
             {
                 "pair_contact": events.contacts.pair_contact,
+                "interval_pair_contact": events.contacts.interval_pair_contact,
                 "pair_collision": events.contacts.pair_collision,
                 "boundary_contact": events.contacts.boundary_contact,
+                "interval_boundary_contact": events.contacts.interval_boundary_contact,
                 "boundary_collision": events.contacts.boundary_collision,
                 "ground_contact": events.contacts.ground_contact,
+                "interval_ground_contact": events.contacts.interval_ground_contact,
                 "ground_collision": events.contacts.ground_collision,
                 "pair_impulse": events.contacts.pair_impulse,
                 "max_penetration": events.contacts.max_penetration,
@@ -395,6 +416,13 @@ class DynamicsModel(nn.Module):
                 device=belief.device,
                 dtype=torch.bool,
             ),
+            "interval_pair_contact": torch.zeros(
+                batch,
+                count,
+                count,
+                device=belief.device,
+                dtype=torch.bool,
+            ),
             "pair_collision": torch.zeros(
                 batch,
                 count,
@@ -409,6 +437,13 @@ class DynamicsModel(nn.Module):
                 device=belief.device,
                 dtype=torch.bool,
             ),
+            "interval_boundary_contact": torch.zeros(
+                batch,
+                count,
+                len(self.events.resolver.plane_names),
+                device=belief.device,
+                dtype=torch.bool,
+            ),
             "boundary_collision": torch.zeros(
                 batch,
                 count,
@@ -417,6 +452,7 @@ class DynamicsModel(nn.Module):
                 dtype=torch.bool,
             ),
             "ground_contact": torch.zeros_like(objects.active),
+            "interval_ground_contact": torch.zeros_like(objects.active),
             "ground_collision": torch.zeros_like(objects.active),
             "pair_impulse": objects.position.new_zeros(batch, count, count),
             "max_penetration": belief.timestamp.new_zeros(batch),
@@ -455,8 +491,11 @@ class DynamicsModel(nn.Module):
         sub_dt = elapsed / substeps
         result: RolloutStep | None = None
         interval_collision_logits: Tensor | None = None
+        interval_pair_contact: Tensor | None = None
         interval_pair_collision: Tensor | None = None
+        interval_boundary_contact: Tensor | None = None
         interval_boundary_collision: Tensor | None = None
+        interval_ground_contact: Tensor | None = None
         interval_ground_collision: Tensor | None = None
         interval_pair_impulse: Tensor | None = None
         interval_max_penetration: Tensor | None = None
@@ -475,8 +514,11 @@ class DynamicsModel(nn.Module):
             )
             if interval_collision_logits is None:
                 interval_collision_logits = collision_logits
+                interval_pair_contact = result.auxiliary["interval_pair_contact"]
                 interval_pair_collision = result.auxiliary["pair_collision"]
+                interval_boundary_contact = result.auxiliary["interval_boundary_contact"]
                 interval_boundary_collision = result.auxiliary["boundary_collision"]
+                interval_ground_contact = result.auxiliary["interval_ground_contact"]
                 interval_ground_collision = result.auxiliary["ground_collision"]
                 interval_pair_impulse = result.auxiliary["pair_impulse"]
                 interval_max_penetration = result.auxiliary["max_penetration"]
@@ -485,11 +527,20 @@ class DynamicsModel(nn.Module):
                     interval_collision_logits,
                     collision_logits,
                 )
+                interval_pair_contact = (
+                    interval_pair_contact | result.auxiliary["interval_pair_contact"]
+                )
                 interval_pair_collision = (
                     interval_pair_collision | result.auxiliary["pair_collision"]
                 )
+                interval_boundary_contact = (
+                    interval_boundary_contact | result.auxiliary["interval_boundary_contact"]
+                )
                 interval_boundary_collision = (
                     interval_boundary_collision | result.auxiliary["boundary_collision"]
+                )
+                interval_ground_contact = (
+                    interval_ground_contact | result.auxiliary["interval_ground_contact"]
                 )
                 interval_ground_collision = (
                     interval_ground_collision | result.auxiliary["ground_collision"]
@@ -504,8 +555,11 @@ class DynamicsModel(nn.Module):
                 )
         assert result is not None
         assert interval_collision_logits is not None
+        assert interval_pair_contact is not None
         assert interval_pair_collision is not None
+        assert interval_boundary_contact is not None
         assert interval_boundary_collision is not None
+        assert interval_ground_contact is not None
         assert interval_ground_collision is not None
         assert interval_pair_impulse is not None
         assert interval_max_penetration is not None
@@ -519,8 +573,11 @@ class DynamicsModel(nn.Module):
         auxiliary = dict(result.auxiliary)
         auxiliary.update(
             {
+                "interval_pair_contact": interval_pair_contact,
                 "pair_collision": interval_pair_collision,
+                "interval_boundary_contact": interval_boundary_contact,
                 "boundary_collision": interval_boundary_collision,
+                "interval_ground_contact": interval_ground_contact,
                 "ground_collision": interval_ground_collision,
                 "pair_impulse": interval_pair_impulse,
                 "max_penetration": interval_max_penetration,

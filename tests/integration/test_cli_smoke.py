@@ -100,15 +100,18 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
     checkpoint = run_directory / "checkpoints" / "last.pt"
     assert checkpoint.is_file()
     assert not (run_directory / "checkpoints" / "best_rollout.pt").exists()
-    assert (run_directory / "checkpoints" / "best_measurement.pt").is_file()
+    # One update is intentionally too short to prove the adjacent-frame fast
+    # RGB path. The trainer must not invent a deployable perception selector.
+    assert not (run_directory / "checkpoints" / "best_measurement.pt").exists()
     assert (run_directory / "metrics.jsonl").is_file()
     assert (run_directory / "config.resolved.yaml").is_file()
     pretrain_summary = json.loads(
         (run_directory / "train_summary.json").read_text(encoding="utf-8")
     )
-    assert pretrain_summary["best_checkpoint_kind"] == "best_measurement"
+    assert pretrain_summary["best_checkpoint_kind"] == "last_unvalidated"
     assert pretrain_summary["best_rollout_checkpoint"] is None
     assert pretrain_summary["best_rollout_validated"] is False
+    assert pretrain_summary["best_measurement_validated"] is False
     assert pretrain_summary["best_rollout_loss"] is None
     assert pretrain_summary["model_parameter_count"] > 0
     assert pretrain_summary["planned_training_episode_draws"] == 1
@@ -191,36 +194,10 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         "training.steps=2",
     )
     best_rollout_path = run_directory / "checkpoints" / "best_rollout.pt"
-    assert best_rollout_path.is_file()
-    best_rollout_payload = torch.load(
-        best_rollout_path,
-        map_location="cpu",
-        weights_only=False,
-    )
-    assert best_rollout_payload["step"] in {1, 2}
-    assert best_rollout_payload["metrics"]["best_rollout_validated"] == 1.0
-    assert "validation_rollout_loss" in best_rollout_payload["metrics"]
-    assert (
-        best_rollout_payload["metrics"]["best_rollout_loss"]
-        == best_rollout_payload["metrics"]["best_rollout_position_loss"]
-        == best_rollout_payload["metrics"]["best_rollout_selection_score"]
-    )
-    assert best_rollout_payload["metrics"]["rollout_selection_metric_version"] == 4.0
-    assert "best_rollout_velocity_rmse_mps" in best_rollout_payload["metrics"]
-    assert "best_rollout_target_coverage" in best_rollout_payload["metrics"]
-    assert "best_rollout_prediction_precision" in best_rollout_payload["metrics"]
-    assert "best_rollout_collision_f1" in best_rollout_payload["metrics"]
-    assert "best_rollout_id_switch_rate" in best_rollout_payload["metrics"]
-    assert "best_rollout_position_calibration_error90" in best_rollout_payload["metrics"]
-    assert len(best_rollout_payload["metrics"]["rollout_validation_protocol_hash"]) == 64
-    assert best_rollout_payload["metrics"]["checkpoint_contains_best_rollout_weights"] == 1.0
-    assert any(
-        name.startswith("best_rollout_position_rmse@") for name in best_rollout_payload["metrics"]
-    )
-    assert any(
-        name.startswith("best_rollout_forecast_target_coverage@")
-        for name in best_rollout_payload["metrics"]
-    )
+    # A single causal update still has zero broad tracking coverage in this
+    # intentionally tiny smoke. Record the validation, but do not fabricate a
+    # deployable rollout selector merely to satisfy the smoke test.
+    assert not best_rollout_path.exists()
     reference_rollout_payload = torch.load(
         run_directory / "checkpoints" / "reference_rollout.pt",
         map_location="cpu",
@@ -234,10 +211,8 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         map_location="cpu",
         weights_only=False,
     )
-    assert (
-        resumed_last_payload["metrics"]["best_rollout_model_state_hash"]
-        == best_rollout_payload["metrics"]["best_rollout_model_state_hash"]
-    )
+    assert resumed_last_payload["metrics"]["best_rollout_validated"] == 0.0
+    assert resumed_last_payload["metrics"]["checkpoint_contains_best_rollout_weights"] == 0.0
     assert (run_directory / "checkpoints" / "validation_step_000001.pt").is_file()
     assert (run_directory / "checkpoints" / "validation_step_000002.pt").is_file()
     training_records = [
@@ -268,10 +243,21 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         closed_loop_records[-1]["gradient_norm_pre_clip"]
         == closed_loop_records[-1]["gradient_norm"]
     )
+    assert 0.0 < closed_loop_records[-1]["interaction_gradient_clip_coefficient"] <= 1.0
+    assert closed_loop_records[-1][
+        "interaction_gradient_norm_applied_before_global_clip"
+    ] == pytest.approx(
+        closed_loop_records[-1]["interaction_gradient_norm_pre_clip"]
+        * closed_loop_records[-1]["interaction_gradient_clip_coefficient"]
+    )
     assert 0.0 < closed_loop_records[-1]["gradient_clip_coefficient"] <= 1.0
     assert closed_loop_records[-1]["gradient_norm_applied"] == pytest.approx(
-        closed_loop_records[-1]["gradient_norm_pre_clip"]
+        closed_loop_records[-1]["gradient_norm_pre_global_clip"]
         * closed_loop_records[-1]["gradient_clip_coefficient"]
+    )
+    assert closed_loop_records[-1]["gradient_total_clip_coefficient"] == pytest.approx(
+        closed_loop_records[-1]["gradient_norm_applied"]
+        / closed_loop_records[-1]["gradient_norm_pre_clip"]
     )
     assert closed_loop_records[-1]["gradient_norm_applied"] <= 1.0 + 1.0e-6
 

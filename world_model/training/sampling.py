@@ -10,12 +10,14 @@ from torch.utils.data import Sampler
 
 
 class StepIndexedBatchSampler(Sampler[list[int]]):
-    """Map every optimiser step to a deterministic dataset batch.
+    """Map every absolute training-data draw to a deterministic dataset batch.
 
     The mapping depends only on the dataset shape, seed, shuffle policy, and
-    absolute optimiser step.  A resumed trainer can therefore start directly
-    at ``start_step`` without replaying the first shuffled epoch or serialising
-    DataLoader prefetch internals.
+    absolute draw index. In the common case one draw produces one optimiser
+    update. Unsupported causal batches may now consume a draw without claiming
+    an update; persisting that draw index still lets a resumed trainer start
+    directly without replaying a shuffled epoch or serialising DataLoader
+    prefetch internals.
     """
 
     def __init__(

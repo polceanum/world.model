@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.6
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026
+**Version:** 1.7
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5456,6 +5456,67 @@ checkpoint round-trip, and a second update after restore. Training resume,
 evaluation, and demos deserialize checkpoints on CPU and let model/optimizer
 state loading place only required tensors on their owners; they must not map a
 saved full optimizer onto MPS merely to evaluate or visualize weights.
+
+---
+
+# Part XXIX — Supported causal optimization and hierarchical stability amendment
+
+## 173. An optimizer step requires causal support
+
+An attempted training draw and a completed optimizer update are distinct. A
+persistent closed-loop update may advance the optimizer only when its loss has
+explicit differentiable support from at least one of:
+
+- current state, rollout, correction, event, existence, uncertainty, or
+  observable physical-parameter supervision; or
+- a valid fast-ROI slot tied to the persistent runtime state.
+
+A global-discovery auxiliary loss alone cannot consume a causal update. When a
+sampled window has no supported causal gradient, training must skip the
+optimizer step, advance the deterministic draw counter, record the skip and
+support counts, and retry only up to a declared finite limit. Checkpoints must
+distinguish attempted draws from completed updates so exact continuation
+cannot silently change the sample stream.
+
+Fast-ROI supervision must keep identity mapping, ROI validity, crop evidence,
+reliable exact geometry, existence validity, and visibility validity as
+separate masks. A valid empty or missed crop supplies negative existence and
+visibility evidence, but it must not fabricate centre, depth, colour,
+appearance, likelihood, or world-position targets. Selection precision counts
+every eligible confident ROI output, including false positives, and temporal
+ROI pretraining uses adjacent frames with the same cache contract used online.
+Global and fast measurement objectives are support-normalized independently
+and combined with fixed declared weights.
+
+Training viability is an absolute and relative coverage contract. A handoff or
+causal candidate must retain declared minimum current and future coverage and a
+declared fraction of its fixed reference. The first unsupported candidate is a
+rejected/reference artifact, never a synthetic best checkpoint. A later
+support-collapse failure restores the verified rollout incumbent and resets
+optimizer state; ordinary broad-score rejection still leaves a finite,
+supported candidate on the mutable optimization trajectory as required by
+Section 164.
+
+Pooled accuracy must not hide a missing or regressed scenario. Every declared
+scenario needs at least one episode in the fixed validation manifest and
+complete current/horizon physical support before a candidate can be promoted.
+The ordered balanced scenario list contains unique family names, so a
+validation budget at least as large as that list deterministically visits
+every family rather than silently spending residues on duplicate entries.
+The selector persists each scenario slice and applies the same broad
+non-regression checks within each slice, plus the absolute and
+reference-relative current/forecast coverage floors used to protect causal
+training. An aggregate score improvement with one unsupported or collapsed
+scenario is a rejection, not convergence evidence.
+
+Recursive structured-interaction gradients may be locally clipped before the
+whole-model clip when a declared subsystem repeatedly dominates the update.
+This changes optimization scale, not forward dynamics capacity. The resolved
+protocol must include both clip limits, and every logged update must expose the
+raw total norm, raw subsystem norm, subsystem coefficient and applied norm,
+pre-global norm, global coefficient, total coefficient, and final applied
+norm. A local clip must not hide the original raw norm or be described as
+convergence evidence.
 
 ---
 

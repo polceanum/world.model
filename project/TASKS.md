@@ -1,6 +1,46 @@
 # Tasks
 
-## Sustained scaled accuracy campaign
+## Supported sustained scaled accuracy campaign
+
+- [x] Stop and preserve the invalid v2 campaign after proving that zero-gradient
+  causal rows consumed scheduled updates and coverage collapsed at the
+  measurement handoff. Remove its persistent trainer/supervisor jobs without
+  deleting evidence.
+- [x] Require causal trajectory/state/parameter or persistent fast-ROI support
+  for every optimizer update; count and bound deterministic unsupported draws.
+- [x] Repair fast-ROI positive/negative supervision, reliability masks,
+  temporal-cache pretraining, false-positive selection precision, and
+  separately normalized global/fast losses.
+- [x] Add absolute and relative training-support guardrails, truthful first
+  candidate handling, and verified rollback plus optimizer reset on later
+  support collapse.
+- [x] Align analytic contacts with the labelled simulator and tighten
+  observation-gated drag/restitution supervision.
+- [x] Diagnose the remaining hard-window gradient spike by subsystem and add
+  explicit local interaction clipping before the whole-model clip without
+  changing the forward dynamics architecture.
+- [x] Require complete persisted current/horizon support and broad
+  non-regression guardrails for every declared scenario, so pooled improvement
+  cannot hide a missing or collapsed dynamics family.
+- [x] Reject duplicate balanced scenario entries and invalid negative or
+  non-integral RGB phase boundaries before deterministic validation/training.
+- [x] Add and smoke-test `configs/sustained_accuracy_mps_v3.yaml` with one
+  shared eight-scenario model and hybrid MPS/CPU execution.
+- [x] Re-run the final audited tree on host MPS/CPU at
+  `runs/20260802-121629-convergence-v3-final-audit-smoke/`; confirm four finite
+  updates, real causal/ROI support, no skipped draw, complete terminal
+  checkpointing, and a truthful coverage-based rejection.
+- [ ] Complete a medium-duration v3 qualification with enough measurement and
+  causal updates to inspect support, gradient, coverage, and validation trends;
+  reject it if any support floor or broad fixed-reference guardrail collapses.
+- [x] Commit and push the complete audited v3 repair set from a fully passing
+  test/lint/type-quality gate.
+- [ ] Launch the clean-source 16,384-update v3 campaign only after the medium
+  qualification passes. Monitor at least four comparable corrected-protocol
+  validations and do not call a hard-budget stop convergence.
+- [ ] Compare the selected v3 checkpoint against its exact imported reference
+  on at least 64 fresh balanced RGB-only episodes, then generate timestamp-first
+  reports and demos only for a broadly accepted checkpoint.
 
 - [x] Audit all comparable training/evaluation artifacts and document which
   improvements generalize, which are context-specific, and which intervention
@@ -70,17 +110,13 @@
   in-place resume to `checkpoints/last.pt`, and deserialize hybrid checkpoints
   on CPU to preserve optimizer ownership and accelerator memory.
 - [x] Launch the timestamped v2 MPS campaign from the preserved step-8192
-  `best_measurement.pt` using clean source `df98f63`. The trainer and
-  convergence supervisor are active for
+  `best_measurement.pt` using clean source `df98f63`, then stop and supersede
+  it at logged step `9576` after the 2 August support/coverage audit. Its
+  trainer and supervisor jobs are no longer active; artifacts remain at
   `runs/20260801-232229-scaled-sustained-v2/`.
-- [ ] Complete the full declared RGB and causal phases; do not change its
-  objective, simulator, manifests, validation protocol, or executable source
-  in-place. Require verified terminal artifacts and the declared supervisor
-  decision.
-- [ ] Compare v2 against the exact legacy reference and strongest numbered
-  candidates on at least 64 fresh balanced episodes, with every
-  axis/scenario/horizon, cold/mature, event, lifecycle, uncertainty, and
-  stochastic/deterministic metric reported.
+- [x] Cancel the v2 completion/comparison tasks because repairing support,
+  selection, and optimization changes the protocol. Never resume v2 in place
+  or describe its finite loss as convergence evidence.
 - [ ] Confirm the selected checkpoint on at least 64 fresh balanced validation
   episodes, report every scenario/horizon, then use the reserved test split
   only if all broad gates pass.

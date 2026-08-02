@@ -129,10 +129,19 @@ class EventModel(nn.Module):
             logits,
             objects.motion_mode_logits,
         )
+        endpoint_logits = logits.clone()
+        # Collision is an interval event, not a persistent endpoint mode after
+        # the impulse has been resolved. ``event_logits`` below retains it for
+        # observation-window supervision and online history resets.
+        endpoint_logits[..., MotionMode.COLLISION] = torch.where(
+            updated.active,
+            endpoint_logits.new_full((), -4.0),
+            objects.motion_mode_logits[..., MotionMode.COLLISION],
+        )
         updated = replace(
             updated,
             velocity=velocity,
-            motion_mode_logits=logits,
+            motion_mode_logits=endpoint_logits,
         )
         pair_logits = torch.stack(
             (
