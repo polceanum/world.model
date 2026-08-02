@@ -30,6 +30,10 @@
   `runs/20260802-121629-convergence-v3-final-audit-smoke/`; confirm four finite
   updates, real causal/ROI support, no skipped draw, complete terminal
   checkpointing, and a truthful coverage-based rejection.
+- [x] Commit/push clean source `c0acf16` and launch the bounded 3,072-update
+  eight-scenario qualification at
+  `runs/20260802-123714-v3-medium-qualification/`; verify host MPS/CPU devices,
+  clean provenance, launchd persistence, and active computation.
 - [ ] Complete a medium-duration v3 qualification with enough measurement and
   causal updates to inspect support, gradient, coverage, and validation trends;
   reject it if any support floor or broad fixed-reference guardrail collapses.

@@ -60,6 +60,11 @@
   updates and two supported CPU causal updates, no skipped draw, version-5
   scenario-aware selection, and a complete terminal checkpoint. Its
   single-scenario two-episode metrics are wiring evidence only.
+- Committed and pushed the audited v3 protocol as `c0acf16`, then launched the
+  clean 3,072-update balanced qualification at
+  `runs/20260802-123714-v3-medium-qualification/`. It retains 32-episode,
+  eight-anchor validation every 512 updates; launch health is not a
+  convergence claim.
 - Advanced the specification to version 1.7 and added the supported-causal
   optimization and hierarchical-gradient-stability contract.
 

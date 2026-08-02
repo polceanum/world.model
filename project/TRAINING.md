@@ -286,6 +286,25 @@ the pooled and scenario slice. The full/medium commands must retain all eight
 scenarios and at least one validation episode per scenario; the v3 profile
 uses 32.
 
+The medium qualification is active at
+`runs/20260802-123714-v3-medium-qualification/` from clean pushed commit
+`c0acf16`. It uses 3,072 updates: 1,024 paired RGB plus the repository's
+minimum meaningful 2,048-update causal interval. With batch two and
+`train_episodes=6144`, it makes exactly 6,144 deterministic episode draws over
+one balanced manifest; the shuffled phase-specific scenario counts are
+expected to be close to, but are not assumed to equal, 256/512 examples per
+scenario. Keep the profile's 32 validation episodes, eight anchors, and
+512-update evaluation cadence unchanged. The resulting causal validations at
+steps 1,536, 2,048, 2,560, and 3,072 are the first admissible trend evidence.
+
+The persistent job is
+`com.polceanum.orpheus.v3-medium-20260802-123714`, with stdout/stderr in
+`/private/tmp/20260802-123714-v3-medium-qualification.*.log`. Do not start an
+overlapping trainer. If interrupted, remove the old job, verify that no
+trainer remains, and exact-resume only from this run's `checkpoints/last.pt`
+with the same total steps, RGB boundary, train manifest size, checkpoint/log
+cadence, and executable source.
+
 ### Superseded v2 campaign
 
 `configs/sustained_accuracy_mps_v2.yaml` and

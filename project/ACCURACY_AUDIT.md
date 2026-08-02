@@ -97,6 +97,13 @@ four comparable corrected-protocol validations and a 64-or-more-episode fresh
 balanced confirmation. A finite loss or exhausted budget alone is not
 convergence.
 
+That qualification is now active at
+`runs/20260802-123714-v3-medium-qualification/` from clean pushed source
+`c0acf16`. Its bounded protocol is 1,024 paired RGB plus 2,048 causal updates,
+32 fixed balanced validation episodes every 512 steps, and four causal
+validation points. Launch health is not an accuracy result; this audit remains
+unchanged until those artifacts exist and are inspected.
+
 ## 2026-08-01 convergence-integrity audit
 
 The first sustained scaled campaign is now preserved as a legacy-protocol

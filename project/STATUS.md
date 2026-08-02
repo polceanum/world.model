@@ -153,8 +153,29 @@ The new full profile is `configs/sustained_accuracy_mps_v3.yaml`: one shared
 eight-scenario model, 8,192 paired RGB updates, 8,192 supported causal updates,
 40-frame episodes, batch two, MPS measurement/CPU causal placement, global
 clip `2.0`, interaction clip `1.0`, and the existing broad rollout guardrails.
-A medium qualification and then at least four comparable long-run validations
-remain required. No v3 convergence or promotion is claimed.
+
+A clean-source medium qualification was launched after commit
+`c0acf1673819b1c3a892722d0a40c7bd085c5ea2` was pushed to `origin/main`:
+
+```text
+run: runs/20260802-123714-v3-medium-qualification/
+LaunchAgent: com.polceanum.orpheus.v3-medium-20260802-123714
+stdout: /private/tmp/20260802-123714-v3-medium-qualification.stdout.log
+stderr: /private/tmp/20260802-123714-v3-medium-qualification.stderr.log
+updates: 3,072 total = 1,024 paired RGB + 2,048 supported causal
+episode draws: 6,144 across the unique balanced eight-scenario manifest
+validation: 32 fixed episodes, eight anchors, every 512 updates
+checkpoint cadence: 64 updates
+devices: MPS paired RGB / CPU causal
+```
+
+At launch verification, launchd reported the job running as PID `55851`; host
+process inspection showed active computation at approximately `525%` CPU,
+MPS was built/available, run metadata recorded clean source and RGB-only
+runtime, and both error/output logs were empty while the initial fixed
+reference validation was in progress. This is launch-health evidence only.
+The qualification outcome and four causal validation points remain pending;
+no v3 convergence or promotion is claimed.
 
 ## 2026-08-01 — complete convergence-integrity audit and corrected v2 path
 
