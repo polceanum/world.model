@@ -53,8 +53,10 @@ class _RecordingDynamics:
         query_seconds,
         *,
         return_events: bool,
+        return_auxiliary: bool,
     ) -> BeliefTrajectory:
         assert return_events
+        assert not return_auxiliary
         self.query_seconds = tuple(float(value) for value in query_seconds)
         query = belief.timestamp.new_tensor(self.query_seconds)
         count = len(self.query_seconds)

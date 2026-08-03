@@ -91,6 +91,22 @@ state. A rollout step's collision logit instead describes occurrence anywhere
 inside that prediction segment; internal physics substeps are aggregated.
 Frame-labelled training/evaluation brackets each target with
 `[h-dt_obs, h]`, so event probabilities have one explicit temporal meaning.
+Substep selection treats a timestamp ratio that is indistinguishable from an
+integer at the belief dtype as that integer, keeping nominal 20 Hz float32
+observations aligned with the simulator's six 120 Hz ticks. Genuine fractional
+intervals still ceil.
+
+When closed-loop training needs the same next prior for direct supervision and
+runtime correction, `OnlineWorldModel` returns a typed one-use prepared
+propagation. Ordinary ingestion validates and consumes it with its original
+elapsed time and interval-event evidence, then performs the unchanged
+observation, association, innovation, correction, lifecycle, cache, scheduler,
+and diagnostic stages. It is neither persistent state nor a second prediction
+path; stale, reused, wrong-source, or wrong-time values are rejected. Dynamics
+parameters/buffers and train/eval mode are part of the same atomic revision.
+This zero-copy guard uses PyTorch tensor mutation versions, so prepared
+propagation runs under ordinary autograd or `torch.no_grad()`, not
+`torch.inference_mode()`.
 
 Closed-loop optimization first permits a profile-specific period of joint
 global-perception adaptation, then freezes the RGB backbone/global detector.

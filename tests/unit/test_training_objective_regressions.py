@@ -508,7 +508,9 @@ class _StaticRolloutDynamics:
         query_seconds: list[float] | tuple[float, ...],
         *,
         return_events: bool,
+        return_auxiliary: bool,
     ) -> BeliefTrajectory:
+        assert not return_auxiliary
         count = len(query_seconds)
         objects = belief.objects
         timestamps = belief.timestamp[:, None] + belief.timestamp.new_tensor(query_seconds)[None]
@@ -1058,12 +1060,15 @@ def test_prior_and_posterior_correction_rollouts_use_identical_query_partitions(
         query_seconds: Any,
         *,
         return_events: bool,
+        return_auxiliary: bool,
     ) -> BeliefTrajectory:
+        assert not return_auxiliary
         query_partitions.append(tuple(float(value) for value in query_seconds))
         trajectory = original_rollout(
             belief,
             query_seconds,
             return_events=return_events,
+            return_auxiliary=return_auxiliary,
         )
         rollout_grad_modes.append(
             (
@@ -1079,6 +1084,7 @@ def test_prior_and_posterior_correction_rollouts_use_identical_query_partitions(
                     belief,
                     query_seconds,
                     return_events=False,
+                    return_auxiliary=False,
                 )
             torch.testing.assert_close(
                 trajectory.positions,

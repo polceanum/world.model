@@ -107,10 +107,26 @@
 - [x] Complete one corrected CPU causal update and one host-MPS measurement
   update with finite post-step/checkpoint state and durable validation
   progress.
-- [ ] Commit and push the cadence/progress/finite-state repair.
-- [ ] Launch a clean timestamped protocol-v11 balanced qualification with the
-  one-shot helper and verify from progress, metrics, and checkpoints that
-  initialization completes and at least one real optimizer update occurs.
+- [x] Commit and push the cadence/progress/finite-state repair as `2487b7e`.
+- [x] Launch a clean timestamped protocol-v11 balanced qualification with the
+  one-shot helper, prove that its progress was finite and single-process, then
+  stop it at zero updates after diagnosing launchd Background QoS as the
+  roughly fourfold validation-throughput regression.
+- [x] Remove the Background launch classification, align float32 belief
+  substep counts with the simulator's integral physics grid, reuse one typed
+  causal propagation for supervision and ingestion, omit unused rollout
+  auxiliary stacking, and bump rollout protocol 11 to 12.
+- [x] Complete a matched Standard/default-priority protocol-v12 validation
+  timing control and confirm that the foreground throughput regression is
+  removed (`29.578 s` for fixed seed `100000`, versus `123.660 s` under
+  Background QoS).
+- [x] Complete one reduced production-model protocol-v12 causal update with
+  nonzero supported gradients, finite post-step/checkpoint state, terminal
+  validation, and correct rejection of its slightly regressed candidate.
+- [ ] Commit and push the launch-QoS/integration/prepared-propagation repair.
+- [ ] Launch a clean timestamped protocol-v12 balanced qualification and
+  verify from progress, metrics, and checkpoints that initialization completes
+  and at least one real optimizer update occurs.
 - [ ] Inspect the next corrected qualification at its declared validation steps
   for support, perception/interaction/global gradient balance, lifecycle
   precision/coverage, identity switches, collisions, calibration, every

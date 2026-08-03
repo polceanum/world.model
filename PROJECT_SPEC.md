@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.10
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, and finite-state amendments 3 August 2026
+**Version:** 1.11
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5692,6 +5692,75 @@ scheduler tensors. Loading validates the payload before mutating the
 destination model or optimizer. A corrupt candidate must leave an existing
 checkpoint byte-for-byte intact and terminate the invocation rather than
 becoming resumable state.
+
+---
+
+# Part XXXIII — Integration-grid, prepared-propagation, and launch-QoS amendment
+
+## 180. Belief dynamics use the intended physical integration grid
+
+The simulator and belief dynamics must interpret an observation interval that
+is nominally an integral number of physics ticks as the same tick count.
+Timestamp storage in float32 may put a mathematically integral
+`elapsed / max_substep` ratio a few representational units above the integer;
+a literal ceiling must not invent an additional substep. Substep-count
+selection may snap only to a nearest integer that is indistinguishable at the
+elapsed tensor's declared floating-point precision. A genuinely longer,
+non-integral interval continues to use the ceiling, elapsed time is still
+divided across every chosen substep, and interval collision/contact evidence
+is accumulated across them all.
+
+Changing this rule changes recursive dynamics, learned-residual execution, and
+event timing for identical timestamps. It therefore requires a new rollout
+validation protocol and fresh qualification evidence. Tests cover ordinary
+20 Hz float32 timestamp differences against the 120 Hz simulator grid, full
+one-second event query plans, non-integral intervals outside tolerance,
+batched maximum elapsed time, and interval event accumulation.
+
+## 181. One causal propagation may serve supervision and assimilation
+
+The predict stage for one observation timestamp is computed once. Training may
+inspect that exact prior for measurement supervision, correction diagnostics,
+and future comparison, then pass a typed one-use prepared propagation into
+the ordinary `OnlineWorldModel.ingest` path. The prepared value must retain
+the original elapsed time and all interval event auxiliaries needed by
+filtering and parameter observability.
+
+Prepared propagation is not a second belief authority and may not bypass the
+runtime loop. Consumption verifies that it was made from the current
+persistent source state for the requested timestamp, batch, device, and dtype;
+stale, reused, wrong-source, or wrong-time values fail loudly. Assimilation,
+association, innovation, lifecycle, scheduler, cache, diagnostics, and
+timestamp update semantics remain identical to an ordinary ingest. Setting
+the runtime state to the prior and ingesting with zero elapsed time is
+forbidden because that would erase interval evidence and temporal velocity
+semantics. Forward-state, metric, event, and gradient parity tests guard the
+optimization.
+
+Preparation and consumption are one atomic model-revision operation: dynamics
+parameter/buffer identity and mutation versions plus training/evaluation mode
+must still match. The zero-copy mutation guard depends on PyTorch tensor
+version counters, so prepared propagation is intentionally unsupported inside
+`torch.inference_mode()`; use `torch.no_grad()` for no-gradient validation and
+deployment paths that consume this contract.
+
+Rollout callers may explicitly decline trajectory auxiliary stacking when they
+consume only state, uncertainty, activity, and event tensors. The public
+rollout default retains complete auxiliary output. Validation-anchor batching
+is a separate optimization and must not be introduced without fixed-manifest
+selector parity and a measured throughput benefit.
+
+## 182. User-requested sustained training is not background maintenance
+
+A one-shot macOS training job remains `KeepAlive=false`, but it must not be
+classified as launchd `Background` work. Sustained training is explicitly
+requested compute; the background classification can throttle multi-core CPU
+dynamics enough to make a healthy validation resemble a stalled run.
+Launchers use the portable Standard/default process classification and retain
+`caffeinate` only for sleep prevention. A matched validation timing control
+must be checked before committing to another multi-day campaign, and process
+priority, CPU utilization, progress heartbeats, and numerical health must be
+distinguished in status reports.
 
 ---
 

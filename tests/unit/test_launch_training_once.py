@@ -25,6 +25,7 @@ def test_launch_payload_is_persistent_but_never_keepalive(tmp_path) -> None:
 
     assert payload["RunAtLoad"] is True
     assert payload["KeepAlive"] is False
+    assert "ProcessType" not in payload
     assert payload["ProgramArguments"][:4] == [
         "/usr/bin/caffeinate",
         "-dimsu",

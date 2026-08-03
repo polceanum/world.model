@@ -25,6 +25,35 @@ from world_model.dynamics.rollout import RolloutEngine, RolloutStep
 from world_model.dynamics.uncertainty import UncertaintyDynamics
 
 
+def _stable_substep_count(elapsed: Tensor, max_substep: float) -> int:
+    """Return a ceiling count without inventing ticks from float clock noise.
+
+    Observation timestamps are stored in the belief dtype.  Subtracting two
+    float32 frame timestamps can put an intended integral ratio such as
+    ``0.05 / (1 / 120) == 6`` a few ulps above six.  A literal ``ceil`` then
+    alternates between six and seven dynamics ticks even though the simulator
+    advances the same 20 Hz interval with six ticks.
+
+    Snap only ratios indistinguishable from an integer at the elapsed tensor's
+    precision.  The absolute cap keeps reduced-precision dtypes conservative;
+    every genuinely non-integral interval still uses the specified ceiling.
+    """
+
+    maximum_elapsed = float(elapsed.max().detach().cpu())
+    if maximum_elapsed <= 0.0:
+        return 0
+    ratio = maximum_elapsed / max_substep
+    nearest = round(ratio)
+    precision = torch.finfo(elapsed.dtype).eps
+    integer_tolerance = min(
+        1.0e-4,
+        16.0 * precision * max(1.0, abs(ratio)),
+    )
+    if nearest >= 1 and abs(ratio - nearest) <= integer_tolerance:
+        return nearest
+    return max(1, math.ceil(ratio))
+
+
 @dataclass(frozen=True)
 class DynamicsConfig:
     """Self-contained dynamics dimensions and numerical settings."""
@@ -482,12 +511,9 @@ class DynamicsModel(nn.Module):
         self._validate_dimensions(belief)
         elapsed = self._normalise_dt(belief, dt)
         output = belief.clone()
-        if float(elapsed.max().detach().cpu()) == 0.0:
+        substeps = _stable_substep_count(elapsed, self.config.max_substep)
+        if substeps == 0:
             return self._zero_step(output)
-        substeps = max(
-            1,
-            math.ceil(float(elapsed.max().detach().cpu()) / self.config.max_substep),
-        )
         sub_dt = elapsed / substeps
         result: RolloutStep | None = None
         interval_collision_logits: Tensor | None = None
@@ -613,12 +639,19 @@ class DynamicsModel(nn.Module):
         query_times: Tensor | Sequence[float],
         *,
         return_events: bool = True,
+        return_auxiliary: bool = True,
     ) -> BeliefTrajectory:
-        """Predict at sorted future offsets in seconds without mutating input."""
+        """Predict at sorted future offsets in seconds without mutating input.
+
+        Public rollouts retain interval auxiliaries by default. Callers that
+        consume only trajectory state and event logits may disable their
+        collection to avoid retaining and stacking unused tensors.
+        """
 
         return self.rollout_engine.rollout(
             lambda current, dt: self._predict_step(current, dt),
             belief,
             query_times,
             return_events=return_events,
+            return_auxiliary=return_auxiliary,
         )

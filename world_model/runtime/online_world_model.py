@@ -52,6 +52,12 @@ from world_model.runtime.diagnostics import (
     RuntimeDiagnostics,
     RuntimeStepDiagnostics,
 )
+from world_model.runtime.prepared import (
+    PreparedPropagation,
+    PreparedPropagationError,
+    TensorVersionSignature,
+    tensor_identity_version_signature,
+)
 from world_model.runtime.state import RuntimeState
 
 if TYPE_CHECKING:
@@ -139,6 +145,7 @@ class OnlineWorldModel(nn.Module):
         self.state = RuntimeState()
         self.diagnostics = RuntimeDiagnostics()
         self._last_measurements: MeasurementSet | None = None
+        self._prepared_propagation_owner = object()
         self.abstraction_router = PredictiveAbstractionRouter()
         self.belief_tokenizer = WorldBeliefTokenizer(self.abstraction_router)
 
@@ -531,6 +538,263 @@ class OnlineWorldModel(nn.Module):
             return torch.device("cpu"), torch.float32
         return parameter.device, parameter.dtype
 
+    def _dynamics_tensor_signature(self) -> TensorVersionSignature:
+        return tensor_identity_version_signature(
+            {
+                "parameters": dict(self.dynamics.named_parameters()),
+                "buffers": dict(self.dynamics.named_buffers()),
+            }
+        )
+
+    @staticmethod
+    def _requested_timestamp(
+        current: WorldBelief,
+        timestamp: float | Tensor,
+    ) -> Tensor:
+        requested = torch.as_tensor(
+            timestamp,
+            device=current.device,
+            dtype=current.dtype,
+        )
+        if requested.ndim == 0:
+            requested = requested.expand_as(current.timestamp).clone()
+        if requested.shape != current.timestamp.shape:
+            raise ValueError(
+                "observation timestamp must be scalar or match belief batch "
+                f"{tuple(current.timestamp.shape)}"
+            )
+        if not bool(torch.isfinite(requested).all()):
+            raise ValueError("observation timestamp must be finite")
+        if torch.any(requested < current.timestamp):
+            raise OutOfSequenceObservationError(
+                f"observation timestamp {float(requested.min()):.9g} precedes current "
+                f"belief timestamp {float(current.timestamp.min()):.9g}"
+            )
+        return requested
+
+    @staticmethod
+    def _interval_collision_mask(
+        current: WorldBelief,
+        auxiliary: Mapping[str, Tensor],
+    ) -> Tensor | None:
+        pair_collision = auxiliary.get("pair_collision")
+        boundary_collision = auxiliary.get("boundary_collision")
+        ground_collision = auxiliary.get("ground_collision")
+        if pair_collision is None or (boundary_collision is None and ground_collision is None):
+            return None
+        expected_pair = (
+            current.batch_size,
+            current.objects.max_objects,
+            current.objects.max_objects,
+        )
+        if pair_collision.shape != expected_pair or pair_collision.dtype is not torch.bool:
+            raise ValueError("dynamics pair_collision must be boolean [B,N,N]")
+        if boundary_collision is not None:
+            if (
+                boundary_collision.ndim != 3
+                or boundary_collision.shape[:2] != current.objects.active.shape
+                or boundary_collision.dtype is not torch.bool
+            ):
+                raise ValueError("dynamics boundary_collision must be boolean [B,N,P]")
+            boundary_collision_mask = boundary_collision.any(dim=-1)
+        else:
+            assert ground_collision is not None
+            if (
+                ground_collision.shape != current.objects.active.shape
+                or ground_collision.dtype is not torch.bool
+            ):
+                raise ValueError("dynamics ground_collision must be boolean [B,N]")
+            boundary_collision_mask = ground_collision
+        return pair_collision.any(dim=-1) | boundary_collision_mask
+
+    def prepare_propagation(
+        self,
+        target_timestamp: float | Tensor,
+    ) -> PreparedPropagation:
+        """Predict once from the current runtime revision for one future ingest."""
+
+        current = self.state.belief
+        if current is None:
+            raise RuntimeError("cannot prepare propagation before belief initialization")
+        requested = self._requested_timestamp(current, target_timestamp)
+        if not torch.equal(requested, requested[:1].expand_as(requested)):
+            raise PreparedPropagationError(
+                "prepared propagation target timestamp must be uniform across batch"
+            )
+        delta_time = requested - current.timestamp
+        source_tensor_signature = tensor_identity_version_signature(current)
+        predict_step = getattr(self.dynamics, "predict_step", None)
+        if not callable(predict_step):
+            raise TypeError("prepared propagation requires dynamics.predict_step")
+        propagation = predict_step(current, delta_time)
+        if tensor_identity_version_signature(current) != source_tensor_signature:
+            raise PreparedPropagationError(
+                "dynamics.predict_step mutated the prepared propagation source belief"
+            )
+        prior = getattr(propagation, "belief", None)
+        event_logits = getattr(propagation, "event_logits", None)
+        raw_auxiliary = getattr(propagation, "auxiliary", None)
+        if not isinstance(prior, WorldBelief):
+            raise TypeError("dynamics.predict_step must return a WorldBelief endpoint")
+        if event_logits is not None and not isinstance(event_logits, Tensor):
+            raise TypeError("dynamics.predict_step event_logits must be a tensor or null")
+        if not isinstance(raw_auxiliary, Mapping) or any(
+            not isinstance(name, str) or not isinstance(value, Tensor)
+            for name, value in raw_auxiliary.items()
+        ):
+            raise TypeError("dynamics.predict_step auxiliary must map strings to tensors")
+        auxiliary = dict(raw_auxiliary)
+        if (
+            prior.batch_size != current.batch_size
+            or prior.device != current.device
+            or prior.dtype != current.dtype
+        ):
+            raise ValueError("prepared prior must preserve source batch, device, and dtype")
+        if not torch.equal(prior.timestamp, requested):
+            raise ValueError("prepared prior timestamp must equal the requested target")
+        interval_collision_mask = self._interval_collision_mask(current, auxiliary)
+        model_device, model_dtype = self._model_device_dtype()
+        if model_device != current.device or model_dtype != current.dtype:
+            raise ValueError("runtime belief and model execution device/dtype do not match")
+        source_timestamp = current.timestamp.detach().clone()
+        target_timestamp = requested.detach().clone()
+        result_tensor_signature = tensor_identity_version_signature(
+            {
+                "prior": prior,
+                "source_timestamp": source_timestamp,
+                "target_timestamp": target_timestamp,
+                "delta_time": delta_time,
+                "event_logits": event_logits,
+                "auxiliary": auxiliary,
+                "interval_collision_mask": interval_collision_mask,
+            }
+        )
+        dynamics_tensor_signature = self._dynamics_tensor_signature()
+        return PreparedPropagation(
+            source=current,
+            prior=prior,
+            source_revision=self.state.ingest_count,
+            source_timestamp=source_timestamp,
+            target_timestamp=target_timestamp,
+            delta_time=delta_time,
+            source_device=current.device,
+            source_dtype=current.dtype,
+            source_batch_size=current.batch_size,
+            event_logits=event_logits,
+            auxiliary=auxiliary,
+            interval_collision_mask=interval_collision_mask,
+            source_tensor_signature=source_tensor_signature,
+            result_tensor_signature=result_tensor_signature,
+            dynamics_tensor_signature=dynamics_tensor_signature,
+            dynamics_training=self.dynamics.training,
+            _owner_token=self._prepared_propagation_owner,
+        )
+
+    def _validate_prepared_propagation(
+        self,
+        prepared: PreparedPropagation,
+        *,
+        current: WorldBelief,
+        requested: Tensor,
+        packet_batch_size: int,
+    ) -> None:
+        if not isinstance(prepared, PreparedPropagation):
+            raise TypeError("prepared must be a PreparedPropagation")
+        if prepared.consumed:
+            raise PreparedPropagationError("prepared propagation has already been consumed")
+        if prepared._owner_token is not self._prepared_propagation_owner:
+            raise PreparedPropagationError("prepared propagation belongs to another runtime")
+        if prepared.source_revision != self.state.ingest_count:
+            raise PreparedPropagationError(
+                "prepared propagation source revision is stale "
+                f"({prepared.source_revision} != {self.state.ingest_count})"
+            )
+        if prepared.source is not current:
+            raise PreparedPropagationError("prepared propagation source belief is stale")
+        if prepared.dynamics_training != self.dynamics.training:
+            raise PreparedPropagationError(
+                "prepared propagation dynamics training/evaluation mode has changed"
+            )
+        if self._dynamics_tensor_signature() != prepared.dynamics_tensor_signature:
+            raise PreparedPropagationError(
+                "prepared propagation dynamics parameters or buffers have changed"
+            )
+        if (
+            prepared.source_batch_size != current.batch_size
+            or packet_batch_size != current.batch_size
+            or self.state.batch_size != current.batch_size
+        ):
+            raise PreparedPropagationError(
+                "prepared propagation batch does not match runtime and observation"
+            )
+        model_device, model_dtype = self._model_device_dtype()
+        if (
+            prepared.source_device != current.device
+            or prepared.source_device != model_device
+            or prepared.source_dtype != current.dtype
+            or prepared.source_dtype != model_dtype
+        ):
+            raise PreparedPropagationError(
+                "prepared propagation source device/dtype no longer matches runtime"
+            )
+        if not torch.equal(current.timestamp, prepared.source_timestamp):
+            raise PreparedPropagationError("prepared propagation source timestamp has changed")
+        if tensor_identity_version_signature(current) != prepared.source_tensor_signature:
+            raise PreparedPropagationError(
+                "prepared propagation source belief tensors have changed"
+            )
+        if not torch.equal(requested, prepared.target_timestamp):
+            raise PreparedPropagationError(
+                "prepared propagation target timestamp does not match observation"
+            )
+        expected_delta = requested - current.timestamp
+        if (
+            prepared.delta_time.shape != expected_delta.shape
+            or prepared.delta_time.device != expected_delta.device
+            or prepared.delta_time.dtype != expected_delta.dtype
+            or not torch.equal(prepared.delta_time, expected_delta)
+        ):
+            raise PreparedPropagationError(
+                "prepared propagation temporal delta does not match source and target"
+            )
+        if (
+            prepared.prior.batch_size != current.batch_size
+            or prepared.prior.device != current.device
+            or prepared.prior.dtype != current.dtype
+            or not torch.equal(prepared.prior.timestamp, requested)
+        ):
+            raise PreparedPropagationError(
+                "prepared propagation prior no longer matches target execution context"
+            )
+        result_tensor_signature = tensor_identity_version_signature(
+            {
+                "prior": prepared.prior,
+                "source_timestamp": prepared.source_timestamp,
+                "target_timestamp": prepared.target_timestamp,
+                "delta_time": prepared.delta_time,
+                "event_logits": prepared.event_logits,
+                "auxiliary": prepared.auxiliary,
+                "interval_collision_mask": prepared.interval_collision_mask,
+            }
+        )
+        if result_tensor_signature != prepared.result_tensor_signature:
+            raise PreparedPropagationError("prepared propagation result tensors have changed")
+        recomputed_collision_mask = self._interval_collision_mask(
+            current,
+            prepared.auxiliary,
+        )
+        if (recomputed_collision_mask is None) != (prepared.interval_collision_mask is None) or (
+            recomputed_collision_mask is not None
+            and prepared.interval_collision_mask is not None
+            and not torch.equal(
+                recomputed_collision_mask,
+                prepared.interval_collision_mask,
+            )
+        ):
+            raise PreparedPropagationError(
+                "prepared propagation interval collision evidence has changed"
+            )
+
     def _initial_belief(self, packet: ObservationPacket) -> WorldBelief:
         device, dtype = self._model_device_dtype()
         batch_size = _packet_batch_size(packet)
@@ -838,69 +1102,62 @@ class OnlineWorldModel(nn.Module):
     def ingest(
         self,
         packets: ObservationPacket | Sequence[ObservationPacket],
+        *,
+        prepared: PreparedPropagation | None = None,
     ) -> WorldBelief:
         packet_list = [packets] if isinstance(packets, ObservationPacket) else list(packets)
         if not packet_list:
             raise ValueError("ingest requires at least one observation packet")
+        if prepared is not None and len({packet.timestamp for packet in packet_list}) != 1:
+            raise PreparedPropagationError(
+                "prepared propagation requires one observation timestamp group"
+            )
         device, dtype = self._model_device_dtype()
         packet_list = [_move_packet(packet, device=device, dtype=dtype) for packet in packet_list]
         packet_list.sort(key=lambda packet: packet.timestamp)
         for timestamp, iterator in groupby(packet_list, key=lambda packet: packet.timestamp):
             group = list(iterator)
             if self.state.belief is None:
+                if prepared is not None:
+                    raise PreparedPropagationError(
+                        "cannot consume prepared propagation before belief initialization"
+                    )
                 self.state.batch_size = _packet_batch_size(group[0])
                 self.state.belief = self._initial_belief(group[0])
             current = self.state.belief
-            current_timestamp = current.timestamp
-            requested = current_timestamp.new_full(current_timestamp.shape, timestamp)
-            if torch.any(requested < current_timestamp):
-                raise OutOfSequenceObservationError(
-                    f"observation timestamp {timestamp:.9g} precedes current "
-                    f"belief timestamp {float(current_timestamp.min()):.9g}"
+            requested = self._requested_timestamp(current, timestamp)
+            if prepared is not None:
+                packet_batch_sizes = {_packet_batch_size(packet) for packet in group}
+                if len(packet_batch_sizes) != 1:
+                    raise PreparedPropagationError(
+                        "prepared propagation observation modalities disagree on batch size"
+                    )
+                self._validate_prepared_propagation(
+                    prepared,
+                    current=current,
+                    requested=requested,
+                    packet_batch_size=packet_batch_sizes.pop(),
                 )
-            dt = requested - current_timestamp
-            predict_step = getattr(self.dynamics, "predict_step", None)
-            prior_interval_collision_mask: Tensor | None = None
-            if callable(predict_step):
-                propagation = predict_step(current, dt)
-                prior = propagation.belief
-                pair_collision = propagation.auxiliary.get("pair_collision")
-                boundary_collision = propagation.auxiliary.get("boundary_collision")
-                ground_collision = propagation.auxiliary.get("ground_collision")
-                if pair_collision is not None and (
-                    boundary_collision is not None or ground_collision is not None
-                ):
-                    expected_pair = (
-                        current.batch_size,
-                        current.objects.max_objects,
-                        current.objects.max_objects,
-                    )
-                    if (
-                        pair_collision.shape != expected_pair
-                        or pair_collision.dtype is not torch.bool
-                    ):
-                        raise ValueError("dynamics pair_collision must be boolean [B,N,N]")
-                    if boundary_collision is not None:
-                        if (
-                            boundary_collision.ndim != 3
-                            or boundary_collision.shape[:2] != current.objects.active.shape
-                            or boundary_collision.dtype is not torch.bool
-                        ):
-                            raise ValueError("dynamics boundary_collision must be boolean [B,N,P]")
-                        boundary_collision_mask = boundary_collision.any(dim=-1)
-                    else:
-                        assert ground_collision is not None
-                        if (
-                            ground_collision.shape != current.objects.active.shape
-                            or ground_collision.dtype is not torch.bool
-                        ):
-                            raise ValueError("dynamics ground_collision must be boolean [B,N]")
-                        boundary_collision_mask = ground_collision
-                    prior_interval_collision_mask = (
-                        pair_collision.any(dim=-1) | boundary_collision_mask
-                    )
+                prepared._consume()
+                prior = prepared.prior
+                dt = prepared.delta_time
+                prior_interval_collision_mask = prepared.interval_collision_mask
             else:
-                prior = self.dynamics.predict(current, dt)
+                dt = requested - current.timestamp
+                predict_step = getattr(self.dynamics, "predict_step", None)
+                prior_interval_collision_mask: Tensor | None = None
+                if callable(predict_step):
+                    propagation = predict_step(current, dt)
+                    prior = propagation.belief
+                    auxiliary = getattr(propagation, "auxiliary", None)
+                    if not isinstance(auxiliary, Mapping):
+                        raise TypeError("dynamics.predict_step auxiliary must be a mapping")
+                    prior_interval_collision_mask = self._interval_collision_mask(
+                        current,
+                        auxiliary,
+                    )
+                else:
+                    prior = self.dynamics.predict(current, dt)
             posterior = prior
             for packet_index, packet in enumerate(self._order_group(group)):
                 # Elapsed-time evidence belongs to the first assimilation only.

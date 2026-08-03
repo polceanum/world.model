@@ -24,7 +24,7 @@ into one accuracy claim:
    one-seed gains did not survive the full online feedback loop.
 
 The justified next decision is a medium supported-gradient qualification of
-the audited rollout-protocol-11 runtime, followed by one sustained,
+the audited rollout-protocol-12 runtime, followed by one sustained,
 end-to-end shared campaign only if support, coverage, gradient, and broad
 validation trends remain healthy. The experimental intervention heads remain
 disabled. No existing v1, v2, or v3-smoke artifact establishes broad scaled
@@ -45,7 +45,24 @@ for actual cadence four and still show that more frequent discovery helped
 relative to the earlier sparse cadence, but they do not validate the intended
 `GLOBAL, FAST, FAST, GLOBAL` policy. Corrected cadence three changes persistent
 association/lifecycle trajectories and requires fresh rollout-protocol-11
-qualification.
+qualification; the subsequent integration-grid repair supersedes that target
+with protocol 12.
+
+### Protocol-11 throughput and integration correction
+
+The first corrected-cadence protocol-11 qualification did not collapse
+numerically: five validation heartbeats completed without stderr or restart.
+It was deliberately stopped at zero updates because launchd
+`ProcessType=Background` made validation average `117.380 s/episode`, versus
+`25.305 s/episode` for a matched repaired foreground control. It supplies no
+accuracy trend.
+
+The same audit found that float32 timestamp noise changed nominal 20 Hz belief
+intervals between six and seven 120 Hz substeps while simulator labels always
+used six, and that causal training propagated each noninitial frame twice.
+Those semantics are repaired under rollout protocol 12. Consequently,
+protocol-11 selector artifacts are diagnostic history rather than a
+protocol-12 reference or incumbent.
 
 ## 2026-08-02 supported-causal convergence audit
 

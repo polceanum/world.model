@@ -28,7 +28,7 @@ from world_model.observations import (
     PredictedMeasurements,
     SensorContext,
 )
-from world_model.runtime import OnlineWorldModel
+from world_model.runtime import OnlineWorldModel, PreparedPropagation
 from world_model.training.event_windows import observation_window_query_plan
 from world_model.training.losses import (
     balanced_binary_cross_entropy,
@@ -2345,6 +2345,7 @@ def _rollout_loss_result(
         belief,
         event_query_plan.query_seconds,
         return_events=True,
+        return_auxiliary=False,
     )
     target_positions = event_query_plan.select_target_endpoints(trajectory.positions)
     target_velocities = event_query_plan.select_target_endpoints(trajectory.velocities)
@@ -3083,11 +3084,9 @@ def run_closed_loop_batch(
         prior_rollout_velocities: Tensor | None = None
         frame_offsets: list[int] = []
         query_seconds: list[float] = []
+        prepared_propagation: PreparedPropagation | None = None
         if model.belief is not None:
             source_belief = model.belief
-            requested = source_belief.timestamp.new_full(
-                source_belief.timestamp.shape, packet.timestamp
-            )
             if apply_perturbations and random.random() < config.training.perturbation_probability:
                 source_belief = perturb_belief(
                     source_belief,
@@ -3100,7 +3099,8 @@ def run_closed_loop_batch(
                 # infer velocity from consecutive RGB position measurements.
                 model.state.belief = source_belief
                 perturbed_updates += 1
-            prior = model.dynamics.predict(source_belief, requested - source_belief.timestamp)
+            prepared_propagation = model.prepare_propagation(packet.timestamp)
+            prior = prepared_propagation.prior
             prior_belief = prior
             if score_rollout:
                 frame_offsets, query_seconds, _ = _valid_rollout_offsets(
@@ -3122,6 +3122,7 @@ def run_closed_loop_batch(
                             prior,
                             event_query_plan.query_seconds,
                             return_events=False,
+                            return_auxiliary=False,
                         )
                         prior_rollout_positions = event_query_plan.select_target_endpoints(
                             prior_rollout.positions
@@ -3187,7 +3188,10 @@ def run_closed_loop_batch(
                         fast_supervised_frames += 1
                         fast_supervised_slots += int(valid_supervision.sum().detach().cpu())
 
-        belief = model.ingest(packet)
+        belief = model.ingest(
+            packet,
+            prepared=prepared_propagation,
+        )
         indices, matched = target_matcher.match(
             belief,
             batch["objects"]["position"][:, frame_index],

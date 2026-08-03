@@ -110,6 +110,78 @@ def test_runtime_identity_change_resets_parameter_temporal_baseline() -> None:
     torch.testing.assert_close(reset, torch.tensor([[True, False]]))
 
 
+def test_burn_in_parameter_history_uses_distance_gated_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    belief = belief.replace(
+        objects=belief.objects.replace(
+            active=torch.tensor([[True]]),
+            object_id=torch.tensor([[7]], dtype=torch.int64),
+        )
+    )
+    detached: list[bool] = []
+    model = SimpleNamespace(
+        ingest=lambda _packet: belief,
+        detach_state=lambda: detached.append(True),
+    )
+    matcher = SimpleNamespace(
+        match=lambda *_args: (
+            torch.tensor([[0]], dtype=torch.int64),
+            torch.tensor([[True]]),
+        )
+    )
+    batch = {
+        "rgb": torch.zeros(1, 1, 3, 4, 4),
+        "timestamps": torch.zeros(1, 1),
+        "camera": {
+            "world_from_camera": torch.eye(4).reshape(1, 1, 4, 4),
+            "intrinsics": torch.eye(3).reshape(1, 1, 3, 3),
+        },
+        "objects": {
+            "position": torch.zeros(1, 1, 2, 3),
+            "active": torch.ones(1, 1, 2, dtype=torch.bool),
+        },
+    }
+    gate_calls: list[torch.Tensor] = []
+
+    monkeypatch.setattr(
+        training_loop,
+        "_runtime_observed_belief_slots",
+        lambda _model, _belief: torch.tensor([[True]]),
+    )
+
+    def reject_physical_match(
+        prediction: torch.Tensor,
+        aligned_target: torch.Tensor,
+        assignment_mask: torch.Tensor,
+        **_: Any,
+    ) -> torch.Tensor:
+        assert prediction.shape == aligned_target.shape
+        gate_calls.append(assignment_mask.clone())
+        return torch.zeros_like(assignment_mask)
+
+    monkeypatch.setattr(
+        training_loop,
+        "_distance_gate_physical_matches",
+        reject_physical_match,
+    )
+
+    last_frame, last_id = training_loop._burn_in_causal_prefix(
+        model,
+        batch,
+        1,
+        matcher,
+        torch.full((1, 2), -1, dtype=torch.int64),
+        torch.full((1, 2), -1, dtype=torch.int64),
+    )
+
+    assert gate_calls and gate_calls[0].item()
+    assert (last_frame == -1).all()
+    assert (last_id == -1).all()
+    assert detached == [True]
+
+
 def test_drag_requires_two_runtime_observations_not_instantaneous_speed() -> None:
     batch = _batch(frames=2, object_count=1)
     indices, matched = _identity_slots(1)

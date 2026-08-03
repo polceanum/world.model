@@ -21,3 +21,12 @@ bounded, detached, modality/sensor-local observation history with no object ID
 and no participation in filtering, dynamics, rollouts, or slow-parameter
 updates. Confirmation allocates a fresh monotonic ID and initializes a normal
 belief slot; reset discards all tentative evidence.
+
+A prepared propagation is also transient rather than a competing belief. It
+is a typed one-use result derived from the current `WorldBelief` for one exact
+future observation timestamp. The runtime may expose it to training
+supervision and then consume it through ordinary ingestion, but validates its
+source and preserves its elapsed-time/event evidence. It is never cached as
+authoritative state and cannot be reused after the persistent belief or
+dynamics parameter/buffer revision advances. Prepared propagation uses
+version-tracked tensors and is therefore not an `inference_mode` API.

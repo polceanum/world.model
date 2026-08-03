@@ -2,6 +2,62 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-03 launch-QoS and integration-grid collapse audit
+
+- Audited and intentionally stopped
+  `runs/20260803-101108-v5-protocol11-balanced-qualification/` after five of
+  32 initialization-validation episodes and before any optimizer update,
+  metric, or checkpoint. Heartbeats advanced, stderr stayed empty, and the
+  original process remained authoritative; the durable interruption/failure
+  artifacts record `KeyboardInterrupt`, so this is not numerical-collapse or
+  convergence evidence.
+- Identified a concrete launch-QoS regression. The one-shot plist classified
+  explicitly requested training as launchd `Background`, reducing observed CPU
+  use to roughly `100–198%` and increasing mean validation time to
+  `117.380 s/episode`. A matched repaired foreground control used roughly
+  `525%` CPU and took `25.305 s/episode`. The launcher now uses launchd's
+  Standard/default classification while retaining `KeepAlive=false` and
+  `caffeinate`.
+- Fixed dtype-sensitive substep selection. Float32 20 Hz timestamp differences
+  previously made 22 of 39 nominal six-tick intervals execute seven belief
+  substeps even though the 120 Hz simulator labels used six. Only
+  precision-indistinguishable integral ratios now snap; genuinely non-integral
+  intervals still ceil and retain interval event accumulation.
+- Added typed one-use prepared propagation so causal training can inspect the
+  exact prior and then pass it through ordinary ingestion without recomputing
+  dynamics, zeroing `dt`, losing interval collisions, or creating a second
+  source of truth. Source/result tensors and dynamics parameters/buffers/mode
+  are revision-bound; in-place value or graph-metadata mutation, replacement,
+  reuse, and nonuniform batch targets fail closed. This version-tracked
+  contract uses `no_grad`, not `inference_mode`.
+- Allowed training/selector rollouts to skip stacking unused auxiliary
+  trajectories while preserving the complete public rollout default.
+- Added the missing burn-in regression proving that a physically
+  distance-rejected association cannot seed slow-parameter frame/identity
+  history; re-audited tentative births, fast-ROI identity, global discovery,
+  and runtime-observation parameter gates without finding another structural
+  defect.
+- Bumped rollout validation protocol 11 to 12 and advanced the authoritative
+  specification to version 1.11. Simulator v4, measurement protocol 5, and
+  selection metric 6 are unchanged.
+- Completed a fixed-seed foreground protocol-12 timing control at
+  `runs/20260803-105244-v6-protocol12-foreground-timing/`: validation batch
+  time was `29.578 s`, versus `123.660 s` for the same seed/scenario in the
+  Background job (`4.18x` faster). It was intentionally interrupted before
+  its first optimizer update and is timing evidence only.
+- Completed a reduced production-model causal smoke at
+  `runs/20260803-110550-v6-protocol12-one-update-smoke/`. It applied one
+  supported finite update (`loss=4.273417`, pre-clip gradient norm `3.012750`,
+  applied norm `1.246404`), skipped no batches, wrote and revalidated
+  `checkpoints/last.pt`, then correctly rejected the step-one candidate's
+  slight score regression (`0.2181897208` versus incumbent `0.2181881493`).
+  This proves repaired optimizer/checkpoint/selector wiring, not convergence.
+- Passed `100` affected tests, the complete sandbox suite
+  (`599 passed, 6 MPS-only skipped`), Ruff format/lint, compileall, the
+  production-profile CPU dry run, and `git diff --check`. A new host-MPS rerun
+  remains pending because the execution approval service hit its external
+  usage limit; no device result was fabricated.
+
 ### 2026-08-03 cadence, progress, and finite-state collapse audit
 
 - Audited and intentionally stopped

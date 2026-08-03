@@ -393,7 +393,17 @@ inserted three rather than two fast ROI frames. It was actively computing, not
 deadlocked or relaunched, but its silent full-manifest validation made progress
 impossible to inspect. Preserve it as a zero-update diagnostic.
 
-New sustained runs use simulator `sphere_world_v4`, rollout protocol 11, and
+The next protocol-11 replacement at
+`runs/20260803-101108-v5-protocol11-balanced-qualification/` was also stopped
+before any optimizer update after five visible, finite validation episodes.
+Its mean completed-batch time was `117.380 s`, versus
+`25.305 s/episode` for a matched repaired foreground control. The generated
+LaunchAgent incorrectly declared explicitly requested training as
+`ProcessType=Background`, and observed CPU use fell from roughly `525%` to
+`100–198%`. The run is a preserved launch-throughput diagnostic, not an
+accuracy result.
+
+New sustained runs use simulator `sphere_world_v4`, rollout protocol 12, and
 selection metric 6. Cadence three is exactly
 `GLOBAL, FAST, FAST, GLOBAL`; historical cadence-three reports used actual
 cadence four and are not selector-comparable. The impulse rate is `0.02` per
@@ -403,14 +413,28 @@ matched-target floors and its supported-episode floor. Deterministic evaluator
 metrics use the same unseen-actuation censor as training, while calibration
 retains stochastic futures. Launch macOS training with
 `scripts/launch_training_once.py`; its generated LaunchAgent has
-`KeepAlive=false`, and `train.py` writes explicit starting, failure, and
-completed state artifacts. During validation, tail stdout or inspect
+`KeepAlive=false` and Standard/default process classification, and `train.py`
+writes explicit starting, failure, and completed state artifacts. Never add
+`ProcessType=Background` to a user-requested sustained campaign. During
+validation, tail stdout or inspect
 `training_progress.json` for exact per-episode counts, timings, seed/scenario,
 PID, and protocol hash; partial progress never becomes selector evidence.
 Training workers start only on the first actual draw. Post-step and checkpoint
 finite-state checks terminate before corrupt parameters/moments can become a
 resumable artifact. See `project/STATUS.md` for the exact failures, smokes, and
 fixed-manifest support evidence.
+
+Protocol 12 also aligns float32 observation intervals with the simulator's
+nominal physics tick count and reuses one validated prepared propagation for
+causal supervision plus ingestion. Do not resume a protocol-11 selector as if
+these recursive numerical semantics were unchanged. Run a matched
+Standard/default-priority timing check before the next full qualification.
+A reduced CPU smoke at
+`runs/20260803-110550-v6-protocol12-one-update-smoke/` completed one supported,
+finite production-model causal update and terminal validation. Its step-one
+candidate slightly regressed the fixed reference and was rejected, so the
+incumbent remained authoritative. Treat this as optimizer/checkpoint/selector
+wiring evidence only, not as an accuracy trend.
 
 ### Superseded v2 campaign
 

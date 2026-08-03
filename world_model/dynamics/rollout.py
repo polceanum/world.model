@@ -55,7 +55,10 @@ class RolloutEngine:
         query_times: Tensor | Sequence[float],
         *,
         return_events: bool = True,
+        return_auxiliary: bool = True,
     ) -> BeliefTrajectory:
+        """Roll forward while optionally retaining event and auxiliary traces."""
+
         offsets = self._normalise_query_times(belief, query_times)
         count = offsets.shape[1]
         if count == 0:
@@ -100,8 +103,9 @@ class RolloutEngine:
             beliefs.append(current)
             if return_events:
                 event_values.append(step.event_logits)
-            for name, value in step.auxiliary.items():
-                auxiliary_values.setdefault(name, []).append(value)
+            if return_auxiliary:
+                for name, value in step.auxiliary.items():
+                    auxiliary_values.setdefault(name, []).append(value)
             previous_offset = offsets[:, index]
 
         trajectory = BeliefTrajectory(
@@ -117,8 +121,10 @@ class RolloutEngine:
             ),
             active_mask=torch.stack([item.objects.active for item in beliefs], dim=1),
             event_logits=(torch.stack(event_values, dim=1) if return_events else None),
-            auxiliary={
-                name: torch.stack(values, dim=1) for name, values in auxiliary_values.items()
-            },
+            auxiliary=(
+                {name: torch.stack(values, dim=1) for name, values in auxiliary_values.items()}
+                if return_auxiliary
+                else {}
+            ),
         )
         return trajectory.validate()

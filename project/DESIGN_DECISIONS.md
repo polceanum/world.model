@@ -1762,3 +1762,47 @@
   completed one finite update with per-episode progress; the host MPS
   measurement smoke completed one finite clipped update and checkpoint
   round-trip. Both are wiring evidence, not accuracy promotion.
+
+## ADR-074 — Align integration ticks, reuse causal propagation, and restore launch QoS
+
+- **Date:** 2026-08-03
+- **Status:** accepted and implemented
+- **Context:** The first protocol-v11 qualification advanced cleanly with no
+  stderr or nonfinite state, but its first five closed-loop validation episodes
+  averaged `117.380 s` versus `25.305 s` for a matched repaired foreground
+  control. The generated LaunchAgent classified explicitly requested training
+  as `Background`; macOS consequently reduced observed CPU use from roughly
+  `525%` in the control to `100–198%`. Separately, a dynamics call audit found
+  two independent numerical-path defects. Float32 20 Hz timestamp differences
+  put 22 of 39 nominal six-tick intervals just above an integer ratio, so a
+  literal ceiling executed seven 120 Hz belief substeps while simulator labels
+  used six. The causal training loop also computed the same deterministic
+  prior once for supervision and again inside `ingest`, including interval
+  dynamics and event work both times.
+- **Decision:** Do not emit launchd `ProcessType=Background`; use its portable
+  Standard/default classification while retaining `KeepAlive=false` and
+  `caffeinate`. Select belief substep counts with a dtype-aware near-integer
+  snap only when the ratio is indistinguishable at timestamp precision, and
+  otherwise retain the ceiling. Bump rollout validation protocol 11 to 12.
+  Expose a typed one-use prepared propagation from `OnlineWorldModel` so the
+  exact prior inspected by training is consumed by ordinary ingestion after
+  strict source/timestamp/device and dynamics parameter/buffer/mode revision
+  checks, with original `dt` and interval collision evidence intact. The
+  zero-copy mutation guard deliberately supports autograd/`no_grad` rather
+  than `inference_mode`. Permit training rollouts to omit unused trajectory-
+  auxiliary stacking while preserving the public complete default.
+- **Alternatives considered:** interpret the fourfold slowdown as model
+  collapse; reduce validation anchors or scenario coverage; leave the
+  float-dependent 6/7 grid because elapsed time remained conserved; set
+  runtime state to the prepared prior and ingest at zero `dt`; classify the
+  job as launchd `Interactive`; batch validation anchors before proving
+  selector parity.
+- **Consequences:** The stopped protocol-v11 run remains truthful zero-update
+  throughput evidence, not an accuracy result. Protocol-v12 candidates require
+  fresh selector/reference validation. The simulator and belief model now
+  share the intended tick grid, interval events remain causal, and training
+  avoids one redundant noninitial propagation without bypassing the persistent
+  predict–observe–associate–innovate–correct loop. A matched timing check and
+  reduced production-model optimizer smoke passed; the smoke candidate was
+  correctly rejected for a slight validation regression. A full-manifest
+  sustained qualification is still required before any convergence claim.

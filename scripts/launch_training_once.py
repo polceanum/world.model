@@ -89,7 +89,12 @@ def build_launchd_payload(
         # submit`` inferred KeepAlive and previously retried one failed
         # initialization thousands of times.
         "KeepAlive": False,
-        "ProcessType": "Background",
+        # Do not classify explicitly requested training as ``Background``:
+        # macOS then applies resource limits that can reduce a multi-core
+        # trainer to roughly one core and make healthy validation look
+        # stalled.  Omitting ProcessType selects launchd's portable Standard
+        # classification; caffeinate still preserves the one-shot process
+        # across idle sleep.
         "StandardOutPath": str(stdout_path),
         "StandardErrorPath": str(stderr_path),
     }
@@ -135,6 +140,7 @@ def main() -> int:
         "stdout": str(stdout_path),
         "stderr": str(stderr_path),
         "keep_alive": False,
+        "process_type": payload.get("ProcessType", "Standard (launchd default)"),
         "program_arguments": payload["ProgramArguments"],
     }
     if args.dry_run:

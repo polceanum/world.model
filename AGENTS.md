@@ -146,3 +146,17 @@ Working rules:
   optimizer step. Validate model buffers, weights, optimizer/scheduler tensors,
   and nonnegative step counters before checkpoint replacement and before
   mutating a destination during load.
+- Keep belief-dynamics substep counts aligned with the simulator's nominal
+  physics grid: float timestamp representation noise may snap to an
+  indistinguishable integer ratio, but genuinely longer intervals must still
+  ceil and preserve interval event accumulation.
+- Reuse one typed, validated propagation when training needs the same causal
+  prior for supervision and ordinary ingestion. Never emulate reuse by
+  ingesting the prior at zero `dt`, and reject stale, reused, wrong-source, or
+  wrong-time prepared values. Preparation/consumption is atomic with respect
+  to belief and dynamics tensor/mode revisions and uses `torch.no_grad()`, not
+  `torch.inference_mode()`, when gradients are disabled.
+- Launch explicitly requested sustained training at launchd's Standard/default
+  process classification with `KeepAlive=false`; do not mark it as
+  `Background` maintenance, and verify matched validation throughput before a
+  multi-day campaign.

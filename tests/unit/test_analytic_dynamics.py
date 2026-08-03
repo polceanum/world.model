@@ -8,6 +8,7 @@ import torch
 
 from world_model.belief import BeliefFactory, MotionMode
 from world_model.dynamics import AnalyticKinematics, DynamicsModel
+from world_model.dynamics.model import _stable_substep_count
 
 
 def _active_belief(batch_size: int = 1, max_objects: int = 2):
@@ -49,6 +50,74 @@ def _deterministic_collision_model(belief):
         for parameter in model.parameters():
             parameter.zero_()
     return model
+
+
+class _CountingDynamicsModel(DynamicsModel):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.substep_calls = 0
+
+    def _substep(self, *args, **kwargs):
+        self.substep_calls += 1
+        return super()._substep(*args, **kwargs)
+
+
+def test_float32_frame_clock_uses_the_intended_simulator_substep_grid() -> None:
+    max_substep = 1.0 / 120.0
+    timestamps = torch.arange(40, dtype=torch.float32) / 20.0
+    observation_intervals = timestamps[1:] - timestamps[:-1]
+
+    assert math.ceil((1.0 / 20.0) / max_substep) == 6
+    assert {
+        _stable_substep_count(interval.unsqueeze(0), max_substep)
+        for interval in observation_intervals
+    } == {6}
+
+    query_frame_offsets = (1, 2, 4, 5, 9, 10, 14, 15, 19, 20)
+    query_times = torch.tensor(query_frame_offsets, dtype=torch.float32) / 20.0
+    query_intervals = torch.diff(torch.cat((torch.zeros(1), query_times)))
+    assert (
+        sum(
+            _stable_substep_count(interval.unsqueeze(0), max_substep)
+            for interval in query_intervals
+        )
+        == 120
+    )
+
+
+def test_substep_grid_still_ceils_a_genuine_excess() -> None:
+    max_substep = 1.0 / 120.0
+    genuine_excess = torch.tensor(
+        [max_substep * (6.0 + 2.0e-4)],
+        dtype=torch.float32,
+    )
+    mixed_batch = torch.cat(
+        (
+            torch.tensor([1.0 / 20.0], dtype=torch.float32),
+            genuine_excess,
+        )
+    )
+
+    assert _stable_substep_count(genuine_excess, max_substep) == 7
+    assert _stable_substep_count(mixed_batch, max_substep) == 7
+
+
+def test_float32_substep_snap_preserves_interval_collision_evidence() -> None:
+    belief = _pair_collision_belief()
+    model = _CountingDynamicsModel.from_belief(
+        belief,
+        max_substep=1.0 / 120.0,
+    )
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.zero_()
+    frame_times = torch.arange(2, dtype=torch.float32) / 20.0
+
+    result = model.predict_step(belief, frame_times[1] - frame_times[0])
+
+    assert model.substep_calls == 6
+    assert result.auxiliary["pair_collision"][0, 0, 1]
+    assert (result.event_logits[0, :, MotionMode.COLLISION] > 0).all()
 
 
 def test_isolated_gravity_trajectory() -> None:
@@ -128,6 +197,33 @@ def test_composite_predict_and_rollout_do_not_mutate_source() -> None:
     assert (
         predicted.objects.fast_log_variance[0, 0, :6] > belief.objects.fast_log_variance[0, 0, :6]
     ).all()
+
+    without_auxiliary = model.rollout(
+        belief,
+        torch.tensor([0.0, 0.03, 0.1]),
+        return_auxiliary=False,
+    )
+    assert without_auxiliary.auxiliary == {}
+    torch.testing.assert_close(without_auxiliary.positions, trajectory.positions)
+    torch.testing.assert_close(without_auxiliary.velocities, trajectory.velocities)
+    torch.testing.assert_close(
+        without_auxiliary.fast_log_variance,
+        trajectory.fast_log_variance,
+    )
+    torch.testing.assert_close(without_auxiliary.event_logits, trajectory.event_logits)
+
+    without_events_or_auxiliary = model.rollout(
+        belief,
+        torch.tensor([0.0, 0.03, 0.1]),
+        return_events=False,
+        return_auxiliary=False,
+    )
+    assert without_events_or_auxiliary.event_logits is None
+    assert without_events_or_auxiliary.auxiliary == {}
+    torch.testing.assert_close(
+        without_events_or_auxiliary.positions,
+        trajectory.positions,
+    )
 
 
 def test_per_batch_zero_dt_is_an_exact_identity() -> None:

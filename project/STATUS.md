@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-03
-**Specification:** `PROJECT_SPEC.md` 1.10
+**Specification:** `PROJECT_SPEC.md` 1.11
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -25,10 +25,184 @@ cadence semantics, progress observability, delayed worker startup, and
 post-step/checkpoint finite-state integrity are now repaired under rollout
 protocol 11; clean CPU causal and host-MPS optimizer-progress smokes completed
 without nonfinite/zero-gradient/restart failure, but neither one-step smoke
-earned a deployment promotion and a fresh protocol-v11 sustained
-qualification has not yet been launched;
+earned a deployment promotion; the first protocol-v11 qualification was
+truthfully alive and finite but intentionally stopped at zero updates after a
+launch-QoS audit found a roughly fourfold `Background` throttling regression;
+float timestamp integration-grid drift and duplicate causal propagation are
+repaired under rollout protocol 12; a reduced production-model smoke completed
+one finite, supported causal optimizer update and terminal validation, but a
+clean full-manifest protocol-v12 sustained qualification has not yet launched;
 collision, occlusion, identification, convergence, and full acceptance remain
 open
+
+## 2026-08-03 — launch-QoS and dynamics-call collapse audit
+
+The clean commit-`2487b7e` run at
+`runs/20260803-101108-v5-protocol11-balanced-qualification/` was alive,
+single-launch, finite, and advancing. It completed five distinct fixed
+validation seeds with no stderr:
+
+```text
+completed episodes: 5 / 32
+batch seconds: 123.660, 96.602, 118.193, 127.201, 121.245
+mean completed-batch time: 117.380 s
+optimizer updates: 0
+metrics/checkpoints: none
+terminal progress: validation_interrupted / KeyboardInterrupt
+terminal trainer state: failed / KeyboardInterrupt
+```
+
+This was not numerical collapse. The heartbeat advanced, the original PID
+remained authoritative, and the interruption stack landed inside ordinary
+finite interaction rollout work. It was stopped deliberately because a matched
+repaired foreground control with the same 40 frames, eight rollout anchors,
+birth-confirmation/lifecycle settings, model, and first 16 validation seeds
+took `404.879 s`, or `25.305 s/episode`. The older 32-episode v3 initialization
+took `30.861 s/episode`. The current one-shot plist set
+`ProcessType=Background`; observed utilization fell from roughly `525%` in the
+foreground control to about `100–198%`. The `4.64x`/`3.80x` wall-clock ratios
+track that lost parallel CPU use. Correcting global cadence adds at most four
+global observations over 40 frames (`10 -> 14`) and cannot explain the
+regression; validation-loader inter-batch gaps were below `0.16 s`.
+
+The launch helper no longer emits a Background classification. Its
+`KeepAlive=false` and `caffeinate` one-shot semantics remain unchanged.
+
+The same audit found two independent dynamics-path problems:
+
+- float32 20 Hz timestamps caused 22 of 39 intended `6 x 1/120 s` frame
+  intervals to execute seven belief-dynamics substeps because a literal
+  ceiling saw a ratio a few representation units above six; simulator labels
+  always used six; and
+- every noninitial causal frame propagated the persistent belief once for
+  supervision/current-correction and again inside `OnlineWorldModel.ingest`.
+
+Belief dynamics now snap only precision-indistinguishable integral ratios and
+otherwise retain the ceiling. A typed, single-use prepared propagation lets
+training inspect and then consume the same prior through the ordinary ingest
+path without replacing `WorldBelief`, zeroing elapsed time, or losing interval
+collision evidence. Belief/result tensors and dynamics parameters/buffers/mode
+are revision-bound; in-place value/graph mutation, tensor replacement, reuse,
+and nonuniform batch targets fail closed. The guard uses ordinary autograd or
+`no_grad`, not `inference_mode`. Training rollouts may also skip stacking
+unused auxiliary trajectories. These numerical semantics bump rollout
+validation protocol 11 to 12; simulator `sphere_world_v4`, measurement
+protocol 5, and selection metric 6 remain unchanged. Old selector artifacts
+are not protocol-v12 incumbents.
+
+The identity/lifecycle re-audit found no remaining structural defect in
+tentative-birth cardinality gating, fast-ROI source identity, global discovery,
+or accepted-association-only parameter history. A missing regression now
+proves that a physically distance-rejected burn-in association cannot seed
+slow-parameter frame/ID history.
+
+Final commands, test counts, timing controls, commit, and the next launch are
+recorded below when they have actually completed. A direct foreground timing
+control at
+`runs/20260803-105244-v6-protocol12-foreground-timing/` completed fixed
+reference seed `100000` in `29.578 s` (`33.493 s` including loader/startup),
+versus `123.660 s` for the same seed/scenario in the Background job: a `4.18x`
+improvement and within the historical foreground range. It established a
+single-scenario diagnostic reference, then was intentionally interrupted while
+drawing its first training batch; it performed zero optimizer updates and is
+not accuracy/convergence evidence.
+
+Current-tree quality gate:
+
+```bash
+PYTHONPATH=. conda run -n orpheus pytest -q \
+  tests/integration/test_prepared_propagation.py \
+  tests/unit/test_prepared_closed_loop.py \
+  tests/unit/test_analytic_dynamics.py \
+  tests/unit/test_event_window_scoring.py \
+  tests/unit/test_training_objective_regressions.py \
+  tests/unit/test_parameter_supervision.py \
+  tests/unit/test_launch_training_once.py \
+  tests/unit/test_scheduler.py \
+  tests/integration/test_trainer_checkpoint_integrity.py
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q
+PYTHONPATH=. conda run -n orpheus ruff format .
+PYTHONPATH=. conda run -n orpheus ruff check .
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-v6-pycache PYTHONPATH=. \
+  conda run -n orpheus python -m compileall -q \
+  train.py evaluate.py demo.py scripts world_model tests
+PYTHONPATH=. conda run -n orpheus python train.py \
+  --config configs/sustained_accuracy_mps_v3.yaml --dry-run --device cpu
+git diff --check
+```
+
+```text
+affected tests: 100 passed in 97.20 s on the final documented tree
+full sandbox suite: 599 passed, 6 MPS-only skipped in 315.68 s
+Ruff format: 185 files unchanged
+Ruff lint: all checks passed
+compileall: passed
+production-profile CPU dry run: passed
+git diff --check: passed
+Python / PyTorch: 3.10.20 / 2.10.0
+MPS compiled / sandbox-visible: true / false
+```
+
+The attempted host-MPS family rerun could not start because the execution
+approval service reported its external-usage limit; this is an infrastructure
+block, not a passing device result. The previous committed tree's host MPS
+families remain valid only for that earlier source.
+
+A reduced production-model causal smoke then exercised the repaired path
+through a real optimizer step and terminal checkpoint/validation:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/sustained_accuracy_mps_v3.yaml \
+  --run-name v6-protocol12-one-update-smoke \
+  --initialize-from \
+    runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/best_measurement.pt \
+  --device cpu \
+  --set 'simulator.scenario_mixture=[reference_pairs]' \
+  --set simulator.sequence_frames=16 \
+  --set training.steps=1 \
+  --set training.rgb_pretrain_steps=0 \
+  --set training.batch_size=1 \
+  --set training.tbptt_steps=4 \
+  --set training.rollout_anchors_per_window=1 \
+  --set training.validation_rollout_anchors_per_episode=1 \
+  --set training.minimum_rollout_age_steps=1 \
+  --set training.validation_minimum_predictable_target_count_per_scenario_horizon=1 \
+  --set training.validation_minimum_matched_target_count_per_scenario_horizon=1 \
+  --set training.validation_minimum_supported_episodes_per_scenario=1 \
+  --set training.train_episodes=2 \
+  --set training.validation_episodes=1 \
+  --set training.num_workers=0 \
+  --set training.checkpoint_every=1 \
+  --set training.eval_every=1 \
+  --set training.log_every=1 \
+  --set training.maximum_no_gradient_batches_per_update=16 \
+  --set 'training.horizon_weights=[1.0,1.5,2.0]' \
+  --set 'evaluation.horizons_seconds=[0.1,0.25,0.5]' \
+  --set evaluation.episodes=1
+```
+
+```text
+run: runs/20260803-110550-v6-protocol12-one-update-smoke/
+terminal state: completed
+optimizer updates: 1
+skipped no-gradient batches: 0
+loss: 4.273417
+gradient norm before local/global clipping: 3.012750
+gradient norm applied: 1.246404
+post-step finite-state check: passed
+terminal checkpoint: checkpoints/last.pt
+initial incumbent score: 0.21818814932904948
+step-1 candidate score: 0.2181897207709593
+selection: rejected; imported incumbent preserved
+elapsed: 16.915 s
+oracle runtime input: false
+```
+
+The one-step candidate's tiny broad-score regression was correctly rejected,
+which is selector-integrity evidence rather than an accuracy result. Commit and
+production launch are recorded after they actually occur. No full-manifest
+protocol-v12 accuracy, promotion, or convergence result exists yet.
 
 ## 2026-08-03 — cadence, progress, and finite-state collapse audit
 
