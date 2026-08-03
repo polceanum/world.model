@@ -135,3 +135,14 @@ Working rules:
   state loading place tensors on their owners. This preserves CPU Adam step
   scalars for the hybrid optimizer and avoids copying unused optimizer moments
   to accelerator memory.
+- Interpret `model.rgb.global_every_steps` as the complete frame-to-frame
+  distance between global observations. Cadence three is exactly
+  `GLOBAL, FAST_ROI, FAST_ROI, GLOBAL`; test the sequence, not only a counter
+  threshold, and bump the rollout protocol when cadence semantics change.
+- Keep selector validation full-manifest and atomic, but emit per-episode
+  stdout and durable `training_progress.json` heartbeats. Do not start
+  training-loader workers before initialization/handoff validation finishes.
+- Reject nonfinite model parameters or optimizer state immediately after an
+  optimizer step. Validate model buffers, weights, optimizer/scheduler tensors,
+  and nonnegative step counters before checkpoint replacement and before
+  mutating a destination during load.

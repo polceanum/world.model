@@ -386,15 +386,30 @@ terminated the trainer. Its `launchctl submit` job then restarted more than
 job is removed and the run is a preserved failure artifact, not an active
 campaign or convergence evidence.
 
-New sustained runs use simulator `sphere_world_v4`, rollout protocol 10, and
-selection metric 6. The impulse rate is `0.02` per observation interval.
+The first protocol-10 replacement at
+`runs/20260803-084843-v4-balanced-qualification/` was then stopped before any
+optimizer update when an audit proved that `global_every_steps=3` actually
+inserted three rather than two fast ROI frames. It was actively computing, not
+deadlocked or relaunched, but its silent full-manifest validation made progress
+impossible to inspect. Preserve it as a zero-update diagnostic.
+
+New sustained runs use simulator `sphere_world_v4`, rollout protocol 11, and
+selection metric 6. Cadence three is exactly
+`GLOBAL, FAST, FAST, GLOBAL`; historical cadence-three reports used actual
+cadence four and are not selector-comparable. The impulse rate is `0.02` per
+observation interval.
 Promotion requires each scenario to meet its per-horizon label-opportunity and
 matched-target floors and its supported-episode floor. Deterministic evaluator
 metrics use the same unseen-actuation censor as training, while calibration
 retains stochastic futures. Launch macOS training with
 `scripts/launch_training_once.py`; its generated LaunchAgent has
 `KeepAlive=false`, and `train.py` writes explicit starting, failure, and
-completed state artifacts. See `project/STATUS.md` for the exact failure and
+completed state artifacts. During validation, tail stdout or inspect
+`training_progress.json` for exact per-episode counts, timings, seed/scenario,
+PID, and protocol hash; partial progress never becomes selector evidence.
+Training workers start only on the first actual draw. Post-step and checkpoint
+finite-state checks terminate before corrupt parameters/moments can become a
+resumable artifact. See `project/STATUS.md` for the exact failures, smokes, and
 fixed-manifest support evidence.
 
 ### Superseded v2 campaign

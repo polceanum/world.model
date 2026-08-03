@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import random
 from dataclasses import replace
@@ -1410,6 +1411,8 @@ def test_closed_loop_validation_uses_the_full_episode(
 
 def test_validation_aggregates_every_loader_batch_by_episode_count(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     seen: list[int] = []
 
@@ -1440,12 +1443,15 @@ def test_validation_aggregates_every_loader_batch_by_episode_count(
         },
     ]
 
+    progress_path = tmp_path / "training_progress.json"
     result = _validation_loader_result(
         _ModeOnlyModel(),  # type: ignore[arg-type]
         loader,  # type: ignore[arg-type]
         load_config("configs/tiny_overfit.yaml"),
         device=torch.device("cpu"),
         closed_loop=True,
+        progress_path=progress_path,
+        progress_split="validation_test",
     )
 
     assert seen == [2, 1]
@@ -1458,6 +1464,76 @@ def test_validation_aggregates_every_loader_batch_by_episode_count(
     assert result.metrics["validation_collision_f1"] == 1.0
     assert result.metrics["validation_id_switch_rate"] == 0.0
     assert result.metrics["validation_position_rmse@0.500s"] == pytest.approx(2.5**0.5)
+    progress = json.loads(progress_path.read_text(encoding="utf-8"))
+    assert progress["state"] == "validation_complete"
+    assert progress["split"] == "validation_test"
+    assert progress["validation_kind"] == "closed_loop"
+    assert progress["protocol_kind"] == "rollout"
+    assert len(progress["protocol_hash"]) == 64
+    assert progress["completed_batches"] == 2
+    assert progress["total_batches"] == 2
+    assert progress["completed_episodes"] == 3
+    assert progress["total_episodes"] is None
+    output = capsys.readouterr().out
+    assert "batches=1/2 episodes=2/?" in output
+    assert "batches=2/2 episodes=3/?" in output
+
+
+def test_validation_progress_records_interrupted_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    calls = 0
+
+    def fake_validation(
+        model: object,
+        batch: dict[str, torch.Tensor],
+        config: object,
+        *,
+        closed_loop: bool,
+    ) -> TrainingBatchResult:
+        nonlocal calls
+        del model, batch, config, closed_loop
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("validation probe failure")
+        return _result(1.0)
+
+    monkeypatch.setattr(
+        "world_model.training.trainer._validation_step",
+        fake_validation,
+    )
+    loader = [
+        {
+            "rgb": torch.ones((1, 3, 3, 8, 8)),
+            "timestamps": torch.zeros((1, 3)),
+        },
+        {
+            "rgb": torch.ones((1, 3, 3, 8, 8)),
+            "timestamps": torch.zeros((1, 3)),
+        },
+    ]
+    progress_path = tmp_path / "training_progress.json"
+
+    with pytest.raises(RuntimeError, match="validation probe failure"):
+        _validation_loader_result(
+            _ModeOnlyModel(),  # type: ignore[arg-type]
+            loader,  # type: ignore[arg-type]
+            load_config("configs/tiny_overfit.yaml"),
+            device=torch.device("cpu"),
+            closed_loop=False,
+            progress_path=progress_path,
+            progress_split="validation_measurement_probe",
+        )
+
+    progress = json.loads(progress_path.read_text(encoding="utf-8"))
+    assert progress["state"] == "validation_interrupted"
+    assert progress["split"] == "validation_measurement_probe"
+    assert progress["validation_kind"] == "measurement"
+    assert progress["protocol_kind"] == "measurement"
+    assert progress["completed_batches"] == 1
+    assert progress["completed_episodes"] == 1
+    assert progress["exception_type"] == "RuntimeError"
 
 
 def test_validation_averages_conditional_diagnostics_over_present_support() -> None:

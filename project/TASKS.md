@@ -87,11 +87,30 @@
   host MPS device families (`38 passed`), a real one-step host-MPS optimizer
   run, and a production-profile CPU causal update under simulator v4 /
   selector v6.
-- [ ] Commit and push the complete initialization/support/process-integrity
-  repair.
-- [ ] Launch a clean timestamped balanced qualification with the one-shot
-  helper and verify from metrics/checkpoints that initialization completes and
-  at least one real optimizer update occurs.
+- [x] Commit and push the complete initialization/support/process-integrity
+  repair as `97415b0`.
+- [x] Launch a clean timestamped protocol-v10 balanced qualification with the
+  one-shot helper, prove that it did not relaunch/deadlock/collapse, then stop
+  and preserve it before any update after discovering the cadence-semantics
+  bug.
+- [x] Fix `global_every_steps` so cadence three is exactly
+  `GLOBAL, FAST, FAST, GLOBAL`, validate it as a positive integer, and bump
+  rollout validation protocol 10 to 11 without changing the measurement,
+  simulator, or selector versions.
+- [x] Add per-episode atomic validation progress/heartbeats, defer training
+  worker startup until the first draw, and preserve full-manifest selector
+  atomicity.
+- [x] Reject nonfinite parameters/optimizer state immediately after Adam and
+  validate model buffers, optimizer/scheduler state, and nonnegative step
+  counters before checkpoint save/load. Prove corrupt overwrites leave the
+  old checkpoint intact.
+- [x] Complete one corrected CPU causal update and one host-MPS measurement
+  update with finite post-step/checkpoint state and durable validation
+  progress.
+- [ ] Commit and push the cadence/progress/finite-state repair.
+- [ ] Launch a clean timestamped protocol-v11 balanced qualification with the
+  one-shot helper and verify from progress, metrics, and checkpoints that
+  initialization completes and at least one real optimizer update occurs.
 - [ ] Inspect the next corrected qualification at its declared validation steps
   for support, perception/interaction/global gradient balance, lifecycle
   precision/coverage, identity switches, collisions, calibration, every

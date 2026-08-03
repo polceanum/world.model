@@ -87,7 +87,12 @@ class ObservationScheduler:
             max_position_std = float(active_position_std.max().detach().cpu())
             if max_position_std > self.uncertainty_threshold:
                 return ObservationMode.RECOVERY
-        if state.steps_since_global >= self.global_every_steps:
+        # ``global_every_steps`` is the distance between global frames, not
+        # the number of FAST frames allowed after one.  The counter stores
+        # completed FAST frames since the last global frame, so cadence three
+        # must emit GLOBAL, FAST, FAST, GLOBAL rather than inserting a third
+        # FAST frame.
+        if state.steps_since_global >= self.global_every_steps - 1:
             return ObservationMode.GLOBAL_DISCOVERY
         return ObservationMode.FAST_ROI
 

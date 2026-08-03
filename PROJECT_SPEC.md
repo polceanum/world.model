@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.9
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, and launch-failure-integrity amendments 3 August 2026
+**Version:** 1.10
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, and finite-state amendments 3 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5639,6 +5639,59 @@ attempt succeeds. Interrupts and cleanup failures are terminal evidence rather
 than unrecorded or masking exceptions.
 A convergence supervisor monitoring an older KeepAlive job must boot it out on
 either verified completion or verified initial-process failure.
+
+---
+
+# Part XXXII — Cadence semantics, progress observability, and finite-state amendment
+
+## 178. Global cadence counts complete observation frames
+
+`model.rgb.global_every_steps` is the positive integral distance between
+global-discovery frames, including the global frame itself. A value of three
+means:
+
+```text
+GLOBAL, FAST_ROI, FAST_ROI, GLOBAL, FAST_ROI, FAST_ROI, GLOBAL
+```
+
+It does not mean three fast frames followed by a fourth global frame. Global
+discovery and recovery both reset the sensor-local fast-frame counter. Tests
+must assert complete mode sequences rather than only forcing the counter to a
+threshold.
+
+Changing this counter interpretation changes persistent observations,
+association, lifecycle, and future rollouts for identical YAML. It therefore
+requires a new rollout-validation protocol version and a fresh weights-only
+qualification; historical selector/reference artifacts from the old cadence
+semantics are not comparable. The measurement-only protocol, simulator
+version, and selection formula need not change when their behavior and
+evidence schema are unchanged.
+
+## 179. Long validation remains atomic but visibly alive and finite
+
+Checkpoint selection remains full-manifest and atomic: no partial validation
+may become a score, reference, incumbent, or convergence point. Separately,
+each validation episode must update a durable, atomic progress snapshot and
+flush a human-readable heartbeat. The snapshot records at least phase/split,
+validation kind, completed and total batches/episodes, elapsed and last-batch
+time, process ID, last seed/scenario when attributable, and the exact protocol
+hash. An interruption records the exception type and last completed progress
+without fabricating partial metrics.
+
+Training workers must not be started or allowed to prefetch while
+initialization or handoff validation is still running. Construct the training
+loader deterministically, but create its iterator only when the first training
+draw is actually required.
+
+Every successful optimizer call is followed immediately by a grouped
+finite-state check over floating/complex model parameters and all optimizer
+state tensors. Optimizer step counters must be scalar, finite, and
+nonnegative. Before an atomic checkpoint replacement, validate model
+parameters and persistent buffers, optimizer state, step counters, and any
+scheduler tensors. Loading validates the payload before mutating the
+destination model or optimizer. A corrupt candidate must leave an existing
+checkpoint byte-for-byte intact and terminate the invocation rather than
+becoming resumable state.
 
 ---
 

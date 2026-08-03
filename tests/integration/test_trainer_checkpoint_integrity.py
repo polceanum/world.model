@@ -1044,6 +1044,7 @@ def test_pending_final_validation_recovers_without_optimizer_update(
         *,
         device,
         closed_loop,
+        **_progress,
     ) -> TrainingBatchResult:
         assert device == torch.device("cpu")
         calls.append(closed_loop)
@@ -1135,6 +1136,7 @@ def test_global_only_causal_draw_does_not_consume_optimizer_step(
         *,
         device,
         closed_loop,
+        **_progress,
     ) -> TrainingBatchResult:
         assert device == torch.device("cpu")
         assert closed_loop
@@ -1199,6 +1201,98 @@ def test_global_only_causal_draw_does_not_consume_optimizer_step(
     assert skipped[0]["gradient_norm"] == 0.0
 
 
+def test_trainer_rejects_nonfinite_parameters_immediately_after_optimizer_step(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        project=replace(source.project, output_dir=str(tmp_path / "runs")),
+        device=replace(
+            source.device,
+            preference="cpu",
+            closed_loop_preference="same",
+        ),
+        training=replace(
+            source.training,
+            steps=1,
+            rgb_pretrain_steps=0,
+            train_episodes=1,
+            validation_episodes=1,
+            batch_size=1,
+            eval_every=0,
+            checkpoint_every=1,
+            log_every=1,
+        ),
+    )
+
+    def fake_validation(
+        _model,
+        _loader,
+        _config,
+        *,
+        device,
+        closed_loop,
+        **_progress,
+    ) -> TrainingBatchResult:
+        assert device == torch.device("cpu")
+        assert closed_loop
+        return TrainingBatchResult(
+            total_loss=torch.tensor(0.4),
+            loss_terms={"rollout": torch.tensor(0.4)},
+            metrics=_physical_metrics(config),
+            phase="closed_loop_rgb",
+        )
+
+    def fake_closed_loop(
+        model,
+        _batch,
+        _config,
+        **_kwargs,
+    ) -> TrainingBatchResult:
+        parameter = next(parameter for parameter in model.parameters() if parameter.requires_grad)
+        loss = parameter.reshape(-1)[0] + 10.0
+        return TrainingBatchResult(
+            total_loss=loss,
+            loss_terms={"state": loss},
+            metrics={"matched_object_frames": 1.0},
+            phase="closed_loop_rgb",
+        )
+
+    original_step = torch.optim.AdamW.step
+
+    def corrupting_step(optimizer, closure=None):
+        result = original_step(optimizer, closure=closure)
+        parameter = optimizer.param_groups[0]["params"][0]
+        with torch.no_grad():
+            parameter.flatten()[0] = float("nan")
+        return result
+
+    monkeypatch.setattr(
+        "world_model.training.trainer._validation_loader_result",
+        fake_validation,
+    )
+    monkeypatch.setattr(
+        "world_model.training.trainer.run_closed_loop_batch",
+        fake_closed_loop,
+    )
+    monkeypatch.setattr(torch.optim.AdamW, "step", corrupting_step)
+
+    with pytest.raises(
+        FloatingPointError,
+        match=r"model_parameters.*NaN or Inf.*after optimiser step 0",
+    ):
+        train_from_config(config, run_name="post-step-nonfinite")
+
+    run_directories = list((tmp_path / "runs").glob("*post-step-nonfinite*"))
+    assert len(run_directories) == 1
+    checkpoint_directory = run_directories[0] / "checkpoints"
+    assert not (checkpoint_directory / "last.pt").exists()
+    assert not (checkpoint_directory / "validation_step_000001.pt").exists()
+    assert (checkpoint_directory / "validation_step_000000.pt").is_file()
+
+
 def test_fresh_causal_run_records_but_does_not_promote_collapsed_incumbent(
     tmp_path,
     monkeypatch,
@@ -1227,6 +1321,7 @@ def test_fresh_causal_run_records_but_does_not_promote_collapsed_incumbent(
         *,
         device,
         closed_loop,
+        **_progress,
     ) -> TrainingBatchResult:
         assert device == torch.device("cpu")
         assert closed_loop
@@ -1304,6 +1399,7 @@ def test_pooled_unsupported_reference_is_diagnostic_not_validated_provenance(
         *,
         device,
         closed_loop,
+        **_progress,
     ) -> TrainingBatchResult:
         assert device == torch.device("cpu")
         assert closed_loop
@@ -1414,6 +1510,7 @@ def test_first_supported_after_pooled_failure_only_reestablishes_reference(
         *,
         device,
         closed_loop,
+        **_progress,
     ) -> TrainingBatchResult:
         nonlocal validation_calls
         assert device == torch.device("cpu")
@@ -1527,6 +1624,7 @@ def test_branched_resume_retains_incomplete_reference_comparison_requirement(
         *,
         device,
         closed_loop,
+        **_progress,
     ) -> TrainingBatchResult:
         assert device == torch.device("cpu")
         assert closed_loop
@@ -1647,6 +1745,7 @@ def test_imported_unsupported_reference_continues_without_repeated_validation(
         *,
         device,
         closed_loop,
+        **_progress,
     ) -> TrainingBatchResult:
         nonlocal validation_calls
         assert device == torch.device("cpu")
@@ -1753,6 +1852,7 @@ def test_first_supported_incumbent_must_pass_fixed_reference_guardrails(
         *,
         device,
         closed_loop,
+        **_progress,
     ) -> TrainingBatchResult:
         nonlocal validation_calls
         assert device == torch.device("cpu")
@@ -1929,6 +2029,7 @@ def test_exact_resume_preserves_reference_without_deployable_incumbent(
         *,
         device,
         closed_loop,
+        **_progress,
     ) -> TrainingBatchResult:
         assert device == torch.device("cpu")
         assert closed_loop
@@ -2023,6 +2124,7 @@ def test_only_support_collapse_rolls_back_mutable_causal_state(
         *,
         device,
         closed_loop,
+        **_progress,
     ) -> TrainingBatchResult:
         nonlocal validation_calls
         assert device == torch.device("cpu")
@@ -2155,6 +2257,7 @@ def test_terminal_support_collapse_checkpoint_truthfully_contains_restored_incum
         *,
         device,
         closed_loop,
+        **_progress,
     ) -> TrainingBatchResult:
         nonlocal validation_calls
         assert device == torch.device("cpu")

@@ -906,7 +906,8 @@
   two. Closed-loop window selection must leave at least one anchor with the
   shortest configured future horizon, even when a late collision label would
   otherwise take priority.
-- **Evidence:** On seeds `100016–100017`, cadence three improved current
+- **Evidence:** On seeds `100016–100017`, the configuration then labelled
+  cadence three improved current
   RMSE/MAE by `5.9%/21.3%`, velocity slightly, 0.10–0.75-second RMSE by
   `7.6–12.8%`, collision F1 from `0.138` to `0.357`, and detection
   recall/precision from `0.500/0.377` to `0.694/0.568`. On disjoint seeds
@@ -914,13 +915,18 @@
   `10.7%`, 0.10–0.75-second RMSE by `3.4–9.0%`, collision F1, and target
   coverage. One switch occurred on the first pair and nominal 90% coverage
   worsened on the second. The corrected sampler produced nonzero position and
-  velocity rollout losses at step 6.
-- **Consequences:** Cadence three is the scaled default but still requires a
-  wider validation/test manifest. The one-second horizon remains essentially
-  unchanged. Longer causal training is allowed only from forecast-supervised
-  windows and remains subject to paired promotion gates. A step-16
-  sampler-corrected continuation was subsequently rejected: current state
-  improved marginally, but 0.25–1.00-second forecasts regressed.
+  velocity rollout losses at step 6. The 3 August audit later proved that the
+  implementation emitted `GLOBAL, FAST, FAST, FAST, GLOBAL`; this evidence
+  therefore supports a denser-than-six cadence but is not evidence for the
+  intended exact three-frame sequence.
+- **Consequences:** Corrected cadence three remains the scaled design default,
+  but the old evidence does not validate its exact sequence; it requires a
+  fresh rollout-protocol-11 validation/test manifest. The old cadence-four
+  one-second horizon remained essentially unchanged. Longer causal training is
+  allowed only from forecast-supervised windows and remains subject to paired
+  promotion gates. A step-16 sampler-corrected continuation under the old
+  cadence was subsequently rejected: current state improved marginally, but
+  0.25–1.00-second forecasts regressed.
 
 ## ADR-051 — Preserve scarce scale anchors separately from per-frame point history
 
@@ -1714,3 +1720,45 @@
   smoke performed one finite clipped optimizer update and completed terminal
   validation. Both are wiring/integrity evidence, not convergence or
   deployment promotion.
+
+## ADR-073 — Count complete cadence frames and make long validation observable
+
+- **Date:** 2026-08-03
+- **Status:** accepted and implemented
+- **Context:** The first protocol-v10 qualification appeared alive but emitted
+  no stdout, metrics, checkpoint, or structured progress for roughly 44
+  minutes. Process inspection proved active CPU dynamics rather than a
+  deadlock. The independent numerical audit then found that
+  `global_every_steps=3` actually emitted
+  `GLOBAL, FAST, FAST, FAST, GLOBAL`, contradicting ADR-050's intended two
+  intervening ROI updates. Every historical report labelled cadence three had
+  therefore measured cadence four. The same audit found that configuration
+  accepted zero cadence, unused training workers prefetched during initial
+  validation, and post-Adam or stored checkpoint tensors were not explicitly
+  checked for nonfinite corruption.
+- **Decision:** Define `global_every_steps` as the complete distance between
+  global frames and require a positive integer. Cadence three is exactly
+  `GLOBAL, FAST, FAST, GLOBAL`; test the whole sequence. Bump only rollout
+  validation protocol 10 to 11 because measurement semantics, simulator
+  semantics, and selector formula are unchanged. Preserve full-manifest
+  selector atomicity while writing atomic per-episode
+  `training_progress.json` heartbeats with split/kind, counts, timings, PID,
+  seed/scenario, and protocol hash. Create the deterministic training loader in
+  advance but do not start its iterator/workers until the first actual draw.
+  After every Adam step, reject nonfinite parameters, moments, or invalid step
+  counters. Validate model buffers/weights, optimizer/scheduler state, and
+  step counters before atomic save and before load mutates a destination.
+- **Alternatives considered:** reinterpret the configuration value as the
+  number of allowed fast frames; relabel all profiles as cadence four; retain
+  silent atomic validation and infer health from CPU usage; stream partial
+  selector scores; start both loader pools at process launch; rely on the next
+  forward pass to discover optimizer corruption.
+- **Consequences:** The interrupted protocol-v10 run is preserved as a
+  zero-update diagnostic and cannot supply convergence evidence. Historical
+  cadence-labelled results remain useful only under their actual cadence-four
+  behavior. A fresh protocol-v11 qualification is required. Validation remains
+  scientifically atomic but operationally inspectable, and corrupt post-step
+  state cannot become a resumable checkpoint. The new CPU causal smoke
+  completed one finite update with per-episode progress; the host MPS
+  measurement smoke completed one finite clipped update and checkpoint
+  round-trip. Both are wiring evidence, not accuracy promotion.

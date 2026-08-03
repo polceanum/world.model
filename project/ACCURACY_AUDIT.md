@@ -1,6 +1,6 @@
 # Accuracy audit
 
-**Evidence cut-off:** 2026-08-02
+**Evidence cut-off:** 2026-08-03
 **Scope:** existing RGB-only checkpoints, reports, resolved configurations, and
 training logs in this repository
 
@@ -24,10 +24,28 @@ into one accuracy claim:
    one-seed gains did not survive the full online feedback loop.
 
 The justified next decision is a medium supported-gradient qualification of
-the audited v3 protocol, followed by one sustained, end-to-end shared campaign
-only if support, coverage, gradient, and broad validation trends remain
-healthy. The experimental intervention heads remain disabled. No existing v1,
-v2, or v3-smoke artifact establishes broad scaled convergence.
+the audited rollout-protocol-11 runtime, followed by one sustained,
+end-to-end shared campaign only if support, coverage, gradient, and broad
+validation trends remain healthy. The experimental intervention heads remain
+disabled. No existing v1, v2, or v3-smoke artifact establishes broad scaled
+convergence.
+
+### Cadence nomenclature correction
+
+The 3 August scheduler audit proved that every historical scaled report
+labelled “cadence three” actually ran:
+
+```text
+GLOBAL, FAST, FAST, FAST, GLOBAL
+```
+
+The counter treated the configured value as the number of fast frames rather
+than the complete distance between global frames. Those results remain valid
+for actual cadence four and still show that more frequent discovery helped
+relative to the earlier sparse cadence, but they do not validate the intended
+`GLOBAL, FAST, FAST, GLOBAL` policy. Corrected cadence three changes persistent
+association/lifecycle trajectories and requires fresh rollout-protocol-11
+qualification.
 
 ## 2026-08-02 supported-causal convergence audit
 
@@ -251,8 +269,8 @@ inferring comparability from similar run names.
 | [Eight-scenario checkpoint](../runs/20260728-091315-selected-all-scenarios-v1/checkpoints/best_rollout.pt) | Step 672; approximately 156k parameters | Best broadly tested checkpoint | A reliable comparison baseline for the small profile, but architecturally incompatible with the 1.90M-parameter scaled profile. |
 | [Fixed-scale measurement summary](../runs/20260728-223558-scaled-fixed-scale-transfer-1k-v1/train_summary.json) | 256 measurement updates, batch four, 1,024 episode draws, eight scenarios, MPS | Accepted initialization evidence | Fixed physical radius makes monocular RGB scale identifiable and improves global measurement validation. It contains no closed-loop training. |
 | [Cadence-three selection](../runs/20260728-231250-scaled-global-cadence3-ablation-v1/evaluation/20260728-232212-global-cadence3-select2-offset16/report.md) and [confirmation](../runs/20260728-231250-scaled-global-cadence3-ablation-v1/evaluation/20260728-233559-global-cadence3-confirm2-offset18/report.md) | Two episodes per block, four scenarios in total, MPS | Provisionally accepted runtime policy | Re-anchoring globally every three frames is better than every six on the matched blocks, but it is not an eight-scenario acceptance result. |
-| [Point/scale selection](../runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-100628-select2-offset16-final-v5/report.md) and [confirmation](../runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-094349-confirm2-offset18-quality-v4/report.md) | Same two paired blocks as cadence three; MPS | Accepted for scaled position only | Multi-frame scale anchors greatly improve current and multistep position, while exposing velocity and event regressions. |
-| [Current scaled runtime checkpoint](../runs/20260729-084712-scaled-point-scale-trajectory-v1/checkpoints/runtime_ablation.pt) | Step-zero runtime wrapper; 1.90M-parameter state; cadence three and point/scale enabled | Recommended weights-only initialization | Its model tensors are byte-identical to the selected fixed-scale step-256 measurement weights. It adds runtime semantics, not additional trained weights. |
+| [Point/scale selection](../runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-100628-select2-offset16-final-v5/report.md) and [confirmation](../runs/20260729-084712-scaled-point-scale-trajectory-v1/evaluation/20260729-094349-confirm2-offset18-quality-v4/report.md) | Same two paired blocks as historical cadence three (actual cadence four); MPS | Accepted for scaled position only | Multi-frame scale anchors greatly improve current and multistep position, while exposing velocity and event regressions. |
+| [Current scaled runtime checkpoint](../runs/20260729-084712-scaled-point-scale-trajectory-v1/checkpoints/runtime_ablation.pt) | Step-zero runtime wrapper; 1.90M-parameter state; historical cadence three (actual cadence four) and point/scale enabled | Recommended weights-only initialization | Its model tensors are byte-identical to the selected fixed-scale step-256 measurement weights. It adds runtime semantics, not additional trained weights. |
 | [Step-16 causal report](../runs/20260729-001136-scaled-fixed-cadence3-causal-valid32-v3/evaluation/20260729-005424-causal-step16-select2-offset16/report.md) | 16 closed-loop updates; two selection episodes | Rejected | The short continuation slightly improves current state but regresses the 0.25–1.0-second forecasts. |
 | [Lateral intervention report](../runs/20260730-092214-rgb-lateral-intervention-regularized-v2/evaluation/20260730-094915-lateral-select2-offset16-frames48/report.md) | Local head trained on 543 windows and evaluated on two episodes | Rejected | Offline lateral correction does not improve the complete recursive online objective. |
 | [On-policy gravity report](../runs/20260730-105512-rgb-gravity-intervention-on-policy-8x8-v4/evaluation/20260730-113746-gravity-select2-offset16-frames48/report.md) | One on-policy aggregation pass and two online episodes | Rejected | A locally useful gravity correction changes later association and observability enough to regress broad metrics. |
@@ -327,9 +345,9 @@ trajectory observer.
 
 | Block and policy | Current position | Velocity | 0.10 / 0.25 / 0.50 / 0.75 / 1.00 s RMSE | F1 | Detection R/P | Coverage 90 |
 | --- | ---: | ---: | --- | ---: | --- | ---: |
-| offset 16 cadence-three baseline | `0.906217` | `1.082334` | `0.780533 / 0.626639 / 0.650438 / 0.773491 / 1.007125` | `0.357143` | `0.694444 / 0.568182` | `0.737805` |
+| offset 16 historical cadence-three baseline (actual four) | `0.906217` | `1.082334` | `0.780533 / 0.626639 / 0.650438 / 0.773491 / 1.007125` | `0.357143` | `0.694444 / 0.568182` | `0.737805` |
 | offset 16 point/scale | `0.684258` | `1.148529` | `0.698125 / 0.526197 / 0.517001 / 0.562448 / 0.618672` | `0.271186` | `0.687500 / 0.480583` | `0.780204` |
-| offset 18 cadence-three baseline | `1.165912` | `0.889775` | `1.010213 / 0.877051 / 0.922522 / 0.988420 / 1.267293` | `0.190476` | `0.391667 / 0.345588` | `0.554667` |
+| offset 18 historical cadence-three baseline (actual four) | `1.165912` | `0.889775` | `1.010213 / 0.877051 / 0.922522 / 0.988420 / 1.267293` | `0.190476` | `0.391667 / 0.345588` | `0.554667` |
 | offset 18 point/scale | `0.804367` | `0.986646` | `0.802223 / 0.630088 / 0.644967 / 0.693634 / 0.760509` | `0.078431` | `0.675000 / 0.455056` | `0.722522` |
 
 Every position horizon improves substantially on both blocks, as do
@@ -362,7 +380,7 @@ On the offset-16 selection block:
 
 | Weights | Causal updates | Current position | Velocity | 0.10 / 0.25 / 0.50 / 0.75 / 1.00 s RMSE |
 | --- | ---: | ---: | ---: | --- |
-| cadence-three baseline | `0` | `0.906217` | `1.082334` | `0.780533 / 0.626639 / 0.650438 / 0.773491 / 1.007125` |
+| historical cadence-three baseline (actual four) | `0` | `0.906217` | `1.082334` | `0.780533 / 0.626639 / 0.650438 / 0.773491 / 1.007125` |
 | sampler-corrected step 8 | `8` | `0.906162` | `1.081974` | `0.780467 / 0.626616 / 0.650370 / 0.773388 / 1.007019` |
 | sampler-corrected step 16 | `16` | `0.906124` | `1.081620` | `0.780446 / 0.627064 / 0.652029 / 0.776092 / 1.008927` |
 
@@ -501,7 +519,7 @@ The next accuracy campaign should use the following evidence-backed policy:
 2. **Keep diagnostic interventions off initially.** The lateral, gravity,
    change-point, and outgoing-proposal gates remain disabled, as in the
    [scaled configuration](../configs/scaled_curriculum.yaml). The confirmed
-   cadence-three and point/scale position observers remain active.
+   corrected cadence-three and point/scale position observers remain active.
 3. **Use the bounded but complete causal path.** Every frame advances and
    supervises belief, while one earliest eligible anchor per four-frame TBPTT
    window scores every horizon supported from that timestamp. The sampler

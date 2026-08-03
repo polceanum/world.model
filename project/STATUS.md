@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-03
-**Specification:** `PROJECT_SPEC.md` 1.9
+**Specification:** `PROJECT_SPEC.md` 1.10
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -15,17 +15,137 @@ that unsupported rows consumed causal updates and coverage collapsed; the
 first v3 qualification is preserved but stopped after its first causal
 validation exposed lifecycle/identity collapse and perception-gradient
 starvation; the repaired runtime passes complete regression, host MPS device,
-and clean hybrid MPS/CPU end-to-end wiring checks, but no repaired v3
+and clean hybrid MPS/CPU end-to-end wiring checks, but no repaired
 qualification result, convergence result, or broad promotion exists yet; a
 second repaired eight-scenario qualification was proven never to have trained
-and its launchd restart storm has been stopped; validation-support, evaluator,
-failure-state, and one-shot-launch repairs are implemented and passing focused
-and complete quality gates; clean CPU causal and host-MPS optimizer-progress
-smokes completed without nonfinite/zero-gradient/restart failure, but neither
-one-step smoke earned a deployment promotion and a new sustained qualification
-has not yet been launched;
+and its launchd restart storm has been stopped; a third protocol-v10
+qualification was intentionally interrupted before its first metric after an
+audit found that configured cadence three actually executed cadence four;
+cadence semantics, progress observability, delayed worker startup, and
+post-step/checkpoint finite-state integrity are now repaired under rollout
+protocol 11; clean CPU causal and host-MPS optimizer-progress smokes completed
+without nonfinite/zero-gradient/restart failure, but neither one-step smoke
+earned a deployment promotion and a fresh protocol-v11 sustained
+qualification has not yet been launched;
 collision, occlusion, identification, convergence, and full acceptance remain
 open
+
+## 2026-08-03 — cadence, progress, and finite-state collapse audit
+
+The clean one-shot qualification at
+`runs/20260803-084843-v4-balanced-qualification/` did not relaunch, deadlock,
+or numerically collapse. The original PID accumulated roughly 83 CPU minutes
+in about 44 wall-clock minutes inside finite dynamics/contact rollout work.
+Its stable eight worker processes showed no churn, stderr stayed empty, and
+the lock/source/command identities matched commit `97415b0`. It nevertheless
+produced no metric or checkpoint because validation was full-manifest atomic
+and had no per-episode heartbeat.
+
+The run was intentionally interrupted before training after an independent
+audit found a real runtime-semantics bug:
+
+```text
+configured global_every_steps: 3
+old actual modes: GLOBAL, FAST, FAST, FAST, GLOBAL
+specified modes:  GLOBAL, FAST, FAST, GLOBAL
+optimizer updates: 0
+metrics/checkpoints: none
+terminal state: failed / KeyboardInterrupt
+launchd restarts: 0
+```
+
+The bug inserted a third stale ROI-only frame, increasing tracker drift and
+identity/lifecycle risk. Historical results labelled “cadence three” therefore
+measured actual cadence four. They remain evidence for that old behavior but
+are not comparable selector/reference evidence for the corrected runtime.
+Rollout validation protocol is now 11; simulator v4, measurement protocol 5,
+and selection metric 6 are unchanged.
+
+The repaired runtime now:
+
+- treats `global_every_steps` as the complete distance between global frames
+  and rejects zero, non-integral, or boolean values;
+- regression-tests the exact `GLOBAL, FAST, FAST, GLOBAL` sequence;
+- atomically writes `training_progress.json` and flushes one stdout heartbeat
+  per validation episode with phase, counts, timings, PID, seed/scenario, and
+  protocol hash while keeping partial results out of checkpoint selection;
+- starts the training iterator/workers only when the first training draw is
+  required, not during initial/handoff validation;
+- checks all floating/complex parameters and optimizer tensors immediately
+  after every successful Adam step, including finite nonnegative scalar step
+  counters; and
+- rejects nonfinite model buffers/weights, optimizer/scheduler state, or
+  invalid step counters before atomic checkpoint replacement and before load
+  mutates a destination. Tests prove an existing checkpoint stays byte
+  identical after a corrupt overwrite attempt.
+
+Two current-tree wiring runs completed:
+
+```text
+runs/20260803-095310-v5-cadence-progress-cpu-smoke/
+  device: CPU
+  actual updates: 1 causal
+  loss: 888.003357
+  raw/applied gradient norm: 15085.8096 / 1.0000
+  trajectory/fast/objective support: 32 / 32 / 3
+  skipped draws: 0
+  elapsed: 123.94 s
+  terminal state: completed
+  selection: unsupported random initialization; no promotion
+
+runs/20260803-095618-v5-poststep-mps-host-smoke/
+  device: host MPS, PyTorch 2.10.0
+  actual updates: 1 RGB measurement
+  loss: 911.012146
+  raw/applied gradient norm: 22329.9609 / 1.0000
+  skipped draws: 0
+  elapsed: 43.16 s
+  terminal state: completed
+  selection: unusable random initialization; no promotion
+```
+
+Both runs are finite-state/progress wiring evidence only. Their random-model
+losses and unsupported selectors are not accuracy results. The CPU run's
+`training_progress.json` ended `validation_complete` with exact seed/scenario
+and protocol hash; the host MPS run persisted a finite `last.pt`.
+
+Final current-tree quality gate:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus ruff format .
+PYTHONPATH=. conda run --no-capture-output -n orpheus ruff check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q \
+  tests/unit/test_config.py tests/unit/test_scheduler.py \
+  tests/unit/test_training_schedule.py \
+  tests/integration/test_rgb_online_loop.py \
+  tests/integration/test_checkpoint_roundtrip.py \
+  tests/integration/test_trainer_checkpoint_integrity.py
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus pytest -q \
+  tests/integration/test_rgb_measurements.py \
+  tests/unit/test_modal_dynamics.py \
+  tests/unit/test_evaluation_parameter_update_metrics.py \
+  tests/unit/test_association.py
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-v5-audit-pycache PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus python -m compileall -q \
+  train.py evaluate.py demo.py scripts world_model tests
+git diff --check
+```
+
+```text
+Ruff format: 182 files formatted/already formatted
+Ruff lint: all checks passed
+affected scheduler/config/trainer/checkpoint tests: 252 passed in 66.88 s
+full sandbox suite: 583 passed, 6 MPS-only skipped in 275.96 s
+host MPS families: 38 passed in 13.16 s
+compileall: passed
+```
+
+The first direct MPS smoke inside the restricted sandbox failed before model
+construction because that process reported MPS compiled but unavailable. The
+same command rerun on the host completed successfully as recorded above; no
+dependency or PyTorch installation was changed.
 
 ## 2026-08-03 — initialization-support and launch-failure audit
 
@@ -921,8 +1041,9 @@ The complete artifact audit is
   at every horizon but remains at `0.200430 m` current position RMSE,
   `0.968753 m/s` velocity RMSE, `0.364040 m` one-second RMSE, and `0.320388`
   collision F1;
-- fixed physical scale, cadence-three global discovery, and the point/scale
-  observer improve scaled position, but the current 1.90M-parameter weights
+- fixed physical scale, the historical cadence-three configuration (actual
+  cadence four), and the point/scale observer improve scaled position, but the
+  current 1.90M-parameter weights
   received only 1,024 measurement episode draws and no accepted causal
   training;
 - the later change-point, outgoing, lateral, and gravity heads improve their
@@ -3199,18 +3320,20 @@ Matched runtime gates on fixed-scale seeds `100016–100017`:
 | six-frame global anchor | `0.963351 m` | `1.086428 m/s` | `0.844761 / 0.704927 / 0.745774 / 0.853151 / 1.007125 m` |
 | ROI component-scale ablation | `0.925932 m` | `1.308184 m/s` | `0.836798 / 0.710704 / 0.744329 / 0.849377 / 1.003551 m` |
 | global every frame | `0.936374 m` | `1.296193 m/s` | `0.841321 / 0.674488 / 0.678569 / 0.785979 / 1.001967 m` |
-| global every three frames | `0.906217 m` | `1.082334 m/s` | `0.780533 / 0.626639 / 0.650438 / 0.773491 / 1.007125 m` |
+| historical config value 3 (actual global every four frames) | `0.906217 m` | `1.082334 m/s` | `0.780533 / 0.626639 / 0.650438 / 0.773491 / 1.007125 m` |
 
 The ROI scale policy was rejected because velocity, detection, collision F1,
 and calibration regressed. It remains implemented behind a disabled,
-crop-boundary-gated configuration flag. Global cadence three retained two fast
-ROI frames per cycle and improved current position, 0.10–0.75-second
+crop-boundary-gated configuration flag. The policy then labelled cadence three
+actually retained three fast ROI frames per cycle and improved current
+position, 0.10–0.75-second
 forecasts, detection, collision F1, and coverage. A disjoint confirmation on
 seeds `100018–100019` improved current RMSE from `1.244437` to `1.165912 m`,
 velocity from `0.996642` to `0.889775 m/s`, and 0.10–0.75-second forecasts by
 `3.4–9.0%`; one-second error was unchanged. Nominal 90% coverage worsened on
-that harder pair, so cadence three is the scaled default but not yet a reserved
-test promotion.
+that harder pair. This selected a denser historical policy, not the corrected
+exact three-frame cadence; the 3 August protocol-11 audit supersedes the
+counter semantics.
 
 Closed-loop window sampling previously allowed late collision-conditioned
 windows with no valid future horizon. One such step consumed `172 s` with
@@ -3228,7 +3351,7 @@ Primary artifacts:
   `runs/20260728-223558-scaled-fixed-scale-transfer-1k-v1/checkpoints/best_measurement.pt`;
 - fixed-scale base report:
   `runs/20260728-223558-scaled-fixed-scale-transfer-1k-v1/evaluation/20260728-225136-fixed-scale-select2-offset16/report.md`;
-- cadence-three reports:
+- historical cadence-three reports (actual cadence four):
   `runs/20260728-231250-scaled-global-cadence3-ablation-v1/evaluation/20260728-232212-global-cadence3-select2-offset16/report.md`
   and
   `runs/20260728-231250-scaled-global-cadence3-ablation-v1/evaluation/20260728-233559-global-cadence3-confirm2-offset18/report.md`;
@@ -3258,7 +3381,8 @@ The sampler-corrected continuation was extended to a safe step-16 checkpoint.
 Steps 10–16 took about 35 minutes on MPS; individual two-step graphs ranged
 from roughly 6.5 to 10 minutes depending on object/interaction density. Step 16
 slightly improved current position and velocity versus the unchanged
-cadence-three weights, but regressed 0.25/0.50/0.75/1.00-second RMSE from
+historical cadence-three weights (actual cadence four), but regressed
+0.25/0.50/0.75/1.00-second RMSE from
 `0.626639/0.650438/0.773491/1.007125 m` to
 `0.627064/0.652029/0.776092/1.008927 m`. Detection, collision F1, and identity
 counts were unchanged. It is rejected, and the interrupted target of step 32
@@ -3291,7 +3415,8 @@ hardware result.
 
 ## 2026-07-29 — persistent point/scale trajectory depth correction
 
-The cadence-three scaled observer exposed a structural history limitation:
+The historical cadence-three (actual cadence-four) scaled observer exposed a
+structural history limitation:
 the existing five-frame point/velocity ring could never retain three global
 scale measurements because the two intervening centre-only ROI frames evicted
 the previous scale anchor. The RGB observer now keeps two bounded rings per
@@ -3310,8 +3435,9 @@ persistent ID:
   through the ordinary robust diagonal filter.
 
 No model weights, simulator state, future RGB, or history re-encoding are used.
-The runtime-ablation checkpoint contains the unchanged cadence-three weights
-and explicit new configuration semantics:
+The runtime-ablation checkpoint contains the unchanged historical
+cadence-three weights (actual cadence four) and explicit new configuration
+semantics:
 
 `runs/20260729-084712-scaled-point-scale-trajectory-v1/checkpoints/runtime_ablation.pt`.
 
@@ -3319,9 +3445,9 @@ Paired MPS results:
 
 | Evidence | Current RMSE m | Velocity RMSE m/s | 0.10 / 0.25 / 0.50 / 0.75 / 1.00 s RMSE m | F1 | Detection R/P | Coverage 90 |
 | --- | ---: | ---: | --- | ---: | --- | ---: |
-| offset-16 cadence-three baseline | `0.906217` | `1.082334` | `0.780533 / 0.626639 / 0.650438 / 0.773491 / 1.007125` | `0.357143` | `0.694444 / 0.568182` | `0.737805` |
+| offset-16 historical cadence-three baseline (actual four) | `0.906217` | `1.082334` | `0.780533 / 0.626639 / 0.650438 / 0.773491 / 1.007125` | `0.357143` | `0.694444 / 0.568182` | `0.737805` |
 | offset-16 trajectory candidate | `0.684258` | `1.148529` | `0.698125 / 0.526197 / 0.517001 / 0.562448 / 0.618672` | `0.271186` | `0.687500 / 0.480583` | `0.780204` |
-| offset-18 cadence-three baseline | `1.165912` | `0.889775` | `1.010213 / 0.877051 / 0.922522 / 0.988420 / 1.267293` | `0.190476` | `0.391667 / 0.345588` | `0.554667` |
+| offset-18 historical cadence-three baseline (actual four) | `1.165912` | `0.889775` | `1.010213 / 0.877051 / 0.922522 / 0.988420 / 1.267293` | `0.190476` | `0.391667 / 0.345588` | `0.554667` |
 | offset-18 quality-gated confirmation | `0.804367` | `0.986646` | `0.802223 / 0.630088 / 0.644967 / 0.693634 / 0.760509` | `0.078431` | `0.675000 / 0.455056` | `0.722522` |
 
 The position result repeats strongly: current RMSE improves by `24.5%` and

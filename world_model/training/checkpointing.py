@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 import random
 import subprocess
 from collections.abc import Mapping
 from copy import deepcopy
+from numbers import Real
 from pathlib import Path
 from typing import Any
 
@@ -546,7 +548,95 @@ def checkpoint_payload(
             else capture_git_metadata(root)
         ),
     }
+    _assert_finite_tensor_tree(payload["model_state"], root="model_state")
+    if payload["optimizer_state"] is not None:
+        _assert_finite_tensor_tree(
+            payload["optimizer_state"],
+            root="optimizer_state",
+        )
+        _assert_valid_optimizer_steps(
+            payload["optimizer_state"],
+            root="optimizer_state",
+        )
+    if payload["scheduler_state"] is not None:
+        _assert_finite_tensor_tree(
+            payload["scheduler_state"],
+            root="scheduler_state",
+        )
     return payload
+
+
+def _assert_finite_tensor_tree(value: Any, *, root: str) -> None:
+    """Reject non-finite floating state in a recursively nested tensor tree."""
+
+    pending: list[tuple[str, Any]] = [(root, value)]
+    named_tensors: list[tuple[str, torch.Tensor]] = []
+    while pending:
+        name, item = pending.pop()
+        if isinstance(item, torch.Tensor):
+            if item.is_floating_point() or item.is_complex():
+                named_tensors.append((name, item))
+            continue
+        if isinstance(item, Mapping):
+            pending.extend((f"{name}.{key}", child) for key, child in item.items())
+            continue
+        if isinstance(item, (list, tuple)):
+            pending.extend((f"{name}[{index}]", child) for index, child in enumerate(item))
+    tensors_by_device: dict[torch.device, list[tuple[str, torch.Tensor]]] = {}
+    for name, tensor in named_tensors:
+        tensors_by_device.setdefault(tensor.device, []).append((name, tensor))
+    for named_device_tensors in tensors_by_device.values():
+        finite = torch.stack(
+            [torch.isfinite(tensor).all() for _, tensor in named_device_tensors]
+        ).all()
+        if bool(finite):
+            continue
+        for name, tensor in named_device_tensors:
+            if not bool(torch.isfinite(tensor).all()):
+                raise FloatingPointError(f"tensor state {name!r} contains NaN or Inf")
+        raise AssertionError("nonfinite tensor group did not identify its offending tensor")
+
+
+def _assert_valid_optimizer_steps(value: Any, *, root: str) -> None:
+    """Require every optimizer step counter to be scalar, finite, and nonnegative."""
+
+    pending: list[tuple[str, Any]] = [(root, value)]
+    tensor_steps_by_device: dict[torch.device, list[tuple[str, Tensor]]] = {}
+    while pending:
+        name, item = pending.pop()
+        if isinstance(item, Mapping):
+            for key, child in item.items():
+                child_name = f"{name}.{key}"
+                if key == "step":
+                    if isinstance(child, Tensor):
+                        if child.numel() != 1:
+                            raise FloatingPointError(
+                                f"optimizer step {child_name!r} must be scalar"
+                            )
+                        tensor_steps_by_device.setdefault(child.device, []).append(
+                            (child_name, child)
+                        )
+                    elif isinstance(child, Real) and not isinstance(child, bool):
+                        if not math.isfinite(float(child)) or child < 0:
+                            raise FloatingPointError(f"optimizer step {child_name!r} is invalid")
+                    else:
+                        raise FloatingPointError(f"optimizer step {child_name!r} is not numeric")
+                pending.append((child_name, child))
+        elif isinstance(item, (list, tuple)):
+            pending.extend((f"{name}[{index}]", child) for index, child in enumerate(item))
+    for named_steps in tensor_steps_by_device.values():
+        valid = torch.stack(
+            [
+                (torch.isfinite(optimizer_step) & (optimizer_step >= 0)).all()
+                for _, optimizer_step in named_steps
+            ]
+        ).all()
+        if bool(valid):
+            continue
+        for name, optimizer_step in named_steps:
+            if not bool((torch.isfinite(optimizer_step) & (optimizer_step >= 0)).all()):
+                raise FloatingPointError(f"optimizer step {name!r} is invalid")
+        raise AssertionError("invalid optimizer step group did not identify its counter")
 
 
 def save_checkpoint(
@@ -603,6 +693,21 @@ def load_checkpoint(
     missing = required - set(payload)
     if missing:
         raise ValueError(f"Checkpoint is missing fields: {sorted(missing)}")
+    _assert_finite_tensor_tree(payload["model_state"], root="model_state")
+    if payload.get("optimizer_state") is not None:
+        _assert_finite_tensor_tree(
+            payload["optimizer_state"],
+            root="optimizer_state",
+        )
+        _assert_valid_optimizer_steps(
+            payload["optimizer_state"],
+            root="optimizer_state",
+        )
+    if payload.get("scheduler_state") is not None:
+        _assert_finite_tensor_tree(
+            payload["scheduler_state"],
+            root="scheduler_state",
+        )
     if expected_config is not None:
         validate_checkpoint_config(payload, expected_config)
     model.load_state_dict(payload["model_state"])
@@ -660,6 +765,7 @@ def load_model_weights(
     missing = required - set(payload)
     if missing:
         raise ValueError(f"Checkpoint is missing fields: {sorted(missing)}")
+    _assert_finite_tensor_tree(payload["model_state"], root="model_state")
     if expected_config is not None:
         validate_checkpoint_config(payload, expected_config)
     model.load_state_dict(payload["model_state"])

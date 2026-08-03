@@ -131,6 +131,119 @@ def test_checkpoint_roundtrip_preserves_trained_state(tmp_path):
         validate_checkpoint_config(payload, incompatible)
 
 
+def test_checkpoint_save_rejects_nonfinite_model_and_optimizer_state(tmp_path) -> None:
+    config = _small_config()
+    model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate)
+    parameter = next(model.parameters())
+    existing_target = save_checkpoint(
+        tmp_path / "existing.pt",
+        model=model,
+        optimizer=optimizer,
+        config=config,
+        step=0,
+    )
+    existing_payload = existing_target.read_bytes()
+
+    with torch.no_grad():
+        parameter.flatten()[0] = float("nan")
+    with pytest.raises(FloatingPointError, match="model_state.*NaN or Inf"):
+        save_checkpoint(
+            existing_target,
+            model=model,
+            optimizer=optimizer,
+            config=config,
+            step=1,
+        )
+    assert existing_target.read_bytes() == existing_payload
+    model_target = tmp_path / "nonfinite-model.pt"
+    with pytest.raises(FloatingPointError, match="model_state.*NaN or Inf"):
+        save_checkpoint(
+            model_target,
+            model=model,
+            optimizer=optimizer,
+            config=config,
+            step=1,
+        )
+    assert not model_target.exists()
+
+    with torch.no_grad():
+        parameter.flatten()[0] = 0.0
+    buffer = next(
+        buffer for buffer in model.buffers() if buffer.is_floating_point() and buffer.numel() > 0
+    )
+    original_buffer_value = buffer.flatten()[0].item()
+    buffer.flatten()[0] = float("nan")
+    buffer_target = tmp_path / "nonfinite-buffer.pt"
+    with pytest.raises(FloatingPointError, match="model_state.*NaN or Inf"):
+        save_checkpoint(
+            buffer_target,
+            model=model,
+            optimizer=optimizer,
+            config=config,
+            step=1,
+        )
+    assert not buffer_target.exists()
+    buffer.flatten()[0] = original_buffer_value
+
+    optimizer.state[parameter] = {
+        "step": torch.tensor(1.0),
+        "exp_avg": torch.zeros_like(parameter),
+        "exp_avg_sq": torch.zeros_like(parameter),
+    }
+    optimizer.state[parameter]["exp_avg"].flatten()[0] = float("inf")
+    optimizer_target = tmp_path / "nonfinite-optimizer.pt"
+    with pytest.raises(FloatingPointError, match="optimizer_state.*NaN or Inf"):
+        save_checkpoint(
+            optimizer_target,
+            model=model,
+            optimizer=optimizer,
+            config=config,
+            step=1,
+        )
+    assert not optimizer_target.exists()
+
+    optimizer.state[parameter]["exp_avg"].zero_()
+    optimizer.state[parameter]["step"].fill_(-1.0)
+    step_target = tmp_path / "negative-optimizer-step.pt"
+    with pytest.raises(FloatingPointError, match="optimizer step.*invalid"):
+        save_checkpoint(
+            step_target,
+            model=model,
+            optimizer=optimizer,
+            config=config,
+            step=1,
+        )
+    assert not step_target.exists()
+
+
+def test_checkpoint_load_rejects_nonfinite_state_before_mutating_model(tmp_path) -> None:
+    config = _small_config()
+    source_model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
+    payload = checkpoint_payload(
+        model=source_model,
+        optimizer=None,
+        scheduler=None,
+        config=config,
+        step=1,
+        metrics={},
+        device="cpu",
+    )
+    tensor_name = next(
+        name for name, tensor in payload["model_state"].items() if tensor.is_floating_point()
+    )
+    payload["model_state"][tensor_name].flatten()[0] = float("nan")
+    source = tmp_path / "corrupt.pt"
+    torch.save(payload, source)
+
+    target_model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
+    original = {name: tensor.detach().clone() for name, tensor in target_model.state_dict().items()}
+    with pytest.raises(FloatingPointError, match="model_state.*NaN or Inf"):
+        load_checkpoint(source, model=target_model)
+    for name, tensor in target_model.state_dict().items():
+        torch.testing.assert_close(tensor, original[name])
+
+
 def test_checkpoint_rng_restore_uses_cpu_generator_state(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,

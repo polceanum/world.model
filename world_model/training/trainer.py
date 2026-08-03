@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import random
 import re
 import shutil
@@ -28,6 +29,8 @@ from world_model.datasets import (
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator.sphere_world import SphereWorldConfig
 from world_model.training.checkpointing import (
+    _assert_finite_tensor_tree,
+    _assert_valid_optimizer_steps,
     capture_git_metadata,
     load_checkpoint,
     load_model_weights,
@@ -62,7 +65,7 @@ _ROLLOUT_SELECTION_METRIC_VERSION = 6.0
 _ROLLOUT_SELECTION_RELATIVE_GUARDRAIL = 0.02
 _ROLLOUT_SELECTION_COVERAGE_TOLERANCE = 0.005
 _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE = 0.02
-_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 10
+_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 11
 _NOMINAL_POSITION_COVERAGE = 0.90
 _MEASUREMENT_SELECTION_MIN_DELTA = 1.0e-5
 _MEASUREMENT_SELECTION_METRIC_VERSION = 5.0
@@ -2462,6 +2465,32 @@ def _clip_training_gradients(
     }
 
 
+def _assert_finite_optimizer_update(
+    model: OnlineWorldModel,
+    optimizer: torch.optim.Optimizer,
+) -> None:
+    """Reject a non-finite parameter or optimizer state immediately post-step."""
+
+    named_parameters = dict(model.named_parameters())
+    _assert_finite_tensor_tree(
+        named_parameters,
+        root="model_parameters",
+    )
+    parameter_names = {id(parameter): name for name, parameter in named_parameters.items()}
+    named_optimizer_state = {
+        parameter_names.get(id(parameter), f"unnamed_parameter_{index}"): state
+        for index, (parameter, state) in enumerate(optimizer.state.items())
+    }
+    _assert_finite_tensor_tree(
+        named_optimizer_state,
+        root="optimizer_state",
+    )
+    _assert_valid_optimizer_steps(
+        named_optimizer_state,
+        root="optimizer_state",
+    )
+
+
 def _rollout_validation_protocol_is_compatible(
     payload: Mapping[str, Any],
     config: OrpheusConfig,
@@ -2908,6 +2937,66 @@ def _aggregate_physical_validation_metrics(
     }
 
 
+def _validation_protocol_progress_fields(
+    config: OrpheusConfig,
+    *,
+    closed_loop: bool,
+) -> dict[str, str]:
+    if closed_loop:
+        return {
+            "protocol_kind": "rollout",
+            "protocol_hash": _rollout_validation_protocol_hash(config),
+        }
+    return {
+        "protocol_kind": "measurement",
+        "protocol_hash": _measurement_validation_protocol_hash(config),
+    }
+
+
+def _write_validation_progress(
+    path: Path,
+    *,
+    config: OrpheusConfig,
+    split: str,
+    closed_loop: bool,
+    state: str,
+    completed_batches: int,
+    total_batches: int | None,
+    completed_episodes: int,
+    total_episodes: int | None,
+    elapsed_seconds: float,
+    last_batch_seconds: float | None = None,
+    last_seed: int | None = None,
+    last_scenario: str | None = None,
+    exception_type: str | None = None,
+) -> None:
+    payload: dict[str, Any] = {
+        "state": state,
+        "updated_utc": datetime.now(timezone.utc).isoformat(),
+        "pid": os.getpid(),
+        "split": split,
+        "validation_kind": "closed_loop" if closed_loop else "measurement",
+        "completed_batches": completed_batches,
+        "total_batches": total_batches,
+        "completed_episodes": completed_episodes,
+        "total_episodes": total_episodes,
+        "elapsed_seconds": elapsed_seconds,
+        **_validation_protocol_progress_fields(
+            config,
+            closed_loop=closed_loop,
+        ),
+    }
+    if last_batch_seconds is not None:
+        payload["last_batch_seconds"] = last_batch_seconds
+    if last_seed is not None:
+        payload["last_seed"] = last_seed
+    if last_scenario is not None:
+        payload["last_scenario"] = last_scenario
+    if exception_type is not None:
+        payload["exception_type"] = exception_type
+    atomic_write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 @torch.no_grad()
 def _validation_loader_result(
     model: OnlineWorldModel,
@@ -2916,6 +3005,8 @@ def _validation_loader_result(
     *,
     device: torch.device,
     closed_loop: bool,
+    progress_path: Path | None = None,
+    progress_split: str = "validation",
 ) -> TrainingBatchResult:
     """Evaluate every configured validation episode exactly once."""
 
@@ -2924,39 +3015,118 @@ def _validation_loader_result(
     scenarios: list[str] = []
     seeds: list[int] = []
     attribution_available = True
-    for raw_batch in loader:
-        _check_batch_major(raw_batch)
-        batch = move_batch_to_device(raw_batch, device)
-        results.append(
-            _validation_step(
-                model,
-                batch,
-                config,
-                closed_loop=closed_loop,
-            )
+    validation_started = time.perf_counter()
+    completed_episodes = 0
+    try:
+        total_batches: int | None = len(loader)
+    except TypeError:
+        total_batches = None
+    dataset = getattr(loader, "dataset", None)
+    try:
+        total_episodes: int | None = len(dataset) if dataset is not None else None
+    except TypeError:
+        total_episodes = None
+    if progress_path is not None:
+        _write_validation_progress(
+            progress_path,
+            config=config,
+            split=progress_split,
+            closed_loop=closed_loop,
+            state="validation_running",
+            completed_batches=0,
+            total_batches=total_batches,
+            completed_episodes=0,
+            total_episodes=total_episodes,
+            elapsed_seconds=0.0,
         )
-        if not bool(torch.isfinite(results[-1].total_loss)):
-            phase = "closed-loop" if closed_loop else "measurement"
-            raise FloatingPointError(f"nonfinite {phase} validation loss")
-        batch_sizes.append(float(batch["rgb"].shape[0]))
-        metadata = raw_batch.get("metadata")
-        scenario_values = metadata.get("scenario") if isinstance(metadata, Mapping) else None
-        seed_values = raw_batch.get("seed")
-        if (
-            not isinstance(scenario_values, list)
-            or len(scenario_values) != 1
-            or not isinstance(seed_values, Tensor)
-            or seed_values.numel() != 1
-        ):
-            # Production validation loaders are deliberately batch-one and
-            # always provide this metadata.  Keep the aggregation helper
-            # usable for synthetic/custom loaders while making the absence of
-            # per-episode attribution explicit instead of rejecting otherwise
-            # valid pooled metrics.
-            attribution_available = False
-        else:
-            scenarios.append(str(scenario_values[0]))
-            seeds.append(int(seed_values.item()))
+    try:
+        for batch_index, raw_batch in enumerate(loader, start=1):
+            batch_started = time.perf_counter()
+            _check_batch_major(raw_batch)
+            batch = move_batch_to_device(raw_batch, device)
+            results.append(
+                _validation_step(
+                    model,
+                    batch,
+                    config,
+                    closed_loop=closed_loop,
+                )
+            )
+            if not bool(torch.isfinite(results[-1].total_loss)):
+                phase = "closed-loop" if closed_loop else "measurement"
+                raise FloatingPointError(f"nonfinite {phase} validation loss")
+            batch_size = int(batch["rgb"].shape[0])
+            batch_sizes.append(float(batch_size))
+            completed_episodes += batch_size
+            metadata = raw_batch.get("metadata")
+            scenario_values = metadata.get("scenario") if isinstance(metadata, Mapping) else None
+            seed_values = raw_batch.get("seed")
+            last_scenario = (
+                str(scenario_values[0])
+                if isinstance(scenario_values, list) and len(scenario_values) == 1
+                else None
+            )
+            last_seed = (
+                int(seed_values.item())
+                if isinstance(seed_values, Tensor) and seed_values.numel() == 1
+                else None
+            )
+            if last_scenario is None or last_seed is None:
+                # Production validation loaders are deliberately batch-one and
+                # always provide this metadata.  Keep the aggregation helper
+                # usable for synthetic/custom loaders while making the absence
+                # of per-episode attribution explicit instead of rejecting
+                # otherwise valid pooled metrics.
+                attribution_available = False
+            else:
+                scenarios.append(last_scenario)
+                seeds.append(last_seed)
+            elapsed = time.perf_counter() - validation_started
+            batch_seconds = time.perf_counter() - batch_started
+            print(
+                "validation progress "
+                f"split={progress_split} "
+                f"kind={'closed_loop' if closed_loop else 'measurement'} "
+                f"batches={batch_index}/{total_batches if total_batches is not None else '?'} "
+                f"episodes={completed_episodes}/"
+                f"{total_episodes if total_episodes is not None else '?'} "
+                f"last_seed={last_seed if last_seed is not None else '?'} "
+                f"last_scenario={last_scenario if last_scenario is not None else '?'} "
+                f"batch_seconds={batch_seconds:.3f} elapsed_seconds={elapsed:.3f}",
+                flush=True,
+            )
+            if progress_path is not None:
+                _write_validation_progress(
+                    progress_path,
+                    config=config,
+                    split=progress_split,
+                    closed_loop=closed_loop,
+                    state="validation_running",
+                    completed_batches=batch_index,
+                    total_batches=total_batches,
+                    completed_episodes=completed_episodes,
+                    total_episodes=total_episodes,
+                    elapsed_seconds=elapsed,
+                    last_batch_seconds=batch_seconds,
+                    last_seed=last_seed,
+                    last_scenario=last_scenario,
+                )
+    except BaseException as error:
+        if progress_path is not None:
+            _write_validation_progress(
+                progress_path,
+                config=config,
+                split=progress_split,
+                closed_loop=closed_loop,
+                state="validation_interrupted",
+                completed_batches=len(results),
+                total_batches=total_batches,
+                completed_episodes=completed_episodes,
+                total_episodes=total_episodes,
+                elapsed_seconds=time.perf_counter() - validation_started,
+                exception_type=type(error).__name__,
+            )
+        raise
     aggregate = _mean_batch_results(results, weights=batch_sizes)
     if closed_loop:
         aggregate.metrics.update(
@@ -3027,6 +3197,21 @@ def _validation_loader_result(
                 for name, value in derived.items():
                     if name.startswith("validation_"):
                         aggregate.metrics[f"seed_{seed}_{name}"] = value
+    if progress_path is not None:
+        _write_validation_progress(
+            progress_path,
+            config=config,
+            split=progress_split,
+            closed_loop=closed_loop,
+            state="validation_complete",
+            completed_batches=len(results),
+            total_batches=total_batches,
+            completed_episodes=completed_episodes,
+            total_episodes=total_episodes,
+            elapsed_seconds=time.perf_counter() - validation_started,
+            last_seed=seeds[-1] if seeds else None,
+            last_scenario=scenarios[-1] if scenarios else None,
+        )
     return aggregate
 
 
@@ -3706,24 +3891,6 @@ def train_from_config(
     else:
         training_data_draw_step = start_step
 
-    remaining_optimizer_updates = config.training.steps - start_step
-    maximum_remaining_batch_draws = remaining_optimizer_updates * (
-        config.training.maximum_no_gradient_batches_per_update + 1
-    )
-    train_loader = _make_loader(
-        config,
-        split="train",
-        episodes=config.training.train_episodes,
-        shuffle=not config.training.fixed_dataset,
-        start_step=training_data_draw_step,
-        stop_step=training_data_draw_step + maximum_remaining_batch_draws,
-    )
-    train_iterator = iter(train_loader)
-    train_batches_per_epoch = math.ceil(
-        config.training.train_episodes
-        / min(config.training.batch_size, config.training.train_episodes)
-    )
-
     logger = MetricsLogger(run_directory / "metrics.jsonl")
     last_metrics: dict[str, float | str] = {}
     started = time.perf_counter()
@@ -3777,6 +3944,8 @@ def train_from_config(
             config,
             device=device,
             closed_loop=True,
+            progress_path=run_directory / "training_progress.json",
+            progress_split=split,
         )
         validation_metrics = _result_metrics(
             validation,
@@ -4270,6 +4439,8 @@ def train_from_config(
             config,
             device=device,
             closed_loop=False,
+            progress_path=run_directory / "training_progress.json",
+            progress_split=split,
         )
         validation_metrics = _result_metrics(
             validation,
@@ -4511,6 +4682,27 @@ def train_from_config(
         not measurement_handoff_completed
         and start_step <= config.training.rgb_pretrain_steps < config.training.steps
     )
+    # Do not spawn/prefetch training workers while imported or resumed weights
+    # are still undergoing the expensive atomic initialization validations.
+    # Apart from wasting memory, those unused workers obscured whether a long
+    # step-zero validation was making progress.
+    remaining_optimizer_updates = config.training.steps - start_step
+    maximum_remaining_batch_draws = remaining_optimizer_updates * (
+        config.training.maximum_no_gradient_batches_per_update + 1
+    )
+    train_loader = _make_loader(
+        config,
+        split="train",
+        episodes=config.training.train_episodes,
+        shuffle=not config.training.fixed_dataset,
+        start_step=training_data_draw_step,
+        stop_step=training_data_draw_step + maximum_remaining_batch_draws,
+    )
+    train_iterator: Iterator[dict[str, Any]] | None = None
+    train_batches_per_epoch = math.ceil(
+        config.training.train_episodes
+        / min(config.training.batch_size, config.training.train_episodes)
+    )
 
     for step in range(start_step, config.training.steps):
         restored_measurement_candidate = False
@@ -4731,7 +4923,10 @@ def train_from_config(
             trainable=global_perception_trainable,
         )
         no_gradient_attempts = 0
+        post_step_finite_check_seconds = 0.0
         while True:
+            if train_iterator is None:
+                train_iterator = iter(train_loader)
             raw_batch, train_iterator = _next_batch(train_loader, train_iterator)
             training_data_draw_step += 1
             _check_batch_major(raw_batch)
@@ -4822,6 +5017,13 @@ def train_from_config(
             effective_gradient_norm = gradient_diagnostics["gradient_norm_pre_global_clip"]
             if _has_effective_gradient(effective_gradient_norm, config):
                 optimizer.step()
+                finite_check_started = time.perf_counter()
+                try:
+                    _assert_finite_optimizer_update(model, optimizer)
+                except FloatingPointError as error:
+                    optimizer.zero_grad(set_to_none=True)
+                    raise FloatingPointError(f"{error} after optimiser step {step}") from error
+                post_step_finite_check_seconds = time.perf_counter() - finite_check_started
                 support_collapse_rollback_at_checkpoint = False
                 break
 
@@ -4888,6 +5090,7 @@ def train_from_config(
         last_metrics["training_data_draw_step"] = float(training_data_draw_step)
         last_metrics["no_gradient_batches_before_update"] = float(no_gradient_attempts)
         last_metrics["skipped_no_gradient_batches"] = float(skipped_no_gradient_batches)
+        last_metrics["post_step_finite_check_seconds"] = post_step_finite_check_seconds
         episode_seeds = raw_batch.get("seed")
         if isinstance(episode_seeds, Tensor):
             last_metrics["episode_seeds"] = ",".join(

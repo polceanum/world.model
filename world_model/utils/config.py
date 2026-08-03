@@ -457,6 +457,12 @@ class OrpheusConfig:
             if not math.isfinite(value) or value < 0:
                 raise ValueError(f"model.dynamics.{name} must be finite and nonnegative")
         if (
+            isinstance(model.rgb.global_every_steps, bool)
+            or not isinstance(model.rgb.global_every_steps, int)
+            or model.rgb.global_every_steps <= 0
+        ):
+            raise ValueError("model.rgb.global_every_steps must be a positive integer")
+        if (
             not math.isfinite(model.rgb.temporal_velocity_min_dt)
             or model.rgb.temporal_velocity_min_dt <= 0
         ):

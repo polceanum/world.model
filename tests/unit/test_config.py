@@ -155,6 +155,7 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
 @pytest.mark.parametrize(
     ("key", "value"),
     [
+        ("global_every_steps", 0),
         ("temporal_velocity_min_dt", 0.0),
         ("temporal_velocity_history_size", 2),
         ("temporal_velocity_min_samples", 4),

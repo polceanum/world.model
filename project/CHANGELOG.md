@@ -2,6 +2,43 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-03 cadence, progress, and finite-state collapse audit
+
+- Audited and intentionally stopped
+  `runs/20260803-084843-v4-balanced-qualification/` before its first optimizer
+  update. It was the original one-shot process, actively computing finite CPU
+  dynamics with stable workers and no stderr/relaunch, but emitted no partial
+  metrics during roughly 44 minutes of atomic initial validation. Its durable
+  terminal state truthfully records `KeyboardInterrupt`; it supplies no
+  convergence evidence.
+- Fixed an off-by-one scheduler bug: `global_every_steps=3` previously emitted
+  `GLOBAL, FAST, FAST, FAST, GLOBAL` despite the specification requiring two
+  intervening fast updates. Cadence three is now exactly
+  `GLOBAL, FAST, FAST, GLOBAL`, and configuration requires a positive integer.
+  Historical “cadence-three” reports are corrected to actual cadence four.
+- Bumped rollout validation protocol 10 to 11 because identical YAML now
+  produces different persistent observations and rollouts. Measurement
+  protocol 5, simulator v4, and selection metric 6 remain unchanged.
+- Added atomic per-episode `training_progress.json` and flushed validation
+  heartbeats with phase/kind, completed/total counts, timings, PID, seed,
+  scenario, and protocol hash. Interrupted validation records its exception
+  type without turning partial results into selector evidence.
+- Delayed training iterator/worker startup until the first real data draw so
+  unused prefetch workers do not consume resources or obscure initial
+  validation.
+- Added grouped per-device finite-state checks immediately after every Adam
+  step. Checkpoint save/load now validates model parameters/buffers,
+  optimizer/scheduler tensors, and scalar finite nonnegative optimizer steps
+  before replacement or destination mutation. Regression tests cover NaN
+  weights/buffers, Inf moments, negative steps, non-mutating corrupt loads, and
+  byte-preserving failed overwrites.
+- Completed one finite corrected CPU causal update at
+  `runs/20260803-095310-v5-cadence-progress-cpu-smoke/` and one finite host-MPS
+  measurement update at
+  `runs/20260803-095618-v5-poststep-mps-host-smoke/`. Both are wiring evidence
+  from random initialization and neither is promoted.
+- Advanced the authoritative specification to version 1.10 and added ADR-073.
+
 ### 2026-08-03 initialization-support and launch-failure audit
 
 - Proved that

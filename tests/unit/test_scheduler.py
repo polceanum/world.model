@@ -111,3 +111,42 @@ def test_scheduler_recovers_after_consecutive_association_failures() -> None:
 
     scheduler.record("camera", ObservationMode.RECOVERY, association_failures=0)
     assert scheduler.state_for("camera").association_failures == 0
+
+
+def test_scheduler_global_cadence_counts_frames_including_global_frame() -> None:
+    scheduler = ObservationScheduler(
+        global_every_steps=3,
+        uncertainty_threshold=4.0,
+        surprise_threshold=8.0,
+        failure_threshold=2,
+    )
+    packet = _packet()
+    belief, predicted = _belief_and_prediction(position_std=0.1)
+
+    modes = [
+        scheduler.choose(
+            packet=packet,
+            belief=None,
+            predicted=None,
+        )
+    ]
+    scheduler.record("camera", modes[-1])
+    for _ in range(6):
+        modes.append(
+            scheduler.choose(
+                packet=packet,
+                belief=belief,
+                predicted=predicted,
+            )
+        )
+        scheduler.record("camera", modes[-1])
+
+    assert modes == [
+        ObservationMode.GLOBAL_DISCOVERY,
+        ObservationMode.FAST_ROI,
+        ObservationMode.FAST_ROI,
+        ObservationMode.GLOBAL_DISCOVERY,
+        ObservationMode.FAST_ROI,
+        ObservationMode.FAST_ROI,
+        ObservationMode.GLOBAL_DISCOVERY,
+    ]
