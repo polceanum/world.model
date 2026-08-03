@@ -48,6 +48,13 @@
   clean checkpoint provenance, and complete terminal validation. Its slightly
   better tiny pooled score was correctly rejected for coverage and short-y
   guardrail regressions; it is not a promotion claim.
+- Pushed the clean-smoke evidence as `baca6a8` and launched the corrected
+  3,072-update balanced qualification at
+  `runs/20260803-000858-v3-collapse-repair-qualification/` under
+  launchd/caffeinate. Metadata records clean pushed source, MPS measurement,
+  CPU causal execution, RGB-only runtime, oracle disabled, two-frame birth
+  confirmation, and both local gradient caps. Launch health is not a
+  convergence result.
 - Advanced the specification to version 1.8.
 
 ### 2026-08-02 supported-causal and convergence-stability audit

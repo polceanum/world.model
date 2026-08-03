@@ -62,9 +62,14 @@
   local gradient caps, source-bound ROI association, tentative births,
   checkpointing, and terminal validation at
   `runs/20260803-000212-collapse-repair-host-smoke/`.
-- [ ] Launch a new timestamped medium balanced qualification only after that
+- [x] Launch a new timestamped medium balanced qualification only after that
   host smoke passes; require at least four comparable corrected-protocol
-  validations before judging trend or plateau.
+  validations before judging trend or plateau. Active run:
+  `runs/20260803-000858-v3-collapse-repair-qualification/`.
+- [ ] Inspect the corrected qualification at steps 1536, 2048, 2560, and 3072
+  for support, perception/interaction/global gradient balance, lifecycle
+  precision/coverage, identity switches, collisions, calibration, every
+  horizon, and every scenario slice. Stop on a repeated structural collapse.
 - [ ] If identity churn persists after the structural repair, add an explicit
   supervised pairwise association-margin objective and test duplicate
   suppression against missed live tracks; do not tune appearance weight alone.

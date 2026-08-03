@@ -16,8 +16,10 @@ first v3 qualification is preserved but stopped after its first causal
 validation exposed lifecycle/identity collapse and perception-gradient
 starvation; the repaired runtime passes complete regression, host MPS device,
 and clean hybrid MPS/CPU end-to-end wiring checks, but no repaired v3
-qualification, convergence result, or broad promotion exists yet; collision,
-occlusion, identification, convergence, and full acceptance remain open
+qualification result, convergence result, or broad promotion exists yet; a
+fresh repaired eight-scenario qualification is active from clean pushed source;
+collision, occlusion, identification, convergence, and full acceptance remain
+open
 
 ## 2026-08-03 — v3 collapse audit and lifecycle/identity repair
 
@@ -173,6 +175,51 @@ persisted all six pooled/scenario reasons, retained the safe incumbent, and
 reported zero distance-gated identity switches. This is clean execution and
 guardrail evidence, not a promoted accuracy result. A new balanced medium
 qualification remains the next convergence test.
+
+The corrected medium qualification was launched only after the clean smoke and
+evidence commit were pushed:
+
+```bash
+launchctl submit \
+  -l com.polceanum.orpheus.v3-repair-20260803-000858 \
+  -o /private/tmp/20260803-000858-v3-collapse-repair-qualification.stdout.log \
+  -e /private/tmp/20260803-000858-v3-collapse-repair-qualification.stderr.log \
+  -- /usr/bin/caffeinate -dimsu \
+  /usr/bin/env PYTHONPATH=/Users/mike/Work/world.model \
+  /usr/local/Caskroom/miniforge/base/envs/orpheus/bin/python \
+  /Users/mike/Work/world.model/train.py \
+  --config /Users/mike/Work/world.model/configs/sustained_accuracy_mps_v3.yaml \
+  --initialize-from \
+  /Users/mike/Work/world.model/runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/best_measurement.pt \
+  --run-name 20260803-000858-v3-collapse-repair-qualification \
+  --device mps \
+  --set training.steps=3072 \
+  --set training.rgb_pretrain_steps=1024 \
+  --set training.train_episodes=6144 \
+  --set training.checkpoint_every=64
+```
+
+```text
+run: runs/20260803-000858-v3-collapse-repair-qualification/
+source: baca6a8cc418a9f1a8e6321124a46026cfcc0004, clean and pushed
+updates: 3,072 = 1,024 paired RGB + 2,048 supported causal
+episode draws: 6,144, batch 2
+scenarios: eight unique balanced families
+validation: 32 fixed episodes, eight anchors, every 512 updates
+devices: MPS paired RGB / CPU causal
+lifecycle: two confirmations within 0.5 m
+gradient caps: perception 1.0 / interaction 1.0 / whole model 2.0
+global causal perception window: 512 updates
+```
+
+Immediate host verification found no overlapping old trainer. Launchd reported
+the new job running as PID `70085`; process inspection showed active initial
+validation at about `297%` CPU. `run_metadata.json` records MPS built/available,
+RGB runtime, oracle disabled, and clean source fingerprint. Both stdout and
+stderr were empty at launch, as expected before the 32-episode imported
+reference validation completes. This is launch-health evidence only. Do not
+claim convergence or promotion before the four corrected-protocol causal
+validations at steps 1536, 2048, 2560, and 3072 have been inspected.
 
 Known lifecycle limitations remain explicit: confirmation is spatial-only, so
 repeated association failure near a missed live track can still confirm a

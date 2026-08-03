@@ -341,6 +341,18 @@ was rejected for coverage/short-y guardrails, so this is device/protocol
 qualification only. A new eight-scenario medium run, not this smoke, must
 provide trend evidence.
 
+That new medium run is active at
+`runs/20260803-000858-v3-collapse-repair-qualification/` from clean pushed
+commit `baca6a8`. It uses the same 3,072-update/6,144-draw/32-validation-episode
+qualification shape as the stopped control, but now has two-frame tentative
+births, pre-gated association/target alignment, source-bound ROI evidence,
+accepted-ID parameter history, the 512-update global adaptation window, and
+both local gradient caps. Its launchd label is
+`com.polceanum.orpheus.v3-repair-20260803-000858`; stdout/stderr are
+`/private/tmp/20260803-000858-v3-collapse-repair-qualification.*.log`.
+Do not launch an overlapping trainer or infer a trend before all four causal
+validation points have been recorded.
+
 ### Superseded v2 campaign
 
 `configs/sustained_accuracy_mps_v2.yaml` and
