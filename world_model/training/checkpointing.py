@@ -121,7 +121,10 @@ _DYNAMICS_LEGACY_DEFAULTS = {
     "boundary_collision_speed_epsilon": 0.1,
 }
 _ASSOCIATION_MIGRATION_DEFAULT_FIELDS = ("minimum_measurement_confidence",)
-_LIFECYCLE_MIGRATION_DEFAULT_FIELDS = ("max_occluded_steps",)
+_LIFECYCLE_MIGRATION_DEFAULT_FIELDS = (
+    "max_occluded_steps",
+    "birth_confirmation_distance_m",
+)
 
 _RESUME_ALLOWED_CONTROL_PATHS = {
     ("project", "name"),

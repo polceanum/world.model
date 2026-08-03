@@ -435,6 +435,8 @@ class OnlineWorldModel(nn.Module):
                 initial_drag=factory.initial_drag,
                 initial_friction=factory.initial_friction,
                 initial_log_variance=factory.initial_log_variance,
+                birth_confirmations=lifecycle_config.birth_confirmations,
+                birth_confirmation_distance_m=(lifecycle_config.birth_confirmation_distance_m),
             )
         )
         identification_config = config.model.identification
@@ -751,13 +753,32 @@ class OnlineWorldModel(nn.Module):
             observed_mask,
             occluded_mask=predicted_occluded,
         )
+        tentative_birth_candidates = 0
+        confirmed_births = 0
         if mode in {ObservationMode.GLOBAL_DISCOVERY, ObservationMode.RECOVERY}:
+            tentative_key = (packet.modality, packet.sensor_id)
+            confirmed_measurements, tentative_state = self.lifecycle.confirm_tentative_births(
+                measurements,
+                association.unmatched_measurements,
+                self.state.tentative_births.get(tentative_key),
+                confidence_threshold=self.birth_confidence,
+            )
+            tentative_birth_candidates = int(tentative_state.active.sum().detach().cpu())
+            if tentative_birth_candidates:
+                self.state.tentative_births[tentative_key] = tentative_state
+            else:
+                self.state.tentative_births.pop(tentative_key, None)
+            active_before_birth = int(posterior.objects.active.sum().detach().cpu())
             posterior = self.lifecycle.birth_from_measurements(
                 posterior,
                 measurements,
-                association.unmatched_measurements,
+                confirmed_measurements,
                 confidence_threshold=self.birth_confidence,
                 initial_velocity_variance=self.initial_velocity_variance,
+            )
+            confirmed_births = max(
+                0,
+                int(posterior.objects.active.sum().detach().cpu()) - active_before_birth,
             )
         observable = self.observability(
             posterior,
@@ -804,6 +825,8 @@ class OnlineWorldModel(nn.Module):
                 active_objects_after=int(posterior.objects.active.sum().detach().cpu()),
                 matched_pairs=int(association.pair_mask.sum().detach().cpu()),
                 unmatched_measurements=unmatched_count,
+                tentative_birth_candidates=tentative_birth_candidates,
+                confirmed_births=confirmed_births,
                 ambiguous_pairs=int(association.ambiguous.sum().detach().cpu()),
                 aggregate_surprise=aggregate_surprise,
                 correction_norm=correction_norm,

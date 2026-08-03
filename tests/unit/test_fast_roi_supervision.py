@@ -796,6 +796,13 @@ def test_closed_loop_temporal_observer_supports_multiple_scenes_per_batch() -> N
 def test_bounded_rollout_anchors_reuse_posterior_and_emit_physical_metrics(
     monkeypatch: Any,
 ) -> None:
+    # Keep this rollout-call accounting test independent of localization from
+    # an untrained RGB detector; matcher gating has dedicated regressions.
+    monkeypatch.setattr(
+        training_loop,
+        "_PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M",
+        10.0,
+    )
     config = _closed_loop_config()
     batch = collate_episodes([generate_episode(config, seed=7)])
     model = OnlineWorldModel.from_config(config, device="cpu")
@@ -858,6 +865,13 @@ def test_bounded_rollout_anchors_reuse_posterior_and_emit_physical_metrics(
 def test_validation_can_skip_prior_future_rollouts_without_losing_physical_metrics(
     monkeypatch: Any,
 ) -> None:
+    # Keep this validation-control test independent of localization from an
+    # untrained RGB detector; matcher gating has dedicated regressions.
+    monkeypatch.setattr(
+        training_loop,
+        "_PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M",
+        10.0,
+    )
     config = _closed_loop_config()
     batch = collate_episodes([generate_episode(config, seed=7)])
     model = OnlineWorldModel.from_config(config, device="cpu")

@@ -99,6 +99,7 @@ model:
   lifecycle:
     birth_confidence: 0.55
     birth_confirmations: 1
+    birth_confirmation_distance_m: 0.5
     max_missed_steps: 12
     max_occluded_steps: 60
     existence_decay: 0.35

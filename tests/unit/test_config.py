@@ -295,11 +295,38 @@ def test_fast_roi_pretrain_weight_is_finite_and_positive(value: str) -> None:
         )
 
 
-def test_unimplemented_birth_confirmation_count_is_rejected() -> None:
-    with pytest.raises(ValueError, match="birth_confirmations currently supports only 1"):
+@pytest.mark.parametrize("value", ["0", "-1", "true", "1.5"])
+def test_birth_confirmation_count_must_be_positive_integer(value: str) -> None:
+    with pytest.raises(ValueError, match="birth_confirmations must be a positive integer"):
         load_config(
             CONFIG_DIR / "tiny_overfit.yaml",
-            overrides=["model.lifecycle.birth_confirmations=2"],
+            overrides=[f"model.lifecycle.birth_confirmations={value}"],
+        )
+
+
+def test_multi_frame_birth_confirmation_is_supported() -> None:
+    config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=["model.lifecycle.birth_confirmations=2"],
+    )
+    assert config.model.lifecycle.birth_confirmations == 2
+
+
+@pytest.mark.parametrize("value", ["0.0", "-1.0", ".inf"])
+def test_birth_confirmation_distance_must_be_finite_and_positive(value: str) -> None:
+    with pytest.raises(ValueError, match="birth_confirmation_distance_m"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"model.lifecycle.birth_confirmation_distance_m={value}"],
+        )
+
+
+@pytest.mark.parametrize("value", ["0", "-1", ".inf", ".nan"])
+def test_association_maximum_cost_must_be_finite_and_positive(value: str) -> None:
+    with pytest.raises(ValueError, match="model.association.maximum_cost"):
+        load_config(
+            "configs/default.yaml",
+            overrides=[f"model.association.maximum_cost={value}"],
         )
 
 
@@ -320,6 +347,17 @@ def test_interaction_gradient_clip_norm_is_finite_and_positive(
         load_config(
             "configs/tiny_overfit.yaml",
             overrides=[f"training.interaction_grad_clip_norm={value}"],
+        )
+
+
+@pytest.mark.parametrize("value", ["0.0", "-1.0", ".inf"])
+def test_closed_loop_perception_gradient_clip_norm_is_finite_and_positive(
+    value: str,
+) -> None:
+    with pytest.raises(ValueError, match="closed_loop_perception_grad_clip_norm"):
+        load_config(
+            "configs/tiny_overfit.yaml",
+            overrides=[f"training.closed_loop_perception_grad_clip_norm={value}"],
         )
 
 

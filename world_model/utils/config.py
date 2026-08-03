@@ -235,6 +235,7 @@ class AssociationConfig:
 class LifecycleConfig:
     birth_confidence: float = 0.55
     birth_confirmations: int = 1
+    birth_confirmation_distance_m: float = 0.5
     max_missed_steps: int = 12
     max_occluded_steps: int = 60
     existence_decay: float = 0.35
@@ -298,6 +299,10 @@ class TrainingConfig:
     # residual across many substeps. Bound that subsystem before the global
     # clip so one edge-Jacobian spike cannot suppress unrelated gradients.
     interaction_grad_clip_norm: float = 1.0
+    # RGB discovery and the shared ROI backbone can likewise dominate the
+    # whole-model norm during causal adaptation. Bound the complete, disjoint
+    # RGB observation module before the global clip.
+    closed_loop_perception_grad_clip_norm: float = 1.0
     checkpoint_every: int = 100
     eval_every: int = 100
     log_every: int = 10
@@ -427,6 +432,11 @@ class OrpheusConfig:
             )
         if not 0.0 <= model.association.minimum_measurement_confidence <= 1.0:
             raise ValueError("model.association.minimum_measurement_confidence must lie in [0,1]")
+        if (
+            not math.isfinite(model.association.maximum_cost)
+            or model.association.maximum_cost <= 0.0
+        ):
+            raise ValueError("model.association.maximum_cost must be finite and positive")
         for name, value in (
             (
                 "pair_collision_speed_epsilon",
@@ -772,10 +782,18 @@ class OrpheusConfig:
                 "model.lifecycle occlusion_existence_decay must lie between "
                 "zero and existence_decay"
             )
-        if model.lifecycle.birth_confirmations != 1:
+        if (
+            isinstance(model.lifecycle.birth_confirmations, bool)
+            or not isinstance(model.lifecycle.birth_confirmations, int)
+            or model.lifecycle.birth_confirmations < 1
+        ):
+            raise ValueError("model.lifecycle.birth_confirmations must be a positive integer")
+        if (
+            not math.isfinite(model.lifecycle.birth_confirmation_distance_m)
+            or model.lifecycle.birth_confirmation_distance_m <= 0.0
+        ):
             raise ValueError(
-                "model.lifecycle.birth_confirmations currently supports only 1; "
-                "multi-frame tentative birth state is not implemented"
+                "model.lifecycle.birth_confirmation_distance_m must be finite and positive"
             )
         if model.dynamics.max_substep <= 0:
             raise ValueError("model.dynamics.max_substep must be positive")
@@ -967,6 +985,13 @@ class OrpheusConfig:
             or self.training.interaction_grad_clip_norm <= 0
         ):
             raise ValueError("training.interaction_grad_clip_norm must be finite and positive")
+        if (
+            not math.isfinite(self.training.closed_loop_perception_grad_clip_norm)
+            or self.training.closed_loop_perception_grad_clip_norm <= 0
+        ):
+            raise ValueError(
+                "training.closed_loop_perception_grad_clip_norm must be finite and positive"
+            )
         if self.training.measurement_validation_frames <= 0:
             raise ValueError("training.measurement_validation_frames must be positive")
         if (

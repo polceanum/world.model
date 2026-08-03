@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import torch
 
+from world_model.belief import TentativeBirthState
 from world_model.observations import ObservationPacket
 from world_model.runtime import OnlineWorldModel
 from world_model.utils.config import OrpheusConfig
@@ -84,6 +85,72 @@ def test_oracle_debug_loop_corrects_perturbation_and_keeps_persistent_id() -> No
     assert model.diagnostics.oracle_used
     trajectory = model.predict([0.1, 0.2])
     assert trajectory.positions.shape[:2] == (1, 2)
+
+
+def test_runtime_assigns_permanent_id_only_after_configured_birth_confirmations() -> None:
+    config = _oracle_config()
+    config = replace(
+        config,
+        model=replace(
+            config.model,
+            lifecycle=replace(
+                config.model.lifecycle,
+                birth_confirmations=2,
+                birth_confirmation_distance_m=0.5,
+            ),
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+
+    tentative = model.ingest(_packet(0.0, 0.0))
+    assert not tentative.objects.active.any()
+    assert model.diagnostics.latest is not None
+    assert model.diagnostics.latest.tentative_birth_candidates == 1
+    assert model.diagnostics.latest.confirmed_births == 0
+    assert model.state.tentative_births[("debug_oracle", "state")].confirmation_count[0, 0] == 1
+
+    confirmed = model.ingest(_packet(0.1, 0.1))
+    assert confirmed.objects.active.sum() == 1
+    assert confirmed.objects.object_id[0, 0] == 0
+    assert model.diagnostics.latest is not None
+    assert model.diagnostics.latest.tentative_birth_candidates == 0
+    assert model.diagnostics.latest.confirmed_births == 1
+    assert ("debug_oracle", "state") not in model.state.tentative_births
+
+    model.reset()
+    assert not model.state.tentative_births
+
+
+def test_tentative_birth_confirmation_is_independent_per_modality_and_sensor() -> None:
+    config = _oracle_config()
+    config = replace(
+        config,
+        model=replace(
+            config.model,
+            lifecycle=replace(
+                config.model.lifecycle,
+                birth_confirmations=2,
+                birth_confirmation_distance_m=0.5,
+            ),
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    model.state.tentative_births[("rgb", "state")] = TentativeBirthState(
+        world_position=torch.tensor([[[0.0, 1.0, 3.0]]]),
+        active=torch.tensor([[True]]),
+        confirmation_count=torch.tensor([[1]], dtype=torch.int64),
+        timestamp=torch.tensor([[-0.1]]),
+    ).validate()
+
+    posterior = model.ingest(_packet(0.0, 0.0))
+
+    assert not posterior.objects.active.any()
+    assert set(model.state.tentative_births) == {
+        ("rgb", "state"),
+        ("debug_oracle", "state"),
+    }
+    assert model.state.tentative_births[("debug_oracle", "state")].confirmation_count[0, 0] == 1
+    assert model.state.tentative_births[("rgb", "state")].confirmation_count[0, 0] == 1
 
 
 def test_online_loop_rejects_delayed_oracle_packet() -> None:

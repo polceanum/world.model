@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -13,6 +14,9 @@ from world_model.simulator import generate_episode
 from world_model.training.loop import (
     _belief_state_losses,
     _parameter_supervision_masks,
+    _reset_parameter_history_for_identity_change,
+    _runtime_observed_belief_slots,
+    _target_observed_runtime_ids,
     run_closed_loop_batch,
 )
 from world_model.utils.config import load_config
@@ -61,6 +65,49 @@ def _identity_slots(object_count: int) -> tuple[torch.Tensor, torch.Tensor]:
         torch.arange(object_count, dtype=torch.int64)[None],
         torch.ones(1, object_count, dtype=torch.bool),
     )
+
+
+def test_newborn_slot_cannot_open_slow_parameter_observation_gate() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    belief = belief.replace(objects=objects)
+    model = SimpleNamespace(
+        updater=SimpleNamespace(
+            last_diagnostics=SimpleNamespace(
+                observed_mask=torch.tensor([[False]]),
+            )
+        )
+    )
+
+    observed = _runtime_observed_belief_slots(model, belief)
+
+    assert not observed.any()
+
+
+def test_runtime_identity_change_resets_parameter_temporal_baseline() -> None:
+    indices = torch.tensor([[0, 1]])
+    matched = torch.tensor([[True, True]])
+    observed = torch.tensor([[True, False]])
+    runtime_ids = torch.tensor([[12, 13]])
+    observed_ids = _target_observed_runtime_ids(
+        indices,
+        matched,
+        observed,
+        runtime_ids,
+        target_count=2,
+    )
+    torch.testing.assert_close(observed_ids, torch.tensor([[12, -1]]))
+
+    frames, reset = _reset_parameter_history_for_identity_change(
+        torch.tensor([[4, 5]], dtype=torch.int64),
+        torch.tensor([[9, 13]], dtype=torch.int64),
+        observed_ids,
+    )
+
+    torch.testing.assert_close(frames, torch.tensor([[-1, 5]], dtype=torch.int64))
+    torch.testing.assert_close(reset, torch.tensor([[True, False]]))
 
 
 def test_drag_requires_two_runtime_observations_not_instantaneous_speed() -> None:

@@ -25,6 +25,7 @@ from world_model.belief.packing import (
     unpack_slow,
     unpack_slow_state,
 )
+from world_model.belief.tentative import TentativeBirthState
 from world_model.belief.validation import (
     clamp_log_variance,
     validate_camera_belief,
@@ -48,6 +49,7 @@ __all__ = [
     "ObjectBeliefTensor",
     "ObjectLifecycle",
     "PackingMap",
+    "TentativeBirthState",
     "WorldBelief",
     "birth_from_measurements",
     "clamp_log_variance",

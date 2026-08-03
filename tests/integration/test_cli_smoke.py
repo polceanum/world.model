@@ -231,6 +231,9 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         and record.get("phase") == "closed_loop_rgb"
     ]
     assert closed_loop_validation_records
+    assert any(
+        record.get("selection_metric_supported") == 0.0 for record in closed_loop_validation_records
+    )
     assert all(
         record["selection_accepted"] in {0.0, 1.0}
         and record["selection_rejection_reason_count"] >= 0.0

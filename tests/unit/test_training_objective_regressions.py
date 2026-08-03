@@ -8,6 +8,7 @@ from typing import Any
 import torch
 from torch import Tensor
 
+import world_model.training.loop as training_loop
 from world_model.belief import BeliefFactory, BeliefTrajectory
 from world_model.datasets import collate_episodes
 from world_model.observations import MeasurementSet
@@ -742,6 +743,21 @@ def test_physical_count_aggregation_preserves_exact_horizon_totals() -> None:
     assert aggregate["physical_forecast_target_count@0.050s"] == 3.0
 
 
+def test_physical_validation_records_zero_horizon_support_without_fabricated_rmse() -> None:
+    unsupported = _additive_result(1.0)
+    unsupported.metrics["physical_rollout_position@0.050s_sse"] = 0.0
+    unsupported.metrics["physical_rollout_position@0.050s_coordinate_count"] = 0.0
+
+    aggregate = _aggregate_physical_validation_metrics(
+        [unsupported],
+        _single_horizon_config(),
+    )
+
+    assert aggregate["selection_metric_supported"] == 0.0
+    assert aggregate["physical_rollout_position@0.050s_coordinate_count"] == 0.0
+    assert "validation_position_rmse@0.050s" not in aggregate
+
+
 def _selection_metrics(*, horizon: float, axis_x: float) -> dict[str, float]:
     metrics = {
         "validation_position_rmse_m": 0.5,
@@ -886,6 +902,14 @@ def test_axis_guardrail_blocks_hidden_regression_despite_better_score() -> None:
 def test_prior_and_posterior_correction_rollouts_use_identical_query_partitions(
     monkeypatch: Any,
 ) -> None:
+    # This test isolates rollout graph/partition reuse from target-bootstrap
+    # localization. The randomly initialized RGB model is not expected to
+    # satisfy the production 0.5 m supervision gate.
+    monkeypatch.setattr(
+        training_loop,
+        "_PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M",
+        10.0,
+    )
     config = load_config("configs/tiny_overfit.yaml")
     config = replace(
         config,

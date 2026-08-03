@@ -100,14 +100,28 @@ Working rules:
   support distinct. Valid empty crops train negative existence/visibility,
   unsupported attributes are omitted, and every eligible confident false
   positive remains in selector precision.
+- Treat tentative births as detached `(modality, sensor)`-local observation
+  history, never as physical state. Require configured consecutive,
+  strictly-later, distance-gated detections before allocating a permanent ID.
+- Gate inadmissible association, tentative-confirmation, and new privileged
+  target-mapping edges before Hungarian assignment so invalid low-cost
+  combinations cannot reduce the number of valid matches.
+- Bind prior-conditioned fast ROI rows to their explicit source belief slot and
+  object ID. They may be rejected by normal gates but may never cross-update a
+  different persistent identity; global discovery remains freely associated.
 - Derive slow drag/restitution supervision only from accepted runtime
   observations across clean causally observable intervals. Simulator track
-  existence may map supervision/evaluation identities, but it must not open a
-  runtime parameter gate by itself.
+  existence or a newborn may map supervision/evaluation identities, but it
+  must not open a runtime parameter gate by itself. Reset the temporal
+  parameter baseline whenever the associated runtime ID changes.
 - Preserve hierarchical gradient evidence when the recursive interaction
   network is locally clipped before the whole model: log raw subsystem and
   total norms, both coefficients, the pre-global norm, total coefficient, and
   final applied norm. Treat both clip limits as resume/protocol semantics.
+- Apply the configured RGB perception-local gradient cap only during causal
+  training, before the whole-model cap, and retain the true reconstructed raw
+  total. Paired RGB pretraining keeps its original whole-model clipping
+  semantics.
 - A configured phase-specific device switch is part of the resolved protocol,
   not a resume override. Exact resume must verify and preserve every linked
   selector artefact; a no-op inspection must not rewrite a durable checkpoint.

@@ -16,6 +16,8 @@ class RuntimeStepDiagnostics:
     active_objects_after: int
     matched_pairs: int
     unmatched_measurements: int
+    tentative_birth_candidates: int
+    confirmed_births: int
     ambiguous_pairs: int
     aggregate_surprise: float
     correction_norm: float

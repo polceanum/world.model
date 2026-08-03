@@ -6,10 +6,13 @@ import math
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
+import numpy as np
 import torch
+from scipy.optimize import linear_sum_assignment
 from torch import Tensor
 
 from world_model.belief.object_belief import MotionMode
+from world_model.belief.tentative import TentativeBirthState
 from world_model.belief.world_belief import WorldBelief
 
 if TYPE_CHECKING:
@@ -33,6 +36,8 @@ class LifecycleConfig:
     initial_friction: float = 0.2
     initial_log_variance: float = 0.0
     max_occluded_steps: int = 60
+    birth_confirmations: int = 1
+    birth_confirmation_distance_m: float = 0.5
 
 
 class ObjectLifecycle:
@@ -59,6 +64,159 @@ class ObjectLifecycle:
             raise ValueError("initial friction must lie strictly in (0,1)")
         if not math.isfinite(self.config.initial_log_variance):
             raise ValueError("initial log variance must be finite")
+        if (
+            isinstance(self.config.birth_confirmations, bool)
+            or not isinstance(self.config.birth_confirmations, int)
+            or self.config.birth_confirmations < 1
+        ):
+            raise ValueError("birth_confirmations must be a positive integer")
+        if (
+            not math.isfinite(self.config.birth_confirmation_distance_m)
+            or self.config.birth_confirmation_distance_m <= 0.0
+        ):
+            raise ValueError("birth_confirmation_distance_m must be finite and positive")
+
+    def confirm_tentative_births(
+        self,
+        measurements: MeasurementSet,
+        unmatched_measurements: Tensor,
+        previous: TentativeBirthState | None,
+        *,
+        confidence_threshold: float,
+    ) -> tuple[Tensor, TentativeBirthState]:
+        """Require consistent unmatched detections before permanent ID birth.
+
+        Matching occurs only in world coordinates and only across strictly
+        increasing observation timestamps. The previous tentative set is
+        replaced on every discovery observation, so an unobserved candidate
+        cannot accumulate non-consecutive confirmations. Tensors are detached:
+        this bounded history selects lifecycle evidence but is not a second
+        differentiable physical state.
+        """
+
+        batch, proposals = measurements.measurement_mask.shape
+        if unmatched_measurements.shape != (batch, proposals):
+            raise ValueError("unmatched_measurements must have shape [B,M]")
+        if unmatched_measurements.dtype is not torch.bool:
+            raise TypeError("unmatched_measurements must be torch.bool")
+        if not 0.0 <= confidence_threshold <= 1.0:
+            raise ValueError("confidence_threshold must lie in [0,1]")
+        world_position = measurements.auxiliary.get("world_position")
+        if not isinstance(world_position, Tensor) or world_position.shape != (
+            batch,
+            proposals,
+            3,
+        ):
+            raise ValueError("birth measurements require world_position [B,M,3]")
+        if measurements.timestamp.shape != (batch,):
+            raise ValueError("measurement timestamp must have shape [B]")
+
+        detached_position = world_position.detach()
+        finite_position = torch.isfinite(detached_position).all(dim=-1)
+        confidence = measurements.existence_logits.detach().sigmoid()
+        eligible = (
+            unmatched_measurements
+            & measurements.measurement_mask
+            & finite_position
+            & (confidence >= confidence_threshold)
+        )
+        counts = torch.zeros(
+            (batch, proposals),
+            device=world_position.device,
+            dtype=torch.int64,
+        )
+        if self.config.birth_confirmations == 1:
+            counts[eligible] = 1
+        else:
+            if previous is not None:
+                previous.validate()
+                if previous.world_position.shape[0] != batch:
+                    raise ValueError("tentative birth batch size changed without reset")
+                previous_position = previous.world_position.to(
+                    device=world_position.device,
+                    dtype=world_position.dtype,
+                )
+                previous_active = previous.active.to(device=world_position.device)
+                previous_count = previous.confirmation_count.to(device=world_position.device)
+                previous_timestamp = previous.timestamp.to(
+                    device=world_position.device,
+                    dtype=world_position.dtype,
+                )
+                for batch_index in range(batch):
+                    old_indices = torch.nonzero(
+                        previous_active[batch_index]
+                        & (measurements.timestamp[batch_index] > previous_timestamp[batch_index]),
+                        as_tuple=False,
+                    ).flatten()
+                    new_indices = torch.nonzero(
+                        eligible[batch_index],
+                        as_tuple=False,
+                    ).flatten()
+                    if old_indices.numel() == 0 or new_indices.numel() == 0:
+                        continue
+                    distances = torch.cdist(
+                        previous_position[batch_index, old_indices],
+                        detached_position[batch_index, new_indices],
+                    )
+                    admissible = torch.isfinite(distances) & (
+                        distances <= self.config.birth_confirmation_distance_m
+                    )
+                    maximum_assignment_count = min(distances.shape)
+                    invalid_cost = (
+                        maximum_assignment_count + 1
+                    ) * self.config.birth_confirmation_distance_m + 1.0
+                    assignment_cost = torch.where(
+                        admissible,
+                        distances,
+                        torch.full_like(distances, invalid_cost),
+                    )
+                    rows, columns = linear_sum_assignment(
+                        np.asarray(
+                            assignment_cost.detach().to(
+                                device="cpu",
+                                dtype=torch.float32,
+                            )
+                        )
+                    )
+                    for row, column in zip(rows.tolist(), columns.tolist(), strict=True):
+                        if not bool(admissible[row, column]):
+                            continue
+                        current_index = int(new_indices[column])
+                        prior_index = int(old_indices[row])
+                        counts[batch_index, current_index] = (
+                            previous_count[batch_index, prior_index] + 1
+                        )
+            counts = torch.where(
+                eligible & (counts == 0),
+                torch.ones_like(counts),
+                counts,
+            )
+
+        confirmed = eligible & (counts >= self.config.birth_confirmations)
+        active = eligible & ~confirmed
+        safe_position = torch.where(
+            finite_position.unsqueeze(-1),
+            detached_position,
+            torch.zeros_like(detached_position),
+        )
+        timestamp = (
+            measurements.timestamp.detach()
+            .to(device=world_position.device, dtype=world_position.dtype)
+            .unsqueeze(-1)
+            .expand(batch, proposals)
+            .clone()
+        )
+        state = TentativeBirthState(
+            world_position=safe_position,
+            active=active,
+            confirmation_count=torch.where(
+                active,
+                counts,
+                torch.zeros_like(counts),
+            ),
+            timestamp=timestamp,
+        ).validate()
+        return confirmed, state
 
     def update_visibility(
         self,

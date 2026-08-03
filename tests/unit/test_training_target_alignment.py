@@ -78,3 +78,79 @@ def test_persistent_target_matcher_releases_target_after_track_death() -> None:
 
     torch.testing.assert_close(indices, torch.tensor([[0, 1]]))
     assert matched.all()
+
+
+def test_persistent_target_matcher_leaves_far_new_track_and_target_unmatched() -> None:
+    matcher = PersistentTargetMatcher()
+    belief = _belief(
+        torch.tensor([[[0.1, 0.0, 0.0], [3.0, 0.0, 0.0]]]),
+        torch.tensor([[10, 20]]),
+    )
+
+    indices, matched = matcher.match(
+        belief,
+        torch.tensor([[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]]),
+        torch.tensor([[True, True]]),
+    )
+
+    torch.testing.assert_close(indices, torch.tensor([[0, -1]]))
+    torch.testing.assert_close(matched, torch.tensor([[True, False]]))
+    assert matcher.mappings == [{10: 0}]
+
+
+def test_persistent_target_matcher_prefers_close_new_track_over_earlier_false_track() -> None:
+    matcher = PersistentTargetMatcher()
+    belief = _belief(
+        torch.tensor([[[2.0, 0.0, 0.0], [0.1, 0.0, 0.0]]]),
+        torch.tensor([[10, 20]]),
+    )
+
+    indices, matched = matcher.match(
+        belief,
+        torch.tensor([[[0.0, 0.0, 0.0]]]),
+        torch.tensor([[True]]),
+    )
+
+    torch.testing.assert_close(indices, torch.tensor([[-1, 0]]))
+    torch.testing.assert_close(matched, torch.tensor([[False, True]]))
+    assert matcher.mappings == [{20: 0}]
+
+
+def test_persistent_target_matcher_uses_inclusive_half_metre_bootstrap_gate() -> None:
+    matcher = PersistentTargetMatcher()
+    belief = _belief(
+        torch.tensor([[[0.5, 0.0, 0.0]], [[0.5001, 0.0, 0.0]]]),
+        torch.tensor([[10], [20]]),
+    )
+
+    indices, matched = matcher.match(
+        belief,
+        torch.zeros((2, 1, 3)),
+        torch.tensor([[True], [True]]),
+    )
+
+    torch.testing.assert_close(indices, torch.tensor([[0], [-1]]))
+    torch.testing.assert_close(matched, torch.tensor([[True], [False]]))
+    assert matcher.mappings == [{10: 0}, {}]
+
+
+def test_persistent_target_matcher_keeps_existing_mapping_beyond_bootstrap_gate() -> None:
+    matcher = PersistentTargetMatcher()
+    active = torch.tensor([[True]])
+    object_ids = torch.tensor([[10]])
+    target = torch.tensor([[[0.0, 0.0, 0.0]]])
+
+    matcher.match(
+        _belief(torch.tensor([[[0.0, 0.0, 0.0]]]), object_ids),
+        target,
+        active,
+    )
+    indices, matched = matcher.match(
+        _belief(torch.tensor([[[2.0, 0.0, 0.0]]]), object_ids),
+        target,
+        active,
+    )
+
+    torch.testing.assert_close(indices, torch.tensor([[0]]))
+    assert matched.all()
+    assert matcher.mappings == [{10: 0}]

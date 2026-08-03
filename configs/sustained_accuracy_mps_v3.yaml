@@ -36,6 +36,14 @@ simulator:
     - heavy_light_impacts
 model:
   max_objects: 6
+  lifecycle:
+    birth_confidence: 0.55
+    birth_confirmations: 2
+    birth_confirmation_distance_m: 0.5
+    max_missed_steps: 12
+    max_occluded_steps: 60
+    existence_decay: 0.35
+    occlusion_existence_decay: 0.04
   state:
     geometry_dim: 8
     appearance_dim: 32
@@ -141,9 +149,9 @@ training:
   rgb_pretrain_steps: 8192
   learning_rate: 0.00002
   closed_loop_learning_rate_scale: 0.25
-  # Keep discovery and its shared fast encoder trainable throughout causal
-  # learning so lifecycle coverage can be repaired rather than starved.
-  closed_loop_global_trainable_steps: 8192
+  # Permit one validation interval of global discovery repair, then freeze its
+  # exclusive head/stages so causal dynamics cannot be dominated indefinitely.
+  closed_loop_global_trainable_steps: 512
   closed_loop_trainable_scope: state_dynamics_roi
   fast_roi_pretrain_weight: 1.0
   handoff_minimum_target_coverage: 0.05
@@ -158,6 +166,7 @@ training:
   validation_rollout_anchors_per_episode: 8
   grad_clip_norm: 2.0
   interaction_grad_clip_norm: 1.0
+  closed_loop_perception_grad_clip_norm: 1.0
   checkpoint_every: 128
   eval_every: 512
   log_every: 8

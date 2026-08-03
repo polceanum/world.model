@@ -280,10 +280,12 @@ def physical_validation_metrics(
 class PersistentTargetMatcher:
     """Keep training-only simulator targets aligned to persistent belief IDs.
 
-    A fresh positional Hungarian match bootstraps new runtime tracks. Once an
-    internal object ID is mapped, that target slot is retained while both
-    remain active. This prevents close contacts from silently swapping the
-    velocity/event supervision of two nearby objects.
+    A distance-gated positional Hungarian match bootstraps new runtime tracks.
+    Once an internal object ID is mapped, that target slot is retained while
+    both remain active. This prevents close contacts from silently swapping the
+    velocity/event supervision of two nearby objects while ensuring a far
+    false-positive track cannot acquire positive state/existence supervision
+    merely because a simulator target remains available.
     """
 
     mappings: list[dict[int, int]] = field(default_factory=list)
@@ -364,8 +366,28 @@ class PersistentTargetMatcher:
                     objects.position[batch_index, belief_slots].detach().cpu(),
                     target_position[batch_index, target_slots].detach().cpu(),
                 )
-                rows, columns = linear_sum_assignment(np.asarray(cost))
+                admissible = torch.isfinite(cost) & (
+                    cost <= _PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M
+                )
+                # Gate impossible pairs before Hungarian assignment.  A
+                # uniform penalty larger than the sum of every possible valid
+                # edge makes the solver maximize admissible cardinality first
+                # and minimize metric distance second. Invalid solver pairs
+                # are discarded below, leaving both the belief and target
+                # explicitly unmatched.
+                maximum_assignment_count = min(cost.shape)
+                invalid_cost = (
+                    maximum_assignment_count + 1
+                ) * _PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M + 1.0
+                assignment_cost = torch.where(
+                    admissible,
+                    cost,
+                    torch.full_like(cost, invalid_cost),
+                )
+                rows, columns = linear_sum_assignment(np.asarray(assignment_cost))
                 for row, column in zip(rows, columns, strict=True):
+                    if not bool(admissible[int(row), int(column)]):
+                        continue
                     belief_slot = unmatched_beliefs[int(row)]
                     target_slot = available_targets[int(column)]
                     indices[batch_index, belief_slot] = target_slot
@@ -928,12 +950,15 @@ def _bootstrap_rgb_belief(
     packet: ObservationPacket,
     measurements: MeasurementSet,
 ) -> WorldBelief:
-    """Create the runtime's initial persistent state from RGB proposals only.
+    """Create a training-only provisional belief for paired fast-ROI loss.
 
     The global proposal remains connected to its direct measurement loss, but
-    the copy consumed by lifecycle is detached before confidence sorting and
-    discrete slot allocation.  No simulator label participates in this state
-    construction.
+    the detached copy is allocated for one paired pretraining sequence without
+    mutating the online runtime or claiming a confirmed object. This deliberate
+    bootstrap keeps fast-ROI pretraining supported when runtime lifecycle needs
+    multiple global discoveries. No simulator label participates in this state
+    construction, and causal training/evaluation use real tentative
+    confirmation instead.
     """
 
     initial_belief = model._initial_belief(packet)
@@ -1754,13 +1779,13 @@ class _ParameterSupervisionMasks:
 def _runtime_observed_belief_slots(
     model: OnlineWorldModel,
     belief: WorldBelief,
-    previous_object_ids: Tensor | None,
 ) -> Tensor:
     """Return slots supported by the RGB packet that was just ingested.
 
-    Filter diagnostics cover accepted associations.  Lifecycle births are
-    unmatched measurements and therefore need the explicit identity-change
-    term below; they are still genuine RGB observations.
+    Slow-parameter updates consume the identifier's accepted-association
+    features. A lifecycle birth is genuine RGB evidence for fast state, but
+    it has no association/innovation path through the identifier on that same
+    frame and therefore cannot open a slow-parameter supervision gate.
     """
 
     diagnostics = model.updater.last_diagnostics
@@ -1771,16 +1796,7 @@ def _runtime_observed_belief_slots(
     )
     if associated.shape != belief.objects.active.shape or associated.dtype is not torch.bool:
         raise ValueError("runtime observed mask must be boolean belief-slot [B,N]")
-    if previous_object_ids is None:
-        born = belief.objects.active
-    else:
-        if (
-            previous_object_ids.shape != belief.objects.object_id.shape
-            or previous_object_ids.dtype is not torch.int64
-        ):
-            raise ValueError("previous object IDs must be int64 belief-slot [B,N]")
-        born = belief.objects.active & (belief.objects.object_id != previous_object_ids)
-    return associated | born
+    return associated & belief.objects.active
 
 
 def _target_observation_mask(
@@ -1801,6 +1817,72 @@ def _target_observation_mask(
     safe_indices = indices.clamp(0, target_count - 1)
     one_hot_targets = F.one_hot(safe_indices, num_classes=target_count).bool()
     return (one_hot_targets & (matched & runtime_observed).unsqueeze(-1)).any(dim=1)
+
+
+def _target_observed_runtime_ids(
+    indices: Tensor,
+    matched: Tensor,
+    runtime_observed: Tensor,
+    runtime_object_ids: Tensor,
+    *,
+    target_count: int,
+) -> Tensor:
+    """Map accepted observations to the persistent runtime ID for each target."""
+
+    if (
+        indices.shape != matched.shape
+        or indices.shape != runtime_observed.shape
+        or indices.shape != runtime_object_ids.shape
+    ):
+        raise ValueError("parameter identity tensors must share belief-slot shape [B,N]")
+    if matched.dtype is not torch.bool or runtime_observed.dtype is not torch.bool:
+        raise TypeError("parameter matched/observed masks must be torch.bool")
+    if runtime_object_ids.dtype is not torch.int64:
+        raise TypeError("runtime object IDs must be int64")
+    if target_count <= 0:
+        raise ValueError("target_count must be positive")
+    safe_indices = indices.clamp(0, target_count - 1)
+    assignment = F.one_hot(safe_indices, num_classes=target_count).bool()
+    valid = matched & runtime_observed & (runtime_object_ids >= 0)
+    candidate_ids = torch.where(
+        assignment & valid.unsqueeze(-1),
+        runtime_object_ids.unsqueeze(-1),
+        torch.full_like(runtime_object_ids.unsqueeze(-1), -1),
+    )
+    return candidate_ids.amax(dim=1)
+
+
+def _reset_parameter_history_for_identity_change(
+    last_observed_target_frame: Tensor,
+    last_observed_runtime_id: Tensor,
+    observed_runtime_id: Tensor,
+) -> tuple[Tensor, Tensor]:
+    """Invalidate a slow-parameter baseline when a target receives a new ID."""
+
+    if (
+        last_observed_target_frame.shape != last_observed_runtime_id.shape
+        or last_observed_target_frame.shape != observed_runtime_id.shape
+    ):
+        raise ValueError("parameter observation histories must share target shape [B,N]")
+    if (
+        last_observed_target_frame.dtype is not torch.int64
+        or last_observed_runtime_id.dtype is not torch.int64
+        or observed_runtime_id.dtype is not torch.int64
+    ):
+        raise TypeError("parameter observation histories must use int64")
+    identity_changed = (
+        (observed_runtime_id >= 0)
+        & (last_observed_runtime_id >= 0)
+        & (observed_runtime_id != last_observed_runtime_id)
+    )
+    return (
+        torch.where(
+            identity_changed,
+            torch.full_like(last_observed_target_frame, -1),
+            last_observed_target_frame,
+        ),
+        identity_changed,
+    )
 
 
 def _parameter_supervision_masks(
@@ -2647,7 +2729,8 @@ def _burn_in_causal_prefix(
     window_start: int,
     target_matcher: PersistentTargetMatcher,
     last_observed_target_frame: Tensor,
-) -> Tensor:
+    last_observed_runtime_id: Tensor,
+) -> tuple[Tensor, Tensor]:
     """Advance the real RGB filter to a mid-episode loss window.
 
     Prefix frames update the persistent belief, lifecycle, modality caches,
@@ -2658,11 +2741,10 @@ def _burn_in_causal_prefix(
 
     if window_start < 0:
         raise ValueError("window_start must be nonnegative")
+    if last_observed_runtime_id.shape != last_observed_target_frame.shape:
+        raise ValueError("parameter observation frame/identity histories must match")
     with torch.no_grad():
         for frame_index in range(window_start):
-            previous_object_ids = (
-                None if model.belief is None else model.belief.objects.object_id.detach().clone()
-            )
             belief = model.ingest(make_rgb_packet(batch, frame_index))
             indices, matched = target_matcher.match(
                 belief,
@@ -2672,22 +2754,37 @@ def _burn_in_causal_prefix(
             runtime_observed = _runtime_observed_belief_slots(
                 model,
                 belief,
-                previous_object_ids,
             )
-            target_observed = _target_observation_mask(
+            aligned_position = gather_target_slots(
+                batch["objects"]["position"][:, frame_index],
                 indices,
+            )
+            distance_gated_matched = _distance_gate_physical_matches(
+                belief.objects.position,
+                aligned_position,
                 matched,
+            )
+            observed_runtime_id = _target_observed_runtime_ids(
+                indices,
+                distance_gated_matched,
                 runtime_observed,
+                belief.objects.object_id,
                 target_count=last_observed_target_frame.shape[1],
             )
+            target_observed = observed_runtime_id >= 0
             last_observed_target_frame = torch.where(
                 target_observed,
                 torch.full_like(last_observed_target_frame, frame_index),
                 last_observed_target_frame,
             )
+            last_observed_runtime_id = torch.where(
+                target_observed,
+                observed_runtime_id,
+                last_observed_runtime_id,
+            )
     if window_start:
         model.detach_state()
-    return last_observed_target_frame
+    return last_observed_target_frame, last_observed_runtime_id
 
 
 def run_closed_loop_batch(
@@ -2741,12 +2838,14 @@ def run_closed_loop_batch(
         device=rgb.device,
         dtype=torch.int64,
     )
-    last_observed_target_frame = _burn_in_causal_prefix(
+    last_observed_runtime_id = torch.full_like(last_observed_target_frame, -1)
+    last_observed_target_frame, last_observed_runtime_id = _burn_in_causal_prefix(
         model,
         batch,
         window_start,
         target_matcher,
         last_observed_target_frame,
+        last_observed_runtime_id,
     )
     detail_lists: dict[str, list[Tensor]] = {}
     current_correction_improvements: list[float] = []
@@ -2783,9 +2882,6 @@ def run_closed_loop_batch(
 
     for frame_index in range(window_start, window_stop):
         packet = make_rgb_packet(batch, frame_index)
-        previous_object_ids = (
-            None if model.belief is None else model.belief.objects.object_id.detach().clone()
-        )
         score_rollout = frame_index in rollout_anchor_set
         prior_belief: WorldBelief | None = None
         prior_rollout = None
@@ -2915,7 +3011,28 @@ def run_closed_loop_batch(
         runtime_observed = _runtime_observed_belief_slots(
             model,
             belief,
-            previous_object_ids,
+        )
+        observed_runtime_id = _target_observed_runtime_ids(
+            indices,
+            distance_gated_matched,
+            runtime_observed,
+            belief.objects.object_id,
+            target_count=target_count,
+        )
+        (
+            last_observed_target_frame,
+            identity_history_reset,
+        ) = _reset_parameter_history_for_identity_change(
+            last_observed_target_frame,
+            last_observed_runtime_id,
+            observed_runtime_id,
+        )
+        parameter_supervision_metrics["parameter_identity_history_reset_count"] = (
+            parameter_supervision_metrics.get(
+                "parameter_identity_history_reset_count",
+                0.0,
+            )
+            + float(identity_history_reset.sum().detach().cpu())
         )
         parameter_supervision, last_observed_target_frame = _parameter_supervision_masks(
             batch,
@@ -2930,6 +3047,11 @@ def run_closed_loop_batch(
             matched=distance_gated_matched,
             runtime_observed=runtime_observed,
             last_observed_target_frame=last_observed_target_frame,
+        )
+        last_observed_runtime_id = torch.where(
+            observed_runtime_id >= 0,
+            observed_runtime_id,
+            last_observed_runtime_id,
         )
         _accumulate_float_metrics(
             parameter_supervision_metrics,

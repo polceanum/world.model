@@ -67,6 +67,116 @@ def test_hungarian_association_matches_swapped_obvious_pairs() -> None:
     result.validate()
 
 
+@pytest.mark.parametrize("maximum_cost", [0.0, -1.0, float("inf"), float("nan")])
+def test_associator_rejects_nonpositive_or_nonfinite_maximum_cost(
+    maximum_cost: float,
+) -> None:
+    with pytest.raises(ValueError, match="maximum_cost"):
+        Associator(maximum_cost=maximum_cost)
+
+
+def test_maximum_cost_is_gated_before_hungarian_to_preserve_valid_cardinality(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    belief, predicted = _belief_and_prediction()
+    measurements = _measurements(predicted.values[:, :2].clone())
+    associator = Associator(maximum_cost=30.0)
+    # Ungated Hungarian prefers 0 + 31, then post-hoc rejection would retain
+    # only one pair. Gating first must choose the two valid cross-pairs.
+    monkeypatch.setattr(
+        associator,
+        "cost_matrix",
+        lambda _measured, _predicted: torch.tensor([[[0.0, 20.0], [20.0, 31.0]]]),
+    )
+
+    result = associator.match(belief, measurements, predicted)
+
+    pairs = {
+        (int(belief_index), int(measurement_index))
+        for belief_index, measurement_index, valid in zip(
+            result.belief_indices[0],
+            result.measurement_indices[0],
+            result.pair_mask[0],
+            strict=True,
+        )
+        if bool(valid)
+    }
+    assert pairs == {(0, 1), (1, 0)}
+    assert not result.unmatched_beliefs[0, :2].any()
+    assert not result.unmatched_measurements.any()
+
+
+def test_source_conditioned_fast_measurements_cannot_cross_persistent_ids() -> None:
+    belief, predicted = _belief_and_prediction()
+    measurements = _measurements(
+        torch.tensor(
+            [
+                [
+                    [0.81, 0.2, -1.2, 0.4],
+                    [0.01, 0.0, -1.0, 0.5],
+                ]
+            ]
+        )
+    )
+    measurements.auxiliary.update(
+        {
+            "source_belief_indices": torch.tensor([[0, 1]]),
+            "source_object_ids": torch.tensor([[10, 11]]),
+        }
+    )
+
+    result = Associator(mahalanobis_gate=4.0).match(
+        belief,
+        measurements,
+        predicted,
+    )
+
+    # Each ROI contains geometry close to the other track. A free Hungarian
+    # match would swap both rows, but prior-conditioned evidence may only
+    # update its originating persistent identity and is therefore rejected.
+    assert not result.pair_mask.any()
+    assert result.unmatched_beliefs[0, :2].all()
+    assert result.unmatched_measurements.all()
+
+
+def test_source_conditioning_follows_explicit_source_when_rows_are_reordered() -> None:
+    belief, predicted = _belief_and_prediction()
+    measurements = _measurements(
+        torch.tensor(
+            [
+                [
+                    [0.81, 0.2, -1.2, 0.4],
+                    [0.01, 0.0, -1.0, 0.5],
+                ]
+            ]
+        )
+    )
+    measurements.auxiliary.update(
+        {
+            "source_belief_indices": torch.tensor([[1, 0]]),
+            "source_object_ids": torch.tensor([[11, 10]]),
+        }
+    )
+
+    result = Associator(mahalanobis_gate=25.0).match(
+        belief,
+        measurements,
+        predicted,
+    )
+    pairs = {
+        (int(belief_index), int(measurement_index))
+        for belief_index, measurement_index, valid in zip(
+            result.belief_indices[0],
+            result.measurement_indices[0],
+            result.pair_mask[0],
+            strict=True,
+        )
+        if bool(valid)
+    }
+
+    assert pairs == {(0, 1), (1, 0)}
+
+
 def test_association_gates_impossible_pair_as_unmatched() -> None:
     belief, predicted = _belief_and_prediction()
     measurements = _measurements(torch.tensor([[[10.0, 10.0, 5.0, 5.0]]]))

@@ -34,11 +34,41 @@
   eight-scenario qualification at
   `runs/20260802-123714-v3-medium-qualification/`; verify host MPS/CPU devices,
   clean provenance, launchd persistence, and active computation.
-- [ ] Complete a medium-duration v3 qualification with enough measurement and
-  causal updates to inspect support, gradient, coverage, and validation trends;
-  reject it if any support floor or broad fixed-reference guardrail collapses.
+- [x] Stop and preserve that qualification after its first causal validation
+  exposed an eight-scenario identity/birth/collision collapse despite better
+  conditional RMSE. Do not resume its step-1728 checkpoint under changed
+  lifecycle, association, supervision, and optimizer semantics.
+- [x] Distance-gate first-time privileged target mappings, pre-gate core and
+  tentative Hungarian assignments, and add cardinality counterexamples.
+- [x] Implement configurable multi-frame tentative birth confirmation as
+  detached modality/sensor-local evidence outside `WorldBelief`.
+- [x] Bind prior-conditioned fast ROI measurements to their source persistent
+  identity and keep unrestricted gated Hungarian only for global discovery.
+- [x] Restrict slow-parameter temporal evidence to accepted associations and
+  reset it on runtime-ID replacement.
+- [x] Add causal-only local RGB-perception clipping, preserve true raw gradient
+  diagnostics, and bound causal global-perception adaptation to 512 updates.
+- [x] Make zero-support pooled validation persist and reject an unsupported
+  candidate instead of crashing or inventing zero horizon RMSE.
+- [x] Pass compile, Ruff, formatting, diff, full sandbox tests
+  (`536 passed, 6 MPS-only skipped`), and the corresponding host MPS device
+  families (`36 passed`).
+- [x] Complete a four-update CPU end-to-end wiring smoke with two real
+  supported causal updates and no skipped/non-finite batch.
 - [x] Commit and push the complete audited v3 repair set from a fully passing
   test/lint/type-quality gate.
+- [ ] Re-run the final committed repair tree on host MPS/CPU and verify both
+  local gradient caps, source-bound ROI association, tentative births,
+  checkpointing, and terminal validation.
+- [ ] Launch a new timestamped medium balanced qualification only after that
+  host smoke passes; require at least four comparable corrected-protocol
+  validations before judging trend or plateau.
+- [ ] If identity churn persists after the structural repair, add an explicit
+  supervised pairwise association-margin objective and test duplicate
+  suppression against missed live tracks; do not tune appearance weight alone.
+- [ ] Decide whether confirmed candidates that exceed free capacity should
+  retain bounded confirmation state for later allocation; current behavior
+  requires reconfirmation after a slot opens.
 - [ ] Launch the clean-source 16,384-update v3 campaign only after the medium
   qualification passes. Monitor at least four comparable corrected-protocol
   validations and do not call a hard-budget stop convergence.
@@ -320,8 +350,9 @@
 
 ## Deferred architecture
 
-- [ ] Multi-frame tentative birth confirmation (configuration currently
-  supports the Milestone 1 value of one confirmation).
+- [x] Multi-frame tentative birth confirmation with bounded sensor-local
+  evidence, strictly increasing timestamps, distance-gated cardinality-first
+  assignment, and permanent IDs only after confirmation.
 - [ ] Multiple-hypothesis branch/prune/merge.
 - [ ] Estimated camera pose and fixed-lag smoothing.
 - [ ] Continuous collision timing and richer geometry.

@@ -8,6 +8,7 @@ import torch
 from world_model.belief import (
     BeliefFactory,
     HypothesisSet,
+    LifecycleConfig,
     MotionMode,
     ObjectLifecycle,
 )
@@ -146,6 +147,146 @@ def test_lifecycle_birth_allocates_monotonic_id_from_measurement() -> None:
     assert torch.linalg.vector_norm(born.objects.appearance[0, 0]).item() == pytest.approx(1.0)
     belief.validate()
     born.validate()
+
+
+def _tentative_measurement(timestamp: float, positions: torch.Tensor) -> MeasurementSet:
+    positions = positions.reshape(1, -1, 3)
+    proposals = positions.shape[1]
+    return MeasurementSet(
+        modality="rgb",
+        sensor_id="camera",
+        timestamp=torch.tensor([timestamp]),
+        values=torch.zeros(1, proposals, 4),
+        log_variance=torch.zeros(1, proposals, 4),
+        existence_logits=torch.full((1, proposals), 4.0),
+        measurement_mask=torch.ones(1, proposals, dtype=torch.bool),
+        appearance=None,
+        class_logits=None,
+        frame_id="camera:test",
+        supported_state_fields=("position",),
+        auxiliary={"world_position": positions},
+    )
+
+
+def test_tentative_birth_requires_two_consistent_increasing_time_detections() -> None:
+    lifecycle = ObjectLifecycle(
+        LifecycleConfig(
+            birth_confirmations=2,
+            birth_confirmation_distance_m=0.5,
+        )
+    )
+    first = _tentative_measurement(0.0, torch.tensor([[0.0, 0.0, 0.0]]))
+    confirmed, state = lifecycle.confirm_tentative_births(
+        first,
+        torch.tensor([[True]]),
+        None,
+        confidence_threshold=0.55,
+    )
+    assert not confirmed.any()
+    assert state.active[0, 0]
+    assert state.confirmation_count[0, 0] == 1
+
+    second = _tentative_measurement(0.1, torch.tensor([[0.2, 0.0, 0.0]]))
+    confirmed, state = lifecycle.confirm_tentative_births(
+        second,
+        torch.tensor([[True]]),
+        state,
+        confidence_threshold=0.55,
+    )
+    assert confirmed[0, 0]
+    assert not state.active.any()
+    assert not state.confirmation_count.any()
+
+
+def test_tentative_birth_restarts_after_far_or_same_timestamp_detection() -> None:
+    lifecycle = ObjectLifecycle(
+        LifecycleConfig(
+            birth_confirmations=2,
+            birth_confirmation_distance_m=0.5,
+        )
+    )
+    first = _tentative_measurement(0.0, torch.tensor([[0.0, 0.0, 0.0]]))
+    _, state = lifecycle.confirm_tentative_births(
+        first,
+        torch.tensor([[True]]),
+        None,
+        confidence_threshold=0.55,
+    )
+    same_time = _tentative_measurement(0.0, torch.tensor([[0.1, 0.0, 0.0]]))
+    confirmed, state = lifecycle.confirm_tentative_births(
+        same_time,
+        torch.tensor([[True]]),
+        state,
+        confidence_threshold=0.55,
+    )
+    assert not confirmed.any()
+    assert state.confirmation_count[0, 0] == 1
+
+    far = _tentative_measurement(0.1, torch.tensor([[0.7, 0.0, 0.0]]))
+    confirmed, state = lifecycle.confirm_tentative_births(
+        far,
+        torch.tensor([[True]]),
+        state,
+        confidence_threshold=0.55,
+    )
+    assert not confirmed.any()
+    assert state.confirmation_count[0, 0] == 1
+
+
+def test_tentative_birth_assignment_maximizes_in_gate_confirmations() -> None:
+    lifecycle = ObjectLifecycle(
+        LifecycleConfig(
+            birth_confirmations=2,
+            birth_confirmation_distance_m=0.5,
+        )
+    )
+    prior_positions = torch.tensor(
+        [
+            [0.0, 0.0, 0.0],
+            [0.22916667, 0.438309, 0.0],
+        ]
+    )
+    first = _tentative_measurement(0.0, prior_positions)
+    _, state = lifecycle.confirm_tentative_births(
+        first,
+        torch.tensor([[True, True]]),
+        None,
+        confidence_threshold=0.55,
+    )
+    # Raw minimum-distance Hungarian prefers 0.01 + 0.51 and would discard the
+    # second edge after gating. Cardinality-first gating must instead retain
+    # both approximately-0.49 m cross assignments.
+    second = _tentative_measurement(
+        0.1,
+        torch.tensor(
+            [
+                [0.01, 0.0, 0.0],
+                [0.49, 0.0, 0.0],
+            ]
+        ),
+    )
+    confirmed, state = lifecycle.confirm_tentative_births(
+        second,
+        torch.tensor([[True, True]]),
+        state,
+        confidence_threshold=0.55,
+    )
+
+    assert confirmed.all()
+    assert not state.active.any()
+
+
+def test_single_confirmation_preserves_immediate_birth_semantics() -> None:
+    lifecycle = ObjectLifecycle(LifecycleConfig(birth_confirmations=1))
+    measurement = _tentative_measurement(0.0, torch.tensor([[0.0, 0.0, 0.0]]))
+    confirmed, state = lifecycle.confirm_tentative_births(
+        measurement,
+        torch.tensor([[True]]),
+        None,
+        confidence_threshold=0.55,
+    )
+    assert confirmed[0, 0]
+    assert not state.active.any()
 
 
 def test_lifecycle_birth_prioritizes_confidence_when_slots_are_limited() -> None:

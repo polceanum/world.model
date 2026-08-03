@@ -65,6 +65,11 @@ targets. When structured disc centres replace learned centres in the forward
 pass, the supported unrefined learned centre is retained as `raw_centre` and
 receives its own smooth-L1 auxiliary loss. Global and fast objectives are
 support-normalized independently before their fixed configured combination.
+Paired RGB pretraining creates a detached one-sequence provisional belief from
+the anchor proposals solely to supply prior-conditioned ROI crops on adjacent
+frames. It is not online runtime state and does not claim lifecycle
+confirmation; causal training, validation, evaluation, and demos use the real
+tentative-birth policy.
 The default measurement weights are:
 
 ```yaml
@@ -84,14 +89,19 @@ localization while retaining an uncertainty-training signal.
 
 Training logs retain legacy `gradient_norm` and
 `gradient_norm_pre_clip` as the raw whole-model norm. The sustained v3
-protocol first clips `dynamics.interactions` to
-`interaction_grad_clip_norm`, then computes `gradient_norm_pre_global_clip`
-and applies `grad_clip_norm` to the complete model. Logs expose the raw
-interaction norm, local coefficient/applied norm, pre-global norm, global and
-total coefficients, and final `gradient_norm_applied`. Raw per-batch total
-loss remains heterogeneous at batch one because scenario, object count,
-association support, events, and available horizons vary; checkpoint
-decisions use the fixed broad validation manifest instead.
+protocol locally clips the complete RGB observation module to
+`closed_loop_perception_grad_clip_norm` during causal training and independently
+clips `dynamics.interactions` to `interaction_grad_clip_norm`, then computes
+`gradient_norm_pre_global_clip` and applies `grad_clip_norm` to the complete
+model. The groups are disjoint and the trainer reconstructs the true original
+whole-model norm before either local cap. Logs expose both raw local norms,
+coefficients/applied norms, the raw total, pre-global norm, global and total
+coefficients, and final `gradient_norm_applied`. The perception-local cap is
+disabled during paired RGB pretraining, preserving that phase's original
+whole-model clipping behavior. Raw per-batch total loss remains heterogeneous
+at batch one because scenario, object count, association support, events, and
+available horizons vary; checkpoint decisions use the fixed broad validation
+manifest instead.
 
 At the phase boundary the trainer carries the best supported measurement
 candidate into causal optimization, starts fresh causal AdamW moments, and applies
@@ -106,9 +116,25 @@ fast-ROI slots; global auxiliary discovery alone cannot consume it.
 Unsupported draws advance the deterministic sample counter and retry up to the
 configured cap without advancing optimizer state. Global
 discovery/backbone parameters remain trainable for
-`closed_loop_global_trainable_steps`, then freeze while the ROI updater,
+`closed_loop_global_trainable_steps` (512 in the repaired v3 profile), then
+freeze while the ROI updater,
 filter, dynamics, and identifier continue learning. Fast ROI losses follow the
 persistent belief-slot assignment on every usable frame.
+
+Privileged simulator targets map losses and metrics but cannot create runtime
+evidence. A first target-to-runtime-ID mapping is admitted only within the
+same `0.5 m` physical selection gate used for reported accuracy, with the gate
+applied before Hungarian assignment; an established live-ID mapping remains
+locked to expose identity swaps. Births do not open parameter supervision.
+Drag/restitution history advances only from accepted distance-gated runtime
+associations and resets whenever a target is next observed under a different
+runtime ID.
+
+Validation support is equally explicit. If the pooled manifest has no valid
+current or configured-horizon physical mapping, the trainer retains additive
+zero counts, marks the selection metric unsupported, writes a rejected
+numbered/reference diagnostic artifact, and continues without a rollout
+incumbent. It does not emit a synthetic zero RMSE or abort the run.
 
 Collision logits describe occurrence over exact observation windows. Training
 expands each requested horizon into `[h-dt_obs, h]` query boundaries, aggregates
@@ -231,10 +257,12 @@ stochastic/deterministic support, fixed global horizon denominators, forecast
 NLL, and deterministic bounded trend-validation anchors. It adds finite
 unsupported-draw retries, absolute/reference-relative coverage floors,
 separate global/fast measurement normalization, adjacent cached ROI training,
-and a `1.0` interaction-local clip before the `2.0` whole-model clip. The safe
-deployment incumbent remains separate from the mutable phase-handoff
-trajectory. Promotion still requires at least 64 fresh balanced episodes and
-every broad guardrail.
+and independent `1.0` RGB-perception and interaction-local causal clips before
+the `2.0` whole-model clip. It also requires two consistent global/recovery
+detections within `0.5 m` before permanent birth and limits global causal
+perception adaptation to 512 updates. The safe deployment incumbent remains
+separate from the mutable phase-handoff trajectory. Promotion still requires
+at least 64 fresh balanced episodes and every broad guardrail.
 
 `device.preference=mps` applies to the convolution-heavy measurement phase.
 `device.closed_loop_preference=cpu` switches the same persistent model at the
@@ -286,24 +314,21 @@ the pooled and scenario slice. The full/medium commands must retain all eight
 scenarios and at least one validation episode per scenario; the v3 profile
 uses 32.
 
-The medium qualification is active at
+The first medium qualification was stopped and preserved at
 `runs/20260802-123714-v3-medium-qualification/` from clean pushed commit
-`c0acf16`. It uses 3,072 updates: 1,024 paired RGB plus the repository's
+`c0acf16`. It declared 3,072 updates: 1,024 paired RGB plus the repository's
 minimum meaningful 2,048-update causal interval. With batch two and
 `train_episodes=6144`, it makes exactly 6,144 deterministic episode draws over
 one balanced manifest; the shuffled phase-specific scenario counts are
 expected to be close to, but are not assumed to equal, 256/512 examples per
 scenario. Keep the profile's 32 validation episodes, eight anchors, and
-512-update evaluation cadence unchanged. The resulting causal validations at
-steps 1,536, 2,048, 2,560, and 3,072 are the first admissible trend evidence.
-
-The persistent job is
-`com.polceanum.orpheus.v3-medium-20260802-123714`, with stdout/stderr in
-`/private/tmp/20260802-123714-v3-medium-qualification.*.log`. Do not start an
-overlapping trainer. If interrupted, remove the old job, verify that no
-trainer remains, and exact-resume only from this run's `checkpoints/last.pt`
-with the same total steps, RGB boundary, train manifest size, checkpoint/log
-cadence, and executable source.
+512-update evaluation cadence unchanged. Its first causal validation improved
+conditional RMSE but exposed broad birth/identity/collision collapse and was
+rejected by 38 guardrails. The trainer was stopped after logged step 1776 and
+the job removed. Do not exact-resume its step-1728 `last.pt`: the repaired
+lifecycle, association, target-supervision, and perception-gradient semantics
+require a new timestamped run and protocol. See `project/STATUS.md` for the
+exact audit.
 
 ### Superseded v2 campaign
 

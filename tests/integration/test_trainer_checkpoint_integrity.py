@@ -219,6 +219,15 @@ def test_validation_protocol_allows_only_training_step_extension() -> None:
             grad_clip_norm=config.training.grad_clip_norm * 2.0,
         ),
     )
+    changed_perception_gradient_stability = replace(
+        config,
+        training=replace(
+            config.training,
+            closed_loop_perception_grad_clip_norm=(
+                config.training.closed_loop_perception_grad_clip_norm * 2.0
+            ),
+        ),
+    )
     changed_retry_bound = replace(
         config,
         training=replace(
@@ -256,6 +265,9 @@ def test_validation_protocol_allows_only_training_step_extension() -> None:
         _rollout_validation_protocol_hash(config)
     )
     assert _rollout_validation_protocol_hash(changed_gradient_stability) != (
+        _rollout_validation_protocol_hash(config)
+    )
+    assert _rollout_validation_protocol_hash(changed_perception_gradient_stability) != (
         _rollout_validation_protocol_hash(config)
     )
     assert _rollout_validation_protocol_hash(changed_retry_bound) != (

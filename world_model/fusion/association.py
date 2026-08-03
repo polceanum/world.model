@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -70,6 +71,8 @@ class Associator:
     ) -> None:
         if not 0.0 <= minimum_measurement_confidence <= 1.0:
             raise ValueError("minimum_measurement_confidence must lie in [0,1]")
+        if not math.isfinite(maximum_cost) or maximum_cost <= 0.0:
+            raise ValueError("maximum_cost must be finite and positive")
         self.geometry_weight = geometry_weight
         self.appearance_weight = appearance_weight
         self.existence_weight = existence_weight
@@ -94,7 +97,31 @@ class Associator:
             mahalanobis_gate=self.mahalanobis_gate,
             minimum_measurement_confidence=self.minimum_measurement_confidence,
         )
-        return cost
+        source_belief_indices = measured.auxiliary.get("source_belief_indices")
+        source_object_ids = measured.auxiliary.get("source_object_ids")
+        if source_belief_indices is None and source_object_ids is None:
+            return cost
+        if not isinstance(source_belief_indices, Tensor) or not isinstance(
+            source_object_ids,
+            Tensor,
+        ):
+            raise ValueError(
+                "source-conditioned measurements require belief indices and object IDs"
+            )
+        expected = measured.measurement_mask.shape
+        if source_belief_indices.shape != expected or source_object_ids.shape != expected:
+            raise ValueError("measurement source identity must have shape [B,M]")
+        if (
+            source_belief_indices.dtype is not torch.int64
+            or source_object_ids.dtype is not torch.int64
+        ):
+            raise TypeError("measurement source identity must use int64")
+        valid_sources = measured.measurement_mask
+        if bool(torch.any(valid_sources & ((source_belief_indices < 0) | (source_object_ids < 0)))):
+            raise ValueError("valid source-conditioned measurements require nonnegative identity")
+        same_slot = predicted.belief_indices[:, :, None] == source_belief_indices[:, None, :]
+        same_identity = predicted.object_ids[:, :, None] == source_object_ids[:, None, :]
+        return cost.masked_fill(~(same_slot & same_identity), torch.inf)
 
     def match(
         self,
@@ -157,13 +184,28 @@ class Associator:
             prediction_np = valid_prediction_rows.cpu().numpy()
             measurement_np = valid_measurements.cpu().numpy()
             subcost = detached[batch_index][np.ix_(prediction_np, measurement_np)]
-            # scipy rejects infeasible all-inf rows/columns. A large finite
-            # sentinel permits assignment; gated pairs are rejected below.
-            finite_subcost = np.where(
-                np.isfinite(subcost),
-                subcost,
-                max(self.maximum_cost * 1000.0, 1.0e6),
+            admissible = np.isfinite(subcost) & (subcost <= self.maximum_cost)
+            maximum_assignment_count = min(subcost.shape)
+            # Gate impossible pairs before Hungarian assignment. SciPy rejects
+            # infeasible all-inf rows/columns, so normalize valid costs to
+            # [0,1] and assign every invalid edge a finite cost greater than
+            # the sum of all possible valid edges. This is lexicographic:
+            # maximize valid cardinality first, then minimize original cost.
+            finite_subcost = np.full(
+                subcost.shape,
+                float(maximum_assignment_count + 1),
+                dtype=np.float64,
             )
+            if bool(admissible.any()):
+                admissible_costs = subcost[admissible].astype(np.float64)
+                minimum_admissible = float(admissible_costs.min())
+                admissible_span = float(admissible_costs.max()) - minimum_admissible
+                if admissible_span > 0.0:
+                    finite_subcost[admissible] = (
+                        admissible_costs - minimum_admissible
+                    ) / admissible_span
+                else:
+                    finite_subcost[admissible] = 0.0
             rows, columns = linear_sum_assignment(finite_subcost)
             output_index = 0
             for row, column in zip(rows.tolist(), columns.tolist(), strict=True):
@@ -171,11 +213,7 @@ class Associator:
                 belief_index = int(predicted.belief_indices[batch_index, prediction_index].item())
                 measurement_index = int(measurement_np[column])
                 selected_cost = float(subcost[row, column])
-                if (
-                    not np.isfinite(selected_cost)
-                    or selected_cost > self.maximum_cost
-                    or output_index >= pair_capacity
-                ):
+                if not admissible[row, column] or output_index >= pair_capacity:
                     continue
                 belief_indices[batch_index, output_index] = belief_index
                 measurement_indices[batch_index, output_index] = measurement_index
@@ -185,8 +223,11 @@ class Associator:
                 ]
                 competing = np.concatenate(
                     (
-                        np.delete(subcost[row, :], column),
-                        np.delete(subcost[:, column], row),
+                        np.delete(np.where(admissible[row, :], subcost[row, :], np.inf), column),
+                        np.delete(
+                            np.where(admissible[:, column], subcost[:, column], np.inf),
+                            row,
+                        ),
                     )
                 )
                 finite_competing = competing[np.isfinite(competing)]

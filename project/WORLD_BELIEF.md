@@ -15,3 +15,9 @@ moving sphere as a point trajectory does not discard its radius or slow
 physical parameters; the full belief remains available for lossless
 refinement at contact. Typed belief tokens are likewise reversible views for
 future transformer processing, never a second persistent source of truth.
+
+Tentative birth evidence is explicitly outside the canonical belief. It is
+bounded, detached, modality/sensor-local observation history with no object ID
+and no participation in filtering, dynamics, rollouts, or slow-parameter
+updates. Confirmation allocates a fresh monotonic ID and initializes a normal
+belief slot; reset discards all tentative evidence.

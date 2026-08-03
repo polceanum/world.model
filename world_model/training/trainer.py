@@ -61,7 +61,7 @@ _ROLLOUT_SELECTION_METRIC_VERSION = 5.0
 _ROLLOUT_SELECTION_RELATIVE_GUARDRAIL = 0.02
 _ROLLOUT_SELECTION_COVERAGE_TOLERANCE = 0.005
 _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE = 0.02
-_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 8
+_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 9
 _NOMINAL_POSITION_COVERAGE = 0.90
 _MEASUREMENT_SELECTION_MIN_DELTA = 1.0e-5
 _MEASUREMENT_SELECTION_METRIC_VERSION = 5.0
@@ -628,6 +628,9 @@ def _rollout_validation_protocol_from_mapping(
         "optimization_stability": {
             "grad_clip_norm": training["grad_clip_norm"],
             "interaction_grad_clip_norm": training["interaction_grad_clip_norm"],
+            "closed_loop_perception_grad_clip_norm": training[
+                "closed_loop_perception_grad_clip_norm"
+            ],
             "minimum_effective_gradient_norm": training["minimum_effective_gradient_norm"],
             "maximum_no_gradient_batches_per_update": training[
                 "maximum_no_gradient_batches_per_update"
@@ -2103,23 +2106,52 @@ def _gradient_clip_diagnostics(
 def _clip_training_gradients(
     model: OnlineWorldModel,
     config: OrpheusConfig,
+    *,
+    apply_perception_local_clip: bool = True,
 ) -> dict[str, float]:
-    """Clip learned interactions locally, then clip the complete model.
+    """Clip RGB perception and learned interactions, then the complete model.
 
-    A learned edge residual is reused at every recursive dynamics substep.
-    Its raw gradient can therefore be much larger than otherwise healthy
-    perception/filter/rollout gradients. A single global clip would shrink
-    every subsystem by that outlier's coefficient. The local cap preserves
-    the full forward dynamics capacity while preventing one residual module
-    from monopolizing an optimizer update.
+    During closed-loop adaptation, RGB discovery/ROI objectives and a learned
+    edge residual can each produce a much larger gradient than otherwise
+    healthy filter/rollout gradients. A single global clip would shrink every
+    subsystem by an unrelated outlier's coefficient. Disjoint local caps
+    preserve the full forward capacity while preventing either subsystem from
+    monopolizing an update. Measurement pretraining deliberately disables the
+    RGB-local cap and retains its established whole-model clipping behavior.
 
     ``clip_grad_norm_`` returns the norm before its own mutation. Since the
-    interaction parameters are a strict subset of the complete model, the raw
-    whole-model norm can be reconstructed exactly from the two returned norms.
+    perception and interaction parameters are disjoint strict subsets of the
+    complete model, the raw whole-model norm can be reconstructed exactly from
+    the three returned norms.
     """
 
+    perception_parameters = tuple(model.observation_modules["rgb"].parameters())
+    interaction_parameters = tuple(model.dynamics.interactions.parameters())
+    perception_ids = {id(parameter) for parameter in perception_parameters}
+    interaction_ids = {id(parameter) for parameter in interaction_parameters}
+    if not perception_ids.isdisjoint(interaction_ids):
+        raise AssertionError("perception and interaction clip groups must be disjoint")
+
+    perception_clip_norm = (
+        config.training.closed_loop_perception_grad_clip_norm
+        if apply_perception_local_clip
+        else math.inf
+    )
+    perception_pre_clip_tensor = torch.nn.utils.clip_grad_norm_(
+        perception_parameters,
+        perception_clip_norm,
+        error_if_nonfinite=False,
+    )
+    if not bool(torch.isfinite(perception_pre_clip_tensor)):
+        raise FloatingPointError("nonfinite RGB perception gradient norm")
+    perception_pre_clip = float(perception_pre_clip_tensor.detach().cpu())
+    perception_coefficient, perception_applied = _gradient_clip_diagnostics(
+        perception_pre_clip,
+        perception_clip_norm,
+    )
+
     interaction_pre_clip_tensor = torch.nn.utils.clip_grad_norm_(
-        model.dynamics.interactions.parameters(),
+        interaction_parameters,
         config.training.interaction_grad_clip_norm,
         error_if_nonfinite=False,
     )
@@ -2145,6 +2177,8 @@ def _clip_training_gradients(
     )
     raw_squared = (
         pre_global_clip * pre_global_clip
+        - perception_applied * perception_applied
+        + perception_pre_clip * perception_pre_clip
         - interaction_applied * interaction_applied
         + interaction_pre_clip * interaction_pre_clip
     )
@@ -2152,6 +2186,10 @@ def _clip_training_gradients(
     total_coefficient = applied / raw if raw > 0.0 else 1.0
     return {
         "gradient_norm_pre_clip": raw,
+        "perception_gradient_norm_pre_clip": perception_pre_clip,
+        "perception_gradient_local_clip_enabled": float(apply_perception_local_clip),
+        "perception_gradient_clip_coefficient": perception_coefficient,
+        "perception_gradient_norm_applied_before_global_clip": perception_applied,
         "interaction_gradient_norm_pre_clip": interaction_pre_clip,
         "interaction_gradient_clip_coefficient": interaction_coefficient,
         "interaction_gradient_norm_applied_before_global_clip": interaction_applied,
@@ -2576,9 +2614,21 @@ def _aggregate_physical_validation_metrics(
     # Averaging per-batch ``*_count`` diagnostics produces fractional values
     # and makes checkpoint audit trails misleading even when the ratios happen
     # to be recomputed correctly.
+    try:
+        derived = physical_validation_metrics(additive, config)
+    except RuntimeError:
+        # A candidate with no valid current or horizon mapping is a truthful
+        # unsupported selection result, not a trainer crash and not a
+        # fabricated zero-RMSE example. Keep its additive evidence and let the
+        # selector persist/reject it explicitly.
+        return {
+            **additive,
+            "selection_metric_supported": 0.0,
+        }
     return {
         **additive,
-        **physical_validation_metrics(additive, config),
+        "selection_metric_supported": 1.0,
+        **derived,
     }
 
 
@@ -2649,28 +2699,28 @@ def _validation_loader_result(
             for scenario, scenario_results in sorted(by_scenario.items()):
                 slug = re.sub(r"[^a-z0-9]+", "_", scenario.lower()).strip("_")
                 aggregate.metrics[f"scenario_{slug}_episode_count"] = float(len(scenario_results))
-                try:
-                    derived = _aggregate_physical_validation_metrics(
-                        scenario_results,
-                        config,
-                    )
-                except RuntimeError:
-                    aggregate.metrics[f"scenario_{slug}_selection_metric_supported"] = 0.0
+                derived = _aggregate_physical_validation_metrics(
+                    scenario_results,
+                    config,
+                )
+                scenario_supported = float(derived["selection_metric_supported"])
+                aggregate.metrics[f"scenario_{slug}_selection_metric_supported"] = (
+                    scenario_supported
+                )
+                if scenario_supported == 0.0:
                     continue
-                aggregate.metrics[f"scenario_{slug}_selection_metric_supported"] = 1.0
                 for name, value in derived.items():
                     if name.startswith("validation_"):
                         aggregate.metrics[f"scenario_{slug}_{name}"] = value
             for seed, result in zip(seeds, results, strict=True):
-                try:
-                    derived = _aggregate_physical_validation_metrics(
-                        [result],
-                        config,
-                    )
-                except RuntimeError:
-                    aggregate.metrics[f"seed_{seed}_selection_metric_supported"] = 0.0
+                derived = _aggregate_physical_validation_metrics(
+                    [result],
+                    config,
+                )
+                seed_supported = float(derived["selection_metric_supported"])
+                aggregate.metrics[f"seed_{seed}_selection_metric_supported"] = seed_supported
+                if seed_supported == 0.0:
                     continue
-                aggregate.metrics[f"seed_{seed}_selection_metric_supported"] = 1.0
                 for name, value in derived.items():
                     if name.startswith("validation_"):
                         aggregate.metrics[f"seed_{seed}_{name}"] = value
@@ -3372,6 +3422,148 @@ def train_from_config(
             validation,
             learning_rate=learning_rate,
         )
+        selection_support = float(validation.metrics.get("selection_metric_supported", 1.0))
+        if not math.isfinite(selection_support) or selection_support not in {0.0, 1.0}:
+            raise ValueError("pooled physical selection support marker must be binary")
+        if selection_support == 0.0:
+            candidate_model_state_hash = _current_model_state_hash(model)
+            support_failures: list[dict[str, float | str]] = [
+                {
+                    "metric": "physical_selection_support",
+                    "direction": "required",
+                    "candidate": 0.0,
+                    "reference": 1.0,
+                    "limit": 1.0,
+                    "delta": -1.0,
+                }
+            ]
+            checkpoint_metrics: dict[str, Any] = {
+                "validation_total_loss": float(validation.total_loss.detach().cpu()),
+                "validation_rollout_loss": float(
+                    validation.loss_terms.get(
+                        "rollout",
+                        validation.total_loss,
+                    )
+                    .detach()
+                    .cpu()
+                ),
+                "validation_rollout_position_loss": float(
+                    validation.loss_terms.get(
+                        "rollout_position",
+                        validation.total_loss,
+                    )
+                    .detach()
+                    .cpu()
+                ),
+                "selection_metric_supported": 0.0,
+                "selection_accepted": 0.0,
+                "selection_rejection_reason_count": 1.0,
+                "selection_rejection_reasons": support_failures,
+                "selection_reference_guardrail_failures": [],
+                "selection_incumbent_guardrail_failures": [],
+                "selection_training_support_failures": support_failures,
+                "selection_training_support_required": float(
+                    config.training.steps > config.training.rgb_pretrain_steps
+                ),
+                "selection_training_support_passed": 0.0,
+                "rollout_selection_metric_version": (_ROLLOUT_SELECTION_METRIC_VERSION),
+                "best_rollout_validated": float(best_rollout_selection is not None),
+                "rollout_reference_validated": float(reference_rollout_selection is not None),
+                "best_measurement_validated": float(best_measurement_selection is not None),
+                **_validation_protocol_checkpoint_metrics(config),
+                "checkpoint_model_state_hash": candidate_model_state_hash,
+                "checkpoint_contains_best_rollout_weights": float(
+                    best_rollout_model_state_hash == candidate_model_state_hash
+                ),
+                "checkpoint_contains_reference_rollout_weights": float(
+                    reference_rollout_model_state_hash == candidate_model_state_hash
+                ),
+                "measurement_handoff_completed": float(measurement_handoff_completed),
+            }
+            if best_rollout_selection is not None:
+                if best_rollout_model_state_hash is None or best_rollout_step is None:
+                    raise AssertionError("retained incumbent is missing weight provenance")
+                checkpoint_metrics.update(best_rollout_selection.checkpoint_metrics())
+                checkpoint_metrics["best_rollout_model_state_hash"] = best_rollout_model_state_hash
+                checkpoint_metrics["best_rollout_checkpoint_step"] = float(best_rollout_step)
+            if reference_rollout_selection is not None:
+                if reference_rollout_model_state_hash is None or reference_rollout_step is None:
+                    raise AssertionError("fixed reference is missing weight provenance")
+                checkpoint_metrics.update(
+                    reference_rollout_selection.checkpoint_metrics(prefix="reference_rollout")
+                )
+                checkpoint_metrics["reference_rollout_model_state_hash"] = (
+                    reference_rollout_model_state_hash
+                )
+                checkpoint_metrics["reference_rollout_checkpoint_step"] = float(
+                    reference_rollout_step
+                )
+            checkpoint_metrics.update(
+                retained_measurement_selector_metrics(
+                    checkpoint_model_state_hash=candidate_model_state_hash,
+                )
+            )
+            validation_metrics.update(
+                {
+                    "selection_metric_supported": 0.0,
+                    "selection_accepted": 0.0,
+                    "selection_rejection_reason_count": 1.0,
+                    "selection_rejection_reasons_json": json.dumps(
+                        support_failures,
+                        sort_keys=True,
+                    ),
+                    "selection_reference_guardrail_failures_json": "[]",
+                    "selection_incumbent_guardrail_failures_json": "[]",
+                    "selection_training_support_failure_count": 1.0,
+                    "selection_training_support_required": float(
+                        config.training.steps > config.training.rgb_pretrain_steps
+                    ),
+                    "selection_training_support_failures_json": json.dumps(
+                        support_failures,
+                        sort_keys=True,
+                    ),
+                }
+            )
+            if best_rollout_selection is not None and best_rollout_step is not None:
+                validation_metrics["best_rollout_selection_score"] = best_rollout_selection.score
+                validation_metrics["best_rollout_checkpoint_step"] = float(best_rollout_step)
+            if reference_rollout_step is not None:
+                validation_metrics["reference_rollout_checkpoint_step"] = float(
+                    reference_rollout_step
+                )
+            logger.log(
+                step=completed_step,
+                split=split,
+                metrics=validation_metrics,
+            )
+            save_checkpoint(
+                checkpoint_directory / f"validation_step_{completed_step:06d}.pt",
+                model=model,
+                optimizer=optimizer,
+                config=config,
+                step=completed_step,
+                metrics=checkpoint_metrics,
+                device=str(device),
+                source_provenance=source_provenance,
+            )
+            if reference_rollout_selection is None and not reference_rollout_path.is_file():
+                unsupported_reference_metrics = {
+                    **checkpoint_metrics,
+                    "checkpoint_contains_reference_rollout_weights": 1.0,
+                    "reference_rollout_artifact_model_state_hash": (candidate_model_state_hash),
+                    "reference_rollout_checkpoint_step": float(completed_step),
+                }
+                save_checkpoint(
+                    reference_rollout_path,
+                    model=model,
+                    optimizer=optimizer,
+                    config=config,
+                    step=completed_step,
+                    metrics=unsupported_reference_metrics,
+                    device=str(device),
+                    source_provenance=source_provenance,
+                )
+            return validation, False, support_failures
         candidate = _rollout_selection_metrics(
             validation.metrics,
             config,
@@ -4185,7 +4377,11 @@ def train_from_config(
             if result.total_loss.requires_grad and causal_support_present:
                 result.total_loss.backward()
             try:
-                gradient_diagnostics = _clip_training_gradients(model, config)
+                gradient_diagnostics = _clip_training_gradients(
+                    model,
+                    config,
+                    apply_perception_local_clip=(step >= config.training.rgb_pretrain_steps),
+                )
             except FloatingPointError as error:
                 optimizer.zero_grad(set_to_none=True)
                 raise FloatingPointError(f"{error} at optimiser step {step}") from error

@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.7
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026
+**Version:** 1.8
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, and perception-gradient-integrity amendment 3 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5491,11 +5491,12 @@ and combined with fixed declared weights.
 Training viability is an absolute and relative coverage contract. A handoff or
 causal candidate must retain declared minimum current and future coverage and a
 declared fraction of its fixed reference. The first unsupported candidate is a
-rejected/reference artifact, never a synthetic best checkpoint. A later
-support-collapse failure restores the verified rollout incumbent and resets
-optimizer state; ordinary broad-score rejection still leaves a finite,
-supported candidate on the mutable optimization trajectory as required by
-Section 164.
+rejected/reference artifact, never a synthetic best checkpoint. Zero physical
+support retains additive counts and an explicit unsupported marker; it must
+neither fabricate zero RMSE nor abort validation. A later support-collapse
+failure restores the verified rollout incumbent and resets optimizer state;
+ordinary broad-score rejection still leaves a finite, supported candidate on
+the mutable optimization trajectory as required by Section 164.
 
 Pooled accuracy must not hide a missing or regressed scenario. Every declared
 scenario needs at least one episode in the fixed validation manifest and
@@ -5517,6 +5518,54 @@ raw total norm, raw subsystem norm, subsystem coefficient and applied norm,
 pre-global norm, global coefficient, total coefficient, and final applied
 norm. A local clip must not hide the original raw norm or be described as
 convergence evidence.
+
+---
+
+# Part XXX — Lifecycle, identity, supervision, and gradient integrity amendment
+
+## 174. Tentative evidence is not persistent physical state
+
+An unmatched global or recovery measurement may require multiple consistent
+detections before birth. Until confirmation, its bounded evidence is detached,
+sensor-local observation history rather than `WorldBelief`: it has no permanent
+object ID and cannot participate in dynamics, filtering, rollouts, or
+slow-parameter identification. Candidate history is keyed by modality and
+sensor, accepts only strictly later timestamps, and matches detections within a
+declared finite world-space gate. Gate impossible pairs before Hungarian
+assignment with valid-cardinality taking precedence over distance. Allocate a
+new monotonic ID only after the configured consecutive confirmation count.
+
+All gated assignment layers follow the same ordering rule. Core association,
+tentative confirmation, and first-time privileged target mapping must exclude
+inadmissible edges before solving, rather than solve first and discard invalid
+pairs afterward. Existing persistent target-to-ID mappings remain locked while
+the target is active so training penalizes swaps; a new simulator target
+mapping is permitted only within the physical evaluation gate.
+
+Fast ROI measurements are prior-conditioned evidence for a particular
+persistent ID. They carry their source belief slot and object ID and may update
+only that source if the ordinary uncertainty/confidence gates pass. They may be
+rejected, but never cross-assigned to another persistent identity. Global
+discovery measurements remain free to use gated Hungarian association.
+
+Slow drag/restitution supervision opens only for accepted runtime
+associations, not births or simulator-visible targets. Per-target temporal
+parameter history records the associated runtime ID and resets before forming
+a label whenever that ID changes. Burn-in evidence uses the same physical
+distance gate as the optimized window.
+
+## 175. Perception gradients must not starve state learning
+
+When causal RGB gradients repeatedly dominate the whole-model clip, the
+declared RGB observation module may be locally clipped before the independent
+interaction-local and final whole-model clips. Local groups must be disjoint.
+The trainer reconstructs and logs the true raw total norm together with each
+local raw norm, coefficient, applied norm, the pre-global norm, global
+coefficient, total coefficient, and final norm. The perception-local cap is a
+causal-stage stability policy and is disabled during paired RGB pretraining,
+where the ordinary whole-model clip retains its original semantics. Clip
+limits and the bounded causal global-perception adaptation window are resolved
+configuration and checkpoint-protocol semantics.
 
 ---
 

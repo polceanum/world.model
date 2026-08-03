@@ -171,6 +171,7 @@ def test_interaction_gradients_are_bounded_before_global_clipping() -> None:
             config.training,
             grad_clip_norm=10.0,
             interaction_grad_clip_norm=1.0,
+            closed_loop_perception_grad_clip_norm=10.0,
         ),
     )
     model = OnlineWorldModel.from_config(config, device="cpu")
@@ -203,6 +204,91 @@ def test_interaction_gradients_are_bounded_before_global_clipping() -> None:
     )
     assert interaction.grad.norm().item() == pytest.approx(1.0, abs=1.0e-6)
     assert other.grad.norm().item() == pytest.approx(4.0, abs=1.0e-6)
+
+
+def test_perception_gradients_are_bounded_without_scaling_small_dynamics() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            grad_clip_norm=10.0,
+            interaction_grad_clip_norm=1.0,
+            closed_loop_perception_grad_clip_norm=1.0,
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    perception_parameters = list(model.observation_modules["rgb"].parameters())
+    perception_ids = {id(parameter) for parameter in perception_parameters}
+    interaction_parameters = list(model.dynamics.interactions.parameters())
+    interaction_ids = {id(parameter) for parameter in interaction_parameters}
+    other_parameters = [
+        parameter
+        for parameter in model.parameters()
+        if id(parameter) not in perception_ids | interaction_ids
+    ]
+    perception = perception_parameters[0]
+    interaction = interaction_parameters[0]
+    other = other_parameters[0]
+    perception.grad = torch.ones_like(perception)
+    perception.grad.mul_(12.0 / perception.grad.norm())
+    interaction.grad = torch.ones_like(interaction)
+    interaction.grad.mul_(0.3 / interaction.grad.norm())
+    other.grad = torch.ones_like(other)
+    other.grad.mul_(0.4 / other.grad.norm())
+
+    diagnostics = _clip_training_gradients(model, config)
+
+    assert diagnostics["perception_gradient_norm_pre_clip"] == pytest.approx(12.0)
+    assert diagnostics["perception_gradient_norm_applied_before_global_clip"] == pytest.approx(
+        1.0, abs=1.0e-6
+    )
+    assert diagnostics["interaction_gradient_norm_pre_clip"] == pytest.approx(0.3)
+    assert diagnostics["interaction_gradient_norm_applied_before_global_clip"] == pytest.approx(0.3)
+    assert diagnostics["gradient_norm_pre_clip"] == pytest.approx(
+        math.sqrt(12.0**2 + 0.3**2 + 0.4**2),
+        abs=1.0e-5,
+    )
+    assert diagnostics["gradient_norm_pre_global_clip"] == pytest.approx(
+        math.sqrt(1.0**2 + 0.3**2 + 0.4**2),
+        abs=1.0e-5,
+    )
+    assert diagnostics["gradient_norm_applied"] == pytest.approx(
+        math.sqrt(1.0**2 + 0.3**2 + 0.4**2),
+        abs=1.0e-5,
+    )
+    assert perception.grad.norm().item() == pytest.approx(1.0, abs=1.0e-6)
+    assert interaction.grad.norm().item() == pytest.approx(0.3, abs=1.0e-6)
+    assert other.grad.norm().item() == pytest.approx(0.4, abs=1.0e-6)
+
+
+def test_measurement_pretraining_disables_closed_loop_perception_local_clip() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            grad_clip_norm=20.0,
+            interaction_grad_clip_norm=20.0,
+            closed_loop_perception_grad_clip_norm=1.0,
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    perception = next(model.observation_modules["rgb"].parameters())
+    perception.grad = torch.ones_like(perception)
+    perception.grad.mul_(12.0 / perception.grad.norm())
+
+    diagnostics = _clip_training_gradients(
+        model,
+        config,
+        apply_perception_local_clip=False,
+    )
+
+    assert diagnostics["perception_gradient_local_clip_enabled"] == 0.0
+    assert diagnostics["perception_gradient_norm_pre_clip"] == pytest.approx(12.0)
+    assert diagnostics["perception_gradient_clip_coefficient"] == 1.0
+    assert diagnostics["perception_gradient_norm_applied_before_global_clip"] == pytest.approx(12.0)
+    assert perception.grad.norm().item() == pytest.approx(12.0, abs=1.0e-5)
 
 
 def test_effective_gradient_threshold_is_strict() -> None:

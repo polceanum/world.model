@@ -2,6 +2,47 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-03 lifecycle, identity, and gradient-collapse audit
+
+- Stopped and preserved
+  `runs/20260802-123714-v3-medium-qualification/` after step-1536 validation
+  improved conditional position/velocity metrics but grew predictions from
+  `3950` to `5274`, identity switches from `10` to `146`, and collision false
+  positives from `242` to `469`. The 38 guardrail failures correctly rejected
+  it; this is not convergence evidence and its last checkpoint must not be
+  resumed under the repaired protocol.
+- Distance-gated first-time simulator target alignment and moved the gate
+  ahead of Hungarian assignment. Existing persistent-ID target mappings remain
+  locked so an identity swap is penalized instead of silently relabelled.
+- Implemented real configurable multi-frame tentative births as detached,
+  modality/sensor-local evidence outside `WorldBelief`, with increasing
+  timestamps, world-distance consistency, cardinality-first matching, and no
+  permanent ID until confirmation.
+- Pre-gated the core maximum-cost association matrix before Hungarian solving,
+  preventing invalid selected edges from reducing valid match cardinality.
+  Configuration and direct construction now reject non-finite or non-positive
+  maximum costs.
+- Added source slot/object-ID metadata to prior-conditioned fast ROI
+  measurements and prohibited cross-identity updates while preserving free
+  gated global-discovery association.
+- Removed births from slow-parameter observation gates and reset per-target
+  frame history whenever the accepted runtime identity changes.
+- Added a causal-only RGB observation-module gradient cap before the
+  interaction-local and whole-model caps, retaining reconstructed raw-total
+  diagnostics. Bounded global causal perception adaptation to one 512-update
+  validation interval.
+- Changed zero-support pooled validation from fatal RMSE conversion into an
+  explicit unsupported selection result with raw counts, rejection reasons,
+  numbered/reference artifacts, and no fabricated zero-error metric.
+- Completed a four-update CPU end-to-end wiring run at
+  `runs/20260802-233339-collapse-repair-cpu-smoke/`: two paired RGB and two
+  supported causal updates, no skipped/non-finite batch, terminal checkpoint
+  complete, and no oracle runtime input. It is not an accuracy result.
+- Passed the complete sandbox suite (`536 passed, 6 MPS-only skipped`) and all
+  corresponding host MPS test families (`36 passed`), plus compile, Ruff,
+  formatting, and diff checks.
+- Advanced the specification to version 1.8.
+
 ### 2026-08-02 supported-causal and convergence-stability audit
 
 - Stopped and preserved

@@ -1611,3 +1611,48 @@
   final-tree smoke confirmed the stricter behavior: its step-four pooled score
   improved `0.558737 → 0.548741`, but coverage fell and the candidate was
   correctly rejected by both pooled and `reference_pairs` slice guardrails.
+
+## ADR-071 — Confirm births, pre-gate assignment, and isolate causal perception gradients
+
+- **Date:** 2026-08-03
+- **Status:** accepted and implemented
+- **Context:** The first v3 causal validation improved conditional physical
+  RMSE but grew predicted object frames by 33.5%, distance-gated identity
+  switches from 10 to 146, collision false positives from 242 to 469, and
+  calibration error. Investigation found that unmatched confident global
+  proposals were born immediately, first-time simulator target mappings had no
+  physical gate, fast ROI rows could cross-update identities, and three
+  Hungarian call sites applied gates only after solving. Births also opened
+  slow-parameter labels without an accepted innovation. Separately, late raw
+  gradients were dominated by the RGB detector/backbone after interactions
+  had already been locally stabilized, so the whole-model cap starved the
+  filter/dynamics update. Removing false target mappings also exposed a
+  zero-support validation path that raised during RMSE derivation instead of
+  persisting a rejected candidate.
+- **Decision:** Tentative discoveries remain detached `(modality, sensor)`-
+  local observation history outside `WorldBelief`; require configured
+  consecutive, strictly-later detections within a finite world-space gate
+  before allocating a monotonic ID. Gate inadmissible core association,
+  tentative confirmation, and new privileged target-alignment edges before
+  Hungarian assignment using a penalty that makes valid cardinality primary
+  and distance/cost secondary. Lock fast ROI evidence to its explicit source
+  slot and object ID, while global discovery remains free to associate.
+  Parameter observability requires an accepted runtime association and its
+  frame baseline resets on runtime-ID replacement. During causal training
+  only, clip the complete RGB observation module locally before the separate
+  interaction and global caps, reconstruct/log the true raw norm, and restrict
+  global perception adaptation to the first 512 causal updates. A pooled
+  validation with no physical support retains raw counts, writes an explicitly
+  unsupported rejected artifact, and establishes no deployable incumbent.
+- **Alternatives considered:** tighten the birth confidence alone; shorten
+  track lifetime; accept improved conditional RMSE despite duplicate tracks;
+  post-filter Hungarian results; hardcode slot-order association globally;
+  freeze all perception at the phase boundary; lower the shared learning rate.
+- **Consequences:** No tentative proposal becomes predictive physical state,
+  invalid edges cannot suppress valid assignments, and ROI evidence cannot
+  corrupt another identity. Simulator visibility or a newborn cannot fabricate
+  parameter evidence. Perception retains a bounded causal adaptation window
+  without erasing smaller dynamics/filter gradients. These changes define a
+  new validation/optimization protocol, so the stopped qualification cannot be
+  resumed or compared as a continuation. A fresh broad qualification is still
+  required; the repair is not itself an accuracy or convergence claim.

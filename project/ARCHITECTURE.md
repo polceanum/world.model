@@ -15,6 +15,7 @@ analytic + gated learned correction
           ├── bounded per-ID sensor history
           │       └── optional velocity-only correction
           ├── lifecycle / identity
+          │       └── detached tentative evidence before permanent birth
           └── observability-gated slow parameter update
           │
           ▼
@@ -67,6 +68,23 @@ routine. A missing, invalid, too-small, or out-of-gate local component falls
 back to the learned/predicted measurement, so this operation cannot globally
 reacquire an object. Depth residuals remain disabled in the current profiles
 until a trained ROI checkpoint passes a held-out correction gate.
+
+Because each fast ROI is already conditioned on a source prior, its
+`MeasurementSet` records the source belief slot and persistent object ID. Core
+association may accept that row only for the same source if the normal
+uncertainty/confidence gates pass; it may not cross-update another object.
+Global discovery retains free gated Hungarian matching. Every maximum-cost or
+distance gate is applied before assignment with valid cardinality taking
+precedence over residual cost, avoiding post-hoc invalid pairs that create
+unnecessary misses and rebirths.
+
+Unmatched global/recovery discoveries use bounded tentative evidence keyed by
+`(modality, sensor_id)`. This state is detached observation history, not a
+second world model: it has no permanent ID and does not enter correction,
+dynamics, rollouts, or parameter identification. Strictly later detections
+must remain within the configured world-distance gate for the configured
+number of consecutive confirmations; only then does lifecycle allocate a
+monotonic ID in `WorldBelief`.
 
 Persistent object `motion_mode_logits` describe the instantaneous endpoint
 state. A rollout step's collision logit instead describes occurrence anywhere

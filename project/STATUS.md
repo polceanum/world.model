@@ -1,7 +1,7 @@
 # Project status
 
-**Date:** 2026-08-02
-**Specification:** `PROJECT_SPEC.md` 1.7
+**Date:** 2026-08-03
+**Specification:** `PROJECT_SPEC.md` 1.8
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -11,11 +11,154 @@ shared-model profile, plus a quality-aware persistent-ID multi-frame
 point/scale depth observer; the first sustained campaign is preserved as a
 superseded legacy-objective control after a convergence-integrity audit; the
 corrected v2 campaign is also preserved and stopped after a second audit proved
-that unsupported rows consumed causal updates and coverage collapsed; the v3
-runtime now passes a real supported-gradient hybrid MPS/CPU smoke with
-hierarchical interaction clipping and scenario-aware rejection, but no v3
-long-run, convergence, or broad promotion result exists yet; collision,
-occlusion, identification, convergence, and full acceptance remain open
+that unsupported rows consumed causal updates and coverage collapsed; the
+first v3 qualification is preserved but stopped after its first causal
+validation exposed lifecycle/identity collapse and perception-gradient
+starvation; the repaired runtime passes focused regression and CPU end-to-end
+wiring checks, but no repaired v3 qualification, convergence result, or broad
+promotion exists yet; collision, occlusion, identification, convergence, and
+full acceptance remain open
+
+## 2026-08-03 — v3 collapse audit and lifecycle/identity repair
+
+The 3,072-update qualification at
+`runs/20260802-123714-v3-medium-qualification/` was not converging safely.
+Its first causal validation at step `1536` reduced the lower-is-better pooled
+score from `0.7462555` to `0.5878015`, position RMSE from `0.8274599 m` to
+`0.5960934 m`, and velocity RMSE from `1.4834236 m/s` to `1.0865632 m/s`.
+Those conditional gains hid structural collapse:
+
+- predicted object frames rose from `3950` to `5274` for `4000` targets;
+- distance-gated identity switches rose from `10/1333` (`0.007502`) to
+  `146/2217` (`0.065855`);
+- collision false positives rose from `242` to `469`, with collision F1
+  falling from `0.222222` to `0.191781`;
+- nominal-90% coverage moved from `0.877841` to `0.978778`, increasing
+  calibration error from `0.022159` to `0.078778`;
+- all eight scenario slices contributed to the `38` persisted rejection
+  reasons.
+
+The selector correctly rejected the candidate. Training was deliberately
+stopped after logged update `1776` / data draw `1779`; the last durable
+checkpoint is step `1728`. The launchd job was removed and the run is
+preserved as a failed-protocol diagnostic. Do not resume it: the source defects
+below change lifecycle, association, supervision, and optimizer semantics.
+
+The audit found and repaired seven causal defects:
+
+1. New persistent simulator-target mappings were accepted at arbitrary
+   distance. In the failed validation, only `1777/3830` newly assigned
+   belief-target frames were within the declared `0.5 m` physical gate.
+   New mappings are now distance-gated before Hungarian assignment; a live
+   persistent ID mapping remains locked while its target exists.
+2. Runtime configuration exposed `birth_confirmations`, but values other than
+   one were rejected and every unmatched confident global proposal received a
+   permanent ID immediately. Detached `(modality, sensor)`-local tentative
+   evidence now requires consecutive strictly-later detections within a
+   configurable world-space gate before monotonic ID allocation.
+3. Core association and tentative confirmation solved ungated costs and
+   discarded invalid pairs afterward. Both now pre-gate with
+   valid-cardinality-first assignment. The regression matrix
+   `[[0,20],[20,31]]` at maximum cost `30` retains both valid cross-pairs.
+4. Prior-conditioned fast ROI rows could be Hungarian-assigned to another
+   persistent object even though their features already mixed in the source
+   prior. Fast rows now carry source slot/ID and may update only that identity;
+   global discovery remains freely associated.
+5. Births and stale target history could open drag/restitution supervision
+   without a same-ID accepted innovation. Parameter gates now use accepted,
+   distance-gated runtime associations only and reset their temporal baseline
+   whenever the associated runtime ID changes.
+6. Late causal raw gradients were dominated by RGB perception rather than the
+   already locally clipped interaction block. An exact snapshot decomposed raw
+   norm `11.784` into global-detector `10.036`, backbone `5.959`, ROI `1.585`,
+   interaction-edge `0.306`, and interaction-node `0.195`. A causal-only
+   `1.0` local cap now covers the complete RGB observation module before the
+   independent interaction and whole-model clips. RGB pretraining retains its
+   original whole-model clipping semantics, and global causal perception
+   adaptation is bounded to `512` updates.
+7. Once false privileged mappings were removed, a deliberately tiny
+   zero-support validation crashed while deriving horizon RMSE. Pooled
+   validation now retains the raw zero counts, marks selection unsupported,
+   persists numbered/reference diagnostic artifacts, and rejects the candidate
+   without fabricating zero RMSE or aborting training.
+
+A dirty-tree CPU wiring run completed while these changes were under test:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/sustained_accuracy_mps_v3.yaml \
+  --initialize-from \
+    runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/best_measurement.pt \
+  --run-name 20260802-233339-collapse-repair-cpu-smoke \
+  --device cpu \
+  --set 'simulator.scenario_mixture=[reference_pairs]' \
+  --set training.steps=4 \
+  --set training.rgb_pretrain_steps=2 \
+  --set training.train_episodes=8 \
+  --set training.validation_episodes=2 \
+  --set training.batch_size=2 \
+  --set training.eval_every=2 \
+  --set training.checkpoint_every=1 \
+  --set training.log_every=1 \
+  --set training.num_workers=0 \
+  --set training.validation_rollout_anchors_per_episode=2 \
+  --set training.measurement_validation_frames=2
+```
+
+```text
+run: runs/20260802-233339-collapse-repair-cpu-smoke/
+updates: 4/4 (2 paired RGB, 2 supported causal)
+episode draws: 8
+skipped/no-gradient batches: 0
+device: CPU
+elapsed: 176.5751 s
+oracle runtime input: false
+```
+
+At its final causal update, the true raw norm was `3.1444`; perception was
+locally reduced from `3.10125` to `1.0`, interaction remained unscaled at
+`0.18152`, and the pre-global/final norm was `1.12674`. This proves gradient,
+runtime, checkpoint, and terminal-validation wiring only. Its two
+`reference_pairs` validation episodes and inherited safe incumbent are far too
+small for an accuracy or convergence claim. A clean host MPS/CPU smoke and
+then a new timestamped balanced qualification remain required.
+
+Known lifecycle limitations remain explicit: confirmation is spatial-only, so
+repeated association failure near a missed live track can still confirm a
+duplicate under the current single-hypothesis tracker. If more confirmed
+proposals arrive than there are free slots, confidence-ordered allocation
+keeps the strongest and an unallocated real candidate must reconfirm after
+capacity opens. These affect recovery latency/duplicate risk but do not
+corrupt an existing belief slot.
+
+Verification on the repaired tree:
+
+```bash
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-collapse-pycache PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus \
+  python -m compileall -q world_model tests train.py evaluate.py demo.py
+conda run --no-capture-output -n orpheus \
+  ruff check world_model tests train.py evaluate.py demo.py
+conda run --no-capture-output -n orpheus \
+  ruff format --check world_model tests train.py evaluate.py demo.py
+git diff --check
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q
+```
+
+Compile, Ruff, formatting, and diff checks passed. The complete sandbox suite
+reported `536 passed, 6 skipped in 143.58s`; every skip was an MPS-only test.
+The environment is Python `3.10.20`, PyTorch `2.10.0`, with MPS compiled in.
+The same final source then ran the skipped device families outside the sandbox:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q \
+  tests/integration/test_rgb_measurements.py \
+  tests/unit/test_association.py \
+  tests/unit/test_evaluation_parameter_update_metrics.py \
+  tests/unit/test_modal_dynamics.py
+```
+
+Host MPS was available and all `36` tests passed in `8.36s`.
 
 ## 2026-08-02 — supported-causal convergence repair and v3 qualification
 
