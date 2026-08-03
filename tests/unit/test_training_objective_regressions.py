@@ -5,6 +5,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 import torch
 from torch import Tensor
 
@@ -23,6 +24,7 @@ from world_model.training.loop import (
     _select_rollout_anchor_frames,
     _update_geometric_identity_metrics,
     _weighted_closed_loop_total,
+    future_scene_predictable_mask,
     match_belief_to_targets,
     measurement_localization_metrics,
     pretrain_rgb_measurements,
@@ -607,11 +609,46 @@ def test_unseen_actuation_censors_the_coupled_scene_but_keeps_distribution_nll()
     assert (
         result.physical_metrics["physical_rollout_censored_external_actuation_count@0.050s"] == 2.0
     )
+    assert result.physical_metrics["physical_forecast_predictable_target_count@0.050s"] == 0.0
+    assert (
+        result.physical_metrics["physical_rollout_position_coverage90@0.050s_coordinate_count"]
+        == 6.0
+    )
+    assert result.physical_metrics["physical_rollout_position@0.050s_coordinate_count"] == 0.0
 
     result.losses["rollout_position_nll"].backward()
     assert log_variance.grad is not None
     # Gradient descent therefore increases variance for the hidden outcome.
     assert log_variance.grad.item() < 0.0
+
+
+def test_scene_predictability_censors_only_batches_with_unseen_actuation() -> None:
+    actuation = torch.zeros(2, 3, 2, dtype=torch.bool)
+    actuation[0, 1, 0] = True
+    batch = {
+        "objects": {
+            "active": torch.ones(2, 3, 2, dtype=torch.bool),
+        },
+        "events": {
+            "externally_actuated": actuation,
+        },
+    }
+    indices = torch.tensor([[0, 1], [0, 1]], dtype=torch.int64)
+
+    scene = future_scene_predictable_mask(
+        batch,
+        anchor_index=0,
+        target_index=2,
+    )
+    targets = _future_predictable_mask(
+        batch,
+        anchor_index=0,
+        target_index=2,
+        target_indices=indices,
+    )
+
+    assert scene.tolist() == [False, True]
+    assert targets.tolist() == [[False, False], [True, True]]
 
 
 def test_mature_mask_excludes_cold_deterministic_targets_but_reports_both() -> None:
@@ -705,6 +742,12 @@ def _additive_result(scale: float) -> TrainingBatchResult:
     metrics = {
         "physical_state_position_sse": 3.0 * scale,
         "physical_state_position_coordinate_count": 3.0 * scale,
+        "physical_state_position_x_sse": 1.0 * scale,
+        "physical_state_position_x_coordinate_count": 1.0 * scale,
+        "physical_state_position_y_sse": 1.0 * scale,
+        "physical_state_position_y_coordinate_count": 1.0 * scale,
+        "physical_state_position_z_sse": 1.0 * scale,
+        "physical_state_position_z_coordinate_count": 1.0 * scale,
         "physical_state_velocity_sse": 3.0 * scale,
         "physical_state_velocity_coordinate_count": 3.0 * scale,
         "physical_distance_gated_matched_object_frames": 1.0 * scale,
@@ -712,15 +755,27 @@ def _additive_result(scale: float) -> TrainingBatchResult:
         "physical_distance_gated_predicted_object_frames": 1.0 * scale,
         "physical_distance_gated_identity_switches": 0.0,
         "physical_distance_gated_object_frame_associations": 1.0 * scale,
-        "physical_position_coverage90_hit_count": 3.0 * scale,
-        "physical_position_coverage90_coordinate_count": 3.0 * scale,
+        "physical_predicted_object_frames": 2.0 * scale,
+        "physical_position_coverage90_hit_count": 12.0 * scale,
+        "physical_position_coverage90_coordinate_count": 15.0 * scale,
         "physical_collision_true_positive_count": 1.0 * scale,
         "physical_collision_false_positive_count": 0.0,
         "physical_collision_false_negative_count": 0.0,
         "physical_rollout_position@0.050s_sse": 3.0 * scale,
         "physical_rollout_position@0.050s_coordinate_count": 3.0 * scale,
+        "physical_rollout_position_x@0.050s_sse": 1.0 * scale,
+        "physical_rollout_position_x@0.050s_coordinate_count": 1.0 * scale,
+        "physical_rollout_position_y@0.050s_sse": 1.0 * scale,
+        "physical_rollout_position_y@0.050s_coordinate_count": 1.0 * scale,
+        "physical_rollout_position_z@0.050s_sse": 1.0 * scale,
+        "physical_rollout_position_z@0.050s_coordinate_count": 1.0 * scale,
+        "physical_rollout_position_coverage90@0.050s_hit_count": 12.0 * scale,
+        "physical_rollout_position_coverage90@0.050s_coordinate_count": 15.0 * scale,
         "physical_forecast_active_count@0.050s": 1.0 * scale,
-        "physical_forecast_target_count@0.050s": 1.0 * scale,
+        "physical_forecast_tracked_count@0.050s": 5.0 * scale,
+        "physical_forecast_target_count@0.050s": 5.0 * scale,
+        "physical_forecast_predictable_target_count@0.050s": 1.0 * scale,
+        "physical_rollout_predictable_target_count@0.050s": 1.0 * scale,
         "physical_collision_true_positive_count@0.050s": 2.0 * scale,
         "physical_rollout_censored_external_actuation_count@0.050s": (4.0 * scale),
     }
@@ -740,7 +795,8 @@ def test_physical_count_aggregation_preserves_exact_horizon_totals() -> None:
 
     assert aggregate["physical_collision_true_positive_count@0.050s"] == 6.0
     assert aggregate["physical_rollout_censored_external_actuation_count@0.050s"] == 12.0
-    assert aggregate["physical_forecast_target_count@0.050s"] == 3.0
+    assert aggregate["physical_forecast_target_count@0.050s"] == 15.0
+    assert aggregate["physical_predicted_object_frames"] == 6.0
 
 
 def test_physical_validation_records_zero_horizon_support_without_fabricated_rmse() -> None:
@@ -756,6 +812,52 @@ def test_physical_validation_records_zero_horizon_support_without_fabricated_rms
     assert aggregate["selection_metric_supported"] == 0.0
     assert aggregate["physical_rollout_position@0.050s_coordinate_count"] == 0.0
     assert "validation_position_rmse@0.050s" not in aggregate
+
+
+def test_missing_physical_metric_schema_is_not_misreported_as_zero_support() -> None:
+    malformed = _additive_result(1.0)
+    del malformed.metrics["physical_state_position_sse"]
+
+    with pytest.raises(
+        RuntimeError,
+        match="missing additive physical validation metric 'physical_state_position_sse'",
+    ):
+        _aggregate_physical_validation_metrics(
+            [malformed],
+            _single_horizon_config(),
+        )
+
+
+def test_zero_horizon_support_cannot_hide_an_unrelated_missing_schema_key() -> None:
+    malformed = _additive_result(1.0)
+    malformed.metrics["physical_forecast_predictable_target_count@0.050s"] = 0.0
+    malformed.metrics["physical_rollout_position@0.050s_sse"] = 0.0
+    malformed.metrics["physical_rollout_position@0.050s_coordinate_count"] = 0.0
+    del malformed.metrics["physical_collision_false_negative_count"]
+
+    with pytest.raises(
+        RuntimeError,
+        match="missing additive physical validation metric "
+        "'physical_collision_false_negative_count'",
+    ):
+        _aggregate_physical_validation_metrics(
+            [malformed],
+            _single_horizon_config(),
+        )
+
+
+def test_negative_support_count_is_invalid_not_ordinary_unsupported() -> None:
+    malformed = _additive_result(1.0)
+    malformed.metrics["physical_forecast_predictable_target_count@0.050s"] = -1.0
+
+    with pytest.raises(
+        ValueError,
+        match="physical_forecast_predictable_target_count@0.050s.*invalid",
+    ):
+        _aggregate_physical_validation_metrics(
+            [malformed],
+            _single_horizon_config(),
+        )
 
 
 def _selection_metrics(*, horizon: float, axis_x: float) -> dict[str, float]:

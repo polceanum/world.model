@@ -39,6 +39,7 @@ from world_model.training.logging import MetricsLogger
 from world_model.training.loop import (
     _MEASUREMENT_SELECTION_DISTANCE_THRESHOLD_M,
     _PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M,
+    PhysicalMetricSupportError,
     TrainingBatchResult,
     move_batch_to_device,
     physical_validation_metrics,
@@ -57,17 +58,31 @@ from world_model.utils.version import SIMULATOR_VERSION
 _SAFE_RUN_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _NUMBERED_VALIDATION_CHECKPOINT = re.compile(r"validation_step_(\d+)\.pt$")
 _ROLLOUT_SELECTION_MIN_DELTA = 1.0e-5
-_ROLLOUT_SELECTION_METRIC_VERSION = 5.0
+_ROLLOUT_SELECTION_METRIC_VERSION = 6.0
 _ROLLOUT_SELECTION_RELATIVE_GUARDRAIL = 0.02
 _ROLLOUT_SELECTION_COVERAGE_TOLERANCE = 0.005
 _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE = 0.02
-_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 9
+_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 10
 _NOMINAL_POSITION_COVERAGE = 0.90
 _MEASUREMENT_SELECTION_MIN_DELTA = 1.0e-5
 _MEASUREMENT_SELECTION_METRIC_VERSION = 5.0
 _MEASUREMENT_SELECTION_RELATIVE_GUARDRAIL = 0.02
 _MEASUREMENT_SELECTION_RECALL_TOLERANCE = 0.005
-_MEASUREMENT_VALIDATION_PROTOCOL_VERSION = 4
+_MEASUREMENT_VALIDATION_PROTOCOL_VERSION = 5
+_PHYSICAL_ADDITIVE_EXACT_METRICS = frozenset(
+    {
+        "physical_target_object_frames",
+        "physical_predicted_object_frames",
+        "physical_matched_object_frames",
+        "physical_identity_switches",
+        "physical_object_frame_associations",
+        "physical_distance_gated_matched_object_frames",
+        "physical_distance_gated_target_object_frames",
+        "physical_distance_gated_predicted_object_frames",
+        "physical_distance_gated_identity_switches",
+        "physical_distance_gated_object_frame_associations",
+    }
+)
 _MEASUREMENT_ADDITIVE_METRICS = frozenset(
     {
         "rgb_runtime_birth_true_positive_count_at_0_5m",
@@ -90,6 +105,19 @@ _MEASUREMENT_ADDITIVE_METRICS = frozenset(
         "rgb_fast_roi_true_positive_count_at_0_5m",
     }
 )
+
+
+def _is_additive_physical_metric(name: str) -> bool:
+    """Whether a metric is an exact manifest-additive physical quantity."""
+
+    return name.startswith("physical_") and (
+        name.endswith("_sse")
+        or name.endswith("_count")
+        or "_count@" in name
+        or name in _PHYSICAL_ADDITIVE_EXACT_METRICS
+    )
+
+
 _CAUSAL_TRAJECTORY_LOSS_TERMS = frozenset(
     {
         "state_position",
@@ -602,6 +630,14 @@ def _rollout_validation_protocol_from_mapping(
         raise ValueError("training.validation_episodes must be positive")
     manifest = make_seed_manifest("validation", validation_episodes)
     resolved_simulator = SphereWorldConfig.from_config(config_mapping)
+    resolved_scenarios = {
+        scenario: asdict(
+            resolved_simulator.for_scenario(scenario).for_distribution(
+                resolved_simulator.distribution
+            )
+        )
+        for scenario in resolved_simulator.scenario_mixture
+    }
     return {
         "protocol_version": _ROLLOUT_VALIDATION_PROTOCOL_VERSION,
         "simulator_version": SIMULATOR_VERSION,
@@ -609,6 +645,7 @@ def _rollout_validation_protocol_from_mapping(
         # generator config. The latter includes defaults and derived padding.
         "simulator": dict(simulator),
         "resolved_sphere_world": asdict(resolved_simulator),
+        "resolved_scenarios": resolved_scenarios,
         "model": dict(model),
         "runtime": dict(runtime),
         "evaluation": dict(evaluation),
@@ -622,6 +659,15 @@ def _rollout_validation_protocol_from_mapping(
                 "handoff_minimum_forecast_coverage": training["handoff_minimum_forecast_coverage"],
                 "handoff_minimum_reference_coverage_ratio": training[
                     "handoff_minimum_reference_coverage_ratio"
+                ],
+                "minimum_predictable_target_count_per_scenario_horizon": training[
+                    "validation_minimum_predictable_target_count_per_scenario_horizon"
+                ],
+                "minimum_matched_target_count_per_scenario_horizon": training[
+                    "validation_minimum_matched_target_count_per_scenario_horizon"
+                ],
+                "minimum_supported_episodes_per_scenario": training[
+                    "validation_minimum_supported_episodes_per_scenario"
                 ],
             },
         },
@@ -690,11 +736,20 @@ def _measurement_validation_protocol_from_mapping(
     if validation_episodes <= 0:
         raise ValueError("training.validation_episodes must be positive")
     manifest = make_seed_manifest("validation", validation_episodes)
+    resolved_simulator = SphereWorldConfig.from_config(config_mapping)
     return {
         "protocol_version": _MEASUREMENT_VALIDATION_PROTOCOL_VERSION,
         "simulator_version": SIMULATOR_VERSION,
         "simulator": dict(simulator),
-        "resolved_sphere_world": asdict(SphereWorldConfig.from_config(config_mapping)),
+        "resolved_sphere_world": asdict(resolved_simulator),
+        "resolved_scenarios": {
+            scenario: asdict(
+                resolved_simulator.for_scenario(scenario).for_distribution(
+                    resolved_simulator.distribution
+                )
+            )
+            for scenario in resolved_simulator.scenario_mixture
+        },
         "model": dict(model),
         "runtime": dict(runtime),
         "selection": {
@@ -766,6 +821,132 @@ def _validation_protocol_checkpoint_metrics(config: OrpheusConfig) -> dict[str, 
     }
 
 
+def _validation_support_evidence(metrics: Mapping[str, Any]) -> dict[str, float]:
+    """Retain exact additive and slice-support evidence for selector decisions."""
+
+    evidence: dict[str, float] = {}
+    for name, value in metrics.items():
+        selection_support_marker = name == "selection_metric_supported" or (
+            name.startswith(("scenario_", "seed_")) and name.endswith("_selection_metric_supported")
+        )
+        scenario_episode_count = name.startswith("scenario_") and name.endswith("_episode_count")
+        scenario_physical_name: str | None = None
+        if name.startswith("scenario_") and "_physical_" in name:
+            scenario_physical_name = "physical_" + name.split("_physical_", 1)[1]
+        additive = _is_additive_physical_metric(name) or (
+            scenario_physical_name is not None
+            and _is_additive_physical_metric(scenario_physical_name)
+        )
+        if not additive and not selection_support_marker and not scenario_episode_count:
+            continue
+        numeric = float(value)
+        if not math.isfinite(numeric) or numeric < 0:
+            raise ValueError(f"validation support evidence {name!r} must be finite/nonnegative")
+        evidence[name] = numeric
+    return evidence
+
+
+def _validate_validation_support_schema(
+    metrics: Mapping[str, Any],
+    config: OrpheusConfig,
+) -> float:
+    """Validate pooled, scenario, and per-seed causal-support markers."""
+
+    def binary(name: str) -> float:
+        if name not in metrics:
+            raise RuntimeError(f"closed-loop validation did not report required {name!r}")
+        value = float(metrics[name])
+        if not math.isfinite(value) or value not in {0.0, 1.0}:
+            raise ValueError(f"closed-loop validation marker {name!r} must be binary")
+        return value
+
+    def count(name: str) -> float:
+        if name not in metrics:
+            raise RuntimeError(f"closed-loop validation did not report required {name!r}")
+        value = float(metrics[name])
+        if not math.isfinite(value) or value < 0 or not value.is_integer():
+            raise ValueError(
+                f"closed-loop validation count {name!r} must be a finite nonnegative integer"
+            )
+        return value
+
+    def validate_horizon_support(prefix: str, *, supported: float) -> None:
+        for suffix, _ in _selection_horizon_keys(config):
+            predictable_key = f"{prefix}physical_forecast_predictable_target_count@{suffix}"
+            coordinate_key = f"{prefix}physical_rollout_position@{suffix}_coordinate_count"
+            predictable_count = count(predictable_key)
+            coordinate_count = count(coordinate_key)
+            if supported == 1.0 and (
+                predictable_count
+                < config.training.validation_minimum_predictable_target_count_per_scenario_horizon
+            ):
+                raise ValueError(
+                    f"supported validation slice {prefix!r} has "
+                    f"{predictable_count:g} predictable targets at {suffix}"
+                )
+            required_coordinates = (
+                3 * config.training.validation_minimum_matched_target_count_per_scenario_horizon
+            )
+            if supported == 1.0 and coordinate_count < required_coordinates:
+                raise ValueError(
+                    f"supported validation slice {prefix!r} has "
+                    f"{coordinate_count:g} matched coordinates at {suffix}"
+                )
+
+    manifest = make_seed_manifest("validation", config.training.validation_episodes)
+    scenario_slugs = _selection_scenario_slugs(config)
+    expected_episode_counts = {scenario: 0 for scenario in scenario_slugs}
+    expected_supported_counts = {scenario: 0 for scenario in scenario_slugs}
+    for seed in manifest.seeds:
+        seed_support = binary(f"seed_{seed}_selection_metric_supported")
+        scenario = scenario_slugs[int(seed) % len(scenario_slugs)]
+        expected_episode_counts[scenario] += 1
+        expected_supported_counts[scenario] += int(seed_support)
+
+    pooled_support = binary("selection_metric_supported")
+    validate_horizon_support("", supported=pooled_support)
+    expected_minimum = config.training.validation_minimum_supported_episodes_per_scenario
+    for scenario in scenario_slugs:
+        prefix = f"scenario_{scenario}_"
+        episode_key = f"{prefix}episode_count"
+        supported_key = f"{prefix}supported_episode_count"
+        minimum_key = f"{prefix}minimum_supported_episode_count"
+        support_key = f"{prefix}selection_metric_supported"
+        episode_count = count(episode_key)
+        supported_count = count(supported_key)
+        minimum_count = count(minimum_key)
+        if episode_count <= 0:
+            raise ValueError(f"declared scenario {scenario!r} has no validation episodes")
+        if episode_count != float(expected_episode_counts[scenario]):
+            raise ValueError(
+                f"declared scenario {scenario!r} recorded {episode_count:g} episodes, "
+                f"expected {expected_episode_counts[scenario]}"
+            )
+        if supported_count > episode_count:
+            raise ValueError(
+                f"declared scenario {scenario!r} has more supported than total episodes"
+            )
+        if supported_count != float(expected_supported_counts[scenario]):
+            raise ValueError(
+                f"declared scenario {scenario!r} recorded {supported_count:g} "
+                "supported episodes, but its per-seed markers imply "
+                f"{expected_supported_counts[scenario]}"
+            )
+        if minimum_count != float(expected_minimum):
+            raise ValueError(
+                f"declared scenario {scenario!r} recorded support minimum "
+                f"{minimum_count:g}, expected {expected_minimum}"
+            )
+        support = binary(support_key)
+        validate_horizon_support(prefix, supported=support)
+        if support == 1.0 and supported_count < minimum_count:
+            raise ValueError(
+                f"declared scenario {scenario!r} claims support below its episode floor"
+            )
+
+    return pooled_support
+
+
 def _rollout_selection_metrics(
     metrics: Mapping[str, float],
     config: OrpheusConfig,
@@ -805,30 +986,19 @@ def _rollout_selection_metrics(
         horizon_coverage_values[suffix] = float(metrics[metric_key])
     axis_values: dict[str, float] = {}
     horizon_axis_values: dict[str, dict[str, float]] = {}
-    available_axis_metrics = [
-        f"validation_position_rmse_{axis}_m" in metrics for axis in ("x", "y", "z")
-    ]
-    if any(available_axis_metrics):
-        if not all(available_axis_metrics):
-            missing.extend(
-                f"validation_position_rmse_{axis}_m"
-                for axis, available in zip(
-                    ("x", "y", "z"),
-                    available_axis_metrics,
-                    strict=True,
-                )
-                if not available
-            )
-        else:
-            for axis in ("x", "y", "z"):
-                axis_values[axis] = float(metrics[f"validation_position_rmse_{axis}_m"])
-                horizon_axis_values[axis] = {}
-                for suffix, _ in _selection_horizon_keys(config):
-                    metric_key = f"validation_position_rmse_{axis}@{suffix}"
-                    if metric_key not in metrics:
-                        missing.append(metric_key)
-                    else:
-                        horizon_axis_values[axis][suffix] = float(metrics[metric_key])
+    for axis in ("x", "y", "z"):
+        axis_key = f"validation_position_rmse_{axis}_m"
+        if axis_key not in metrics:
+            missing.append(axis_key)
+            continue
+        axis_values[axis] = float(metrics[axis_key])
+        horizon_axis_values[axis] = {}
+        for suffix, _ in _selection_horizon_keys(config):
+            metric_key = f"validation_position_rmse_{axis}@{suffix}"
+            if metric_key not in metrics:
+                missing.append(metric_key)
+            else:
+                horizon_axis_values[axis][suffix] = float(metrics[metric_key])
     if missing:
         raise RuntimeError(
             "closed-loop validation did not report broad selection metrics: "
@@ -959,22 +1129,19 @@ def _rollout_selection_from_checkpoint(
             return None
         translated[f"validation_forecast_target_coverage@{suffix}"] = float(metrics[coverage_key])
     axis_checkpoint_keys = [f"{prefix}_position_rmse_{axis}_m" for axis in ("x", "y", "z")]
-    if any(key in metrics for key in axis_checkpoint_keys):
-        if not all(key in metrics for key in axis_checkpoint_keys):
-            return None
-        for axis, checkpoint_key in zip(
-            ("x", "y", "z"),
-            axis_checkpoint_keys,
-            strict=True,
-        ):
-            translated[f"validation_position_rmse_{axis}_m"] = float(metrics[checkpoint_key])
-            for suffix, _ in _selection_horizon_keys(config):
-                horizon_key = f"{prefix}_position_rmse_{axis}@{suffix}"
-                if horizon_key not in metrics:
-                    return None
-                translated[f"validation_position_rmse_{axis}@{suffix}"] = float(
-                    metrics[horizon_key]
-                )
+    if not all(key in metrics for key in axis_checkpoint_keys):
+        return None
+    for axis, checkpoint_key in zip(
+        ("x", "y", "z"),
+        axis_checkpoint_keys,
+        strict=True,
+    ):
+        translated[f"validation_position_rmse_{axis}_m"] = float(metrics[checkpoint_key])
+        for suffix, _ in _selection_horizon_keys(config):
+            horizon_key = f"{prefix}_position_rmse_{axis}@{suffix}"
+            if horizon_key not in metrics:
+                return None
+            translated[f"validation_position_rmse_{axis}@{suffix}"] = float(metrics[horizon_key])
     restored = _rollout_selection_metrics(translated, config)
     stored_score = metrics.get(f"{prefix}_selection_score")
     if stored_score is None or not math.isclose(
@@ -1012,6 +1179,75 @@ def _rollout_selection_from_checkpoint(
             return None
         scenario_slices[scenario] = scenario_selection
     return replace(restored, scenario_slices=scenario_slices)
+
+
+def _rollout_selection_from_additive_evidence(
+    metrics: Mapping[str, Any],
+    config: OrpheusConfig,
+) -> _RolloutSelectionMetrics:
+    """Recompute a selector solely from retained exact validation evidence."""
+
+    pooled = _rollout_selection_metrics(
+        physical_validation_metrics(metrics, config),
+        config,
+    )
+    scenario_slices: dict[str, _RolloutSelectionMetrics | None] = {}
+    for scenario in _selection_scenario_slugs(config):
+        metric_prefix = f"scenario_{scenario}_"
+        support_key = f"{metric_prefix}selection_metric_supported"
+        support = _binary_checkpoint_marker(
+            metrics.get(support_key),
+            name=support_key,
+        )
+        if not support:
+            scenario_slices[scenario] = None
+            continue
+        scenario_additive = {
+            name.removeprefix(metric_prefix): value
+            for name, value in metrics.items()
+            if name.startswith(metric_prefix)
+        }
+        scenario_slices[scenario] = _rollout_selection_metrics(
+            physical_validation_metrics(scenario_additive, config),
+            config,
+        )
+    return replace(pooled, scenario_slices=scenario_slices)
+
+
+def _checkpoint_selection_matches_additive_evidence(
+    metrics: Mapping[str, Any],
+    config: OrpheusConfig,
+    *,
+    prefix: str,
+) -> bool:
+    """Reject derived selector metadata that contradicts exact raw sums."""
+
+    stored = _rollout_selection_from_checkpoint(
+        metrics,
+        config,
+        prefix=prefix,
+    )
+    if stored is None:
+        return False
+    recomputed = _rollout_selection_from_additive_evidence(metrics, config)
+    expected_metrics = {
+        **recomputed.validation_metrics(),
+        **recomputed.checkpoint_metrics(prefix=prefix),
+    }
+    for name, expected in expected_metrics.items():
+        value = metrics.get(name)
+        try:
+            actual = float(value)
+        except (TypeError, ValueError):
+            return False
+        if not math.isfinite(actual) or not math.isclose(
+            actual,
+            float(expected),
+            rel_tol=1.0e-9,
+            abs_tol=1.0e-12,
+        ):
+            return False
+    return True
 
 
 def _rollout_selection_guardrail_failures(
@@ -1533,13 +1769,17 @@ def _rollout_validation_checkpoint_metrics(
         ),
         "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
         "best_rollout_validated": 1.0,
+        "incomplete_reference_comparison_required": 0.0,
         "best_measurement_validated": float(best_measurement is not None),
+        **_validation_support_evidence(validation.metrics),
         **candidate.validation_metrics(),
         **incumbent.checkpoint_metrics(),
         **reference.checkpoint_metrics(prefix="reference_rollout"),
         **_validation_protocol_checkpoint_metrics(config),
         "checkpoint_model_state_hash": checkpoint_model_state_hash,
-        "checkpoint_contains_best_rollout_weights": float(accepted),
+        "checkpoint_contains_best_rollout_weights": float(
+            checkpoint_model_state_hash == incumbent_model_state_hash
+        ),
         "best_rollout_model_state_hash": incumbent_model_state_hash,
         "best_rollout_checkpoint_step": float(incumbent_step),
         "checkpoint_contains_reference_rollout_weights": float(
@@ -1721,12 +1961,23 @@ def _verified_selector_checkpoint(
             _ROLLOUT_SELECTION_METRIC_VERSION
         ):
             return None
+        if _binary_checkpoint_marker(
+            metrics.get("incomplete_reference_comparison_required"),
+            name="incomplete_reference_comparison_required",
+        ):
+            return None
+        if _validate_validation_support_schema(metrics, config) != 1.0:
+            return None
         selection = _rollout_selection_from_checkpoint(
             metrics,
             config,
             prefix=prefix,
         )
-        if selection is None:
+        if selection is None or not _checkpoint_selection_matches_additive_evidence(
+            metrics,
+            config,
+            prefix=prefix,
+        ):
             return None
         if float(metrics.get(f"checkpoint_contains_{prefix}_weights", 0.0)) != 1.0:
             return None
@@ -1843,6 +2094,13 @@ def _verified_accepted_validation_checkpoint(
             return None
         if float(metrics.get("selection_accepted", 0.0)) != 1.0:
             return None
+        if _binary_checkpoint_marker(
+            metrics.get("incomplete_reference_comparison_required"),
+            name="incomplete_reference_comparison_required",
+        ):
+            return None
+        if _validate_validation_support_schema(metrics, config) != 1.0:
+            return None
         if float(metrics.get("checkpoint_contains_best_rollout_weights", 0.0)) != 1.0:
             return None
         linked_step = _finite_nonnegative_integer(
@@ -1857,7 +2115,11 @@ def _verified_accepted_validation_checkpoint(
         if metrics.get("best_rollout_model_state_hash") != model_state_hash:
             return None
         selection = _rollout_selection_from_checkpoint(metrics, config)
-        if selection is None:
+        if selection is None or not _checkpoint_selection_matches_additive_evidence(
+            metrics,
+            config,
+            prefix="best_rollout",
+        ):
             return None
     except (KeyError, RuntimeError, TypeError, ValueError):
         return None
@@ -2586,37 +2848,49 @@ def _validation_step(
 def _aggregate_physical_validation_metrics(
     results: list[TrainingBatchResult],
     config: OrpheusConfig,
+    *,
+    minimum_predictable_target_count: int = 1,
+    minimum_matched_target_count: int = 1,
 ) -> dict[str, float]:
     """Derive exact split-level physical metrics from additive batch counts."""
 
+    for name, value in (
+        ("minimum_predictable_target_count", minimum_predictable_target_count),
+        ("minimum_matched_target_count", minimum_matched_target_count),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
     additive: dict[str, float] = {}
     for result in results:
         for name, value in result.metrics.items():
-            if name.startswith("physical_") and (
-                name.endswith("_sse")
-                or name.endswith("_count")
-                or "_count@" in name
-                or name
-                in {
-                    "physical_target_object_frames",
-                    "physical_matched_object_frames",
-                    "physical_identity_switches",
-                    "physical_object_frame_associations",
-                    "physical_distance_gated_matched_object_frames",
-                    "physical_distance_gated_target_object_frames",
-                    "physical_distance_gated_predicted_object_frames",
-                    "physical_distance_gated_identity_switches",
-                    "physical_distance_gated_object_frame_associations",
-                }
-            ):
-                additive[name] = additive.get(name, 0.0) + float(value)
+            if _is_additive_physical_metric(name):
+                numeric = float(value)
+                if not math.isfinite(numeric) or numeric < 0:
+                    raise ValueError(f"additive physical validation metric {name!r} is invalid")
+                additive[name] = additive.get(name, 0.0) + numeric
     # Preserve the exact split totals as well as ratios derived from them.
     # Averaging per-batch ``*_count`` diagnostics produces fractional values
     # and makes checkpoint audit trails misleading even when the ratios happen
     # to be recomputed correctly.
+    insufficient_support = False
+    for suffix, _ in _selection_horizon_keys(config):
+        predictable_key = f"physical_forecast_predictable_target_count@{suffix}"
+        if predictable_key not in additive:
+            raise RuntimeError(f"missing additive physical validation metric {predictable_key!r}")
+        if additive[predictable_key] < minimum_predictable_target_count:
+            insufficient_support = True
+        coordinate_key = f"physical_rollout_position@{suffix}_coordinate_count"
+        if coordinate_key not in additive:
+            raise RuntimeError(f"missing additive physical validation metric {coordinate_key!r}")
+        required_coordinates = 3 * minimum_matched_target_count
+        if additive[coordinate_key] < required_coordinates:
+            insufficient_support = True
     try:
         derived = physical_validation_metrics(additive, config)
-    except RuntimeError:
+    except PhysicalMetricSupportError:
+        insufficient_support = True
+        derived = None
+    if insufficient_support:
         # A candidate with no valid current or horizon mapping is a truthful
         # unsupported selection result, not a trainer crash and not a
         # fabricated zero-RMSE example. Keep its additive evidence and let the
@@ -2625,6 +2899,8 @@ def _aggregate_physical_validation_metrics(
             **additive,
             "selection_metric_supported": 0.0,
         }
+    if derived is None:
+        raise AssertionError("supported physical validation did not derive metrics")
     return {
         **additive,
         "selection_metric_supported": 1.0,
@@ -2702,15 +2978,42 @@ def _validation_loader_result(
                 derived = _aggregate_physical_validation_metrics(
                     scenario_results,
                     config,
+                    minimum_predictable_target_count=(
+                        config.training.validation_minimum_predictable_target_count_per_scenario_horizon
+                    ),
+                    minimum_matched_target_count=(
+                        config.training.validation_minimum_matched_target_count_per_scenario_horizon
+                    ),
                 )
-                scenario_supported = float(derived["selection_metric_supported"])
+                supported_episode_count = sum(
+                    float(
+                        _aggregate_physical_validation_metrics(
+                            [scenario_result],
+                            config,
+                        )["selection_metric_supported"]
+                    )
+                    for scenario_result in scenario_results
+                )
+                aggregate.metrics[f"scenario_{slug}_supported_episode_count"] = (
+                    supported_episode_count
+                )
+                aggregate.metrics[f"scenario_{slug}_minimum_supported_episode_count"] = float(
+                    config.training.validation_minimum_supported_episodes_per_scenario
+                )
+                scenario_supported = float(
+                    derived["selection_metric_supported"] == 1.0
+                    and supported_episode_count
+                    >= config.training.validation_minimum_supported_episodes_per_scenario
+                )
                 aggregate.metrics[f"scenario_{slug}_selection_metric_supported"] = (
                     scenario_supported
                 )
-                if scenario_supported == 0.0:
-                    continue
                 for name, value in derived.items():
-                    if name.startswith("validation_"):
+                    physical_support_diagnostic = _is_additive_physical_metric(name)
+                    supported_selection_metric = scenario_supported == 1.0 and name.startswith(
+                        "validation_"
+                    )
+                    if physical_support_diagnostic or supported_selection_metric:
                         aggregate.metrics[f"scenario_{slug}_{name}"] = value
             for seed, result in zip(seeds, results, strict=True):
                 derived = _aggregate_physical_validation_metrics(
@@ -3183,6 +3486,7 @@ def train_from_config(
     training_data_draw_step = 0
     skipped_no_gradient_batches = 0
     support_collapse_rollback_at_checkpoint = False
+    incomplete_reference_comparison_required = False
     if resume_path is not None:
         payload = load_checkpoint(
             resume_path,
@@ -3204,19 +3508,44 @@ def train_from_config(
             resume_metrics.get("best_rollout_validated", 0.0),
             name="best_rollout_validated",
         )
+        rollout_reference_validated = _binary_checkpoint_marker(
+            resume_metrics.get(
+                "rollout_reference_validated",
+                float(best_rollout_validated),
+            ),
+            name="rollout_reference_validated",
+        )
+        incomplete_reference_marker = resume_metrics.get("incomplete_reference_comparison_required")
+        if incomplete_reference_marker is not None:
+            incomplete_reference_comparison_required = _binary_checkpoint_marker(
+                incomplete_reference_marker,
+                name="incomplete_reference_comparison_required",
+            )
+        elif not rollout_reference_validated:
+            # Compatibility for a current-protocol unsupported numbered
+            # checkpoint written before the durable marker existed.  The
+            # explicit zero support result is enough to prove that the next
+            # supported validation must establish a fixed reference without
+            # promoting itself.
+            stored_selection_support = resume_metrics.get("selection_metric_supported")
+            if stored_selection_support is not None:
+                incomplete_reference_comparison_required = not _binary_checkpoint_marker(
+                    stored_selection_support,
+                    name="selection_metric_supported",
+                )
+        if incomplete_reference_comparison_required and (
+            rollout_reference_validated or best_rollout_validated
+        ):
+            raise ValueError(
+                "exact resume cannot require an incomplete reference comparison "
+                "while declaring a validated rollout reference or incumbent"
+            )
         best_measurement_validated = _binary_checkpoint_marker(
             resume_metrics.get("best_measurement_validated", 0.0),
             name="best_measurement_validated",
         )
-        if best_rollout_validated:
-            preserved_best = _preserve_resume_selector_checkpoint(
-                resume_path,
-                best_rollout_path,
-                config,
-                prefix="best_rollout",
-                resume_metrics=resume_metrics,
-                expected_device=closed_loop_device,
-            )
+        preserved_reference: tuple[_RolloutSelectionMetrics, str, int] | None = None
+        if rollout_reference_validated:
             preserved_reference = _preserve_resume_selector_checkpoint(
                 resume_path,
                 reference_rollout_path,
@@ -3225,10 +3554,50 @@ def train_from_config(
                 resume_metrics=resume_metrics,
                 expected_device=closed_loop_device,
             )
-            # Moving-best metadata is useful only when both linked files prove
-            # the actual incumbent and the fixed anti-ratcheting reference.
-            if preserved_best is None or preserved_reference is None:
-                linked_rollout_format = (
+            if preserved_reference is None:
+                linked_reference_format = (
+                    float(
+                        resume_metrics.get(
+                            "rollout_selection_metric_version",
+                            -1.0,
+                        )
+                    )
+                    == _ROLLOUT_SELECTION_METRIC_VERSION
+                    and isinstance(
+                        resume_metrics.get("reference_rollout_model_state_hash"),
+                        str,
+                    )
+                    and resume_metrics.get("reference_rollout_checkpoint_step") is not None
+                )
+                if linked_reference_format or best_rollout_validated:
+                    raise ValueError(
+                        "exact resume declared a linked rollout reference, but "
+                        "reference_rollout.pt is missing or failed "
+                        "protocol/tensor verification"
+                    )
+                rollout_reference_validated = False
+            else:
+                (
+                    reference_rollout_selection,
+                    reference_rollout_model_state_hash,
+                    reference_rollout_step,
+                ) = preserved_reference
+        if best_rollout_validated:
+            if not rollout_reference_validated or preserved_reference is None:
+                raise ValueError(
+                    "exact resume declares a best rollout without a verified "
+                    "fixed rollout reference"
+                )
+            preserved_best = _preserve_resume_selector_checkpoint(
+                resume_path,
+                best_rollout_path,
+                config,
+                prefix="best_rollout",
+                resume_metrics=resume_metrics,
+                expected_device=closed_loop_device,
+            )
+            if preserved_best is None:
+                linked_best_format = (
                     float(
                         resume_metrics.get(
                             "rollout_selection_metric_version",
@@ -3241,17 +3610,12 @@ def train_from_config(
                         str,
                     )
                     and resume_metrics.get("best_rollout_checkpoint_step") is not None
-                    and isinstance(
-                        resume_metrics.get("reference_rollout_model_state_hash"),
-                        str,
-                    )
-                    and resume_metrics.get("reference_rollout_checkpoint_step") is not None
                 )
-                if linked_rollout_format:
+                if linked_best_format:
                     raise ValueError(
-                        "exact resume declared linked rollout selector artifacts, "
-                        "but best_rollout.pt or reference_rollout.pt is missing "
-                        "or failed protocol/tensor verification"
+                        "exact resume declared a linked rollout incumbent, but "
+                        "best_rollout.pt is missing or failed protocol/tensor "
+                        "verification"
                     )
                 best_rollout_validated = False
             else:
@@ -3260,11 +3624,6 @@ def train_from_config(
                     best_rollout_model_state_hash,
                     best_rollout_step,
                 ) = preserved_best
-                (
-                    reference_rollout_selection,
-                    reference_rollout_model_state_hash,
-                    reference_rollout_step,
-                ) = preserved_reference
                 best_rollout = best_rollout_selection.score
         stored_handoff_completed = resume_metrics.get("measurement_handoff_completed")
         if stored_handoff_completed is not None:
@@ -3410,6 +3769,7 @@ def train_from_config(
         nonlocal best_rollout_model_state_hash, best_rollout_step
         nonlocal reference_rollout_selection
         nonlocal reference_rollout_model_state_hash, reference_rollout_step
+        nonlocal incomplete_reference_comparison_required
 
         validation = _validation_loader_result(
             model,
@@ -3422,10 +3782,13 @@ def train_from_config(
             validation,
             learning_rate=learning_rate,
         )
-        selection_support = float(validation.metrics.get("selection_metric_supported", 1.0))
-        if not math.isfinite(selection_support) or selection_support not in {0.0, 1.0}:
-            raise ValueError("pooled physical selection support marker must be binary")
+        selection_support = _validate_validation_support_schema(
+            validation.metrics,
+            config,
+        )
         if selection_support == 0.0:
+            if reference_rollout_selection is None:
+                incomplete_reference_comparison_required = True
             candidate_model_state_hash = _current_model_state_hash(model)
             support_failures: list[dict[str, float | str]] = [
                 {
@@ -3439,6 +3802,7 @@ def train_from_config(
             ]
             checkpoint_metrics: dict[str, Any] = {
                 "validation_total_loss": float(validation.total_loss.detach().cpu()),
+                **_validation_support_evidence(validation.metrics),
                 "validation_rollout_loss": float(
                     validation.loss_terms.get(
                         "rollout",
@@ -3469,6 +3833,9 @@ def train_from_config(
                 "rollout_selection_metric_version": (_ROLLOUT_SELECTION_METRIC_VERSION),
                 "best_rollout_validated": float(best_rollout_selection is not None),
                 "rollout_reference_validated": float(reference_rollout_selection is not None),
+                "incomplete_reference_comparison_required": float(
+                    incomplete_reference_comparison_required
+                ),
                 "best_measurement_validated": float(best_measurement_selection is not None),
                 **_validation_protocol_checkpoint_metrics(config),
                 "checkpoint_model_state_hash": candidate_model_state_hash,
@@ -3549,9 +3916,9 @@ def train_from_config(
             if reference_rollout_selection is None and not reference_rollout_path.is_file():
                 unsupported_reference_metrics = {
                     **checkpoint_metrics,
-                    "checkpoint_contains_reference_rollout_weights": 1.0,
+                    "checkpoint_contains_reference_rollout_weights": 0.0,
                     "reference_rollout_artifact_model_state_hash": (candidate_model_state_hash),
-                    "reference_rollout_checkpoint_step": float(completed_step),
+                    "reference_rollout_artifact_checkpoint_step": float(completed_step),
                 }
                 save_checkpoint(
                     reference_rollout_path,
@@ -3570,11 +3937,15 @@ def train_from_config(
             require_scenarios=True,
         )
         candidate_model_state_hash = _current_model_state_hash(model)
+        deferred_reference_comparison_required = incomplete_reference_comparison_required or (
+            reference_rollout_selection is None and reference_rollout_path.is_file()
+        )
         established_reference = reference_rollout_selection is None
         if established_reference:
             reference_rollout_selection = candidate
             reference_rollout_model_state_hash = candidate_model_state_hash
             reference_rollout_step = completed_step
+            incomplete_reference_comparison_required = False
         if (
             reference_rollout_selection is None
             or reference_rollout_model_state_hash is None
@@ -3591,9 +3962,33 @@ def train_from_config(
             if training_support_required
             else []
         )
-        if best_rollout_selection is None and training_support_failures:
+        reference_guardrail_failures = (
+            []
+            if established_reference
+            else _rollout_selection_guardrail_failures(
+                candidate,
+                reference_rollout_selection,
+            )
+        )
+        if established_reference and deferred_reference_comparison_required:
+            reference_guardrail_failures = [
+                {
+                    "metric": "complete_fixed_reference_comparison",
+                    "direction": "required_before_promotion",
+                    "candidate": 0.0,
+                    "reference": 0.0,
+                    "limit": 1.0,
+                    "delta": 0.0,
+                }
+            ]
+        first_incumbent_rejection_reasons = [
+            *training_support_failures,
+            *reference_guardrail_failures,
+        ]
+        if best_rollout_selection is None and first_incumbent_rejection_reasons:
             checkpoint_metrics: dict[str, Any] = {
                 "validation_total_loss": float(validation.total_loss.detach().cpu()),
+                **_validation_support_evidence(validation.metrics),
                 "validation_rollout_loss": float(
                     validation.loss_terms.get("rollout", validation.total_loss).detach().cpu()
                 ),
@@ -3606,23 +4001,26 @@ def train_from_config(
                     .cpu()
                 ),
                 "selection_accepted": 0.0,
-                "selection_rejection_reason_count": float(len(training_support_failures)),
-                "selection_rejection_reasons": training_support_failures,
-                "selection_reference_guardrail_failures": [],
+                "selection_rejection_reason_count": float(len(first_incumbent_rejection_reasons)),
+                "selection_rejection_reasons": first_incumbent_rejection_reasons,
+                "selection_reference_guardrail_failures": reference_guardrail_failures,
                 "selection_incumbent_guardrail_failures": [],
                 "selection_training_support_failures": training_support_failures,
                 "selection_training_support_required": 1.0,
-                "selection_training_support_passed": 0.0,
+                "selection_training_support_passed": float(not training_support_failures),
                 "rollout_selection_metric_version": (_ROLLOUT_SELECTION_METRIC_VERSION),
                 "best_rollout_validated": 0.0,
                 "rollout_reference_validated": 1.0,
+                "incomplete_reference_comparison_required": 0.0,
                 "best_measurement_validated": float(best_measurement_selection is not None),
                 **candidate.validation_metrics(),
                 **reference_rollout_selection.checkpoint_metrics(prefix="reference_rollout"),
                 **_validation_protocol_checkpoint_metrics(config),
                 "checkpoint_model_state_hash": candidate_model_state_hash,
                 "checkpoint_contains_best_rollout_weights": 0.0,
-                "checkpoint_contains_reference_rollout_weights": 1.0,
+                "checkpoint_contains_reference_rollout_weights": float(
+                    candidate_model_state_hash == reference_rollout_model_state_hash
+                ),
                 "reference_rollout_model_state_hash": (reference_rollout_model_state_hash),
                 "reference_rollout_checkpoint_step": float(reference_rollout_step),
                 "measurement_handoff_completed": float(measurement_handoff_completed),
@@ -3635,9 +4033,15 @@ def train_from_config(
             validation_metrics.update(
                 {
                     "selection_accepted": 0.0,
-                    "selection_rejection_reason_count": float(len(training_support_failures)),
+                    "selection_rejection_reason_count": float(
+                        len(first_incumbent_rejection_reasons)
+                    ),
                     "selection_rejection_reasons_json": json.dumps(
-                        training_support_failures,
+                        first_incumbent_rejection_reasons,
+                        sort_keys=True,
+                    ),
+                    "selection_reference_guardrail_failures_json": json.dumps(
+                        reference_guardrail_failures,
                         sort_keys=True,
                     ),
                     "selection_training_support_failure_count": float(
@@ -3678,9 +4082,10 @@ def train_from_config(
                 )
             return validation, False, training_support_failures
         accepted = not training_support_failures and (
-            best_rollout_selection is None
+            (best_rollout_selection is None and not reference_guardrail_failures)
             or (
-                _rollout_selection_improves(
+                best_rollout_selection is not None
+                and _rollout_selection_improves(
                     candidate,
                     best_rollout_selection,
                 )
@@ -3807,6 +4212,9 @@ def train_from_config(
         metrics: dict[str, Any] = {
             "best_rollout_validated": float(best_rollout_selection is not None),
             "rollout_reference_validated": float(reference_rollout_selection is not None),
+            "incomplete_reference_comparison_required": float(
+                incomplete_reference_comparison_required
+            ),
             "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
             "checkpoint_model_state_hash": current_model_state_hash,
             "checkpoint_contains_best_rollout_weights": float(
@@ -4033,13 +4441,36 @@ def train_from_config(
                 learning_rate=float(optimizer.param_groups[0]["lr"]),
                 split="validation_initialization_incumbent",
             )
-            if not accepted:
-                raise AssertionError("initialization validation must establish the first incumbent")
-            print(
-                "preserved imported runtime as broad closed-loop incumbent "
-                f"(score={best_rollout:.6f})",
-                flush=True,
-            )
+            if accepted:
+                print(
+                    "preserved imported runtime as broad closed-loop incumbent "
+                    f"(score={best_rollout:.6f})",
+                    flush=True,
+                )
+            else:
+                # ``validate_closed_loop_incumbent`` deliberately persists a
+                # truthful unsupported reference and leaves the mutable
+                # training path able to restore support.  Aborting here made
+                # that recovery path unreachable and turned one unsupported
+                # scenario slice into an initialization crash.
+                logger.log(
+                    step=start_step,
+                    split="training_control_initialization_support",
+                    metrics={
+                        "initialization_candidate_accepted": 0.0,
+                        "initialization_reference_established": float(
+                            reference_rollout_selection is not None
+                        ),
+                        "initialization_training_continues": 1.0,
+                        "training_data_draw_step": float(training_data_draw_step),
+                    },
+                )
+                print(
+                    "imported runtime did not satisfy every causal promotion "
+                    "guard; preserved its diagnostic reference and continued "
+                    "training without promoting a deployment incumbent",
+                    flush=True,
+                )
         if start_step < config.training.rgb_pretrain_steps and device != validation_source_device:
             model.to(validation_source_device)
             model.reset()
@@ -4056,6 +4487,26 @@ def train_from_config(
                     "measurement incumbent",
                     flush=True,
                 )
+    elif start_step == 0 and config.training.rgb_pretrain_steps == 0 and config.training.steps > 0:
+        # A fresh causal-only run still needs one immutable pre-update
+        # reference. Later retries happen only at ``eval_every`` rather than
+        # before every optimizer update.
+        _, accepted, _ = validate_closed_loop_incumbent(
+            completed_step=0,
+            learning_rate=float(optimizer.param_groups[0]["lr"]),
+            split="validation_initialization_incumbent",
+        )
+        if accepted:
+            print(
+                f"established initial causal reference/incumbent (score={best_rollout:.6f})",
+                flush=True,
+            )
+        else:
+            print(
+                "initial causal reference did not satisfy every promotion "
+                "guard; training continues without a deployment incumbent",
+                flush=True,
+            )
     measurement_handoff_pending = (
         not measurement_handoff_completed
         and start_step <= config.training.rgb_pretrain_steps < config.training.steps
@@ -4063,7 +4514,6 @@ def train_from_config(
 
     for step in range(start_step, config.training.steps):
         restored_measurement_candidate = False
-        handoff_validation_performed = False
         if (
             step == config.training.rgb_pretrain_steps
             and best_measurement_validated
@@ -4123,7 +4573,6 @@ def train_from_config(
                 learning_rate=float(optimizer.param_groups[0]["lr"]),
                 split="validation_measurement_handoff",
             )
-            handoff_validation_performed = True
             if best_rollout_selection is None:
                 # The fresh run establishes its first broad incumbent below.
                 pass
@@ -4260,27 +4709,11 @@ def train_from_config(
                 )
             measurement_handoff_completed = True
             measurement_handoff_pending = False
-        if (
-            step >= config.training.rgb_pretrain_steps
-            and best_rollout_selection is None
-            and not handoff_validation_performed
-        ):
-            _, established_incumbent, _ = validate_closed_loop_incumbent(
-                completed_step=step,
-                learning_rate=float(optimizer.param_groups[0]["lr"]),
-                split="validation_incumbent",
-            )
-            if established_incumbent:
-                print(
-                    f"established broad closed-loop incumbent (score={best_rollout:.6f})",
-                    flush=True,
-                )
-            else:
-                print(
-                    "closed-loop candidate did not meet causal support floors; "
-                    "training continues without promoting a rollout incumbent",
-                    flush=True,
-                )
+        # If no deployable incumbent exists yet, retry only at the declared
+        # validation cadence below. Running the complete validation manifest
+        # before every causal optimizer update can make an unsupported model
+        # appear hung and consume orders of magnitude more validation than
+        # training.
         global_perception_trainable = (
             step
             < config.training.rgb_pretrain_steps
@@ -4483,10 +4916,12 @@ def train_from_config(
                 flush=True,
             )
 
-        should_validate = config.training.eval_every > 0 and (
-            completed_step % config.training.eval_every == 0
-            or completed_step == config.training.rgb_pretrain_steps
-            or completed_step == config.training.steps
+        should_validate = completed_step == config.training.steps or (
+            config.training.eval_every > 0
+            and (
+                completed_step % config.training.eval_every == 0
+                or completed_step == config.training.rgb_pretrain_steps
+            )
         )
         if should_validate and completed_step == config.training.steps:
             # Final validation can be much more expensive than the final

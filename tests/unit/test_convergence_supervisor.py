@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 import torch
@@ -13,6 +15,7 @@ from scripts.supervise_convergence import (
     _wait_for_completed_segment,
     parse_args,
 )
+from world_model.datasets import make_seed_manifest
 from world_model.runtime import OnlineWorldModel
 from world_model.training.checkpointing import save_checkpoint
 from world_model.training.convergence import (
@@ -316,6 +319,166 @@ def test_initial_wait_fails_when_monitored_trainer_disappears(
         )
 
 
+def test_initial_wait_surfaces_terminal_trainer_failure_without_pid(
+    tmp_path,
+) -> None:
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "training_state.json").write_text(
+        json.dumps(
+            {
+                "state": "failed",
+                "exception_type": "RuntimeError",
+                "message": "causal support exhausted",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        CampaignIncompleteError,
+        match=("training_state.json: RuntimeError: causal support exhausted"),
+    ):
+        _wait_for_completed_segment(
+            run,
+            config=load_config("configs/tiny_overfit.yaml"),
+            minimum_expected_steps=12288,
+            poll_seconds=0.001,
+            event_path=tmp_path / "events.jsonl",
+        )
+
+
+def test_initial_wait_prefers_terminal_failure_artifact_over_live_pid(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "training_failure.json").write_text(
+        json.dumps(
+            {
+                "state": "failed",
+                "exception_type": "KeyboardInterrupt",
+                "message": "operator interrupted training",
+            }
+        ),
+        encoding="utf-8",
+    )
+    process_probes = 0
+
+    def record_process_probe(_pid: int, _signal: int) -> None:
+        nonlocal process_probes
+        process_probes += 1
+
+    monkeypatch.setattr(
+        "scripts.supervise_convergence.os.kill",
+        record_process_probe,
+    )
+
+    with pytest.raises(
+        CampaignIncompleteError,
+        match=("training_failure.json: KeyboardInterrupt: operator interrupted training"),
+    ):
+        _wait_for_completed_segment(
+            run,
+            config=load_config("configs/tiny_overfit.yaml"),
+            minimum_expected_steps=12288,
+            poll_seconds=0.001,
+            event_path=tmp_path / "events.jsonl",
+            monitored_pid=37360,
+        )
+    assert process_probes == 0
+
+
+def test_initial_wait_rejects_reused_unrelated_pid(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    def live_process(_pid: int, _signal: int) -> None:
+        return None
+
+    def unrelated_process(*_args, **_kwargs):
+        return subprocess.CompletedProcess(
+            args=["ps"],
+            returncode=0,
+            stdout="/usr/bin/python /tmp/unrelated.py\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        "scripts.supervise_convergence.os.kill",
+        live_process,
+    )
+    monkeypatch.setattr(
+        "scripts.supervise_convergence.subprocess.run",
+        unrelated_process,
+    )
+
+    run = tmp_path / "run"
+    with pytest.raises(
+        CampaignIncompleteError,
+        match="no longer identifies the trainer",
+    ):
+        _wait_for_completed_segment(
+            run,
+            config=load_config("configs/tiny_overfit.yaml"),
+            minimum_expected_steps=12288,
+            poll_seconds=0.001,
+            event_path=tmp_path / "events.jsonl",
+            monitored_pid=37360,
+        )
+
+
+def test_initial_wait_accepts_matching_fresh_run_pid_until_artifacts_complete(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    run = tmp_path / "20260803-120000-qualification"
+    run.mkdir()
+    process_probes = 0
+
+    def live_then_exit(_pid: int, _signal: int) -> None:
+        nonlocal process_probes
+        process_probes += 1
+        if process_probes > 1:
+            raise ProcessLookupError
+
+    def matching_process(*_args, **_kwargs):
+        return subprocess.CompletedProcess(
+            args=["ps"],
+            returncode=0,
+            stdout=(
+                "/usr/bin/python /repo/train.py --config /repo/config.yaml "
+                "--run-name qualification\n"
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        "scripts.supervise_convergence.os.kill",
+        live_then_exit,
+    )
+    monkeypatch.setattr(
+        "scripts.supervise_convergence.subprocess.run",
+        matching_process,
+    )
+    monkeypatch.setattr(
+        "scripts.supervise_convergence.time.sleep",
+        lambda _seconds: None,
+    )
+
+    with pytest.raises(CampaignIncompleteError, match="exited before step 12288"):
+        _wait_for_completed_segment(
+            run,
+            config=load_config("configs/tiny_overfit.yaml"),
+            minimum_expected_steps=12288,
+            poll_seconds=0.001,
+            event_path=tmp_path / "events.jsonl",
+            monitored_pid=37360,
+        )
+    assert process_probes == 2
+
+
 def test_main_records_initial_trainer_failure(tmp_path, monkeypatch) -> None:
     run = tmp_path / "run"
     arguments = argparse.Namespace(
@@ -350,6 +513,84 @@ def test_main_records_initial_trainer_failure(tmp_path, monkeypatch) -> None:
     assert events[-1]["event"] == "initial_segment_failed"
 
 
+def test_main_boots_out_failed_initial_keepalive_job(tmp_path, monkeypatch) -> None:
+    run = tmp_path / "run"
+    arguments = argparse.Namespace(
+        config="configs/sustained_accuracy_mps.yaml",
+        run=str(run),
+        device="mps",
+        initial_launchctl_label="com.example.failed-trainer",
+        initial_trainer_pid=37360,
+        poll_seconds=0.001,
+        minimum_total_steps=None,
+        extension_steps=4096,
+        tail_steps=1024,
+        minimum_relative_gain=0.01,
+        maximum_total_steps=24576,
+        inspect_only=False,
+    )
+
+    def fail_wait(*_args, **_kwargs):
+        raise CampaignIncompleteError("trainer PID 37360 exited before step 12288")
+
+    bootout_calls: list[tuple[str, str]] = []
+
+    def record_bootout(label: str, *, event_path: Path, outcome: str) -> None:
+        assert event_path == run / "convergence_supervisor.jsonl"
+        bootout_calls.append((label, outcome))
+
+    monkeypatch.setattr(supervise_convergence, "parse_args", lambda: arguments)
+    monkeypatch.setattr(supervise_convergence, "_wait_for_completed_segment", fail_wait)
+    monkeypatch.setattr(supervise_convergence, "_bootout_initial_job", record_bootout)
+
+    assert supervise_convergence.main() == 2
+    assert bootout_calls == [("com.example.failed-trainer", "failure")]
+
+
+def test_initial_cleanup_failure_cannot_mask_durable_trainer_failure(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    run = tmp_path / "run"
+    arguments = argparse.Namespace(
+        config="configs/sustained_accuracy_mps.yaml",
+        run=str(run),
+        device="mps",
+        initial_launchctl_label="com.example.stuck-trainer",
+        initial_trainer_pid=37360,
+        poll_seconds=0.001,
+        minimum_total_steps=None,
+        extension_steps=4096,
+        tail_steps=1024,
+        minimum_relative_gain=0.01,
+        maximum_total_steps=24576,
+        inspect_only=False,
+    )
+
+    def fail_wait(*_args, **_kwargs):
+        raise CampaignIncompleteError("original trainer failure")
+
+    def fail_bootout(*_args, **_kwargs):
+        raise RuntimeError("launchctl refused cleanup")
+
+    monkeypatch.setattr(supervise_convergence, "parse_args", lambda: arguments)
+    monkeypatch.setattr(supervise_convergence, "_wait_for_completed_segment", fail_wait)
+    monkeypatch.setattr(supervise_convergence, "_bootout_initial_job", fail_bootout)
+
+    assert supervise_convergence.main() == 2
+
+    state = json.loads((run / "convergence_supervisor_state.json").read_text(encoding="utf-8"))
+    assert state["status"] == "initial_trainer_failed"
+    assert state["error"] == "original trainer failure"
+    assert state["cleanup_error"] == "launchctl refused cleanup"
+    events = [
+        json.loads(line)
+        for line in (run / "convergence_supervisor.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    names = [event["event"] for event in events]
+    assert names.index("initial_segment_failed") < names.index("initial_job_bootout_failed")
+
+
 def test_supervisor_lock_rejects_a_second_owner(tmp_path) -> None:
     path = tmp_path / "supervisor.lock"
     first_owner = _acquire_supervisor_lock(path)
@@ -363,24 +604,71 @@ def test_supervisor_lock_rejects_a_second_owner(tmp_path) -> None:
 
 
 def _physical_metrics(config: OrpheusConfig, *, scale: float):
+    position_rmse = 0.4 * scale
     metrics = {
-        "validation_position_rmse_m": 0.4 * scale,
+        "selection_metric_supported": 1.0,
+        "validation_position_rmse_m": position_rmse,
         "validation_velocity_rmse_mps": 0.8,
         "validation_target_coverage": 0.9,
         "validation_prediction_precision": 0.9,
         "validation_collision_f1": 0.6,
         "validation_id_switch_rate": 0.0,
         "validation_position_coverage90": 0.9,
+        "physical_state_position_sse": position_rmse**2 * 300.0,
+        "physical_state_position_coordinate_count": 300.0,
+        "physical_state_velocity_sse": 0.8**2 * 300.0,
+        "physical_state_velocity_coordinate_count": 300.0,
+        "physical_distance_gated_matched_object_frames": 90.0,
+        "physical_distance_gated_target_object_frames": 100.0,
+        "physical_distance_gated_predicted_object_frames": 100.0,
+        "physical_distance_gated_identity_switches": 0.0,
+        "physical_distance_gated_object_frame_associations": 100.0,
+        "physical_position_coverage90_hit_count": 270.0,
+        "physical_position_coverage90_coordinate_count": 300.0,
+        "physical_collision_true_positive_count": 3.0,
+        "physical_collision_false_positive_count": 2.0,
+        "physical_collision_false_negative_count": 2.0,
     }
+    for axis in ("x", "y", "z"):
+        metrics[f"validation_position_rmse_{axis}_m"] = position_rmse
+        metrics[f"physical_state_position_{axis}_sse"] = position_rmse**2 * 100.0
+        metrics[f"physical_state_position_{axis}_coordinate_count"] = 100.0
     for index, (suffix, _) in enumerate(_selection_horizon_keys(config)):
-        metrics[f"validation_position_rmse@{suffix}"] = scale * (0.4 - 0.05 * index)
+        horizon_rmse = scale * (0.4 - 0.05 * index)
+        metrics[f"validation_position_rmse@{suffix}"] = horizon_rmse
         metrics[f"validation_forecast_target_coverage@{suffix}"] = 0.9
+        metrics[f"physical_rollout_position@{suffix}_sse"] = horizon_rmse**2 * 30.0
+        metrics[f"physical_forecast_predictable_target_count@{suffix}"] = 10.0
+        metrics[f"physical_rollout_position@{suffix}_coordinate_count"] = 30.0
+        metrics[f"physical_rollout_position_coverage90@{suffix}_hit_count"] = 27.0
+        metrics[f"physical_rollout_position_coverage90@{suffix}_coordinate_count"] = 30.0
+        metrics[f"physical_forecast_active_count@{suffix}"] = 9.0
+        metrics[f"physical_forecast_tracked_count@{suffix}"] = 10.0
+        metrics[f"physical_forecast_target_count@{suffix}"] = 10.0
+        metrics[f"physical_rollout_predictable_target_count@{suffix}"] = 10.0
+        metrics[f"physical_rollout_censored_external_actuation_count@{suffix}"] = 0.0
+        for axis in ("x", "y", "z"):
+            metrics[f"validation_position_rmse_{axis}@{suffix}"] = horizon_rmse
+            metrics[f"physical_rollout_position_{axis}@{suffix}_sse"] = horizon_rmse**2 * 10.0
+            metrics[f"physical_rollout_position_{axis}@{suffix}_coordinate_count"] = 10.0
     base = dict(metrics)
-    for scenario in _selection_scenario_slugs(config):
+    manifest = make_seed_manifest("validation", config.training.validation_episodes)
+    scenario_slugs = _selection_scenario_slugs(config)
+    scenario_counts = {scenario: 0 for scenario in scenario_slugs}
+    for seed in manifest.seeds:
+        scenario_counts[scenario_slugs[int(seed) % len(scenario_slugs)]] += 1
+    for scenario in scenario_slugs:
         prefix = f"scenario_{scenario}_"
-        metrics[f"{prefix}episode_count"] = 1.0
+        episode_count = float(scenario_counts[scenario])
+        metrics[f"{prefix}episode_count"] = episode_count
+        metrics[f"{prefix}supported_episode_count"] = episode_count
+        metrics[f"{prefix}minimum_supported_episode_count"] = float(
+            config.training.validation_minimum_supported_episodes_per_scenario
+        )
         metrics[f"{prefix}selection_metric_supported"] = 1.0
         metrics.update({f"{prefix}{name}": value for name, value in base.items()})
+    for seed in manifest.seeds:
+        metrics[f"seed_{seed}_selection_metric_supported"] = 1.0
     return metrics
 
 
@@ -411,11 +699,13 @@ def _selector_metrics(
         require_scenarios=True,
     )
     return {
+        **_physical_metrics(config, scale=candidate_scale),
         "selection_accepted": float(accepted),
         "selection_training_support_required": 1.0,
         "selection_training_support_passed": 1.0,
         "best_rollout_validated": 1.0,
         "rollout_reference_validated": 1.0,
+        "incomplete_reference_comparison_required": 0.0,
         "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
         **candidate.validation_metrics(),
         **best.checkpoint_metrics(),

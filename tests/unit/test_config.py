@@ -442,6 +442,39 @@ def test_validation_rollout_anchors_must_be_positive_or_null() -> None:
 
 
 @pytest.mark.parametrize(
+    "name",
+    [
+        "validation_minimum_predictable_target_count_per_scenario_horizon",
+        "validation_minimum_matched_target_count_per_scenario_horizon",
+        "validation_minimum_supported_episodes_per_scenario",
+    ],
+)
+@pytest.mark.parametrize("value", ["0", "true", "1.5"])
+def test_validation_support_floors_must_be_positive_integers(
+    name: str,
+    value: str,
+) -> None:
+    with pytest.raises(ValueError, match=name):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.{name}={value}"],
+        )
+
+
+def test_supported_episode_floor_must_fit_balanced_validation_manifest() -> None:
+    with pytest.raises(
+        ValueError,
+        match="validation_minimum_supported_episodes_per_scenario.*exceeds",
+    ):
+        load_config(
+            CONFIG_DIR / "tiny_all_scenarios.yaml",
+            overrides=[
+                "training.validation_minimum_supported_episodes_per_scenario=2",
+            ],
+        )
+
+
+@pytest.mark.parametrize(
     ("key", "value"),
     [
         ("structured_disc_threshold", 0.0),
@@ -484,6 +517,14 @@ def test_rgb_pretrain_steps_must_be_a_nonnegative_integer(value: str) -> None:
         load_config(
             CONFIG_DIR / "tiny_overfit.yaml",
             overrides=[f"training.rgb_pretrain_steps={value}"],
+        )
+
+
+def test_training_steps_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="steps must be positive"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=["training.steps=0"],
         )
 
 

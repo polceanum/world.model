@@ -4,13 +4,35 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import json
+import os
+import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 
 import torch
 
-from world_model.training.trainer import _resolve_training_devices
+from world_model.training.trainer import _resolve_run_directory, _resolve_training_devices
 from world_model.utils.config import load_config
+from world_model.utils.io import append_jsonl, atomic_write_text
+
+
+def _acquire_training_lock(path: Path):
+    """Own one non-blocking trainer lock for a run until invocation exit."""
+
+    handle = path.open("a+", encoding="utf-8")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as error:
+        handle.close()
+        raise RuntimeError(f"another trainer already owns this run: {path.parent}") from error
+    handle.seek(0)
+    handle.truncate()
+    handle.write(f"{os.getpid()}\n")
+    handle.flush()
+    return handle
 
 
 def parse_args() -> argparse.Namespace:
@@ -107,12 +129,112 @@ def main() -> int:
 
     from world_model.training.trainer import train_from_config
 
-    result = train_from_config(
+    effective_run_name = args.run_name
+    planned_run_directory = _resolve_run_directory(
         config,
         run_name=args.run_name,
         resume_path=args.resume,
-        initialize_from_path=args.initialize_from,
     )
+    starts_new_directory = args.resume is None or args.run_name is not None
+    if starts_new_directory:
+        # Claim the complete run directory, including early-failure state.
+        # Treat even a state-only directory as occupied so an accidental retry
+        # cannot overwrite the original diagnostic or leave stale failure
+        # evidence beside a later successful run.
+        planned_run_directory.mkdir(parents=True, exist_ok=False)
+        effective_run_name = planned_run_directory.name
+    training_lock = _acquire_training_lock(planned_run_directory / ".training.lock")
+    state_path = planned_run_directory / "training_state.json"
+    failure_path = planned_run_directory / "training_failure.json"
+    previous_state: dict[str, object] | None = None
+    if not starts_new_directory and state_path.is_file():
+        try:
+            decoded_state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            decoded_state = None
+        if isinstance(decoded_state, dict):
+            previous_state = {
+                key: decoded_state[key]
+                for key in (
+                    "state",
+                    "updated_utc",
+                    "run_directory",
+                    "completed_steps",
+                    "best_checkpoint",
+                    "best_checkpoint_kind",
+                    "exception_type",
+                    "message",
+                )
+                if key in decoded_state
+            }
+    # ``training_failure.json`` describes only the current terminal attempt.
+    # Its append-only history is retained separately, while a new starting
+    # state must not coexist with a stale current-failure marker.
+    failure_path.unlink(missing_ok=True)
+    atomic_write_text(
+        state_path,
+        json.dumps(
+            {
+                "state": "starting",
+                "updated_utc": datetime.now(timezone.utc).isoformat(),
+                "config": str(Path(args.config).expanduser().resolve()),
+                "run_directory": str(planned_run_directory),
+                "resume": args.resume,
+                "initialize_from": args.initialize_from,
+                "previous_state": previous_state,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+    )
+    try:
+        result = train_from_config(
+            config,
+            run_name=effective_run_name,
+            resume_path=args.resume,
+            initialize_from_path=args.initialize_from,
+        )
+    except BaseException as error:
+        failure = {
+            "state": "failed",
+            "updated_utc": datetime.now(timezone.utc).isoformat(),
+            "run_directory": str(planned_run_directory),
+            "resume": args.resume,
+            "initialize_from": args.initialize_from,
+            "previous_state": previous_state,
+            "exception_type": type(error).__name__,
+            "message": str(error),
+            "traceback": traceback.format_exc(),
+        }
+        encoded_failure = json.dumps(failure, indent=2, sort_keys=True) + "\n"
+        atomic_write_text(failure_path, encoded_failure)
+        atomic_write_text(state_path, encoded_failure)
+        with contextlib.suppress(OSError):
+            append_jsonl(planned_run_directory / "training_failures.jsonl", failure)
+        # The atomic current-state artifacts above are authoritative. A
+        # best-effort historical append must never mask the trainer error.
+        training_lock.close()
+        raise
+    failure_path.unlink(missing_ok=True)
+    atomic_write_text(
+        state_path,
+        json.dumps(
+            {
+                "state": "completed",
+                "updated_utc": datetime.now(timezone.utc).isoformat(),
+                "run_directory": result["run_directory"],
+                "completed_steps": result["completed_steps"],
+                "best_checkpoint": result["best_checkpoint"],
+                "best_checkpoint_kind": result["best_checkpoint_kind"],
+                "previous_state": previous_state,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+    )
+    training_lock.close()
     print(json.dumps(result, indent=2, default=str))
     return 0
 

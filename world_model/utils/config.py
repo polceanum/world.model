@@ -337,6 +337,13 @@ class TrainingConfig:
     # use a deterministic spread of forecast anchors. Full promotion
     # evaluation remains a separate, larger manifest.
     validation_rollout_anchors_per_episode: int | None = None
+    # A nonzero RMSE denominator alone can make a scenario look supported from
+    # one lucky tracked object. Require explicit label-only causal opportunity,
+    # matched point support, and multiple independently generated episodes
+    # before a scenario slice may authorize checkpoint promotion.
+    validation_minimum_predictable_target_count_per_scenario_horizon: int = 1
+    validation_minimum_matched_target_count_per_scenario_horizon: int = 1
+    validation_minimum_supported_episodes_per_scenario: int = 1
     collision_positive_weight_max: float = 10.0
     horizon_weights: tuple[float, ...] = (1.0, 1.0, 1.2, 1.5, 1.5)
     measurement_loss_weights: dict[str, float] = field(
@@ -910,8 +917,8 @@ class OrpheusConfig:
                 "evaluation horizon exceeds generated episode duration "
                 f"({max(self.evaluation.horizons_seconds):.3f}s > {episode_duration:.3f}s)"
             )
-        if self.training.batch_size <= 0 or self.training.steps < 0:
-            raise ValueError("training batch_size must be positive and steps nonnegative")
+        if self.training.batch_size <= 0 or self.training.steps <= 0:
+            raise ValueError("training batch_size and steps must be positive")
         if (
             isinstance(self.training.rgb_pretrain_steps, bool)
             or not isinstance(self.training.rgb_pretrain_steps, int)
@@ -928,6 +935,26 @@ class OrpheusConfig:
         if self.training.validation_episodes < len(simulator.scenario_mixture):
             raise ValueError(
                 "training.validation_episodes must cover every simulator scenario at least once"
+            )
+        validation_support_integer_fields = (
+            "validation_minimum_predictable_target_count_per_scenario_horizon",
+            "validation_minimum_matched_target_count_per_scenario_horizon",
+            "validation_minimum_supported_episodes_per_scenario",
+        )
+        for name in validation_support_integer_fields:
+            value = getattr(self.training, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"training.{name} must be a positive integer")
+        minimum_scenario_episode_count = self.training.validation_episodes // len(
+            simulator.scenario_mixture
+        )
+        if (
+            self.training.validation_minimum_supported_episodes_per_scenario
+            > minimum_scenario_episode_count
+        ):
+            raise ValueError(
+                "training.validation_minimum_supported_episodes_per_scenario "
+                "exceeds the guaranteed balanced validation episodes per scenario"
             )
         if self.training.learning_rate <= 0:
             raise ValueError("training.learning_rate must be positive")

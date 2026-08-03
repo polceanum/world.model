@@ -1009,13 +1009,6 @@ class RGBObservationModule(ObservationModule):
             "world_radius": predicted.auxiliary["world_radius"],
             "world_log_variance": world_position_log_variance,
             "world_position_log_variance": world_position_log_variance,
-            # A residual ROI is evidence about the persistent slot that
-            # generated its crop. Association may reject that evidence, but
-            # must not cross-assign the prior-mixed appearance/geometry to a
-            # different identity. Global proposals intentionally omit these
-            # source fields and remain freely Hungarian-associated.
-            "source_belief_indices": predicted.belief_indices,
-            "source_object_ids": predicted.object_ids,
             "visibility_logit": output.visibility_logits,
             "visibility_logits": output.visibility_logits,
             "event_features": output.event_features,
@@ -1038,6 +1031,13 @@ class RGBObservationModule(ObservationModule):
             frame_id=packets[0].frame_id,
             supported_state_fields=tuple(supported_state_fields),
             auxiliary=auxiliary,
+            # A residual ROI is evidence about the persistent slot that
+            # generated its crop. Association may reject that evidence, but
+            # must not cross-assign the prior-mixed appearance/geometry to a
+            # different identity. Global proposals intentionally omit these
+            # source fields and remain freely Hungarian-associated.
+            source_belief_indices=predicted.belief_indices.detach().clone(),
+            source_object_ids=predicted.object_ids.detach().clone(),
         )
         measurement.validate()
         object_ids = predicted.object_ids

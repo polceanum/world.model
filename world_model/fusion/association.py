@@ -97,8 +97,8 @@ class Associator:
             mahalanobis_gate=self.mahalanobis_gate,
             minimum_measurement_confidence=self.minimum_measurement_confidence,
         )
-        source_belief_indices = measured.auxiliary.get("source_belief_indices")
-        source_object_ids = measured.auxiliary.get("source_object_ids")
+        source_belief_indices = measured.source_belief_indices
+        source_object_ids = measured.source_object_ids
         if source_belief_indices is None and source_object_ids is None:
             return cost
         if not isinstance(source_belief_indices, Tensor) or not isinstance(

@@ -28,6 +28,8 @@ class MeasurementSet:
     frame_id: str
     supported_state_fields: tuple[str, ...]
     auxiliary: dict[str, Tensor] = field(default_factory=dict)
+    source_belief_indices: Tensor | None = None
+    source_object_ids: Tensor | None = None
 
     def validate(self) -> None:
         if self.timestamp.ndim != 1:
@@ -59,6 +61,34 @@ class MeasurementSet:
             measurements,
         ):
             raise ValueError("class_logits must begin with shape [B, M]")
+        source_fields = (
+            self.source_belief_indices,
+            self.source_object_ids,
+        )
+        if any(source is not None for source in source_fields):
+            if any(source is None for source in source_fields):
+                raise ValueError(
+                    "measurement source belief indices and object IDs must be provided together"
+                )
+            assert self.source_belief_indices is not None
+            assert self.source_object_ids is not None
+            for name, source in (
+                ("source_belief_indices", self.source_belief_indices),
+                ("source_object_ids", self.source_object_ids),
+            ):
+                if source.shape != (batch, measurements):
+                    raise ValueError(f"{name} must have shape [B, M]")
+                if source.dtype is not torch.int64:
+                    raise TypeError(f"{name} must use torch.int64")
+            valid_source = self.measurement_mask
+            if bool(
+                torch.any(
+                    valid_source & ((self.source_belief_indices < 0) | (self.source_object_ids < 0))
+                )
+            ):
+                raise ValueError(
+                    "valid source-conditioned measurements require nonnegative identity"
+                )
         if not torch.isfinite(self.values).all():
             raise ValueError("measurement values contain NaN or Inf")
         if not torch.isfinite(self.timestamp).all():
@@ -96,6 +126,12 @@ class MeasurementSet:
             frame_id=self.frame_id,
             supported_state_fields=self.supported_state_fields,
             auxiliary={key: floating(value) for key, value in self.auxiliary.items()},
+            source_belief_indices=(
+                None if self.source_belief_indices is None else floating(self.source_belief_indices)
+            ),
+            source_object_ids=(
+                None if self.source_object_ids is None else floating(self.source_object_ids)
+            ),
         )
 
     def detach(self) -> MeasurementSet:
@@ -114,6 +150,12 @@ class MeasurementSet:
             frame_id=self.frame_id,
             supported_state_fields=self.supported_state_fields,
             auxiliary={key: value.detach() for key, value in self.auxiliary.items()},
+            source_belief_indices=(
+                None if self.source_belief_indices is None else self.source_belief_indices.detach()
+            ),
+            source_object_ids=(
+                None if self.source_object_ids is None else self.source_object_ids.detach()
+            ),
         )
 
 

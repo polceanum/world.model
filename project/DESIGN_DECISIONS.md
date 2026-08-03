@@ -1658,3 +1658,59 @@
   required; the repair is not itself an accuracy or convergence claim. The
   clean committed host smoke confirmed finite hybrid MPS/CPU execution and
   correct guardrail rejection, but its two episodes remain wiring evidence.
+
+## ADR-072 — Require causal validation opportunity and one-shot training launches
+
+- **Date:** 2026-08-03
+- **Status:** accepted and implemented
+- **Context:** The supposedly active repaired qualification never trained. Its
+  only metrics row was step-zero initialization validation; all four fixed
+  `impulse_perturbation` episodes lacked one-second deterministic support under
+  an external-impulse probability of `0.12` sampled every observation
+  interval. The resulting assertion terminated the trainer. `launchctl
+  submit` had inferred KeepAlive behavior and restarted the same command more
+  than 2,284 times; later attempts hit the occupied run directory. The
+  evaluator also scored deterministic errors across hidden interventions while
+  training correctly censored them, and pooled binary support could rest on
+  one matched object.
+- **Decision:** Interpret and document external-impulse probability at its
+  actual per-observation cadence. Use `0.02` for the stochastic scenario,
+  retaining real surprises while the fixed manifest preserves clean windows.
+  Censor deterministic trainer and evaluator point/event/correction metrics
+  scene-wide after unseen actuation, while leaving forecast likelihood and
+  calibration stochastic. Require positive per-scenario, per-horizon floors
+  for label-only predictable targets and matched targets, plus at least two
+  independently supported episodes in the v3 profile. Persist exact support
+  counts and include the resolved scenario generator parameters, simulator
+  version, metric version, and floors in protocol hashes. Treat only the
+  explicit insufficient-support exception as a rejected candidate; metric
+  schema errors remain fatal. Recompute every retained derived selector field
+  from its exact additive evidence before accepting checkpoint provenance.
+  An unsupported imported initialization is persisted and training continues,
+  with broad validation retried at the configured cadence rather than before
+  every optimizer update. Persist an incomplete-reference-comparison marker
+  across exact-resume branches; the first later supported candidate establishes
+  the fixed reference without promoting itself. Fresh CLI runs write
+  starting/failed/completed state artifacts and take an exclusive per-run
+  lock. New macOS training launches use an explicit one-shot LaunchAgent plist
+  with `KeepAlive=false`; the legacy convergence supervisor consumes terminal
+  trainer state, verifies monitored PID command identity, and removes its
+  initial job after verified completion or failure.
+- **Alternatives considered:** label the restart storm as ordinary launch
+  health; remove the stochastic scenario; score unknowable post-impulse point
+  targets; accept any nonzero pooled denominator; keep retrying full
+  validation before each update; retain inferred launchd KeepAlive.
+- **Consequences:** A process listing or occupied directory can no longer be
+  mistaken for learning progress. The exact fixed validation slice now has
+  three supported impulse episodes out of four, predictable target counts
+  `116/98/80/62/47`, and matched target counts `40/30/23/16/12` across
+  `0.1/0.25/0.5/0.75/1.0 s`, passing the configured `4`, `2`, and `2`
+  floors. One seed remains truthfully unsupported. This changes simulator and
+  validation semantics (`sphere_world_v4`, rollout protocol 10, selection
+  metric 6); older runs remain evidence but cannot be exact-resumed into this
+  protocol. The production-profile CPU smoke performed one finite supported
+  causal update and then rejected its apparent multihorizon position gain
+  because coverage, events, axes, and scenario slices regressed. The host MPS
+  smoke performed one finite clipped optimizer update and completed terminal
+  validation. Both are wiring/integrity evidence, not convergence or
+  deployment promotion.

@@ -62,11 +62,37 @@
   local gradient caps, source-bound ROI association, tentative births,
   checkpointing, and terminal validation at
   `runs/20260803-000212-collapse-repair-host-smoke/`.
-- [x] Launch a new timestamped medium balanced qualification only after that
-  host smoke passes; require at least four comparable corrected-protocol
-  validations before judging trend or plateau. Active run:
-  `runs/20260803-000858-v3-collapse-repair-qualification/`.
-- [ ] Inspect the corrected qualification at steps 1536, 2048, 2560, and 3072
+- [x] Launch a new timestamped medium balanced qualification after that host
+  smoke, then prove by artifact audit that it failed during initialization,
+  took zero optimizer steps, and was repeatedly relaunched. Stop and preserve
+  `runs/20260803-000858-v3-collapse-repair-qualification/`; do not count it as
+  convergence evidence.
+- [x] Repair per-interval stochastic-event density, shared trainer/evaluator
+  causal censoring, per-scenario horizon/episode support floors, incomplete
+  initialization recovery, metric-schema error handling, exact support
+  persistence, and resolved-scenario protocol hashing.
+- [x] Add atomic CLI failure/completion state and a one-shot macOS launch helper
+  with `KeepAlive=false`; make the legacy supervisor remove failed initial
+  jobs.
+- [x] Make pooled/scenario/axis selector metadata exactly reproducible from
+  retained additive evidence, require a durable incomplete-reference marker
+  across branched resumes, and prevent the first recovered supported candidate
+  from self-promotion.
+- [x] Promote fast-ROI source slot/object ID from untyped auxiliary data to a
+  validated measurement contract; reject stale identity after slot reuse while
+  retaining unrestricted global Hungarian discovery.
+- [x] Make the convergence supervisor consume authoritative terminal trainer
+  state without requiring a PID and reject a live-but-reused unrelated PID.
+- [x] Pass the complete quality gate (`577 passed, 6 MPS-only skipped`), the
+  host MPS device families (`38 passed`), a real one-step host-MPS optimizer
+  run, and a production-profile CPU causal update under simulator v4 /
+  selector v6.
+- [ ] Commit and push the complete initialization/support/process-integrity
+  repair.
+- [ ] Launch a clean timestamped balanced qualification with the one-shot
+  helper and verify from metrics/checkpoints that initialization completes and
+  at least one real optimizer update occurs.
+- [ ] Inspect the next corrected qualification at its declared validation steps
   for support, perception/interaction/global gradient balance, lifecycle
   precision/coverage, identity switches, collisions, calibration, every
   horizon, and every scenario slice. Stop on a repeated structural collapse.

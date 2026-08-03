@@ -49,10 +49,17 @@ as a numbered checkpoint.
 
 Rollout checkpoint metadata contains a canonical validation-protocol hash, the
 explicit validation seed-manifest hash, and tensor hashes linking incumbent and
-reference metrics to real checkpoint weights. A resumed run reuses those
-metrics only when the linked files and hashes verify. This prevents a rejected
-`last.pt` or copied numbered snapshot from carrying better incumbent metrics
-without the corresponding model state.
+reference metrics to real checkpoint weights. It also retains exact additive
+pooled/scenario evidence and every per-seed support marker. Verification
+recomputes all pooled, scenario, horizon, and axis selector fields from those
+raw sums; internally consistent derived-score tampering is still invalid. A
+resumed run reuses metrics only when the linked files, hashes, raw evidence,
+support schema, and fixed-reference state verify. An unsupported diagnostic
+state persists an incomplete-reference-comparison marker across in-place and
+branched resumes. The first later supported candidate establishes a complete
+fixed reference but cannot promote itself. This prevents a rejected `last.pt`
+or copied numbered snapshot from carrying better incumbent metrics without the
+corresponding model state or from self-comparing into deployment.
 
 RGB supervision includes metric-space position after calibrated
 backprojection. Supported targets use a smooth-L1 (Huber) term plus a diagonal
@@ -70,6 +77,11 @@ the anchor proposals solely to supply prior-conditioned ROI crops on adjacent
 frames. It is not online runtime state and does not claim lifecycle
 confirmation; causal training, validation, evaluation, and demos use the real
 tentative-birth policy.
+Fast ROI measurements carry typed, paired source belief-slot and persistent-ID
+fields. Association may reject the evidence through its normal gates but may
+not cross-assign it, including after slot reuse under a different ID. Global
+discovery omits these fields and retains unrestricted gated Hungarian
+association.
 The default measurement weights are:
 
 ```yaml
@@ -134,7 +146,13 @@ Validation support is equally explicit. If the pooled manifest has no valid
 current or configured-horizon physical mapping, the trainer retains additive
 zero counts, marks the selection metric unsupported, writes a rejected
 numbered/reference diagnostic artifact, and continues without a rollout
-incumbent. It does not emit a synthetic zero RMSE or abort the run.
+incumbent. It does not emit a synthetic zero RMSE or abort the run. Promotion
+also requires declared per-scenario minima for label-predictable targets,
+matched targets, and independently supported episodes at every horizon.
+Training and evaluation censor deterministic point/event/correction metrics
+scene-wide after an unseen external actuation while retaining those realised
+outcomes for forecast likelihood/calibration and publishing both support
+counts.
 
 Collision logits describe occurrence over exact observation windows. Training
 expands each requested horizon into `[h-dt_obs, h]` query boundaries, aggregates
@@ -250,6 +268,23 @@ python train.py \
   --device mps
 ```
 
+For a multi-hour macOS run, launch the same command as a one-shot LaunchAgent
+instead of using `launchctl submit`:
+
+```bash
+python scripts/launch_training_once.py \
+  --label com.polceanum.orpheus.v3-$(date -u +%Y%m%d-%H%M%S) \
+  --config configs/sustained_accuracy_mps_v3.yaml \
+  --initialize-from \
+    runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/best_measurement.pt \
+  --run-name "$(date -u +%Y%m%d-%H%M%S)-scaled-sustained-v3" \
+  --device mps
+```
+
+Use one captured timestamp for both label and run name in an actual launch.
+The helper invokes the active `orpheus` Python through `caffeinate`, writes an
+explicit plist, and sets `KeepAlive=false`; a failed process remains terminal.
+
 This is a new weights-only curriculum, not `--resume`. It has 40 frames,
 batch two, 16,384 unique training episodes, 8,192 measurement updates, 8,192
 supported causal updates, explicit mature/cold and
@@ -341,17 +376,26 @@ was rejected for coverage/short-y guardrails, so this is device/protocol
 qualification only. A new eight-scenario medium run, not this smoke, must
 provide trend evidence.
 
-That new medium run is active at
-`runs/20260803-000858-v3-collapse-repair-qualification/` from clean pushed
-commit `baca6a8`. It uses the same 3,072-update/6,144-draw/32-validation-episode
-qualification shape as the stopped control, but now has two-frame tentative
-births, pre-gated association/target alignment, source-bound ROI evidence,
-accepted-ID parameter history, the 512-update global adaptation window, and
-both local gradient caps. Its launchd label is
-`com.polceanum.orpheus.v3-repair-20260803-000858`; stdout/stderr are
-`/private/tmp/20260803-000858-v3-collapse-repair-qualification.*.log`.
-Do not launch an overlapping trainer or infer a trend before all four causal
-validation points have been recorded.
+The attempted replacement at
+`runs/20260803-000858-v3-collapse-repair-qualification/` never completed its
+step-zero imported-reference validation and took zero optimizer steps. A
+per-observation external-impulse rate of `0.12` removed deterministic
+one-second support from every fixed impulse episode; the resulting assertion
+terminated the trainer. Its `launchctl submit` job then restarted more than
+2,284 times, with later attempts failing against the occupied directory. The
+job is removed and the run is a preserved failure artifact, not an active
+campaign or convergence evidence.
+
+New sustained runs use simulator `sphere_world_v4`, rollout protocol 10, and
+selection metric 6. The impulse rate is `0.02` per observation interval.
+Promotion requires each scenario to meet its per-horizon label-opportunity and
+matched-target floors and its supported-episode floor. Deterministic evaluator
+metrics use the same unseen-actuation censor as training, while calibration
+retains stochastic futures. Launch macOS training with
+`scripts/launch_training_once.py`; its generated LaunchAgent has
+`KeepAlive=false`, and `train.py` writes explicit starting, failure, and
+completed state artifacts. See `project/STATUS.md` for the exact failure and
+fixed-manifest support evidence.
 
 ### Superseded v2 campaign
 

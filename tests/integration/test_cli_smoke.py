@@ -203,9 +203,13 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         map_location="cpu",
         weights_only=False,
     )
+    # Zero-support validation persists a diagnostic artifact, not a
+    # tensor-linked numerical reference. The first later supported candidate
+    # must establish a complete reference and wait for another comparison.
     assert (
-        reference_rollout_payload["metrics"]["checkpoint_contains_reference_rollout_weights"] == 1.0
+        reference_rollout_payload["metrics"]["checkpoint_contains_reference_rollout_weights"] == 0.0
     )
+    assert reference_rollout_payload["metrics"]["incomplete_reference_comparison_required"] == 1.0
     resumed_last_payload = torch.load(
         checkpoint,
         map_location="cpu",
@@ -299,6 +303,12 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
     assert "current_detection_recall@0.500m" in report["metrics"]
     assert "current_detection_precision@0.500m" in report["metrics"]
     assert "forecast_target_coverage@0.050s" in report["metrics"]
+    assert "forecast_predictable_target_count@0.050s" in report["metrics"]
+    assert report["metrics"]["forecast_censored_tracked_count@0.050s"] == 0.0
+    assert (
+        report["metrics"]["forecast_calibration_coordinate_count"]
+        >= (report["metrics"]["model@0.050s_position_coordinate_count"])
+    )
     assert "identifier_restitution_gate_mean" in report["metrics"]
     assert "identifier_restitution_update_count" in report["metrics"]
     assert "identifier_drag_gate_mean" in report["metrics"]
@@ -312,4 +322,7 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
         report["metrics"]["model@0.050s_position_coordinate_count"]
         == report["metrics"]["constant_velocity@0.050s_position_coordinate_count"]
     )
+    training_state = json.loads((run_directory / "training_state.json").read_text(encoding="utf-8"))
+    assert training_state["state"] == "completed"
+    assert training_state["completed_steps"] == 3
     assert (evaluation_directory / "report.md").is_file()

@@ -141,6 +141,8 @@ def test_global_rgb_measurements_are_finite_and_state_free() -> None:
     assert measured.auxiliary["world_position"].shape == (1, 4, 3)
     assert torch.isfinite(measured.values).all()
     assert "object_id" not in measured.auxiliary
+    assert measured.source_belief_indices is None
+    assert measured.source_object_ids is None
 
 
 def test_grid_sample_roi_path_and_projector_shapes() -> None:
@@ -243,6 +245,14 @@ def test_fast_roi_depth_residual_is_gated_until_explicitly_enabled() -> None:
             belief,
             predicted,
             None,
+        )
+        torch.testing.assert_close(
+            measured.source_belief_indices,
+            predicted.belief_indices,
+        )
+        torch.testing.assert_close(
+            measured.source_object_ids,
+            predicted.object_ids,
         )
         return predicted.values[..., 3], measured.values[..., 3]
 

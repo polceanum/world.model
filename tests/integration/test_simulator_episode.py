@@ -13,6 +13,8 @@ from world_model.datasets import (
     make_seed_manifest,
 )
 from world_model.simulator import SphereWorld, SphereWorldConfig, generate_episode, validate_episode
+from world_model.training.loop import _select_rollout_anchor_frames
+from world_model.utils.config import load_config
 
 
 def _test_config() -> SphereWorldConfig:
@@ -143,7 +145,7 @@ def test_seeded_scenario_mixture_exercises_distinct_physical_regimes() -> None:
     assert worlds[2].config.drag_range == (0.005, 0.04)
     assert worlds[3].config.restitution_range == (0.18, 0.42)
     assert worlds[3].config.friction_range == (0.28, 0.55)
-    assert worlds[4].config.external_impulse_probability == 0.12
+    assert worlds[4].config.external_impulse_probability == 0.02
     assert worlds[4].config.external_impulse_range == (0.25, 0.8)
     assert worlds[5].config.camera_motion == "combined"
     assert worlds[5].config.camera_zoom_amplitude == 0.12
@@ -156,6 +158,55 @@ def test_seeded_scenario_mixture_exercises_distinct_physical_regimes() -> None:
     active = episode["objects"]["active"][0]
     assert torch.all(episode["objects"]["restitution"][0, active, 0] <= 0.42)
     assert torch.all(episode["objects"]["drag"][0, active, 0] >= 0.18)
+
+
+def test_impulse_validation_slice_keeps_real_events_and_causal_horizon_support() -> None:
+    config = load_config("configs/sustained_accuracy_mps_v3.yaml")
+    simulator = SphereWorldConfig.from_config(config)
+    impulse_seeds = (100004, 100012, 100020, 100028)
+    anchors = _select_rollout_anchor_frames(
+        config,
+        window_start=0,
+        window_stop=simulator.sequence_frames,
+        total_frames=simulator.sequence_frames,
+        rollout_anchors_per_window=(config.training.validation_rollout_anchors_per_episode),
+    )
+    episodes: list[tuple[torch.Tensor, torch.Tensor]] = []
+    impulse_count = 0
+    for seed in impulse_seeds:
+        world = SphereWorld(simulator, seed)
+        assert world.scenario_name == "impulse_perturbation"
+        active_frames = [world.state.active.clone()]
+        actuation_frames = [torch.zeros_like(world.state.active)]
+        for frame_index in range(1, simulator.sequence_frames):
+            world.apply_lifecycle(frame_index)
+            event = world.step(simulator.observation_dt)
+            active_frames.append(world.state.active.clone())
+            actuated = torch.linalg.vector_norm(event.external_impulse, dim=-1) > 0
+            actuation_frames.append(actuated)
+            impulse_count += int(actuated.sum())
+        episodes.append(
+            (
+                torch.stack(active_frames),
+                torch.stack(actuation_frames),
+            )
+        )
+
+    assert impulse_count > 0
+    for horizon_seconds in config.evaluation.horizons_seconds:
+        offset = max(1, round(horizon_seconds * simulator.frame_rate))
+        predictable_target_count = 0
+        for active, actuated in episodes:
+            for anchor in anchors:
+                target = anchor + offset
+                if target >= simulator.sequence_frames:
+                    continue
+                if not bool(actuated[anchor + 1 : target + 1].any()):
+                    predictable_target_count += int(active[target].sum())
+        assert (
+            predictable_target_count
+            >= config.training.validation_minimum_predictable_target_count_per_scenario_horizon
+        )
 
 
 def test_glancing_scenario_has_nonzero_impact_parameter_and_collides() -> None:

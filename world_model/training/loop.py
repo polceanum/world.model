@@ -174,6 +174,10 @@ def _distance_gate_physical_matches(
     return assignment_mask & torch.isfinite(distance) & (distance <= threshold_m)
 
 
+class PhysicalMetricSupportError(RuntimeError):
+    """A valid physical metric schema has no samples for a required score."""
+
+
 def physical_validation_metrics(
     additive_metrics: Mapping[str, float],
     config: OrpheusConfig,
@@ -198,7 +202,9 @@ def physical_validation_metrics(
         squared_error = required(sse_name)
         count = required(count_name)
         if count <= 0:
-            raise RuntimeError(f"physical validation metric {count_name!r} has no support")
+            raise PhysicalMetricSupportError(
+                f"physical validation metric {count_name!r} has no support"
+            )
         return math.sqrt(squared_error / count)
 
     def bounded_ratio(numerator_name: str, denominator_name: str) -> float:
@@ -207,6 +213,157 @@ def physical_validation_metrics(
         if denominator <= 0:
             return 0.0
         return min(1.0, max(0.0, numerator / denominator))
+
+    required_names = {
+        "physical_state_position_sse",
+        "physical_state_position_coordinate_count",
+        "physical_state_velocity_sse",
+        "physical_state_velocity_coordinate_count",
+        "physical_distance_gated_matched_object_frames",
+        "physical_distance_gated_target_object_frames",
+        "physical_distance_gated_predicted_object_frames",
+        "physical_distance_gated_identity_switches",
+        "physical_distance_gated_object_frame_associations",
+        "physical_position_coverage90_hit_count",
+        "physical_position_coverage90_coordinate_count",
+        "physical_collision_true_positive_count",
+        "physical_collision_false_positive_count",
+        "physical_collision_false_negative_count",
+    }
+    for axis_name in ("x", "y", "z"):
+        required_names.update(
+            {
+                f"physical_state_position_{axis_name}_sse",
+                f"physical_state_position_{axis_name}_coordinate_count",
+            }
+        )
+    seen_offsets: set[int] = set()
+    physical_suffixes: list[str] = []
+    for horizon in config.evaluation.horizons_seconds:
+        frame_offset = max(1, int(round(float(horizon) * config.simulator.frame_rate)))
+        if frame_offset in seen_offsets:
+            continue
+        seen_offsets.add(frame_offset)
+        physical_suffix = f"@{frame_offset / config.simulator.frame_rate:.3f}s"
+        physical_suffixes.append(physical_suffix)
+        required_names.update(
+            {
+                f"physical_rollout_position{physical_suffix}_sse",
+                f"physical_rollout_position{physical_suffix}_coordinate_count",
+                f"physical_rollout_position_coverage90{physical_suffix}_hit_count",
+                f"physical_rollout_position_coverage90{physical_suffix}_coordinate_count",
+                f"physical_forecast_active_count{physical_suffix}",
+                f"physical_forecast_tracked_count{physical_suffix}",
+                f"physical_forecast_target_count{physical_suffix}",
+                f"physical_forecast_predictable_target_count{physical_suffix}",
+                f"physical_rollout_predictable_target_count{physical_suffix}",
+                f"physical_rollout_censored_external_actuation_count{physical_suffix}",
+            }
+        )
+        for axis_name in ("x", "y", "z"):
+            required_names.update(
+                {
+                    f"physical_rollout_position_{axis_name}{physical_suffix}_sse",
+                    (f"physical_rollout_position_{axis_name}{physical_suffix}_coordinate_count"),
+                }
+            )
+    # Validate the complete schema before deciding that any zero denominator is
+    # ordinary insufficient support. Otherwise an early zero can hide missing
+    # or corrupt metrics later in the mapping.
+    validated = {name: required(name) for name in sorted(required_names)}
+
+    squared_error_pairs = [
+        (
+            "physical_state_position_sse",
+            "physical_state_position_coordinate_count",
+        ),
+        (
+            "physical_state_velocity_sse",
+            "physical_state_velocity_coordinate_count",
+        ),
+    ]
+    squared_error_pairs.extend(
+        (
+            f"physical_state_position_{axis_name}_sse",
+            f"physical_state_position_{axis_name}_coordinate_count",
+        )
+        for axis_name in ("x", "y", "z")
+    )
+    squared_error_pairs.extend(
+        (
+            f"physical_rollout_position{physical_suffix}_sse",
+            f"physical_rollout_position{physical_suffix}_coordinate_count",
+        )
+        for physical_suffix in physical_suffixes
+    )
+    squared_error_pairs.extend(
+        (
+            f"physical_rollout_position_{axis_name}{physical_suffix}_sse",
+            f"physical_rollout_position_{axis_name}{physical_suffix}_coordinate_count",
+        )
+        for physical_suffix in physical_suffixes
+        for axis_name in ("x", "y", "z")
+    )
+    for sse_name, count_name in squared_error_pairs:
+        if validated[count_name] == 0.0 and validated[sse_name] != 0.0:
+            raise ValueError(
+                f"additive physical validation metric {sse_name!r} must be "
+                f"zero when {count_name!r} has no support"
+            )
+
+    bounded_count_pairs = [
+        (
+            "physical_distance_gated_matched_object_frames",
+            "physical_distance_gated_target_object_frames",
+        ),
+        (
+            "physical_distance_gated_matched_object_frames",
+            "physical_distance_gated_predicted_object_frames",
+        ),
+        (
+            "physical_distance_gated_identity_switches",
+            "physical_distance_gated_object_frame_associations",
+        ),
+        (
+            "physical_position_coverage90_hit_count",
+            "physical_position_coverage90_coordinate_count",
+        ),
+    ]
+    for physical_suffix in physical_suffixes:
+        bounded_count_pairs.extend(
+            [
+                (
+                    f"physical_forecast_active_count{physical_suffix}",
+                    f"physical_forecast_tracked_count{physical_suffix}",
+                ),
+                (
+                    f"physical_forecast_tracked_count{physical_suffix}",
+                    f"physical_forecast_target_count{physical_suffix}",
+                ),
+                (
+                    f"physical_forecast_predictable_target_count{physical_suffix}",
+                    f"physical_forecast_target_count{physical_suffix}",
+                ),
+                (
+                    f"physical_rollout_predictable_target_count{physical_suffix}",
+                    f"physical_forecast_tracked_count{physical_suffix}",
+                ),
+                (
+                    f"physical_rollout_censored_external_actuation_count{physical_suffix}",
+                    f"physical_forecast_tracked_count{physical_suffix}",
+                ),
+                (
+                    f"physical_rollout_position_coverage90{physical_suffix}_hit_count",
+                    (f"physical_rollout_position_coverage90{physical_suffix}_coordinate_count"),
+                ),
+            ]
+        )
+    for numerator_name, denominator_name in bounded_count_pairs:
+        if validated[numerator_name] > validated[denominator_name]:
+            raise ValueError(
+                f"additive physical validation metric {numerator_name!r} "
+                f"exceeds denominator {denominator_name!r}"
+            )
 
     output = {
         "validation_position_rmse_m": rmse(
@@ -237,11 +394,10 @@ def physical_validation_metrics(
     for axis_name in ("x", "y", "z"):
         axis_sse = f"physical_state_position_{axis_name}_sse"
         axis_count = f"physical_state_position_{axis_name}_coordinate_count"
-        if axis_sse in additive_metrics and axis_count in additive_metrics:
-            output[f"validation_position_rmse_{axis_name}_m"] = rmse(
-                axis_sse,
-                axis_count,
-            )
+        output[f"validation_position_rmse_{axis_name}_m"] = rmse(
+            axis_sse,
+            axis_count,
+        )
     true_positive = required("physical_collision_true_positive_count")
     false_positive = required("physical_collision_false_positive_count")
     false_negative = required("physical_collision_false_negative_count")
@@ -250,14 +406,7 @@ def physical_validation_metrics(
         false_positive,
         false_negative,
     )[0]
-    seen_offsets: set[int] = set()
-    for horizon in config.evaluation.horizons_seconds:
-        frame_offset = max(1, int(round(float(horizon) * config.simulator.frame_rate)))
-        if frame_offset in seen_offsets:
-            continue
-        seen_offsets.add(frame_offset)
-        physical_seconds = frame_offset / config.simulator.frame_rate
-        physical_suffix = f"@{physical_seconds:.3f}s"
+    for physical_suffix in physical_suffixes:
         output[f"validation_position_rmse{physical_suffix}"] = rmse(
             f"physical_rollout_position{physical_suffix}_sse",
             f"physical_rollout_position{physical_suffix}_coordinate_count",
@@ -265,10 +414,9 @@ def physical_validation_metrics(
         for axis_name in ("x", "y", "z"):
             axis_sse = f"physical_rollout_position_{axis_name}{physical_suffix}_sse"
             axis_count = f"physical_rollout_position_{axis_name}{physical_suffix}_coordinate_count"
-            if axis_sse in additive_metrics and axis_count in additive_metrics:
-                output[f"validation_position_rmse_{axis_name}{physical_suffix}"] = rmse(
-                    axis_sse, axis_count
-                )
+            output[f"validation_position_rmse_{axis_name}{physical_suffix}"] = rmse(
+                axis_sse, axis_count
+            )
         output[f"validation_forecast_target_coverage{physical_suffix}"] = bounded_ratio(
             f"physical_forecast_active_count{physical_suffix}",
             f"physical_forecast_target_count{physical_suffix}",
@@ -1623,7 +1771,50 @@ def rollout_horizon_loss_key(name: str, seconds: float) -> str:
     return f"{name}@{seconds:.3f}s"
 
 
-def _future_predictable_mask(
+def future_scene_predictable_mask(
+    batch: Mapping[str, Any],
+    *,
+    anchor_index: int,
+    target_index: int,
+) -> Tensor:
+    """Return one causal deterministic-support marker per batch scene."""
+
+    events = batch.get("events")
+    if not isinstance(events, Mapping):
+        raise ValueError("closed-loop training requires batch.events")
+    externally_actuated = events.get("externally_actuated")
+    if not isinstance(externally_actuated, Tensor):
+        objects = batch.get("objects")
+        active = objects.get("active") if isinstance(objects, Mapping) else None
+        if not isinstance(active, Tensor) or active.ndim != 3:
+            raise ValueError(
+                "a batch without events.externally_actuated requires objects.active [B,T,N]"
+            )
+        return torch.ones(
+            active.shape[0],
+            dtype=torch.bool,
+            device=active.device,
+        )
+    if externally_actuated.ndim != 3:
+        raise ValueError("events.externally_actuated must have shape [B,T,N]")
+    if not 0 <= anchor_index < target_index < externally_actuated.shape[1]:
+        raise ValueError("forecast anchor/target indices are outside the event sequence")
+    # Dynamics are coupled: an unobserved impulse on one object can change any
+    # other object's target through a subsequent interaction. Censor the
+    # complete scene until the next observation has exposed the actuation.
+    scene_intervened = (
+        externally_actuated[
+            :,
+            anchor_index + 1 : target_index + 1,
+        ]
+        .bool()
+        .flatten(start_dim=1)
+        .any(dim=1)
+    )
+    return ~scene_intervened
+
+
+def future_predictable_mask(
     batch: Mapping[str, Any],
     *,
     anchor_index: int,
@@ -1637,29 +1828,17 @@ def _future_predictable_mask(
     teach only an average of mutually incompatible futures.
     """
 
-    events = batch.get("events")
-    if not isinstance(events, Mapping):
-        raise ValueError("closed-loop training requires batch.events")
-    externally_actuated = events.get("externally_actuated")
-    if not isinstance(externally_actuated, Tensor):
-        return torch.ones_like(target_indices, dtype=torch.bool)
-    if externally_actuated.ndim != 3:
-        raise ValueError("events.externally_actuated must have shape [B,T,N]")
-    # Dynamics are coupled: an unobserved impulse on one object can change any
-    # other object's target through a subsequent interaction.  Censoring only
-    # the directly actuated slot would still train deterministic pair/event
-    # targets that are conditional on hidden future input.  Keep the complete
-    # scene stochastic until the next observation has exposed the actuation.
-    scene_intervened = (
-        externally_actuated[
-            :,
-            anchor_index + 1 : target_index + 1,
-        ]
-        .bool()
-        .flatten(start_dim=1)
-        .any(dim=1)
+    scene_predictable = future_scene_predictable_mask(
+        batch,
+        anchor_index=anchor_index,
+        target_index=target_index,
     )
-    return ~scene_intervened[:, None].expand_as(target_indices)
+    return scene_predictable[:, None].expand_as(target_indices)
+
+
+# Preserve the internal name used by focused regression tests and downstream
+# research code while exposing one shared public evaluator/trainer contract.
+_future_predictable_mask = future_predictable_mask
 
 
 def _globally_weight_horizon_details(
@@ -2205,11 +2384,16 @@ def _rollout_loss_result(
         # A dropped/deactivated forecast remains an error. Mask only by the
         # common target support so lifecycle collapse cannot lower the loss.
         valid = matched & future_active
-        predictable = _future_predictable_mask(
+        predictable = future_predictable_mask(
             batch,
             anchor_index=frame_index,
             target_index=target_index,
             target_indices=indices,
+        )
+        scene_predictable = future_scene_predictable_mask(
+            batch,
+            anchor_index=frame_index,
+            target_index=target_index,
         )
         point_valid = valid & predictable
         mature = belief.objects.age_steps >= config.training.minimum_rollout_age_steps
@@ -2288,7 +2472,11 @@ def _rollout_loss_result(
             mean=target_positions[:, query_index],
             target=target_position,
             log_variance=target_position_log_variance[:, query_index],
-            mask=point_valid,
+            # Coverage is a stochastic calibration diagnostic, like the
+            # proper forecast NLL above. Hidden interventions are excluded
+            # from deterministic point RMSE but remain valid realised samples
+            # for whether the predictive distribution widened enough.
+            mask=valid,
         )
         _add_squared_error_metrics(
             physical_metrics,
@@ -2322,6 +2510,12 @@ def _rollout_loss_result(
         )
         physical_metrics[f"physical_rollout_predictable_target_count{horizon_suffix}"] = float(
             point_valid.sum().detach().cpu()
+        )
+        physical_metrics[f"physical_forecast_predictable_target_count{horizon_suffix}"] = float(
+            (batch["objects"]["active"][:, target_index].bool() & scene_predictable[:, None])
+            .sum()
+            .detach()
+            .cpu()
         )
         physical_metrics[f"physical_rollout_censored_external_actuation_count{horizon_suffix}"] = (
             float((valid & ~predictable).sum().detach().cpu())
@@ -3254,7 +3448,7 @@ def run_closed_loop_batch(
                     .bool()
                 )
                 valid = matched & future_active & prior_belief.objects.active
-                valid &= _future_predictable_mask(
+                valid &= future_predictable_mask(
                     batch,
                     anchor_index=frame_index,
                     target_index=target_index,
@@ -3656,7 +3850,10 @@ def run_closed_loop_batch(
 
 
 __all__ = [
+    "PhysicalMetricSupportError",
     "TrainingBatchResult",
+    "future_predictable_mask",
+    "future_scene_predictable_mask",
     "gather_target_slots",
     "make_rgb_packet",
     "match_belief_to_targets",

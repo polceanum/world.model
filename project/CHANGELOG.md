@@ -2,6 +2,66 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-03 initialization-support and launch-failure audit
+
+- Proved that
+  `runs/20260803-000858-v3-collapse-repair-qualification/` never performed an
+  optimizer update. It contains one step-zero initialization-validation row,
+  no `last.pt` or best checkpoint, and a terminal
+  `AssertionError: initialization validation must establish the first
+  incumbent`. The launchd job then restarted more than 2,284 times and each
+  retry failed against the occupied run directory. Removed the job and
+  preserved the artifacts; this run supplies no convergence evidence.
+- Reduced the `impulse_perturbation` event probability from `0.12` to `0.02`
+  per observation interval. The old setting expected about 4.68 hidden events
+  in every 40-frame episode and erased nearly all deterministic one-second
+  support. The corrected fixed four-episode slice retains real impulses, has
+  three independently supported episodes, and passes every configured
+  predictable/matched horizon floor.
+- Added shared scene-causal future masks to deterministic trainer and evaluator
+  position, velocity, event, collision-conditioned, and correction metrics.
+  Forecast calibration deliberately retains stochastic outcomes and now
+  publishes its coordinate count; reports publish predictable and censored
+  deterministic counts.
+- Replaced binary nonzero validation support with per-scenario, per-horizon
+  minimum predictable-target, matched-target, and supported-episode floors.
+  Exact support evidence is persisted, while missing physical metric schema
+  now raises instead of being misreported as ordinary zero support.
+- Included fully resolved scenario generator configurations and all support
+  floors in measurement/rollout protocol hashes; bumped simulator semantics to
+  `sphere_world_v4`, rollout protocol to 10, measurement protocol to 5, and
+  rollout selection metric to 6.
+- Made unsupported imported initialization recoverable, removed full-manifest
+  validation before every causal optimizer update, and required the first
+  later incumbent to pass available reference/training guardrails.
+- Added atomic `training_state.json` and `training_failure.json` CLI artifacts,
+  append-only `training_failures.jsonl` history, exclusive fresh run-directory
+  claiming, and resume-attempt state so a retry cannot overwrite or contradict
+  an earlier terminal result. Added a one-shot macOS LaunchAgent helper with
+  `KeepAlive=false`, and supervisor cleanup for both verified initial
+  completion and initial failure.
+- Added an exclusive per-run training lock, durable interrupted-attempt
+  failure history, and supervisor consumption of authoritative terminal
+  trainer state. Supervisor PID checks now verify command/run identity so PID
+  reuse cannot be mistaken for a live trainer.
+- Made every pooled, scenario, horizon, and axis selector field reproducible
+  from its retained exact additive evidence. Current-protocol selector
+  artifacts are rejected if axis fields, support markers, raw schema, derived
+  values, tensor hashes, or fixed-reference state disagree.
+- Persisted an incomplete-reference-comparison marker across in-place and
+  branched exact resumes. The first supported candidate after an unsupported
+  diagnostic state establishes a complete fixed reference but cannot compare
+  with and promote itself.
+- Promoted fast-ROI source belief slot/object ID from ad-hoc auxiliary keys to
+  a typed, paired, validated measurement contract. Stale evidence after slot
+  reuse is rejected; global discovery remains free Hungarian association.
+- Passed Ruff, compileall, the complete sandbox suite
+  (`577 passed, 6 MPS-only skipped`), and the host MPS families
+  (`38 passed`). Completed one finite production-profile causal CPU update and
+  one real host-MPS optimizer update with terminal checkpoints. Neither
+  one-step smoke was promoted or described as an accuracy result.
+- Advanced the authoritative specification to version 1.9.
+
 ### 2026-08-03 lifecycle, identity, and gradient-collapse audit
 
 - Stopped and preserved
@@ -48,13 +108,12 @@
   clean checkpoint provenance, and complete terminal validation. Its slightly
   better tiny pooled score was correctly rejected for coverage and short-y
   guardrail regressions; it is not a promotion claim.
-- Pushed the clean-smoke evidence as `baca6a8` and launched the corrected
+- Pushed the clean-smoke evidence as `baca6a8` and attempted the corrected
   3,072-update balanced qualification at
   `runs/20260803-000858-v3-collapse-repair-qualification/` under
-  launchd/caffeinate. Metadata records clean pushed source, MPS measurement,
-  CPU causal execution, RGB-only runtime, oracle disabled, two-frame birth
-  confirmation, and both local gradient caps. Launch health is not a
-  convergence result.
+  launchd/caffeinate. Later audit proved that it failed during step-zero
+  initialization and took no optimizer steps; its apparent live PID was a
+  restart loop, not launch health or convergence evidence.
 - Advanced the specification to version 1.8.
 
 ### 2026-08-02 supported-causal and convergence-stability audit

@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.8
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, and perception-gradient-integrity amendment 3 August 2026
+**Version:** 1.9
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, and launch-failure-integrity amendments 3 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5566,6 +5566,79 @@ causal-stage stability policy and is disabled during paired RGB pretraining,
 where the ordinary whole-model clip retains its original semantics. Clip
 limits and the bounded causal global-perception adaptation window are resolved
 configuration and checkpoint-protocol semantics.
+
+---
+
+# Part XXXI — Validation support and launch-failure integrity amendment
+
+## 176. Deterministic accuracy requires auditable causal opportunity
+
+An observation-interval intervention probability is not an episode-level
+probability. Scenario parameters must state the sampling cadence, and fixed
+validation manifests must be checked against the resulting event sequence.
+A stochastic-intervention scenario must contain real interventions while also
+retaining enough clean windows at every declared horizon to evaluate the
+deterministic predictor.
+
+Because object dynamics interact, an unseen external actuation on any object
+can invalidate a point target for the complete coupled scene until a later
+observation exposes it. Training and standalone evaluation must use the same
+causal mask for deterministic position, velocity, event, collision-conditioned,
+and correction-improvement metrics. Distributional likelihood and calibration
+continue to score the realised stochastic outcome. Reports must publish both
+the censored deterministic support and the uncensored calibration coordinate
+count so an apparent RMSE improvement cannot be manufactured by dropping hard
+futures.
+
+Promotion support is stronger than a nonzero pooled denominator. Every
+scenario must satisfy configured positive minima for:
+
+- label-only causally predictable targets at every horizon;
+- matched predicted targets at every horizon; and
+- independently supported validation episodes.
+
+Exact additive counts, per-seed support, per-scenario support, and the configured
+floors are checkpoint evidence. Missing metric schema is an implementation
+error and must fail loudly; only a well-formed zero/insufficient-support result
+may become a truthful rejected candidate. Fully resolved per-scenario simulator
+parameters, simulator version, metric version, support floors, seed manifest,
+and execution policy are part of the validation-protocol hash.
+Every retained derived selector value, including pooled/scenario and
+axis-resolved metrics, must be reproducible from the stored exact additive
+evidence. A selector artifact whose derived score contradicts its raw sums is
+invalid even when its tensor hash and internally recomputed weighted score
+match.
+
+## 177. Initialization failure must be recoverable and terminal process state explicit
+
+A weights-only initialization is a candidate, not an assumed incumbent. Its
+first broad validation may establish a fixed diagnostic reference while being
+unsupported for deployment. Persist the candidate and reasons, continue the
+declared causal optimization path, and retry broad validation only at the
+configured evaluation cadence and terminal boundary. Do not run the complete
+validation manifest before every optimizer update. The first later supported
+incumbent must pass every available fixed-reference and training-viability
+guardrail; incomplete initialization evidence never becomes a synthetic best
+checkpoint.
+An unsupported diagnostic artifact does not constitute a numerical fixed
+reference. The checkpoint carries a durable incomplete-reference-comparison
+marker across both in-place and branched exact resumes. The first later
+supported candidate establishes the complete fixed reference but cannot
+promote itself; only a subsequent supported candidate can be compared with and
+promoted against that reference.
+
+Every fresh CLI training invocation writes a timestamped state artifact before
+expensive initialization, a terminal failure artifact with exception type,
+message, and traceback on failure, and a completed state only after terminal
+validation succeeds. Persistent macOS launches are one-shot launchd jobs
+wrapped by `caffeinate`, with `KeepAlive=false`. A failed trainer must remain
+failed rather than being silently relaunched against an occupied run directory.
+A per-run exclusive training lock prevents concurrent exact-resume writers,
+and every failed attempt is retained in append-only history even when a later
+attempt succeeds. Interrupts and cleanup failures are terminal evidence rather
+than unrecorded or masking exceptions.
+A convergence supervisor monitoring an older KeepAlive job must boot it out on
+either verified completion or verified initial-process failure.
 
 ---
 

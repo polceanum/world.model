@@ -7,6 +7,7 @@ import argparse
 import fcntl
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -90,8 +91,16 @@ def _acquire_supervisor_lock(path: Path) -> TextIO:
     return handle
 
 
-def _bootout_completed_job(label: str, *, event_path: Path) -> None:
-    """Remove the initial KeepAlive job only after its artifacts verify."""
+def _bootout_initial_job(
+    label: str,
+    *,
+    event_path: Path,
+    outcome: str,
+) -> None:
+    """Remove the initial KeepAlive job after verified completion or failure."""
+
+    if outcome not in {"completion", "failure"}:
+        raise ValueError("initial job outcome must be 'completion' or 'failure'")
 
     domain_target = f"gui/{os.getuid()}/{label}"
     result = subprocess.run(
@@ -109,20 +118,124 @@ def _bootout_completed_job(label: str, *, event_path: Path) -> None:
         )
         if probe.returncode == 0:
             raise RuntimeError(
-                f"could not boot out completed KeepAlive job {domain_target}: "
+                f"could not boot out {outcome} KeepAlive job {domain_target}: "
                 f"{result.stderr.strip()}"
             )
         _append_event(
             event_path,
             "initial_job_already_absent",
             launchctl_target=domain_target,
+            outcome=outcome,
         )
         return
     _append_event(
         event_path,
-        "initial_job_booted_out_after_verified_completion",
+        f"initial_job_booted_out_after_verified_{outcome}",
         launchctl_target=domain_target,
     )
+
+
+def _bootout_initial_job_safely(
+    label: str,
+    *,
+    event_path: Path,
+    outcome: str,
+) -> str | None:
+    """Attempt cleanup without masking already-durable trainer state."""
+
+    try:
+        _bootout_initial_job(
+            label,
+            event_path=event_path,
+            outcome=outcome,
+        )
+    except Exception as error:
+        _append_event(
+            event_path,
+            "initial_job_bootout_failed",
+            outcome=outcome,
+            error_type=type(error).__name__,
+            error=str(error),
+        )
+        return str(error)
+    return None
+
+
+def _raise_on_terminal_trainer_failure(
+    run_directory: Path,
+    *,
+    minimum_expected_steps: int,
+) -> None:
+    """Surface the trainer's atomic terminal failure instead of polling forever."""
+
+    failure_path = run_directory / "training_failure.json"
+    state_path = run_directory / "training_state.json"
+    for path in (failure_path, state_path):
+        if not path.is_file():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as error:
+            raise CampaignIncompleteError(
+                f"trainer state artifact is unreadable before step {minimum_expected_steps}: {path}"
+            ) from error
+        if not isinstance(payload, dict):
+            raise CampaignIncompleteError(
+                f"trainer state artifact is not a JSON object before step "
+                f"{minimum_expected_steps}: {path}"
+            )
+        state = payload.get("state")
+        if path == failure_path and state != "failed":
+            raise CampaignIncompleteError(
+                f"trainer failure artifact has invalid state {state!r} before "
+                f"step {minimum_expected_steps}: {path}"
+            )
+        if state != "failed":
+            continue
+        exception_type = str(payload.get("exception_type") or "UnknownError")
+        message = str(payload.get("message") or "no failure message recorded")
+        raise CampaignIncompleteError(
+            f"trainer reported terminal failure before step "
+            f"{minimum_expected_steps} via {path.name}: "
+            f"{exception_type}: {message}"
+        )
+
+
+def _pid_matches_training_run(pid: int, run_directory: Path) -> bool:
+    """Prove that a live PID is still the trainer for the requested run."""
+
+    result = subprocess.run(
+        ["ps", "-ww", "-p", str(pid), "-o", "command="],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return False
+    try:
+        arguments = shlex.split(result.stdout.strip())
+    except ValueError:
+        return False
+    if not any(Path(argument).name == "train.py" for argument in arguments):
+        return False
+
+    run_directory = run_directory.resolve()
+    for index, argument in enumerate(arguments[:-1]):
+        value = arguments[index + 1]
+        if argument == "--run-name":
+            return value == run_directory.name or run_directory.name.endswith(f"-{value}")
+        if argument == "--resume":
+            checkpoint = Path(value).expanduser()
+            if not checkpoint.is_absolute():
+                checkpoint = Path(__file__).resolve().parents[1] / checkpoint
+            checkpoint = checkpoint.resolve()
+            if (
+                checkpoint.name == "last.pt"
+                and checkpoint.parent.name == "checkpoints"
+                and checkpoint.parent.parent == run_directory
+            ):
+                return True
+    return False
 
 
 def _wait_for_completed_segment(
@@ -139,6 +252,10 @@ def _wait_for_completed_segment(
     summary_path = run_directory / "train_summary.json"
     last_wait_log = 0.0
     while True:
+        _raise_on_terminal_trainer_failure(
+            run_directory,
+            minimum_expected_steps=minimum_expected_steps,
+        )
         if summary_path.is_file():
             try:
                 summary = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -157,6 +274,12 @@ def _wait_for_completed_segment(
                 ) from error
             except PermissionError:
                 pass
+            if not _pid_matches_training_run(monitored_pid, run_directory):
+                raise CampaignIncompleteError(
+                    f"trainer PID {monitored_pid} no longer identifies the "
+                    f"trainer for {run_directory} before step "
+                    f"{minimum_expected_steps}"
+                )
         now = time.monotonic()
         if now - last_wait_log >= 600.0:
             _append_event(
@@ -342,7 +465,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"], default="mps")
     parser.add_argument(
         "--initial-launchctl-label",
-        help="KeepAlive job to boot out only after the initial segment verifies",
+        help=(
+            "Initial job to boot out after verified completion or a monitored "
+            "initial-trainer failure"
+        ),
     )
     parser.add_argument(
         "--initial-trainer-pid",
@@ -451,6 +577,12 @@ def main() -> int:
     state = _read_state(state_path)
     if state.get("status") in {"extension_failed", "initial_trainer_failed"}:
         recorded_status = str(state["status"])
+        if recorded_status == "initial_trainer_failed" and args.initial_launchctl_label:
+            _bootout_initial_job_safely(
+                args.initial_launchctl_label,
+                event_path=event_path,
+                outcome="failure",
+            )
         _append_event(
             event_path,
             "supervisor_stopped_on_recorded_failure",
@@ -497,6 +629,24 @@ def main() -> int:
                 error_type=type(error).__name__,
                 error=str(error),
             )
+            cleanup_error = None
+            if args.initial_launchctl_label:
+                cleanup_error = _bootout_initial_job_safely(
+                    args.initial_launchctl_label,
+                    event_path=event_path,
+                    outcome="failure",
+                )
+                if cleanup_error is not None:
+                    _write_state(
+                        state_path,
+                        status="initial_trainer_failed",
+                        trainer_pid=args.initial_trainer_pid,
+                        target_steps=minimum_total_steps,
+                        returncode=2,
+                        error_type=type(error).__name__,
+                        error=str(error),
+                        cleanup_error=cleanup_error,
+                    )
             return 2
     else:
         stored_pid_value = state.get("child_pid")
@@ -599,7 +749,11 @@ def main() -> int:
         completed_steps=inspection.completed_steps,
     )
     if args.initial_launchctl_label:
-        _bootout_completed_job(args.initial_launchctl_label, event_path=event_path)
+        _bootout_initial_job(
+            args.initial_launchctl_label,
+            event_path=event_path,
+            outcome="completion",
+        )
 
     while True:
         decision = decide_continuation(

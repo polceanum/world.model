@@ -31,7 +31,12 @@ def _belief_and_prediction() -> tuple[object, PredictedMeasurements]:
     return belief, predicted
 
 
-def _measurements(values: torch.Tensor) -> MeasurementSet:
+def _measurements(
+    values: torch.Tensor,
+    *,
+    source_belief_indices: torch.Tensor | None = None,
+    source_object_ids: torch.Tensor | None = None,
+) -> MeasurementSet:
     batch, count, _ = values.shape
     return MeasurementSet(
         modality="rgb",
@@ -45,12 +50,16 @@ def _measurements(values: torch.Tensor) -> MeasurementSet:
         class_logits=None,
         frame_id="camera:camera",
         supported_state_fields=("position",),
+        source_belief_indices=source_belief_indices,
+        source_object_ids=source_object_ids,
     )
 
 
 def test_hungarian_association_matches_swapped_obvious_pairs() -> None:
     belief, predicted = _belief_and_prediction()
     measurements = _measurements(torch.tensor([[[0.81, 0.2, -1.2, 0.4], [0.01, 0.0, -1.0, 0.5]]]))
+    assert measurements.source_belief_indices is None
+    assert measurements.source_object_ids is None
     result = Associator(mahalanobis_gate=25.0).match(belief, measurements, predicted)
     pairs = {
         (int(belief_index), int(measurement_index))
@@ -116,13 +125,9 @@ def test_source_conditioned_fast_measurements_cannot_cross_persistent_ids() -> N
                     [0.01, 0.0, -1.0, 0.5],
                 ]
             ]
-        )
-    )
-    measurements.auxiliary.update(
-        {
-            "source_belief_indices": torch.tensor([[0, 1]]),
-            "source_object_ids": torch.tensor([[10, 11]]),
-        }
+        ),
+        source_belief_indices=torch.tensor([[0, 1]]),
+        source_object_ids=torch.tensor([[10, 11]]),
     )
 
     result = Associator(mahalanobis_gate=4.0).match(
@@ -149,13 +154,9 @@ def test_source_conditioning_follows_explicit_source_when_rows_are_reordered() -
                     [0.01, 0.0, -1.0, 0.5],
                 ]
             ]
-        )
-    )
-    measurements.auxiliary.update(
-        {
-            "source_belief_indices": torch.tensor([[1, 0]]),
-            "source_object_ids": torch.tensor([[11, 10]]),
-        }
+        ),
+        source_belief_indices=torch.tensor([[1, 0]]),
+        source_object_ids=torch.tensor([[11, 10]]),
     )
 
     result = Associator(mahalanobis_gate=25.0).match(
@@ -175,6 +176,53 @@ def test_source_conditioning_follows_explicit_source_when_rows_are_reordered() -
     }
 
     assert pairs == {(0, 1), (1, 0)}
+
+
+def test_source_conditioning_rejects_stale_identity_after_slot_reuse() -> None:
+    belief, predicted = _belief_and_prediction()
+    measurements = _measurements(
+        predicted.values[:, :1].clone(),
+        source_belief_indices=torch.tensor([[0]]),
+        source_object_ids=torch.tensor([[9]]),
+    )
+
+    result = Associator(mahalanobis_gate=25.0).match(
+        belief,
+        measurements,
+        predicted,
+    )
+
+    assert not result.pair_mask.any()
+    assert result.unmatched_beliefs[0, :2].all()
+    assert result.unmatched_measurements.all()
+
+
+def test_measurement_source_identity_is_a_validated_paired_contract() -> None:
+    values = torch.zeros(1, 1, 4)
+    incomplete = _measurements(
+        values,
+        source_belief_indices=torch.tensor([[0]]),
+    )
+    with pytest.raises(ValueError, match="must be provided together"):
+        incomplete.validate()
+
+    wrong_dtype = _measurements(
+        values,
+        source_belief_indices=torch.tensor([[0]], dtype=torch.int32),
+        source_object_ids=torch.tensor([[10]], dtype=torch.int32),
+    )
+    with pytest.raises(TypeError, match="must use torch.int64"):
+        wrong_dtype.validate()
+
+    valid = _measurements(
+        values,
+        source_belief_indices=torch.tensor([[0]]),
+        source_object_ids=torch.tensor([[10]]),
+    )
+    valid.validate()
+    roundtrip = valid.to(device="cpu").detach()
+    torch.testing.assert_close(roundtrip.source_belief_indices, torch.tensor([[0]]))
+    torch.testing.assert_close(roundtrip.source_object_ids, torch.tensor([[10]]))
 
 
 def test_association_gates_impossible_pair_as_unmatched() -> None:

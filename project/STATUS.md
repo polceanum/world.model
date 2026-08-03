@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-03
-**Specification:** `PROJECT_SPEC.md` 1.8
+**Specification:** `PROJECT_SPEC.md` 1.9
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -17,9 +17,213 @@ validation exposed lifecycle/identity collapse and perception-gradient
 starvation; the repaired runtime passes complete regression, host MPS device,
 and clean hybrid MPS/CPU end-to-end wiring checks, but no repaired v3
 qualification result, convergence result, or broad promotion exists yet; a
-fresh repaired eight-scenario qualification is active from clean pushed source;
+second repaired eight-scenario qualification was proven never to have trained
+and its launchd restart storm has been stopped; validation-support, evaluator,
+failure-state, and one-shot-launch repairs are implemented and passing focused
+and complete quality gates; clean CPU causal and host-MPS optimizer-progress
+smokes completed without nonfinite/zero-gradient/restart failure, but neither
+one-step smoke earned a deployment promotion and a new sustained qualification
+has not yet been launched;
 collision, occlusion, identification, convergence, and full acceptance remain
 open
+
+## 2026-08-03 — initialization-support and launch-failure audit
+
+The apparent qualification at
+`runs/20260803-000858-v3-collapse-repair-qualification/` was not training
+slowly or noisily: it never took an optimizer step. Its complete durable
+evidence is:
+
+```text
+metrics rows: 1
+row: step 0, validation_initialization_incumbent
+checkpoints: reference_rollout.pt, validation_step_000000.pt
+last.pt / best_rollout.pt / best_measurement.pt: absent
+terminal error:
+  AssertionError: initialization validation must establish the first incumbent
+```
+
+The step-zero metrics and checkpoint tensors are finite, and the stored tensor
+hashes match. This rules out numeric NaN/Inf collapse at that point. Instead,
+all four fixed `impulse_perturbation` validation episodes were unsupported at
+one second. The old probability `0.12` was applied once per 20 Hz observation
+interval, not once per episode, so a 40-frame episode expected `4.68` unseen
+impulses. The exact affected seeds produced event frames:
+
+```text
+100004: 19, 24, 29
+100012: 5, 17, 35, 39
+100020: 8, 17
+100028: 5, 10, 11, 26, 33, 37
+```
+
+That left essentially no causally identifiable one-second point targets at the
+fixed validation anchors. The assertion killed the first process.
+Unfortunately the `launchctl submit` job behaved as KeepAlive and restarted
+it more than 2,284 times. Each later process failed with `FileExistsError`
+against the first attempt's occupied run directory. The stderr log grew to
+about 1.17 MB / 18,000 lines without learning. The launchd label
+`com.polceanum.orpheus.v3-repair-20260803-000858` has been booted out. The run
+is retained as a launch/protocol failure and contains no convergence trend.
+
+The current repair:
+
+- changes the stochastic impulse rate to `0.02` per observation interval,
+  which still produces real surprises but preserves deterministic windows;
+- uses one shared scene-wide causal mask in training and evaluation for point,
+  event, collision-conditioned, and correction metrics after unseen
+  actuation, while forecast calibration still scores stochastic outcomes;
+- requires per-scenario, per-horizon minima of four label-predictable targets,
+  two matched targets, and two independently supported episodes for v3
+  promotion;
+- persists exact predictable/censored/coordinate/episode support evidence and
+  lets only an explicit insufficient-support condition become a rejected
+  candidate; missing metric schema is fatal;
+- records fully resolved scenario configurations in protocol hashes and bumps
+  simulator semantics to `sphere_world_v4`;
+- continues after an unsupported imported initialization, removes the
+  accidental full 32-episode validation before every causal optimizer update,
+  and applies available fixed-reference/training guardrails before the first
+  later promotion;
+- writes atomic starting, failed, and completed CLI state artifacts; and
+- launches future macOS jobs from an explicit one-shot plist with
+  `KeepAlive=false`. The legacy convergence supervisor also boots out a failed
+  initial job.
+
+An exact current-tree CPU replay of the imported checkpoint on the four fixed
+impulse seeds produced:
+
+```text
+per-seed supported: 100004 yes, 100012 yes, 100020 no, 100028 yes
+supported episodes: 3 / 4 (minimum 2)
+predictable targets @ 0.1/0.25/0.5/0.75/1.0 s:
+  116 / 98 / 80 / 62 / 47 (minimum 4 each)
+matched targets @ 0.1/0.25/0.5/0.75/1.0 s:
+  40 / 30 / 23 / 16 / 12 (minimum 2 each)
+scenario selection support: pass
+pooled selection support: pass
+```
+
+One seed is deliberately reported unsupported rather than hidden. This is
+support/protocol evidence, not an accuracy result.
+
+The completed quality gate on the final repaired tree was:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus ruff format --check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus ruff check .
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-v4-audit-pycache PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus python -m compileall -q \
+  train.py evaluate.py demo.py scripts world_model tests
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q
+```
+
+```text
+Ruff format: 182 files already formatted
+Ruff lint: all checks passed
+compileall: passed
+pytest: 577 passed, 6 MPS-only skipped in 180.59 s
+```
+
+Host hardware and focused accelerator validation:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus python -c \
+  "import platform, torch; print(platform.python_version()); \
+   print(torch.__version__); print(torch.backends.mps.is_built()); \
+   print(torch.backends.mps.is_available())"
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus pytest -q \
+  tests/integration/test_rgb_measurements.py \
+  tests/unit/test_modal_dynamics.py \
+  tests/unit/test_evaluation_parameter_update_metrics.py \
+  tests/unit/test_association.py
+```
+
+```text
+Python 3.10.20
+PyTorch 2.10.0
+MPS built: true
+MPS available: true
+38 passed in 8.36 s
+```
+
+The clean production-profile causal smoke used the imported paired-RGB
+checkpoint but no oracle runtime input:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/sustained_accuracy_mps_v3.yaml \
+  --initialize-from \
+    runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/best_measurement.pt \
+  --run-name 20260803-081824-v4-collapse-audit-cpu-smoke \
+  --device cpu \
+  --set training.steps=1 \
+  --set training.rgb_pretrain_steps=0 \
+  --set training.train_episodes=16 \
+  --set training.validation_episodes=16 \
+  --set training.batch_size=2 \
+  --set training.num_workers=0 \
+  --set training.eval_every=1 \
+  --set training.checkpoint_every=1 \
+  --set training.log_every=1
+```
+
+It completed one real update in `839.80 s`, with loss `3.006042`, raw/applied
+gradient `5.617366 / 1.268207`, trajectory support `27`, fast-ROI support `12`,
+thirteen differentiable causal objective terms, no skipped batch, and a
+terminally validated `last.pt`. The fixed reference passes tensor, protocol,
+support-schema, and raw-additive recomputation checks.
+
+Pooled validation changed as follows:
+
+| metric | imported reference | step 1 |
+|---|---:|---:|
+| position RMSE | `0.314256 m` | `0.307586 m` |
+| velocity RMSE | `1.178649 m/s` | `1.180215 m/s` |
+| target coverage | `0.293627` | `0.292157` |
+| prediction precision | `0.359760` | `0.364972` |
+| collision F1 | `0.269939` | `0.254545` |
+| ID-switch rate | `0.013267` | `0.013378` |
+| nominal-90% coverage | `0.880747` | `0.884518` |
+| horizon RMSE 0.1/0.25/0.5/0.75/1.0 s | `0.325038 / 0.329932 / 0.338065 / 0.349248 / 0.357262 m` | `0.319815 / 0.320804 / 0.325284 / 0.333406 / 0.334316 m` |
+
+The aggregate/horizon position gains were not promoted: coverage, collision,
+some axes, and scenario support regressed, producing 61 explicit guardrail
+reasons. The run has no `best_rollout.pt`; that is correct for a one-update
+smoke. Artifacts:
+
+- `runs/20260803-081824-v4-collapse-audit-cpu-smoke/checkpoints/last.pt`
+- `runs/20260803-081824-v4-collapse-audit-cpu-smoke/checkpoints/reference_rollout.pt`
+- `runs/20260803-081824-v4-collapse-audit-cpu-smoke/metrics.jsonl`
+- `runs/20260803-081824-v4-collapse-audit-cpu-smoke/train_summary.json`
+- `runs/20260803-081824-v4-collapse-audit-cpu-smoke/training_state.json`
+
+The actual host-MPS optimizer-progress smoke was:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/tiny_overfit.yaml \
+  --run-name 20260803-083723-v4-mps-optimizer-smoke \
+  --device mps \
+  --set device.global_detector_cpu_on_mps=true \
+  --set training.steps=1 \
+  --set training.rgb_pretrain_steps=1 \
+  --set training.train_episodes=2 \
+  --set training.checkpoint_every=1 \
+  --set training.eval_every=1 \
+  --set training.log_every=1 \
+  --set training.num_workers=0
+```
+
+It completed on MPS in `429.06 s`; training/validation losses were finite
+(`26.659035 / 5.401521`), the first-step raw gradient `2946.836426` was clipped
+to `1.0`, the optimizer update was applied, terminal validation completed, and
+no failure artifact exists. A random one-update measurement model was correctly
+reported unusable and not promoted. This proves real MPS optimizer/checkpoint
+wiring, not accuracy. Artifacts are under
+`runs/20260803-083723-v4-mps-optimizer-smoke/`.
 
 ## 2026-08-03 — v3 collapse audit and lifecycle/identity repair
 
@@ -176,8 +380,8 @@ reported zero distance-gated identity switches. This is clean execution and
 guardrail evidence, not a promoted accuracy result. A new balanced medium
 qualification remains the next convergence test.
 
-The corrected medium qualification was launched only after the clean smoke and
-evidence commit were pushed:
+The next medium qualification was launched after the clean smoke and evidence
+commit were pushed:
 
 ```bash
 launchctl submit \
@@ -202,8 +406,9 @@ launchctl submit \
 ```text
 run: runs/20260803-000858-v3-collapse-repair-qualification/
 source: baca6a8cc418a9f1a8e6321124a46026cfcc0004, clean and pushed
-updates: 3,072 = 1,024 paired RGB + 2,048 supported causal
-episode draws: 6,144, batch 2
+declared updates: 3,072 = 1,024 paired RGB + 2,048 causal
+actual optimizer updates: 0
+actual episode draws: 0
 scenarios: eight unique balanced families
 validation: 32 fixed episodes, eight anchors, every 512 updates
 devices: MPS paired RGB / CPU causal
@@ -212,14 +417,12 @@ gradient caps: perception 1.0 / interaction 1.0 / whole model 2.0
 global causal perception window: 512 updates
 ```
 
-Immediate host verification found no overlapping old trainer. Launchd reported
-the new job running as PID `70085`; process inspection showed active initial
-validation at about `297%` CPU. `run_metadata.json` records MPS built/available,
-RGB runtime, oracle disabled, and clean source fingerprint. Both stdout and
-stderr were empty at launch, as expected before the 32-episode imported
-reference validation completes. This is launch-health evidence only. Do not
-claim convergence or promotion before the four corrected-protocol causal
-validations at steps 1536, 2048, 2560, and 3072 have been inspected.
+Immediate host inspection saw PID `70085` spending CPU on the initial
+validation, but later forensic inspection proved that process failed before
+training and launchd repeatedly replaced it. This is exactly why PID/CPU and
+empty-at-launch logs are not sufficient launch-health evidence. The complete
+failure evidence and corrected protocol are recorded in the newer audit
+section above.
 
 Known lifecycle limitations remain explicit: confirmation is spatial-only, so
 repeated association failure near a missed live track can still confirm a

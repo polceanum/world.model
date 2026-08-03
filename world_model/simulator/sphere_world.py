@@ -288,7 +288,14 @@ class SphereWorldConfig:
                 drag_range=(0.02, 0.14),
                 friction_range=(0.06, 0.3),
                 initial_speed_range=(0.45, 1.3),
-                external_impulse_probability=0.12,
+                # This probability is sampled once per observation interval,
+                # not once per episode.  At 20 Hz over a 40-frame sequence,
+                # 0.12 produced about 4.7 hidden impulses per episode and
+                # removed essentially all deterministic one-second forecast
+                # support.  A two-percent interval rate remains a genuine
+                # stochastic surprise regime (about 0.78 impulses per
+                # episode) while preserving clean pre/post-event windows.
+                external_impulse_probability=0.02,
                 external_impulse_range=(0.25, 0.8),
             )
         if scenario == "camera_parallax":

@@ -7,7 +7,7 @@ import math
 import statistics
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -39,12 +39,15 @@ from world_model.evaluation.velocity_metrics import (
 )
 from world_model.identification import ParameterUpdateDiagnostics
 from world_model.runtime import OnlineWorldModel
+from world_model.simulator.sphere_world import SphereWorldConfig
 from world_model.training.checkpointing import load_checkpoint
 from world_model.training.event_windows import (
     ObservationWindowQueryPlan,
     observation_window_query_plan,
 )
 from world_model.training.loop import (
+    future_predictable_mask,
+    future_scene_predictable_mask,
     gather_target_slots,
     make_rgb_packet,
     match_belief_to_targets,
@@ -256,6 +259,7 @@ class _CalibrationAccumulator:
             return {
                 "forecast_gaussian_nll": None,
                 "forecast_sharpness_std": None,
+                "forecast_calibration_coordinate_count": 0.0,
                 "forecast_coverage_50": None,
                 "forecast_coverage_80": None,
                 "forecast_coverage_90": None,
@@ -275,6 +279,7 @@ class _CalibrationAccumulator:
         metrics: dict[str, float | None] = {
             "forecast_gaussian_nll": float(nll.mean()),
             "forecast_sharpness_std": float(std.mean()),
+            "forecast_calibration_coordinate_count": float(error.numel()),
         }
         for level, quantile in quantiles.items():
             metrics[f"forecast_coverage_{level}"] = float((z <= quantile).float().mean())
@@ -616,6 +621,8 @@ def evaluate_checkpoint(
     forecast_target_count: dict[str, int] = {}
     forecast_tracked_count: dict[str, int] = {}
     forecast_active_count: dict[str, int] = {}
+    forecast_predictable_target_count: dict[str, int] = {}
+    forecast_censored_tracked_count: dict[str, int] = {}
 
     with torch.no_grad():
         for raw_batch in loader:
@@ -1065,6 +1072,18 @@ def evaluate_checkpoint(
                         )
                         horizon = _horizon_key(query_seconds[query_index])
                         common_valid = matched & future_active
+                        predictable = future_predictable_mask(
+                            batch,
+                            anchor_index=frame_index,
+                            target_index=target_frame,
+                            target_indices=target_indices,
+                        )
+                        scene_predictable = future_scene_predictable_mask(
+                            batch,
+                            anchor_index=frame_index,
+                            target_index=target_frame,
+                        )
+                        point_valid = common_valid & predictable
                         forecast_target_count[horizon] = forecast_target_count.get(
                             horizon, 0
                         ) + int(batch["objects"]["active"][:, target_frame].sum().detach().cpu())
@@ -1076,10 +1095,26 @@ def evaluate_checkpoint(
                         ) + int(
                             (common_valid & model_active_mask[:, query_index]).sum().detach().cpu()
                         )
+                        forecast_predictable_target_count[horizon] = (
+                            forecast_predictable_target_count.get(horizon, 0)
+                            + int(
+                                (
+                                    batch["objects"]["active"][:, target_frame].bool()
+                                    & scene_predictable[:, None]
+                                )
+                                .sum()
+                                .detach()
+                                .cpu()
+                            )
+                        )
+                        forecast_censored_tracked_count[horizon] = (
+                            forecast_censored_tracked_count.get(horizon, 0)
+                            + int((common_valid & ~predictable).sum().detach().cpu())
+                        )
                         forecast_errors.setdefault(("model", horizon), _ErrorAccumulator()).update(
                             model_positions[:, query_index],
                             future_target,
-                            common_valid,
+                            point_valid,
                         )
                         for baseline_name, positions in baselines.items():
                             forecast_errors.setdefault(
@@ -1088,8 +1123,11 @@ def evaluate_checkpoint(
                             ).update(
                                 positions[:, query_index],
                                 future_target,
-                                common_valid,
+                                point_valid,
                             )
+                        # Calibration remains a proper stochastic diagnostic:
+                        # unseen interventions are omitted from point RMSE but
+                        # still test whether predictive uncertainty widens.
                         calibration.update(
                             model_positions[:, query_index],
                             model_log_variance[:, query_index, :, :3],
@@ -1119,7 +1157,7 @@ def evaluate_checkpoint(
                                 },
                             },
                             target=future_target,
-                            valid_mask=common_valid,
+                            valid_mask=point_valid,
                             collision_mask=aligned_collision_during_window,
                         )
                         if model_collision_logits is not None:
@@ -1134,7 +1172,7 @@ def evaluate_checkpoint(
                             events.update(
                                 model_collision_logits[:, query_index],
                                 collision_target,
-                                common_valid,
+                                point_valid,
                             )
                     if not bool(
                         torch.isfinite(trajectory.positions).all()
@@ -1165,6 +1203,12 @@ def evaluate_checkpoint(
                             .bool()
                         )
                         valid = matched & future_active
+                        valid &= future_predictable_mask(
+                            batch,
+                            anchor_index=frame_index,
+                            target_index=target_frame,
+                            target_indices=target_indices,
+                        )
                         correction.update(
                             prior_rollout.positions[:, query_index],
                             posterior_rollout.positions[:, query_index],
@@ -1271,6 +1315,12 @@ def evaluate_checkpoint(
             active_count / tracked_count if tracked_count else None
         )
         metrics[f"model_dropped_forecast_count@{horizon}"] = float(tracked_count - active_count)
+        metrics[f"forecast_predictable_target_count@{horizon}"] = float(
+            forecast_predictable_target_count.get(horizon, 0)
+        )
+        metrics[f"forecast_censored_tracked_count@{horizon}"] = float(
+            forecast_censored_tracked_count.get(horizon, 0)
+        )
     metrics.update(
         {
             "rgb_global_update_latency_mean_ms": _mean_or_none(global_latencies),
@@ -1382,6 +1432,14 @@ def evaluate_checkpoint(
         "checkpoint_step": int(payload["step"]),
         "simulator_version": SIMULATOR_VERSION,
         "scenario_mixture": list(config.simulator.scenario_mixture),
+        "resolved_scenarios": {
+            scenario: asdict(
+                SphereWorldConfig.from_config(config)
+                .for_scenario(scenario)
+                .for_distribution("ood" if split == "ood" else "in_distribution")
+            )
+            for scenario in config.simulator.scenario_mixture
+        },
         "evaluation_episode_scenarios": [
             config.simulator.scenario_mixture[int(seed) % len(config.simulator.scenario_mixture)]
             for seed in resolved_seed_protocol.manifest.seeds
@@ -1393,8 +1451,16 @@ def evaluate_checkpoint(
         "rgb_only": True,
         "oracle_runtime_input_used": False,
         "simulator_state_usage": "metrics_and_baselines_only",
+        "deterministic_forecast_support_mask_source": (
+            "persistent_target_match_and_target_active_and_no_unseen_external_"
+            "actuation_anywhere_in_coupled_scene_over_(anchor_frame,target_frame]"
+        ),
+        "stochastic_calibration_support_mask_source": (
+            "persistent_target_match_and_target_active_including_hidden_external_actuation_outcomes"
+        ),
         "collision_conditioned_mask_source": (
-            "evaluation_only_simulator_collision_any_in_(anchor_frame,target_frame]"
+            "deterministic_forecast_support_and_evaluation_only_simulator_"
+            "collision_any_in_(anchor_frame,target_frame]"
         ),
         "parameter_metric_mask_source": "runtime_identifier_diagnostics",
         "directional_parameter_metric_mask_source": (

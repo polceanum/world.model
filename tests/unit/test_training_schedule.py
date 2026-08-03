@@ -727,6 +727,23 @@ def test_additive_physical_metrics_convert_to_selection_metrics() -> None:
         "physical_forecast_active_count@0.500s": 6.0,
         "physical_forecast_target_count@0.500s": 10.0,
     }
+    for axis in ("x", "y", "z"):
+        additive[f"physical_state_position_{axis}_sse"] = 4.0
+        additive[f"physical_state_position_{axis}_coordinate_count"] = 1.0
+    for suffix, horizon_sse in (
+        ("0.100s", 3.0),
+        ("0.250s", 12.0),
+        ("0.500s", 27.0),
+    ):
+        for axis in ("x", "y", "z"):
+            additive[f"physical_rollout_position_{axis}@{suffix}_sse"] = horizon_sse / 3.0
+            additive[f"physical_rollout_position_{axis}@{suffix}_coordinate_count"] = 1.0
+        additive[f"physical_rollout_position_coverage90@{suffix}_hit_count"] = 3.0
+        additive[f"physical_rollout_position_coverage90@{suffix}_coordinate_count"] = 3.0
+        additive[f"physical_forecast_tracked_count@{suffix}"] = 10.0
+        additive[f"physical_forecast_predictable_target_count@{suffix}"] = 10.0
+        additive[f"physical_rollout_predictable_target_count@{suffix}"] = 1.0
+        additive[f"physical_rollout_censored_external_actuation_count@{suffix}"] = 0.0
 
     metrics = physical_validation_metrics(additive, config)
 
@@ -978,7 +995,7 @@ def _physical_selection_metrics(
     forecast_coverage: tuple[float, float, float] = (0.9, 0.9, 0.9),
     horizons: tuple[float, float, float] = (0.4, 0.3, 0.2),
 ) -> dict[str, float]:
-    return {
+    metrics = {
         "validation_position_rmse_m": position,
         "validation_velocity_rmse_mps": velocity,
         "validation_target_coverage": coverage,
@@ -993,6 +1010,12 @@ def _physical_selection_metrics(
         "validation_forecast_target_coverage@0.250s": forecast_coverage[1],
         "validation_forecast_target_coverage@0.500s": forecast_coverage[2],
     }
+    for axis in ("x", "y", "z"):
+        metrics[f"validation_position_rmse_{axis}_m"] = position
+        metrics[f"validation_position_rmse_{axis}@0.100s"] = horizons[0]
+        metrics[f"validation_position_rmse_{axis}@0.250s"] = horizons[1]
+        metrics[f"validation_position_rmse_{axis}@0.500s"] = horizons[2]
+    return metrics
 
 
 def _with_scenario_selection_metrics(
@@ -1295,10 +1318,16 @@ class _ModeOnlyModel:
 def _result(value: float) -> TrainingBatchResult:
     scalar = torch.tensor(value)
     physical_metrics = {
-        "physical_state_position_sse": value,
-        "physical_state_position_coordinate_count": 1.0,
-        "physical_state_velocity_sse": value,
-        "physical_state_velocity_coordinate_count": 1.0,
+        "physical_state_position_sse": 3.0 * value,
+        "physical_state_position_coordinate_count": 3.0,
+        "physical_state_position_x_sse": value,
+        "physical_state_position_x_coordinate_count": 1.0,
+        "physical_state_position_y_sse": value,
+        "physical_state_position_y_coordinate_count": 1.0,
+        "physical_state_position_z_sse": value,
+        "physical_state_position_z_coordinate_count": 1.0,
+        "physical_state_velocity_sse": 3.0 * value,
+        "physical_state_velocity_coordinate_count": 3.0,
         "physical_target_object_frames": 1.0,
         "physical_matched_object_frames": 1.0,
         "physical_identity_switches": 0.0,
@@ -1315,10 +1344,19 @@ def _result(value: float) -> TrainingBatchResult:
         "physical_collision_false_negative_count": 0.0,
     }
     for suffix in ("0.100s", "0.250s", "0.500s"):
-        physical_metrics[f"physical_rollout_position@{suffix}_sse"] = value
-        physical_metrics[f"physical_rollout_position@{suffix}_coordinate_count"] = 1.0
+        physical_metrics[f"physical_rollout_position@{suffix}_sse"] = 3.0 * value
+        physical_metrics[f"physical_rollout_position@{suffix}_coordinate_count"] = 3.0
+        for axis in ("x", "y", "z"):
+            physical_metrics[f"physical_rollout_position_{axis}@{suffix}_sse"] = value
+            physical_metrics[f"physical_rollout_position_{axis}@{suffix}_coordinate_count"] = 1.0
+        physical_metrics[f"physical_rollout_position_coverage90@{suffix}_hit_count"] = 3.0
+        physical_metrics[f"physical_rollout_position_coverage90@{suffix}_coordinate_count"] = 3.0
         physical_metrics[f"physical_forecast_active_count@{suffix}"] = 1.0
+        physical_metrics[f"physical_forecast_tracked_count@{suffix}"] = 1.0
         physical_metrics[f"physical_forecast_target_count@{suffix}"] = 1.0
+        physical_metrics[f"physical_forecast_predictable_target_count@{suffix}"] = 1.0
+        physical_metrics[f"physical_rollout_predictable_target_count@{suffix}"] = 1.0
+        physical_metrics[f"physical_rollout_censored_external_actuation_count@{suffix}"] = 0.0
     return TrainingBatchResult(
         total_loss=scalar,
         loss_terms={"rollout": scalar},
