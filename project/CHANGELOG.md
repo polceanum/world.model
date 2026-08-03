@@ -57,6 +57,19 @@
   production-profile CPU dry run, and `git diff --check`. A new host-MPS rerun
   remains pending because the execution approval service hit its external
   usage limit; no device result was fabricated.
+- Launched the unshortened 16,384-step protocol-12 convergence campaign at
+  `runs/20260803-112948-v6-protocol12-full-convergence/` from accepted
+  `best_rollout.pt` and clean commit `e08c4d0`. Host metadata confirms MPS
+  availability for measurement training, CPU for the configured closed-loop
+  phase, one Standard/default launchd process, empty stderr, and initial
+  validation throughput of `28.342`, `26.702`, and `27.385 s/episode`.
+- Completed all 32 broad initialization episodes in `889.508 s`. The supported
+  imported incumbent was accepted at score `0.3310606914`, position RMSE
+  `0.308032 m`, velocity RMSE `1.135027 m/s`, target coverage `0.322500`,
+  prediction precision `0.370903`, collision F1 `0.225519`, ID-switch rate
+  `0.006834`, and nominal-90% coverage `0.890140`. The subsequent independent
+  MPS measurement-incumbent validation is advancing; its first two episodes
+  took `104.511` and `82.898 s`, with empty stderr and no optimizer update yet.
 
 ### 2026-08-03 cadence, progress, and finite-state collapse audit
 

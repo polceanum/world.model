@@ -436,6 +436,15 @@ candidate slightly regressed the fixed reference and was rejected, so the
 incumbent remained authoritative. Treat this as optimizer/checkpoint/selector
 wiring evidence only, not as an accuracy trend.
 
+The full unshortened continuation is active at
+`runs/20260803-112948-v6-protocol12-full-convergence/`, initialized from that
+smoke's accepted `best_rollout.pt`. It uses the profile's 16,384 steps and
+episodes, 8,192-step MPS measurement phase, 8,192-step CPU closed-loop phase,
+32-episode fixed validation, 128-step checkpoints, and 512-step selector
+interval. Its launchd job is Standard/default and one-shot (`KeepAlive=false`);
+inspect `training_progress.json` and the `/private/tmp/20260803-112948-...`
+stdout/stderr logs rather than inferring health from silence.
+
 ### Superseded v2 campaign
 
 `configs/sustained_accuracy_mps_v2.yaml` and

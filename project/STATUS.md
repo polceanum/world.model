@@ -31,9 +31,72 @@ launch-QoS audit found a roughly fourfold `Background` throttling regression;
 float timestamp integration-grid drift and duplicate causal propagation are
 repaired under rollout protocol 12; a reduced production-model smoke completed
 one finite, supported causal optimizer update and terminal validation, but a
-clean full-manifest protocol-v12 sustained qualification has not yet launched;
+clean full-manifest protocol-v12 convergence campaign is now running from the
+accepted protocol-v12 checkpoint and has begun healthy initialization
+validation; full convergence and acceptance remain unproven;
 collision, occlusion, identification, convergence, and full acceptance remain
 open
+
+## 2026-08-03 — full protocol-12 convergence campaign launched
+
+The full default sustained profile is active at
+`runs/20260803-112948-v6-protocol12-full-convergence/`, initialized from the
+accepted protocol-12 selector checkpoint
+`runs/20260803-110550-v6-protocol12-one-update-smoke/checkpoints/best_rollout.pt`.
+It was launched from clean pushed commit `e08c4d0` with:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python \
+  scripts/launch_training_once.py \
+  --label com.polceanum.orpheus.v6-20260803-112948 \
+  --config configs/sustained_accuracy_mps_v3.yaml \
+  --run-name 20260803-112948-v6-protocol12-full-convergence \
+  --device mps \
+  --initialize-from \
+    runs/20260803-110550-v6-protocol12-one-update-smoke/checkpoints/best_rollout.pt
+```
+
+The resolved schedule is the unshortened profile: `16,384` optimizer steps,
+`16,384` training episodes, `8,192` measurement-pretraining steps, `8,192`
+closed-loop steps, 32 fixed validation episodes, validation every 512 steps,
+and checkpoints every 128 steps. Measurement training uses MPS float32; the
+profile intentionally moves causal closed-loop optimization to CPU.
+
+Initial launch evidence:
+
+```text
+launchd label: com.polceanum.orpheus.v6-20260803-112948
+launchd state / runs / PID: running / 1 / 31197
+KeepAlive / ProcessType: false / omitted (Standard default)
+source commit / dirty: e08c4d0 / false
+MPS built / host available: true / true
+runtime modality / oracle: rgb / false
+closed-loop initialization validation: 32 / 32 episodes complete
+closed-loop validation elapsed / mean: 889.508 s / 27.797 s per episode
+closed-loop batch-time range: 24.559–28.342 s
+initial selector score / support / accepted: 0.3310606914 / true / true
+position / velocity RMSE: 0.308032 m / 1.135027 m/s
+target coverage / prediction precision: 0.322500 / 0.370903
+collision F1 / ID-switch rate: 0.225519 / 0.006834
+nominal-90% position coverage: 0.890140
+measurement-incumbent validation: 2 / 32 episodes complete
+first two MPS measurement batch seconds: 104.511, 82.898
+CPU utilization during closed-loop validation: approximately 530–541%
+stderr bytes: 0
+optimizer updates so far: 0
+```
+
+This restores the expected foreground throughput and shows no restart,
+deadlock, nonfinite failure, or launch-QoS regression. The complete broad
+initialization selector accepted the imported checkpoint and wrote
+`best_rollout.pt`, `reference_rollout.pt`, and
+`validation_step_000000.pt`. The trainer is now evaluating the separate
+measurement incumbent on host MPS before the first optimizer update. The first
+measurement episode paid substantial first-use MPS/hybrid warmup; the second
+fell from `104.511` to `82.898 s`, with live progress and empty stderr. No
+training trend or convergence claim exists yet. The authoritative heartbeat is
+`training_progress.json`; measurement selector evidence remains atomic until
+all 32 episodes complete.
 
 ## 2026-08-03 — launch-QoS and dynamics-call collapse audit
 
@@ -200,9 +263,10 @@ oracle runtime input: false
 ```
 
 The one-step candidate's tiny broad-score regression was correctly rejected,
-which is selector-integrity evidence rather than an accuracy result. Commit and
-production launch are recorded after they actually occur. No full-manifest
-protocol-v12 accuracy, promotion, or convergence result exists yet.
+which is selector-integrity evidence rather than an accuracy result. The
+repair was committed and pushed as `e08c4d0`; the full production launch is
+recorded above. No full-manifest protocol-v12 accuracy, promotion, or
+convergence result exists yet.
 
 ## 2026-08-03 — cadence, progress, and finite-state collapse audit
 

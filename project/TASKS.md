@@ -123,10 +123,17 @@
 - [x] Complete one reduced production-model protocol-v12 causal update with
   nonzero supported gradients, finite post-step/checkpoint state, terminal
   validation, and correct rejection of its slightly regressed candidate.
-- [ ] Commit and push the launch-QoS/integration/prepared-propagation repair.
-- [ ] Launch a clean timestamped protocol-v12 balanced qualification and
-  verify from progress, metrics, and checkpoints that initialization completes
-  and at least one real optimizer update occurs.
+- [x] Commit and push the launch-QoS/integration/prepared-propagation repair as
+  `e08c4d0`.
+- [x] Launch the full clean timestamped protocol-v12 convergence campaign from
+  pushed commit `e08c4d0` and verify Standard/default launch QoS, one
+  authoritative PID, host MPS availability, advancing per-episode progress,
+  expected foreground throughput, and empty stderr.
+- [x] Verify that the 32-episode broad initialization completes with supported,
+  accepted score `0.3310606914` and writes its reference/best/step-zero
+  checkpoints without stderr or nonfinite state.
+- [ ] Verify that the separate measurement-incumbent initialization completes
+  and at least one real MPS optimizer update occurs.
 - [ ] Inspect the next corrected qualification at its declared validation steps
   for support, perception/interaction/global gradient balance, lifecycle
   precision/coverage, identity switches, collisions, calibration, every
