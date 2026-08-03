@@ -330,6 +330,17 @@ lifecycle, association, target-supervision, and perception-gradient semantics
 require a new timestamped run and protocol. See `project/STATUS.md` for the
 exact audit.
 
+The repaired committed tree passed a clean four-update host smoke at
+`runs/20260803-000212-collapse-repair-host-smoke/`. Its paired RGB phase used
+MPS with the CPU proposal-transformer workaround, and its causal phase used
+CPU. Both causal updates had real trajectory and fast-ROI support, the new
+perception-local cap reduced raw perception norms above `3.1` to `1.0` without
+scaling interaction norms below `1.0`, no update was skipped, and terminal
+validation/checkpointing completed. The two-episode `reference_pairs` candidate
+was rejected for coverage/short-y guardrails, so this is device/protocol
+qualification only. A new eight-scenario medium run, not this smoke, must
+provide trend evidence.
+
 ### Superseded v2 campaign
 
 `configs/sustained_accuracy_mps_v2.yaml` and

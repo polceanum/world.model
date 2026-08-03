@@ -1655,4 +1655,6 @@
   without erasing smaller dynamics/filter gradients. These changes define a
   new validation/optimization protocol, so the stopped qualification cannot be
   resumed or compared as a continuation. A fresh broad qualification is still
-  required; the repair is not itself an accuracy or convergence claim.
+  required; the repair is not itself an accuracy or convergence claim. The
+  clean committed host smoke confirmed finite hybrid MPS/CPU execution and
+  correct guardrail rejection, but its two episodes remain wiring evidence.

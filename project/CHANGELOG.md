@@ -41,6 +41,13 @@
 - Passed the complete sandbox suite (`536 passed, 6 MPS-only skipped`) and all
   corresponding host MPS test families (`36 passed`), plus compile, Ruff,
   formatting, and diff checks.
+- Pushed repair commit `c869571` to `origin/main` and completed the clean
+  hybrid host smoke at
+  `runs/20260803-000212-collapse-repair-host-smoke/`: four finite updates, no
+  skipped batch, real causal/ROI support, causal perception clipping active,
+  clean checkpoint provenance, and complete terminal validation. Its slightly
+  better tiny pooled score was correctly rejected for coverage and short-y
+  guardrail regressions; it is not a promotion claim.
 - Advanced the specification to version 1.8.
 
 ### 2026-08-02 supported-causal and convergence-stability audit

@@ -57,9 +57,11 @@
   supported causal updates and no skipped/non-finite batch.
 - [x] Commit and push the complete audited v3 repair set from a fully passing
   test/lint/type-quality gate.
-- [ ] Re-run the final committed repair tree on host MPS/CPU and verify both
+- [x] Commit and push the lifecycle/identity/gradient repair as `c869571`.
+- [x] Re-run the final committed repair tree on host MPS/CPU and verify both
   local gradient caps, source-bound ROI association, tentative births,
-  checkpointing, and terminal validation.
+  checkpointing, and terminal validation at
+  `runs/20260803-000212-collapse-repair-host-smoke/`.
 - [ ] Launch a new timestamped medium balanced qualification only after that
   host smoke passes; require at least four comparable corrected-protocol
   validations before judging trend or plateau.

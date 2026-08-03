@@ -14,10 +14,10 @@ corrected v2 campaign is also preserved and stopped after a second audit proved
 that unsupported rows consumed causal updates and coverage collapsed; the
 first v3 qualification is preserved but stopped after its first causal
 validation exposed lifecycle/identity collapse and perception-gradient
-starvation; the repaired runtime passes focused regression and CPU end-to-end
-wiring checks, but no repaired v3 qualification, convergence result, or broad
-promotion exists yet; collision, occlusion, identification, convergence, and
-full acceptance remain open
+starvation; the repaired runtime passes complete regression, host MPS device,
+and clean hybrid MPS/CPU end-to-end wiring checks, but no repaired v3
+qualification, convergence result, or broad promotion exists yet; collision,
+occlusion, identification, convergence, and full acceptance remain open
 
 ## 2026-08-03 — v3 collapse audit and lifecycle/identity repair
 
@@ -121,7 +121,58 @@ locally reduced from `3.10125` to `1.0`, interaction remained unscaled at
 runtime, checkpoint, and terminal-validation wiring only. Its two
 `reference_pairs` validation episodes and inherited safe incumbent are far too
 small for an accuracy or convergence claim. A clean host MPS/CPU smoke and
-then a new timestamped balanced qualification remain required.
+then a new timestamped balanced qualification remained required.
+
+The clean host requirement was subsequently satisfied from pushed commit
+`c8695716b11f64462741971e7179cccf3f54b15a`:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/sustained_accuracy_mps_v3.yaml \
+  --initialize-from \
+    runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/best_measurement.pt \
+  --run-name 20260803-000212-collapse-repair-host-smoke \
+  --device mps \
+  --set 'simulator.scenario_mixture=[reference_pairs]' \
+  --set training.steps=4 \
+  --set training.rgb_pretrain_steps=2 \
+  --set training.train_episodes=8 \
+  --set training.validation_episodes=2 \
+  --set training.batch_size=2 \
+  --set training.eval_every=2 \
+  --set training.checkpoint_every=1 \
+  --set training.log_every=1 \
+  --set training.num_workers=0 \
+  --set training.validation_rollout_anchors_per_episode=2 \
+  --set training.measurement_validation_frames=2
+```
+
+```text
+run: runs/20260803-000212-collapse-repair-host-smoke/
+source: c8695716b11f64462741971e7179cccf3f54b15a, clean
+updates: 4/4 (2 paired RGB, 2 supported causal)
+episode draws: 8
+devices: paired RGB MPS/CPU hybrid; causal CPU
+elapsed: 216.6836 s
+skipped/no-gradient batches: 0
+oracle runtime input: false
+terminal checkpoint: step 4, final_validation_completed=1
+```
+
+Both paired RGB updates kept the causal perception-local cap disabled and were
+finite under the ordinary whole-model clip: raw norms `5.85800` and `4.35465`
+were applied at `2.0`. The causal updates had trajectory/fast-slot support
+`69/23` and `111/36`. Their raw perception norms `3.22456` and `3.10125`
+were locally capped at `1.0`; interaction norms `0.77003` and `0.18152`
+remained unscaled, leaving final norms `1.32850` and `1.12674`.
+
+Terminal pooled score moved `0.4017391 → 0.3968408` (lower is better), but
+target coverage fell `0.23 → 0.20`, 0.1-second forecast coverage fell
+`0.50 → 0.40`, and 0.1-second y RMSE crossed its tolerance. The selector
+persisted all six pooled/scenario reasons, retained the safe incumbent, and
+reported zero distance-gated identity switches. This is clean execution and
+guardrail evidence, not a promoted accuracy result. A new balanced medium
+qualification remains the next convergence test.
 
 Known lifecycle limitations remain explicit: confirmation is spatial-only, so
 repeated association failure near a missed live track can still confirm a
