@@ -70,6 +70,17 @@
   `0.006834`, and nominal-90% coverage `0.890140`. The subsequent independent
   MPS measurement-incumbent validation is advancing; its first two episodes
   took `104.511` and `82.898 s`, with empty stderr and no optimizer update yet.
+- Audited the same live run after more than 2,000 MPS updates. Fixed validation
+  selection score improved monotonically from `11.901029` at initialization to
+  `5.688880`, `5.625772`, and `5.305358` through step 1536, with no nonfinite,
+  skipped-update, restart, or checkpoint failure. No trained checkpoint has
+  been promoted because fast-ROI MAE remains worse than the imported
+  `0.189315 m` guardrail; the safe incumbent remains intact.
+- Attached `scripts/supervise_convergence.py` as the one-shot Standard/default
+  LaunchAgent `com.polceanum.orpheus.convergence-20260803-112948`. It monitors
+  exact trainer PID `31197`, requires the full 16,384-step segment, and applies
+  the declared 4,096-step extension/1% plateau protocol up to the 24,576-step
+  safety limit. Supervisor stderr is empty.
 
 ### 2026-08-03 cadence, progress, and finite-state collapse audit
 

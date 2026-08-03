@@ -132,8 +132,15 @@
 - [x] Verify that the 32-episode broad initialization completes with supported,
   accepted score `0.3310606914` and writes its reference/best/step-zero
   checkpoints without stderr or nonfinite state.
-- [ ] Verify that the separate measurement-incumbent initialization completes
-  and at least one real MPS optimizer update occurs.
+- [x] Verify that the separate 32-episode measurement-incumbent initialization
+  completes and that more than 2,000 real finite MPS optimizer updates occur
+  with advancing checkpoints and empty stderr.
+- [x] Attach the exact-PID convergence supervisor with the predeclared
+  16,384-step minimum, 4,096-step extensions, four-validation/1% plateau rule,
+  and 24,576-step hard limit.
+- [ ] Continue monitoring fixed validation for a guardrail-safe measurement
+  promotion, especially recovery of fast-ROI MAE below the imported
+  `0.189315 m` reference.
 - [ ] Inspect the next corrected qualification at its declared validation steps
   for support, perception/interaction/global gradient balance, lifecycle
   precision/coverage, identity switches, collisions, calibration, every

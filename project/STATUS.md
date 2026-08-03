@@ -37,6 +37,69 @@ validation; full convergence and acceptance remain unproven;
 collision, occlusion, identification, convergence, and full acceptance remain
 open
 
+## 2026-08-03 — step-2008 convergence audit and plateau supervisor
+
+The active campaign at
+`runs/20260803-112948-v6-protocol12-full-convergence/` remains one live
+launchd process (`PID 31197`, launch count one) after more than 11 hours. It is
+in MPS measurement pretraining at approximately step `2008 / 16384`; stderr is
+empty, every logged optimizer update is finite and applied, no JSON metric or
+log contains `NaN`/`Infinity`, and `checkpoints/last.pt` continues to advance
+on the declared 128-step cadence.
+
+Raw minibatch loss is intentionally not used as the convergence decision
+because batches mix eight scenarios and different object counts. Its
+256-update means nevertheless improved from `2.25981` in steps 1–256 to
+`1.01154`, `1.21964`, `0.721624`, `0.957202`, `0.711013`, `1.00612`, and
+`0.761188` in subsequent windows through step 2008. Mean matched-proposal world
+MAE fell from `1.02777 m` in the first window to approximately
+`0.216–0.339 m` in recent complete windows. Pre-clip gradient norms are
+variable and frequently exceed the global bound, but finite gradients are
+consistently clipped to the configured `2.0`; there is no skipped or rejected
+optimizer update.
+
+The fixed 32-episode measurement selector provides the trustworthy trend:
+
+| step | selection score ↓ | global MAE | runtime recall | runtime precision | fast-ROI MAE | accepted |
+| ---: | ---: | ---: | ---: | ---: | ---: | :---: |
+| 0 | `11.901029` | `1.560788 m` | `0.228750` | `0.298046` | `0.189315 m` | yes |
+| 512 | `5.688880` | `0.239608 m` | `0.256250` | `0.571031` | `0.344317 m` | no |
+| 1024 | `5.625772` | `0.368076 m` | `0.248750` | `0.496259` | `0.234358 m` | no |
+| 1536 | `5.305358` | `0.247284 m` | `0.288750` | `0.589286` | `0.307533 m` | no |
+
+The lower-is-better broad score has improved at every validation and the
+trained global path is much better than its imported baseline. This is real
+progress, not collapse. No candidate has been promoted because the independent
+fast-ROI guard correctly rejects its localization regression relative to the
+`0.189315 m` incumbent. The imported measurement checkpoint therefore remains
+safe and will be restored at the phase handoff unless a later candidate
+improves without that regression. The current evidence supports continuing the
+long run; changing learning rate, clipping, or guardrails at one quarter of
+the measurement phase would discard a monotone broad trend without proving a
+better replacement.
+
+The repository convergence supervisor is now attached persistently:
+
+```text
+label: com.polceanum.orpheus.convergence-20260803-112948
+PID: 35788
+minimum segment: 16384 updates
+extension size: 4096 updates
+plateau tail: 1024 updates
+minimum relative gain: 1%
+hard limit: 24576 updates
+state: waiting_for_segment
+stderr bytes: 0
+```
+
+It monitors the exact initial trainer PID, verifies the completed summary and
+all selector links, and only resumes from the finite in-place `last.pt` after a
+complete 16,384-step segment. It declares plateau only from the predeclared
+four-validation rule; otherwise it extends by complete 4,096-step blocks up to
+24,576 and reports `limit_hit` rather than fabricating convergence. Durable
+events are in `convergence_supervisor.jsonl`; the final decision will be in
+`convergence_report.json`.
+
 ## 2026-08-03 — full protocol-12 convergence campaign launched
 
 The full default sustained profile is active at

@@ -445,6 +445,17 @@ interval. Its launchd job is Standard/default and one-shot (`KeepAlive=false`);
 inspect `training_progress.json` and the `/private/tmp/20260803-112948-...`
 stdout/stderr logs rather than inferring health from silence.
 
+The convergence supervisor is also active under launchd label
+`com.polceanum.orpheus.convergence-20260803-112948`, monitoring initial trainer
+PID `31197`. It waits for the complete 16,384-step summary, verifies every
+selector/checkpoint link, and then applies the repository's fixed plateau rule:
+4,096-step extensions, a four-validation 1% tail decision, and a 24,576-step
+hard limit. Its durable log is
+`runs/20260803-112948-v6-protocol12-full-convergence/convergence_supervisor.jsonl`;
+stdout/stderr are
+`/private/tmp/20260803-112948-convergence-supervisor.{stdout,stderr}.log`.
+Do not manually start a second trainer or supervisor for this run.
+
 ### Superseded v2 campaign
 
 `configs/sustained_accuracy_mps_v2.yaml` and
