@@ -33,6 +33,14 @@ quality. Fixed-dataset measurement training sweeps all frames independently of
 loader-batch position. Validation iterates the complete validation loader;
 closed-loop validation causally unrolls every full episode, while measurement
 validation uses the configured evenly spaced frames from every episode.
+
+An exact in-place resume also requires the executable-source fingerprint stored
+in the checkpoint. Documentation and tests are intentionally excluded from
+that numerical fingerprint, but `train.py` and `world_model/*.py` are not.
+Do not patch executable source while a sustained supervisor may still extend a
+run; finish the campaign under identical source, then start changed semantics
+through a new timestamped weights-only initialization.
+
 Measurement checkpoints use the versioned runtime-qualified global-discovery
 and fast-ROI selector. It pools world-position error, target/proposal/match
 counts, recall, precision, F1, and fast bootstrap coverage using the same birth

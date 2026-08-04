@@ -145,6 +145,18 @@
   training/checkpoints, a step-2048 raw-score best of `4.868897`, later scores
   still far better than initialization, and no evidence justifying a
   mid-protocol reset.
+- [x] Re-audit executable training/selection/continuation paths during the
+  step-6144 validation; preserve the exact runtime fingerprint, confirm
+  production ROI gradients, pass `599` non-device tests, and verify that the
+  validation heartbeat continues under CPU contention.
+- [ ] After the campaign reaches a terminal supervisor decision, fail closed
+  in `supervised_slot_measurement_losses` by requiring `matched_slots` for
+  positive crop evidence even if a stale nonnegative target index is supplied;
+  add the explicit stale-index regression without changing this run's source.
+- [ ] After the campaign reaches a terminal supervisor decision, make
+  `training_state.json` distinguish an active/running invocation from initial
+  startup, while preserving atomic terminal failure/completion semantics and
+  `training_progress.json` as the detailed heartbeat.
 - [ ] Inspect the next corrected qualification at its declared validation steps
   for support, perception/interaction/global gradient balance, lifecycle
   precision/coverage, identity switches, collisions, calibration, every

@@ -1806,3 +1806,35 @@
   reduced production-model optimizer smoke passed; the smoke candidate was
   correctly rejected for a slight validation regression. A full-manifest
   sustained qualification is still required before any convergence claim.
+
+## ADR-075 — Freeze executable source through the supervised exact-resume campaign
+
+- **Date:** 2026-08-04
+- **Status:** accepted for the active campaign; post-campaign hardening pending
+- **Context:** A live step-6144 audit found no defect exercised by the current
+  trainer. It did identify a redundant fail-closed check that should eventually
+  require `matched_slots=true` before a fast-ROI row can receive positive crop
+  evidence even if a stale caller supplies a nonnegative target index. Current
+  production callers already replace rejected indices with `-1`. The audit
+  also found that `training_state.json` remains `starting` throughout a live
+  invocation even though detailed `training_progress.json` heartbeats are
+  correct. Either edit would change executable source while the convergence
+  supervisor may still need to exact-resume the step-16,384 checkpoint.
+- **Decision:** Do not change `train.py` or `world_model/*.py` until the active
+  supervisor records `plateau`, `limit_hit`, or a terminal failure. Preserve
+  the exact runtime-source fingerprint
+  `43eaaea369ac13a430b2efff224b7f88db973f0a133593966326c095cb16c330`.
+  Permit documentation and test-result updates because they are excluded from
+  the numerical runtime fingerprint. Queue the fail-closed ROI helper check
+  and the explicit running-state artifact as the first post-campaign
+  hardening, each with focused tests.
+- **Alternatives considered:** patch the live worktree and let the extension
+  fail source verification; weaken exact-resume provenance; stop a healthy
+  trainer to relaunch under changed semantics; create a second hidden source
+  checkout for extensions.
+- **Consequences:** The active initial segment and any supervisor extension
+  remain numerically comparable and exactly resumable. The two low-risk
+  hardening items remain explicit rather than being silently lost, but neither
+  is misrepresented as the cause of the current fast-ROI regression. New
+  runtime improvements must begin from a new timestamped initialization after
+  the campaign decision, not mutate this campaign in place.

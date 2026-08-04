@@ -2,6 +2,26 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-04 live step-6144 source-integrity audit
+
+- Verified that `main` and `origin/main` both pointed to `fa9f7a9` and that the
+  executable-source fingerprint still exactly matched the active checkpoint.
+- Audited paired global/fast supervision, persistent ROI identity masks,
+  phase trainability, causal support, finite optimizer/checkpoint state,
+  selection, exact resume, prepared propagation, and supervisor extension
+  logic without finding a defect exercised by the active campaign.
+- Confirmed with a production-profile CPU probe that objective-connected ROI
+  heads receive finite nonzero gradients when positive crop support exists;
+  negative-only batches correctly omit unsupported state gradients.
+- Passed Ruff and the complete non-device regression gate:
+  `599 passed, 5 skipped, 1 deselected in 247.25s`. The live validation
+  advanced during the suite and both production stderr logs stayed empty.
+- Deferred two executable hardening items until the exact-resume campaign is
+  terminal: require `matched_slots` as an explicit positive-crop gate even
+  when a stale nonnegative target index is supplied, and expose a distinct
+  live/running CLI state. Current production callers sanitize rejected indices,
+  and `training_progress.json` already supplies truthful live heartbeats.
+
 ### 2026-08-03 launch-QoS and integration-grid collapse audit
 
 - Audited and intentionally stopped

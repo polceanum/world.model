@@ -1,6 +1,6 @@
 # Project status
 
-**Date:** 2026-08-03
+**Date:** 2026-08-04
 **Specification:** `PROJECT_SPEC.md` 1.11
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
@@ -36,6 +36,71 @@ accepted protocol-v12 checkpoint and has begun healthy initialization
 validation; full convergence and acceptance remain unproven;
 collision, occlusion, identification, convergence, and full acceptance remain
 open
+
+## 2026-08-04 — live step-6144 code and continuation audit
+
+The protocol-12 trainer and convergence supervisor remain active while the
+repository is audited. At `2026-08-04T21:26:11Z`, the trainer had completed
+6,144 finite MPS measurement updates and 19 of 32 episodes in the atomic
+step-6144 validation. Both trainer and supervisor stderr files remain empty,
+and validation heartbeats continued while the regression suite shared CPU
+resources.
+
+The committed repository is synchronized with GitHub:
+
+```text
+branch: main
+HEAD: fa9f7a9cb7a20287a4e8535a9552b717b5a90f8e
+origin/main: fa9f7a9cb7a20287a4e8535a9552b717b5a90f8e
+worktree before documentation update: clean
+```
+
+A convergence-critical static and dynamic audit covered paired global/fast
+measurement supervision, persistent-slot target mapping, positive/negative
+ROI masks, phase trainability, causal support, optimizer/checkpoint finite
+state, selector promotion, exact resume, prepared propagation, and supervisor
+extension logic. A production-profile CPU probe using two real
+`elastic_pairs` episodes confirmed finite, nonzero gradients in every
+objective-connected ROI head; only the deliberately disconnected ROI event
+head was absent. A negative-only tiny probe correctly omitted state/geometry
+head gradients rather than fabricating positive support.
+
+No defect exercised by the active campaign was found. One defensive helper
+hardening remains valid: `supervised_slot_measurement_losses` should require
+both a nonnegative target index and `matched_slots=true` before treating a crop
+as positive evidence. Current production callers already replace rejected
+indices with `-1`, so the condition is redundant on this run and does not
+explain its fast-ROI regression. The long-lived `training_state.json` also
+retains `state=starting` until terminal completion/failure; operational
+progress is truthful in `training_progress.json`, but a distinct running state
+would be clearer.
+
+Both executable edits are deferred until this exact-resume campaign reaches a
+terminal supervisor decision. The current executable-source fingerprint is
+`43eaaea369ac13a430b2efff224b7f88db973f0a133593966326c095cb16c330`,
+exactly matching `checkpoints/last.pt`. Documentation/test-only commits are
+safe, but changing `train.py` or `world_model/*.py` now would correctly make a
+later supervisor extension reject exact continuation.
+
+Audit commands and observed results:
+
+```bash
+PYTHONPATH=. conda run -n orpheus ruff check .
+# All checks passed.
+
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q \
+  -m 'not device'
+# 599 passed, 5 skipped, 1 deselected in 247.25s
+
+PYTHONPATH=. conda run -n orpheus python -c \
+  '<checkpoint/current runtime-source fingerprint comparison>'
+# runtime_match True
+```
+
+The five skips are MPS-only tests because sandboxed verification processes
+cannot see MPS. The separately launched production process records PyTorch
+`2.10.0`, `mps_built=true`, `mps_available=true`, and `device=mps`; its
+advancing MPS optimizer/checkpoint evidence remains authoritative.
 
 ## 2026-08-04 — continued measurement convergence through step 3584
 
