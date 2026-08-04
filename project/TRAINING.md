@@ -456,6 +456,14 @@ stdout/stderr are
 `/private/tmp/20260803-112948-convergence-supervisor.{stdout,stderr}.log`.
 Do not manually start a second trainer or supervisor for this run.
 
+As of 2026-08-04 the measurement phase has reached step 3584. The raw fixed
+score reached `4.868897` at step 2048, then `5.029407` and `5.081339` at
+2560/3072; all are materially better than the `11.901029` imported score.
+Fast-ROI MAE remains the non-negotiable blocker at approximately `0.32 m`
+versus the `0.189315 m` incumbent, so no trained measurement candidate has
+been promoted. Continue the declared phase and do not weaken the selector or
+start a competing trainer while its fixed validation is in flight.
+
 ### Superseded v2 campaign
 
 `configs/sustained_accuracy_mps_v2.yaml` and

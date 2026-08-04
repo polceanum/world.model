@@ -37,6 +37,43 @@ validation; full convergence and acceptance remain unproven;
 collision, occlusion, identification, convergence, and full acceptance remain
 open
 
+## 2026-08-04 — continued measurement convergence through step 3584
+
+The same single trainer (`PID 31197`, launch count one) and convergence
+supervisor (`PID 35788`, launch count one) remain active after approximately
+20 hours. Both stderr logs are empty, checkpoints continue on cadence, and no
+metric contains a nonfinite value. The trainer has completed 3,584 MPS
+measurement updates and is nine episodes into the atomic step-3584 validation.
+
+New complete fixed-manifest results:
+
+| step | selection score ↓ | global MAE | runtime recall | runtime precision | fast-ROI MAE | accepted |
+| ---: | ---: | ---: | ---: | ---: | ---: | :---: |
+| 2048 | `4.868897` | `0.251612 m` | `0.381250` | `0.523156` | `0.325113 m` | no |
+| 2560 | `5.029407` | `0.231081 m` | `0.328750` | `0.579295` | `0.322065 m` | no |
+| 3072 | `5.081339` | `0.235489 m` | `0.277500` | `0.623596` | `0.321362 m` | no |
+
+Step 2048 is the best raw broad score so far. The two subsequent results are a
+modest regression from that point, but remain substantially better than the
+`11.901029` imported measurement score and do not indicate collapse.
+Independent 512-update training-window means also remain healthy: mean total
+loss moved from `1.63568` in the first window to `0.79936`, `0.88187`, and
+`0.82949` in the latest three complete windows, while matched-proposal world
+MAE moved from `0.67002 m` to `0.24136`, `0.27832`, and `0.23005 m`.
+
+Fast-ROI localization remains the explicit blocker. Its fixed MAE has settled
+near `0.32 m`, worse than the imported `0.189315 m` incumbent, even while
+global localization and precision improved. The selector has therefore
+preserved `best_measurement.pt` and rejected every trained candidate. At this
+point the declared measurement phase is not yet halfway complete and the
+broad/training trends are still materially better than initialization.
+Changing weights, clipping, or the guardrail during an in-flight validation
+would create an incomparable protocol and discard the safe handoff. The
+evidence-backed action is to continue the full phase, retain the incumbent,
+and let the step-3584 and later fixed validations decide whether fast ROI
+recovers. The convergence supervisor remains in `waiting_for_segment` and
+will apply the complete-block plateau rule after step 16,384.
+
 ## 2026-08-03 — step-2008 convergence audit and plateau supervisor
 
 The active campaign at

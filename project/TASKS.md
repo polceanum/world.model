@@ -141,6 +141,10 @@
 - [ ] Continue monitoring fixed validation for a guardrail-safe measurement
   promotion, especially recovery of fast-ROI MAE below the imported
   `0.189315 m` reference.
+- [x] Re-audit the live campaign at step 3584; confirm continued finite
+  training/checkpoints, a step-2048 raw-score best of `4.868897`, later scores
+  still far better than initialization, and no evidence justifying a
+  mid-protocol reset.
 - [ ] Inspect the next corrected qualification at its declared validation steps
   for support, perception/interaction/global gradient balance, lifecycle
   precision/coverage, identity switches, collisions, calibration, every

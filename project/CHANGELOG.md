@@ -81,6 +81,13 @@
   exact trainer PID `31197`, requires the full 16,384-step segment, and applies
   the declared 4,096-step extension/1% plateau protocol up to the 24,576-step
   safety limit. Supervisor stderr is empty.
+- Continued the full campaign through 3,584 finite MPS measurement updates.
+  Step 2048 produced the best raw broad score so far (`4.868897`); steps
+  2560/3072 scored `5.029407`/`5.081339`, still far better than the
+  `11.901029` initialization. Latest complete-window train loss/MAE are
+  `0.82949`/`0.23005 m`. Fast-ROI MAE remains near `0.32 m`, so selector
+  guardrails correctly preserve the imported checkpoint while the declared
+  long phase continues.
 
 ### 2026-08-03 cadence, progress, and finite-state collapse audit
 
