@@ -2,6 +2,23 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-04 conservative repository cleanup
+
+- Inventoried tracked source, ignored files, cache directories, run/demo
+  footprint, empty directories, and tracked references while the protocol-12
+  convergence campaign continued.
+- Quarantined 3.0 MiB of regenerable Python bytecode, pytest/Ruff caches, and
+  editable-install metadata under
+  `/private/tmp/orpheus-cleanup-20260804-215308/`.
+- Quarantined the genuinely empty
+  `demo_outputs/20260728-151223-scaled-step257/` directory.
+- Preserved all nonempty run/demo evidence, including the active campaign and
+  its initialization source. `git clean -ndX` now lists only the intentionally
+  ignored `runs/` and `demo_outputs/` trees.
+- Made no executable-source change: the active exact-resume fingerprint is
+  unchanged, and low-static-reference evaluation helpers remain because
+  `PROJECT_SPEC.md` explicitly requires them.
+
 ### 2026-08-04 live step-6144 source-integrity audit
 
 - Verified that `main` and `origin/main` both pointed to `fa9f7a9` and that the

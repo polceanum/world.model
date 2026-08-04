@@ -149,6 +149,15 @@
   step-6144 validation; preserve the exact runtime fingerprint, confirm
   production ROI gradients, pass `599` non-device tests, and verify that the
   validation heartbeat continues under CPU contention.
+- [x] Complete a conservative cleanup during live training: remove/quarantine
+  regenerable bytecode, test/lint caches, editable-install metadata, and the
+  empty step-257 demo while retaining the active run, initialization input,
+  accepted/rejected scientific evidence, and all specification-required
+  modules.
+- [ ] After the campaign reaches a terminal supervisor decision, perform a
+  tracked-code simplification review against `PROJECT_SPEC.md`; do not remove
+  dormant modality-independent contracts merely because the first RGB slice
+  does not yet call them.
 - [ ] After the campaign reaches a terminal supervisor decision, fail closed
   in `supervised_slot_measurement_losses` by requiring `matched_slots` for
   positive crop evidence even if a stale nonnegative target index is supplied;

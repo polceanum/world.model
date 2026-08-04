@@ -1838,3 +1838,35 @@
   is misrepresented as the cause of the current fast-ROI regression. New
   runtime improvements must begin from a new timestamped initialization after
   the campaign decision, not mutate this campaign in place.
+
+## ADR-076 — Preserve scientific evidence during conservative artifact cleanup
+
+- **Date:** 2026-08-04
+- **Status:** accepted
+- **Context:** The working tree contained 3.0 MiB of regenerable Python,
+  pytest, Ruff, and editable-install caches, one empty demo directory, 2.0 GiB
+  of run artifacts, and 22 MiB of nonempty demos. The run tree includes the
+  live convergence campaign, the checkpoint it was initialized from,
+  accepted baselines, rejected controls, and reports cited by the accuracy
+  audit. A static reference scan also found two presently uncalled evaluation
+  helpers, but both are named in the authoritative specification's required
+  repository structure. The supervisor may still exact-resume the active
+  campaign and verifies every `train.py` and `world_model/*.py` byte.
+- **Decision:** Remove only reproducible caches, generated editable-install
+  metadata, and genuinely empty artifact directories during the campaign.
+  Quarantine them under a timestamped `/private/tmp` path so the cleanup is
+  immediately recoverable. Retain every nonempty run/demo artifact unless a
+  later audit proves that it is neither an active dependency nor scientific
+  evidence. Do not use broad `git clean -fdX`, because `runs/` and
+  `demo_outputs/` are intentionally ignored. Do not delete tracked code based
+  on static call count alone; first reconcile it with `PROJECT_SPEC.md`, then
+  make any executable simplification only after the supervisor is terminal.
+- **Alternatives considered:** delete all ignored files; prune checkpoint
+  tensors from rejected runs while keeping reports; delete every module with
+  no current static caller; postpone even cache cleanup.
+- **Consequences:** The repository loses disposable clutter without risking
+  the running process, exact continuation, accepted checkpoints, or truthful
+  historical evidence. The active runtime fingerprint remains unchanged.
+  Large experiment artifacts remain visible by design rather than being
+  silently discarded for cosmetic disk savings. A later destructive retention
+  policy requires an explicit evidence manifest and a terminal campaign.

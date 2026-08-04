@@ -32,10 +32,82 @@ float timestamp integration-grid drift and duplicate causal propagation are
 repaired under rollout protocol 12; a reduced production-model smoke completed
 one finite, supported causal optimizer update and terminal validation, but a
 clean full-manifest protocol-v12 convergence campaign is now running from the
-accepted protocol-v12 checkpoint and has begun healthy initialization
-validation; full convergence and acceptance remain unproven;
+accepted protocol-v12 checkpoint and has passed 6,144 finite MPS measurement
+updates; full convergence and acceptance remain unproven;
 collision, occlusion, identification, convergence, and full acceptance remain
 open
+
+## 2026-08-04 — conservative repository cleanup during live training
+
+The repository was inventoried without touching the active numerical runtime.
+At `2026-08-04T21:53:08Z`, the trainer (`PID 31197`) and convergence supervisor
+(`PID 35788`) were both still alive. The latest metrics row was finite
+measurement update 6,192, the complete step-6,144 measurement validation had
+been persisted, and the supervisor continued to write
+`waiting_for_segment` heartbeats for the declared 16,384-step minimum.
+
+The cleanup removed 3.0 MiB of regenerable Python bytecode, pytest/Ruff caches,
+and editable-install package metadata, plus the empty
+`demo_outputs/20260728-151223-scaled-step257/` directory. These paths were moved
+to the recoverable quarantine
+`/private/tmp/orpheus-cleanup-20260804-215308/`. A follow-up
+`git clean -ndX` listed only `runs/` and `demo_outputs/`; no ignored cache,
+package-build, temporary checkpoint, coverage, or editor artifact remains in
+the repository.
+
+The 2.0 GiB `runs/` tree and 22 MiB of nonempty demos were deliberately
+retained. They contain the active campaign, its initialization checkpoint,
+selector/reference checkpoints, reproducibility metadata, documented accepted
+baselines, rejected controls, and visual audit evidence. Deleting checkpoints
+merely because they are large would make the accuracy audit less reproducible.
+Likewise, no tracked Python module was deleted: the two evaluation helpers with
+no current static caller, `event_metrics.py` and `tracking_metrics.py`, are
+explicitly part of the authoritative `PROJECT_SPEC.md` repository contract.
+More generally, any `train.py` or `world_model/*.py` deletion would change the
+live exact-resume fingerprint. Tracked-code simplification remains a
+post-campaign task and must preserve the specification rather than equating
+low current call frequency with obsolescence.
+
+Cleanup verification:
+
+```bash
+git clean -ndX
+# Would remove demo_outputs/
+# Would remove runs/
+
+find . -type d \( -name __pycache__ -o -name .pytest_cache \
+  -o -name .ruff_cache -o -name .mypy_cache -o -name .hypothesis \) \
+  -prune -print
+# no output
+
+ps -o pid,ppid,etime,state,%cpu,%mem,command -p 31197,35788
+# both original processes alive; trainer on MPS and supervisor waiting
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
+  ruff check --no-cache .
+# All checks passed.
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider \
+  tests/unit/test_artifact_naming.py \
+  tests/unit/test_convergence_supervisor.py
+# 25 passed in 5.75s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python -c \
+  '<checkpoint/current runtime-source fingerprint comparison>'
+# current=stored=43eaaea369ac13a430b2efff224b7f88db973f0a133593966326c095cb16c330
+# runtime_match=True
+
+git diff --check
+# no output
+```
+
+The first read-only fingerprint probe looked for provenance under the obsolete
+`source_provenance` checkpoint key and failed with `KeyError`; the corrected
+probe used the current `git` payload and produced the matching result above.
+No full suite was repeated because tracked executable/test code did not change;
+the immediately preceding complete non-device result remains
+`599 passed, 5 skipped, 1 deselected`.
 
 ## 2026-08-04 — live step-6144 code and continuation audit
 
