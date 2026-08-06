@@ -134,6 +134,25 @@ evidence, not an accuracy or convergence result. The production qualification
 must initialize from the trained protocol-12 candidate rather than this random
 smoke.
 
+The repaired production continuation is now active at
+`runs/20260806-213753-v7-protocol13-causal-convergence/`. It is a fresh
+weights-only protocol-13 run from the finite step-10,240 protocol-12 candidate,
+with `rgb_pretrain_steps=0`, 8,192 supported causal updates, 32 fixed balanced
+validation episodes, 512-update selector cadence, two bounded loader workers,
+and the profile's explicit CPU closed-loop device. It loaded from clean pushed
+source commit `1470b2e7186aebe77646e44e3097650abdb57f9d`; run metadata records
+`mps_built=true`, `mps_available=true`, `measurement_device=mps`,
+`closed_loop_device=cpu`, and matching immutable source fingerprints.
+
+The one-shot Standard/default LaunchAgent
+`com.polceanum.orpheus.protocol13-20260806-213753` has `KeepAlive=false`, one
+launch, trainer PID `74486`, empty stderr, and explicit
+`training_state.json: state=running`. It is currently executing the complete
+32-episode initialization validation under protocol hash
+`e31bf1cde4e4adf8603190b3258e086d6f749ad1d5689427d60e367f9fbb53a0`.
+No optimizer update or new accuracy metric existed at this status cut; launch
+health must not be reported as convergence or improvement.
+
 ## 2026-08-04 — conservative repository cleanup during live training
 
 The repository was inventoried without touching the active numerical runtime.

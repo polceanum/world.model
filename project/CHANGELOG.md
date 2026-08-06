@@ -40,6 +40,13 @@
   with finite state, no skipped draw, no oracle input, and `616,239,104` bytes
   maximum RSS; its unsupported random-weight validation is wiring evidence,
   not an accuracy result.
+- Committed and pushed the repair as `1470b2e`, then launched the clean-source
+  8,192-update causal continuation at
+  `runs/20260806-213753-v7-protocol13-causal-convergence/` from the finite
+  step-10,240 candidate. The one-shot Standard/default job has one live PID,
+  explicit running state, empty stderr, host MPS visibility, CPU closed-loop
+  execution, and an advancing atomic initialization validation; it has no new
+  accuracy result yet.
 
 ### 2026-08-04 conservative repository cleanup
 

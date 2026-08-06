@@ -179,10 +179,15 @@
   `training_state.json` distinguish an active/running invocation from initial
   startup, while preserving atomic terminal failure/completion semantics and
   `training_progress.json` as the detailed heartbeat.
-- [ ] Launch a new timestamped protocol-13 qualification from the best finite
-  protocol-12 raw causal candidate as weights-only initialization. Verify at
-  consecutive 512-update validations that optimizer history accumulates across
-  scenario-only deployment rejections and that process RSS remains bounded.
+- [x] Launch
+  `runs/20260806-213753-v7-protocol13-causal-convergence/` from clean pushed
+  commit `1470b2e` and the best finite protocol-12 raw causal candidate as
+  weights-only initialization; verify one Standard/default process, explicit
+  running state, empty stderr, host MPS visibility, CPU causal policy, and
+  advancing full initialization validation.
+- [ ] At consecutive 512-update protocol-13 validations, verify that optimizer
+  history accumulates across scenario-only deployment rejections and process
+  RSS remains bounded.
 - [ ] Inspect the next corrected qualification at its declared validation steps
   for support, perception/interaction/global gradient balance, lifecycle
   precision/coverage, identity switches, collisions, calibration, every

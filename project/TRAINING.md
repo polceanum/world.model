@@ -466,6 +466,15 @@ maximum RSS. `train.py` writes `starting`, `running`, and terminal states; the
 supervisor converts a proved external trainer exit into an ordinary durable
 training failure.
 
+The first production protocol-13 continuation is
+`runs/20260806-213753-v7-protocol13-causal-convergence/`. It starts
+weights-only from the rejected-but-finite protocol-12 step-10,240 candidate and
+sets `training.rgb_pretrain_steps=0`, `training.steps=8192`. The configured
+measurement device remains MPS-capable, while this causal-only invocation uses
+the explicit CPU closed-loop device. Treat its initial full-manifest
+validation, launch state, and empty stderr as health evidence only until real
+optimizer/selector metrics are persisted.
+
 The convergence supervisor is also active under launchd label
 `com.polceanum.orpheus.convergence-20260803-112948`, monitoring initial trainer
 PID `31197`. It waits for the complete 16,384-step summary, verifies every
