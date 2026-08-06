@@ -1,6 +1,6 @@
 # Accuracy audit
 
-**Evidence cut-off:** 2026-08-03
+**Evidence cut-off:** 2026-08-06
 **Scope:** existing RGB-only checkpoints, reports, resolved configurations, and
 training logs in this repository
 
@@ -24,11 +24,30 @@ into one accuracy claim:
    one-seed gains did not survive the full online feedback loop.
 
 The justified next decision is a medium supported-gradient qualification of
-the audited rollout-protocol-12 runtime, followed by one sustained,
-end-to-end shared campaign only if support, coverage, gradient, and broad
-validation trends remain healthy. The experimental intervention heads remain
-disabled. No existing v1, v2, or v3-smoke artifact establishes broad scaled
-convergence.
+the audited rollout-protocol-13 runtime, initialized weights-only from the best
+finite protocol-12 raw candidate, followed by one sustained end-to-end shared
+campaign only if support, coverage, optimizer continuity, resource use, and
+broad validation trends remain healthy. The experimental intervention heads
+remain disabled. No existing v1, v2, v3-smoke, or protocol-12 campaign artifact
+establishes broad scaled convergence.
+
+### Protocol-12 terminal and optimizer-continuity correction
+
+The full protocol-12 campaign reached logged step 11,776 and durable step
+11,648 before macOS killed the trainer during system-wide memory pressure. It
+did not reach the 16,384-step target, write a final summary, or produce a
+convergence decision.
+
+More importantly, its six causal validations at steps 8,704–11,264 all reset
+the mutable model and Adam to the accepted step-zero incumbent. The raw
+step-10,240 score (`0.329669`) was slightly better than the fixed
+`0.3310606914` reference, but the candidate failed an `elastic_pairs`
+reference-relative coverage floor. That is a valid deployment rejection, not
+evidence that the finite pooled optimizer state was unusable. Protocol 13
+therefore retains scenario and reference guardrails for promotion while
+rolling mutable state back only for invalid/nonfinite state or pooled absolute
+coverage collapse. The protocol change needs fresh validation; it is not
+itself an accuracy improvement.
 
 ### Cadence nomenclature correction
 
@@ -132,12 +151,13 @@ four comparable corrected-protocol validations and a 64-or-more-episode fresh
 balanced confirmation. A finite loss or exhausted budget alone is not
 convergence.
 
-That qualification is now active at
+That qualification was launched at
 `runs/20260802-123714-v3-medium-qualification/` from clean pushed source
 `c0acf16`. Its bounded protocol is 1,024 paired RGB plus 2,048 causal updates,
 32 fixed balanced validation episodes every 512 steps, and four causal
-validation points. Launch health is not an accuracy result; this audit remains
-unchanged until those artifacts exist and are inspected.
+validation points. It was later stopped and preserved after the first causal
+validation exposed lifecycle/identity collapse and is historical evidence, not
+an active run or accuracy promotion.
 
 ## 2026-08-01 convergence-integrity audit
 

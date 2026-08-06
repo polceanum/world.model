@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import math
 import os
 import random
 import re
+import resource
 import shutil
+import sys
 import time
 from collections.abc import Iterator, Mapping
 from dataclasses import asdict, dataclass, field, replace
@@ -65,7 +68,7 @@ _ROLLOUT_SELECTION_METRIC_VERSION = 6.0
 _ROLLOUT_SELECTION_RELATIVE_GUARDRAIL = 0.02
 _ROLLOUT_SELECTION_COVERAGE_TOLERANCE = 0.005
 _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE = 0.02
-_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 12
+_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 13
 _NOMINAL_POSITION_COVERAGE = 0.90
 _MEASUREMENT_SELECTION_MIN_DELTA = 1.0e-5
 _MEASUREMENT_SELECTION_METRIC_VERSION = 5.0
@@ -1569,6 +1572,62 @@ def _handoff_training_support_failures(
     return failures
 
 
+def _mutable_causal_training_support_failures(
+    candidate: _RolloutSelectionMetrics,
+    config: OrpheusConfig,
+) -> list[dict[str, float | str]]:
+    """Return only catastrophic pooled failures that require state rollback.
+
+    Scenario and reference-relative floors remain mandatory for deployment,
+    but a finite iterate with absolute pooled causal coverage can still repair
+    a weak scenario. Rolling that iterate back every validation interval makes
+    the failure self-perpetuating and conflates deployment selection with the
+    mutable optimization trajectory.
+    """
+
+    failures: list[dict[str, float | str]] = []
+
+    def require(name: str, value: float, limit: float) -> None:
+        if value < limit:
+            failures.append(
+                {
+                    "metric": name,
+                    "direction": "minimum_mutable_viability",
+                    "candidate": value,
+                    "reference": limit,
+                    "limit": limit,
+                    "delta": value - limit,
+                }
+            )
+
+    require(
+        "target_coverage",
+        candidate.target_coverage,
+        config.training.handoff_minimum_target_coverage,
+    )
+    expected_horizons = {suffix for suffix, _ in _selection_horizon_keys(config)}
+    candidate_horizons = set(candidate.horizon_forecast_target_coverage)
+    if candidate_horizons != expected_horizons:
+        failures.append(
+            {
+                "metric": "forecast_target_coverage_schema",
+                "direction": "required_mutable_viability",
+                "candidate": float(len(candidate_horizons)),
+                "reference": float(len(expected_horizons)),
+                "limit": float(len(expected_horizons)),
+                "delta": float(len(candidate_horizons) - len(expected_horizons)),
+            }
+        )
+        return failures
+    for suffix in sorted(expected_horizons):
+        require(
+            f"forecast_target_coverage@{suffix}",
+            candidate.horizon_forecast_target_coverage[suffix],
+            config.training.handoff_minimum_forecast_coverage,
+        )
+    return failures
+
+
 def _has_effective_gradient(
     gradient_norm: float,
     config: OrpheusConfig,
@@ -1715,6 +1774,7 @@ def _rollout_validation_checkpoint_metrics(
     accepted: bool,
     training_support_required: bool,
     training_support_failures: list[dict[str, float | str]],
+    mutable_training_support_failures: list[dict[str, float | str]],
     best_measurement: _MeasurementSelectionMetrics | None,
     checkpoint_model_state_hash: str,
     incumbent_model_state_hash: str,
@@ -1769,6 +1829,10 @@ def _rollout_validation_checkpoint_metrics(
         "selection_training_support_required": float(training_support_required),
         "selection_training_support_passed": float(
             not training_support_required or not training_support_failures
+        ),
+        "selection_mutable_training_support_failures": mutable_training_support_failures,
+        "selection_mutable_training_support_passed": float(
+            not training_support_required or not mutable_training_support_failures
         ),
         "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
         "best_rollout_validated": 1.0,
@@ -2308,6 +2372,11 @@ def _make_loader(
             num_workers=config.training.num_workers,
             collate_fn=collate_episodes,
             generator=worker_generator,
+            **(
+                {"prefetch_factor": 1, "persistent_workers": False}
+                if config.training.num_workers > 0
+                else {}
+            ),
         )
     generator = torch.Generator(device="cpu")
     generator.manual_seed(config.project.seed + (0 if split == "train" else 10_000))
@@ -2319,6 +2388,11 @@ def _make_loader(
         collate_fn=collate_episodes,
         drop_last=False,
         generator=generator,
+        **(
+            {"prefetch_factor": 1, "persistent_workers": False}
+            if config.training.num_workers > 0
+            else {}
+        ),
     )
 
 
@@ -2331,6 +2405,25 @@ def _check_batch_major(batch: Mapping[str, Any]) -> None:
         raise ValueError("DataLoader must emit timestamps with shape [B,T]")
 
 
+def _process_max_rss_bytes() -> float:
+    """Return the process high-water RSS in bytes on supported Unix hosts."""
+
+    maximum_rss = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    # macOS reports bytes; Linux and the other supported Unix training hosts
+    # report KiB. This is a high-water mark, not an instantaneous sample.
+    return maximum_rss if sys.platform == "darwin" else maximum_rss * 1024.0
+
+
+def _release_accelerator_cache(previous_device: torch.device) -> None:
+    """Release cached accelerator pages after moving the complete model away."""
+
+    gc.collect()
+    if previous_device.type == "mps" and hasattr(torch, "mps"):
+        torch.mps.empty_cache()
+    elif previous_device.type == "cuda" and torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 def _result_metrics(
     result: TrainingBatchResult,
     *,
@@ -2341,6 +2434,7 @@ def _result_metrics(
         "phase": result.phase,
         "loss_total": float(result.total_loss.detach().cpu()),
         "learning_rate": float(learning_rate),
+        "process_max_rss_bytes": _process_max_rss_bytes(),
     }
     for name, value in result.loss_terms.items():
         metrics[f"loss_{name}"] = float(value.detach().cpu())
@@ -3931,6 +4025,7 @@ def train_from_config(
         TrainingBatchResult,
         bool,
         list[dict[str, float | str]],
+        list[dict[str, float | str]],
     ]:
         nonlocal best_rollout, best_rollout_selection, best_rollout_validated
         nonlocal best_rollout_model_state_hash, best_rollout_step
@@ -3999,6 +4094,8 @@ def train_from_config(
                     config.training.steps > config.training.rgb_pretrain_steps
                 ),
                 "selection_training_support_passed": 0.0,
+                "selection_mutable_training_support_failures": support_failures,
+                "selection_mutable_training_support_passed": 0.0,
                 "rollout_selection_metric_version": (_ROLLOUT_SELECTION_METRIC_VERSION),
                 "best_rollout_validated": float(best_rollout_selection is not None),
                 "rollout_reference_validated": float(reference_rollout_selection is not None),
@@ -4058,6 +4155,11 @@ def train_from_config(
                         support_failures,
                         sort_keys=True,
                     ),
+                    "selection_mutable_training_support_failure_count": 1.0,
+                    "selection_mutable_training_support_failures_json": json.dumps(
+                        support_failures,
+                        sort_keys=True,
+                    ),
                 }
             )
             if best_rollout_selection is not None and best_rollout_step is not None:
@@ -4099,7 +4201,7 @@ def train_from_config(
                     device=str(device),
                     source_provenance=source_provenance,
                 )
-            return validation, False, support_failures
+            return validation, False, support_failures, support_failures
         candidate = _rollout_selection_metrics(
             validation.metrics,
             config,
@@ -4128,6 +4230,11 @@ def train_from_config(
                 reference_rollout_selection,
                 config,
             )
+            if training_support_required
+            else []
+        )
+        mutable_training_support_failures = (
+            _mutable_causal_training_support_failures(candidate, config)
             if training_support_required
             else []
         )
@@ -4177,6 +4284,10 @@ def train_from_config(
                 "selection_training_support_failures": training_support_failures,
                 "selection_training_support_required": 1.0,
                 "selection_training_support_passed": float(not training_support_failures),
+                "selection_mutable_training_support_failures": (mutable_training_support_failures),
+                "selection_mutable_training_support_passed": float(
+                    not mutable_training_support_failures
+                ),
                 "rollout_selection_metric_version": (_ROLLOUT_SELECTION_METRIC_VERSION),
                 "best_rollout_validated": 0.0,
                 "rollout_reference_validated": 1.0,
@@ -4221,6 +4332,13 @@ def train_from_config(
                         training_support_failures,
                         sort_keys=True,
                     ),
+                    "selection_mutable_training_support_failure_count": float(
+                        len(mutable_training_support_failures)
+                    ),
+                    "selection_mutable_training_support_failures_json": json.dumps(
+                        mutable_training_support_failures,
+                        sort_keys=True,
+                    ),
                 }
             )
             logger.log(
@@ -4249,7 +4367,12 @@ def train_from_config(
                     device=str(device),
                     source_provenance=source_provenance,
                 )
-            return validation, False, training_support_failures
+            return (
+                validation,
+                False,
+                training_support_failures,
+                mutable_training_support_failures,
+            )
         accepted = not training_support_failures and (
             (best_rollout_selection is None and not reference_guardrail_failures)
             or (
@@ -4283,6 +4406,7 @@ def train_from_config(
             accepted=accepted,
             training_support_required=training_support_required,
             training_support_failures=training_support_failures,
+            mutable_training_support_failures=mutable_training_support_failures,
             best_measurement=(best_measurement_selection if best_measurement_validated else None),
             checkpoint_model_state_hash=candidate_model_state_hash,
             incumbent_model_state_hash=best_rollout_model_state_hash,
@@ -4332,6 +4456,13 @@ def train_from_config(
                     training_support_failures,
                     sort_keys=True,
                 ),
+                "selection_mutable_training_support_failure_count": float(
+                    len(mutable_training_support_failures)
+                ),
+                "selection_mutable_training_support_failures_json": json.dumps(
+                    mutable_training_support_failures,
+                    sort_keys=True,
+                ),
                 "best_rollout_selection_score": best_rollout_selection.score,
                 "best_rollout_checkpoint_step": float(best_rollout_step),
                 "reference_rollout_checkpoint_step": float(reference_rollout_step),
@@ -4374,7 +4505,12 @@ def train_from_config(
                 device=str(device),
                 source_provenance=source_provenance,
             )
-        return validation, accepted, training_support_failures
+        return (
+            validation,
+            accepted,
+            training_support_failures,
+            mutable_training_support_failures,
+        )
 
     def retained_selector_metrics() -> dict[str, Any]:
         current_model_state_hash = _current_model_state_hash(model)
@@ -4604,10 +4740,12 @@ def train_from_config(
         causal_phase_planned = config.training.steps > config.training.rgb_pretrain_steps
         if causal_phase_planned:
             if device != closed_loop_device:
+                previous_device = device
                 model.to(closed_loop_device)
                 model.reset()
                 device = closed_loop_device
-            _, accepted, _ = validate_closed_loop_incumbent(
+                _release_accelerator_cache(previous_device)
+            _, accepted, _, _ = validate_closed_loop_incumbent(
                 completed_step=start_step,
                 learning_rate=float(optimizer.param_groups[0]["lr"]),
                 split="validation_initialization_incumbent",
@@ -4643,9 +4781,11 @@ def train_from_config(
                     flush=True,
                 )
         if start_step < config.training.rgb_pretrain_steps and device != validation_source_device:
+            previous_device = device
             model.to(validation_source_device)
             model.reset()
             device = validation_source_device
+            _release_accelerator_cache(previous_device)
         if start_step < config.training.rgb_pretrain_steps:
             _, measurement_baseline_accepted = validate_measurement_incumbent(
                 completed_step=start_step,
@@ -4662,7 +4802,7 @@ def train_from_config(
         # A fresh causal-only run still needs one immutable pre-update
         # reference. Later retries happen only at ``eval_every`` rather than
         # before every optimizer update.
-        _, accepted, _ = validate_closed_loop_incumbent(
+        _, accepted, _, _ = validate_closed_loop_incumbent(
             completed_step=0,
             learning_rate=float(optimizer.param_groups[0]["lr"]),
             split="validation_initialization_incumbent",
@@ -4747,19 +4887,23 @@ def train_from_config(
                 # persistent model exactly once, clear transient runtime
                 # caches, and keep every selector validation on the causal
                 # device recorded in the protocol hash.
+                previous_device = device
                 model.to(closed_loop_device)
                 model.reset()
                 device = closed_loop_device
+                _release_accelerator_cache(previous_device)
         if step == config.training.rgb_pretrain_steps and measurement_handoff_pending:
             # Keep the marker pending through validation and any rollback.
             # A boundary checkpoint must never claim the handoff completed
             # before the mutable causal source has actually been selected.
             handoff_support_failures: list[dict[str, float | str]] = []
+            handoff_mutable_support_failures: list[dict[str, float | str]] = []
             handoff_mutable_source = "measurement_candidate"
             (
                 _,
                 accepted,
                 handoff_support_failures,
+                handoff_mutable_support_failures,
             ) = validate_closed_loop_incumbent(
                 completed_step=step,
                 learning_rate=float(optimizer.param_groups[0]["lr"]),
@@ -4836,7 +4980,7 @@ def train_from_config(
                     "restored the retained broad incumbent for causal training",
                     flush=True,
                 )
-            elif handoff_support_failures:
+            elif handoff_mutable_support_failures:
                 if not best_rollout_path.is_file():
                     raise RuntimeError(
                         "measurement handoff collapsed causal training support, "
@@ -4865,10 +5009,10 @@ def train_from_config(
                         "measurement_handoff_candidate_training_viable": 0.0,
                         "measurement_handoff_mutable_source": handoff_mutable_source,
                         "measurement_handoff_support_failure_count": float(
-                            len(handoff_support_failures)
+                            len(handoff_mutable_support_failures)
                         ),
                         "measurement_handoff_support_failures_json": json.dumps(
-                            handoff_support_failures,
+                            handoff_mutable_support_failures,
                             sort_keys=True,
                         ),
                         "training_data_draw_step": float(training_data_draw_step),
@@ -4888,8 +5032,13 @@ def train_from_config(
                         "measurement_handoff_candidate_accepted": 0.0,
                         "measurement_handoff_candidate_training_viable": 1.0,
                         "measurement_handoff_mutable_source": handoff_mutable_source,
-                        "measurement_handoff_support_failure_count": 0.0,
-                        "measurement_handoff_support_failures_json": "[]",
+                        "measurement_handoff_support_failure_count": float(
+                            len(handoff_support_failures)
+                        ),
+                        "measurement_handoff_support_failures_json": json.dumps(
+                            handoff_support_failures,
+                            sort_keys=True,
+                        ),
                         "training_data_draw_step": float(training_data_draw_step),
                     },
                 )
@@ -5150,16 +5299,21 @@ def train_from_config(
             )
         if should_validate:
             if completed_step > config.training.rgb_pretrain_steps:
-                _, _, validation_support_failures = validate_closed_loop_incumbent(
+                (
+                    _,
+                    _,
+                    _,
+                    mutable_validation_support_failures,
+                ) = validate_closed_loop_incumbent(
                     completed_step=completed_step,
                     learning_rate=learning_rate,
                     split="validation",
                 )
-                if validation_support_failures and best_rollout_selection is not None:
+                if mutable_validation_support_failures and best_rollout_selection is not None:
                     restore_safe_causal_incumbent(
                         completed_step=completed_step,
                         split="training_control_support_collapse",
-                        support_failures=validation_support_failures,
+                        support_failures=mutable_validation_support_failures,
                     )
             else:
                 validate_measurement_incumbent(
@@ -5199,17 +5353,18 @@ def train_from_config(
             (
                 final_validation,
                 _,
-                recovery_support_failures,
+                _,
+                mutable_recovery_support_failures,
             ) = validate_closed_loop_incumbent(
                 completed_step=start_step,
                 learning_rate=recovery_learning_rate,
                 split="validation_recovery",
             )
-            if recovery_support_failures and best_rollout_selection is not None:
+            if mutable_recovery_support_failures and best_rollout_selection is not None:
                 restore_safe_causal_incumbent(
                     completed_step=start_step,
                     split="training_control_support_collapse_recovery",
-                    support_failures=recovery_support_failures,
+                    support_failures=mutable_recovery_support_failures,
                 )
         else:
             final_validation, _ = validate_measurement_incumbent(

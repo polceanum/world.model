@@ -188,6 +188,9 @@ def test_successful_resume_clears_current_failure_but_retains_history(
 
     def complete_resume(*_args, **_kwargs):
         assert not (run_directory / "training_failure.json").exists()
+        live_state = json.loads((run_directory / "training_state.json").read_text(encoding="utf-8"))
+        assert live_state["state"] == "running"
+        assert live_state["previous_state"]["state"] == "failed"
         return {
             "run_directory": str(run_directory),
             "completed_steps": 16,

@@ -1,7 +1,7 @@
 # Project status
 
-**Date:** 2026-08-04
-**Specification:** `PROJECT_SPEC.md` 1.11
+**Date:** 2026-08-06
+**Specification:** `PROJECT_SPEC.md` 1.12
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -30,12 +30,109 @@ truthfully alive and finite but intentionally stopped at zero updates after a
 launch-QoS audit found a roughly fourfold `Background` throttling regression;
 float timestamp integration-grid drift and duplicate causal propagation are
 repaired under rollout protocol 12; a reduced production-model smoke completed
-one finite, supported causal optimizer update and terminal validation, but a
-clean full-manifest protocol-v12 convergence campaign is now running from the
-accepted protocol-v12 checkpoint and has passed 6,144 finite MPS measurement
-updates; full convergence and acceptance remain unproven;
+one finite, supported causal optimizer update and terminal validation; the
+full protocol-v12 campaign reached 11,776 logged updates but was killed by
+macOS memory pressure before its 16,384-step target, and its deployment support
+gate repeatedly reset otherwise finite causal candidates to step zero, so it
+is incomplete rather than converged; protocol 13 separates deployment
+selection from catastrophic mutable-state viability and bounds long-run
+worker/allocator memory; full repaired convergence and acceptance remain
+unproven;
 collision, occlusion, identification, convergence, and full acceptance remain
 open
+
+## 2026-08-06 — protocol-12 terminal audit and protocol-13 convergence repair
+
+The trainer (`PID 31197`) and supervisor (`PID 35788`) for
+`runs/20260803-112948-v6-protocol12-full-convergence/` are no longer running.
+The latest metric is step 11,776 and the last durable resumable checkpoint is
+step 11,648. There is no `train_summary.json` or convergence decision. Unified
+macOS logs record an `OS_REASON_JETSAM` termination at
+`2026-08-06 01:01:39.691` during a system-wide memory-pressure event. This is
+an externally killed incomplete run, not a plateau or successful convergence.
+
+The causal history also exposed an independent optimization deadlock. Each of
+the six broad causal validations at steps 8,704 through 11,264 restored the
+accepted step-zero rollout checkpoint and reset Adam. The raw pooled selection
+score improved from the fixed `0.3310606914` reference to `0.329669` at step
+10,240, but that candidate failed the stricter `elastic_pairs`
+reference-relative coverage floor. Treating this deployment failure as a
+catastrophic training-support collapse erased every 512-update learning block,
+so no causal optimizer history accumulated beyond one validation interval.
+
+Protocol 13 repairs the distinction required by specification Section 164:
+
+- complete per-scenario, reference-relative, and broad guardrails still reject
+  deployment promotion;
+- nonfinite/invalid state fails closed; a well-formed candidate restores the
+  incumbent and resets optimizer state only when pooled current/all-horizon
+  coverage falls below absolute floors;
+- every validation checkpoint records deployment failures and mutable
+  viability failures separately, and convergence inspection uses the latter
+  only to determine whether a raw candidate is safe enough to continue
+  optimizing.
+
+Long-run integrity is also hardened. Sustained macOS loading is bounded to two
+non-persistent workers and one prefetched batch per worker. Phase transitions
+collect Python garbage and release the previous MPS/CUDA allocator cache.
+Every training metric includes the process maximum-RSS high-water mark.
+`training_state.json` becomes `running` before trainer entry, and the
+supervisor records a disappeared or externally killed trainer as a terminal
+`ExternalTrainerExit` in the primary failure contract. Fast-ROI positive crop
+evidence now also requires the explicit association match bit, closing the
+previously documented stale-index defensive gap.
+
+Protocol-12 checkpoints are historical evidence and are not exact-resumable
+under protocol 13. The best raw step-10,240 candidate is a legitimate
+weights-only initialization source for a new timestamped protocol-13
+qualification after the quality gate; it must not be called promoted or
+converged.
+
+Quality and device verification on the repaired tree:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider -m "not device"
+# 603 passed, 5 skipped, 1 deselected in 150.48s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider \
+  tests/unit/test_modal_dynamics.py \
+  tests/integration/test_rgb_measurements.py \
+  tests/unit/test_association.py tests/unit/test_device.py \
+  tests/unit/test_evaluation_parameter_update_metrics.py \
+  tests/unit/test_rgb_temporal_history.py
+# host execution: 70 passed in 8.45s
+
+PYTHONPATH=. conda run -n orpheus ruff check .
+# All checks passed!
+
+PYTHONPATH=. conda run -n orpheus ruff format --check .
+# 185 files already formatted
+
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-pycache PYTHONPATH=. \
+  conda run -n orpheus python -m compileall -q \
+  train.py evaluate.py demo.py scripts world_model tests
+# exit 0
+
+git diff --check
+# no output
+```
+
+The host environment is Python `3.10.20`, PyTorch `2.10.0`,
+`mps_built=true`, and `mps_available=true`. The sandbox correctly cannot expose
+MPS, so accelerator families were rerun against the host.
+
+A real deterministic CPU causal smoke completed at
+`runs/20260806-213442-protocol13-one-update-smoke/`. It applied one supported
+optimizer update with no skipped draw, completed both one-episode validations,
+wrote a finite terminal checkpoint, persisted `state=completed`, used no oracle
+runtime input, and logged process maximum RSS `616,239,104` bytes. Its
+from-scratch one-episode candidate had zero physical tracking support and no
+deployable incumbent, so the artifact is strictly protocol/checkpoint wiring
+evidence, not an accuracy or convergence result. The production qualification
+must initialize from the trained protocol-12 candidate rather than this random
+smoke.
 
 ## 2026-08-04 — conservative repository cleanup during live training
 

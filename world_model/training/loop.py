@@ -898,7 +898,7 @@ def supervised_slot_measurement_losses(
             aligned,
             roi_bounds,
         )
-    crop_evidence = roi_valid & aligned_target_mask & crop_overlap
+    crop_evidence = mapped_valid & roi_valid & aligned_target_mask & crop_overlap
     exact_geometry = crop_evidence & _reliably_observable_rgb_geometry(
         aligned,
         aligned_visibility,

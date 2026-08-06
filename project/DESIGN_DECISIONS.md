@@ -1870,3 +1870,67 @@
   Large experiment artifacts remain visible by design rather than being
   silently discarded for cosmetic disk savings. A later destructive retention
   policy requires an explicit evidence manifest and a terminal campaign.
+
+## ADR-077 — Separate deployment support from mutable optimizer viability
+
+- **Date:** 2026-08-06
+- **Status:** accepted; rollout validation protocol 13
+- **Context:** In the protocol-12 full campaign, all six causal validations at
+  steps 8,704–11,264 restored the accepted step-zero incumbent and reset Adam.
+  Each candidate had finite pooled current/horizon evidence, and the raw
+  step-10,240 score (`0.329669`) improved on the fixed reference
+  (`0.3310606914`), but a scenario or reference-relative coverage guardrail
+  failed. The old Section 173 wording treated every later deployment-support
+  failure as catastrophic mutable support collapse. Therefore causal learning
+  could never accumulate for more than the 512-update validation interval,
+  contradicting Section 164's separation of safe deployment from repairable
+  mutable optimization.
+- **Decision:** Keep absolute, reference-relative, per-scenario, and broad
+  guardrails for deployment selection. Define catastrophic mutable viability
+  more narrowly: the candidate must be structurally valid/finite and retain
+  pooled current and every configured forecast-horizon coverage above the
+  absolute handoff floors. A scenario-only, reference-relative, or broad-score
+  failure rejects promotion but preserves candidate tensors and optimizer
+  history. Invalid/nonfinite state terminates fail-closed; only absolute pooled
+  support collapse in a well-formed candidate restores the verified incumbent
+  and resets Adam. Persist both failure sets and use mutable viability, not
+  deployment eligibility, when interpreting raw convergence candidates.
+- **Alternatives considered:** remove scenario guardrails; lower the
+  `elastic_pairs` floor until every candidate passes; retain blanket rollback
+  but lengthen validation intervals; always train from rejected tensors but
+  hide the distinction in checkpoint metadata.
+- **Consequences:** Deployment safety is unchanged, while causal updates can
+  repair the scenario that caused rejection. Protocol-12 selector artifacts
+  are not comparable or exact-resumable under protocol 13. A new broad
+  qualification must prove both sustained optimizer-history accumulation and
+  eventual multi-scenario promotion; this decision itself is not an accuracy
+  result.
+
+## ADR-078 — Treat long-run resource and external-process state as training integrity
+
+- **Date:** 2026-08-06
+- **Status:** accepted
+- **Context:** The protocol-12 trainer and supervisor disappeared during a
+  system-wide macOS memory-pressure storm. Unified logs report
+  `OS_REASON_JETSAM` at `2026-08-06 01:01:39.691`. The run used four loader
+  workers with default two-batch prefetch and crossed from MPS to CPU without
+  explicitly releasing allocator cache. Because the kernel killed the process
+  rather than raising Python, `training_state.json` remained stale and no
+  terminal trainer failure existed.
+- **Decision:** Sustained macOS profiles default to a low explicit worker count,
+  one prefetched batch per worker, and non-persistent workers. Phase transitions
+  move/reset the model, collect Python garbage, and empty the allocator cache
+  for the previous MPS/CUDA device. Metrics include process maximum RSS.
+  `train.py` writes a live `running` state before trainer entry. The convergence
+  supervisor writes an `ExternalTrainerExit` terminal artifact to the ordinary
+  training-state/failure/history contract whenever it proves that a monitored
+  trainer vanished, including extension subprocesses.
+- **Alternatives considered:** assume unrelated applications alone caused the
+  kill; reduce model or validation coverage without measuring resident memory;
+  use persistent workers; leave the supervisor-only failure as sufficient
+  terminal evidence.
+- **Consequences:** These controls reduce avoidable resident memory and make an
+  OS kill auditable without changing the model, fixed manifest, selector, or
+  full-validation atomicity. Maximum RSS is a high-water diagnostic rather
+  than instantaneous attribution, so a future campaign still needs host
+  monitoring before claiming that memory growth is eliminated.

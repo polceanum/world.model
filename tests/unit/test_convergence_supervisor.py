@@ -12,6 +12,7 @@ import torch
 from scripts import supervise_convergence
 from scripts.supervise_convergence import (
     _acquire_supervisor_lock,
+    _record_external_trainer_failure,
     _wait_for_completed_segment,
     parse_args,
 )
@@ -591,6 +592,37 @@ def test_initial_cleanup_failure_cannot_mask_durable_trainer_failure(
     assert names.index("initial_segment_failed") < names.index("initial_job_bootout_failed")
 
 
+def test_external_trainer_exit_updates_the_primary_training_state(tmp_path) -> None:
+    run = tmp_path / "run"
+    run.mkdir()
+    running = {
+        "state": "running",
+        "updated_utc": "2026-08-06T00:00:00+00:00",
+        "run_directory": str(run),
+    }
+    (run / "training_state.json").write_text(json.dumps(running), encoding="utf-8")
+
+    _record_external_trainer_failure(
+        run,
+        trainer_pid=4321,
+        target_steps=12288,
+        message="trainer was killed by the operating system",
+    )
+
+    state = json.loads((run / "training_state.json").read_text(encoding="utf-8"))
+    failure = json.loads((run / "training_failure.json").read_text(encoding="utf-8"))
+    history = [
+        json.loads(line)
+        for line in (run / "training_failures.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert state == failure == history[0]
+    assert state["state"] == "failed"
+    assert state["exception_type"] == "ExternalTrainerExit"
+    assert state["trainer_pid"] == 4321
+    assert state["target_steps"] == 12288
+    assert state["previous_state"] == running
+
+
 def test_supervisor_lock_rejects_a_second_owner(tmp_path) -> None:
     path = tmp_path / "supervisor.lock"
     first_owner = _acquire_supervisor_lock(path)
@@ -703,6 +735,7 @@ def _selector_metrics(
         "selection_accepted": float(accepted),
         "selection_training_support_required": 1.0,
         "selection_training_support_passed": 1.0,
+        "selection_mutable_training_support_passed": 1.0,
         "best_rollout_validated": 1.0,
         "rollout_reference_validated": 1.0,
         "incomplete_reference_comparison_required": 0.0,

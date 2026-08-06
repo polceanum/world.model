@@ -357,6 +357,29 @@ def test_fast_roi_valid_unmapped_query_trains_only_negative_confidence() -> None
     )
 
 
+def test_fast_roi_stale_nonnegative_identity_cannot_create_positive_crop_evidence() -> None:
+    batch = _batch()
+    measurements = _measurements(torch.zeros((1, 1, 7)))
+    module = _RecordingLossModule()
+
+    supervised_slot_measurement_losses(
+        module,
+        measurements,
+        batch,
+        frame_index=0,
+        # Association explicitly rejected this slot, but a stale index remains.
+        target_indices=torch.tensor([[0]], dtype=torch.int64),
+        matched_slots=torch.tensor([[False]]),
+        roi_bounds=torch.tensor([[[-1.0, -1.0, 0.0, 0.5]]]),
+    )
+
+    assert module.masks["roi_valid"].tolist() == [[True]]
+    assert module.masks["crop_evidence"].tolist() == [[False]]
+    assert module.masks["existence"].tolist() == [[False]]
+    assert module.masks["geometry"].tolist() == [[False]]
+    assert module.targets["visibility"].tolist() == [[0.0]]
+
+
 def test_fast_roi_exact_geometry_requires_target_pixel_support_in_crop() -> None:
     batch = _batch()
     measurements = _measurements(torch.zeros((1, 2, 7)))

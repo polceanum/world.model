@@ -24,7 +24,7 @@ from world_model.training.convergence import (
     inspect_completed_campaign,
 )
 from world_model.utils.config import OrpheusConfig, load_config
-from world_model.utils.io import atomic_write_text
+from world_model.utils.io import append_jsonl, atomic_write_text
 
 
 def _utc_now() -> str:
@@ -60,6 +60,49 @@ def _write_report(
 def _write_state(path: Path, *, status: str, **fields: Any) -> None:
     payload = {"updated_utc": _utc_now(), "status": status, **fields}
     atomic_write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+class ExternalTrainerExitError(CampaignIncompleteError):
+    """The monitored trainer disappeared without writing its terminal state."""
+
+
+def _record_external_trainer_failure(
+    run_directory: Path,
+    *,
+    trainer_pid: int,
+    target_steps: int,
+    message: str,
+) -> None:
+    """Make an OS-killed trainer terminal in the ordinary run-state contract."""
+
+    run_directory = run_directory.expanduser().resolve()
+    state_path = run_directory / "training_state.json"
+    failure_path = run_directory / "training_failure.json"
+    previous_state: dict[str, Any] | None = None
+    if state_path.is_file():
+        try:
+            decoded = json.loads(state_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            decoded = None
+        if isinstance(decoded, dict):
+            if decoded.get("state") in {"completed", "failed"}:
+                return
+            previous_state = decoded
+    failure = {
+        "state": "failed",
+        "updated_utc": _utc_now(),
+        "run_directory": str(run_directory),
+        "exception_type": "ExternalTrainerExit",
+        "message": message,
+        "trainer_pid": trainer_pid,
+        "target_steps": target_steps,
+        "detected_by": "convergence_supervisor",
+        "previous_state": previous_state,
+    }
+    encoded = json.dumps(failure, indent=2, sort_keys=True) + "\n"
+    atomic_write_text(failure_path, encoded)
+    atomic_write_text(state_path, encoded)
+    append_jsonl(run_directory / "training_failures.jsonl", failure)
 
 
 def _read_state(path: Path) -> dict[str, Any]:
@@ -269,13 +312,13 @@ def _wait_for_completed_segment(
             try:
                 os.kill(monitored_pid, 0)
             except ProcessLookupError as error:
-                raise CampaignIncompleteError(
+                raise ExternalTrainerExitError(
                     f"trainer PID {monitored_pid} exited before step {minimum_expected_steps}"
                 ) from error
             except PermissionError:
                 pass
             if not _pid_matches_training_run(monitored_pid, run_directory):
-                raise CampaignIncompleteError(
+                raise ExternalTrainerExitError(
                     f"trainer PID {monitored_pid} no longer identifies the "
                     f"trainer for {run_directory} before step "
                     f"{minimum_expected_steps}"
@@ -403,6 +446,15 @@ def _launch_extension(
     )
     returncode = process.wait()
     if returncode != 0:
+        _record_external_trainer_failure(
+            state_path.parent,
+            trainer_pid=process.pid,
+            target_steps=target_steps,
+            message=(
+                f"trainer subprocess {process.pid} exited with return code "
+                f"{returncode} before step {target_steps}"
+            ),
+        )
         _append_event(
             event_path,
             "extension_failed",
@@ -612,6 +664,13 @@ def main() -> int:
                 monitored_pid=args.initial_trainer_pid,
             )
         except Exception as error:
+            if isinstance(error, ExternalTrainerExitError) and args.initial_trainer_pid is not None:
+                _record_external_trainer_failure(
+                    run_directory,
+                    trainer_pid=args.initial_trainer_pid,
+                    target_steps=minimum_total_steps,
+                    message=str(error),
+                )
             _append_event(
                 event_path,
                 "initial_segment_failed",

@@ -135,7 +135,7 @@ def _validation_candidate(path: Path, *, protocol_hash: str) -> ValidationCandid
         raise ValueError(f"validation checkpoint has invalid acceptance state: {path}")
     accepted = accepted_value == 1.0
     support_required_value = float(metrics.get("selection_training_support_required", math.nan))
-    support_passed_value = float(metrics.get("selection_training_support_passed", math.nan))
+    support_passed_value = float(metrics.get("selection_mutable_training_support_passed", math.nan))
     if support_required_value not in {0.0, 1.0} or support_passed_value not in {0.0, 1.0}:
         raise ValueError(f"validation checkpoint has invalid training-support state: {path}")
     training_support_passed = support_passed_value == 1.0

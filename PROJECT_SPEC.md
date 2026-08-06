@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.11
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026
+**Version:** 1.12
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5488,15 +5488,26 @@ ROI pretraining uses adjacent frames with the same cache contract used online.
 Global and fast measurement objectives are support-normalized independently
 and combined with fixed declared weights.
 
-Training viability is an absolute and relative coverage contract. A handoff or
-causal candidate must retain declared minimum current and future coverage and a
-declared fraction of its fixed reference. The first unsupported candidate is a
-rejected/reference artifact, never a synthetic best checkpoint. Zero physical
-support retains additive counts and an explicit unsupported marker; it must
-neither fabricate zero RMSE nor abort validation. A later support-collapse
-failure restores the verified rollout incumbent and resets optimizer state;
-ordinary broad-score rejection still leaves a finite, supported candidate on
-the mutable optimization trajectory as required by Section 164.
+Training viability has separate deployment and mutable-optimisation contracts.
+A deployable handoff or causal candidate must retain declared minimum current
+and future coverage, a declared fraction of its fixed reference, and complete
+scenario support. The first unsupported candidate is a rejected/reference
+artifact, never a synthetic best checkpoint. Zero physical support retains
+additive counts and an explicit unsupported marker; it must neither fabricate
+zero RMSE nor abort validation.
+
+Deployment rejection alone must not reset the mutable optimizer trajectory.
+A finite candidate whose pooled current and all-horizon forecast coverage
+remain above the absolute configured floors continues training even when a
+scenario slice is unsupported, a reference-relative coverage floor fails, or
+a broad selection guardrail rejects promotion. Those are precisely the
+deficits subsequent causal updates must be allowed to repair. Restore the
+verified rollout incumbent and reset optimizer state only when a well-formed
+finite candidate's pooled current/all-horizon coverage falls below those
+absolute floors. A nonfinite or structurally invalid candidate instead fails
+closed under the numerical/schema integrity rules. Validation checkpoints must
+record both contracts and their independent failure reasons. This distinction
+implements the mutable/deployment separation required by Section 164.
 
 Pooled accuracy must not hide a missing or regressed scenario. Every declared
 scenario needs at least one episode in the fixed validation manifest and
@@ -5627,10 +5638,15 @@ supported candidate establishes the complete fixed reference but cannot
 promote itself; only a subsequent supported candidate can be compared with and
 promoted against that reference.
 
-Every fresh CLI training invocation writes a timestamped state artifact before
-expensive initialization, a terminal failure artifact with exception type,
-message, and traceback on failure, and a completed state only after terminal
-validation succeeds. Persistent macOS launches are one-shot launchd jobs
+Every fresh CLI training invocation writes a timestamped starting state before
+expensive initialization, changes it atomically to running immediately before
+entering the trainer, writes a terminal failure artifact with exception type,
+message, and traceback on an in-process failure, and writes a completed state
+only after terminal validation succeeds. A convergence supervisor that proves
+the trainer process disappeared must also change this primary state to failed
+and retain the prior live state in append-only history; an operating-system
+kill must not leave a stale starting/running marker. Persistent macOS launches
+are one-shot launchd jobs
 wrapped by `caffeinate`, with `KeepAlive=false`. A failed trainer must remain
 failed rather than being silently relaunched against an occupied run directory.
 A per-run exclusive training lock prevents concurrent exact-resume writers,
@@ -5681,7 +5697,9 @@ without fabricating partial metrics.
 Training workers must not be started or allowed to prefetch while
 initialization or handoff validation is still running. Construct the training
 loader deterministically, but create its iterator only when the first training
-draw is actually required.
+draw is actually required. Sustained macOS profiles use a low explicit worker
+count, one prefetched batch per worker, and non-persistent workers unless a
+measured profile justifies a larger resident pool.
 
 Every successful optimizer call is followed immediately by a grouped
 finite-state check over floating/complex model parameters and all optimizer
@@ -5761,6 +5779,13 @@ Launchers use the portable Standard/default process classification and retain
 must be checked before committing to another multi-day campaign, and process
 priority, CPU utilization, progress heartbeats, and numerical health must be
 distinguished in status reports.
+
+At phase-device transitions, move the complete model, reset transient runtime
+state, collect unreachable Python objects, and release the previous MPS/CUDA
+allocator cache. Training metrics record a process maximum-resident-set
+high-water mark so resource growth can be distinguished from loss variance.
+The selector remains atomic and full-manifest; memory mitigation must not
+shorten validation or alter its fixed evidence.
 
 ---
 

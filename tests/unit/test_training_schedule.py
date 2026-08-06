@@ -30,7 +30,9 @@ from world_model.training.trainer import (
     _gradient_clip_diagnostics,
     _handoff_training_support_failures,
     _has_effective_gradient,
+    _make_loader,
     _mean_batch_results,
+    _mutable_causal_training_support_failures,
     _rollout_selection_improves,
     _rollout_selection_is_compatible,
     _rollout_selection_metrics,
@@ -44,6 +46,20 @@ from world_model.training.trainer import (
     set_global_perception_trainable,
 )
 from world_model.utils.config import load_config
+
+
+def test_worker_loader_bounds_prefetch_and_does_not_persist_workers() -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        training=replace(source.training, num_workers=1),
+    )
+
+    loader = _make_loader(config, split="train", episodes=1, shuffle=False)
+
+    assert loader.num_workers == 1
+    assert loader.prefetch_factor == 1
+    assert loader.persistent_workers is False
 
 
 def test_fixed_pretraining_sweeps_every_adjacent_pair_for_every_loader_batch() -> None:
@@ -1149,6 +1165,7 @@ def test_rollout_selection_rejects_aggregate_gain_with_unsupported_scenario() ->
     assert "scenario_elastic_pairs_selection_support" in {
         str(failure["metric"]) for failure in failures
     }
+    assert not _mutable_causal_training_support_failures(candidate, config)
 
 
 def test_rollout_selection_rejects_aggregate_gain_with_scenario_regression() -> None:
@@ -1198,9 +1215,9 @@ def test_handoff_rejects_conditionally_accurate_candidate_with_collapsed_coverag
     candidate = _rollout_selection_metrics(
         _physical_selection_metrics(
             position=0.10,
-            coverage=0.06,
+            coverage=0.01,
             horizons=(0.10, 0.09, 0.08),
-            forecast_coverage=(0.09, 0.08, 0.07),
+            forecast_coverage=(0.01, 0.01, 0.01),
         ),
         config,
     )
@@ -1209,6 +1226,15 @@ def test_handoff_rejects_conditionally_accurate_candidate_with_collapsed_coverag
 
     assert candidate.score < reference.score
     assert {failure["metric"] for failure in failures} == {
+        "target_coverage",
+        "forecast_target_coverage@0.100s",
+        "forecast_target_coverage@0.250s",
+        "forecast_target_coverage@0.500s",
+    }
+    assert {
+        failure["metric"]
+        for failure in _mutable_causal_training_support_failures(candidate, config)
+    } == {
         "target_coverage",
         "forecast_target_coverage@0.100s",
         "forecast_target_coverage@0.250s",

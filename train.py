@@ -189,6 +189,23 @@ def main() -> int:
         + "\n",
     )
     try:
+        atomic_write_text(
+            state_path,
+            json.dumps(
+                {
+                    "state": "running",
+                    "updated_utc": datetime.now(timezone.utc).isoformat(),
+                    "config": str(Path(args.config).expanduser().resolve()),
+                    "run_directory": str(planned_run_directory),
+                    "resume": args.resume,
+                    "initialize_from": args.initialize_from,
+                    "previous_state": previous_state,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+        )
         result = train_from_config(
             config,
             run_name=effective_run_name,

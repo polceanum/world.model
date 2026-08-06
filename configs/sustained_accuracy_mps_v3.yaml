@@ -175,7 +175,8 @@ training:
   log_every: 8
   train_episodes: 16384
   validation_episodes: 32
-  num_workers: 4
+  # Bound resident worker/prefetch memory during multi-day MPS campaigns.
+  num_workers: 2
   fixed_dataset: false
   measurement_validation_frames: 8
   perturbation_probability: 0.25

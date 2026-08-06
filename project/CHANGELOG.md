@@ -2,6 +2,45 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-06 protocol-13 mutable-optimisation and resource-integrity repair
+
+- Audited the terminated protocol-12 campaign through logged step 11,776 and
+  durable step 11,648. macOS unified logs identify an `OS_REASON_JETSAM` kill
+  during system-wide memory pressure; no terminal summary or convergence
+  decision exists.
+- Reconstructed all six causal validations. Every 512-update block restored
+  the step-zero rollout incumbent and reset Adam because a scenario or
+  reference-relative deployment floor failed, even when pooled coverage was
+  finite and the raw score improved past the fixed reference.
+- Split deployment eligibility from mutable optimizer viability. Protocol 13
+  still rejects incomplete/regressed scenario slices for promotion.
+  Invalid/nonfinite candidates fail closed; well-formed mutable state rolls
+  back only for pooled current/all-horizon coverage below the absolute floors.
+  Checkpoints and convergence inspection persist/use the two decisions
+  independently.
+- Added a regression proving that scenario-only deployment rejection preserves
+  updated tensors and Adam state, while the existing pooled-collapse
+  regressions continue to require verified incumbent restoration.
+- Bounded sustained macOS loading to two non-persistent workers and one
+  prefetched batch per worker, release the prior MPS/CUDA allocator cache at
+  phase transitions, and log process maximum RSS with every optimizer metric.
+- Made CLI state transition explicitly from `starting` to `running`. A
+  supervisor-proved process disappearance now writes `ExternalTrainerExit` to
+  the primary training state, current failure artifact, and append-only failure
+  history; killed extension children receive the same treatment.
+- Closed the documented fast-ROI fail-closed gap: positive crop evidence now
+  requires both a nonnegative mapping and `matched_slots=true`, with a stale
+  nonnegative-index regression.
+- Advanced the authoritative specification to 1.12 and updated sustained
+  training documentation for the failed protocol-12 campaign and fresh
+  protocol-13 qualification requirement.
+- Passed `603` non-device tests, all `70` host MPS/device tests, Ruff,
+  compileall, and diff checks. A real one-update causal smoke at
+  `runs/20260806-213442-protocol13-one-update-smoke/` completed in `45.65 s`
+  with finite state, no skipped draw, no oracle input, and `616,239,104` bytes
+  maximum RSS; its unsupported random-weight validation is wiring evidence,
+  not an accuracy result.
+
 ### 2026-08-04 conservative repository cleanup
 
 - Inventoried tracked source, ignored files, cache directories, run/demo

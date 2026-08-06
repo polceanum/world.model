@@ -11,9 +11,9 @@
 - [x] Repair fast-ROI positive/negative supervision, reliability masks,
   temporal-cache pretraining, false-positive selection precision, and
   separately normalized global/fast losses.
-- [x] Add absolute and relative training-support guardrails, truthful first
-  candidate handling, and verified rollback plus optimizer reset on later
-  support collapse.
+- [x] Add absolute and relative deployment-support guardrails, truthful first
+  candidate handling, and verified rollback plus optimizer reset only on
+  catastrophic pooled support collapse.
 - [x] Align analytic contacts with the labelled simulator and tighten
   observation-gated drag/restitution supervision.
 - [x] Diagnose the remaining hard-window gradient spike by subsystem and add
@@ -138,9 +138,22 @@
 - [x] Attach the exact-PID convergence supervisor with the predeclared
   16,384-step minimum, 4,096-step extensions, four-validation/1% plateau rule,
   and 24,576-step hard limit.
-- [ ] Continue monitoring fixed validation for a guardrail-safe measurement
-  promotion, especially recovery of fast-ROI MAE below the imported
-  `0.189315 m` reference.
+- [x] Audit the terminated protocol-12 campaign through step 11,776: preserve
+  its artifacts, prove the macOS JETSAM kill, and document that no terminal
+  summary, convergence decision, or deployment promotion exists.
+- [x] Prove that six causal validation intervals repeatedly reset finite
+  candidates and Adam to step zero because deployment support was incorrectly
+  used as mutable-state viability.
+- [x] Split protocol-13 deployment support from catastrophic mutable viability,
+  retain per-scenario/reference guardrails for promotion, and preserve a finite
+  pooled candidate unless it falls below absolute coverage floors.
+- [x] Bound sustained macOS workers/prefetch, release accelerator caches on
+  phase transitions, and log process maximum RSS.
+- [x] Persist explicit running state and convert supervisor-proved external
+  trainer exits into the primary terminal failure contract.
+- [x] Pass `603` non-device regressions, all `70` host MPS/device regressions,
+  Ruff, compileall, diff checks, and a real one-update protocol-13 CPU causal
+  smoke with finite checkpoint/state and process-RSS evidence.
 - [x] Re-audit the live campaign at step 3584; confirm continued finite
   training/checkpoints, a step-2048 raw-score best of `4.868897`, later scores
   still far better than initialization, and no evidence justifying a
@@ -154,18 +167,22 @@
   empty step-257 demo while retaining the active run, initialization input,
   accepted/rejected scientific evidence, and all specification-required
   modules.
-- [ ] After the campaign reaches a terminal supervisor decision, perform a
+- [x] After the campaign terminates, perform a
   tracked-code simplification review against `PROJECT_SPEC.md`; do not remove
   dormant modality-independent contracts merely because the first RGB slice
-  does not yet call them.
-- [ ] After the campaign reaches a terminal supervisor decision, fail closed
+  does not yet call them. The review found no safe tracked-module deletion.
+- [x] After the campaign terminates, fail closed
   in `supervised_slot_measurement_losses` by requiring `matched_slots` for
   positive crop evidence even if a stale nonnegative target index is supplied;
-  add the explicit stale-index regression without changing this run's source.
-- [ ] After the campaign reaches a terminal supervisor decision, make
+  add the explicit stale-index regression.
+- [x] After the campaign terminates, make
   `training_state.json` distinguish an active/running invocation from initial
   startup, while preserving atomic terminal failure/completion semantics and
   `training_progress.json` as the detailed heartbeat.
+- [ ] Launch a new timestamped protocol-13 qualification from the best finite
+  protocol-12 raw causal candidate as weights-only initialization. Verify at
+  consecutive 512-update validations that optimizer history accumulates across
+  scenario-only deployment rejections and that process RSS remains bounded.
 - [ ] Inspect the next corrected qualification at its declared validation steps
   for support, perception/interaction/global gradient balance, lifecycle
   precision/coverage, identity switches, collisions, calibration, every

@@ -90,6 +90,7 @@ def test_rejected_equal_weight_candidate_still_reports_incumbent_tensor_linkage(
         accepted=False,
         training_support_required=True,
         training_support_failures=[],
+        mutable_training_support_failures=[],
         best_measurement=None,
         checkpoint_model_state_hash="same-tensors",
         incumbent_model_state_hash="same-tensors",
@@ -2212,6 +2213,116 @@ def test_only_support_collapse_rolls_back_mutable_causal_state(
         last["metrics"]["best_rollout_model_state_hash"]
         == best["metrics"]["best_rollout_model_state_hash"]
     )
+
+
+def test_scenario_only_support_failure_preserves_mutable_causal_state(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        project=replace(source.project, output_dir=str(tmp_path / "runs")),
+        device=replace(
+            source.device,
+            preference="cpu",
+            closed_loop_preference="same",
+        ),
+        training=replace(
+            source.training,
+            steps=1,
+            rgb_pretrain_steps=0,
+            train_episodes=1,
+            validation_episodes=1,
+            batch_size=1,
+            eval_every=1,
+            checkpoint_every=1,
+            log_every=1,
+        ),
+    )
+    initial_model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
+    initialize_from = save_checkpoint(
+        tmp_path / "scenario-support-initial.pt",
+        model=initial_model,
+        optimizer=None,
+        config=config,
+        step=0,
+        device="cpu",
+    )
+    validation_calls = 0
+
+    def fake_validation(
+        _model,
+        _loader,
+        _config,
+        *,
+        device,
+        closed_loop,
+        **_progress,
+    ) -> TrainingBatchResult:
+        nonlocal validation_calls
+        assert device == torch.device("cpu")
+        assert closed_loop
+        validation_calls += 1
+        metrics = _physical_metrics(config)
+        if validation_calls == 2:
+            scenario = _selection_scenario_slugs(config)[0]
+            prefix = f"scenario_{scenario}_"
+            metrics[f"{prefix}selection_metric_supported"] = 0.0
+            for name in tuple(metrics):
+                if name.startswith(f"{prefix}validation_"):
+                    del metrics[name]
+        return TrainingBatchResult(
+            total_loss=torch.tensor(0.4),
+            loss_terms={"rollout": torch.tensor(0.4)},
+            metrics=metrics,
+            phase="closed_loop_rgb",
+        )
+
+    def fake_closed_loop(model, _batch, _config, **_kwargs) -> TrainingBatchResult:
+        parameter = next(parameter for parameter in model.parameters() if parameter.requires_grad)
+        loss = parameter.reshape(-1)[0] + 10.0
+        return TrainingBatchResult(
+            total_loss=loss,
+            loss_terms={"state": loss},
+            metrics={"matched_object_frames": 1.0},
+            phase="closed_loop_rgb",
+        )
+
+    monkeypatch.setattr(
+        "world_model.training.trainer._validation_loader_result",
+        fake_validation,
+    )
+    monkeypatch.setattr(
+        "world_model.training.trainer.run_closed_loop_batch",
+        fake_closed_loop,
+    )
+
+    result = train_from_config(
+        config,
+        run_name="scenario-support-preserved",
+        initialize_from_path=initialize_from,
+    )
+    records = [
+        json.loads(line)
+        for line in Path(result["metrics_jsonl"]).read_text(encoding="utf-8").splitlines()
+    ]
+    assert not [
+        record for record in records if record["split"] == "training_control_support_collapse"
+    ]
+    validation = torch.load(
+        Path(result["run_directory"]) / "checkpoints" / "validation_step_000001.pt",
+        map_location="cpu",
+        weights_only=False,
+    )
+    last = torch.load(result["last_checkpoint"], map_location="cpu", weights_only=False)
+    best = torch.load(result["best_rollout_checkpoint"], map_location="cpu", weights_only=False)
+    assert validation["metrics"]["selection_accepted"] == 0.0
+    assert validation["metrics"]["selection_training_support_passed"] == 0.0
+    assert validation["metrics"]["selection_mutable_training_support_passed"] == 1.0
+    assert _model_state_hash(last["model_state"]) != _model_state_hash(best["model_state"])
+    assert last["optimizer_state"]["state"]
+    assert last["metrics"]["checkpoint_state_role"] == "mutable_training_iterate"
 
 
 def test_terminal_support_collapse_checkpoint_truthfully_contains_restored_incumbent(

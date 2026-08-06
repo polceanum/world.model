@@ -411,7 +411,8 @@ LaunchAgent incorrectly declared explicitly requested training as
 `100–198%`. The run is a preserved launch-throughput diagnostic, not an
 accuracy result.
 
-New sustained runs use simulator `sphere_world_v4`, rollout protocol 12, and
+Historical sustained runs through 3 August used simulator `sphere_world_v4`,
+rollout protocol 12, and
 selection metric 6. Cadence three is exactly
 `GLOBAL, FAST, FAST, GLOBAL`; historical cadence-three reports used actual
 cadence four and are not selector-comparable. The impulse rate is `0.02` per
@@ -444,14 +445,26 @@ candidate slightly regressed the fixed reference and was rejected, so the
 incumbent remained authoritative. Treat this as optimizer/checkpoint/selector
 wiring evidence only, not as an accuracy trend.
 
-The full unshortened continuation is active at
+The full unshortened continuation at
 `runs/20260803-112948-v6-protocol12-full-convergence/`, initialized from that
 smoke's accepted `best_rollout.pt`. It uses the profile's 16,384 steps and
 episodes, 8,192-step MPS measurement phase, 8,192-step CPU closed-loop phase,
 32-episode fixed validation, 128-step checkpoints, and 512-step selector
-interval. Its launchd job is Standard/default and one-shot (`KeepAlive=false`);
-inspect `training_progress.json` and the `/private/tmp/20260803-112948-...`
-stdout/stderr logs rather than inferring health from silence.
+interval. The trainer and supervisor were killed by macOS memory pressure at
+step 11,776, after the durable step-11,648 checkpoint. It has no completed
+summary and is a failed/incomplete campaign, not convergence evidence.
+
+New sustained runs use rollout protocol 13. Deployment support and mutable
+optimizer viability are now separate: pooled coverage below the absolute
+floors still restores the verified incumbent and resets optimizer state, while
+a finite pooled candidate that fails only a scenario, reference-relative, or
+broad deployment guardrail remains the mutable iterate so later causal updates
+can repair it. Validation checkpoints record both decisions. The macOS profile
+uses two non-persistent workers with one prefetched batch each, releases the
+previous accelerator allocator cache at phase transitions, and logs process
+maximum RSS. `train.py` writes `starting`, `running`, and terminal states; the
+supervisor converts a proved external trainer exit into an ordinary durable
+training failure.
 
 The convergence supervisor is also active under launchd label
 `com.polceanum.orpheus.convergence-20260803-112948`, monitoring initial trainer
