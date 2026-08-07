@@ -2717,7 +2717,7 @@ def set_closed_loop_trainable_scope(
             model.identifier.requires_grad_(True)
         _freeze_disconnected_training_heads(model)
         return
-    if scope == "state_dynamics_roi":
+    if scope in {"state_dynamics_fast_roi", "state_dynamics_roi"}:
         model.dynamics.requires_grad_(True)
         model.updater.requires_grad_(True)
         if model.identifier is not None:
@@ -2729,15 +2729,16 @@ def set_closed_loop_trainable_scope(
         backbone = getattr(rgb_module, "backbone", None)
         if backbone is None:
             raise TypeError("RGB module is missing backbone")
-        for stage in backbone.stages[:2]:
-            stage.requires_grad_(True)
+        if scope == "state_dynamics_roi":
+            for stage in backbone.stages[:2]:
+                stage.requires_grad_(True)
         backbone.fast_projection.requires_grad_(True)
         roi_updater.requires_grad_(True)
         _freeze_disconnected_training_heads(model)
         return
     raise ValueError(
         "closed-loop trainable scope must be 'all', 'dynamics', "
-        "'state_dynamics', or 'state_dynamics_roi'"
+        "'state_dynamics', 'state_dynamics_fast_roi', or 'state_dynamics_roi'"
     )
 
 

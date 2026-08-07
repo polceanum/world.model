@@ -972,11 +972,13 @@ class OrpheusConfig:
             "all",
             "dynamics",
             "state_dynamics",
+            "state_dynamics_fast_roi",
             "state_dynamics_roi",
         }:
             raise ValueError(
                 "training.closed_loop_trainable_scope must be "
-                "'all', 'dynamics', 'state_dynamics', or 'state_dynamics_roi'"
+                "'all', 'dynamics', 'state_dynamics', "
+                "'state_dynamics_fast_roi', or 'state_dynamics_roi'"
             )
         for name, value in (
             (

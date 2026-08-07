@@ -1,7 +1,7 @@
 # Project status
 
-**Date:** 2026-08-06
-**Specification:** `PROJECT_SPEC.md` 1.12
+**Date:** 2026-08-07
+**Specification:** `PROJECT_SPEC.md` 1.13
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -36,10 +36,80 @@ macOS memory pressure before its 16,384-step target, and its deployment support
 gate repeatedly reset otherwise finite causal candidates to step zero, so it
 is incomplete rather than converged; protocol 13 separates deployment
 selection from catastrophic mutable-state viability and bounds long-run
-worker/allocator memory; full repaired convergence and acceptance remain
-unproven;
-collision, occlusion, identification, convergence, and full acceptance remain
-open
+worker/allocator memory; its repaired campaign accumulated 6,096 supported
+causal updates with stable optimizer/memory/numerics but no strict promotion;
+exact modular qualification isolated shared-backbone drift and found a strong
+every-horizon fast-ROI/state/dynamics diagnostic candidate that still fails
+identity, z, coverage, and scenario guardrails; a new
+`state_dynamics_fast_roi` scope now freezes shared/global RGB perception for
+the next clean long run; strict convergence and acceptance remain unproven,
+and collision, identity, z-axis, coverage, and scenario-wide non-regression
+remain open
+
+## 2026-08-07 — long-horizon audit and frozen-backbone correction
+
+The protocol-13 campaign at
+`runs/20260806-213753-v7-protocol13-causal-convergence/` was gracefully stopped
+at logged step 6,096 after eleven complete post-initialization 512-step
+validations produced no promotion. Its optimizer counters accumulated rather
+than resetting, maximum RSS stayed at `1,354,514,432` bytes, validation support
+remained finite, and stderr stayed empty. This is a healthy but non-converged
+campaign, not a collapse. Step 4,096 was the strongest raw full candidate:
+weighted horizon score `0.2854974` versus accepted `0.3296688`, with lower RMSE
+at every horizon, but lower target/forecast coverage and worse identity and
+per-scenario guardrails. Later candidates recovered coverage but gave back the
+RMSE gain.
+
+Exact fixed-manifest modular qualifications then separated the coupling:
+
+- dynamics-only step-4,096 transfer was rejected at score `0.3481675` and
+  worsened every horizon;
+- dynamics/updater/identifier transfer improved score to `0.3265871` and most
+  pooled metrics, but regressed x, identity, and 1.0-second RMSE;
+- 25% interpolation of the complete model collapsed horizon coverage to
+  `0.2250–0.2925` and was rejected at score `0.3387919`;
+- the accepted global detector/shared backbone plus donor fast ROI, updater,
+  identifier, and dynamics was strongest at score `0.2909420`, improving
+  horizon RMSE from `[0.2931762, 0.2949214, 0.3154012, 0.3390725, 0.3608819]`
+  to `[0.2249350, 0.2408390, 0.2732086, 0.3060187, 0.3372541]` seconds-aligned
+  metres. It remains rejected on identity, small z regressions, forecast
+  coverage, and per-scenario guardrails and is not a deployment baseline.
+- retaining the accepted ROI lifecycle/appearance heads reduced the gain
+  (score `0.3221206`) without restoring acceptance.
+
+The evidence identifies an actual trainability leak: `state_dynamics_roi`
+kept the first two shared backbone stages trainable after global-exclusive
+heads froze. The new `state_dynamics_fast_roi` scope trains dynamics, belief
+update, identifier, ROI updater, and ROI-only fast projection while freezing
+every shared backbone/global-discovery tensor. Specification 1.13 and ADR-079
+make this distinction explicit. The next production run must initialize
+weights-only from the accepted step-zero reference, use zero global-adaptation
+steps, and retain the unchanged protocol-13 selector.
+
+New verification on the amended tree:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider -m "not device"
+# 609 passed, 5 skipped, 1 deselected in 146.89s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider \
+  tests/unit/test_training_schedule.py tests/unit/test_config.py \
+  tests/unit/test_checkpoint_composition.py
+# 191 passed in 4.02s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check .
+# All checks passed
+```
+
+The exact qualification reports/checkpoints are under:
+
+- `runs/20260807-214551-modular-dynamics-step4096/`;
+- `runs/20260807-215329-modular-state-dynamics-step4096/`;
+- `runs/20260807-220123-interpolated-full-step4096-w025/`;
+- `runs/20260807-220945-modular-state-dynamics-fast-roi-step4096/`;
+- `runs/20260807-221743-modular-spatial-roi-step4096/`.
 
 ## 2026-08-06 — protocol-12 terminal audit and protocol-13 convergence repair
 

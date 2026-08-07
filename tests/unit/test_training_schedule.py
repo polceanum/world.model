@@ -506,6 +506,29 @@ def test_state_dynamics_roi_scope_trains_fast_rgb_without_global_perception() ->
     assert not any(parameter.requires_grad for parameter in rgb.global_detector.parameters())
 
 
+def test_state_dynamics_fast_roi_scope_keeps_shared_backbone_frozen() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+    rgb = model.observation_modules["rgb"]
+
+    set_closed_loop_trainable_scope(model, scope="state_dynamics_fast_roi")
+
+    assert all(parameter.requires_grad for parameter in model.dynamics.parameters())
+    assert any(parameter.requires_grad for parameter in model.updater.parameters())
+    assert model.identifier is not None
+    assert any(parameter.requires_grad for parameter in model.identifier.parameters())
+    assert any(parameter.requires_grad for parameter in rgb.roi_updater.parameters())
+    assert all(parameter.requires_grad for parameter in rgb.backbone.fast_projection.parameters())
+    assert not any(
+        parameter.requires_grad for stage in rgb.backbone.stages for parameter in stage.parameters()
+    )
+    assert not any(
+        parameter.requires_grad
+        for projection in rgb.backbone.projections
+        for parameter in projection.parameters()
+    )
+    assert not any(parameter.requires_grad for parameter in rgb.global_detector.parameters())
+
+
 def test_closed_loop_terms_expose_physical_components_without_double_counting() -> None:
     reference = torch.zeros(())
     terms = _group_closed_loop_terms(

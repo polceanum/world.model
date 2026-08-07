@@ -1934,3 +1934,37 @@
   full-validation atomicity. Maximum RSS is a high-water diagnostic rather
   than instantaneous attribution, so a future campaign still needs host
   monitoring before claiming that memory growth is eliminated.
+
+## ADR-079 — Qualify modular candidates and isolate fast-ROI adaptation
+
+- **Date:** 2026-08-07
+- **Status:** accepted implementation policy; accuracy promotion pending
+- **Context:** Protocol 13 accumulated more than 6,000 causal updates without
+  numerical or resource collapse, but no checkpoint passed the fixed broad
+  selector. The full step-4,096 candidate improved pooled RMSE at every
+  horizon while reducing coverage. A dynamics-only transplant was worse at
+  every horizon; a coherent state+dynamics transplant improved most pooled
+  metrics but regressed x and identity. Adding donor fast-ROI tensors while
+  retaining the accepted global detector/shared backbone produced the best
+  diagnostic score (`0.2909420` versus `0.3296688`) and improved every
+  horizon, but still failed identity, z, coverage, and scenario guardrails.
+  Importing or interpolating shared/global perception caused severe coverage
+  loss. The existing `state_dynamics_roi` training scope continued to update
+  shared backbone stages after global-only heads were frozen.
+- **Decision:** Make module boundaries executable in offline qualification via
+  schema-checked, provenance-recorded checkpoint composition. Add a narrower
+  `state_dynamics_fast_roi` training scope: dynamics, belief updater,
+  identifier, ROI updater, and ROI-only fast projection may adapt, while all
+  shared backbone stages, global pyramid projections, and the detector remain
+  frozen. Start the new campaign weights-only from the accepted reference and
+  set the global-adaptation duration to zero. Keep all existing deployment
+  guardrails unchanged.
+- **Alternatives considered:** relax per-scenario guardrails; promote the best
+  pooled modular candidate; continue the coupled run indefinitely; use
+  dynamics-only transfer; interpolate the complete checkpoint; keep training
+  the first two shared backbone stages after global heads freeze.
+- **Consequences:** Future causal learning cannot silently move global RGB
+  discovery through a supposedly fast-ROI scope. Rejected modular artifacts
+  remain reproducible scientific evidence, not accepted baselines. Acceptance
+  still requires a complete long run and the exact balanced selector, so this
+  decision is a targeted training correction rather than a claim of success.

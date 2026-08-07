@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.12
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026
+**Version:** 1.13
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5786,6 +5786,41 @@ allocator cache. Training metrics record a process maximum-resident-set
 high-water mark so resource growth can be distinguished from loss variance.
 The selector remains atomic and full-manifest; memory mitigation must not
 shorten validation or alter its fixed evidence.
+
+---
+
+# Part XXXIV — Modular qualification and fast-ROI isolation amendment
+
+## 183. Module boundaries are checkpoint-selection and optimisation boundaries
+
+The architectural separation between RGB discovery, fast residual
+measurement, belief correction, identification, and dynamics must be usable
+experimentally rather than existing only as class structure. An offline
+candidate may retain a verified base checkpoint and import declared module
+prefixes from a compatible donor. Such composition validates the complete
+state-dict schema, shapes, dtypes, finite tensors, configuration semantics,
+source paths, module prefixes, and blend weight. It never imports optimizer or
+RNG state. A composed checkpoint is only a candidate until the unchanged full
+balanced RGB-only validation protocol accepts it.
+
+Shared RGB backbone stages are not fast-path-exclusive merely because the ROI
+updater consumes their features. After a bounded global adaptation phase,
+continued gradients through shared stages can move the global discovery
+distribution and reduce persistent target coverage. Training therefore
+supports an explicit `state_dynamics_fast_roi` scope that adapts dynamics,
+belief update, slow identification, the ROI updater, and its ROI-only fast
+projection while keeping all shared backbone stages, global feature-pyramid
+projections, and the global detector frozen. The broader
+`state_dynamics_roi` scope remains an explicit ablation that also adapts the
+first two shared backbone stages.
+
+Changing the trainable scope or global-adaptation duration starts a new
+weights-only run and is recorded in resolved configuration and provenance.
+It does not relax selection. Promotion still requires primary-score
+improvement plus pooled, per-axis, every-horizon, lifecycle/identity, event,
+calibration, coverage, and per-scenario non-regression against the same fixed
+reference. Module composition is diagnostic evidence when rejected, not a
+means to relabel a Pareto tradeoff as an accepted baseline.
 
 ---
 

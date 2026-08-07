@@ -185,10 +185,19 @@
   weights-only initialization; verify one Standard/default process, explicit
   running state, empty stderr, host MPS visibility, CPU causal policy, and
   advancing full initialization validation.
-- [ ] At consecutive 512-update protocol-13 validations, verify that optimizer
+- [x] At consecutive 512-update protocol-13 validations, verify that optimizer
   history accumulates across scenario-only deployment rejections and process
   RSS remains bounded.
-- [ ] Inspect the next corrected qualification at its declared validation steps
+- [x] Audit the coupled protocol-13 campaign through 6,096 causal updates,
+  preserve its eleven rejected post-initialization validations, and stop it
+  after proving a repeated forecast-accuracy versus tracking-support tradeoff.
+- [x] Add exact modular checkpoint qualification and prove that preserving the
+  accepted global discovery stack while importing causal fast-ROI/state
+  modules yields the strongest every-horizon diagnostic candidate without
+  falsely promoting its remaining identity/z/coverage regressions.
+- [x] Add `state_dynamics_fast_roi` so causal ROI learning cannot update shared
+  backbone stages after global perception is frozen.
+- [ ] Inspect the new frozen-backbone qualification at its declared validation steps
   for support, perception/interaction/global gradient balance, lifecycle
   precision/coverage, identity switches, collisions, calibration, every
   horizon, and every scenario slice. Stop on a repeated structural collapse.

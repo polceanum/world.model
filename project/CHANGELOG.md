@@ -2,6 +2,33 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-07 modular long-horizon qualification and fast-ROI isolation
+
+- Audited the protocol-13 causal campaign through 6,096 updates and eleven
+  complete post-initialization validations. Optimizer state accumulated and
+  memory/numerics remained stable, but no candidate passed the fixed broad
+  selector. Step 4,096 improved pooled RMSE at every horizon while regressing
+  tracking coverage/identity and scenario guardrails, demonstrating a real
+  accuracy-support tradeoff rather than convergence.
+- Added a schema-checked modular checkpoint composer and an exact fixed-seed
+  RGB-only qualification CLI. It records timestamp-first raw metrics, strict
+  failure lists, provenance, and a weights-only candidate without importing
+  optimizer/RNG state.
+- Rejected dynamics-only, 25% full-model interpolation, and other modular
+  candidates truthfully. The best diagnostic candidate combines the accepted
+  global detector/shared backbone with the donor fast ROI, state update,
+  identifier, and dynamics: its weighted 0.1–1.0 s score improves from
+  `0.3296688` to `0.2909420`, with lower RMSE at every horizon, but it remains
+  unaccepted because identity, z-axis, forecast-coverage, and scenario
+  guardrails fail.
+- Added `state_dynamics_fast_roi`, which freezes all shared backbone/global
+  discovery tensors while adapting the ROI-only projection/updater and causal
+  state modules. This closes the trainability leak identified by the modular
+  audit without relaxing selection.
+- Advanced the authoritative specification to 1.13. A new long run must start
+  weights-only from the accepted reference with zero global-adaptation steps;
+  no rejected modular checkpoint is a deployment baseline.
+
 ### 2026-08-06 protocol-13 mutable-optimisation and resource-integrity repair
 
 - Audited the terminated protocol-12 campaign through logged step 11,776 and
