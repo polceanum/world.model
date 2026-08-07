@@ -197,6 +197,11 @@
   falsely promoting its remaining identity/z/coverage regressions.
 - [x] Add `state_dynamics_fast_roi` so causal ROI learning cannot update shared
   backbone stages after global perception is frozen.
+- [x] Commit/push `ea67f8d` and launch the clean 8,192-update frozen-backbone
+  campaign from the accepted reference with zero global-adaptation steps.
+- [x] Verify the complete 32-episode initialization retains the exact accepted
+  score/hash linkage, then observe a finite supported step-8 update with zero
+  global-perception trainability and no skipped draws or stderr.
 - [ ] Inspect the new frozen-backbone qualification at its declared validation steps
   for support, perception/interaction/global gradient balance, lifecycle
   precision/coverage, identity switches, collisions, calibration, every

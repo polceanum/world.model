@@ -111,6 +111,26 @@ The exact qualification reports/checkpoints are under:
 - `runs/20260807-220945-modular-state-dynamics-fast-roi-step4096/`;
 - `runs/20260807-221743-modular-spatial-roi-step4096/`.
 
+The corrected production campaign is active at
+`runs/20260807-223146-v8-protocol13-frozen-fast-roi/`. It was launched from
+clean pushed commit `ea67f8d5d78826072908c32dc9fd3ddf00576192` through the
+one-shot Standard/default LaunchAgent
+`com.polceanum.orpheus.protocol13-frozen-roi-20260807-223146`. The resolved
+configuration uses `rgb_pretrain_steps=0`, `steps=8192`,
+`closed_loop_global_trainable_steps=0`, and
+`closed_loop_trainable_scope=state_dynamics_fast_roi`. Host metadata records
+Python 3.10, PyTorch 2.10.0, `mps_built=true`, `mps_available=true`, RGB
+measurement device MPS, causal device CPU, RGB-only runtime, and no debug
+oracle. PID `86599` is alive at the status cut, initialization validation is
+complete on all 32 fixed episodes under unchanged protocol hash
+`e31bf1cde4e4adf8603190b3258e086d6f749ad1d5689427d60e367f9fbb53a0`,
+and stderr is empty. The tensor-linked step-zero checkpoint is accepted with
+the exact source score `0.3296687588`; its best/reference/current hashes and
+steps all agree. The first causal metric is step 8 after eight draws with zero
+skips, one finite optimizer update, `global_perception_trainable=0`, local ROI
+perception clipping active, and maximum RSS `1,018,089,472` bytes. No trained
+candidate validation, new promotion, or convergence claim exists yet.
+
 ## 2026-08-06 — protocol-12 terminal audit and protocol-13 convergence repair
 
 The trainer (`PID 31197`) and supervisor (`PID 35788`) for

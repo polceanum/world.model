@@ -28,6 +28,16 @@
 - Advanced the authoritative specification to 1.13. A new long run must start
   weights-only from the accepted reference with zero global-adaptation steps;
   no rejected modular checkpoint is a deployment baseline.
+- Committed and pushed the repair as `ea67f8d`, then launched
+  `runs/20260807-223146-v8-protocol13-frozen-fast-roi/` from the accepted
+  step-zero reference with 8,192 causal updates, zero global-adaptation steps,
+  the frozen-backbone fast-ROI scope, MPS measurement execution, and CPU
+  causal execution. The clean-source one-shot job is alive in initialization
+  validation with empty stderr. The 32-episode initialization completed with
+  the exact tensor-linked accepted score `0.3296687588`; its first eight
+  causal draws produced one logged finite step-8 update with zero skips,
+  global perception frozen, and empty stderr. It has no trained-candidate
+  accuracy result yet.
 
 ### 2026-08-06 protocol-13 mutable-optimisation and resource-integrity repair
 
