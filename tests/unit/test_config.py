@@ -246,6 +246,28 @@ def test_closed_loop_trainable_scope_is_explicit() -> None:
 
 
 @pytest.mark.parametrize(
+    "overrides",
+    [
+        ["training.closed_loop_late_trainable_scope=state_dynamics"],
+        ["training.closed_loop_scope_transition_steps=512"],
+        [
+            "training.closed_loop_late_trainable_scope=unknown",
+            "training.closed_loop_scope_transition_steps=512",
+        ],
+        [
+            "training.closed_loop_late_trainable_scope=state_dynamics",
+            "training.closed_loop_scope_transition_steps=0",
+        ],
+    ],
+)
+def test_closed_loop_scope_transition_is_explicit_and_paired(
+    overrides: list[str],
+) -> None:
+    with pytest.raises(ValueError, match="closed_loop_(late|scope)"):
+        load_config(CONFIG_DIR / "tiny_overfit.yaml", overrides=overrides)
+
+
+@pytest.mark.parametrize(
     "field",
     [
         "handoff_minimum_target_coverage",

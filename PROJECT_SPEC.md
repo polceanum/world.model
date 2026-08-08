@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.14
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity amendment 8 August 2026
+**Version:** 1.15
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5843,6 +5843,24 @@ the total loss appear to converge or oscillate. Scope regressions must test
 both `requires_grad` declarations and the final closed-loop objective terms.
 Correcting a trainable-path classification changes the training objective and
 therefore requires a fresh weights-only run rather than exact resume.
+
+## 185. Branch coefficients and causal scope transitions are fixed protocol
+
+Relative global/fast RGB measurement weights have one fixed denominator even
+when a branch is frozen or lacks support on a particular draw. An unavailable
+branch contributes zero; the available branch must not inherit its coefficient.
+This prevents a trainability or support decision from silently doubling an
+auxiliary gradient relative to state and rollout objectives.
+
+A sustained run may declare one causal trainability-scope transition at an
+exact completed-causal-update boundary. Both scopes and the boundary are
+resolved configuration and continuation semantics. The intended evidence-led
+use is a short `fast_roi` phase followed by `state_dynamics`: first improve
+residual visual localization while the accepted belief/dynamics stack is
+fixed, then freeze perception while velocity, identity, coverage, and rollout
+dynamics adapt. Every training metric records which side of the boundary
+produced the update. The transition never promotes the intermediate tensors;
+the unchanged full RGB-only selector remains authoritative.
 
 ---
 

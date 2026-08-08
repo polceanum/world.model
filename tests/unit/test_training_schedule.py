@@ -12,6 +12,7 @@ from torch import nn
 from world_model.runtime import OnlineWorldModel
 from world_model.training.loop import (
     TrainingBatchResult,
+    _combine_measurement_objectives,
     _distance_gate_physical_matches,
     _global_measurement_has_trainable_path,
     _globally_weight_horizon_details,
@@ -27,6 +28,7 @@ from world_model.training.trainer import (
     _ROLLOUT_SELECTION_METRIC_VERSION,
     _causal_training_support,
     _clip_training_gradients,
+    _closed_loop_trainable_scope_for_step,
     _finite_nonnegative_integer,
     _gradient_clip_diagnostics,
     _handoff_training_support_failures,
@@ -531,6 +533,47 @@ def test_state_dynamics_fast_roi_scope_keeps_shared_backbone_frozen() -> None:
     assert not _global_measurement_has_trainable_path(rgb)
 
 
+def test_fast_roi_scope_freezes_state_and_global_modules() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+    rgb = model.observation_modules["rgb"]
+
+    set_closed_loop_trainable_scope(model, scope="fast_roi")
+
+    assert not any(parameter.requires_grad for parameter in model.dynamics.parameters())
+    assert not any(parameter.requires_grad for parameter in model.updater.parameters())
+    assert model.identifier is not None
+    assert not any(parameter.requires_grad for parameter in model.identifier.parameters())
+    assert any(parameter.requires_grad for parameter in rgb.roi_updater.parameters())
+    assert all(parameter.requires_grad for parameter in rgb.backbone.fast_projection.parameters())
+    assert not any(
+        parameter.requires_grad for stage in rgb.backbone.stages for parameter in stage.parameters()
+    )
+    assert not any(parameter.requires_grad for parameter in rgb.global_detector.parameters())
+
+
+def test_closed_loop_scope_transition_counts_causal_updates() -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            rgb_pretrain_steps=100,
+            closed_loop_trainable_scope="fast_roi",
+            closed_loop_late_trainable_scope="state_dynamics",
+            closed_loop_scope_transition_steps=512,
+        ),
+    )
+
+    assert _closed_loop_trainable_scope_for_step(config, completed_step=611) == (
+        "fast_roi",
+        False,
+    )
+    assert _closed_loop_trainable_scope_for_step(config, completed_step=612) == (
+        "state_dynamics",
+        True,
+    )
+
+
 def test_global_measurement_trainability_ignores_roi_only_projection() -> None:
     model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
     rgb = model.observation_modules["rgb"]
@@ -541,6 +584,36 @@ def test_global_measurement_trainability_ignores_roi_only_projection() -> None:
     set_closed_loop_trainable_scope(model, scope="state_dynamics_fast_roi")
     assert all(parameter.requires_grad for parameter in rgb.backbone.fast_projection.parameters())
     assert not _global_measurement_has_trainable_path(rgb)
+
+
+def test_measurement_branch_coefficients_do_not_change_with_support() -> None:
+    global_loss = torch.tensor(6.0)
+    fast_loss = torch.tensor(2.0)
+
+    torch.testing.assert_close(
+        _combine_measurement_objectives(
+            global_measurement=global_loss,
+            fast_measurement=fast_loss,
+            fast_weight=1.0,
+        ),
+        torch.tensor(4.0),
+    )
+    torch.testing.assert_close(
+        _combine_measurement_objectives(
+            global_measurement=global_loss,
+            fast_measurement=None,
+            fast_weight=1.0,
+        ),
+        torch.tensor(3.0),
+    )
+    torch.testing.assert_close(
+        _combine_measurement_objectives(
+            global_measurement=None,
+            fast_measurement=fast_loss,
+            fast_weight=1.0,
+        ),
+        torch.tensor(1.0),
+    )
 
 
 def test_closed_loop_terms_expose_physical_components_without_double_counting() -> None:

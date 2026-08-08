@@ -1980,8 +1980,9 @@
   `fast_projection` remained trainable, so the code misclassified the global
   discovery loss as trainable. A representative step logged global loss
   `5.287398` and fast-ROI loss `0.050371`, then optimised their average
-  `2.668884`; the global term had no gradient path and halved the useful fast
-  gradient while dominating the reported scalar loss.
+  `2.668884`; the global term had no gradient path while dominating the
+  reported scalar loss. ADR-081 separately corrects the later accidental
+  reallocation of its fixed coefficient.
 - **Decision:** Determine global-loss trainability only from the global
   detector, shared backbone stages, and global pyramid projections. Retain a
   frozen global measurement as a diagnostic, but exclude it from the
@@ -1996,3 +1997,33 @@
   campaign remains useful diagnostic evidence but cannot prove convergence.
   Because this is an objective change, training restarts weights-only from the
   same accepted reference under specification 1.14.
+
+## ADR-081 — Preserve branch coefficients and stage fast ROI before state dynamics
+
+- **Date:** 2026-08-08
+- **Status:** accepted implementation policy; qualification pending
+- **Context:** The specification-1.14 run was finite and supported but its
+  first 512-update candidate regressed every horizon (`0.3749701` versus
+  `0.3296688`), led by x RMSE (`0.4224541` versus `0.3300525`). Correctly
+  removing frozen global discovery exposed a second bug: when only fast ROI
+  remained, loss assembly renormalized it from coefficient `0.5` to `1.0`.
+  An exact fast-ROI-only transplant from that candidate reproduced most of the
+  damage at score `0.3602169`. Conversely, a fast-ROI-only transplant from the
+  earlier fixed-half-weight step 512 improved score to `0.3110033`, current
+  position RMSE to `0.2509520`, and every axis/horizon, while slightly
+  regressing velocity and coverage and still failing scenario guardrails.
+- **Decision:** Combine global and fast measurement objectives over the fixed
+  denominator `1 + fast_roi_pretrain_weight`, treating an absent/frozen branch
+  as zero rather than reallocating its coefficient. Add `fast_roi` as an
+  explicit scope and an optional paired late scope plus exact causal-update
+  transition. The next campaign uses 512 fast-ROI-only updates followed by
+  `state_dynamics`, preserving the accepted deployment incumbent throughout.
+- **Alternatives considered:** keep the doubled fast coefficient; lower the
+  learning rate globally; promote the rejected modular candidate; manually
+  splice checkpoints; continue training every module indefinitely; freeze all
+  learned state after the early ROI gain.
+- **Consequences:** Auxiliary gradient scale is invariant to support and
+  trainability. The staged campaign tests the observed localization gain while
+  giving velocity/coverage repair a disjoint later phase. Scope and boundary
+  are exact configuration semantics, and the intermediate ROI state remains
+  unaccepted until the ordinary broad selector passes.

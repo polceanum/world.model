@@ -475,6 +475,32 @@ the explicit CPU closed-loop device. Treat its initial full-manifest
 validation, launch state, and empty stderr as health evidence only until real
 optimizer/selector metrics are persisted.
 
+Specification 1.15 preserves the configured global/fast measurement
+coefficients when either branch is frozen or unsupported. It also permits one
+explicit causal scope transition. The evidence-led frozen-perception campaign
+uses:
+
+```bash
+python train.py \
+  --config configs/sustained_accuracy_mps_v3.yaml \
+  --initialize-from <accepted-reference-checkpoint> \
+  --run-name <timestamp>-staged-fast-roi-state-dynamics \
+  --device mps \
+  --set training.rgb_pretrain_steps=0 \
+  --set training.steps=8192 \
+  --set training.closed_loop_global_trainable_steps=0 \
+  --set training.closed_loop_trainable_scope=fast_roi \
+  --set training.closed_loop_late_trainable_scope=state_dynamics \
+  --set training.closed_loop_scope_transition_steps=512
+```
+
+The first 512 completed causal updates train only the ROI-exclusive projection
+and updater. From update 513 onward those tensors freeze and only belief
+update, identifier, and dynamics adapt. The resolved scopes and boundary are
+exact continuation semantics; changing them requires weights-only
+initialization. This schedule does not promote the step-512 candidate or relax
+any fixed-manifest guardrail.
+
 The convergence supervisor is also active under launchd label
 `com.polceanum.orpheus.convergence-20260803-112948`, monitoring initial trainer
 PID `31197`. It waits for the complete 16,384-step summary, verifies every

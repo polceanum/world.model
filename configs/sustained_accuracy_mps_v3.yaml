@@ -153,6 +153,11 @@ training:
   # exclusive head/stages so causal dynamics cannot be dominated indefinitely.
   closed_loop_global_trainable_steps: 512
   closed_loop_trainable_scope: state_dynamics_roi
+  # Optional fixed causal-update boundary for an explicitly staged scope.
+  # Production overrides may learn only the fast ROI initially, then freeze it
+  # while state/dynamics repair velocity, identity, and coverage.
+  closed_loop_late_trainable_scope: null
+  closed_loop_scope_transition_steps: null
   fast_roi_pretrain_weight: 1.0
   handoff_minimum_target_coverage: 0.05
   handoff_minimum_forecast_coverage: 0.05

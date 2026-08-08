@@ -14,7 +14,7 @@
   `fast_projection` caused a container-wide predicate to include a completely
   frozen global-discovery loss in the measurement objective. A representative
   step mixed global `5.287398` with fast ROI `0.050371` into `2.668884`,
-  diluting the useful gradient and making total-loss trends misleading.
+  contributing no global gradient while making total-loss trends misleading.
 - Global trainability now follows only detector/shared-stage/pyramid paths.
   Frozen global loss remains an explicit diagnostic and cannot enter or scale
   the fast-ROI objective. Added predicate and real closed-loop batch
@@ -27,6 +27,20 @@
   one-shot job uses MPS measurement and CPU closed-loop execution and is
   advancing its initialization validation with empty stderr; it has no
   corrected training metric or accuracy result yet.
+- Stopped that replacement at step 720 after its first trained validation
+  regressed score to `0.3749701`, x RMSE to `0.4224541`, and every horizon
+  despite finite state and intact coverage support.
+- Fixed a second objective bug: losing/fixing one RGB branch no longer
+  renormalizes the remaining branch over a smaller denominator. Fixed
+  `1:fast_weight` coefficients now remain fixed under missing support.
+- Exact modular qualification showed doubled-weight fast ROI reproduced most
+  of the regression (`0.3602169`), while the earlier half-weight fast ROI alone
+  improved score to `0.3110033`, current position to `0.2509520`, every axis,
+  every horizon, precision, collision F1, and identity, with remaining
+  velocity/coverage/scenario failures truthfully rejected.
+- Added an explicit `fast_roi` scope and a configured completed-causal-update
+  transition to a late scope. The next evidence-led curriculum uses 512
+  fast-ROI-only updates followed by `state_dynamics`; specification is 1.15.
 
 ### 2026-08-07 modular long-horizon qualification and fast-ROI isolation
 

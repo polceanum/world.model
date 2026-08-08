@@ -213,9 +213,19 @@
   closed-loop regression.
 - [x] Launch a fresh specification-1.14 frozen-fast-ROI campaign weights-only
   from the same accepted reference with clean source and unchanged protocol.
-- [ ] Inspect its first corrected optimizer metrics. Confirm they omit
+- [x] Inspect its first corrected optimizer metrics. Confirm they omit
   `measurement_global`, retain `frozen_global_measurement`, and show the
-  undiluted `measurement_fast` term before interpreting accuracy trends.
+  raw `measurement_fast` diagnostic before interpreting accuracy trends. The
+  step-512 regression exposed support-dependent branch reweighting.
+- [x] Preserve fixed global/fast coefficients when one branch is absent or
+  frozen; add direct branch-support regressions.
+- [x] Qualify fast-ROI-only tensors from both half- and full-weight step-512
+  candidates on the exact 32-episode manifest and record the opposing results.
+- [x] Add an explicit fast-ROI-only scope plus a paired, exact causal-update
+  transition to a late state/dynamics scope, with per-update phase metrics.
+- [ ] Launch the clean specification-1.15 campaign for 512 fast-ROI-only
+  updates followed by state/dynamics, then inspect the step-512 localization
+  checkpoint and subsequent velocity/coverage repair before extending it.
 - [ ] If identity churn persists after the structural repair, add an explicit
   supervised pairwise association-margin objective and test duplicate
   suppression against missed live tracks; do not tune appearance weight alone.

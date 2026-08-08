@@ -1425,7 +1425,12 @@ def pretrain_rgb_measurements(
         global_details,
         config.training.measurement_loss_weights,
     )
-    measurement = global_measurement
+    fast_weight = config.training.fast_roi_pretrain_weight
+    measurement = _combine_measurement_objectives(
+        global_measurement=global_measurement,
+        fast_measurement=None,
+        fast_weight=fast_weight,
+    )
     metrics = {name: float(value.detach().cpu()) for name, value in global_details.items()}
     metrics.update(
         measurement_localization_metrics(
@@ -1559,9 +1564,10 @@ def pretrain_rgb_measurements(
 
         if fast_measurement_losses:
             fast_measurement = torch.stack(fast_measurement_losses).mean()
-            fast_weight = config.training.fast_roi_pretrain_weight
-            measurement = (global_measurement + fast_weight * fast_measurement) / (
-                1.0 + fast_weight
+            measurement = _combine_measurement_objectives(
+                global_measurement=global_measurement,
+                fast_measurement=fast_measurement,
+                fast_weight=fast_weight,
             )
             for name, values in fast_detail_lists.items():
                 metrics[f"fast_{name}"] = float(torch.stack(values).mean().detach().cpu())
@@ -1697,6 +1703,32 @@ def _weighted_measurement_total(
     return torch.stack(
         [value * float(weights.get(name, 1.0)) for name, value in losses.items()]
     ).sum()
+
+
+def _combine_measurement_objectives(
+    *,
+    global_measurement: Tensor | None,
+    fast_measurement: Tensor | None,
+    fast_weight: float,
+) -> Tensor:
+    """Combine available RGB branches without support-dependent reweighting.
+
+    ``fast_weight`` declares fixed relative coefficients ``1:fast_weight``.
+    A temporarily absent or frozen branch contributes zero; it does not cause
+    the remaining branch to inherit the missing branch's coefficient.
+    """
+
+    if global_measurement is None and fast_measurement is None:
+        raise ValueError("at least one RGB measurement objective is required")
+    if not math.isfinite(fast_weight) or fast_weight <= 0.0:
+        raise ValueError("fast measurement weight must be finite and positive")
+    denominator = 1.0 + fast_weight
+    if global_measurement is None:
+        assert fast_measurement is not None
+        return fast_weight * fast_measurement / denominator
+    if fast_measurement is None:
+        return global_measurement / denominator
+    return (global_measurement + fast_weight * fast_measurement) / denominator
 
 
 def _global_measurement_has_trainable_path(module: torch.nn.Module) -> bool:
@@ -3586,18 +3618,15 @@ def run_closed_loop_batch(
     details = {name: _mean_losses(values, reference) for name, values in detail_lists.items()}
     global_measurement = details.pop("global_measurement", None)
     fast_measurement = details.pop("fast_measurement", None)
-    if global_measurement is not None and fast_measurement is not None:
-        fast_weight = config.training.fast_roi_pretrain_weight
-        details["measurement"] = (global_measurement + fast_weight * fast_measurement) / (
-            1.0 + fast_weight
+    if global_measurement is not None or fast_measurement is not None:
+        details["measurement"] = _combine_measurement_objectives(
+            global_measurement=global_measurement,
+            fast_measurement=fast_measurement,
+            fast_weight=config.training.fast_roi_pretrain_weight,
         )
+    if global_measurement is not None:
         details["measurement_global"] = global_measurement
-        details["measurement_fast"] = fast_measurement
-    elif global_measurement is not None:
-        details["measurement"] = global_measurement
-        details["measurement_global"] = global_measurement
-    elif fast_measurement is not None:
-        details["measurement"] = fast_measurement
+    if fast_measurement is not None:
         details["measurement_fast"] = fast_measurement
     details = _globally_weight_horizon_details(details, config, reference)
     terms = _group_closed_loop_terms(details, reference)

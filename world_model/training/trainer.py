@@ -2717,11 +2717,12 @@ def set_closed_loop_trainable_scope(
             model.identifier.requires_grad_(True)
         _freeze_disconnected_training_heads(model)
         return
-    if scope in {"state_dynamics_fast_roi", "state_dynamics_roi"}:
-        model.dynamics.requires_grad_(True)
-        model.updater.requires_grad_(True)
-        if model.identifier is not None:
-            model.identifier.requires_grad_(True)
+    if scope in {"fast_roi", "state_dynamics_fast_roi", "state_dynamics_roi"}:
+        if scope != "fast_roi":
+            model.dynamics.requires_grad_(True)
+            model.updater.requires_grad_(True)
+            if model.identifier is not None:
+                model.identifier.requires_grad_(True)
         rgb_module = model.observation_modules["rgb"]
         roi_updater = getattr(rgb_module, "roi_updater", None)
         if roi_updater is None:
@@ -2738,8 +2739,27 @@ def set_closed_loop_trainable_scope(
         return
     raise ValueError(
         "closed-loop trainable scope must be 'all', 'dynamics', "
-        "'state_dynamics', 'state_dynamics_fast_roi', or 'state_dynamics_roi'"
+        "'fast_roi', 'state_dynamics', 'state_dynamics_fast_roi', or "
+        "'state_dynamics_roi'"
     )
+
+
+def _closed_loop_trainable_scope_for_step(
+    config: OrpheusConfig,
+    *,
+    completed_step: int,
+) -> tuple[str, bool]:
+    """Resolve the declared causal scope at one completed-update boundary."""
+
+    primary = config.training.closed_loop_trainable_scope
+    late = config.training.closed_loop_late_trainable_scope
+    transition = config.training.closed_loop_scope_transition_steps
+    if late is None or transition is None:
+        return primary, False
+    causal_updates = max(0, completed_step - config.training.rgb_pretrain_steps)
+    if causal_updates >= transition:
+        return late, True
+    return primary, False
 
 
 def _freeze_disconnected_training_heads(model: OnlineWorldModel) -> None:
@@ -5061,12 +5081,21 @@ def train_from_config(
             < config.training.rgb_pretrain_steps
             + config.training.closed_loop_global_trainable_steps
         )
+        active_closed_loop_scope = config.training.closed_loop_trainable_scope
+        closed_loop_scope_transitioned = False
         if step < config.training.rgb_pretrain_steps:
             model.requires_grad_(True)
         else:
+            (
+                active_closed_loop_scope,
+                closed_loop_scope_transitioned,
+            ) = _closed_loop_trainable_scope_for_step(
+                config,
+                completed_step=step,
+            )
             set_closed_loop_trainable_scope(
                 model,
-                scope=config.training.closed_loop_trainable_scope,
+                scope=active_closed_loop_scope,
             )
         set_global_perception_trainable(
             model,
@@ -5135,6 +5164,15 @@ def train_from_config(
                     apply_perturbations=True,
                     include_measurement_supervision=True,
                     rollout_anchors_per_window=(config.training.rollout_anchors_per_window),
+                )
+                result.metrics["closed_loop_scope_transitioned"] = float(
+                    closed_loop_scope_transitioned
+                )
+                result.metrics["closed_loop_scope_fast_roi_only"] = float(
+                    active_closed_loop_scope == "fast_roi"
+                )
+                result.metrics["closed_loop_scope_state_dynamics_only"] = float(
+                    active_closed_loop_scope == "state_dynamics"
                 )
             for parameter_group in optimizer.param_groups:
                 parameter_group["lr"] = target_learning_rate

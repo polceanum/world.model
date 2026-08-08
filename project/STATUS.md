@@ -67,9 +67,10 @@ The audit found a concrete objective bug. Although metrics truthfully reported
 the RGB backbone. The ROI-only `fast_projection` therefore made completely
 frozen global discovery appear trainable. At the last logged step, global loss
 `5.2873979` and fast-ROI loss `0.0503706` were averaged into measurement loss
-`2.6688843`. The constant global term contributed no gradient, halved the
-useful fast-path gradient, dominated the scalar loss, and invalidated any loss-
-convergence interpretation.
+`2.6688843`. The constant global term contributed no gradient, dominated the
+scalar loss, and invalidated any loss-convergence interpretation. The later
+audit below distinguishes that diagnostic bug from the fixed fast-branch
+coefficient, which still had to remain one half.
 
 Specification 1.14 and ADR-080 now require a real trainable path. Global loss
 inclusion checks only the detector, shared stages, and pyramid projections.
@@ -105,7 +106,7 @@ unloaded LaunchAgent, final step 4,744, and this audit are authoritative. A
 fresh weights-only run from the same accepted reference is required; exact
 resume would retain the flawed objective.
 
-That replacement is now active at
+That replacement ran at
 `runs/20260808-161058-v9-protocol14-fast-roi-objective/` under the one-shot
 Standard/default LaunchAgent
 `com.polceanum.orpheus.protocol14-fast-roi-20260808-161058`. It launched from
@@ -113,10 +114,74 @@ clean pushed commit `c13d5d9402d1f6932492ddaffa144f1cdbde80a6`, uses the same
 accepted step-zero initialization, 8,192 causal-update target, zero global
 adaptation steps, and `state_dynamics_fast_roi` scope. Metadata records
 PyTorch 2.10.0, `mps_built=true`, `mps_available=true`, MPS measurement,
-CPU closed-loop execution, RGB-only runtime, and no oracle. PID `95136` is
-active at the status cut; the exact 32-episode initialization validation has
-completed 6/32 episodes with stderr empty. No corrected optimizer metric,
-trained validation, promotion, or convergence result exists yet.
+CPU closed-loop execution, RGB-only runtime, and no oracle. It was later
+stopped at step 720 after the first trained validation exposed the separate
+branch-weight bug documented above; it is not active, promoted, or converged.
+
+## 2026-08-08 — fixed branch weights and staged-scope repair
+
+The specification-1.14 campaign remained finite, supported, and resource-
+stable, with zero skipped updates, unchanged global/shared RGB tensors, and
+empty stderr. Its first trained candidate at step 512 nevertheless regressed
+score from `0.3296688` to `0.3749701`, current x RMSE from `0.3300525` to
+`0.4224541`, and every forecast horizon. It retained pooled current/horizon
+coverage and therefore was not a numerical or lifecycle collapse, but the
+accuracy regression was large enough to stop and preserve the run at logged
+step 720 rather than spend the remaining budget unchanged.
+
+Gradient evidence identified support-dependent branch reweighting. With both
+global and fast measurement objectives, `fast_roi_pretrain_weight=1.0` assigns
+each coefficient `0.5`. After frozen global discovery became diagnostic-only,
+the single-branch fallback silently assigned fast ROI coefficient `1.0`.
+Typical ROI gradients were 6–30 times the local cap, so this changed their
+direction relative to state/rollout gradients rather than merely changing the
+displayed scalar.
+
+Two exact 32-episode modular qualifications isolate the effect:
+
+- specification-1.14 step-512 fast ROI alone scores `0.3602169`, regressing
+  every horizon and reproducing most of the full candidate's damage;
+- the earlier fixed-half-weight step-512 fast ROI alone scores `0.3110033`
+  versus base `0.3296688`, lowers current position RMSE from `0.2841220` to
+  `0.2509520`, improves x/y/z and all five horizons, slightly improves
+  precision, collision F1, and ID switches, but slightly regresses velocity
+  and coverage and still fails 120 strict scenario/reference guardrails.
+
+Specification 1.15 and ADR-081 now keep the denominator `1 + fast_weight`
+fixed when either branch is unavailable. An unavailable branch contributes
+zero without donating its coefficient. The trainer also supports an explicit
+`fast_roi` scope and one exact causal-update scope transition. The next run is
+configured for 512 fast-ROI-only updates followed by `state_dynamics`, so the
+observed localization gain can be frozen while the later phase repairs
+velocity, identity, coverage, and rollout behavior without further perception
+drift. The intermediate state remains a candidate; promotion is unchanged.
+
+Verification on the staged-scope tree:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider \
+  tests/unit/test_config.py tests/unit/test_training_schedule.py \
+  tests/unit/test_training_objective_regressions.py \
+  tests/unit/test_fast_roi_supervision.py
+# 241 passed in 11.57s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider -m "not device"
+# 618 passed, 5 skipped, 1 deselected in 149.72s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check .
+# All checks passed
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
+  ruff format --check .
+# 188 files already formatted
+
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-pycache PYTHONPATH=. \
+  conda run -n orpheus python -m compileall -q \
+  train.py evaluate.py demo.py scripts world_model tests
+# exit 0
+```
 
 ## 2026-08-07 — long-horizon audit and frozen-backbone correction
 

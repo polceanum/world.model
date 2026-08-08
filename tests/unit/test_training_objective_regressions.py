@@ -732,7 +732,9 @@ def test_frozen_global_measurement_is_diagnostic_only_with_fast_roi_scope() -> N
     assert "measurement_global" not in result.metrics
     torch.testing.assert_close(
         result.loss_terms["measurement"].detach(),
-        torch.tensor(result.metrics["measurement_fast"]),
+        torch.tensor(result.metrics["measurement_fast"])
+        * config.training.fast_roi_pretrain_weight
+        / (1.0 + config.training.fast_roi_pretrain_weight),
     )
 
 

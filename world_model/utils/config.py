@@ -280,6 +280,11 @@ class TrainingConfig:
     closed_loop_learning_rate_scale: float = 0.1
     closed_loop_global_trainable_steps: int = 50
     closed_loop_trainable_scope: str = "all"
+    # Optional causal-update boundary for a declared two-scope curriculum.
+    # The primary scope applies before this many completed causal updates;
+    # the late scope applies from the boundary onward.
+    closed_loop_late_trainable_scope: str | None = None
+    closed_loop_scope_transition_steps: int | None = None
     # A measurement-only checkpoint may score well on the few proposals that
     # survive lifecycle gating while destroying the persistent runtime's
     # training support.  At the stage boundary, require both absolute and
@@ -968,17 +973,36 @@ class OrpheusConfig:
             raise ValueError("training.closed_loop_learning_rate_scale must lie in (0, 1]")
         if self.training.closed_loop_global_trainable_steps < 0:
             raise ValueError("training.closed_loop_global_trainable_steps must be nonnegative")
-        if self.training.closed_loop_trainable_scope not in {
+        valid_closed_loop_scopes = {
             "all",
             "dynamics",
+            "fast_roi",
             "state_dynamics",
             "state_dynamics_fast_roi",
             "state_dynamics_roi",
-        }:
+        }
+        if self.training.closed_loop_trainable_scope not in valid_closed_loop_scopes:
             raise ValueError(
                 "training.closed_loop_trainable_scope must be "
-                "'all', 'dynamics', 'state_dynamics', "
+                "'all', 'dynamics', 'fast_roi', 'state_dynamics', "
                 "'state_dynamics_fast_roi', or 'state_dynamics_roi'"
+            )
+        late_scope = self.training.closed_loop_late_trainable_scope
+        transition_steps = self.training.closed_loop_scope_transition_steps
+        if (late_scope is None) != (transition_steps is None):
+            raise ValueError(
+                "training.closed_loop_late_trainable_scope and "
+                "closed_loop_scope_transition_steps must be configured together"
+            )
+        if late_scope is not None and late_scope not in valid_closed_loop_scopes:
+            raise ValueError("training.closed_loop_late_trainable_scope is invalid")
+        if transition_steps is not None and (
+            isinstance(transition_steps, bool)
+            or not isinstance(transition_steps, int)
+            or transition_steps <= 0
+        ):
+            raise ValueError(
+                "training.closed_loop_scope_transition_steps must be a positive integer"
             )
         for name, value in (
             (
