@@ -1968,3 +1968,31 @@
   remain reproducible scientific evidence, not accepted baselines. Acceptance
   still requires a complete long run and the exact balanced selector, so this
   decision is a targeted training correction rather than a claim of success.
+
+## ADR-080 — Exclude frozen global discovery from the fast-ROI objective
+
+- **Date:** 2026-08-08
+- **Status:** accepted; corrected qualification pending
+- **Context:** The frozen-backbone campaign correctly reported
+  `global_perception_trainable=0`, and tensor comparison proved every shared
+  and global RGB parameter remained unchanged. Its loss assembly nevertheless
+  tested all parameters below the backbone container. The ROI-exclusive
+  `fast_projection` remained trainable, so the code misclassified the global
+  discovery loss as trainable. A representative step logged global loss
+  `5.287398` and fast-ROI loss `0.050371`, then optimised their average
+  `2.668884`; the global term had no gradient path and halved the useful fast
+  gradient while dominating the reported scalar loss.
+- **Decision:** Determine global-loss trainability only from the global
+  detector, shared backbone stages, and global pyramid projections. Retain a
+  frozen global measurement as a diagnostic, but exclude it from the
+  measurement objective whenever none of those components is trainable. Test
+  the trainability predicate and a complete causal batch under
+  `state_dynamics_fast_roi`.
+- **Alternatives considered:** ignore the constant because it has zero
+  derivative; compensate by doubling the learning rate; remove all global
+  diagnostics; continue the existing run and reinterpret its scalar loss.
+- **Consequences:** The fast-ROI objective now has its declared scale and the
+  reported total reflects trainable behavior. The interrupted 4,744-update
+  campaign remains useful diagnostic evidence but cannot prove convergence.
+  Because this is an objective change, training restarts weights-only from the
+  same accepted reference under specification 1.14.

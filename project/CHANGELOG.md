@@ -2,6 +2,26 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-08 frozen-loss objective-integrity repair
+
+- Audited the frozen-backbone campaign through 4,744 supported causal updates
+  and ten numbered validations (initialization plus steps 512–4,608). The
+  process, optimizer, frozen backbone, and finite state were healthy, but
+  candidates oscillated across axes/scenarios and none passed the unchanged
+  broad selector. Step 512 improved pooled RMSE at every forecast horizon but
+  regressed coverage, identity, and y-axis/scenario guardrails.
+- Found and fixed a causal objective bug: the trainable ROI-only
+  `fast_projection` caused a container-wide predicate to include a completely
+  frozen global-discovery loss in the measurement objective. A representative
+  step mixed global `5.287398` with fast ROI `0.050371` into `2.668884`,
+  diluting the useful gradient and making total-loss trends misleading.
+- Global trainability now follows only detector/shared-stage/pyramid paths.
+  Frozen global loss remains an explicit diagnostic and cannot enter or scale
+  the fast-ROI objective. Added predicate and real closed-loop batch
+  regressions, and advanced the specification to 1.14.
+- Intentionally stopped and unloaded the flawed one-shot campaign at step
+  4,744. Its artifacts are preserved; it is neither converged nor promoted.
+
 ### 2026-08-07 modular long-horizon qualification and fast-ROI isolation
 
 - Audited the protocol-13 causal campaign through 6,096 updates and eleven

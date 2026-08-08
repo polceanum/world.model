@@ -13,6 +13,7 @@ from world_model.runtime import OnlineWorldModel
 from world_model.training.loop import (
     TrainingBatchResult,
     _distance_gate_physical_matches,
+    _global_measurement_has_trainable_path,
     _globally_weight_horizon_details,
     _group_closed_loop_terms,
     _select_rollout_anchor_frames,
@@ -527,6 +528,19 @@ def test_state_dynamics_fast_roi_scope_keeps_shared_backbone_frozen() -> None:
         for parameter in projection.parameters()
     )
     assert not any(parameter.requires_grad for parameter in rgb.global_detector.parameters())
+    assert not _global_measurement_has_trainable_path(rgb)
+
+
+def test_global_measurement_trainability_ignores_roi_only_projection() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+    rgb = model.observation_modules["rgb"]
+
+    set_closed_loop_trainable_scope(model, scope="state_dynamics_roi")
+    assert _global_measurement_has_trainable_path(rgb)
+
+    set_closed_loop_trainable_scope(model, scope="state_dynamics_fast_roi")
+    assert all(parameter.requires_grad for parameter in rgb.backbone.fast_projection.parameters())
+    assert not _global_measurement_has_trainable_path(rgb)
 
 
 def test_closed_loop_terms_expose_physical_components_without_double_counting() -> None:

@@ -202,10 +202,19 @@
 - [x] Verify the complete 32-episode initialization retains the exact accepted
   score/hash linkage, then observe a finite supported step-8 update with zero
   global-perception trainability and no skipped draws or stderr.
-- [ ] Inspect the new frozen-backbone qualification at its declared validation steps
+- [x] Inspect the new frozen-backbone qualification at its declared validation steps
   for support, perception/interaction/global gradient balance, lifecycle
   precision/coverage, identity switches, collisions, calibration, every
   horizon, and every scenario slice. Stop on a repeated structural collapse.
+  The audit reached step 4,744 and found a frozen-global-loss objective bug.
+- [x] Make causal global-loss inclusion depend on a real trainable detector,
+  shared-stage, or pyramid path rather than the ROI-only fast projection; keep
+  frozen global loss diagnostic-only and cover the final objective in a real
+  closed-loop regression.
+- [ ] Launch and inspect a fresh specification-1.14 frozen-fast-ROI campaign
+  weights-only from the same accepted reference. Confirm early metrics omit
+  `measurement_global`, retain `frozen_global_measurement`, and show the
+  undiluted `measurement_fast` term before interpreting accuracy trends.
 - [ ] If identity churn persists after the structural repair, add an explicit
   supervised pairwise association-margin objective and test duplicate
   suppression against missed live tracks; do not tune appearance weight alone.

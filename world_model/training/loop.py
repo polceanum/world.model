@@ -1699,6 +1699,32 @@ def _weighted_measurement_total(
     ).sum()
 
 
+def _global_measurement_has_trainable_path(module: torch.nn.Module) -> bool:
+    """Return whether global-discovery supervision can update any parameter.
+
+    The RGB backbone's ``fast_projection`` belongs exclusively to the ROI
+    path.  Looking at every parameter under ``backbone`` therefore produces a
+    false positive for the frozen-shared-backbone training scope: the global
+    loss is constant with respect to every trainable tensor even though the
+    ROI projection remains trainable.
+    """
+
+    backbone = getattr(module, "backbone", None)
+    global_detector = getattr(module, "global_detector", None)
+    if backbone is None or global_detector is None:
+        raise TypeError("RGB module is missing backbone or global_detector")
+    global_modules = (
+        global_detector,
+        *backbone.stages,
+        *backbone.projections,
+    )
+    return any(
+        parameter.requires_grad
+        for component in global_modules
+        for parameter in component.parameters()
+    )
+
+
 def _valid_rollout_offsets(
     config: OrpheusConfig,
     frame_index: int,
@@ -3541,10 +3567,8 @@ def run_closed_loop_batch(
                 supervised,
                 config.training.measurement_loss_weights,
             )
-            global_trainable = torch.is_grad_enabled() and any(
-                parameter.requires_grad
-                for component_name in ("backbone", "global_detector")
-                for parameter in getattr(module, component_name).parameters()
+            global_trainable = torch.is_grad_enabled() and _global_measurement_has_trainable_path(
+                module
             )
             add(
                 "global_measurement" if global_trainable else "frozen_global_measurement",

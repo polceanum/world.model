@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.13
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026
+**Version:** 1.14
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity amendment 8 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5821,6 +5821,28 @@ improvement plus pooled, per-axis, every-horizon, lifecycle/identity, event,
 calibration, coverage, and per-scenario non-regression against the same fixed
 reference. Module composition is diagnostic evidence when rejected, not a
 means to relabel a Pareto tradeoff as an accepted baseline.
+
+---
+
+# Part XXXV — Trainable-path objective-integrity amendment
+
+## 184. Frozen auxiliary losses are diagnostics, not optimisation terms
+
+Every causal auxiliary loss must have a differentiable path to at least one
+currently trainable parameter before it enters the optimised total. A module
+container is not sufficient evidence: path-exclusive parameters under the
+same container do not make an unrelated output trainable. In particular, the
+ROI-only RGB `fast_projection` must not classify global discovery as
+trainable when the shared backbone stages, pyramid projections, and global
+detector are frozen.
+
+A frozen global-discovery loss may still be evaluated and logged under an
+explicit frozen diagnostic name. It must not be averaged with the fast-ROI
+measurement loss, change that loss's scale, consume gradient weight, or make
+the total loss appear to converge or oscillate. Scope regressions must test
+both `requires_grad` declarations and the final closed-loop objective terms.
+Correcting a trainable-path classification changes the training objective and
+therefore requires a fresh weights-only run rather than exact resume.
 
 ---
 

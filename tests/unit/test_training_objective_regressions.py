@@ -41,6 +41,7 @@ from world_model.training.trainer import (
     _rollout_selection_guardrail_failures,
     _rollout_selection_improves,
     _rollout_selection_metrics,
+    set_closed_loop_trainable_scope,
 )
 from world_model.utils.config import OrpheusConfig, load_config
 
@@ -707,6 +708,32 @@ def test_optional_rollout_nll_never_falls_back_to_unit_weight() -> None:
 
     assert without_explicit_weight.item() == 0.0
     torch.testing.assert_close(with_explicit_weight, torch.tensor(0.2))
+
+
+def test_frozen_global_measurement_is_diagnostic_only_with_fast_roi_scope() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    batch = collate_episodes([generate_episode(config, seed=9)])
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    set_closed_loop_trainable_scope(model, scope="state_dynamics_fast_roi")
+
+    result = run_closed_loop_batch(
+        model,
+        batch,
+        config,
+        window_steps=4,
+        apply_perturbations=False,
+        include_measurement_supervision=True,
+        rollout_anchors_per_window=1,
+        compute_future_correction=False,
+    )
+
+    assert "frozen_global_measurement" in result.metrics
+    assert "measurement_fast" in result.metrics
+    assert "measurement_global" not in result.metrics
+    torch.testing.assert_close(
+        result.loss_terms["measurement"].detach(),
+        torch.tensor(result.metrics["measurement_fast"]),
+    )
 
 
 def test_velocity_correction_is_a_distinct_weightable_objective() -> None:

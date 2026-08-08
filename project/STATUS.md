@@ -46,6 +46,65 @@ the next clean long run; strict convergence and acceptance remain unproven,
 and collision, identity, z-axis, coverage, and scenario-wide non-regression
 remain open
 
+## 2026-08-08 — frozen-loss audit and objective-integrity repair
+
+The frozen-backbone campaign at
+`runs/20260807-223146-v8-protocol13-frozen-fast-roi/` was intentionally stopped
+and its one-shot LaunchAgent unloaded after 4,744 supported causal updates.
+It completed initialization and nine post-initialization validations through
+step 4,608 with finite optimizer state, no shared/global RGB tensor drift, and
+no promotion. It did not collapse numerically, but it oscillated across axes
+and scenarios. The step-512 candidate had a better score (`0.3141055` versus
+`0.3296688`) and lower pooled RMSE at all five horizons
+(`[0.275420, 0.279301, 0.292794, 0.320858, 0.352984]` versus
+`[0.293176, 0.294921, 0.315401, 0.339072, 0.360882]`), but it regressed target
+coverage (`0.3735` versus `0.3820`), ID switches (`0.020151` versus
+`0.013548`), y accuracy, and 128 scenario guardrails. Later checkpoints traded
+these properties rather than converging broadly.
+
+The audit found a concrete objective bug. Although metrics truthfully reported
+`global_perception_trainable=0`, loss assembly considered every parameter under
+the RGB backbone. The ROI-only `fast_projection` therefore made completely
+frozen global discovery appear trainable. At the last logged step, global loss
+`5.2873979` and fast-ROI loss `0.0503706` were averaged into measurement loss
+`2.6688843`. The constant global term contributed no gradient, halved the
+useful fast-path gradient, dominated the scalar loss, and invalidated any loss-
+convergence interpretation.
+
+Specification 1.14 and ADR-080 now require a real trainable path. Global loss
+inclusion checks only the detector, shared stages, and pyramid projections.
+Under `state_dynamics_fast_roi`, global loss is retained as
+`frozen_global_measurement` diagnostics but excluded from the optimized
+measurement term. Predicate and complete causal-batch regressions pass.
+
+Verification on the repaired tree:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider \
+  tests/unit/test_training_schedule.py \
+  tests/unit/test_training_objective_regressions.py
+# 99 passed in 4.90s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider -m "not device"
+# 611 passed, 5 skipped, 1 deselected in 147.57s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check .
+# All checks passed
+
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-pycache PYTHONPATH=. \
+  conda run -n orpheus python -m compileall -q \
+  train.py evaluate.py demo.py scripts world_model tests
+# exit 0
+```
+
+The stopped run's `training_state.json` remains stale at `running` because a
+direct SIGTERM cannot execute Python's terminal-state writer; the absent PID,
+unloaded LaunchAgent, final step 4,744, and this audit are authoritative. A
+fresh weights-only run from the same accepted reference is required; exact
+resume would retain the flawed objective.
+
 ## 2026-08-07 — long-horizon audit and frozen-backbone correction
 
 The protocol-13 campaign at
