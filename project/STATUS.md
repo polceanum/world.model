@@ -105,6 +105,19 @@ unloaded LaunchAgent, final step 4,744, and this audit are authoritative. A
 fresh weights-only run from the same accepted reference is required; exact
 resume would retain the flawed objective.
 
+That replacement is now active at
+`runs/20260808-161058-v9-protocol14-fast-roi-objective/` under the one-shot
+Standard/default LaunchAgent
+`com.polceanum.orpheus.protocol14-fast-roi-20260808-161058`. It launched from
+clean pushed commit `c13d5d9402d1f6932492ddaffa144f1cdbde80a6`, uses the same
+accepted step-zero initialization, 8,192 causal-update target, zero global
+adaptation steps, and `state_dynamics_fast_roi` scope. Metadata records
+PyTorch 2.10.0, `mps_built=true`, `mps_available=true`, MPS measurement,
+CPU closed-loop execution, RGB-only runtime, and no oracle. PID `95136` is
+active at the status cut; the exact 32-episode initialization validation has
+completed 6/32 episodes with stderr empty. No corrected optimizer metric,
+trained validation, promotion, or convergence result exists yet.
+
 ## 2026-08-07 — long-horizon audit and frozen-backbone correction
 
 The protocol-13 campaign at

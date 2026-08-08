@@ -21,6 +21,12 @@
   regressions, and advanced the specification to 1.14.
 - Intentionally stopped and unloaded the flawed one-shot campaign at step
   4,744. Its artifacts are preserved; it is neither converged nor promoted.
+- Committed and pushed the repair as `c13d5d9`, then launched
+  `runs/20260808-161058-v9-protocol14-fast-roi-objective/` from the same
+  accepted reference and unchanged balanced protocol. The clean-source
+  one-shot job uses MPS measurement and CPU closed-loop execution and is
+  advancing its initialization validation with empty stderr; it has no
+  corrected training metric or accuracy result yet.
 
 ### 2026-08-07 modular long-horizon qualification and fast-ROI isolation
 
