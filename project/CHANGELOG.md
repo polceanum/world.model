@@ -41,6 +41,11 @@
 - Added an explicit `fast_roi` scope and a configured completed-causal-update
   transition to a late scope. The next evidence-led curriculum uses 512
   fast-ROI-only updates followed by `state_dynamics`; specification is 1.15.
+- Committed and pushed the staged repair as `2fea10a`, then launched
+  `runs/20260808-193216-v10-protocol15-staged-fast-roi-state-dynamics/` from
+  the same accepted reference. Its clean-source one-shot job is active in the
+  fixed initialization validation with MPS available and stderr empty; no
+  trained accuracy result exists yet.
 
 ### 2026-08-07 modular long-horizon qualification and fast-ROI isolation
 

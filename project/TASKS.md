@@ -223,9 +223,11 @@
   candidates on the exact 32-episode manifest and record the opposing results.
 - [x] Add an explicit fast-ROI-only scope plus a paired, exact causal-update
   transition to a late state/dynamics scope, with per-update phase metrics.
-- [ ] Launch the clean specification-1.15 campaign for 512 fast-ROI-only
-  updates followed by state/dynamics, then inspect the step-512 localization
-  checkpoint and subsequent velocity/coverage repair before extending it.
+- [x] Launch the clean specification-1.15 campaign for 512 fast-ROI-only
+  updates followed by state/dynamics from the accepted reference.
+- [ ] Inspect the step-512 localization checkpoint, prove the scope transition
+  in subsequent metrics/tensor deltas, and require velocity/coverage repair
+  before extending it.
 - [ ] If identity churn persists after the structural repair, add an explicit
   supervised pairwise association-margin objective and test duplicate
   suppression against missed live tracks; do not tune appearance weight alone.

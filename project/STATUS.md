@@ -100,6 +100,18 @@ PYTHONPYCACHEPREFIX=/private/tmp/orpheus-pycache PYTHONPATH=. \
 # exit 0
 ```
 
+The corrected staged campaign is active at
+`runs/20260808-193216-v10-protocol15-staged-fast-roi-state-dynamics/` under
+one-shot Standard/default LaunchAgent
+`com.polceanum.orpheus.protocol15-staged-20260808-193216`. It launched from
+clean pushed commit `2fea10aab0b96442ee0ae63a29a88d155e5dc646`, uses the
+same accepted step-zero reference and unchanged 32-episode selector, targets
+8,192 causal updates, trains `fast_roi` through update 512, then transitions
+to `state_dynamics`. Metadata records PyTorch 2.10.0, MPS built/available,
+MPS measurement, CPU closed-loop execution, RGB-only runtime, and no oracle.
+PID `98671` is active in initialization validation with stderr empty. No
+trained candidate or new accuracy result exists yet.
+
 The stopped run's `training_state.json` remains stale at `running` because a
 direct SIGTERM cannot execute Python's terminal-state writer; the absent PID,
 unloaded LaunchAgent, final step 4,744, and this audit are authoritative. A
