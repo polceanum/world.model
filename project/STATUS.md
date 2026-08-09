@@ -55,7 +55,71 @@ optimizer/support collapse; its latest candidate recovered current state,
 velocity, tracking, calibration, x/y, and four joint horizons relative to step
 1,024, but still failed the fixed reference on medium/long horizons and broad
 scenario balance, so it remains rejected; an exact step-1,536 resume is active
-toward the unchanged 8,192-step minimum without promotion
+under a corrected one-shot launcher toward the unchanged 8,192-step minimum
+without promotion
+
+## 2026-08-09 — exact-resume launcher repair and monitored continuation
+
+The first two post-audit launch attempts did not alter the authoritative
+step-1,536 checkpoint. The first used the run-local resolved configuration
+with a relative `project.output_dir`; together with the old launch helper's
+mandatory `--run-name`, that created a new nested run instead of an exact
+continuation. Its finite steps 1,544--1,568 were quarantined intact at
+`/private/tmp/20260809-171508-protocol17-accidental-nested-resume` and are not
+protocol-17 evidence. The second correctly resolved the original config but
+still passed `--run-name`; `train.py` rejected the already-existing target
+directory before loading or updating the model. The supervisor truthfully
+recorded that external trainer exit, and its state was archived at
+`convergence/convergence_supervisor_state_failed_resume1536b.json` before the
+explicitly acknowledged retry. `checkpoints/last.pt` remained the durable
+step-1,536 source throughout.
+
+`scripts/launch_training_once.py` now makes `--run-name` optional and omits it
+from the child command for an exact `--resume`; new runs still require an
+explicit name. A regression asserts that the resulting launch payload uses
+the source run's `checkpoints/last.pt` without injecting `--run-name`.
+Verification was:
+
+```bash
+PYTHONPATH=. conda run -n orpheus pytest -q \
+  tests/unit/test_launch_training_once.py
+# 3 passed in 0.67s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
+  ruff check scripts/launch_training_once.py \
+  tests/unit/test_launch_training_once.py
+# All checks passed!
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
+  ruff format --check scripts/launch_training_once.py \
+  tests/unit/test_launch_training_once.py
+# 2 files already formatted
+```
+
+The corrected one-shot trainer
+`com.polceanum.orpheus.protocol17-resume1536c-20260809-172500` is active with
+trainer PID `27142`; `training_state.json` records an in-place resume from the
+authoritative `checkpoints/last.pt`. Its first authoritative resumed metric is
+step 1,544/data draw 1,544: all 13 causal objective terms had support, the
+optimizer update applied, frozen-perception gradient was exactly zero, and
+raw/applied gradient norm was finite at `1.033924`. The corrected exact-source
+supervisor
+`com.polceanum.orpheus.protocol17-convergence-resume1536c-20260809-172500`
+is active with PID `27404`, has acquired the run lock, and is waiting for the
+unchanged step-8,192 segment. Both corrected stderr logs are empty. No
+convergence or promotion is claimed.
+
+The append-only `metrics.jsonl` contains two step-1,544 training rows. The
+original process had logged that update after its step-1,536 checkpoint but
+was stopped before a newer checkpoint; exact resume therefore restored step
+1,536 and deterministically replayed draw 1,544. The two records are identical
+in every model/data/loss/gradient field and differ only in elapsed time,
+finite-check timing, and process RSS. This is a telemetry-generation issue,
+not two optimizer updates in the resumed state. Convergence is unaffected:
+`world_model.training.convergence` reads tensor-verified numbered validation
+checkpoints and the terminal summary, never raw training-row counts. Until a
+post-campaign logger repair is committed, audits must canonicalize repeated
+`(split, step)` rows and retain both originals as restart evidence.
 
 ## 2026-08-09 — protocol-17 step-1,536 recovery and exact continuation
 
@@ -111,19 +175,10 @@ duration. Event/trunk decoupling therefore remains a measured follow-up only
 if later comparable validations regress again or establish a failed plateau.
 
 The original trainer and supervisor were unloaded after preserving the
-step-1,536 checkpoint during the audit, then the exact run was resumed from
-`checkpoints/last.pt` without changing source, configuration, optimizer, RNG,
-or sample semantics. The active one-shot trainer is
-`com.polceanum.orpheus.protocol17-resume1536-20260809-170433` (PID `25477`),
-and the exact-source supervisor is
-`com.polceanum.orpheus.protocol17-convergence-resume1536-20260809-170433`
-(PID `25555`) from `/private/tmp/orpheus-protocol17-runtime-6dba48e`.
-The supervisor retains the 8,192 minimum, 4,096 extensions, final-1,024/1%
-four-validation plateau rule, and 24,576 hard limit. The first post-resume log
-at step 1,544 used data draw 1,544, applied all 13 supported objectives with no
-skip/retry, kept perception gradient zero, and had finite raw/applied norm
-`1.033924`. Both new stderr logs are empty. No convergence or promotion is
-claimed.
+step-1,536 checkpoint during the audit. The operational incident and corrected
+exact continuation are recorded in the section above. The active supervisor
+retains the 8,192 minimum, 4,096 extensions, final-1,024/1% four-validation
+plateau rule, and 24,576 hard limit. No convergence or promotion is claimed.
 
 ## 2026-08-09 — rollout uncertainty-gradient repair
 

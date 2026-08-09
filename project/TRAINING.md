@@ -332,7 +332,20 @@ demos use the same CPU-deserialization rule so a saved optimizer is not
 duplicated in accelerator memory. In-place exact resume accepts only the
 source run's `checkpoints/last.pt`; selector/numbered checkpoints require a new
 run or `--initialize-from`. A pending terminal-validation marker is recoverable
-without an optimizer update.
+without an optimizer update. The persistent one-shot form deliberately omits
+`--run-name` for this case:
+
+```bash
+python scripts/launch_training_once.py \
+  --label com.polceanum.orpheus.resume-$(date -u +%Y%m%d-%H%M%S) \
+  --config configs/sustained_accuracy_mps_v3.yaml \
+  --resume runs/<source-run>/checkpoints/last.pt \
+  --device mps \
+  --set training.steps=<new-total>
+```
+
+Supplying `--run-name` changes the operation into a new run and must never be
+used for an exact in-place optimizer/RNG continuation.
 
 The v3 four-update qualification at
 `runs/20260802-110951-convergence-v3-hierarchical-clip-smoke/` proves finite

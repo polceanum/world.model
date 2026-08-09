@@ -2119,3 +2119,53 @@
   later evidence warrants intervention. Step 1,536 remains a rejected
   numbered checkpoint; the exact resumed trainer and supervisor preserve
   optimizer, RNG, data draw, source fingerprint, and convergence semantics.
+
+## ADR-085 — Exact in-place resume must not inject a run name
+
+- **Date:** 2026-08-09
+- **Status:** accepted and implemented
+- **Context:** `train.py` deliberately treats `--resume` without `--run-name`
+  as an in-place optimizer/RNG continuation from the source run's exact
+  `checkpoints/last.pt`. The macOS one-shot helper nevertheless required and
+  always emitted `--run-name`. With a run-local resolved config this could
+  create a nested sibling run; with the original config it correctly failed
+  on the occupied target directory. Neither attempt updated the authoritative
+  checkpoint, but the mismatch made the supported persistent-launch path
+  unable to express the trainer's exact-resume contract.
+- **Decision:** Make the launch helper's run name optional. Require it for a
+  new run or weights-only initialization, but omit the argument entirely for
+  exact resume and derive only default log filenames from the resume run
+  directory. Keep `train.py` as the final validator that exact resume points
+  to `checkpoints/last.pt`.
+- **Alternatives considered:** weaken `train.py` to accept an existing named
+  directory; reuse the run-local config and reinterpret nested artifacts;
+  launch an unmonitored background shell; discard the failed-attempt evidence.
+- **Consequences:** Persistent macOS launch now faithfully represents both new
+  and exact-resume workflows. Failed-attempt state remains auditable, the
+  accidental nested artifacts are quarantined rather than counted, and the
+  active protocol continues from the unchanged step-1,536 model, optimizer,
+  RNG, and data-draw state.
+
+## ADR-086 — Do not infer optimizer progress from raw append-only row counts
+
+- **Date:** 2026-08-09
+- **Status:** accepted monitoring policy; attempt-aware logging pending
+- **Context:** The stopped protocol-17 process wrote a step-1,544 training row
+  after its durable step-1,536 validation checkpoint. Exact resume correctly
+  restored checkpoint state and replayed draw 1,544, producing a second row.
+  Apart from elapsed time, finite-check duration, and process RSS, both rows
+  are identical. Rewriting the active append-only artifact would discard
+  useful crash/restart evidence, while changing numerical runtime source
+  during an exact campaign would invalidate later continuations.
+- **Decision:** Preserve both rows and canonicalize repeated `(split, step)`
+  records in manual training-dynamics audits. Convergence and promotion must
+  continue to consume only tensor/protocol-hash-verified numbered validation
+  checkpoints and terminal summaries. Add explicit attempt/resume generation
+  metadata after the active campaign reaches a terminal decision.
+- **Alternatives considered:** count every JSONL line as an update; delete the
+  first row; truncate the metrics file at every resume; change the running
+  protocol's runtime source; treat the deterministic replay as model wobble.
+- **Consequences:** The optimizer/RNG trajectory stays exact and all restart
+  evidence remains auditable. Raw line counts are not authoritative progress;
+  the checkpoint step, data-draw invariant, unique logged steps, process state,
+  and fixed validation checkpoints are.

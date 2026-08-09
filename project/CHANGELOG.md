@@ -64,6 +64,18 @@
   trainer and exact-source convergence supervisor. Step 1,544 consumed draw
   1,544 with all 13 objectives, no retry/skip, zero perception gradient,
   finite norm, stable memory, and empty stderr.
+- Found that the one-shot helper's mandatory `--run-name` violated the
+  trainer's exact in-place resume contract. Quarantined one accidental nested
+  continuation and preserved one pre-training directory-collision failure;
+  neither changed the authoritative step-1,536 checkpoint.
+- Made `--run-name` optional only for exact resume, added a launch-payload
+  regression, and relaunched the unchanged checkpoint under corrected
+  one-shot trainer/supervisor jobs. The first authoritative resumed update is
+  finite, supported, optimizer-applied, and perception-frozen.
+- Documented the duplicate append-only step-1,544 telemetry row produced when
+  an uncheckpointed logged tail is deterministically replayed after exact
+  resume. Verified that convergence consumes numbered validation checkpoints,
+  not raw training rows; an attempt-aware logger repair remains post-campaign.
 
 ### 2026-08-09 perception-local auxiliary-gradient repair
 

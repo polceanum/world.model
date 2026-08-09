@@ -51,3 +51,25 @@ def test_launch_payload_rejects_unsafe_label(tmp_path) -> None:
             stdout_path=tmp_path / "stdout.log",
             stderr_path=tmp_path / "stderr.log",
         )
+
+
+def test_exact_resume_payload_omits_run_name_for_in_place_contract(tmp_path) -> None:
+    repository = tmp_path / "repo"
+    resume = repository / "runs" / "campaign" / "checkpoints" / "last.pt"
+    payload = build_launchd_payload(
+        label="com.example.orpheus.resume",
+        repository_root=repository,
+        python_executable=Path("/conda/orpheus/bin/python"),
+        config_path=repository / "configs" / "run.yaml",
+        run_name=None,
+        device="mps",
+        initialize_from=None,
+        resume=resume,
+        overrides=["training.steps=8192"],
+        stdout_path=Path("/private/tmp/run.stdout.log"),
+        stderr_path=Path("/private/tmp/run.stderr.log"),
+    )
+
+    arguments = payload["ProgramArguments"]
+    assert "--run-name" not in arguments
+    assert arguments[arguments.index("--resume") + 1] == str(resume)

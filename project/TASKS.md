@@ -257,6 +257,10 @@
 - [ ] Monitor protocol 17's optimizer/support/identity/uncertainty, every-axis,
   every-horizon, and every-scenario dynamics through the declared minimum and
   plateau/extension rule without promoting any broad regression.
+- [ ] After protocol 17 reaches a terminal convergence decision, make resumed
+  metrics attempts explicit so an uncheckpointed pre-stop tail and its exact
+  replay cannot be naïvely double-counted. Preserve append-only evidence and
+  keep convergence based solely on verified validation checkpoints.
 - [x] Audit protocol 17 through the complete step-512 fixed validation and
   first late-phase block. Preserve its rejected 113-guardrail checkpoint;
   verify state/dynamics routing, support, gradients, finite state, and memory.
@@ -272,6 +276,10 @@
 - [x] Resume protocol 17 exactly from step 1,536 after the audit; verify sample
   draw 1,544, optimizer/support continuity, frozen perception, one trainer,
   one exact-source supervisor, Standard QoS, and empty stderr.
+- [x] Repair the one-shot launch helper so exact in-place `--resume` omits
+  `--run-name`; quarantine the accidental nested attempt, preserve the failed
+  launch evidence, and relaunch the unchanged step-1,536 checkpoint under one
+  monitored trainer and supervisor.
 - [ ] If identity churn persists after the structural repair, add an explicit
   supervised pairwise association-margin objective and test duplicate
   suppression against missed live tracks; do not tune appearance weight alone.

@@ -22,7 +22,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--label", required=True, help="Unique launchd job label")
     parser.add_argument("--config", required=True)
-    parser.add_argument("--run-name", required=True)
+    parser.add_argument(
+        "--run-name",
+        help=(
+            "Run name for a new run. Omit this for an exact in-place resume "
+            "from the source run's checkpoints/last.pt."
+        ),
+    )
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--initialize-from")
     source.add_argument("--resume")
@@ -45,7 +51,7 @@ def build_launchd_payload(
     repository_root: Path,
     python_executable: Path,
     config_path: Path,
-    run_name: str,
+    run_name: str | None,
     device: str,
     initialize_from: Path | None,
     resume: Path | None,
@@ -66,11 +72,10 @@ def build_launchd_payload(
         str(repository_root / "train.py"),
         "--config",
         str(config_path),
-        "--run-name",
-        run_name,
-        "--device",
-        device,
     ]
+    if run_name is not None:
+        program_arguments.extend(("--run-name", run_name))
+    program_arguments.extend(("--device", device))
     if initialize_from is not None:
         program_arguments.extend(("--initialize-from", str(initialize_from)))
     if resume is not None:
@@ -113,11 +118,17 @@ def main() -> int:
     for name, source in (("initialization checkpoint", initialize_from), ("resume", resume)):
         if source is not None and not source.is_file():
             raise FileNotFoundError(f"{name} not found: {source}")
+    if args.run_name is None and resume is None:
+        raise ValueError("--run-name is required unless performing an exact --resume")
+    artifact_name = args.run_name
+    if artifact_name is None:
+        assert resume is not None
+        artifact_name = resume.parent.parent.name
     stdout_path = (
-        Path(args.stdout or f"/private/tmp/{args.run_name}.stdout.log").expanduser().resolve()
+        Path(args.stdout or f"/private/tmp/{artifact_name}.stdout.log").expanduser().resolve()
     )
     stderr_path = (
-        Path(args.stderr or f"/private/tmp/{args.run_name}.stderr.log").expanduser().resolve()
+        Path(args.stderr or f"/private/tmp/{artifact_name}.stderr.log").expanduser().resolve()
     )
     plist_path = Path(args.plist or f"/private/tmp/{args.label}.plist").expanduser().resolve()
     payload = build_launchd_payload(
