@@ -257,6 +257,9 @@
 - [ ] Monitor protocol 17's optimizer/support/identity/uncertainty, every-axis,
   every-horizon, and every-scenario dynamics through the declared minimum and
   plateau/extension rule without promoting any broad regression.
+- [x] Audit protocol 17 through the complete step-512 fixed validation and
+  first late-phase block. Preserve its rejected 113-guardrail checkpoint;
+  verify state/dynamics routing, support, gradients, finite state, and memory.
 - [ ] If identity churn persists after the structural repair, add an explicit
   supervised pairwise association-margin objective and test duplicate
   suppression against missed live tracks; do not tune appearance weight alone.

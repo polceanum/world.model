@@ -26,6 +26,19 @@
 - Attached an exact-commit isolated convergence supervisor with the unchanged
   8,192 minimum, 4,096 extensions, four-validation/1% plateau decision, and
   24,576 hard limit; it is waiting durably for the first complete segment.
+- Audited all 64 supported fast-ROI optimizer blocks through step 512. No
+  skipped update, support collapse, nonfinite state, scope leak, retained-memory
+  growth after warm-up, or persistent gradient escalation occurred.
+- Rejected the fixed 32-episode step-512 candidate despite improved pooled
+  score, every joint horizon, and every current axis. It failed 113 unchanged
+  guardrails through velocity, coverage, identity, late axes, and scenario
+  tradeoffs; no checkpoint was promoted.
+- Confirmed the rollout-gradient repair improves the matched phase over
+  protocol 16 on score, current position, velocity, coverage, precision, four
+  horizons, and failure count, while preserving its remaining regressions.
+- Verified the first `state_dynamics` block has no optimized measurement or
+  fast support, exactly zero perception gradient, finite interaction gradient,
+  real trajectory support, an unclipped finite total norm, and stable memory.
 
 ### 2026-08-09 perception-local auxiliary-gradient repair
 

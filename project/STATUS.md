@@ -137,20 +137,54 @@ events confirm the 8,192-step minimum, 4,096-step extensions, final-1,024
 window, 1% four-validation plateau rule, and 24,576 hard limit. It is waiting
 for the initial segment and cannot overlap another trainer. Initialization
 completed all 32 episodes in `708.55 s` and exactly reproduced the accepted
-score `0.3296688`. Causal metric blocks through update 256 all had real support,
+score `0.3296688`. Causal metric blocks through update 512 all had real support,
 applied an optimizer update, skipped no gradients, kept interaction gradient
 zero in the `fast_roi` phase, and passed the post-step finite check. Across the
-four consecutive 64-update quarters, mean heterogeneous-window losses were
-`3.3888 / 3.5659 / 3.3182 / 2.5461` and mean raw gradients were
+first four consecutive 64-update quarters, mean heterogeneous-window losses
+were `3.3888 / 3.5659 / 3.3182 / 2.5461` and mean raw gradients were
 `4.2628 / 3.6357 / 3.9217 / 3.0525`. These non-identically supported losses
 are conditioning evidence, not accuracy/convergence metrics; nevertheless the
 absence of a rising loss or gradient envelope argues against early optimizer
-collapse. Every raw norm was finite within `0.9831–8.1992`; one sub-unit
-update remained unclipped, proving clipping does not mechanically normalize
-every batch. RSS high-water moved from `921 MB` on the first block to `984 MB`
-at update 128, then stayed exactly flat through update 256. Stderr remains
-empty. No protocol-17 trained validation checkpoint or convergence claim
-exists yet.
+collapse. Two later fast-perception outliers at updates 368 and 448 reached
+raw norms `10.5515` and `14.0315`; both were isolated measurement/variance
+events, correctly capped to approximately `1.0`, followed by ordinary norms,
+and left model/optimizer state finite. RSS high-water moved from `921 MB` on
+the first block to `984 MB` at update 128, then stayed exactly flat through
+update 512. Stderr remains empty.
+
+The complete fixed 32-episode step-512 candidate improved raw score
+`0.3296688 → 0.3189699` and current position RMSE
+`0.2841220 → 0.2504031 m`, with current x/y/z RMSE
+`0.268917 / 0.208281 / 0.269087 m`. Joint forecast RMSE improved at every
+horizon to `[0.262201, 0.270166, 0.305863, 0.334885, 0.357770] m`.
+Nevertheless it was correctly rejected by 113 unchanged guardrails: velocity
+worsened `1.055478 → 1.079254 m/s`, target coverage
+`0.3820 → 0.3755`, precision `0.361229 → 0.358216`, and identity-switch rate
+`0.013548 → 0.018421`. Collision F1 improved slightly
+`0.181818 → 0.189376`, and 90% position coverage moved closer to nominal
+`0.941595 → 0.931655`. Forecast coverage remained below reference at all five
+horizons. Long-horizon x regressed at 0.75 and 1.0 seconds and y regressed at
+0.5 and 0.75 seconds despite the lower joint RMSE.
+
+The failure breakdown is broad rather than a pooled-metric artifact: 29
+guardrails failed in `heavy_light_impacts`, 22 in `glancing_impacts`, 21 in
+`baseline`, 14 in `impulse_perturbation`, 8 in `camera_parallax`, 5 each in
+`reference_pairs` and `elastic_pairs`, 2 in `damped_contacts`, and 7 pooled.
+By metric family the 113 failures comprise 26 x, 21 y, 12 z, and 19 joint
+position failures; 20 coverage, 4 precision, 4 velocity, 3 identity, 3
+collision, and 1 calibration failure. The same phase under protocol 16 scored
+`0.3214190`, so variance-only rollout likelihood materially improved score,
+current position, velocity, coverage, precision, four of five horizons, and
+failure count relative to the duplicated-gradient objective; it slightly
+worsened 1.0-second RMSE, identity, collision F1, and calibration relative to
+that rejected candidate. No candidate is promoted.
+
+The first post-transition block at update 520 proves corrected late-phase
+routing: `state_dynamics` is active, optimized measurement is absent,
+`frozen_fast_measurement=1.678343` remains diagnostic, causal fast support and
+perception gradient are exactly zero, trajectory support is 138, interaction
+gradient is finite at `0.407258`, and total/applied norm is an unclipped
+`0.536599`. The run remains active; no convergence claim exists yet.
 
 ## 2026-08-09 — staged-campaign plateau and auxiliary-gradient repair
 
