@@ -94,6 +94,13 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
   ruff format --check scripts/launch_training_once.py \
   tests/unit/test_launch_training_once.py
 # 2 files already formatted
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
+  pytest -q -p no:cacheprovider \
+  tests/unit/test_convergence_supervisor.py \
+  tests/unit/test_launch_training_once.py \
+  tests/unit/test_train_entrypoint.py
+# 32 passed in 6.07s
 ```
 
 The corrected one-shot trainer
