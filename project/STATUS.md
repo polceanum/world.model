@@ -128,7 +128,6 @@ weights-only from the unchanged accepted step-zero reference, uses the fixed
 `6dba48eaa39a4df926dcdca085864ceddb95cb50`, PyTorch `2.10.0`, MPS
 built/available, MPS measurement plus CPU closed-loop execution, RGB-only
 runtime, and no oracle. Trainer PID `9466` is active with Standard QoS; the
-initialization heartbeat advanced through 5/32 episodes in `83.53 s` and both
 trainer and supervisor stderr files are empty.
 
 Exact-launch-source supervisor PID `9591` runs from detached clean clone
@@ -138,14 +137,19 @@ events confirm the 8,192-step minimum, 4,096-step extensions, final-1,024
 window, 1% four-validation plateau rule, and 24,576 hard limit. It is waiting
 for the initial segment and cannot overlap another trainer. Initialization
 completed all 32 episodes in `708.55 s` and exactly reproduced the accepted
-score `0.3296688`. Causal metric blocks through update 24 all had real support,
+score `0.3296688`. Causal metric blocks through update 128 all had real support,
 applied an optimizer update, skipped no gradients, kept interaction gradient
-zero in the `fast_roi` phase, and passed the post-step finite check. Their raw
-perception gradient norms were `6.1890`, `4.5935`, and `6.4077`, locally/globally
-clipped to approximately `1.0`; loss varied `2.4441 / 3.9769 / 3.1616` with
-the deliberately heterogeneous event/existence windows rather than increasing
-monotonically. RSS remained bounded at `935 MB` and stderr remained empty. No
-protocol-17 trained validation checkpoint or convergence claim exists yet.
+zero in the `fast_roi` phase, and passed the post-step finite check. The same
+invariants held across all 16 blocks through update 128. Comparing the first
+and second eight-block halves, mean raw gradient fell `4.2628 → 3.6357`, mean
+trajectory support rose `64.0 → 93.25`, and mean ROI support rose
+`25.875 → 34.0`; mean heterogeneous-window loss moved `3.3888 → 3.5659` and
+therefore supplies neither a convergence nor collapse claim. Raw norms remained
+finite within `1.0205–7.3045` and were locally/globally clipped to approximately
+`1.0`. RSS high-water moved from `921 MB` on the first block to `984 MB` at
+update 128 and remains an explicit long-run monitoring item; stderr remains
+empty. No protocol-17 trained validation checkpoint or convergence claim
+exists yet.
 
 ## 2026-08-09 — staged-campaign plateau and auxiliary-gradient repair
 
