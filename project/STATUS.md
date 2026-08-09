@@ -160,6 +160,20 @@ even though they could not support an update. Causal support now reports that
 count only when the fast measurement has a real nonzero derivative into the
 optimized total; raw observed slot counts remain available separately.
 
+A one-shot convergence supervisor is attached under LaunchAgent
+`com.polceanum.orpheus.protocol16-convergence-20260809-065710`, with supervisor
+PID `7587`. It executes from an isolated clean local clone of exact launch
+commit `310d419`; its runtime/source fingerprints match the trainer checkpoint
+provenance exactly. It waits for the complete 8,192-step segment, verifies
+every selector/tensor link, applies the declared four-consecutive-512-step and
+1% plateau rule, and may launch only whole 4,096-step exact-resume extensions
+up to the 24,576 hard limit. Durable events are in
+`runs/20260809-065710-v11-protocol16-perception-local-objectives/convergence_supervisor.jsonl`;
+supervisor stderr is empty. The later support-count reporting fix is not
+hot-loaded into this numerical trajectory; its raw observed count must be
+interpreted alongside the zero perception gradient and absent differentiable
+fast support. This preserves exact training semantics.
+
 ## 2026-08-08 — frozen-loss audit and objective-integrity repair
 
 The frozen-backbone campaign at

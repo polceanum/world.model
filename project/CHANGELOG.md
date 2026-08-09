@@ -29,6 +29,10 @@
   measurement term and exactly zero perception gradient. Corrected its
   follow-up support diagnostic so frozen observed ROI slots cannot appear as
   differentiable causal fast support.
+- Attached a one-shot exact-source convergence supervisor to protocol 16. It
+  verifies the initial 8,192-step segment and may launch only full 4,096-step
+  exact-resume extensions until the four-validation plateau rule or 24,576
+  hard limit; its launch event is durable and stderr is empty.
 
 ### 2026-08-08 frozen-loss objective-integrity repair
 

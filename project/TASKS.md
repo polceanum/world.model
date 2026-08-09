@@ -244,6 +244,10 @@
 - [x] Verify the first late-phase block omits optimized fast measurement and
   has zero perception gradient; make `causal_fast_support_count` exclude
   observed-but-frozen ROI slots instead of overstating causal support.
+- [x] Attach the exact-launch-source convergence supervisor with the 8,192
+  minimum, 4,096 extensions, four-validation/1% plateau rule, and 24,576 hard
+  limit; verify one supervisor PID, matching runtime fingerprint, durable wait
+  event, and empty stderr.
 - [ ] If identity churn persists after the structural repair, add an explicit
   supervised pairwise association-margin objective and test duplicate
   suppression against missed live tracks; do not tune appearance weight alone.
