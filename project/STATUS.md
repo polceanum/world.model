@@ -136,8 +136,16 @@ Exact-launch-source supervisor PID `9591` runs from detached clean clone
 `com.polceanum.orpheus.protocol17-convergence-20260809-091718`. Its durable
 events confirm the 8,192-step minimum, 4,096-step extensions, final-1,024
 window, 1% four-validation plateau rule, and 24,576 hard limit. It is waiting
-for the initial segment and cannot overlap another trainer. No protocol-17
-trained checkpoint or convergence claim exists yet.
+for the initial segment and cannot overlap another trainer. Initialization
+completed all 32 episodes in `708.55 s` and exactly reproduced the accepted
+score `0.3296688`. Causal metric blocks through update 24 all had real support,
+applied an optimizer update, skipped no gradients, kept interaction gradient
+zero in the `fast_roi` phase, and passed the post-step finite check. Their raw
+perception gradient norms were `6.1890`, `4.5935`, and `6.4077`, locally/globally
+clipped to approximately `1.0`; loss varied `2.4441 / 3.9769 / 3.1616` with
+the deliberately heterogeneous event/existence windows rather than increasing
+monotonically. RSS remained bounded at `935 MB` and stderr remained empty. No
+protocol-17 trained validation checkpoint or convergence claim exists yet.
 
 ## 2026-08-09 — staged-campaign plateau and auxiliary-gradient repair
 
