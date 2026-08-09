@@ -17,6 +17,13 @@
   one finite supported update, zero perception leakage, terminal RGB-only
   validation, finite checkpoint, and 1.20 GB maximum RSS. The smoke is not an
   accuracy promotion.
+- Committed/pushed specification 1.18 as `b646582`, stopped the superseded
+  protocol-17 trainer/supervisor at durable step 2,304, and launched
+  `runs/20260809-212649-protocol18-balanced-scenarios/` from the fixed-validated
+  step-512 candidate. Its clean-source one-shot trainer and exact-commit
+  supervisor are active with MPS measurement, CPU closed-loop execution,
+  Standard QoS, advancing 32-episode initialization heartbeat, and empty
+  stderr; no trained result exists yet.
 
 ### 2026-08-09 rollout uncertainty-gradient repair
 

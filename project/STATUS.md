@@ -61,7 +61,9 @@ camera/depth and glancing-contact forecasts; exact module ablations isolated
 late updater/dynamics drift under random two-scenario updates, deterministic
 eight-scenario optimizer batches are now implemented, and a real batch-eight
 smoke completed one finite supported update and terminal validation at 1.20 GB
-maximum RSS; the replacement campaign is pending immutable launch
+maximum RSS; the superseded protocol-17 jobs are stopped and the clean
+protocol-18 balanced campaign plus exact-source convergence supervisor are
+active in initialization validation
 
 ## 2026-08-09 — scenario-balanced optimization repair
 
@@ -100,6 +102,60 @@ maximum RSS `1,201,246,208` bytes. Its terminal eight-scenario RGB-only
 validation and finite checkpoint completed in `335.49 s`. This is integrity
 and throughput evidence only, not an accuracy promotion. Artifact:
 `/private/tmp/orpheus-balanced-smoke/20260809-211033-20260809-balanced-batch8-smoke/`.
+
+The repair was committed and pushed to `main` as clean commit `b646582`. The
+protocol-17 supervisor and trainer were then booted out; their last logged row
+is step 2,360 and their last durable checkpoint is step 2,304. Because direct
+SIGTERM cannot execute Python's terminal-state writer, its generated
+`training_state.json` remains stale at `running`; absent launchd jobs and this
+record are authoritative. No protocol-17 step after 2,048 was broad-validated
+or promoted.
+
+The new run is
+`runs/20260809-212649-protocol18-balanced-scenarios/`, initialized weights-only
+from protocol-17 `validation_step_000512.pt` (SHA-256
+`67f197f136de8be98e9cfdc3c070cfe69ec0499e51b1f77d2955dcbf8978472d`).
+One-shot Standard launchd trainer
+`com.polceanum.orpheus.protocol18-balanced-20260809-212627` is active as PID
+`38073`; metadata records clean commit `b646582`, PyTorch `2.10.0`, MPS
+built/available, MPS measurement, CPU closed loop, RGB-only runtime, and no
+oracle. Initialization heartbeat has completed three of 32 fixed episodes
+under unchanged selector hash
+`e31bf1cde4e4adf8603190b3258e086d6f749ad1d5689427d60e367f9fbb53a0`;
+trainer stderr is empty.
+
+Exact-source supervisor
+`com.polceanum.orpheus.protocol18-convergence-20260809-212627` is active as PID
+`38232` from detached clean clone
+`/private/tmp/orpheus-protocol18-runtime-b646582`. It requires 4,096 balanced
+updates, may extend by complete 2,048-update dataset passes, retains the
+four-validation/1% plateau rule, and has a 12,288-update hard limit. Supervisor
+source hash matches the repository and stderr is empty. No protocol-18 trained
+candidate, promotion, plateau, or convergence result exists yet.
+
+Verification for specification 1.18:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider -m 'not device'
+# 630 passed, 5 skipped, 1 deselected in 201.67s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider -m device
+# 1 passed, 635 deselected in 4.53s on host MPS
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check .
+# All checks passed
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
+  ruff format --check .
+# 190 files already formatted
+
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-protocol18-pycache PYTHONPATH=. \
+  conda run -n orpheus python -m compileall -q \
+  train.py evaluate.py demo.py scripts world_model tests
+# exit 0; git diff --check also passed
+```
 
 ## 2026-08-09 — exact-resume launcher repair and monitored continuation
 

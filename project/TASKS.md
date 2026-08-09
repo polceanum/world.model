@@ -10,7 +10,7 @@
   terminal RGB-only validation; verify finite gradients, causal support,
   frozen perception, seed/scenario membership, checkpointing, throughput, and
   maximum RSS.
-- [ ] Commit and push specification 1.18, stop the superseded protocol-17
+- [x] Commit and push specification 1.18, stop the superseded protocol-17
   trainer/supervisor at a durable checkpoint, and launch the clean immutable
   balanced campaign from protocol-17 step 512.
 - [ ] Inspect every 512-update fixed validation for pooled and per-scenario
