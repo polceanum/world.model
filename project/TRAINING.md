@@ -1,5 +1,21 @@
 # Training
 
+## Scenario-balanced shared-state campaign
+
+Protocol 17 proved that dataset-level balance is insufficient when batch size
+two serves eight heterogeneous dynamics families: later updater/dynamics
+updates can improve one regime while undoing another before the next broad
+validation. `training.scenario_balanced_batches` makes every optimizer update
+contain equal support from every scenario in the explicit seed manifest.
+Within-scenario pools shuffle independently, and the absolute data-draw index
+reconstructs exact resume order.
+
+`configs/sustained_accuracy_balanced_mps.yaml` uses batch eight (one episode per
+scenario), 4,096 updates, frozen RGB perception, and state/dynamics/identifier
+training from the protocol-17 step-512 candidate. A one-update CPU smoke used
+1.20 GB maximum RSS and completed finite checkpoint plus terminal validation.
+This does not alter or relax the batch-one 32-episode selector.
+
 Training uses deterministic on-the-fly sphere episodes and one architecture
 through measurement pretraining, closed-loop RGB correction, perturbation
 recovery, horizon-weighted rollout loss, event supervision, and observable

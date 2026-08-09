@@ -1,5 +1,30 @@
 # Design decisions
 
+## ADR-088 — Aggregate every scenario in each shared-model optimizer update
+
+- **Date:** 2026-08-09
+- **Status:** accepted and implemented; sustained qualification pending
+- **Context:** Protocol 17 remained finite and supported, yet steps 512--2,048
+  repeatedly exchanged accuracy between camera/depth, glancing contacts,
+  heavy/light impacts, and other regimes. Exact module swaps localized the
+  later regression to coupled updater/dynamics drift. The causal loader used
+  batch size two over eight randomly shuffled scenarios, so individual updates
+  optimized an incomplete and often conflicting view of the shared objective.
+- **Decision:** Add a manifest-bound scenario-balanced step-indexed sampler.
+  Each update contains equal support from every declared scenario, per-scenario
+  pools shuffle independently, and an absolute data-draw index reconstructs
+  exact continuation. Reject partial/unequal protocols. Initialize a new
+  state/dynamics campaign weights-only from the best step-512 candidate; keep
+  perception frozen and the full batch-one selector unchanged.
+- **Alternatives considered:** continue protocol 17 unchanged; reduce the
+  corrector gate globally; freeze only the updater; combine early updater with
+  late dynamics; lower learning rate on random pair batches; relax guardrails.
+- **Consequences:** One update is more expensive and uses about 1.20 GB in the
+  measured batch-eight smoke, but represents the actual shared objective and
+  remains practical on this host. This is a new optimization protocol under
+  specification 1.18, not an exact resume or an accuracy claim.
+
+
 ## ADR-001 — Persistent belief is authoritative
 
 - **Date:** 2026-07-26

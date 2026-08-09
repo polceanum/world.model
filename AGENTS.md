@@ -56,6 +56,9 @@ Working rules:
   model or claim convergence until its declared balanced minimum training
   coverage has completed and broad validation has reached a predeclared
   plateau.
+- When heterogeneous scenario updates demonstrably trade accuracy between
+  regimes, use deterministic manifest-bound scenario-balanced optimizer
+  batches; never describe a randomly shuffled dataset as per-update balance.
 - For the sustained campaign, plateau requires four exact consecutive
   512-step validation candidates with no acceptance and less than 1% raw
   primary-score improvement over the safe pre-window incumbent. Missing or

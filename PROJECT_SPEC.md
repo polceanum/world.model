@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.17
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing and rollout uncertainty-gradient isolation amendments 9 August 2026
+**Version:** 1.18
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, and scenario-balanced optimization amendments 9 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5894,6 +5894,33 @@ predictive variance through proper likelihood, but it must not train a mean
 for a future that was not identifiable at the causal anchor. Regressions must
 prove both properties directly: no mean gradient and a finite variance
 gradient that widens under an under-dispersed hidden outcome.
+
+## 188. Shared-regime optimization requires balanced gradient evidence
+
+Balanced validation cannot repair an optimizer that sees one or two randomly
+selected scenario families per update. When later shared-state updates improve
+one family while degrading another, a sustained profile may require each
+optimizer update to aggregate equal support from every declared scenario.
+
+Scenario-balanced sampling must:
+
+- bind scenario membership to the explicit dataset seed manifest;
+- include the same positive number of examples from every unique scenario in
+  each optimizer update;
+- shuffle within each scenario pool independently rather than cycling one
+  fixed tuple forever;
+- remain deterministic and exactly reconstructable from the absolute data-draw
+  index after interruption;
+- reject unequal pools, partial batches, and batch sizes that cannot represent
+  every scenario equally;
+- record every contributing seed and scenario in training metrics; and
+- leave the fixed, batch-one, full-manifest RGB-only selector unchanged.
+
+This is an optimization protocol change and therefore starts a new
+weights-only run. It does not average validation slices, relax per-scenario
+guardrails, or make a smooth training loss a convergence criterion. Batch size,
+scenario balancing, learning rate, trainable scope, and seed manifest remain
+checkpoint and exact-continuation semantics.
 
 ---
 

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import pytest
 import torch
 from torch.utils.data import DataLoader
 
-from world_model.training.sampling import StepIndexedBatchSampler
+from world_model.training.sampling import (
+    ScenarioBalancedStepIndexedBatchSampler,
+    StepIndexedBatchSampler,
+)
 
 
 def _legacy_loader_batches(
@@ -129,3 +133,66 @@ def test_unshuffled_step_order_resumes_across_partial_last_batch() -> None:
         [0, 1],
     ]
     assert resumed == uninterrupted
+
+
+def test_scenario_balanced_batches_are_exact_and_resume_deterministically() -> None:
+    common = {
+        "scenario_index_by_dataset_index": [index % 4 for index in range(32)],
+        "scenario_count": 4,
+        "batch_size": 8,
+        "seed": 733,
+        "shuffle": True,
+    }
+    uninterrupted = list(
+        ScenarioBalancedStepIndexedBatchSampler(
+            **common,
+            start_step=0,
+            stop_step=11,
+        )
+    )
+    resumed = [
+        *ScenarioBalancedStepIndexedBatchSampler(
+            **common,
+            start_step=0,
+            stop_step=5,
+        ),
+        *ScenarioBalancedStepIndexedBatchSampler(
+            **common,
+            start_step=5,
+            stop_step=11,
+        ),
+    ]
+
+    assert resumed == uninterrupted
+    assert all(len(batch) == 8 for batch in uninterrupted)
+    assert all(
+        [sum(index % 4 == scenario for index in batch) for scenario in range(4)] == [2, 2, 2, 2]
+        for batch in uninterrupted
+    )
+    assert all(
+        len({index for batch in uninterrupted[epoch : epoch + 4] for index in batch}) == 32
+        for epoch in (0, 4)
+    )
+
+
+def test_scenario_balanced_sampler_rejects_incomplete_or_unequal_protocols() -> None:
+    with pytest.raises(ValueError, match="multiple of scenario_count"):
+        ScenarioBalancedStepIndexedBatchSampler(
+            scenario_index_by_dataset_index=[0, 1, 2, 3],
+            scenario_count=4,
+            batch_size=6,
+            seed=0,
+            shuffle=True,
+            start_step=0,
+            stop_step=1,
+        )
+    with pytest.raises(ValueError, match="equal nonempty scenario pools"):
+        ScenarioBalancedStepIndexedBatchSampler(
+            scenario_index_by_dataset_index=[0, 0, 1],
+            scenario_count=2,
+            batch_size=2,
+            seed=0,
+            shuffle=True,
+            start_step=0,
+            stop_step=1,
+        )

@@ -1,5 +1,25 @@
 # Tasks
 
+## Active convergence target — scenario-balanced shared optimization
+
+- [x] Diagnose protocol-17 step-2,048 per-axis/per-scenario regression with
+  exact learned-corrector scale and updater/dynamics checkpoint ablations.
+- [x] Implement deterministic, exact-resumable batches with equal support from
+  all eight scenario families and strict configuration validation.
+- [x] Complete a real batch-eight checkpoint-initialized causal update plus
+  terminal RGB-only validation; verify finite gradients, causal support,
+  frozen perception, seed/scenario membership, checkpointing, throughput, and
+  maximum RSS.
+- [ ] Commit and push specification 1.18, stop the superseded protocol-17
+  trainer/supervisor at a durable checkpoint, and launch the clean immutable
+  balanced campaign from protocol-17 step 512.
+- [ ] Inspect every 512-update fixed validation for pooled and per-scenario
+  current/velocity, x/y/z, every horizon, identity, lifecycle, events,
+  calibration, support, optimizer state, and memory.
+- [ ] Continue through at least 4,096 balanced updates and only declare
+  convergence after four comparable fixed validations satisfy the existing
+  plateau rule; extend rather than promote a broad regression.
+
 ## Supported sustained scaled accuracy campaign
 
 - [x] Stop and preserve the invalid v2 campaign after proving that zero-gradient

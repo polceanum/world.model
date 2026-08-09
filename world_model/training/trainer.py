@@ -53,7 +53,10 @@ from world_model.training.loop import (
     run_closed_loop_batch,
     select_closed_loop_window,
 )
-from world_model.training.sampling import StepIndexedBatchSampler
+from world_model.training.sampling import (
+    ScenarioBalancedStepIndexedBatchSampler,
+    StepIndexedBatchSampler,
+)
 from world_model.utils.artifacts import timestamped_artifact_path
 from world_model.utils.config import OrpheusConfig, save_resolved_config
 from world_model.utils.device import DeviceInfo, select_device
@@ -2357,14 +2360,29 @@ def _make_loader(
         raise ValueError("batch_size_override must be positive")
     batch_size = min(requested_batch_size, max(1, episodes))
     if start_step is not None and stop_step is not None:
-        batch_sampler = StepIndexedBatchSampler(
-            dataset_size=len(dataset),
-            batch_size=batch_size,
-            seed=config.project.seed + (0 if split == "train" else 10_000),
-            shuffle=shuffle,
-            start_step=start_step,
-            stop_step=stop_step,
-        )
+        sampler_seed = config.project.seed + (0 if split == "train" else 10_000)
+        if split == "train" and config.training.scenario_balanced_batches:
+            scenario_count = len(config.simulator.scenario_mixture)
+            batch_sampler = ScenarioBalancedStepIndexedBatchSampler(
+                scenario_index_by_dataset_index=[
+                    int(seed) % scenario_count for seed in dataset.manifest.seeds
+                ],
+                scenario_count=scenario_count,
+                batch_size=batch_size,
+                seed=sampler_seed,
+                shuffle=shuffle,
+                start_step=start_step,
+                stop_step=stop_step,
+            )
+        else:
+            batch_sampler = StepIndexedBatchSampler(
+                dataset_size=len(dataset),
+                batch_size=batch_size,
+                seed=sampler_seed,
+                shuffle=shuffle,
+                start_step=start_step,
+                stop_step=stop_step,
+            )
         worker_generator = torch.Generator(device="cpu")
         worker_generator.manual_seed(config.project.seed + (20_000 if split == "train" else 30_000))
         return DataLoader(
@@ -5669,6 +5687,7 @@ def train_from_config(
         "train_episodes": config.training.train_episodes,
         "validation_episodes": config.training.validation_episodes,
         "scenario_families": list(config.simulator.scenario_mixture),
+        "scenario_balanced_batches": config.training.scenario_balanced_batches,
         "rgb_pretrain_steps": min(config.training.steps, config.training.rgb_pretrain_steps),
         "closed_loop_steps": max(0, config.training.steps - config.training.rgb_pretrain_steps),
         "device": (

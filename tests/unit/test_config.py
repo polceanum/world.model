@@ -562,6 +562,43 @@ def test_scenario_mixture_rejects_duplicates_that_break_validation_coverage() ->
         )
 
 
+def test_scenario_balanced_batches_require_complete_equal_batch_support() -> None:
+    config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=[
+            "simulator.scenario_mixture=[baseline,elastic_pairs]",
+            "training.validation_episodes=2",
+            "training.train_episodes=8",
+            "training.batch_size=4",
+            "training.scenario_balanced_batches=true",
+        ],
+    )
+    assert config.training.scenario_balanced_batches
+
+    with pytest.raises(ValueError, match="multiple of the scenario count"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[
+                "simulator.scenario_mixture=[baseline,elastic_pairs]",
+                "training.validation_episodes=2",
+                "training.train_episodes=8",
+                "training.batch_size=3",
+                "training.scenario_balanced_batches=true",
+            ],
+        )
+    with pytest.raises(ValueError, match="train_episodes must be divisible"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[
+                "simulator.scenario_mixture=[baseline,elastic_pairs]",
+                "training.validation_episodes=2",
+                "training.train_episodes=10",
+                "training.batch_size=4",
+                "training.scenario_balanced_batches=true",
+            ],
+        )
+
+
 @pytest.mark.parametrize("profile_name", ["toy_hard.yaml", "cloud_single_gpu.yaml"])
 def test_noisy_profiles_use_noise_robust_structured_rgb_threshold(
     profile_name: str,

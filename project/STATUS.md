@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-09
-**Specification:** `PROJECT_SPEC.md` 1.17
+**Specification:** `PROJECT_SPEC.md` 1.18
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -56,7 +56,50 @@ velocity, tracking, calibration, x/y, and four joint horizons relative to step
 1,024, but still failed the fixed reference on medium/long horizons and broad
 scenario balance, so it remains rejected; an exact step-1,536 resume is active
 under a corrected one-shot launcher toward the unchanged 8,192-step minimum
-without promotion
+without promotion; fixed step 2,048 improved selected slices but regressed
+camera/depth and glancing-contact forecasts; exact module ablations isolated
+late updater/dynamics drift under random two-scenario updates, deterministic
+eight-scenario optimizer batches are now implemented, and a real batch-eight
+smoke completed one finite supported update and terminal validation at 1.20 GB
+maximum RSS; the replacement campaign is pending immutable launch
+
+## 2026-08-09 — scenario-balanced optimization repair
+
+Protocol 17 remains numerically healthy, but its complete fixed step-2,048
+candidate exposed continued cross-regime wobble rather than broad convergence.
+The weighted score was `0.3594687`, versus `0.3385591` at step 1,536 and the
+`0.3296688` fixed reference. Current z RMSE regressed to `0.288938 m`; the
+camera-parallax slice reached about `0.2528 m` current error and glancing
+impacts `0.5116 m`, both with large depth regressions, while heavy/light
+impacts improved strongly. The candidate was rejected with 120 fixed-reference
+guardrail failures.
+
+Exact fixed-manifest scale and module ablations showed that reducing the
+learned-corrector scale only traded metrics. Restoring the step-512 updater
+into the step-2,048 model repaired camera/glancing depth but regressed other
+scenarios, while the inverse composition failed badly. This localizes the
+failure to coupled updater/dynamics drift rather than perception, finite state,
+or one bad gate. The batch-two loader gave each update only a random pair from
+the eight scenario families, so no update represented the declared shared
+objective.
+
+Specification 1.18 adds deterministic manifest-bound scenario-balanced
+optimizer sampling. `training.scenario_balanced_batches=true` requires complete
+equal support; each scenario pool shuffles independently and exact continuation
+is reconstructed from the absolute draw. The new
+`configs/sustained_accuracy_balanced_mps.yaml` uses one example from every
+scenario per update, freezes the qualified RGB stack, and trains updater,
+identifier, and dynamics from protocol-17 step 512 for 4,096 updates / 32,768
+episode draws.
+
+A real CPU smoke initialized from `validation_step_000512.pt`, ingested all
+eight scenario names in one update, and reported loss `3.636137`, raw/applied
+gradient norms `1.395285 / 1.045683`, all 13 causal objective terms, 188
+trajectory-support rows, zero perception gradient, no skipped update, and
+maximum RSS `1,201,246,208` bytes. Its terminal eight-scenario RGB-only
+validation and finite checkpoint completed in `335.49 s`. This is integrity
+and throughput evidence only, not an accuracy promotion. Artifact:
+`/private/tmp/orpheus-balanced-smoke/20260809-211033-20260809-balanced-batch8-smoke/`.
 
 ## 2026-08-09 — exact-resume launcher repair and monitored continuation
 

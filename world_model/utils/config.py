@@ -275,6 +275,10 @@ class RuntimeConfig:
 @dataclass(frozen=True)
 class TrainingConfig:
     batch_size: int = 4
+    # When enabled, every training batch contains equal support from every
+    # declared simulator scenario. This is an optimization-protocol choice,
+    # not a validation balancing shortcut.
+    scenario_balanced_batches: bool = False
     steps: int = 1000
     learning_rate: float = 3e-4
     closed_loop_learning_rate_scale: float = 0.1
@@ -969,6 +973,20 @@ class OrpheusConfig:
             )
         if self.training.learning_rate <= 0:
             raise ValueError("training.learning_rate must be positive")
+        if not isinstance(self.training.scenario_balanced_batches, bool):
+            raise ValueError("training.scenario_balanced_batches must be a boolean")
+        if self.training.scenario_balanced_batches:
+            scenario_count = len(simulator.scenario_mixture)
+            if self.training.batch_size % scenario_count != 0:
+                raise ValueError(
+                    "training.batch_size must be a multiple of the scenario count "
+                    "when scenario_balanced_batches is enabled"
+                )
+            if self.training.train_episodes % self.training.batch_size != 0:
+                raise ValueError(
+                    "training.train_episodes must be divisible by training.batch_size "
+                    "when scenario_balanced_batches is enabled"
+                )
         if not 0 < self.training.closed_loop_learning_rate_scale <= 1:
             raise ValueError("training.closed_loop_learning_rate_scale must lie in (0, 1]")
         if self.training.closed_loop_global_trainable_steps < 0:

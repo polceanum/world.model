@@ -2,6 +2,22 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-09 scenario-balanced optimization
+
+- Audited protocol-17 step 2,048 and exact module/scale ablations. Training is
+  finite, but later updater/dynamics updates trade camera/glancing depth
+  accuracy against heavy/light and other scenario gains; no candidate was
+  promoted.
+- Added strict deterministic scenario-balanced step-indexed batches so every
+  shared-model optimizer update contains equal support from all declared
+  regimes and resumes exactly from its absolute draw.
+- Added configuration/loader/sampler regressions and the production
+  `configs/sustained_accuracy_balanced_mps.yaml` profile.
+- Completed a real eight-scenario causal smoke from the step-512 checkpoint:
+  one finite supported update, zero perception leakage, terminal RGB-only
+  validation, finite checkpoint, and 1.20 GB maximum RSS. The smoke is not an
+  accuracy promotion.
+
 ### 2026-08-09 rollout uncertainty-gradient repair
 
 - Stopped protocol 16 and its convergence supervisor at causal update 552

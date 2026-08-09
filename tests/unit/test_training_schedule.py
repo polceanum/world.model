@@ -66,6 +66,40 @@ def test_worker_loader_bounds_prefetch_and_does_not_persist_workers() -> None:
     assert loader.persistent_workers is False
 
 
+def test_training_loader_batches_every_declared_scenario_when_balanced() -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    scenarios = ("reference_pairs", "baseline", "elastic_pairs", "damped_contacts")
+    config = replace(
+        source,
+        simulator=replace(source.simulator, scenario_mixture=scenarios),
+        training=replace(
+            source.training,
+            batch_size=4,
+            train_episodes=16,
+            validation_episodes=4,
+            scenario_balanced_batches=True,
+            num_workers=0,
+        ),
+    )
+    config.validate()
+
+    loader = _make_loader(
+        config,
+        split="train",
+        episodes=16,
+        shuffle=True,
+        start_step=0,
+        stop_step=5,
+    )
+    batches = list(loader)
+
+    assert len(batches) == 5
+    assert all(
+        tuple(sorted(batch["metadata"]["scenario"])) == tuple(sorted(scenarios))
+        for batch in batches
+    )
+
+
 def test_fixed_pretraining_sweeps_every_adjacent_pair_for_every_loader_batch() -> None:
     loader_batches = 4
     total_frames = 16

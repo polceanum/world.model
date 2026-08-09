@@ -111,6 +111,7 @@ def main() -> int:
                     "train_episodes": config.training.train_episodes,
                     "validation_episodes": config.training.validation_episodes,
                     "batch_size": config.training.batch_size,
+                    "scenario_balanced_batches": (config.training.scenario_balanced_batches),
                     "nominal_training_episode_draws": (
                         config.training.steps * config.training.batch_size
                     ),
