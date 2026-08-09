@@ -87,6 +87,10 @@
   collision, uncertainty, correction, parameter-observability, axis-local,
   and horizon-resolved distributions. Ten canonical blocks through step 1,608
   pass; no health metric justifies interrupting the unchanged protocol.
+- Traced the step-1,624 identity outlier to a deliberately perturbed,
+  contact-heavy recovery batch with valid fully visible targets. Added pooled
+  perturbed-versus-clean identity accounting; clean logged identity rate is
+  lower and post-1,536 clean blocks contain no switch.
 
 ### 2026-08-09 perception-local auxiliary-gradient repair
 

@@ -70,6 +70,22 @@ def _metric_distribution(records: list[dict[str, Any]], key: str) -> dict[str, f
     )
 
 
+def _pooled_identity_summary(records: list[dict[str, Any]]) -> dict[str, float | int]:
+    switches = sum(
+        float(record.get("physical_distance_gated_identity_switches", 0.0)) for record in records
+    )
+    associations = sum(
+        float(record.get("physical_distance_gated_object_frame_associations", 0.0))
+        for record in records
+    )
+    return {
+        "blocks": len(records),
+        "switches": switches,
+        "associations": associations,
+        "switch_rate": switches / associations if associations else 0.0,
+    }
+
+
 def _decoded_list_length(value: Any) -> int | None:
     if not isinstance(value, str):
         return None
@@ -289,6 +305,17 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
     live_physical_diagnostics["forecast_target_coverage_by_horizon"] = {
         horizon: _metric_distribution(training, f"physical_forecast_target_coverage@{horizon}")
         for horizon in _HORIZONS
+    }
+    perturbed_training = [
+        record for record in training if float(record.get("perturbed_updates", 0.0)) > 0.0
+    ]
+    unperturbed_training = [
+        record for record in training if float(record.get("perturbed_updates", 0.0)) == 0.0
+    ]
+    live_physical_diagnostics["identity_by_recovery_perturbation"] = {
+        "all": _pooled_identity_summary(training),
+        "perturbed": _pooled_identity_summary(perturbed_training),
+        "unperturbed": _pooled_identity_summary(unperturbed_training),
     }
     return {
         "run_directory": str(run_directory),

@@ -33,6 +33,9 @@ def _record(step: int, **overrides: object) -> dict[str, object]:
         "loss_rollout_position_x": 0.1,
         "physical_rollout_position_rmse_m@1.000s": 0.3,
         "physical_forecast_target_coverage@1.000s": 0.6,
+        "physical_distance_gated_identity_switches": 1.0,
+        "physical_distance_gated_object_frame_associations": 10.0,
+        "perturbed_updates": 1.0,
     }
     record.update(overrides)
     return record
@@ -81,6 +84,21 @@ def test_audit_canonicalizes_replayed_tail_without_double_counting(tmp_path) -> 
     assert diagnostics["rollout_position_loss_by_axis"]["x"]["median"] == 0.1
     assert diagnostics["rollout_position_rmse_by_horizon_m"]["1.000s"]["median"] == 0.3
     assert diagnostics["forecast_target_coverage_by_horizon"]["1.000s"]["median"] == 0.6
+    assert diagnostics["identity_by_recovery_perturbation"] == {
+        "all": {"blocks": 2, "switches": 2.0, "associations": 20.0, "switch_rate": 0.1},
+        "perturbed": {
+            "blocks": 2,
+            "switches": 2.0,
+            "associations": 20.0,
+            "switch_rate": 0.1,
+        },
+        "unperturbed": {
+            "blocks": 0,
+            "switches": 0,
+            "associations": 0,
+            "switch_rate": 0.0,
+        },
+    }
 
 
 def test_audit_reports_numerical_support_and_scope_failures(tmp_path) -> None:

@@ -2187,7 +2187,8 @@
   numerical, optimizer, causal-support, objective-support, gradient,
   frozen-scope, or data-draw invariant violations. Report training
   lifecycle/identity/event/uncertainty, correction, observability, axis, and
-  horizon distributions together with fixed-validation axes/horizons, while reserving
+  horizon distributions together with recovery-perturbed versus clean pooled
+  identity rates and fixed-validation axes/horizons, while reserving
   convergence and promotion exclusively for tensor-verified complete
   validation checkpoints and the declared plateau selector.
 - **Alternatives considered:** infer convergence from smoothed training loss;

@@ -163,6 +163,20 @@ represented, and every axis and horizon had finite supported diagnostics.
 Future correction improvement was approximately neutral at median
 `-0.000102 m`; this is monitored but is not a fixed-validation regression.
 
+Step 1,624 produced the largest late-phase single-batch identity value: three
+distance-gated switches over 16 associations. Exact seed/window inspection
+showed this was a deliberately hard recovery batch, not malformed truth: it
+used two injected belief perturbations, one pair collision, five ground
+collisions, fully visible valid targets, and no hidden external actuation.
+Replay-aware pooled accounting through step 1,640 gives 11 switches over 521
+associations (`0.021113`) in perturbed blocks versus 2 over 183 (`0.010929`)
+in clean blocks; the latter two occurred earlier, while all post-1,536 clean
+blocks have zero switches. Overall logged rate is 13/704 (`0.018466`), close
+to fixed step-1,536 validation's `0.016119`. The monitor now reports these
+strata explicitly. This is a recovery/contact difficulty signal to recheck at
+step 2,048, not evidence of an unperturbed lifecycle collapse or a reason to
+interrupt the protocol.
+
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
   pytest -q -p no:cacheprovider \

@@ -452,7 +452,8 @@ python scripts/audit_training_dynamics.py \
 The command exits nonzero on numerical, optimizer, support, frozen-scope, or
 data-progress failure and prints live lifecycle/identity/event/uncertainty,
 axis/horizon, correction, and parameter-observability distributions together
-with fixed-validation axes/horizons, but it never uses heterogeneous training
+with pooled recovery-perturbed versus clean identity rates and fixed-validation
+axes/horizons, but it never uses heterogeneous training
 loss as a convergence signal. Duplicate exact-
 resume tail rows remain in the append-only source and must agree in all
 model/data metrics; the audit counts their latest replay once.
