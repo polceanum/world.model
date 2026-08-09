@@ -441,6 +441,19 @@ writes explicit starting, failure, and completed state artifacts. Never add
 validation, tail stdout or inspect
 `training_progress.json` for exact per-episode counts, timings, seed/scenario,
 PID, and protocol hash; partial progress never becomes selector evidence.
+For causal optimizer health, use the replay-aware read-only audit:
+
+```bash
+python scripts/audit_training_dynamics.py \
+  --run runs/<timestamped-run> \
+  --after-step <first-step-to-audit>
+```
+
+The command exits nonzero on numerical, optimizer, support, frozen-scope, or
+data-progress failure and prints fixed-validation axes/horizons, but it never
+uses heterogeneous training loss as a convergence signal. Duplicate exact-
+resume tail rows remain in the append-only source and must agree in all
+model/data metrics; the audit counts their latest replay once.
 Training workers start only on the first actual draw. Post-step and checkpoint
 finite-state checks terminate before corrupt parameters/moments can become a
 resumable artifact. See `project/STATUS.md` for the exact failures, smokes, and

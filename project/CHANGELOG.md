@@ -76,6 +76,13 @@
   an uncheckpointed logged tail is deterministically replayed after exact
   resume. Verified that convergence consumes numbered validation checkpoints,
   not raw training rows; an attempt-aware logger repair remains post-campaign.
+- Added a read-only sustained-training dynamics auditor with replay-row
+  equivalence checks, optimizer/support/scope/data-progress failure detection,
+  loss/gradient/support/RSS summaries, scenario draw counts, and pooled,
+  identity, event, uncertainty, per-axis, and every-horizon validation output.
+- Ran it on live protocol 17 through unique logged step 1,592: all eight
+  canonical post-1,536 blocks were finite, supported, optimizer-applied, and
+  perception-frozen with no skipped draw or memory high-water growth.
 
 ### 2026-08-09 perception-local auxiliary-gradient repair
 

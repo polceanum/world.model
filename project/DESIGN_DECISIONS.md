@@ -2169,3 +2169,30 @@
   evidence remains auditable. Raw line counts are not authoritative progress;
   the checkpoint step, data-draw invariant, unique logged steps, process state,
   and fixed validation checkpoints are.
+
+## ADR-087 — Separate live optimizer health from fixed-validation convergence
+
+- **Date:** 2026-08-09
+- **Status:** accepted and implemented
+- **Context:** Per-batch loss and gradients vary substantially across the
+  balanced collision/camera/damping curriculum, and an exact resume may
+  preserve then replay an uncheckpointed logged tail. Manual line counts or a
+  smooth-loss expectation can therefore misdiagnose both healthy hard batches
+  and duplicated telemetry as collapse. Conversely, waiting only for the next
+  32-episode validation can leave genuine finite/support/scope failures
+  undetected for hours.
+- **Decision:** Use a read-only deterministic audit for live health. Count the
+  latest row for each `(split, step)`, require duplicate replay rows to agree
+  in every model/data metric except process timing and RSS, and fail on
+  numerical, optimizer, causal-support, objective-support, gradient,
+  frozen-scope, or data-draw invariant violations. Report training
+  distributions and fixed-validation axes/horizons, while reserving
+  convergence and promotion exclusively for tensor-verified complete
+  validation checkpoints and the declared plateau selector.
+- **Alternatives considered:** infer convergence from smoothed training loss;
+  ignore training until validation; delete duplicate rows; treat every JSONL
+  line as a distinct optimizer update; weaken the fixed broad selector.
+- **Consequences:** Numerical collapse can be caught promptly without
+  mistaking curriculum variance for failure, and restart telemetry remains
+  auditable. A passing health report proves only that optimization is
+  functioning; it cannot promote weights or establish accuracy convergence.

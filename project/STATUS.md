@@ -128,6 +128,53 @@ checkpoints and the terminal summary, never raw training-row counts. Until a
 post-campaign logger repair is committed, audits must canonicalize repeated
 `(split, step)` rows and retain both originals as restart evidence.
 
+## 2026-08-09 — deterministic live training-dynamics audit
+
+`scripts/audit_training_dynamics.py` now turns the sustained-run health checks
+into a repeatable read-only command. It canonicalizes append-only replay rows
+by `(split, step)` while retaining and reporting the originals, requires
+replayed model/data metrics to agree apart from process timing/RSS fields, and
+fails on nonfinite metrics, missing optimizer updates, absent causal/objective
+support, nonpositive gradients, state/dynamics perception-gradient leakage,
+or a broken `training_data_draw_step = step + skipped_draws` invariant. It
+also reports loss/gradient/support distributions, clipping, RSS, scenario
+draw counts, and fixed-validation pooled, identity, event, uncertainty,
+per-axis, and every-horizon evidence. It does not use training loss as a
+convergence decision.
+
+The live protocol-17 audit through unique logged step 1,592 passed with eight
+canonical blocks from step 1,536, eight applied optimizer updates, no skipped
+draw, trajectory support of 27--73 rows, raw gradient norm
+`0.274486--1.327438`, loss `0.734846--4.035967`, three clipped blocks, bounded
+RSS at or below the earlier `983797760`-byte high-water mark, and no failure.
+The two step-1,544 rows are identical in all model/data metrics and are
+reported as one canonical block plus one preserved replay record. No new
+fixed validation exists beyond the rejected step-1,536 candidate, so this is
+health evidence only, not accuracy or convergence evidence.
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
+  pytest -q -p no:cacheprovider \
+  tests/unit/test_audit_training_dynamics.py
+# 4 passed in 0.06s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
+  ruff check scripts/audit_training_dynamics.py \
+  tests/unit/test_audit_training_dynamics.py
+# All checks passed!
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
+  ruff format --check scripts/audit_training_dynamics.py \
+  tests/unit/test_audit_training_dynamics.py
+# 2 files already formatted
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python \
+  scripts/audit_training_dynamics.py \
+  --run runs/20260809-091718-v12-protocol17-rollout-variance-only \
+  --after-step 1536
+# status: pass; last_training_step: 1592; failures: []
+```
+
 ## 2026-08-09 — protocol-17 step-1,536 recovery and exact continuation
 
 The complete fixed 32-episode step-1,536 validation at
