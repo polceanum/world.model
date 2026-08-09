@@ -150,6 +150,16 @@ RGB-only runtime, and no oracle. Trainer PID `5760` is active in initialization
 validation; its first episode completed in `10.560 s` and stderr is empty. No
 protocol-16 trained checkpoint or accuracy result exists yet.
 
+The first protocol-16 late-phase block at step 520 proves the repaired
+objective route is active: `loss_measurement` and `measurement_fast` are
+absent, `frozen_fast_measurement=1.684341` remains diagnostic,
+`perception_gradient_norm_pre_clip=0`, trajectory support is nonzero, and the
+total raw gradient is finite at `0.486013`. The same row exposed a metrics-only
+follow-up: `causal_fast_support_count` still reported 48 observed frozen slots
+even though they could not support an update. Causal support now reports that
+count only when the fast measurement has a real nonzero derivative into the
+optimized total; raw observed slot counts remain available separately.
+
 ## 2026-08-08 — frozen-loss audit and objective-integrity repair
 
 The frozen-backbone campaign at

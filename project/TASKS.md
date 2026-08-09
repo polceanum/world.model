@@ -241,6 +241,9 @@
 - [ ] Inspect protocol 16 at step 512 and every later exact validation; require
   broad velocity, coverage, identity, every-axis/horizon, and scenario
   non-regression before promotion or extension.
+- [x] Verify the first late-phase block omits optimized fast measurement and
+  has zero perception gradient; make `causal_fast_support_count` exclude
+  observed-but-frozen ROI slots instead of overstating causal support.
 - [ ] If identity churn persists after the structural repair, add an explicit
   supervised pairwise association-margin objective and test duplicate
   suppression against missed live tracks; do not tune appearance weight alone.

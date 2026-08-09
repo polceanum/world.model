@@ -424,7 +424,7 @@ def test_global_measurement_cannot_impersonate_supported_fast_roi_gradient() -> 
         support_terms={"fast_measurement": fast_loss},
     )
 
-    assert _causal_training_support(result) == (False, 0.0, 2.0, 0.0)
+    assert _causal_training_support(result) == (False, 0.0, 0.0, 0.0)
 
 
 @pytest.mark.parametrize("value", [math.nan, math.inf, -1, 1.5, "2", True])

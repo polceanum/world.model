@@ -25,6 +25,10 @@
   2.10/MPS availability, MPS measurement plus CPU causal execution, and an
   advancing initialization heartbeat with empty stderr; it has no trained
   accuracy result yet.
+- Verified protocol 16's first post-transition block has no optimized
+  measurement term and exactly zero perception gradient. Corrected its
+  follow-up support diagnostic so frozen observed ROI slots cannot appear as
+  differentiable causal fast support.
 
 ### 2026-08-08 frozen-loss objective-integrity repair
 

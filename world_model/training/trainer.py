@@ -1760,8 +1760,9 @@ def _causal_training_support(
             and bool(torch.isfinite(measurement_derivative).all())
             and bool(torch.any(measurement_derivative != 0))
         )
+    effective_fast_support = fast_support if fast_differentiable else 0.0
     supported = (trajectory_support > 0.0 and trajectory_differentiable) or fast_differentiable
-    return supported, trajectory_support, fast_support, objective_term_support
+    return supported, trajectory_support, effective_fast_support, objective_term_support
 
 
 def _rollout_validation_checkpoint_metrics(
