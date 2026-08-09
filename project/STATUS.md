@@ -49,7 +49,11 @@ plateau after exact ablations exposed fast-measurement gradient leakage into
 the frozen-perception state/dynamics phase; protocol 16 verified that repair
 but was intentionally stopped at update 552 after a further audit found that
 rollout likelihood duplicated the deterministic forecast-mean gradient; both
-objective defects are repaired, but no corrected convergence result exists yet
+objective defects are repaired, but no corrected convergence result exists
+yet; protocol 17 has now completed its step-1,024 fixed validation without
+optimizer/support collapse, but its state/dynamics phase traded better z/event
+behavior for worse x/y and medium-to-long rollout accuracy, so that candidate
+was also rejected and training continues without promotion
 
 ## 2026-08-09 — rollout uncertainty-gradient repair
 
@@ -185,6 +189,40 @@ routing: `state_dynamics` is active, optimized measurement is absent,
 perception gradient are exactly zero, trajectory support is 138, interaction
 gradient is finite at `0.407258`, and total/applied norm is an unclipped
 `0.536599`. The run remains active; no convergence claim exists yet.
+
+All 64 logged `state_dynamics` blocks from update 520 through 1,024 applied an
+optimizer update and passed finite-state checks. Fifty-eight had state support,
+51 had rollout support, and 48 exposed all 13 causal objective families; six
+were legitimate negative-lifecycle-only windows rather than empty draws.
+Median trajectory support was 65 and median raw gradient norm was `0.756674`.
+Seven event-conditioned interaction gradients used the isolated local cap and
+only one block reached the global cap; every following spike recovered, the
+perception gradient stayed exactly zero, and RSS high-water stayed exactly
+`983797760` bytes. Rollout NLL had median `-0.501280`; one finite damped-contact
+outlier reached `17.204458` and did not recur.
+
+The complete step-1,024 validation finished all 32 episodes in `921.14 s` with
+the unchanged protocol hash. It was not promoted. Score regressed from the
+reference/step-512 values `0.3296688 / 0.3189699` to `0.3413697`. Current
+position remained better than reference but worse than step 512 at
+`0.2693728 m`; velocity was `1.067599 m/s`. Current x/y/z RMSE was
+`0.307633 / 0.225661 / 0.268559 m`. Relative to step 512, all five z horizons
+improved to `[0.273445, 0.261571, 0.270725, 0.291681, 0.309352] m`, collision
+F1 improved `0.189376 -> 0.240363`, identity churn improved
+`0.018421 -> 0.016469`, and every forecast-coverage horizon improved slightly.
+However, x horizons regressed to
+`[0.337209, 0.375243, 0.454931, 0.507940, 0.529834] m`, y regressed at four of
+five horizons, and joint horizons regressed to
+`[0.282900, 0.294747, 0.329719, 0.360698, 0.375831] m`.
+
+Reference-guardrail failures increased `113 -> 134`. Baseline failures fell
+`21 -> 2`, coverage `20 -> 18`, and identity `3 -> 2`, but x-position failures
+rose `26 -> 35`, joint position `19 -> 25`, and failures broadened in reference,
+elastic, damped, and camera scenarios. Mutable/training support failures stayed
+zero. The trainer resumed normally at update 1,032 with all 13 objective
+families and 70 trajectory-support items; exact-source training continues to
+the step-1,536 validation to determine whether the axis tradeoff is transient
+or worsening. No convergence claim exists.
 
 ## 2026-08-09 — staged-campaign plateau and auxiliary-gradient repair
 

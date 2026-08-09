@@ -260,6 +260,10 @@
 - [x] Audit protocol 17 through the complete step-512 fixed validation and
   first late-phase block. Preserve its rejected 113-guardrail checkpoint;
   verify state/dynamics routing, support, gradients, finite state, and memory.
+- [x] Audit protocol 17 through the complete step-1,024 validation. Preserve
+  its rejected 134-guardrail checkpoint; record the z/collision/coverage gains,
+  x/y and medium-to-long joint regressions, zero support failures, finite
+  optimizer behavior, frozen perception, and flat memory.
 - [ ] If identity churn persists after the structural repair, add an explicit
   supervised pairwise association-margin objective and test duplicate
   suppression against missed live tracks; do not tune appearance weight alone.

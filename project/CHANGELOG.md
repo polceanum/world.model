@@ -39,6 +39,16 @@
 - Verified the first `state_dynamics` block has no optimized measurement or
   fast support, exactly zero perception gradient, finite interaction gradient,
   real trajectory support, an unclipped finite total norm, and stable memory.
+- Audited all 64 logged state/dynamics blocks through step 1,024: every update
+  applied with finite state, six lifecycle-only windows remained a minority,
+  local interaction spikes recovered, frozen-perception gradient stayed zero,
+  and RSS remained flat.
+- Rejected the complete step-1,024 candidate. It improved z rollouts, collision
+  F1, identity churn, baseline behavior, and forecast coverage relative to step
+  512, but regressed x/y and medium-to-long joint rollouts; score worsened to
+  `0.3413697` and reference-guardrail failures increased `113 -> 134`.
+- Confirmed mutable/training support failures remained zero and continued the
+  exact campaign without promotion toward the step-1,536 fixed validation.
 
 ### 2026-08-09 perception-local auxiliary-gradient repair
 
