@@ -138,6 +138,18 @@ and it did not recur at that scale; this remains a conditioning diagnostic,
 not evidence of numerical collapse. The corrected objective requires a fresh
 weights-only qualification. No protocol-15 candidate is promoted.
 
+The corrected replacement is active at
+`runs/20260809-065710-v11-protocol16-perception-local-objectives/` under
+one-shot Standard/default LaunchAgent
+`com.polceanum.orpheus.protocol16-perception-local-20260809-065710`. It
+launched from clean pushed commit `310d41922b4489126ca9710b76093c5cf4a2ee04`,
+the same accepted step-zero reference, the unchanged 32-episode selector, and
+the same 512-update `fast_roi` then `state_dynamics` schedule. Metadata records
+PyTorch `2.10.0`, MPS built/available, MPS measurement, CPU closed-loop,
+RGB-only runtime, and no oracle. Trainer PID `5760` is active in initialization
+validation; its first episode completed in `10.560 s` and stderr is empty. No
+protocol-16 trained checkpoint or accuracy result exists yet.
+
 ## 2026-08-08 — frozen-loss audit and objective-integrity repair
 
 The frozen-backbone campaign at

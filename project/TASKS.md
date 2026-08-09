@@ -235,7 +235,10 @@
   diagnostics and add real closed-loop objective/support regressions.
 - [x] Synchronize checkpoint `specification_version` metadata with the
   authoritative 1.16 contract and test that the two cannot drift silently.
-- [ ] Launch a clean specification-1.16 weights-only replacement and require
+- [x] Commit/push specification 1.16 as `310d419` and launch a clean
+  weights-only replacement with verified Standard QoS, host MPS, clean source,
+  one trainer, advancing initialization heartbeat, and empty stderr.
+- [ ] Inspect protocol 16 at step 512 and every later exact validation; require
   broad velocity, coverage, identity, every-axis/horizon, and scenario
   non-regression before promotion or extension.
 - [ ] If identity churn persists after the structural repair, add an explicit

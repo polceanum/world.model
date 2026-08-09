@@ -19,6 +19,12 @@
   advanced the specification to 1.16. A fresh qualification is required.
 - Synchronized checkpoint specification metadata from stale `1.12` to `1.16`
   and added a contract-header consistency regression.
+- Committed/pushed the repair as `310d419` and launched
+  `runs/20260809-065710-v11-protocol16-perception-local-objectives/` from the
+  same accepted reference. The one-shot job records clean source, PyTorch
+  2.10/MPS availability, MPS measurement plus CPU causal execution, and an
+  advancing initialization heartbeat with empty stderr; it has no trained
+  accuracy result yet.
 
 ### 2026-08-08 frozen-loss objective-integrity repair
 
