@@ -2056,3 +2056,31 @@
   specification 1.16 and unchanged broad selection. Checkpoint metadata is
   synchronized to the same specification version and tested against the
   authoritative document header.
+
+## ADR-083 — Isolate rollout uncertainty from forecast-mean learning
+
+- **Date:** 2026-08-09
+- **Status:** accepted; corrected qualification pending
+- **Context:** Protocol 16 verified perception-local loss routing and remained
+  finite through update 552, but a full objective trace found rollout Gaussian
+  NLL consumed the live mean error while the deterministic per-axis/horizon
+  point loss already supervised the same trajectory. Low predicted variance
+  could therefore duplicate and amplify a point-mean gradient. The NLL also
+  retained this path when deterministic targets were correctly censored after
+  an unseen external actuation, teaching a mean for a causally unidentifiable
+  outcome. State uncertainty had already detached its mean error, so rollout
+  behavior was inconsistent with the declared calibration contract.
+- **Decision:** Detach rollout mean error inside Gaussian NLL. Realised future
+  outcomes train forecast variance through likelihood; only identifiable
+  deterministic rollout point losses train the trajectory mean. Preserve NLL
+  after hidden actuation solely as a variance-calibration signal and directly
+  regress both absent mean gradient and finite widening variance gradient.
+- **Alternatives considered:** retain both gradients and tune the NLL weight;
+  clamp inverse variance more aggressively; drop rollout NLL entirely; allow
+  hidden interventions to supervise the most likely deterministic response;
+  continue protocol 16 and reinterpret its loss.
+- **Consequences:** Forecast mean and uncertainty objectives have explicit,
+  non-overlapping ownership. Protocol-16 weights cannot prove convergence
+  under the corrected objective, so its trainer and supervisor remain stopped
+  and protocol 17 starts weights-only from the same accepted reference under
+  specification 1.17 and the unchanged broad selector.

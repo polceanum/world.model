@@ -92,6 +92,9 @@ Working rules:
 - Omit unsupported objectives rather than averaging fabricated zero examples.
   Use uncertainty calibration to train variance without duplicating an
   explicitly supervised state-mean gradient.
+- Apply the same isolation to rollout likelihood: detach forecast-mean error,
+  train variance from realised outcomes, and never learn a deterministic mean
+  across an unseen external actuation.
 - Keep RGB measurement auxiliaries perception-local. A frozen fast ROI can
   remain differentiable through its prior input, but that must not let its
   measurement loss train dynamics or the belief updater.

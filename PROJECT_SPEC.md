@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.16
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing amendment 9 August 2026
+**Version:** 1.17
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing and rollout uncertainty-gradient isolation amendments 9 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5878,6 +5878,22 @@ corrector through the ROI's prior-conditioned input. Current-state, rollout,
 event, uncertainty, correction, lifecycle, and observable-parameter losses
 are the authoritative gradients for the physical stack. Any change to this
 routing is objective protocol and requires a fresh weights-only run.
+
+## 187. Rollout likelihood calibrates uncertainty without duplicating the mean objective
+
+The deterministic rollout point loss is the sole supervised gradient for a
+predictable forecast mean. Rollout Gaussian likelihood retains the realised
+squared error as a detached calibration target and updates forecast variance
+only; it must not send an additional inverse-variance-weighted gradient into
+the mean. This matches the state-uncertainty rule and prevents low predicted
+variance from overwhelming the declared per-axis/horizon point objective.
+
+After an unseen external actuation, deterministic point/event means remain
+censored for the coupled scene. The realised future may still train the
+predictive variance through proper likelihood, but it must not train a mean
+for a future that was not identifiable at the causal anchor. Regressions must
+prove both properties directly: no mean gradient and a finite variance
+gradient that widens under an under-dispersed hidden outcome.
 
 ---
 

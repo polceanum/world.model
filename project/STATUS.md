@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-09
-**Specification:** `PROJECT_SPEC.md` 1.16
+**Specification:** `PROJECT_SPEC.md` 1.17
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -46,8 +46,77 @@ the next clean long run; strict convergence and acceptance remain unproven,
 and collision, identity, z-axis, coverage, and scenario-wide non-regression
 remain open; the protocol-15 staged campaign is preserved as a finite failed
 plateau after exact ablations exposed fast-measurement gradient leakage into
-the frozen-perception state/dynamics phase; that routing defect is repaired,
-but its replacement qualification has not yet produced accuracy evidence
+the frozen-perception state/dynamics phase; protocol 16 verified that repair
+but was intentionally stopped at update 552 after a further audit found that
+rollout likelihood duplicated the deterministic forecast-mean gradient; both
+objective defects are repaired, but no corrected convergence result exists yet
+
+## 2026-08-09 — rollout uncertainty-gradient repair
+
+Protocol 16 at
+`runs/20260809-065710-v11-protocol16-perception-local-objectives/` was
+intentionally stopped at logged causal update 552, after its step-512 broad
+validation and the first late-phase blocks had provided enough evidence to
+audit the corrected objective. The trainer and convergence-supervisor
+LaunchAgents were unloaded and their PIDs are absent. The only stderr message
+is Python's expected resource-tracker warning from externally terminating the
+worker pool; no nonfinite loss, optimizer collapse, support collapse, or
+automatic restart occurred.
+
+The fixed 32-episode step-512 validation exactly reproduced protocol 15's
+early fast-ROI phase, as expected: score `0.3214190` versus reference
+`0.3296688`, current position RMSE `0.2626464` versus `0.2841220 m`, velocity
+RMSE `1.087324` versus `1.055478 m/s`, coverage `0.36825` versus `0.382`,
+precision `0.350464` versus `0.361229`, collision F1 `0.204651` versus
+`0.181818`, and identity-switch rate `0.017184` versus `0.013548`. Axis RMSE
+was `0.278836 / 0.215060 / 0.288009 m`; horizon RMSE was
+`[0.274357, 0.278067, 0.308430, 0.335595, 0.355628] m`. The candidate failed
+122 unchanged reference guardrails and was not promoted. Forecast coverage
+declined from `0.49625` at 0.1 seconds to `0.405` at 1.0 second. Mutable
+support, gradients, and finite-state gates remained valid.
+
+Static objective tracing then found that rollout Gaussian NLL used the same
+live forecast error as the deterministic per-axis/horizon point loss. It
+therefore added a second inverse-variance-weighted gradient to the trajectory
+mean and could teach a deterministic mean even after a causally unseen
+external actuation. This contradicted the already-enforced state-uncertainty
+contract and made low-variance examples capable of overwhelming the declared
+point objective. Rollout NLL now detaches the mean error: realised outcomes
+calibrate forecast variance, while deterministic rollout means receive their
+sole supervised gradient from the identifiable point objective. A regression
+proves hidden-actuation NLL leaves the belief/mean gradient absent while still
+widening an under-dispersed variance. This objective change advances the
+specification to 1.17 and requires a fresh weights-only protocol-17 run from
+the same accepted reference; protocol 16 must not be resumed.
+
+Verification on the specification-1.17 repair:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider \
+  tests/unit/test_training_objective_regressions.py \
+  tests/unit/test_training_schedule.py \
+  tests/integration/test_checkpoint_roundtrip.py
+# 129 passed in 16.17s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider -m "not device"
+# 620 passed, 5 skipped, 1 deselected in 167.44s
+
+# Host-MPS device marker and the five otherwise sandbox-skipped MPS tests:
+# 1 passed, 625 deselected in 5.01s
+# 5 passed in 8.23s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check .
+# All checks passed
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
+  ruff format --check .
+# 188 files already formatted
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-protocol17-pycache PYTHONPATH=. \
+  conda run -n orpheus python -m compileall -q \
+  train.py evaluate.py demo.py scripts world_model tests
+# exit 0; git diff --check also passed
+```
 
 ## 2026-08-09 — staged-campaign plateau and auxiliary-gradient repair
 

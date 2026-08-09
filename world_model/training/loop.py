@@ -2508,6 +2508,7 @@ def _rollout_loss_result(
             # An unseen intervention has no deterministic point target, but
             # its outcome still teaches the predictive distribution to widen.
             valid,
+            detach_mean_error=True,
         )
         seconds = query_seconds[query_index]
         # Do not represent an unsupported horizon as a zero-valued training

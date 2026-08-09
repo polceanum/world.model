@@ -238,9 +238,9 @@
 - [x] Commit/push specification 1.16 as `310d419` and launch a clean
   weights-only replacement with verified Standard QoS, host MPS, clean source,
   one trainer, advancing initialization heartbeat, and empty stderr.
-- [ ] Inspect protocol 16 at step 512 and every later exact validation; require
-  broad velocity, coverage, identity, every-axis/horizon, and scenario
-  non-regression before promotion or extension.
+- [x] Inspect protocol 16 at step 512 and its first late-phase updates. Preserve
+  its rejected 122-guardrail candidate, then stop at update 552 after objective
+  tracing exposes duplicated rollout-likelihood mean gradients.
 - [x] Verify the first late-phase block omits optimized fast measurement and
   has zero perception gradient; make `causal_fast_support_count` exclude
   observed-but-frozen ROI slots instead of overstating causal support.
@@ -248,6 +248,12 @@
   minimum, 4,096 extensions, four-validation/1% plateau rule, and 24,576 hard
   limit; verify one supervisor PID, matching runtime fingerprint, durable wait
   event, and empty stderr.
+- [x] Make rollout Gaussian likelihood variance-only by detaching forecast-mean
+  error, including after hidden external actuation; prove absent mean gradient
+  and finite variance-widening gradient in a direct regression.
+- [ ] Commit/push specification 1.17, launch protocol 17 weights-only from the
+  accepted reference, and monitor every fixed validation through the declared
+  minimum and plateau/extension rule without promoting any broad regression.
 - [ ] If identity churn persists after the structural repair, add an explicit
   supervised pairwise association-margin objective and test duplicate
   suppression against missed live tracks; do not tune appearance weight alone.

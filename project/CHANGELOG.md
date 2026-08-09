@@ -2,6 +2,23 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-09 rollout uncertainty-gradient repair
+
+- Stopped protocol 16 and its convergence supervisor at causal update 552
+  after its rejected step-512 validation and first corrected late-phase blocks
+  supplied enough evidence for a deeper objective audit. No nonfinite,
+  optimizer, lifecycle-support, or restart collapse was observed.
+- Recorded the exact step-512 every-axis/horizon, tracking, identity, event,
+  and support results; the candidate failed 122 unchanged guardrails and was
+  not promoted.
+- Fixed rollout Gaussian likelihood so realised forecast error is detached
+  from the trajectory mean and calibrates variance only. Deterministic means
+  now receive one declared point-loss gradient and remain censored across
+  causally unseen external actuation.
+- Added a direct gradient regression and advanced the specification/checkpoint
+  contract to 1.17. Protocol 16 is not resumable; protocol 17 must start
+  weights-only from the same accepted reference.
+
 ### 2026-08-09 perception-local auxiliary-gradient repair
 
 - Stopped and preserved protocol 15 after validation candidates at steps

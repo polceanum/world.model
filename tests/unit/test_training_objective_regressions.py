@@ -580,6 +580,7 @@ def test_unseen_actuation_censors_the_coupled_scene_but_keeps_distribution_nll()
         positions=torch.full((1, 2, 3), 2.0),
         age_steps=torch.full((1, 2), 5, dtype=torch.int64),
     )
+    belief.objects.position.requires_grad_()
     log_variance = torch.zeros((), requires_grad=True)
     model = SimpleNamespace(dynamics=_StaticRolloutDynamics(position_log_variance=log_variance))
     indices = torch.tensor([[0, 1]], dtype=torch.int64)
@@ -620,6 +621,7 @@ def test_unseen_actuation_censors_the_coupled_scene_but_keeps_distribution_nll()
     assert result.physical_metrics["physical_rollout_position@0.050s_coordinate_count"] == 0.0
 
     result.losses["rollout_position_nll"].backward()
+    assert belief.objects.position.grad is None
     assert log_variance.grad is not None
     # Gradient descent therefore increases variance for the hidden outcome.
     assert log_variance.grad.item() < 0.0

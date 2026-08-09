@@ -511,6 +511,14 @@ measurement term and fast-support map. A run created before this correction
 must not be resumed under the new objective; initialize weights-only from the
 verified reference.
 
+Protocol 16 exposed a separate rollout-objective defect before its long run
+completed. Forecast Gaussian NLL must use a detached realised mean error and
+train variance only; the deterministic per-axis/horizon rollout loss is the
+sole supervised mean gradient. This remains true after an unseen external
+actuation: the realised outcome may widen uncertainty, but cannot supervise an
+unidentifiable deterministic future. Runs created before specification 1.17
+must not be resumed under this corrected objective.
+
 The convergence supervisor is also active under launchd label
 `com.polceanum.orpheus.convergence-20260803-112948`, monitoring initial trainer
 PID `31197`. It waits for the complete 16,384-step summary, verifies every
