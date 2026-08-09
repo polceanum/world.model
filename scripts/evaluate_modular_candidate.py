@@ -40,7 +40,17 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
     parser.add_argument("--base", required=True, help="Accepted base checkpoint")
-    parser.add_argument("--donor", required=True, help="Candidate donor checkpoint")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--donor", help="Candidate donor checkpoint")
+    source.add_argument(
+        "--fresh-initialization",
+        action="store_true",
+        help=(
+            "Use the deterministic fresh model initialization as the donor. "
+            "This is required when a changed module's parameter meaning is "
+            "incompatible with inherited weights."
+        ),
+    )
     parser.add_argument(
         "--module",
         action="append",
@@ -84,20 +94,30 @@ def main() -> int:
     seed_everything(config.project.seed, deterministic=config.project.deterministic)
 
     base_path = Path(args.base).expanduser().resolve()
-    donor_path = Path(args.donor).expanduser().resolve()
     base_payload = _load_payload(base_path)
-    donor_payload = _load_payload(donor_path)
     validate_checkpoint_config(base_payload, config)
-    validate_checkpoint_config(donor_payload, config)
     reference = _selection_from_numbered_checkpoint(base_payload, config)
+    model = OnlineWorldModel.from_config(config, device=torch.device(args.device))
+    donor_path: Path | None = None
+    donor_payload: dict[str, Any] | None = None
+    if args.fresh_initialization:
+        if args.donor_weight != 1.0:
+            raise ValueError("fresh initialization requires --donor-weight=1")
+        donor_state = model.state_dict()
+        donor_step = 0
+    else:
+        donor_path = Path(args.donor).expanduser().resolve()
+        donor_payload = _load_payload(donor_path)
+        validate_checkpoint_config(donor_payload, config)
+        donor_state = donor_payload["model_state"]
+        donor_step = int(donor_payload["step"])
     composed_state, selected = compose_model_state(
         base_payload["model_state"],
-        donor_payload["model_state"],
+        donor_state,
         module_prefixes=args.modules,
         donor_weight=args.donor_weight,
     )
 
-    model = OnlineWorldModel.from_config(config, device=torch.device(args.device))
     model.load_state_dict(composed_state)
     model.eval()
     loader = _make_loader(
@@ -145,8 +165,9 @@ def main() -> int:
         "accepted_against_base": accepted,
         "base_checkpoint": str(base_path),
         "base_step": int(base_payload["step"]),
-        "donor_checkpoint": str(donor_path),
-        "donor_step": int(donor_payload["step"]),
+        "donor_checkpoint": None if donor_path is None else str(donor_path),
+        "donor_step": donor_step,
+        "fresh_initialization": bool(args.fresh_initialization),
         "modules": list(args.modules),
         "donor_weight": args.donor_weight,
         "selected_tensor_count": len(selected),
@@ -165,7 +186,7 @@ def main() -> int:
         model=model,
         optimizer=None,
         config=config,
-        step=int(donor_payload["step"]),
+        step=donor_step,
         metrics={
             "modular_candidate": 1.0,
             "accepted_against_base": float(accepted),
@@ -176,7 +197,9 @@ def main() -> int:
             **capture_git_metadata(Path(__file__).resolve().parents[1]),
             "checkpoint_composition": {
                 "base_checkpoint": str(base_path),
-                "donor_checkpoint": str(donor_path),
+                "donor_checkpoint": None if donor_path is None else str(donor_path),
+                "fresh_initialization": bool(args.fresh_initialization),
+                "project_seed": config.project.seed,
                 "modules": list(args.modules),
                 "donor_weight": args.donor_weight,
             },

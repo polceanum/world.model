@@ -172,6 +172,9 @@ Working rules:
 - Learned fast-state mean corrections must be anchored to explicit supported
   world-state innovation. Zero innovation means zero learned mean change, and
   per-axis confidence/support masks both mean and variance residuals.
+- Reset and record any checkpoint head whose mathematical output meaning
+  changes across protocols; never reinterpret inherited residual-head numbers
+  as gains merely because their tensor shapes still load.
 - Scale attention over entity, relation, event, scene/camera, and bounded
   history tokens derived from `WorldBelief`. Decode outputs into typed
   proposals; attention never becomes an opaque replacement for persistent

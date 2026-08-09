@@ -117,7 +117,39 @@ learned-gradient regression. Full non-device regression reports `636 passed, 5
 skipped, 1 deselected` in `173.22 s`; the sandbox cannot
 expose MPS, while the same device-marked command on the host reports `1 passed,
 640 deselected` in `4.72 s`. Ruff check and repository-wide format check pass.
-Fixed 32-episode qualification remains due before sustained training.
+The first fixed 32-episode qualification is complete and exposes an inherited-
+head migration defect described below; a reset-head qualification remains due
+before sustained training.
+
+The clean source is committed and pushed as `b53c116`. Qualification run
+`runs/20260809-233714-protocol19-anchored-correction-qualification/` loaded the
+protocol-17 step-512 weights under the new semantics and evaluated the exact
+32-episode selector before training. The step-zero pooled score improved
+slightly from the legacy-semantics `0.3189518` to `0.3180155`, and 0.50/0.75/
+1.00-second RMSE improved to `0.303777/0.331702/0.355324 m`. However, current
+position worsened `0.250220 -> 0.251928 m`, velocity worsened
+`1.079204 -> 1.103289 m/s`, and 0.10/0.25-second RMSE worsened to
+`0.265631/0.274496 m`. Scenarios were mixed: baseline, impulse, and heavy/light
+current RMSE improved, while reference, elastic, damped, camera, and especially
+glancing current RMSE regressed. This is not broad acceptance.
+
+The cause is deterministic: the old learned mean head represented an absolute
+state delta, while specification 1.19 interprets it as an innovation gain.
+Shape-compatible loading silently reused incompatible numbers. One balanced
+training update was finite and fully supported (`loss=3.532505`, raw/applied
+gradient `0.548843`, all 13 objectives, 257 trajectory rows, zero skips, 1.19
+GB maximum RSS), proving the new path trains; nevertheless it immediately
+worsened the selector score to `0.322579` and every x metric, so its step-one
+candidate was correctly rejected with 19 guardrail failures. The step-zero
+checkpoint remains the run's internal best but is not promoted over the legacy
+reference.
+
+`scripts/evaluate_modular_candidate.py` now supports a deterministic
+`--fresh-initialization` donor with explicit seed/module provenance. The next
+exact qualification resets the mean, variance, and gate output heads whose
+semantics changed while retaining the compatible corrector trunk and
+mode/existence/visibility heads. Sustained protocol 19 remains blocked on that
+unchanged-selector result, not on training loss.
 
 Specification 1.19 also records the compute path reviewed against transformer,
 Perceiver IO, compute-optimal scaling, JEPA/video-world-model, and recent

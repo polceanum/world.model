@@ -2272,8 +2272,13 @@
   guardrail; scale the same updater with a larger network.
 - **Consequences:** The correction path again satisfies the measurement support
   contract and retains learnable context-dependent positive or negative gains.
-  Focused tests pass, but neither the semantic migration nor new training is
-  accepted until the unchanged 32-episode RGB-only selector passes.
+  Focused tests pass. The first exact qualification proved that directly
+  loading old absolute-delta heads under the gain interpretation is a mixed,
+  invalid transfer: the pooled score improved slightly, but velocity, short
+  horizons, and several scenarios regressed, and one finite balanced update
+  worsened every x metric. Changed mean/variance/gate heads must therefore be
+  deterministically reset with composition provenance and requalified before
+  sustained training.
 
 ## ADR-089 — Scale transformers over explicit predictive abstractions
 

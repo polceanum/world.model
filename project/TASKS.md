@@ -24,8 +24,13 @@
 - [x] Repair the learned corrector so explicit per-axis world innovation and
   declared field support mask learned mean/variance residuals, while legacy
   checkpoint semantics remain reproducible by default.
-- [ ] Run the complete non-device/device regression suites and exact 32-episode
-  fixed RGB-only qualification of the innovation-anchored step-zero control.
+- [x] Run the complete non-device/device regression suites and exact 32-episode
+  fixed RGB-only qualification of the innovation-anchored inherited-head
+  control; reject it as mixed because old absolute-delta heads cannot be
+  reinterpreted as innovation gains despite a slightly better pooled score.
+- [ ] Reset the changed corrector mean/variance/gate heads from deterministic
+  fresh initialization, record composition provenance, and pass the same exact
+  32-episode fixed selector before any sustained run.
 - [ ] If the repaired control is non-regressing, train balanced protocol 19
   long enough for repeated fixed validation and a declared plateau; inspect
   pooled and per-scenario

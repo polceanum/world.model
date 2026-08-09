@@ -5949,7 +5949,11 @@ hardcoded physical law.
 Historical checkpoints retain their original unanchored semantics unless a
 new resolved protocol opts into the corrected path. An opt-in changes forward
 semantics and requires a new weights-only campaign and complete fixed-manifest
-qualification; it is never an exact resume.
+qualification; it is never an exact resume. Any output head whose mathematical
+meaning changes from an absolute residual to an innovation gain must be reset
+to its declared neutral initialization with explicit checkpoint provenance.
+Loading its old numerical weights under the new interpretation is not a valid
+weights-only transfer.
 
 ## 190. Attention operates on predictive abstractions
 

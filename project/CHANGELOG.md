@@ -1262,3 +1262,10 @@ further gravity-axis threshold tuning.
 - Advanced the specification to 1.19 with a staged abstraction-token attention
   ladder from a 1--4M parameter Mac pilot to later CUDA-scale latent video
   pretraining, gated by disjoint generalization and broad non-regression.
+- Ran the exact 32-episode inherited-head protocol-19 qualification. Pooled
+  score improved slightly, but velocity, short horizons, and multiple scenarios
+  regressed; one finite supported balanced update then worsened every x metric.
+  The candidate is rejected rather than promoted.
+- Added deterministic fresh-initialization module donation to the modular
+  qualifier so changed corrector output heads can be reset and evaluated with
+  explicit seed/prefix provenance before sustained training.
