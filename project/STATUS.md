@@ -50,10 +50,80 @@ the frozen-perception state/dynamics phase; protocol 16 verified that repair
 but was intentionally stopped at update 552 after a further audit found that
 rollout likelihood duplicated the deterministic forecast-mean gradient; both
 objective defects are repaired, but no corrected convergence result exists
-yet; protocol 17 has now completed its step-1,024 fixed validation without
-optimizer/support collapse, but its state/dynamics phase traded better z/event
-behavior for worse x/y and medium-to-long rollout accuracy, so that candidate
-was also rejected and training continues without promotion
+yet; protocol 17 has now completed fixed validation through step 1,536 without
+optimizer/support collapse; its latest candidate recovered current state,
+velocity, tracking, calibration, x/y, and four joint horizons relative to step
+1,024, but still failed the fixed reference on medium/long horizons and broad
+scenario balance, so it remains rejected; an exact step-1,536 resume is active
+toward the unchanged 8,192-step minimum without promotion
+
+## 2026-08-09 — protocol-17 step-1,536 recovery and exact continuation
+
+The complete fixed 32-episode step-1,536 validation at
+`runs/20260809-091718-v12-protocol17-rollout-variance-only/` finished in
+`908.8502 s` under unchanged protocol hash
+`e31bf1cde4e4adf8603190b3258e086d6f749ad1d5689427d60e367f9fbb53a0`.
+The candidate was not promoted. Its weighted score was `0.3385591`, versus
+`0.3296688` for the fixed reference and `0.3413697` at step 1,024. Current
+position RMSE improved to `0.2482949 m`, velocity to `1.0326004 m/s`, target
+coverage to `0.3890`, precision to `0.3718929`, identity-switch rate to
+`0.0161186`, and collision F1 remained above reference at `0.2311321`.
+Position coverage moved closer to nominal at `0.9134915`.
+
+Current x/y/z RMSE was `0.299827 / 0.205018 / 0.230265 m`. Joint horizon RMSE
+was `[0.263368, 0.286204, 0.325554, 0.360225, 0.380415] m`. Relative to step
+1,024, current position, velocity, coverage, precision, identity, calibration,
+all current axes, x at every horizon, y at every horizon, and the first four
+joint horizons improved. The 1.0-second joint horizon worsened slightly
+`0.375831 -> 0.380415 m`; z improved through 0.25 seconds but regressed at
+0.5--1.0 seconds. Relative to the fixed reference, the 0.1/0.25-second joint
+horizons improved, while 0.5/0.75/1.0 seconds remained worse.
+
+The candidate failed 122 reference guardrails, down from 134 at step 1,024 but
+still broad: 32 x, 16 y, 15 z, 28 joint-position, 18 coverage, 4 velocity, 3
+precision, 3 identity, 2 collision, and 1 calibration failures. Scenario
+failures were baseline 2, camera parallax 20, damped contacts 11, elastic pairs
+16, glancing impacts 21, heavy/light impacts 25, impulse perturbation 11, and
+reference pairs 9. Mutable and training-support failures stayed zero.
+Reference pairs and baseline improved strongly; the remaining deployment
+failures are concentrated in glancing impacts, camera parallax, elastic
+long-horizon motion, heavy/light x motion, and some scenario-local coverage
+and identity tradeoffs.
+
+All 64 logged state/dynamics updates from 1,032 through 1,536 applied an
+optimizer update. Frozen-perception gradient stayed exactly zero, RSS
+high-water stayed `983797760` bytes, and one isolated `1.8559e-05` lifecycle
+gradient recovered on the following update. Checkpoint deltas were directional
+rather than random: update cosine similarity across the 512--1,024 and
+1,024--1,280 intervals was `0.968` for interactions, `0.928` for modal
+dynamics, `0.939` for uncertainty, and `0.949` for the learned corrector.
+Optimizer moments in the durable step-1,408 checkpoint were finite and had the
+expected 512-step frozen-fast and 896-step state/dynamics counters.
+
+A read-only four-batch gradient attribution exposed a real multi-task
+diagnostic: on the shared edge trunk, event-versus-z trajectory cosine was
+negative on all four audited collision batches (`-0.631`, `-0.511`, `-0.653`,
+`-0.416`), while x/y/velocity conflicts varied by scenario. This is a
+plausible source of event/axis tradeoffs, but not yet evidence for an
+architecture change: step 1,536 broadly recovered from step 1,024, and the
+declared sustained plan says not to judge causal convergence before adequate
+duration. Event/trunk decoupling therefore remains a measured follow-up only
+if later comparable validations regress again or establish a failed plateau.
+
+The original trainer and supervisor were unloaded after preserving the
+step-1,536 checkpoint during the audit, then the exact run was resumed from
+`checkpoints/last.pt` without changing source, configuration, optimizer, RNG,
+or sample semantics. The active one-shot trainer is
+`com.polceanum.orpheus.protocol17-resume1536-20260809-170433` (PID `25477`),
+and the exact-source supervisor is
+`com.polceanum.orpheus.protocol17-convergence-resume1536-20260809-170433`
+(PID `25555`) from `/private/tmp/orpheus-protocol17-runtime-6dba48e`.
+The supervisor retains the 8,192 minimum, 4,096 extensions, final-1,024/1%
+four-validation plateau rule, and 24,576 hard limit. The first post-resume log
+at step 1,544 used data draw 1,544, applied all 13 supported objectives with no
+skip/retry, kept perception gradient zero, and had finite raw/applied norm
+`1.033924`. Both new stderr logs are empty. No convergence or promotion is
+claimed.
 
 ## 2026-08-09 — rollout uncertainty-gradient repair
 

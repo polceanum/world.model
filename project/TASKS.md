@@ -264,6 +264,14 @@
   its rejected 134-guardrail checkpoint; record the z/collision/coverage gains,
   x/y and medium-to-long joint regressions, zero support failures, finite
   optimizer behavior, frozen perception, and flat memory.
+- [x] Audit protocol 17 through the complete step-1,536 validation. Preserve
+  its rejected 122-guardrail checkpoint; record the broad recovery from step
+  1,024, remaining medium/long and scenario regressions, finite optimizer and
+  support state, and measured event-versus-trajectory shared-trunk gradient
+  conflicts without prematurely changing the protocol.
+- [x] Resume protocol 17 exactly from step 1,536 after the audit; verify sample
+  draw 1,544, optimizer/support continuity, frozen perception, one trainer,
+  one exact-source supervisor, Standard QoS, and empty stderr.
 - [ ] If identity churn persists after the structural repair, add an explicit
   supervised pairwise association-margin objective and test duplicate
   suppression against missed live tracks; do not tune appearance weight alone.

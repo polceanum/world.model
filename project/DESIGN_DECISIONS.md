@@ -2084,3 +2084,38 @@
   under the corrected objective, so its trainer and supervisor remain stopped
   and protocol 17 starts weights-only from the same accepted reference under
   specification 1.17 and the unchanged broad selector.
+
+## ADR-084 — Require repeated broad evidence before decoupling interaction objectives
+
+- **Date:** 2026-08-09
+- **Status:** accepted; protocol-17 continuation active
+- **Context:** Protocol 17's step-1,024 candidate improved z, collision, and
+  tracking behavior while regressing x/y and medium/long forecasts. A
+  four-batch gradient attribution at the later step-1,408 checkpoint found
+  scenario-dependent multi-task conflict in the shared interaction edge trunk:
+  event-versus-z trajectory cosine was negative on all four audited collision
+  batches, and x/y/velocity conflicts changed with the physical regime. A
+  checkpoint-compatible detached event-trunk gradient is technically possible.
+  However, the complete step-1,536 validation then recovered current state,
+  velocity, tracking, calibration, all current axes, x/y horizons, and four
+  joint horizons relative to step 1,024. It remained rejected, but did not
+  establish a repeated worsening trend or the declared convergence plateau.
+- **Decision:** Preserve the gradient-conflict measurements as a concrete
+  follow-up, but do not change objective ownership or forward architecture
+  during a recovering sustained campaign. Continue protocol 17 exactly from
+  its durable step-1,536 state to the predeclared 8,192 minimum and apply the
+  unchanged validation/extension rule. Introduce event/shared-trunk
+  decoupling only in a new timestamped protocol if later comparable fixed
+  validations again regress or establish a failed plateau. Any such protocol
+  must retain a trainable event head, preserve checkpoint-compatible forward
+  values where possible, and pass the same broad selector rather than claiming
+  success from gradient cosine alone.
+- **Alternatives considered:** continue blindly without recording the
+  conflict; stop at 1,536 and immediately start a new architecture; remove the
+  collision objective; relax scenario guardrails; promote the better pooled
+  current-state metrics; treat heterogeneous batch loss as convergence.
+- **Consequences:** The user-requested sustained training receives adequate
+  duration, while a measured negative-transfer mechanism remains available if
+  later evidence warrants intervention. Step 1,536 remains a rejected
+  numbered checkpoint; the exact resumed trainer and supervisor preserve
+  optimizer, RNG, data draw, source fingerprint, and convergence semantics.

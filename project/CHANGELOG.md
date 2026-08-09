@@ -49,6 +49,21 @@
   `0.3413697` and reference-guardrail failures increased `113 -> 134`.
 - Confirmed mutable/training support failures remained zero and continued the
   exact campaign without promotion toward the step-1,536 fixed validation.
+- Completed and rejected the fixed step-1,536 validation. It recovered score,
+  current state, velocity, tracking, calibration, all current axes, x/y at
+  every horizon, and four joint horizons relative to step 1,024, but remained
+  worse than the reference at medium/long horizons and failed 122 broad
+  guardrails across scenario balance, axes, coverage, identity, and events.
+- Audited checkpoint update direction, optimizer moments, support frequency,
+  clipping, frozen-perception isolation, and memory. The run is finite and
+  directionally learning rather than numerically wobbling or collapsing.
+- Measured event-versus-trajectory gradient conflict on the shared interaction
+  trunk across four collision batches. Kept decoupling as an evidence-backed
+  follow-up rather than changing architecture after one recovering validation.
+- Preserved step 1,536, then exact-resumed protocol 17 under a new one-shot
+  trainer and exact-source convergence supervisor. Step 1,544 consumed draw
+  1,544 with all 13 objectives, no retry/skip, zero perception gradient,
+  finite norm, stable memory, and empty stderr.
 
 ### 2026-08-09 perception-local auxiliary-gradient repair
 
