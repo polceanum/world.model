@@ -18,6 +18,14 @@
 - Added a direct gradient regression and advanced the specification/checkpoint
   contract to 1.17. Protocol 16 is not resumable; protocol 17 must start
   weights-only from the same accepted reference.
+- Committed/pushed the repair as `6dba48e` and launched
+  `runs/20260809-091718-v12-protocol17-rollout-variance-only/`. Its one-shot
+  trainer records clean source, host MPS measurement, CPU closed-loop RGB-only
+  execution, no oracle, Standard QoS, advancing initialization heartbeat, and
+  empty stderr.
+- Attached an exact-commit isolated convergence supervisor with the unchanged
+  8,192 minimum, 4,096 extensions, four-validation/1% plateau decision, and
+  24,576 hard limit; it is waiting durably for the first complete segment.
 
 ### 2026-08-09 perception-local auxiliary-gradient repair
 

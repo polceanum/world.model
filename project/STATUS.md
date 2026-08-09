@@ -118,6 +118,27 @@ PYTHONPYCACHEPREFIX=/private/tmp/orpheus-protocol17-pycache PYTHONPATH=. \
 # exit 0; git diff --check also passed
 ```
 
+The fresh corrected campaign is active at
+`runs/20260809-091718-v12-protocol17-rollout-variance-only/` under one-shot
+Standard/default LaunchAgent
+`com.polceanum.orpheus.protocol17-rollout-variance-20260809-091718`. It starts
+weights-only from the unchanged accepted step-zero reference, uses the fixed
+32-episode selector, and retains the 512-update `fast_roi` then
+`state_dynamics` schedule. Immutable metadata records clean pushed commit
+`6dba48eaa39a4df926dcdca085864ceddb95cb50`, PyTorch `2.10.0`, MPS
+built/available, MPS measurement plus CPU closed-loop execution, RGB-only
+runtime, and no oracle. Trainer PID `9466` is active with Standard QoS; the
+initialization heartbeat advanced through 5/32 episodes in `83.53 s` and both
+trainer and supervisor stderr files are empty.
+
+Exact-launch-source supervisor PID `9591` runs from detached clean clone
+`/private/tmp/orpheus-protocol17-runtime-6dba48e/` under LaunchAgent
+`com.polceanum.orpheus.protocol17-convergence-20260809-091718`. Its durable
+events confirm the 8,192-step minimum, 4,096-step extensions, final-1,024
+window, 1% four-validation plateau rule, and 24,576 hard limit. It is waiting
+for the initial segment and cannot overlap another trainer. No protocol-17
+trained checkpoint or convergence claim exists yet.
+
 ## 2026-08-09 — staged-campaign plateau and auxiliary-gradient repair
 
 The staged campaign at

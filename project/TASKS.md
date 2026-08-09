@@ -251,9 +251,12 @@
 - [x] Make rollout Gaussian likelihood variance-only by detaching forecast-mean
   error, including after hidden external actuation; prove absent mean gradient
   and finite variance-widening gradient in a direct regression.
-- [ ] Commit/push specification 1.17, launch protocol 17 weights-only from the
-  accepted reference, and monitor every fixed validation through the declared
-  minimum and plateau/extension rule without promoting any broad regression.
+- [x] Commit/push specification 1.17 and launch protocol 17 weights-only from
+  the accepted reference with verified clean source, MPS availability,
+  Standard QoS, advancing heartbeat, and empty trainer/supervisor stderr.
+- [ ] Monitor protocol 17's optimizer/support/identity/uncertainty, every-axis,
+  every-horizon, and every-scenario dynamics through the declared minimum and
+  plateau/extension rule without promoting any broad regression.
 - [ ] If identity churn persists after the structural repair, add an explicit
   supervised pairwise association-margin objective and test duplicate
   suppression against missed live tracks; do not tune appearance weight alone.
