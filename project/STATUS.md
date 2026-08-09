@@ -137,17 +137,18 @@ events confirm the 8,192-step minimum, 4,096-step extensions, final-1,024
 window, 1% four-validation plateau rule, and 24,576 hard limit. It is waiting
 for the initial segment and cannot overlap another trainer. Initialization
 completed all 32 episodes in `708.55 s` and exactly reproduced the accepted
-score `0.3296688`. Causal metric blocks through update 128 all had real support,
+score `0.3296688`. Causal metric blocks through update 256 all had real support,
 applied an optimizer update, skipped no gradients, kept interaction gradient
-zero in the `fast_roi` phase, and passed the post-step finite check. The same
-invariants held across all 16 blocks through update 128. Comparing the first
-and second eight-block halves, mean raw gradient fell `4.2628 → 3.6357`, mean
-trajectory support rose `64.0 → 93.25`, and mean ROI support rose
-`25.875 → 34.0`; mean heterogeneous-window loss moved `3.3888 → 3.5659` and
-therefore supplies neither a convergence nor collapse claim. Raw norms remained
-finite within `1.0205–7.3045` and were locally/globally clipped to approximately
-`1.0`. RSS high-water moved from `921 MB` on the first block to `984 MB` at
-update 128 and remains an explicit long-run monitoring item; stderr remains
+zero in the `fast_roi` phase, and passed the post-step finite check. Across the
+four consecutive 64-update quarters, mean heterogeneous-window losses were
+`3.3888 / 3.5659 / 3.3182 / 2.5461` and mean raw gradients were
+`4.2628 / 3.6357 / 3.9217 / 3.0525`. These non-identically supported losses
+are conditioning evidence, not accuracy/convergence metrics; nevertheless the
+absence of a rising loss or gradient envelope argues against early optimizer
+collapse. Every raw norm was finite within `0.9831–8.1992`; one sub-unit
+update remained unclipped, proving clipping does not mechanically normalize
+every batch. RSS high-water moved from `921 MB` on the first block to `984 MB`
+at update 128, then stayed exactly flat through update 256. Stderr remains
 empty. No protocol-17 trained validation checkpoint or convergence claim
 exists yet.
 
