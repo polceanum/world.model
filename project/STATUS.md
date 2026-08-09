@@ -62,12 +62,71 @@ late updater/dynamics drift under random two-scenario updates, deterministic
 eight-scenario optimizer batches are now implemented, and a real batch-eight
 smoke completed one finite supported update and terminal validation at 1.20 GB
 maximum RSS; the superseded protocol-17 jobs are stopped and the clean
-protocol-18 balanced campaign plus exact-source convergence supervisor are
-active after completing initialization validation and 72 balanced updates;
-one severe but finite step-64 recursive interaction gradient was isolated to
-the baseline seed-16081 rollout-velocity objective, bounded by both declared
-clips, followed by a normal step-72 update, and is now surfaced truthfully by
-the training-dynamics auditor
+protocol-18 balanced campaign was intentionally stopped at its durable
+step-128 checkpoint after exact fixed validation rejected every forecast
+horizon and localized the dominant regression to the learned updater rather
+than dynamics or identification; the updater was found to discard axis/sign
+innovation and to apply unconstrained learned mean/variance residuals to
+unsupported packed fields; specification 1.19 and the next protocol now add an
+explicit opt-in innovation-anchored, per-axis support-masked corrector; focused
+tests pass, but its complete fixed-manifest qualification and any subsequent
+attention-capacity pilot remain pending
+
+## 2026-08-09 — protocol-18 rejection and innovation-anchored repair
+
+Protocol 18 reached a durable step-128 checkpoint with 128 balanced optimizer
+updates, zero skipped updates, all 13 causal objectives, 486 trajectory-support
+rows, finite model/Adam tensors, complete RNG state, and synchronized data draw.
+The rare step-64 recursive-velocity spike remained bounded and did not recur in
+the next logged blocks. The trainer and supervisor were deliberately booted out
+after exact early validation proved broad accuracy regression; the stale
+`training_state.json` is not evidence of a live process.
+
+Exact fixed 32-episode RGB-only validation is preserved at
+`runs/20260809-224159-protocol18-step128-early-diagnostic/report.json`. The
+weighted score worsened `0.3189518 -> 0.3340991`, current position worsened
+`0.2502196 -> 0.2683071 m`, velocity was flat/slightly worse
+`1.0792038 -> 1.0794120 m/s`, and all five horizons worsened from
+`0.261999/0.270180/0.305863/0.334885/0.357770 m` to
+`0.277947/0.290649/0.324950/0.350739/0.366774 m`. Identity and collision F1
+improved, but elastic-pair x prediction regressed catastrophically. The
+candidate is rejected.
+
+Exact module ablations established causality. Dynamics-only at
+`runs/20260809-225002-protocol18-step128-dynamics-only/report.json` was nearly
+neutral (`0.3189518 -> 0.319478`), with small mixed scenario changes.
+Updater-plus-identifier at
+`runs/20260809-225754-protocol18-step128-updater-identifier/report.json`
+worsened the score to `0.335865`; updater-only at
+`runs/20260809-230632-protocol18-step128-updater-only/report.json` reproduced
+it at `0.335849`. The identifier is negligible and late dynamics partly
+compensated for a defective correction path.
+
+Code inspection found two contract violations in that path. The corrector
+received only pooled camera-space innovation statistics, losing explicit axis
+and sign evidence, then applied learned fast-state and variance deltas to every
+packed component regardless of `supported_state_fields`. The specification
+1.19 repair is opt-in to preserve historical checkpoints: learned mean
+residuals become bounded gains on explicit whitened world-state innovation;
+per-axis confidence and support mask mean and variance updates; zero supported
+innovation produces exactly zero learned mean update. RGB position evidence
+can affect position and its documented temporal velocity coupling, but not
+orientation, angular velocity, or modal state. Focused
+filter/config/checkpoint tests report `142 passed`, including a finite nonzero
+learned-gradient regression. Full non-device regression reports `636 passed, 5
+skipped, 1 deselected` in `173.22 s`; the sandbox cannot
+expose MPS, while the same device-marked command on the host reports `1 passed,
+640 deselected` in `4.72 s`. Ruff check and repository-wide format check pass.
+Fixed 32-episode qualification remains due before sustained training.
+
+Specification 1.19 also records the compute path reviewed against transformer,
+Perceiver IO, compute-optimal scaling, JEPA/video-world-model, and recent
+object-centric physical-prediction literature. The first scale rung is not a
+large pixel transformer: after the correction repair passes, a 1--4M parameter
+pre-normalized entity/relation/event attention pilot will consume derived
+`WorldBelief` tokens and decode typed residual proposals. It must beat the
+accepted smaller and parameter-matched graph controls on disjoint RGB-only
+generalization and every existing guardrail before a wider CUDA rung.
 
 ## 2026-08-09 — protocol-18 early dynamics and severe-clip observability
 

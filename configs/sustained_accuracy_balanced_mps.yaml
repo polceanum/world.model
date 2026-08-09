@@ -132,6 +132,9 @@ model:
     pair_collision_speed_epsilon: 0.0000001
   filter:
     hidden_dim: 192
+    # Protocol 19: learned fast-state residuals are gains on explicit,
+    # axis-aligned world innovation and cannot rewrite unsupported fields.
+    innovation_anchored_correction: true
   identification:
     hidden_dim: 64
 runtime:

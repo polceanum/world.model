@@ -38,6 +38,7 @@ class BeliefUpdaterConfig:
     appearance_ema: float = 0.15
     learned_residual_scale: float = 0.1
     enable_learned_corrector: bool = True
+    innovation_anchored_correction: bool = False
     velocity_from_position_coupling: float = 0.5
     velocity_from_position_variance_scale: float = 2.0
     maximum_velocity_from_position_delta: float = 6.0
@@ -230,9 +231,21 @@ class BeliefUpdater(nn.Module):
             position_lv = measured_lv[..., :3]
         position_measurement_lv = position_lv[batch_index, pair_index]
         packing = fast_packing_map(prior.objects)
+        correction_evidence = packed.new_zeros((batch_index.numel(), packed.shape[-1]))
+        correction_confidence = packed.new_zeros(correction_evidence.shape)
         position_slice = packing["position"]
         prior_position = packed[batch_index, belief_index, position_slice]
         prior_position_lv = log_variance[batch_index, belief_index, position_slice]
+        position_standard_deviation = (
+            (prior_position_lv.exp() + position_measurement_lv.exp()).clamp_min(1.0e-8).sqrt()
+        )
+        correction_evidence[..., position_slice] = (
+            (position_measurement - prior_position) / position_standard_deviation
+        ).clamp(-self.config.robust_clip_norm, self.config.robust_clip_norm)
+        position_learned_confidence = position_confidence
+        if position_learned_confidence.ndim == confidence.ndim:
+            position_learned_confidence = position_learned_confidence.unsqueeze(-1)
+        correction_confidence[..., position_slice] = position_learned_confidence
         analytic_position = diagonal_kalman_update(
             prior_position,
             prior_position_lv,
@@ -287,6 +300,27 @@ class BeliefUpdater(nn.Module):
             updated_log_variance[batch_index, belief_index, velocity_slice] = (
                 analytic_velocity.log_variance
             )
+            velocity_standard_deviation = (
+                (
+                    log_variance[batch_index, belief_index, velocity_slice].exp()
+                    + velocity_measurement_lv.exp()
+                )
+                .clamp_min(1.0e-8)
+                .sqrt()
+            )
+            velocity_evidence = (
+                (velocity_measurement - packed[batch_index, belief_index, velocity_slice])
+                / velocity_standard_deviation
+            ).clamp(-self.config.robust_clip_norm, self.config.robust_clip_norm)
+            velocity_supported = velocity_valid[batch_index, pair_index].unsqueeze(-1)
+            correction_evidence[..., velocity_slice] = torch.where(
+                velocity_supported,
+                velocity_evidence,
+                torch.zeros_like(velocity_evidence),
+            )
+            correction_confidence[..., velocity_slice] = velocity_confidence.unsqueeze(
+                -1
+            ) * velocity_supported.to(confidence.dtype)
         elif "velocity_from_position" in measured.supported_state_fields:
             elapsed = elapsed_by_batch[batch_index]
             valid_elapsed = elapsed > self.config.minimum_velocity_dt
@@ -334,6 +368,28 @@ class BeliefUpdater(nn.Module):
             updated_log_variance[batch_index, belief_index, velocity_slice] = (
                 analytic_velocity.log_variance
             )
+            velocity_standard_deviation = (
+                (
+                    log_variance[batch_index, belief_index, velocity_slice].exp()
+                    + velocity_measurement_lv.exp()
+                )
+                .clamp_min(1.0e-8)
+                .sqrt()
+            )
+            velocity_evidence = (
+                (velocity_measurement - prior_velocity) / velocity_standard_deviation
+            ).clamp(-self.config.robust_clip_norm, self.config.robust_clip_norm)
+            velocity_supported = valid_elapsed.unsqueeze(-1)
+            correction_evidence[..., velocity_slice] = torch.where(
+                velocity_supported,
+                velocity_evidence,
+                torch.zeros_like(velocity_evidence),
+            )
+            if velocity_confidence.ndim == confidence.ndim:
+                velocity_confidence = velocity_confidence.unsqueeze(-1)
+            correction_confidence[..., velocity_slice] = (
+                velocity_confidence * velocity_supported.to(confidence.dtype)
+            )
 
         objects = unpack_fast_state(updated_packed, prior.objects)
         orientation = F.normalize(objects.orientation, dim=-1)
@@ -364,19 +420,41 @@ class BeliefUpdater(nn.Module):
                 modality_index=modality,
             )
             confidence_full = learned_confidence.unsqueeze(-1)
+            if self.config.innovation_anchored_correction:
+                # The corrector learns a bounded gain on explicit, supported
+                # world-state innovation.  This prevents a camera-space
+                # summary from inventing an unrelated axis/state correction
+                # while still allowing context to modulate or oppose the
+                # analytic proposal.  Surprise robustness is applied once to
+                # the learned path, after per-axis measurement confidence.
+                if cause is not None:
+                    correction_confidence = correction_confidence * cause.robust_weight[
+                        batch_index,
+                        pair_index,
+                    ].unsqueeze(-1)
+                learned_state_factor = correction_evidence.tanh() * correction_confidence
+            else:
+                # Preserve exact historical checkpoint semantics unless the
+                # corrected protocol is selected explicitly in configuration.
+                learned_state_factor = confidence_full
             learned_delta = (
                 learned.state_gate
                 * learned.mean_delta
                 * self.config.learned_residual_scale
-                * confidence_full
+                * learned_state_factor
             )
             updated_packed = pack_fast_state(objects).clone()
             updated_packed[batch_index, belief_index] = (
                 updated_packed[batch_index, belief_index] + learned_delta
             )
             updated_lv = objects.fast_log_variance.clone()
+            variance_factor = (
+                correction_confidence
+                if self.config.innovation_anchored_correction
+                else confidence_full
+            )
             updated_lv[batch_index, belief_index] = (
-                updated_lv[batch_index, belief_index] + confidence_full * learned.log_variance_delta
+                updated_lv[batch_index, belief_index] + variance_factor * learned.log_variance_delta
             ).clamp(
                 self.config.minimum_log_variance,
                 self.config.maximum_log_variance,

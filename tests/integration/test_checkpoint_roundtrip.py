@@ -789,6 +789,30 @@ def test_rgb_runtime_controls_are_semantic_with_legacy_defaults() -> None:
         validate_checkpoint_config(payload, architecture_change)
 
 
+def test_innovation_anchored_correction_is_semantic_with_legacy_false() -> None:
+    config = _small_config()
+    payload = {"config": config.to_dict()}
+    legacy_payload = deepcopy(payload)
+    legacy_payload["config"]["model"]["filter"].pop("innovation_anchored_correction")
+
+    validate_checkpoint_config(legacy_payload, config)
+    corrected = replace(
+        config,
+        model=replace(
+            config.model,
+            filter=replace(
+                config.model.filter,
+                innovation_anchored_correction=True,
+            ),
+        ),
+    )
+    corrected.validate()
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(legacy_payload, corrected)
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(payload, corrected)
+
+
 def test_runtime_invariant_semantics_preserve_historical_contact_defaults() -> None:
     config = _small_config()
     historical = replace(

@@ -169,3 +169,14 @@ Working rules:
   process classification with `KeepAlive=false`; do not mark it as
   `Background` maintenance, and verify matched validation throughput before a
   multi-day campaign.
+- Learned fast-state mean corrections must be anchored to explicit supported
+  world-state innovation. Zero innovation means zero learned mean change, and
+  per-axis confidence/support masks both mean and variance residuals.
+- Scale attention over entity, relation, event, scene/camera, and bounded
+  history tokens derived from `WorldBelief`. Decode outputs into typed
+  proposals; attention never becomes an opaque replacement for persistent
+  belief, analytic dynamics, association, filtering, or uncertainty.
+- Increase model capacity only after the smaller rung has no known correctness
+  regression and has completed a fixed-manifest plateau check. Scale data with
+  parameters and require disjoint RGB-only generalization plus broad
+  non-regression against the accepted smaller control.

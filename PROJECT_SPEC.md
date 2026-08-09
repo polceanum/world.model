@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.18
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, and scenario-balanced optimization amendments 9 August 2026
+**Version:** 1.19
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5921,6 +5921,108 @@ weights-only run. It does not average validation slices, relax per-scenario
 guardrails, or make a smooth training loss a convergence criterion. Batch size,
 scenario balancing, learning rate, trainable scope, and seed manifest remain
 checkpoint and exact-continuation semantics.
+
+---
+
+# Part XXXVI — Innovation integrity and staged attention scaling amendment
+
+## 189. Learned correction must be anchored to supported innovation
+
+The fast corrector may not infer an unconstrained state displacement from only
+pooled innovation statistics. Pooled mean, norm, and maximum discard the axis,
+sign pattern, and state-field support needed to distinguish a useful residual
+from a scenario prior. Every learned fast-state mean residual must therefore be
+anchored to explicit innovation in the corresponding world-state component.
+
+For each associated pair, construct a typed state-space innovation and
+component confidence from the measurement's declared
+`supported_state_fields`. A position-only observation may correct position;
+documented temporal position coupling may also correct velocity. It may not
+rewrite orientation, angular velocity, or modal state merely because those
+fields share a packed tensor. Per-axis localization confidence and robust
+surprise influence must mask learned mean and variance corrections as well as
+the analytic proposal. With zero supported innovation, the learned mean update
+is exactly zero. The learned network remains free to predict a positive or
+negative bounded gain, so this is evidence conditioning rather than a
+hardcoded physical law.
+
+Historical checkpoints retain their original unanchored semantics unless a
+new resolved protocol opts into the corrected path. An opt-in changes forward
+semantics and requires a new weights-only campaign and complete fixed-manifest
+qualification; it is never an exact resume.
+
+## 190. Attention operates on predictive abstractions
+
+The Transformer's durable contribution is content-dependent interaction among
+tokens, parallel training, and a scalable residual backbone. Project Orpheus
+uses those properties without turning RGB patches or an opaque sequence cache
+into the source of truth. The scalable token set is derived from typed state:
+
+- entity tokens carry persistent identity, kinematics, uncertainty, lifecycle,
+  slow parameters, appearance, abstraction kind, timestamp, and freshness;
+- relation tokens carry candidate pair geometry, relative motion, contact and
+  observability evidence;
+- event tokens carry discrete jumps, interventions, and interval evidence;
+- scene/camera tokens carry global fields and calibrated sensor context; and
+- bounded history tokens summarize sparse belief/innovation changes rather
+  than replaying the full RGB history.
+
+A pre-normalized attention backbone may propose residual forces, event logits,
+uncertainty growth, abstraction refinements, and supported correction gains.
+Its outputs must decode into typed proposals and pass through the existing
+analytic dynamics, event, uncertainty, association, and filtering contracts.
+It must preserve masking, permutation consistency, explicit timestamps, cheap
+online updates, and the authoritative `WorldBelief`.
+
+Dense RGB/audio/depth features may later cross-attend into a fixed-size latent
+or object-token bottleneck in the style of Perceiver IO. Self-supervised masked
+latent prediction in the style of JEPA may pretrain perception and predictive
+context. Pixel/video generation may be an auxiliary decoder or uncertainty
+visualizer, but is not the primary physical accuracy objective.
+
+Relevant foundations and current evidence include:
+
+- Vaswani et al., “Attention Is All You Need,” arXiv:1706.03762;
+- Jaegle et al., “Perceiver IO,” arXiv:2107.14795;
+- Hoffmann et al., “Training Compute-Optimal Large Language Models,”
+  arXiv:2203.15556;
+- Assran et al., “V-JEPA 2,” 2025;
+- Joseph et al., “Interpreting Physics in Video World Models,”
+  arXiv:2602.07050; and
+- Soraki et al., “ObjectForesight,” arXiv:2601.05237.
+
+## 191. Capacity increases require a measured generalization ladder
+
+Do not increase parameter count while a smaller model has a known semantic,
+support, numerical, or optimizer defect. First repair and qualify the same
+fixed RGB-only selector. Then scale one axis at a time while increasing data
+coverage commensurately; a larger undertrained model is not progress.
+
+The initial ladder is:
+
+1. **Corrected control:** existing graph/filter capacity with
+   innovation-anchored correction; qualify current, every horizon, every axis,
+   every scenario, identity, event, support, and calibration.
+2. **Mac attention pilot:** two to four pre-normalized object/relation blocks,
+   width 128, four heads, short bounded token history, and roughly 1–4 million
+   new parameters. Train on thousands of balanced continuously varied episodes
+   and compare against a parameter-matched MLP/graph control.
+3. **Single-GPU model:** width 256–384 and six to eight blocks with wider
+   perception, masked latent pretraining, more objects/modalities, longer
+   horizons, and tens of millions of parameters after the pilot passes.
+4. **Foundation-scale encoder/predictor:** larger video pretraining and
+   generative auxiliary decoders only when substantial CUDA compute and
+   real-video data are available. Distill or adapt its proposals into the same
+   explicit belief runtime.
+
+Every rung declares parameter count, episode/token draws, approximate data
+passes, peak memory, throughput, optimizer/gradient health, and a predeclared
+training budget large enough to expose a plateau. Promotion requires disjoint
+validation and test manifests, held-out initial conditions and parameter
+combinations, OOD object counts/camera paths, recovery perturbations, and no
+material regression against both the smaller accepted model and the analytic
+low-complexity prior. Training loss alone, a shorter run, or one improved slice
+cannot justify scaling.
 
 ---
 

@@ -38,6 +38,14 @@ def test_sustained_v3_analytic_contacts_match_reference_solver_thresholds() -> N
     assert dynamics.pair_collision_speed_epsilon == pytest.approx(1.0e-7)
 
 
+def test_innovation_anchored_correction_is_explicit_protocol_semantics() -> None:
+    legacy = load_config(CONFIG_DIR / "toy_smoke.yaml")
+    corrected = load_config(CONFIG_DIR / "sustained_accuracy_balanced_mps.yaml")
+
+    assert not legacy.model.filter.innovation_anchored_correction
+    assert corrected.model.filter.innovation_anchored_correction
+
+
 def test_dotted_override_is_typed(tmp_path: Path) -> None:
     config = load_config(
         CONFIG_DIR / "toy_smoke.yaml",

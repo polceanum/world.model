@@ -259,6 +259,14 @@ def _model_checkpoint_semantics(value: object) -> object:
         for field_name, historical_value in _DYNAMICS_LEGACY_DEFAULTS.items():
             normalized_dynamics.setdefault(field_name, historical_value)
         model["dynamics"] = normalized_dynamics
+    filter_config = model.get("filter")
+    if isinstance(filter_config, Mapping):
+        normalized_filter = dict(filter_config)
+        # Checkpoints before specification 1.19 used the unanchored learned
+        # residual path. Missing is therefore exactly legacy False, not the
+        # semantics selected by a newer training profile.
+        normalized_filter.setdefault("innovation_anchored_correction", False)
+        model["filter"] = normalized_filter
     association = model.get("association")
     if isinstance(association, Mapping):
         normalized_association = dict(association)

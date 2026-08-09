@@ -217,6 +217,9 @@ class FilterConfig:
     min_log_variance: float = -12.0
     max_log_variance: float = 8.0
     learned_residual_scale: float = 0.15
+    # False preserves checkpoints trained before specification 1.19. New
+    # protocols should opt into evidence-anchored, component-masked updates.
+    innovation_anchored_correction: bool = False
     missed_variance_growth: float = 0.08
 
 

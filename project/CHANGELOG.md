@@ -1246,3 +1246,19 @@ improved current and 0.1-second position on one seed, but velocity regressed.
 The gate and proposal therefore remain disabled in the scaled profile. The
 next target is an intervention-aware camera-lateral outgoing correction, not
 further gravity-axis threshold tuning.
+
+## 2026-08-09 — specification 1.19 correction integrity and scale path
+
+- Stopped and rejected protocol 18 at durable step 128 after exact fixed
+  validation worsened current position and all five forecast horizons.
+- Preserved exact dynamics-only, updater-plus-identifier, and updater-only
+  ablations that localize the regression to the learned fast updater.
+- Added opt-in innovation-anchored learned correction with explicit per-axis
+  world-state evidence, support/confidence masking, and zero-innovation mean
+  invariance while preserving legacy checkpoint behavior by default.
+- Added focused axis-local/support-mask/config/checkpoint tests (`142 passed`),
+  including legacy-false checkpoint normalization; full non-device regression
+  reports `636 passed, 5 skipped, 1 deselected` and host MPS reports `1 passed`.
+- Advanced the specification to 1.19 with a staged abstraction-token attention
+  ladder from a 1--4M parameter Mac pilot to later CUDA-scale latent video
+  pretraining, gated by disjoint generalization and broad non-regression.

@@ -1,6 +1,6 @@
 # Tasks
 
-## Active convergence target — scenario-balanced shared optimization
+## Active convergence target — corrected control before attention scaling
 
 - [x] Diagnose protocol-17 step-2,048 per-axis/per-scenario regression with
   exact learned-corrector scale and updater/dynamics checkpoint ablations.
@@ -17,15 +17,29 @@
   objective, and interaction output row; verify both declared clips bounded
   the finite update and add explicit severe-clip reporting to the dynamics
   auditor.
-- [ ] Measure severe-clipping recurrence over a materially larger balanced
-  prefix; change gradient aggregation only if fixed validation or recurrence
-  proves that rare recursive-velocity examples dominate shared optimization.
-- [ ] Inspect every 512-update fixed validation for pooled and per-scenario
+- [x] Stop protocol 18 at durable step 128 after exact fixed validation proved
+  all-horizon regression; preserve its artifacts and do not resume it.
+- [x] Isolate the regression with exact dynamics-only,
+  updater-plus-identifier, and updater-only fixed-manifest ablations.
+- [x] Repair the learned corrector so explicit per-axis world innovation and
+  declared field support mask learned mean/variance residuals, while legacy
+  checkpoint semantics remain reproducible by default.
+- [ ] Run the complete non-device/device regression suites and exact 32-episode
+  fixed RGB-only qualification of the innovation-anchored step-zero control.
+- [ ] If the repaired control is non-regressing, train balanced protocol 19
+  long enough for repeated fixed validation and a declared plateau; inspect
+  pooled and per-scenario
   current/velocity, x/y/z, every horizon, identity, lifecycle, events,
   calibration, support, optimizer state, and memory.
-- [ ] Continue through at least 4,096 balanced updates and only declare
+- [ ] Continue through the predeclared balanced minimum and only declare
   convergence after four comparable fixed validations satisfy the existing
   plateau rule; extend rather than promote a broad regression.
+- [ ] After the corrected control qualifies, implement the Mac attention pilot:
+  2--4 pre-normalized entity/relation/event blocks, width 128, four heads,
+  bounded belief history, typed residual decoders, and 1--4M added parameters.
+- [ ] Compare the attention pilot against the accepted control and a
+  parameter-matched graph/MLP control on disjoint validation/test and OOD
+  manifests; scale data with capacity and reject any broad regression.
 
 ## Supported sustained scaled accuracy campaign
 

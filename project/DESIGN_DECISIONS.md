@@ -2246,3 +2246,60 @@
   mistaking curriculum variance for failure, and restart telemetry remains
   auditable. A passing health report proves only that optimization is
   functioning; it cannot promote weights or establish accuracy convergence.
+
+## ADR-088 — Reject protocol 18 and anchor correction to typed innovation
+
+- **Date:** 2026-08-09
+- **Status:** accepted and implemented; broad qualification pending
+- **Context:** The balanced protocol-18 optimizer remained finite and fully
+  supported through step 128, but exact fixed validation worsened current state
+  and every forecast horizon. Dynamics-only was nearly neutral, whereas
+  updater-only reproduced the full regression. Inspection showed that the
+  learned corrector reduced camera-space innovation to pooled statistics and
+  then applied arbitrary deltas to all packed fast-state and variance fields.
+  It therefore lacked the axis/sign evidence needed for its outputs and
+  ignored the modality's declared state support.
+- **Decision:** Stop and reject protocol 18. Add explicit opt-in
+  innovation-anchored semantics: form whitened world-position and supported
+  velocity evidence per associated pair, treat learned outputs as bounded
+  gains on that evidence, apply per-axis measurement/surprise confidence, and
+  mask learned mean and variance changes to supported components. Zero
+  innovation produces zero learned mean movement. Preserve unanchored legacy
+  semantics as the default for historical checkpoint reproduction; the next
+  config opts in and starts weights-only.
+- **Alternatives considered:** train protocol 18 longer; lower its learning
+  rate; remove the state gate; train dynamics only; relax the elastic-pair
+  guardrail; scale the same updater with a larger network.
+- **Consequences:** The correction path again satisfies the measurement support
+  contract and retains learnable context-dependent positive or negative gains.
+  Focused tests pass, but neither the semantic migration nor new training is
+  accepted until the unchanged 32-episode RGB-only selector passes.
+
+## ADR-089 — Scale transformers over explicit predictive abstractions
+
+- **Date:** 2026-08-09
+- **Status:** accepted architecture direction; implementation gated on ADR-088
+- **Context:** Modern Transformers provide content-dependent token interaction
+  and scalable parallel training; Perceiver-style bottlenecks handle dense
+  multimodal inputs, and JEPA-style feature prediction scales self-supervision.
+  Contemporary video world models also show strong distributed physical
+  representations. None of that removes Orpheus's need for fast explicit
+  trajectories, uncertainty, identity, lifecycle, online correction, and
+  measurable long-horizon state accuracy. The current laptop also cannot
+  establish a credible path by jumping directly to foundation-model scale.
+- **Decision:** Scale through derived entity, relation, event, scene/camera,
+  and bounded-history tokens while `WorldBelief` remains authoritative. Begin
+  only after the corrected small control qualifies. The Mac pilot adds 2--4
+  pre-normalized width-128/four-head blocks and typed residual decoders, then
+  compares them with the accepted model and a parameter-matched graph control.
+  Wider single-GPU and foundation-video rungs follow only with commensurate
+  data and fixed disjoint generalization evidence.
+- **Alternatives considered:** replace the runtime with a video generator;
+  tokenize all RGB history autoregressively; immediately increase every hidden
+  width; use training loss as the scaling gate; defer all attention work until
+  cloud compute is available.
+- **Consequences:** Local work tests the architecture and scaling law rather
+  than pretending the Mac can train a foundation model. Every rung records
+  parameters, data exposure, throughput, memory, plateau evidence, and broad
+  RGB-only/OOD metrics. Attention proposes typed updates and cannot bypass the
+  analytic/filtering contracts.

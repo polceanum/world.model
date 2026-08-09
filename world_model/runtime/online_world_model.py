@@ -425,6 +425,7 @@ class OnlineWorldModel(nn.Module):
                 minimum_log_variance=filter_config.min_log_variance,
                 maximum_log_variance=filter_config.max_log_variance,
                 learned_residual_scale=filter_config.learned_residual_scale,
+                innovation_anchored_correction=(filter_config.innovation_anchored_correction),
                 missed_fast_variance_increment=(filter_config.missed_variance_growth),
                 observed_confidence_threshold=(association_config.minimum_measurement_confidence),
             ),
