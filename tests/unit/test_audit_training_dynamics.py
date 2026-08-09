@@ -24,6 +24,15 @@ def _record(step: int, **overrides: object) -> dict[str, object]:
         "training_data_draw_step": float(step),
         "process_max_rss_bytes": 1000.0,
         "scenario_names": "baseline,elastic_pairs",
+        "physical_current_distance_gated_target_coverage": 0.5,
+        "physical_current_distance_gated_prediction_precision": 0.4,
+        "physical_distance_gated_identity_switch_rate": 0.1,
+        "physical_collision_f1_proxy": 0.25,
+        "physical_position_coverage90": 0.9,
+        "uncertainty_position_nll": -0.5,
+        "loss_rollout_position_x": 0.1,
+        "physical_rollout_position_rmse_m@1.000s": 0.3,
+        "physical_forecast_target_coverage@1.000s": 0.6,
     }
     record.update(overrides)
     return record
@@ -67,6 +76,11 @@ def test_audit_canonicalizes_replayed_tail_without_double_counting(tmp_path) -> 
         "latest": 1000.0,
         "maximum": 1000.0,
     }
+    diagnostics = report["live_physical_diagnostics"]
+    assert diagnostics["physical_position_coverage90"]["median"] == 0.9
+    assert diagnostics["rollout_position_loss_by_axis"]["x"]["median"] == 0.1
+    assert diagnostics["rollout_position_rmse_by_horizon_m"]["1.000s"]["median"] == 0.3
+    assert diagnostics["forecast_target_coverage_by_horizon"]["1.000s"]["median"] == 0.6
 
 
 def test_audit_reports_numerical_support_and_scope_failures(tmp_path) -> None:

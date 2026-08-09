@@ -2186,7 +2186,8 @@
   in every model/data metric except process timing and RSS, and fail on
   numerical, optimizer, causal-support, objective-support, gradient,
   frozen-scope, or data-draw invariant violations. Report training
-  distributions and fixed-validation axes/horizons, while reserving
+  lifecycle/identity/event/uncertainty, correction, observability, axis, and
+  horizon distributions together with fixed-validation axes/horizons, while reserving
   convergence and promotion exclusively for tensor-verified complete
   validation checkpoints and the declared plateau selector.
 - **Alternatives considered:** infer convergence from smoothed training loss;

@@ -11,6 +11,8 @@ from pathlib import Path
 from statistics import median
 from typing import Any
 
+_HORIZONS = ("0.100s", "0.250s", "0.500s", "0.750s", "1.000s")
+
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
@@ -54,6 +56,18 @@ def _distribution(values: list[float]) -> dict[str, float | None]:
         "p95": _percentile(values, 0.95),
         "maximum": max(values) if values else None,
     }
+
+
+def _metric_distribution(records: list[dict[str, Any]], key: str) -> dict[str, float | None]:
+    return _distribution(
+        [
+            float(record[key])
+            for record in records
+            if isinstance(record.get(key), (int, float))
+            and not isinstance(record.get(key), bool)
+            and math.isfinite(float(record[key]))
+        ]
+    )
 
 
 def _decoded_list_length(value: Any) -> int | None:
@@ -201,7 +215,6 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
         if isinstance(names, str):
             scenario_counts.update(name for name in names.split(",") if name)
 
-    horizons = ("0.100s", "0.250s", "0.500s", "0.750s", "1.000s")
     validation_summary = []
     for record in validations:
         validation_summary.append(
@@ -232,21 +245,51 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
                 "position_coverage90": record.get("validation_position_coverage90"),
                 "horizon_position_rmse_m": {
                     horizon: record.get(f"validation_position_rmse@{horizon}")
-                    for horizon in horizons
+                    for horizon in _HORIZONS
                 },
                 "horizon_position_rmse_by_axis_m": {
                     axis: {
                         horizon: record.get(f"validation_position_rmse_{axis}@{horizon}")
-                        for horizon in horizons
+                        for horizon in _HORIZONS
                     }
                     for axis in ("x", "y", "z")
                 },
                 "horizon_target_coverage": {
                     horizon: record.get(f"validation_forecast_target_coverage@{horizon}")
-                    for horizon in horizons
+                    for horizon in _HORIZONS
                 },
             }
         )
+
+    live_diagnostic_keys = (
+        "physical_current_distance_gated_target_coverage",
+        "physical_current_distance_gated_prediction_precision",
+        "physical_distance_gated_identity_switch_rate",
+        "physical_collision_f1_proxy",
+        "physical_position_coverage90",
+        "uncertainty_position_nll",
+        "current_correction_improvement_m",
+        "future_correction_improvement_m",
+        "matched_object_frames",
+        "existence_negative_supervision_object_frames",
+        "parameter_drag_observable_object_count",
+        "parameter_restitution_observable_object_count",
+    )
+    live_physical_diagnostics = {
+        key: _metric_distribution(training, key) for key in live_diagnostic_keys
+    }
+    live_physical_diagnostics["rollout_position_loss_by_axis"] = {
+        axis: _metric_distribution(training, f"loss_rollout_position_{axis}")
+        for axis in ("x", "y", "z")
+    }
+    live_physical_diagnostics["rollout_position_rmse_by_horizon_m"] = {
+        horizon: _metric_distribution(training, f"physical_rollout_position_rmse_m@{horizon}")
+        for horizon in _HORIZONS
+    }
+    live_physical_diagnostics["forecast_target_coverage_by_horizon"] = {
+        horizon: _metric_distribution(training, f"physical_forecast_target_coverage@{horizon}")
+        for horizon in _HORIZONS
+    }
     return {
         "run_directory": str(run_directory),
         "after_step": after_step,
@@ -271,6 +314,7 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
             "maximum": max(rss) if rss else None,
         },
         "scenario_draw_counts": dict(sorted(scenario_counts.items())),
+        "live_physical_diagnostics": live_physical_diagnostics,
         "validations": validation_summary,
     }
 

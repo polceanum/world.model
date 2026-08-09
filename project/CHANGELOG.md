@@ -83,6 +83,10 @@
 - Ran it on live protocol 17 through unique logged step 1,592: all eight
   canonical post-1,536 blocks were finite, supported, optimizer-applied, and
   perception-frozen with no skipped draw or memory high-water growth.
+- Extended the same audit with live lifecycle coverage/precision, identity,
+  collision, uncertainty, correction, parameter-observability, axis-local,
+  and horizon-resolved distributions. Ten canonical blocks through step 1,608
+  pass; no health metric justifies interrupting the unchanged protocol.
 
 ### 2026-08-09 perception-local auxiliary-gradient repair
 

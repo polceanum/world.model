@@ -260,7 +260,8 @@
 - [x] Add a deterministic live dynamics audit that canonicalizes exact-resume
   replay rows, verifies their model/data equivalence, detects finite/update/
   support/scope/data-progress failures, and reports every-axis/horizon fixed
-  validation evidence without treating training loss as convergence.
+  validation plus live lifecycle/identity/event/uncertainty/observability
+  evidence without treating training loss as convergence.
 - [ ] After protocol 17 reaches a terminal convergence decision, make resumed
   metrics attempts explicit so an uncheckpointed pre-stop tail and its exact
   replay cannot be naïvely double-counted. Preserve append-only evidence and

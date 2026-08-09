@@ -152,6 +152,17 @@ reported as one canonical block plus one preserved replay record. No new
 fixed validation exists beyond the rejected step-1,536 candidate, so this is
 health evidence only, not accuracy or convergence evidence.
 
+The audit now also summarizes live lifecycle coverage/precision, identity
+churn, collision signal, position calibration, correction benefit, drag and
+restitution observability, axis-local rollout objectives, and horizon-resolved
+RMSE/coverage. Through unique step 1,608, all ten canonical post-1,536 blocks
+still pass. Distance-gated identity-switch rate was zero in every logged
+block, median position coverage90 was `0.972222`, median current correction
+improvement was `+0.020439 m`, drag/restitution observability remained
+represented, and every axis and horizon had finite supported diagnostics.
+Future correction improvement was approximately neutral at median
+`-0.000102 m`; this is monitored but is not a fixed-validation regression.
+
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
   pytest -q -p no:cacheprovider \
