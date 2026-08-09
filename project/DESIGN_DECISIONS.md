@@ -1,5 +1,28 @@
 # Design decisions
 
+## ADR-089 — Surface severe clipping; do not redesign from one bounded hard window
+
+- **Date:** 2026-08-09
+- **Status:** accepted monitoring policy; recurrence qualification pending
+- **Context:** The first 63 protocol-18 updates were substantially more stable
+  than protocol 17, but update 64 produced a raw norm of `30.3853`. Exact replay
+  localized it to one baseline trajectory's recursive velocity gradient
+  through normal/tangential pair-force outputs. Local interaction and global
+  clipping bounded the applied update, and update 72 recovered immediately.
+  The existing auditor checked finiteness but did not call out clip severity.
+- **Decision:** Warn whenever either clipping coefficient is below `0.1` and
+  report exact steps/coefficients. Keep the existing forward dynamics and
+  hierarchical clips while measuring recurrence and fixed-manifest effects.
+  Do not infer collapse or change balanced optimization from one finite,
+  successfully bounded hard example.
+- **Alternatives considered:** stop protocol 18 immediately; remove recursive
+  velocity supervision; reduce force capacity; lower the clip thresholds;
+  compute separate per-scenario gradients on every update.
+- **Consequences:** Monitoring now distinguishes ordinary clipping from an
+  update that discards over 90% of a raw group gradient. A repeated severe-clip
+  rate or broad fixed-validation regression will trigger a gradient-aggregation
+  intervention; isolated hard examples remain trainable without silent drift.
+
 ## ADR-088 — Aggregate every scenario in each shared-model optimizer update
 
 - **Date:** 2026-08-09

@@ -12,6 +12,7 @@ from statistics import median
 from typing import Any
 
 _HORIZONS = ("0.100s", "0.250s", "0.500s", "0.750s", "1.000s")
+_SEVERE_CLIP_COEFFICIENT = 0.1
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -215,6 +216,23 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
         for record in training
         if "gradient_total_clip_coefficient" in record
     ]
+    severe_clipped_steps: list[dict[str, float | int]] = []
+    for record in training:
+        total_coefficient = float(record.get("gradient_total_clip_coefficient", 1.0))
+        interaction_coefficient = float(record.get("interaction_gradient_clip_coefficient", 1.0))
+        if min(total_coefficient, interaction_coefficient) < _SEVERE_CLIP_COEFFICIENT:
+            severe_clipped_steps.append(
+                {
+                    "step": int(record["step"]),
+                    "total_coefficient": total_coefficient,
+                    "interaction_coefficient": interaction_coefficient,
+                }
+            )
+    if severe_clipped_steps:
+        warnings.append(
+            "severe gradient clipping retained less than 10% of at least one "
+            "raw parameter-group/update gradient"
+        )
     trajectory_support = [
         float(record["causal_trajectory_support_count"])
         for record in training
@@ -333,6 +351,7 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
         "loss_total": _distribution(losses),
         "gradient_norm_pre_clip": _distribution(gradients),
         "clipped_block_count": sum(coefficient < 1.0 for coefficient in clip_coefficients),
+        "severe_clipped_steps": severe_clipped_steps,
         "trajectory_support_count": _distribution(trajectory_support),
         "maximum_skipped_draws": skipped_max,
         "process_rss_bytes": {

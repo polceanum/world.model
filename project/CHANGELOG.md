@@ -24,6 +24,17 @@
   supervisor are active with MPS measurement, CPU closed-loop execution,
   Standard QoS, advancing 32-episode initialization heartbeat, and empty
   stderr; no trained result exists yet.
+- Completed initialization and the first 72 balanced updates without skipped,
+  non-finite, support, scope, worker, or memory failure. Early balanced updates
+  materially reduce typical gradient clipping and increase causal support
+  relative to protocol 17.
+- Isolated one severe step-64 gradient to baseline seed `16081` and the
+  recursive rollout-velocity path through continuous pair-force outputs. Both
+  hierarchical clips worked and step 72 returned to normal; recurrence and
+  fixed validation remain required before changing or promoting the model.
+- Made `audit_training_dynamics.py` warn on global or interaction clipping that
+  retains less than 10% of the raw gradient and report the exact step and both
+  coefficients. Added a focused regression test.
 
 ### 2026-08-09 rollout uncertainty-gradient repair
 

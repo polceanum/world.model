@@ -13,6 +13,13 @@
 - [x] Commit and push specification 1.18, stop the superseded protocol-17
   trainer/supervisor at a durable checkpoint, and launch the clean immutable
   balanced campaign from protocol-17 step 512.
+- [x] Diagnose the protocol-18 step-64 hard-window gradient by exact episode,
+  objective, and interaction output row; verify both declared clips bounded
+  the finite update and add explicit severe-clip reporting to the dynamics
+  auditor.
+- [ ] Measure severe-clipping recurrence over a materially larger balanced
+  prefix; change gradient aggregation only if fixed validation or recurrence
+  proves that rare recursive-velocity examples dominate shared optimization.
 - [ ] Inspect every 512-update fixed validation for pooled and per-scenario
   current/velocity, x/y/z, every horizon, identity, lifecycle, events,
   calibration, support, optimizer state, and memory.

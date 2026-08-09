@@ -63,7 +63,48 @@ eight-scenario optimizer batches are now implemented, and a real batch-eight
 smoke completed one finite supported update and terminal validation at 1.20 GB
 maximum RSS; the superseded protocol-17 jobs are stopped and the clean
 protocol-18 balanced campaign plus exact-source convergence supervisor are
-active in initialization validation
+active after completing initialization validation and 72 balanced updates;
+one severe but finite step-64 recursive interaction gradient was isolated to
+the baseline seed-16081 rollout-velocity objective, bounded by both declared
+clips, followed by a normal step-72 update, and is now surfaced truthfully by
+the training-dynamics auditor
+
+## 2026-08-09 — protocol-18 early dynamics and severe-clip observability
+
+Protocol 18 established the imported step-512 protocol-17 candidate as its
+immutable step-zero reference on the unchanged 32-episode selector. The
+reference score is `0.3189518`; this is initialization evidence, not a new
+accuracy result. Through update 72, all nine logged optimizer blocks applied,
+every scenario appeared exactly once per update, no causal-support, finite-
+state, frozen-perception, worker, or memory failure occurred, and maximum RSS
+stabilized at `1,423,511,552` bytes.
+
+The first seven balanced blocks reduced median raw gradient from `4.5935` in
+the comparable protocol-17 prefix to `0.9645`, reduced clipping from `7/7` to
+`2/7`, and raised median causal trajectory support from `69` to `349`. Update
+64 then exposed a real rare-window spike: raw interaction/full norms were
+`28.5453 / 30.3853`; local interaction clipping retained `0.0350`, and global
+clipping retained an overall `0.0658`, producing a finite applied norm of
+`2.0`. The next logged update returned to an unclipped `0.9823` norm with all
+13 objectives and 385 trajectory rows.
+
+An exact CPU replay from `validation_step_000000.pt` localized the spike to
+the `baseline` episode seed `16081`: its interaction norm was `37.1272`, while
+the other seven scenarios were at or below `1.3271`. Weighted objective
+autograd attributed `36.7589` to recursive rollout velocity; every other term
+was at or below `0.4291`. The interaction output-row gradients were concentrated
+in continuous normal/tangential force, not impulse residuals, event BCE,
+uncertainty, or parameter identification. This is currently one bounded hard
+trajectory rather than evidence of numerical collapse; recurrence frequency
+remains under audit before any optimization change.
+
+The dynamics auditor previously treated any finite clipped update as an
+unqualified pass. It now warns and reports exact steps whenever global or
+interaction clipping retains less than 10% of the raw gradient. Focused tests
+report `5 passed`; Ruff check and format-check pass. Running it on protocol 18
+now reports step 64 with total/interaction coefficients `0.0658212 / 0.0350320`.
+No checkpoint is promoted; the first trained fixed validation remains due at
+step 512.
 
 ## 2026-08-09 — scenario-balanced optimization repair
 
