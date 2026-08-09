@@ -92,6 +92,9 @@ Working rules:
 - Omit unsupported objectives rather than averaging fabricated zero examples.
   Use uncertainty calibration to train variance without duplicating an
   explicitly supervised state-mean gradient.
+- Keep RGB measurement auxiliaries perception-local. A frozen fast ROI can
+  remain differentiable through its prior input, but that must not let its
+  measurement loss train dynamics or the belief updater.
 - Do not consume a causal optimizer step from global auxiliary perception
   alone. Require explicit differentiable trajectory/state/parameter support or
   a valid persistent fast-ROI slot; count deterministic skipped draws

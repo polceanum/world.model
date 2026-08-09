@@ -2027,3 +2027,32 @@
   giving velocity/coverage repair a disjoint later phase. Scope and boundary
   are exact configuration semantics, and the intermediate ROI state remains
   unaccepted until the ordinary broad selector passes.
+
+## ADR-082 — Keep measurement auxiliaries perception-local
+
+- **Date:** 2026-08-09
+- **Status:** accepted; corrected qualification pending
+- **Context:** Protocol 15 was finite and obeyed its parameter freeze boundary,
+  but four late candidates formed a failed accuracy plateau. Exact module
+  ablations showed both late dynamics and late updater/identifier tensors
+  damaged long-horizon forecasts. Although every RGB parameter was frozen in
+  `state_dynamics`, the fast ROI is prior-conditioned, so its measurement loss
+  still required gradients through the propagated prior and silently trained
+  the physical stack. The scope froze weights but not the unintended
+  cross-module objective path.
+- **Decision:** Classify fast-measurement trainability only from shared fast
+  encoder stages, the ROI-exclusive projection, and the ROI updater. If none
+  is trainable, detach and log `frozen_fast_measurement` plus its component
+  diagnostics, exclude the branch from the optimized measurement total, and
+  omit it from causal fast-support terms. State/dynamics remain supervised by
+  their explicit physical objectives.
+- **Alternatives considered:** continue because the path is mathematically
+  differentiable; reduce the global learning rate; promote step 512 despite
+  guardrail failures; train dynamics and perception jointly again; remove fast
+  diagnostics entirely.
+- **Consequences:** Trainable scopes now isolate both tensors and objective
+  ownership. Protocol-15 weights cannot validate the corrected objective; the
+  next campaign starts weights-only from the same accepted reference under
+  specification 1.16 and unchanged broad selection. Checkpoint metadata is
+  synchronized to the same specification version and tested against the
+  authoritative document header.

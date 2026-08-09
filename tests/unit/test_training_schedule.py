@@ -14,6 +14,7 @@ from world_model.training.loop import (
     TrainingBatchResult,
     _combine_measurement_objectives,
     _distance_gate_physical_matches,
+    _fast_measurement_has_trainable_perception_path,
     _global_measurement_has_trainable_path,
     _globally_weight_horizon_details,
     _group_closed_loop_terms,
@@ -457,6 +458,7 @@ def test_state_dynamics_scope_freezes_rgb_and_trains_filter_dynamics_identifier(
         parameter.requires_grad for parameter in model.identifier.variance_head.parameters()
     )
     assert not any(parameter.requires_grad for parameter in model.observation_modules.parameters())
+    assert not _fast_measurement_has_trainable_perception_path(model.observation_modules["rgb"])
 
 
 def test_state_dynamics_roi_scope_trains_fast_rgb_without_global_perception() -> None:
@@ -531,6 +533,7 @@ def test_state_dynamics_fast_roi_scope_keeps_shared_backbone_frozen() -> None:
     )
     assert not any(parameter.requires_grad for parameter in rgb.global_detector.parameters())
     assert not _global_measurement_has_trainable_path(rgb)
+    assert _fast_measurement_has_trainable_perception_path(rgb)
 
 
 def test_fast_roi_scope_freezes_state_and_global_modules() -> None:
@@ -549,6 +552,7 @@ def test_fast_roi_scope_freezes_state_and_global_modules() -> None:
         parameter.requires_grad for stage in rgb.backbone.stages for parameter in stage.parameters()
     )
     assert not any(parameter.requires_grad for parameter in rgb.global_detector.parameters())
+    assert _fast_measurement_has_trainable_perception_path(rgb)
 
 
 def test_closed_loop_scope_transition_counts_causal_updates() -> None:

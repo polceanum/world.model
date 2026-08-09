@@ -738,6 +738,30 @@ def test_frozen_global_measurement_is_diagnostic_only_with_fast_roi_scope() -> N
     )
 
 
+def test_frozen_fast_measurement_cannot_train_state_dynamics_through_prior() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    batch = collate_episodes([generate_episode(config, seed=9)])
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    set_closed_loop_trainable_scope(model, scope="state_dynamics")
+
+    result = run_closed_loop_batch(
+        model,
+        batch,
+        config,
+        window_steps=4,
+        apply_perturbations=False,
+        include_measurement_supervision=True,
+        rollout_anchors_per_window=1,
+        compute_future_correction=False,
+    )
+
+    assert "frozen_global_measurement" in result.metrics
+    assert "frozen_fast_measurement" in result.metrics
+    assert "measurement" not in result.loss_terms
+    assert "measurement_fast" not in result.metrics
+    assert not result.support_terms
+
+
 def test_velocity_correction_is_a_distinct_weightable_objective() -> None:
     terms = _group_closed_loop_terms(
         {

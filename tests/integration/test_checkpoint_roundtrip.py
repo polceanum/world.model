@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -24,6 +25,17 @@ from world_model.training.loop import (
 from world_model.training.trainer import train_from_config
 from world_model.utils.config import load_config
 from world_model.utils.device import select_device
+from world_model.utils.version import SPECIFICATION_VERSION
+
+
+def test_checkpoint_specification_version_matches_authoritative_contract() -> None:
+    specification = (Path(__file__).resolve().parents[2] / "PROJECT_SPEC.md").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(r"^\*\*Version:\*\* ([0-9.]+)$", specification, re.MULTILINE)
+
+    assert match is not None
+    assert match.group(1) == SPECIFICATION_VERSION
 
 
 def _small_config():

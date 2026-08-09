@@ -1757,6 +1757,34 @@ def _global_measurement_has_trainable_path(module: torch.nn.Module) -> bool:
     )
 
 
+def _fast_measurement_has_trainable_perception_path(module: torch.nn.Module) -> bool:
+    """Return whether fast-ROI supervision can update RGB perception.
+
+    A fast residual is conditioned on the propagated prior.  When RGB
+    perception is frozen, the resulting loss can still require gradients via
+    that prior and therefore accidentally train dynamics or the belief
+    corrector.  Measurement supervision is a perception-local auxiliary: the
+    physical stack has its own current-state, rollout, event, uncertainty, and
+    correction objectives.  Treat only the shared fast encoder, ROI-only
+    projection, and ROI updater as valid trainable paths for this branch.
+    """
+
+    backbone = getattr(module, "backbone", None)
+    roi_updater = getattr(module, "roi_updater", None)
+    if backbone is None or roi_updater is None:
+        raise TypeError("RGB module is missing backbone or roi_updater")
+    fast_modules = (
+        *backbone.stages[:2],
+        backbone.fast_projection,
+        roi_updater,
+    )
+    return any(
+        parameter.requires_grad
+        for component in fast_modules
+        for parameter in component.parameters()
+    )
+
+
 def _valid_rollout_offsets(
     config: OrpheusConfig,
     frame_index: int,
@@ -3234,15 +3262,20 @@ def run_closed_loop_batch(
                             matched_slots=matched_slots,
                             roi_bounds=predicted.rois,
                         )
+                        fast_trainable = (
+                            torch.is_grad_enabled()
+                            and _fast_measurement_has_trainable_perception_path(module)
+                        )
+                        fast_total = _weighted_measurement_total(
+                            fast_supervised,
+                            config.training.measurement_loss_weights,
+                        )
                         add(
-                            "fast_measurement",
-                            _weighted_measurement_total(
-                                fast_supervised,
-                                config.training.measurement_loss_weights,
-                            ),
+                            "fast_measurement" if fast_trainable else "frozen_fast_measurement",
+                            fast_total if fast_trainable else fast_total.detach(),
                         )
                         for name, value in fast_supervised.items():
-                            add(f"fast_{name}", value)
+                            add(f"fast_{name}", value if fast_trainable else value.detach())
                         fast_supervised_frames += 1
                         fast_supervised_slots += int(valid_supervision.sum().detach().cpu())
 

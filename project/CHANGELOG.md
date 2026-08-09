@@ -2,6 +2,24 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-09 perception-local auxiliary-gradient repair
+
+- Stopped and preserved protocol 15 after validation candidates at steps
+  1,024–2,560 met the four-candidate failed-plateau rule. Training was finite,
+  supported, and correctly frozen by tensor group, but no candidate passed the
+  fixed broad selector and long-horizon x accuracy regressed.
+- Rejected exact step-1,536 dynamics-only and updater/identifier-only module
+  qualifications. Neither subsystem independently retained the early
+  fast-ROI localization gain across the complete forecast horizon.
+- Fixed an objective-routing leak: frozen fast-ROI measurement supervision can
+  no longer train dynamics/updater through its predicted-prior input. It is
+  now a detached `frozen_fast_measurement` diagnostic unless a real fast RGB
+  perception path is trainable, and cannot impersonate causal fast support.
+- Added predicate, scope, full closed-loop objective, and support regressions;
+  advanced the specification to 1.16. A fresh qualification is required.
+- Synchronized checkpoint specification metadata from stale `1.12` to `1.16`
+  and added a contract-header consistency regression.
+
 ### 2026-08-08 frozen-loss objective-integrity repair
 
 - Audited the frozen-backbone campaign through 4,744 supported causal updates

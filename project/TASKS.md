@@ -225,9 +225,19 @@
   transition to a late state/dynamics scope, with per-update phase metrics.
 - [x] Launch the clean specification-1.15 campaign for 512 fast-ROI-only
   updates followed by state/dynamics from the accepted reference.
-- [ ] Inspect the step-512 localization checkpoint, prove the scope transition
-  in subsequent metrics/tensor deltas, and require velocity/coverage repair
-  before extending it.
+- [x] Inspect the step-512 localization checkpoint and prove exact scope/tensor
+  isolation. Stop protocol 15 after four later candidates meet the failed-
+  plateau rule without velocity/coverage or long-horizon repair.
+- [x] Qualify step-1,536 dynamics-only and updater/identifier-only donors on
+  the exact 32-episode manifest; preserve both rejected reports.
+- [x] Prevent frozen fast-ROI measurement auxiliaries from training dynamics
+  or the belief updater through their prior-conditioned input; keep detached
+  diagnostics and add real closed-loop objective/support regressions.
+- [x] Synchronize checkpoint `specification_version` metadata with the
+  authoritative 1.16 contract and test that the two cannot drift silently.
+- [ ] Launch a clean specification-1.16 weights-only replacement and require
+  broad velocity, coverage, identity, every-axis/horizon, and scenario
+  non-regression before promotion or extension.
 - [ ] If identity churn persists after the structural repair, add an explicit
   supervised pairwise association-margin objective and test duplicate
   suppression against missed live tracks; do not tune appearance weight alone.

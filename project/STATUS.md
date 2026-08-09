@@ -1,7 +1,7 @@
 # Project status
 
-**Date:** 2026-08-07
-**Specification:** `PROJECT_SPEC.md` 1.13
+**Date:** 2026-08-09
+**Specification:** `PROJECT_SPEC.md` 1.16
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -44,7 +44,99 @@ identity, z, coverage, and scenario guardrails; a new
 `state_dynamics_fast_roi` scope now freezes shared/global RGB perception for
 the next clean long run; strict convergence and acceptance remain unproven,
 and collision, identity, z-axis, coverage, and scenario-wide non-regression
-remain open
+remain open; the protocol-15 staged campaign is preserved as a finite failed
+plateau after exact ablations exposed fast-measurement gradient leakage into
+the frozen-perception state/dynamics phase; that routing defect is repaired,
+but its replacement qualification has not yet produced accuracy evidence
+
+## 2026-08-09 — staged-campaign plateau and auxiliary-gradient repair
+
+The staged campaign at
+`runs/20260808-193216-v10-protocol15-staged-fast-roi-state-dynamics/`
+completed 2,976 logged causal updates and broad validation through step 2,560.
+It remained finite, supported, single-process, and active until intentionally
+stopped; every RGB tensor changed only during the first 512-update `fast_roi`
+phase, and only dynamics/updater/identifier tensors changed afterward. There
+was no numerical, lifecycle-support, optimizer, or scope-freeze collapse.
+
+It nevertheless reached a failed accuracy plateau. Step 512 improved the raw
+score from `0.3296688` to `0.3214190`, current position RMSE from `0.2841220`
+to `0.2626464 m`, and four of five forecast horizons, but failed 122 reference
+guardrails including velocity, coverage, precision, y, identity, and scenario
+slices. The four subsequent exact candidates at steps 1,024–2,560 were all
+rejected and none improved the fixed incumbent score by 1%; scores were
+`0.3450999`, `0.3328185`, `0.3500511`, and `0.3614501`. This satisfies the
+declared failed-plateau rule, so the one-shot LaunchAgent was unloaded rather
+than spending the remaining 8,192-step budget unchanged.
+
+Exact 32-episode module ablations at the least-bad late checkpoint, step 1,536,
+showed that dynamics alone regressed all five horizons to
+`[0.307012, 0.311106, 0.337824, 0.364638, 0.374338] m` and failed 139
+guardrails. Updater plus identifier improved 0.1-second RMSE and coverage but
+regressed the longer horizons to
+`[0.275294, 0.291523, 0.332584, 0.368270, 0.389032] m`, failing 114
+guardrails. Reports are in
+`runs/20260809-062728-protocol15-step1536-dynamics-only/` and
+`runs/20260809-063510-protocol15-step1536-updater-identifier/`.
+
+The audit found an objective-routing bug. During `state_dynamics`, every RGB
+parameter was correctly frozen, but the fast ROI output remained
+differentiable through its propagated-prior input. Fast measurement loss was
+therefore still included and trained dynamics/updater to improve an auxiliary
+measurement residual, contrary to the staged isolation contract. The fast
+branch now counts as trainable only when a shared fast encoder stage, the
+ROI-only projection, or the ROI updater is trainable. Otherwise its scalar and
+components are detached `frozen_fast_measurement` diagnostics, excluded from
+the optimized total and fast causal-support map. A real closed-loop regression
+proves the state/dynamics scope has no measurement term or fast support.
+The same pass found checkpoint metadata still declared specification `1.12`;
+the package constant now matches authoritative specification `1.16`, with a
+regression that reads and compares the contract header.
+
+Focused verification on the repair:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider \
+  tests/unit/test_training_schedule.py \
+  tests/unit/test_training_objective_regressions.py
+# 103 passed in 7.27s
+```
+
+Complete verification after the provenance repair:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q -p no:cacheprovider -m "not device"
+# 620 passed, 5 skipped, 1 deselected in 153.74s
+
+/bin/zsh -lc 'PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus pytest -q \
+  -p no:cacheprovider -m device'
+# 1 passed, 625 deselected in 4.57s (host MPS)
+
+# The five otherwise sandbox-skipped MPS tests were also selected explicitly.
+# 5 passed in 7.20s (host MPS)
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus \
+  ruff format --check .
+# 188 files already formatted
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check .
+# All checks passed
+
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-protocol16-pycache PYTHONPATH=. \
+  conda run -n orpheus python -m compileall -q \
+  train.py evaluate.py demo.py scripts world_model tests
+# exit 0; git diff --check also passed
+```
+
+The raw interaction gradient had one extreme but finite step-1,736 outlier
+(`28053.64`) on a glancing-impact batch. The configured interaction-local cap
+reduced it before the whole-model cap, optimizer/model state stayed finite,
+and it did not recur at that scale; this remains a conditioning diagnostic,
+not evidence of numerical collapse. The corrected objective requires a fresh
+weights-only qualification. No protocol-15 candidate is promoted.
 
 ## 2026-08-08 — frozen-loss audit and objective-integrity repair
 

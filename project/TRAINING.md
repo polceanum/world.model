@@ -501,6 +501,16 @@ exact continuation semantics; changing them requires weights-only
 initialization. This schedule does not promote the step-512 candidate or relax
 any fixed-manifest guardrail.
 
+Protocol 15 proved that freezing perception tensors alone was insufficient:
+the prior-conditioned fast ROI remained differentiable through its input, so
+its auxiliary measurement loss trained the physical stack during the
+`state_dynamics` phase. Specification 1.16 makes measurement objectives
+perception-local. With fast perception frozen, the trainer logs detached
+`frozen_fast_measurement` diagnostics and excludes them from the optimized
+measurement term and fast-support map. A run created before this correction
+must not be resumed under the new objective; initialize weights-only from the
+verified reference.
+
 The convergence supervisor is also active under launchd label
 `com.polceanum.orpheus.convergence-20260803-112948`, monitoring initial trainer
 PID `31197`. It waits for the complete 16,384-step summary, verifies every
