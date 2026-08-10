@@ -162,8 +162,10 @@
   bounded memory. Exact audit proves 177 inherited tensors unchanged, all 48
   attention tensors live, all 48 optimizer states attention-owned at Adam step
   128, finite state, and intact protected hashes. Partial training remains
-  non-promotion evidence; update 152/280 recurrence and the step-512 selector
-  are still pending.
+  non-promotion evidence. The former step-152 event-heavy failure now improves
+  raw norm/retained interaction coefficient from `28.1387/0.03554` to
+  `7.1111/0.14308` with complete support and no severe clip. Step 280 recurrence
+  and the step-512 selector are still pending.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

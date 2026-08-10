@@ -452,9 +452,21 @@ optimizer tensors are finite. The mutable hash is
 matches checkpoint metadata; `best_rollout.pt`, `reference_rollout.pt`, and
 `validation_step_000000.pt` remain finite at step zero with exact protected
 hash `1354bdfca1cef965c0cd907ea8c157c0fd82169e64f24da656eb42dd1a96df91`.
-This proves optimizer/scope/resource integrity only. The former update-152/280
-periodic batches, first trained selector at update 512, and convergence remain
-pending; the campaign continues under the same one-shot job.
+This proves optimizer/scope/resource integrity only. The former periodic
+batches, first trained selector at update 512, and convergence still require
+continued evidence; the campaign continues under the same one-shot job.
+
+The first former failure boundary at update 152 now passes. Its deterministic
+window again contains 22 ground-contact objects, seven pair-collision
+intervals, and one wall collision. The stopped conditioned run produced raw
+interaction norm `28.1387` and retained coefficient `0.03554`; the repaired
+run produces `7.1111` and retains `0.14308` at the interaction stage. Its raw
+collision row is `1.6490`, is locally reduced to `1.0`, and no longer forces a
+severe complete-block cap. All 13 objectives and 343 trajectory targets remain
+supported, the optimizer update applies, peak RSS remains unchanged, and
+stderr is empty. The post-128 auditor passes with zero failures/severe clips.
+This directly qualifies the update-152 repair but does not substitute for the
+second recurrence at 280 or fixed-selector accuracy.
 
 The present capacity is `1,103,626` typed-attention parameters and `3,004,656`
 parameters for the complete model, with at most 22 scene/entity/relation

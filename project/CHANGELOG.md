@@ -20,8 +20,10 @@
   The dynamics audit reports 128 applied updates, balanced support, zero
   skips/failures/severe clips, and bounded `2.99 GB` RSS. Sampled row caps
   preserve materially more unrelated interaction gradient as intended. The
-  historical update-152/280 boundary and first trained selector remain
-  pending; no trained accuracy or convergence claim exists yet.
+  former update-152 event-heavy failure improves from raw norm `28.1387` and
+  retained coefficient `0.03554` to `7.1111/0.14308`, with complete support
+  and no severe clip. Update 280 and the first trained selector remain pending;
+  no trained accuracy or convergence claim exists yet.
 
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,

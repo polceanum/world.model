@@ -3,7 +3,7 @@
 ## ADR-097 — Require repaired checkpoint and selector evidence before scaling
 
 - **Date:** 2026-08-10
-- **Status:** accepted; repaired campaign continuing
+- **Status:** accepted; step-152 repair passed, campaign continuing
 - **Context:** The collision-isolated campaign reached durable update 128 with
   128 applied balanced updates, no numerical/support/resource failure, exact
   inherited-weight isolation, all 48 attention tensors live, and attention-
@@ -25,6 +25,9 @@
   decision. A successful stage A unlocks bounded timestamped history and then
   one-axis-at-a-time dense capacity growth with commensurate data; a regression
   preserves the exact smaller control and triggers diagnosis before scaling.
+  The first former periodic failure at update 152 now retains `0.14308` rather
+  than `0.03554` of the interaction-stage gradient and passes the auditor; the
+  update-280 recurrence and fixed selectors remain required.
 
 ## ADR-096 — Isolate collision-logit gradients before the interaction group
 
