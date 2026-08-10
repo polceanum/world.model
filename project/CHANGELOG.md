@@ -13,11 +13,15 @@
   completes in `976.793 s` and exactly reproduces protected score
   `0.3213162196`, every pooled axis/horizon metric, and model hash
   `1354bdfc...df91` with no guardrail/support failure or stderr. Attention-only
-  training is active. The first 32 updates pass the dynamics audit with zero
-  skipped draws/failures/severe clips and bounded `2.99 GB` RSS. Sampled steps
-  24/32 cap raw collision-row norms `4.314/5.393` before the interaction group,
-  retaining substantially more unrelated gradient while preserving raw
-  diagnostics. No trained accuracy or convergence claim exists yet.
+  training is active. The first durable step-128 checkpoint passes exact
+  scope/state/hash audit: 177 inherited tensors remain bitwise unchanged, all
+  48 attention tensors change, all 48 optimizer states are attention-owned at
+  Adam step 128, every tensor is finite, and protected artifacts remain exact.
+  The dynamics audit reports 128 applied updates, balanced support, zero
+  skips/failures/severe clips, and bounded `2.99 GB` RSS. Sampled row caps
+  preserve materially more unrelated interaction gradient as intended. The
+  historical update-152/280 boundary and first trained selector remain
+  pending; no trained accuracy or convergence claim exists yet.
 
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,

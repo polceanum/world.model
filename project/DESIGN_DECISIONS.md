@@ -1,5 +1,31 @@
 # Design decisions
 
+## ADR-097 — Require repaired checkpoint and selector evidence before scaling
+
+- **Date:** 2026-08-10
+- **Status:** accepted; repaired campaign continuing
+- **Context:** The collision-isolated campaign reached durable update 128 with
+  128 applied balanced updates, no numerical/support/resource failure, exact
+  inherited-weight isolation, all 48 attention tensors live, and attention-
+  only Adam state. This is substantially stronger than a smoke but still
+  precedes the former update-152/280 anomaly and the first trained fixed
+  selector at update 512. Sampled scenario loss is heterogeneous and cannot
+  establish convergence.
+- **Decision:** Continue the unchanged 3.00M-parameter stage-A campaign through
+  the former anomaly boundaries, repeated complete selectors, and a declared
+  plateau. Do not add stage-B history, increase width/depth, or introduce MoE/
+  long-context optimizations until the current dense typed residual improves
+  or safely matches all protected multi-horizon guardrails. Judge convergence
+  on fixed selectors and later disjoint/OOD manifests, not sampled train loss.
+- **Alternatives considered:** scale immediately because state is finite; stop
+  at checkpoint 128; tune against individual sampled losses; add history and
+  capacity together; replace dense attention with MoE on the 22-token set.
+- **Consequences:** The current run remains long enough to reveal a real
+  learning curve on Mac hardware and produces a defensible scale/no-scale
+  decision. A successful stage A unlocks bounded timestamped history and then
+  one-axis-at-a-time dense capacity growth with commensurate data; a regression
+  preserves the exact smaller control and triggers diagnosis before scaling.
+
 ## ADR-096 — Isolate collision-logit gradients before the interaction group
 
 - **Date:** 2026-08-10

@@ -157,10 +157,13 @@
   `0.3213162196` and the complete protected model hash. Prove the periodic
   frames 7--11 batches no longer suppress unrelated gradients before accepting
   its first trained complete selector. Continue through repeated selectors and
-  the declared plateau. Through step 32 the auditor passes with balanced
-  support, zero skips/severe clips, bounded memory, and two sampled collision-
-  row caps that preserve materially more unrelated gradient. Partial training
-  remains non-promotion evidence.
+  the declared plateau. Through durable step 128 the auditor passes with 128
+  applied updates, balanced support, zero skips/failures/severe clips, and
+  bounded memory. Exact audit proves 177 inherited tensors unchanged, all 48
+  attention tensors live, all 48 optimizer states attention-owned at Adam step
+  128, finite state, and intact protected hashes. Partial training remains
+  non-promotion evidence; update 152/280 recurrence and the step-512 selector
+  are still pending.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

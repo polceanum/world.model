@@ -431,20 +431,30 @@ There are no selector guardrail/support failures and stderr remains empty.
 Attention-only training is active; no trained accuracy or convergence
 improvement is claimed from the equality control.
 
-The first 32 repaired optimizer updates pass the offline dynamics audit: four
-cadence-eight confirmations, 32 applied updates, four sampled draws from every
-scenario, zero skipped draws/failures/severe clips, trajectory support
-`162..396`, complete mature per-axis objectives after the cold-start block,
-empty stderr, and peak RSS `2,990,858,240` bytes. Step 8 transiently has raw
-interaction norm `6.336` and retained coefficient `0.1578`; steps 16/24/32
-remain finite at `1.719/4.792/5.424` with no coefficient below `0.1`. At steps
-24 and 32 the raw collision-row norms `4.314/5.393` are locally capped to
-`1.0`; post-row interaction norms `2.308/1.158` let unrelated gradients retain
-`0.433/0.863` at the interaction stage instead of applying the raw whole-group
-coefficients `0.209/0.184` to every typed output. This is direct evidence that
-the repair isolates the intended row while preserving truthful raw telemetry.
-It is optimizer-health evidence only; the former periodic steps, durable
-checkpoint integrity, and first trained selector remain pending.
+The repaired campaign has now reached its first durable checkpoint at update
+128. The offline dynamics audit reports 128 applied updates, 16 cadence-eight
+confirmations, exactly 16 sampled draws from every scenario, zero skipped
+draws/failures/severe clips, trajectory support `154..486` (median `329`),
+complete objectives, empty stderr, and stable peak RSS `2,990,858,240` bytes.
+Sampled raw gradients span `0.9164..7.2588` with median `4.5879`; the varying
+contact/event load produces heterogeneous batch loss rather than a monotonic
+explosion. At update 112, for example, 24 ground-contact objects produce a raw
+collision-row norm of `4.2285`; row isolation caps it before the remaining
+interaction block and preserves a `0.3512` interaction-stage coefficient.
+Update 120 is fully unclipped at `0.9164`, and update 128 retains `0.8287` at
+the post-row interaction stage despite a raw collision-row norm of `2.9903`.
+
+Exact step-128 checkpoint audit finds all 177 inherited tensors bitwise equal
+to step zero, all 48 attention tensors changed, and all 48 serialized optimizer
+states mapped only to named attention parameters at Adam step 128. Model and
+optimizer tensors are finite. The mutable hash is
+`bbadb23698e3712199c892e485e27e8480d8063a55901cd81112ef5d2cae9122` and
+matches checkpoint metadata; `best_rollout.pt`, `reference_rollout.pt`, and
+`validation_step_000000.pt` remain finite at step zero with exact protected
+hash `1354bdfca1cef965c0cd907ea8c157c0fd82169e64f24da656eb42dd1a96df91`.
+This proves optimizer/scope/resource integrity only. The former update-152/280
+periodic batches, first trained selector at update 512, and convergence remain
+pending; the campaign continues under the same one-shot job.
 
 The present capacity is `1,103,626` typed-attention parameters and `3,004,656`
 parameters for the complete model, with at most 22 scene/entity/relation
