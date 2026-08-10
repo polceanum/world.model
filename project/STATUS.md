@@ -208,7 +208,39 @@ reports `129 passed` in `18.54 s`. The complete non-device suite reports
 `650 passed, 5 skipped, 1 deselected` in `171.69 s`; the host-MPS device marker
 reports `1 passed, 655 deselected` in `3.04 s`. `ruff check .`,
 `ruff format --check .`, compileall, and `git diff --check` pass. A new clean
-host smoke remains pending.
+host smoke is complete at
+`runs/20260810-133010-attention-live-scene-smoke/`.
+
+Exact smoke command:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/attention_pilot_mps.yaml \
+  --initialize-from runs/20260810-042627-protocol20-y-only-recovery/checkpoints/validation_step_000064.pt \
+  --run-name 20260810-133010-attention-live-scene-smoke \
+  --device mps \
+  --set training.steps=2 \
+  --set training.checkpoint_every=2 \
+  --set training.eval_every=2 \
+  --set training.validation_episodes=16 \
+  --set evaluation.episodes=16
+```
+
+It completed in `649.0025 s` with MPS measurement, CPU closed loop, float32,
+RGB only, no oracle input, two optimizer updates/eight-scenario balanced
+batches, 16 episode draws, zero skips, loss `0.9372296`, raw/applied gradient
+`0.3623803/0.3623803`, and peak RSS `2,700,517,376` bytes. The reduced
+manifest correctly retains `last.pt` as `last_unvalidated`; no accuracy claim
+is made.
+
+Exact step-two checkpoint audit finds all 177 inherited tensors bitwise
+unchanged and all 48 attention tensors changed. `scene_projection.weight` has
+2,432 nonzero entries relative to step zero (`max=3.7078e-5`,
+`L2=0.0011339`) and its Adam first moment is nonzero (`L2=2.3550e-6`). Every
+optimizer state belongs to attention, model/optimizer tensors are finite,
+perception gradient is zero, data draw is exactly two, and source provenance
+is clean commit `c9f9dc6`. This closes the dead-scene wiring defect; sustained
+accuracy and convergence are still unproven.
 
 Historical verification for specification 1.22 before the live-scene repair:
 

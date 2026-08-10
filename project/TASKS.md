@@ -101,13 +101,18 @@
 - [x] Pass the corrected focused suite (`129 passed`), complete non-device
   suite (`650 passed, 5 skipped, 1 deselected`), host-MPS device marker
   (`1 passed, 655 deselected`), Ruff, format, compileall, and diff gates.
+- [x] Complete a clean two-update host smoke from the protected graph control:
+  verify MPS RGB/CPU closed-loop placement, finite supported updates, zero
+  skipped draws and frozen-perception gradient, all 177 inherited tensors
+  exact, all 48 attention tensors changed, and nonzero scene-projection weight
+  plus Adam moment by update two.
 - [ ] Run the declared 8,192-update, 65,536-draw balanced attention-only
   campaign through repeated complete 32-episode selectors and a real plateau;
   retain the protocol-14 step-64 graph runtime as the protected control. The
   first run at `runs/20260810-114053-attention-pilot-stage-a/` is stopped and
-  cannot count because its scene input was dead. Complete the full quality
-  gate and corrected host smoke, then launch a new timestamped clean run from
-  the same protected graph checkpoint.
+  cannot count because its scene input was dead. The corrected quality gate and
+  host smoke pass; launch a new timestamped clean run from the same protected
+  graph checkpoint.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

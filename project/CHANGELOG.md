@@ -57,6 +57,12 @@
   checkpoint coverage, `650 passed, 5 skipped, 1 deselected` for the complete
   non-device suite, and `1 passed, 655 deselected` on host MPS; Ruff, format,
   compileall, and diff checks pass.
+- Corrected two-update host smoke
+  `runs/20260810-133010-attention-live-scene-smoke/` completes in `649.00 s`
+  with MPS measurement, CPU closed loop, finite supported gradients, zero
+  skips, and no oracle input. Exact checkpoint audit leaves all 177 inherited
+  tensors unchanged, changes all 48 attention tensors, and gives the scene
+  projection a nonzero parameter delta and Adam moment by update two.
 
 ### 2026-08-10 fast-ROI ownership stability
 
