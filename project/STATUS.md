@@ -419,8 +419,17 @@ RGB measurement, CPU closed loop, float32, RGB-only/no-oracle execution, and
 the protected protocol-14 graph checkpoint as its weights-only initializer.
 The resolved protocol hash is
 `9cff424179133097847955f041cf35c73efb5947b66cd877b395b9c57f516fcb`.
-The mandatory step-zero 32-episode selector is in progress; no accuracy or
-convergence improvement is claimed from optimizer isolation or launch alone.
+The mandatory step-zero 32-episode selector completed all episodes in
+`976.793 s` (`987.004 s` including persistence) and exactly reproduces the
+protected score `0.3213162196`, current position `0.2514599 m`, velocity
+`1.0931909 m/s`, axes `0.281775/0.201906/0.263691 m`, and horizons
+`0.265184/0.277452/0.309911/0.335387/0.357837 m`. Coverage, precision,
+identity, collision, and calibration metrics also match. `best_rollout.pt`,
+`reference_rollout.pt`, and `validation_step_000000.pt` all record exact model
+hash `1354bdfca1cef965c0cd907ea8c157c0fd82169e64f24da656eb42dd1a96df91`.
+There are no selector guardrail/support failures and stderr remains empty.
+Attention-only training is active; no trained accuracy or convergence
+improvement is claimed from the equality control.
 
 The present capacity is `1,103,626` typed-attention parameters and `3,004,656`
 parameters for the complete model, with at most 22 scene/entity/relation

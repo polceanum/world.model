@@ -153,10 +153,11 @@
 - [ ] Complete the collision-isolated attention campaign at
   `runs/20260810-180502-attention-collision-isolated-stage-a/`, launched
   weights-only from the same protected protocol-14 graph control and clean
-  commit `70c2e3b`. Prove the periodic frames 7--11 batches no longer suppress
-  unrelated gradients before accepting its first complete selector. Continue
-  through repeated selectors and the declared plateau. Partial training
-  remains non-promotion evidence.
+  commit `70c2e3b`. Its 32-episode step-zero selector exactly reproduces score
+  `0.3213162196` and the complete protected model hash. Prove the periodic
+  frames 7--11 batches no longer suppress unrelated gradients before accepting
+  its first trained complete selector. Continue through repeated selectors and
+  the declared plateau. Partial training remains non-promotion evidence.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

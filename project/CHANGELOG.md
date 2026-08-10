@@ -9,8 +9,11 @@
   `runs/20260810-180502-attention-collision-isolated-stage-a/`. Initial
   metadata records clean immutable source, RGB-only/no-oracle execution, MPS
   measurement, CPU closed loop, float32, and the protected protocol-14 graph
-  checkpoint as initializer. The mandatory step-zero 32-episode selector is
-  running; no trained accuracy or convergence claim exists yet.
+  checkpoint as initializer. The mandatory step-zero 32-episode selector
+  completes in `976.793 s` and exactly reproduces protected score
+  `0.3213162196`, every pooled axis/horizon metric, and model hash
+  `1354bdfc...df91` with no guardrail/support failure or stderr. Attention-only
+  training is active; no trained accuracy or convergence claim exists yet.
 
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,
