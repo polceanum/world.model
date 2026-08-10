@@ -3,7 +3,10 @@ from __future__ import annotations
 import pytest
 import torch
 
-from world_model.training.checkpoint_composition import compose_model_state
+from world_model.training.checkpoint_composition import (
+    compose_model_state,
+    compose_model_state_rows,
+)
 
 
 def test_compose_model_state_replaces_only_selected_module() -> None:
@@ -68,3 +71,58 @@ def test_compose_model_state_rejects_schema_and_prefix_mismatch() -> None:
     state = {"dynamics.weight": torch.tensor([1.0])}
     with pytest.raises(ValueError, match="matched no tensors"):
         compose_model_state(state, state, module_prefixes=["updater"])
+
+
+def test_compose_model_state_rows_replaces_only_selected_leading_rows() -> None:
+    base = {
+        "head.weight": torch.zeros(3, 2),
+        "head.bias": torch.zeros(3),
+        "trunk.weight": torch.zeros(2, 2),
+    }
+    donor = {
+        "head.weight": torch.arange(6, dtype=torch.float32).reshape(3, 2) + 1,
+        "head.bias": torch.tensor([4.0, 5.0, 6.0]),
+        "trunk.weight": torch.ones(2, 2),
+    }
+
+    composed, selected = compose_model_state_rows(
+        base,
+        donor,
+        tensor_rows={"head.weight": [0, 2], "head.bias": [0, 2]},
+    )
+
+    assert selected == (
+        "head.bias[0]",
+        "head.bias[2]",
+        "head.weight[0]",
+        "head.weight[2]",
+    )
+    torch.testing.assert_close(composed["head.weight"][0], donor["head.weight"][0])
+    torch.testing.assert_close(composed["head.weight"][1], base["head.weight"][1])
+    torch.testing.assert_close(composed["head.weight"][2], donor["head.weight"][2])
+    torch.testing.assert_close(composed["head.bias"], torch.tensor([4.0, 0.0, 6.0]))
+    torch.testing.assert_close(composed["trunk.weight"], base["trunk.weight"])
+    assert composed["head.weight"].data_ptr() != base["head.weight"].data_ptr()
+
+
+def test_compose_model_state_rows_interpolates_and_rejects_invalid_rows() -> None:
+    state = {"head.weight": torch.zeros(2, 2), "scalar": torch.tensor(0.0)}
+    donor = {"head.weight": torch.ones(2, 2), "scalar": torch.tensor(1.0)}
+
+    composed, _ = compose_model_state_rows(
+        state,
+        donor,
+        tensor_rows={"head.weight": [1]},
+        donor_weight=0.25,
+    )
+    torch.testing.assert_close(composed["head.weight"][0], torch.zeros(2))
+    torch.testing.assert_close(composed["head.weight"][1], torch.full((2,), 0.25))
+
+    with pytest.raises(ValueError, match="matched no tensor"):
+        compose_model_state_rows(state, donor, tensor_rows={"missing": [0]})
+    with pytest.raises(ValueError, match="non-scalar"):
+        compose_model_state_rows(state, donor, tensor_rows={"scalar": [0]})
+    with pytest.raises(ValueError, match="outside leading dimension"):
+        compose_model_state_rows(state, donor, tensor_rows={"head.weight": [-1, 2]})
+    with pytest.raises(ValueError, match="at least one tensor row"):
+        compose_model_state_rows(state, donor, tensor_rows={})

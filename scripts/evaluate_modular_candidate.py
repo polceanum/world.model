@@ -12,7 +12,10 @@ from typing import Any
 import torch
 
 from world_model.runtime import OnlineWorldModel
-from world_model.training.checkpoint_composition import compose_model_state
+from world_model.training.checkpoint_composition import (
+    compose_model_state,
+    compose_model_state_rows,
+)
 from world_model.training.checkpointing import (
     capture_git_metadata,
     save_checkpoint,
@@ -51,12 +54,22 @@ def parse_args() -> argparse.Namespace:
             "incompatible with inherited weights."
         ),
     )
-    parser.add_argument(
+    selection = parser.add_mutually_exclusive_group(required=True)
+    selection.add_argument(
         "--module",
         action="append",
-        required=True,
         dest="modules",
         help="Top-level or dotted state-dict module prefix; may be repeated",
+    )
+    selection.add_argument(
+        "--tensor-row",
+        action="append",
+        dest="tensor_rows",
+        metavar="STATE_DICT_NAME:ROW",
+        help=(
+            "Import one leading-dimension tensor row from the donor; may be "
+            "repeated for axis-local output-head qualification"
+        ),
     )
     parser.add_argument("--donor-weight", type=float, default=1.0)
     parser.add_argument("--output", required=True)
@@ -80,6 +93,20 @@ def _selection_from_numbered_checkpoint(payload: dict[str, Any], config: Any) ->
     if selection is None:
         raise ValueError("base checkpoint does not contain a complete accepted selection")
     return selection
+
+
+def _parse_tensor_rows(values: list[str] | None) -> dict[str, list[int]]:
+    parsed: dict[str, list[int]] = {}
+    for value in values or []:
+        name, separator, row_text = value.rpartition(":")
+        if not separator or not name or not row_text:
+            raise ValueError(f"--tensor-row must use STATE_DICT_NAME:ROW, received {value!r}")
+        try:
+            row = int(row_text)
+        except ValueError as error:
+            raise ValueError(f"tensor row must be an integer, received {value!r}") from error
+        parsed.setdefault(name, []).append(row)
+    return parsed
 
 
 def main() -> int:
@@ -111,12 +138,21 @@ def main() -> int:
         validate_checkpoint_config(donor_payload, config)
         donor_state = donor_payload["model_state"]
         donor_step = int(donor_payload["step"])
-    composed_state, selected = compose_model_state(
-        base_payload["model_state"],
-        donor_state,
-        module_prefixes=args.modules,
-        donor_weight=args.donor_weight,
-    )
+    tensor_rows = _parse_tensor_rows(args.tensor_rows)
+    if args.modules:
+        composed_state, selected = compose_model_state(
+            base_payload["model_state"],
+            donor_state,
+            module_prefixes=args.modules,
+            donor_weight=args.donor_weight,
+        )
+    else:
+        composed_state, selected = compose_model_state_rows(
+            base_payload["model_state"],
+            donor_state,
+            tensor_rows=tensor_rows,
+            donor_weight=args.donor_weight,
+        )
 
     model.load_state_dict(composed_state)
     model.eval()
@@ -168,7 +204,8 @@ def main() -> int:
         "donor_checkpoint": None if donor_path is None else str(donor_path),
         "donor_step": donor_step,
         "fresh_initialization": bool(args.fresh_initialization),
-        "modules": list(args.modules),
+        "modules": list(args.modules or []),
+        "tensor_rows": tensor_rows,
         "donor_weight": args.donor_weight,
         "selected_tensor_count": len(selected),
         "candidate": candidate.validation_metrics(),
@@ -200,7 +237,8 @@ def main() -> int:
                 "donor_checkpoint": None if donor_path is None else str(donor_path),
                 "fresh_initialization": bool(args.fresh_initialization),
                 "project_seed": config.project.seed,
-                "modules": list(args.modules),
+                "modules": list(args.modules or []),
+                "tensor_rows": tensor_rows,
                 "donor_weight": args.donor_weight,
             },
         },

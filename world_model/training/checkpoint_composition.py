@@ -84,4 +84,78 @@ def compose_model_state(
     return composed, selected
 
 
-__all__ = ["compose_model_state"]
+def compose_model_state_rows(
+    base: Mapping[str, Tensor],
+    donor: Mapping[str, Tensor],
+    *,
+    tensor_rows: Mapping[str, Sequence[int]],
+    donor_weight: float = 1.0,
+) -> tuple[dict[str, Tensor], tuple[str, ...]]:
+    """Blend selected leading-dimension rows from ``donor`` into ``base``.
+
+    Row-level composition is intentionally explicit and is primarily useful
+    for axis-local output-head ablations.  It cannot address scalar tensors,
+    silently wrap negative indices, or mutate either source checkpoint.
+    Complete state-dict schema validation is retained even though only a small
+    subset of rows is selected.
+    """
+
+    if not 0.0 <= donor_weight <= 1.0:
+        raise ValueError("donor_weight must lie in [0, 1]")
+    if not tensor_rows:
+        raise ValueError("at least one tensor row selection is required")
+    if set(base) != set(donor):
+        missing_from_donor = sorted(set(base) - set(donor))
+        missing_from_base = sorted(set(donor) - set(base))
+        raise ValueError(
+            "checkpoint model-state schemas differ: "
+            f"missing_from_donor={missing_from_donor}, "
+            f"missing_from_base={missing_from_base}"
+        )
+
+    normalised_rows: dict[str, tuple[int, ...]] = {}
+    selected: list[str] = []
+    for name, rows in tensor_rows.items():
+        if name not in base:
+            raise ValueError(f"tensor row selection matched no tensor: {name!r}")
+        base_tensor = base[name]
+        donor_tensor = donor[name]
+        if base_tensor.shape != donor_tensor.shape:
+            raise ValueError(f"tensor shape differs for {name!r}")
+        if base_tensor.dtype != donor_tensor.dtype:
+            raise ValueError(f"tensor dtype differs for {name!r}")
+        if base_tensor.ndim == 0:
+            raise ValueError(f"tensor row selection requires a non-scalar tensor: {name!r}")
+        unique_rows = tuple(dict.fromkeys(int(row) for row in rows))
+        if not unique_rows:
+            raise ValueError(f"tensor row selection is empty for {name!r}")
+        invalid = [row for row in unique_rows if row < 0 or row >= base_tensor.shape[0]]
+        if invalid:
+            raise ValueError(
+                f"tensor row selection is outside leading dimension for {name!r}: {invalid}"
+            )
+        normalised_rows[name] = unique_rows
+        selected.extend(f"{name}[{row}]" for row in unique_rows)
+
+    composed = {name: tensor.detach().clone() for name, tensor in base.items()}
+    if donor_weight == 0.0:
+        return composed, tuple(sorted(selected))
+    for name, rows in normalised_rows.items():
+        base_tensor = base[name]
+        donor_tensor = donor[name]
+        row_index = torch.as_tensor(rows, dtype=torch.int64, device=base_tensor.device)
+        if base_tensor.is_floating_point() or base_tensor.is_complex():
+            values = torch.lerp(
+                base_tensor.index_select(0, row_index),
+                donor_tensor.index_select(0, row_index),
+                donor_weight,
+            )
+        elif donor_weight == 1.0:
+            values = donor_tensor.index_select(0, row_index)
+        else:
+            values = base_tensor.index_select(0, row_index)
+        composed[name].index_copy_(0, row_index, values)
+    return composed, tuple(sorted(selected))
+
+
+__all__ = ["compose_model_state", "compose_model_state_rows"]
