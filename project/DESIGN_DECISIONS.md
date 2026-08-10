@@ -42,6 +42,12 @@
   so the discrete baseline identity changes are an association-threshold
   response rather than optimizer oscillation. Continue the declared run and
   retain step 64; do not promote metric equivalence as a new improvement.
+- **Step-320 evidence:** The candidate returned to the rejected regime at
+  `0.3216708` with the same three baseline failures. The y row and its moments
+  still move smoothly and exclusively. Four consecutive 64-step candidates
+  without acceptance are useful bounded-recovery saturation evidence but do
+  not meet the sustained policy's 512-step spacing; complete the declared
+  512-update run rather than claiming convergence early.
 
 ## ADR-091 — Continue correction recovery on the accepted y row only
 

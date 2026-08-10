@@ -215,11 +215,22 @@ fixed. The online association response is nonmonotonic across this smooth
 parameter path, explaining why steps 128/192 shared one discrete identity and
 steps 64/256 another.
 
-Step 64 remains the immutable selected incumbent. The unchanged 512-update
-recovery run continues toward step 320 and later fixed gates; it has not yet
-completed its declared budget or established the applicable plateau evidence.
-No deployment replacement, generalization result, or attention-scaling
-authorization exists yet.
+Step 320 crossed back into the same rejected discrete baseline regime as steps
+128/192: score `0.3216708`, current position `0.2536469 m`, velocity
+`1.0969604 m/s`, identity `0.0155440`, and the same baseline coverage,
+identity, and 0.10-second x failures. The 256--320 y-weight-row segment moved
+smoothly by L2 `0.0000939`; only row 1 changed, its Adam state is finite and
+nonzero, and all excluded model/optimizer rows remain exact. This strengthens
+the association-threshold diagnosis rather than indicating optimizer
+oscillation or scope leakage.
+
+Step 64 remains the immutable selected incumbent. Although the four latest
+64-step candidates contain no acceptance and less than 1% raw gain, they do
+not satisfy the sustained campaign's required 512-step spacing. The unchanged
+512-update recovery run therefore continues toward steps 384, 448, and 512; it
+has not completed its declared budget or established the applicable plateau
+evidence. No deployment replacement, generalization result, or attention-
+scaling authorization exists yet.
 
 ## 2026-08-09 — protocol-18 rejection and innovation-anchored repair
 

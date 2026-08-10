@@ -48,6 +48,11 @@
   is `0.00000167` worse than the protected incumbent. Smooth y-row checkpoint
   motion produces a nonmonotonic discrete association response; optimizer,
   support, uncertainty, resources, and scope isolation remain healthy.
+- Rejected step 320 at `0.3216708` after it returned to the same baseline
+  coverage/identity/0.10-second-x threshold as steps 128/192. Exact row deltas
+  and optimizer state remain smooth, finite, and y-only. Closely spaced
+  64-update rejections do not satisfy the formal 512-step plateau spacing, so
+  continue the declared run with step 64 protected.
 
 ### 2026-08-09 scenario-balanced optimization
 
