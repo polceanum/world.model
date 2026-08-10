@@ -186,11 +186,25 @@ switch rate rose `0.00488 -> 0.01456`, and 0.10-second x RMSE rose
 improved, and tensor comparison still finds changes only in mean-head y row 1.
 
 This is a scenario/association threshold regression, not evidence of numerical
-collapse. Because the earlier y-row learning curve also rejected step 128 and
-recovered by step 192, and because the best checkpoint is protected, training
-continues unchanged toward the step-192 selector. No plateau, deployment
-replacement, generalization result, or attention-scaling authorization exists
-yet.
+collapse. Step 192 then completed with the same healthy optimizer/support/
+resource profile but did not recover: score `0.3216706`, current position
+`0.2536476 m`, velocity `1.0969583 m/s`, identity `0.0155440`, and all three
+baseline fixed-reference failures are effectively identical to step 128.
+
+The y row is approaching a stationary point rather than becoming frozen by a
+bug. Its weight change shrank from L2 `0.001135` over steps 0--64 to
+`0.0000756` over steps 128--192, while finite Adam moments remain nonzero only
+in row 1. Every other model tensor remains bitwise equal to step zero. Across
+192 updates, the audit reports 24/24 logged balanced blocks applied, no skip or
+clip, gradients `0.000489--0.029813`, 156--486 trajectory-support rows, equal
+scenario counts, finite uncertainty, and bounded RSS through
+`1,346,781,184` bytes.
+
+Step 64 remains the immutable selected incumbent. Two near-identical rejected
+points are insufficient for the declared convergence rule, so the unchanged
+512-update recovery run continues toward step 256 and later fixed gates. No
+plateau, deployment replacement, generalization result, or attention-scaling
+authorization exists yet.
 
 ## 2026-08-09 — protocol-18 rejection and innovation-anchored repair
 

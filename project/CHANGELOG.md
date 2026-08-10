@@ -37,6 +37,12 @@
   The optimizer/support/resource audit still passes and all other scenarios
   are nearly flat, so the protected step-64 incumbent remains selected while
   the unchanged trajectory continues to the predeclared step-192 gate.
+- Rejected step 192 at the effectively unchanged score `0.3216706` with the
+  same three baseline failures. Exact checkpoint deltas show diminishing but
+  nonzero y-row motion, finite row-1-only Adam moments, and bitwise preservation
+  of every excluded tensor; this is behavioral saturation, not scope or
+  optimizer collapse. Continue the declared 512-update run for sufficient
+  plateau evidence while retaining step 64.
 
 ### 2026-08-09 scenario-balanced optimization
 

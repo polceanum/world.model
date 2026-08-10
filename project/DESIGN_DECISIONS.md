@@ -30,6 +30,12 @@
   training audit and y-row tensor isolation still pass. Continue to step 192
   because the prior y-only curve recovered after the same intermediate gate,
   while retaining step 64 as the immutable incumbent.
+- **Step-192 evidence:** The candidate remained rejected at `0.3216706` with
+  the same baseline failures. The y-row update magnitude fell by more than
+  sixfold from the first segment, but finite row-local gradients and Adam
+  moments persist and excluded tensors remain bitwise fixed. Treat this as the
+  first repeated saturation evidence, not enough by itself to declare a
+  plateau; continue the already-declared 512-update run with step 64 protected.
 
 ## ADR-091 — Continue correction recovery on the accepted y row only
 
