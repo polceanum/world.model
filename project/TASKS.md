@@ -157,7 +157,10 @@
   `0.3213162196` and the complete protected model hash. Prove the periodic
   frames 7--11 batches no longer suppress unrelated gradients before accepting
   its first trained complete selector. Continue through repeated selectors and
-  the declared plateau. Partial training remains non-promotion evidence.
+  the declared plateau. Through step 32 the auditor passes with balanced
+  support, zero skips/severe clips, bounded memory, and two sampled collision-
+  row caps that preserve materially more unrelated gradient. Partial training
+  remains non-promotion evidence.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

@@ -431,6 +431,21 @@ There are no selector guardrail/support failures and stderr remains empty.
 Attention-only training is active; no trained accuracy or convergence
 improvement is claimed from the equality control.
 
+The first 32 repaired optimizer updates pass the offline dynamics audit: four
+cadence-eight confirmations, 32 applied updates, four sampled draws from every
+scenario, zero skipped draws/failures/severe clips, trajectory support
+`162..396`, complete mature per-axis objectives after the cold-start block,
+empty stderr, and peak RSS `2,990,858,240` bytes. Step 8 transiently has raw
+interaction norm `6.336` and retained coefficient `0.1578`; steps 16/24/32
+remain finite at `1.719/4.792/5.424` with no coefficient below `0.1`. At steps
+24 and 32 the raw collision-row norms `4.314/5.393` are locally capped to
+`1.0`; post-row interaction norms `2.308/1.158` let unrelated gradients retain
+`0.433/0.863` at the interaction stage instead of applying the raw whole-group
+coefficients `0.209/0.184` to every typed output. This is direct evidence that
+the repair isolates the intended row while preserving truthful raw telemetry.
+It is optimizer-health evidence only; the former periodic steps, durable
+checkpoint integrity, and first trained selector remain pending.
+
 The present capacity is `1,103,626` typed-attention parameters and `3,004,656`
 parameters for the complete model, with at most 22 scene/entity/relation
 tokens under the six-slot contract. Review of the original Transformer and
