@@ -20,6 +20,11 @@
   non-device suite reports `641 passed, 5 skipped, 1 deselected`, and host MPS
   device validation reports `1 passed, 646 deselected`. Ruff lint and format
   checks pass.
+- Committed/pushed the y-only contract as `3ad5ee2` and launched clean one-shot
+  run `runs/20260810-042627-protocol20-y-only-recovery/` from the accepted
+  step-192 y-row candidate. Metadata records MPS measurement, CPU closed loop,
+  RGB-only/no-oracle runtime, clean source, 512 balanced updates, effective
+  learning rate `5e-6`, and exact validation cadence 64.
 
 ### 2026-08-09 scenario-balanced optimization
 

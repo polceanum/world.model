@@ -143,6 +143,16 @@ learning rate, and exact validation every 64 updates. The corrected incumbent
 still scores above the approximately `0.318` legacy reference, so it is not a
 deployment replacement and does not yet unlock the attention pilot.
 
+That campaign is now active at
+`runs/20260810-042627-protocol20-y-only-recovery/` under one-shot launchd label
+`com.polceanum.orpheus.protocol20-y-recovery-20260810-042609` as PID `58922`.
+Metadata records clean commit `3ad5ee2`, PyTorch `2.10.0`, MPS built/available,
+MPS measurement, CPU closed loop, RGB-only/no-oracle runtime, the accepted
+step-192 y-row initialization, `updater_mean_y`, 512 balanced updates, effective
+learning rate `5e-6`, and checkpoint/evaluation cadence 64. Initialization is
+advancing through the exact 32-episode manifest with empty stderr; no new
+trained result or convergence claim exists yet.
+
 ## 2026-08-09 — protocol-18 rejection and innovation-anchored repair
 
 Protocol 18 reached a durable step-128 checkpoint with 128 balanced optimizer

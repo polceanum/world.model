@@ -47,9 +47,10 @@
   (`0.3241755 -> 0.3216427`).
 - [x] Add an exact `updater_mean_y` training scope that masks excluded rows,
   restores them across AdamW decay, and clears their optimizer moments.
-- [ ] Launch a clean y-only sustained recovery from the accepted step-192 row
+- [x] Launch a clean y-only sustained recovery from the accepted step-192 row
   composition and train through repeated exact validation to a declared
-  plateau without reactivating x/z.
+  plateau without reactivating x/z. The one-shot protocol-20 worker is active;
+  convergence remains pending.
 - [ ] If the recovered control is non-regressing, train balanced protocol 19
   long enough for repeated fixed validation and a declared plateau; inspect
   pooled and per-scenario
