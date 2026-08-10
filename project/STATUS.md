@@ -231,7 +231,7 @@ distance-gated identity switches are zero, and maximum RSS is
 `2,874,376,192` bytes. This is early optimizer health only; steps 152/280 and
 the first trained selector at 512 remain required.
 
-Sampled updates 16, 24, and 32 remain finite, supported, and scope-clean. At step
+Sampled updates 16 through 72 remain finite, supported, and scope-clean. At step
 24 the collision row produces a raw norm of `4.45588`; its configured local
 cap reduces it to `1.0`, after which the complete interaction cap reduces the
 remaining `2.36835` norm to `1.0`. The true raw whole-model norm is `4.94611`,
@@ -243,6 +243,20 @@ interaction coefficient is a mild `0.929705`, all 32 balanced updates are
 applied, every scenario has four sampled blocks, trusted identity switches are
 zero in the block, and RSS stays flat. This is evidence that the hierarchy
 contains collision-row outliers, not selector evidence of an accuracy gain.
+
+Step 64 exposes one severe but correctly isolated force-row event. Its raw
+interaction norm is `21.5377`, of which `21.4665` is confined to the joint
+normal/tangent decoder rows (`7.5142/20.1083`). The configured force-row cap
+reduces that group to `1.0`; the remaining interaction norm is `2.01547`, so
+unrelated attention gradients retain a `0.496162` stage coefficient instead
+of the raw-total `0.0464303` coefficient. Collision, node, support, identity,
+finite-state, frozen-perception, and memory diagnostics remain ordinary. Step
+72 immediately returns to force coefficient `0.976879`, interaction-stage
+coefficient `0.686862`, zero sampled identity switches, positive future
+correction, and unchanged RSS. The auditor truthfully retains step 64 as a
+severe row-clip warning while reporting no hard failure. This is one contained
+typed-row outlier, not yet systematic recurrence or selector evidence; the
+run continues unchanged toward checkpoint 128 and boundaries 152/280.
 
 An architecture/scaling review against the original Transformer, modern dense
 LLM practice, compute-optimal scaling, set attention, Perceiver-style latent

@@ -201,12 +201,18 @@
   trajectory targets, no skipped draws, frozen perception, finite unclipped
   gradients, zero trusted identity switches, bounded RSS, and a passing live
   dynamics report.
-- [x] Audit sampled updates 16/24/32. Every update is finite and supported; the
+- [x] Audit sampled updates 16 through 72. Every update is finite and supported; the
   step-24/32 collision-row outliers are contained by the row cap before the
   interaction/global hierarchy, no severe coefficient or hard auditor failure
   occurs, frozen perception remains exact, all scenarios remain balanced, and
   RSS remains bounded. Do not infer an accuracy direction before the fixed
   selector.
+- [x] Localize the severe step-64 warning to the joint force decoder rows:
+  `21.4665` of `21.5377` raw interaction norm. Verify row isolation leaves a
+  `2.01547` post-row norm and `0.496162` stage coefficient for unrelated
+  learning, then verify step 72 returns to ordinary force/stage coefficients.
+  Keep the warning visible and require checkpoint/selector evidence before
+  deciding whether it is isolated or systematic.
 - [ ] Pass steps 152/280, the first trained selector at 512, repeated selectors,
   and the declared plateau in the force-isolated campaign before scaling
   capacity.

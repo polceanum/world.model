@@ -78,6 +78,15 @@
   width-256/depth-6 rungs, but did not launch or promote a larger model before
   fixed-selector and plateau evidence.
 
+- Continued the live force-isolated audit through sampled step 72. Step 64 has
+  one severe raw joint-force norm of `21.4665`, but the targeted row cap leaves
+  a `2.01547` post-row interaction norm and `0.496162` coefficient for
+  unrelated attention learning rather than suppressing it to `0.04643`. Step
+  72 immediately returns to ordinary force/stage coefficients. All 72 updates
+  remain applied and exactly scenario-balanced, with zero skips, frozen
+  perception, finite state, bounded RSS, and no hard auditor failure. Retain
+  the severe row warning and do not infer promotion before fixed validation.
+
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,
   scaled dot-product attention, and SwiGLU feed-forwards add `1,103,626`

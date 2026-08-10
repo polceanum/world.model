@@ -47,6 +47,17 @@ collision-row norm of `3.23987`; its subsequent interaction coefficient is
 sampled trusted identity switches are zero. There is still no trained fixed
 selector.
 
+Through sampled step 72, one severe force-row warning occurs at step 64. The
+joint normal/tangent row norm is `21.4665` inside a `21.5377` raw interaction
+norm. After the force cap, the interaction norm is `2.01547`, so unrelated
+attention gradients retain a `0.496162` stage coefficient rather than the
+raw-total `0.0464303` coefficient. The next sampled block returns to force
+coefficient `0.976879` and stage coefficient `0.686862`, with positive future
+correction, zero sampled identity switches, and unchanged memory. This
+supports the isolation mechanism but does not prove the event is harmless to
+accuracy; checkpoint 128, the former 152/280 boundaries, and fixed selector
+512 remain required.
+
 Exact capacity census for later one-axis studies:
 
 - current/data-only: `3,004,656` total, `1,103,626` attention parameters;
