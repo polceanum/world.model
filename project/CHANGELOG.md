@@ -57,6 +57,16 @@
   clean source provenance, no oracle input, and the protected graph control.
   The initial 32-episode selector is active; no trained result is claimed.
 
+- Completed the force-isolated run's exact step-zero selector in `959.695 s`.
+  The model hash and all tensors equal the protected control, and 2,583
+  comparable broad metrics have zero differences. Attached an exact-source
+  convergence supervisor with the declared 8,192 minimum, 4,096 extensions,
+  four-selector/1% plateau rule, and 24,576 hard limit. The first eight
+  balanced updates pass the live dynamics audit with all eight scenarios,
+  support 349, zero skips, frozen perception, raw gradient `0.668898`, no
+  clipping, zero trusted identity switches, bounded 2.874 GB RSS, and empty
+  trainer/supervisor stderr. No trained selector is yet available.
+
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,
   scaled dot-product attention, and SwiGLU feed-forwards add `1,103,626`

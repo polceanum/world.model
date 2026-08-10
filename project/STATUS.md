@@ -199,6 +199,38 @@ The mandatory initial 32-episode selector is in progress with durable
 per-episode heartbeats and zero stderr; no optimizer update, trained selector,
 accuracy improvement, or convergence claim exists yet.
 
+The initial selector completed all 32 episodes in `959.695 s`. Exact tensor
+comparison against the preceding collision-isolated step-zero checkpoint finds
+zero changed tensors and the same model hash
+`1354bdfca1cef965c0cd907ea8c157c0fd82169e64f24da656eb42dd1a96df91`.
+Excluding the intentionally new optimization-protocol hash and timing fields,
+all 2,583 comparable selector fields match exactly, including every pooled/
+per-scenario axis and horizon, lifecycle/identity, event, support, and
+calibration metric. Score is `0.3213162196`; current position/velocity RMSE are
+`0.251460 m / 1.093191 m/s`; 0.10/0.25/0.50/0.75/1.00-second RMSE is
+`0.265184/0.277452/0.309911/0.335387/0.357837 m`; collision F1 is `0.195489`,
+distance-gated ID-switch rate is `1.3592%`, and position coverage90 is
+`93.3861%`. This is the exact protected equality control, not a trained gain.
+
+A clean exact-source convergence supervisor is attached from detached commit
+`b3b69c1` under one-shot LaunchAgent
+`com.polceanum.orpheus.attention-force-convergence-20260810-213857`, supervisor
+PID `2662` at attachment. Its runtime fingerprint exactly matches the trainer:
+`199b33bbb6c43dd82a02dcd7c5299d4bd410f6abc999a1f3cc0c8ebb9bc73257`.
+It durably records the 8,192-step minimum, complete 4,096-step extensions,
+four-selector/1% plateau rule, and truthful 24,576 hard limit; reaching the
+limit without plateau is `limit_hit`, not convergence. Trainer and supervisor
+stderr remain empty.
+
+The first eight balanced optimizer updates also pass the live dynamics audit.
+One draw from every scenario is applied, trajectory support is `349`, skipped
+draws are zero, perception gradient is exactly zero, raw interaction/whole
+gradient is `0.668898` with coefficient `1.0`, joint force-row norm is
+`0.646357` with coefficient `1.0`, collision-row norm is effectively zero,
+distance-gated identity switches are zero, and maximum RSS is
+`2,874,376,192` bytes. This is early optimizer health only; steps 152/280 and
+the first trained selector at 512 remain required.
+
 ## 2026-08-10 — typed-attention scene context and input conditioning repaired
 
 Primary-source review retained the useful Transformer mechanism—parallel

@@ -188,7 +188,19 @@
   protected graph control at
   `runs/20260810-213857-attention-force-isolated-stage-a/`, clean commit
   `b3b69c1`, under one-shot Standard launchd with MPS measurement, CPU closed
-  loop, and no oracle. Its mandatory step-zero selector is active.
+  loop, and no oracle. Its mandatory step-zero selector is complete.
+- [x] Complete and independently audit the step-zero selector: all model
+  tensors and 2,583 comparable broad metrics exactly reproduce the protected
+  graph control; specification metadata is 1.27 and only the optimization
+  protocol hash changes.
+- [x] Attach an exact-source one-shot convergence supervisor with the 8,192
+  minimum, 4,096 extensions, four-selector/1% plateau rule, and 24,576 hard
+  limit; verify the trainer/supervisor runtime fingerprint matches and stderr
+  is empty.
+- [x] Audit the first eight balanced updates: all scenarios supported, 349
+  trajectory targets, no skipped draws, frozen perception, finite unclipped
+  gradients, zero trusted identity switches, bounded RSS, and a passing live
+  dynamics report.
 - [ ] Pass steps 152/280, the first trained selector at 512, repeated selectors,
   and the declared plateau in the force-isolated campaign before scaling
   capacity.
