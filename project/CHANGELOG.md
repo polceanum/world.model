@@ -87,6 +87,15 @@
   perception, finite state, bounded RSS, and no hard auditor failure. Retain
   the severe row warning and do not infer promotion before fixed validation.
 
+- Completed the force-isolated step-128 durable checkpoint and independent
+  exact-source audit. All 177 inherited tensors remain bitwise unchanged, all
+  48 attention tensors change, all 48 optimizer states are attention-owned at
+  Adam step 128, all serialized state is finite, and protected best/reference
+  hashes remain exact. The dynamics audit records 128 applied balanced
+  updates, zero skips or hard failures, one isolated severe force-row warning
+  at step 64, frozen perception, and bounded RSS. This is scope/integrity
+  evidence only; no trained fixed selector exists yet.
+
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,
   scaled dot-product attention, and SwiGLU feed-forwards add `1,103,626`

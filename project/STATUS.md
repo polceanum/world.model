@@ -258,6 +258,25 @@ severe row-clip warning while reporting no hard failure. This is one contained
 typed-row outlier, not yet systematic recurrence or selector evidence; the
 run continues unchanged toward checkpoint 128 and boundaries 152/280.
 
+The first durable trained checkpoint at step 128 passes an independent
+exact-source audit. All 177 inherited tensors remain bitwise equal to step
+zero; all 48 attention tensors change; all 48 optimizer states belong only to
+attention parameters and report Adam step 128; model, optimizer, and scheduler
+state are finite; and checkpoint hash
+`19cc53de2ac9cbbf88be38aeb94b689e373b6aa989fbd63c6c6674e2899c8010`
+matches its metadata. Best/reference model states remain exactly equal to the
+protected control hash `1354bdfc...df91`; protocol and validation-manifest
+hashes remain `6612f910...bc6f` and `e27bdf2d...46be`. Step 128 itself has
+force coefficient `1.0`, collision coefficient `0.373758`, interaction-stage
+coefficient `0.851525`, support 486, positive future correction, frozen
+perception, and stable `2,892,918,784`-byte maximum RSS. Its two sampled
+identity switches reproduce exactly in the matched preceding control; sampled
+aggregate identity rate through step 128 is `6/697 = 0.8608%`. The durable
+audit artifact is
+`runs/20260810-213857-attention-force-isolated-stage-a/checkpoint_step_000128_audit.json`.
+This proves scope and continuation integrity, not accuracy promotion; former
+boundaries 152/280 and fixed selector 512 remain required.
+
 An architecture/scaling review against the original Transformer, modern dense
 LLM practice, compute-optimal scaling, set attention, Perceiver-style latent
 bottlenecks, and recent video-world-model evidence does not justify changing

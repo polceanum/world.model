@@ -213,6 +213,11 @@
   learning, then verify step 72 returns to ordinary force/stage coefficients.
   Keep the warning visible and require checkpoint/selector evidence before
   deciding whether it is isolated or systematic.
+- [x] Independently audit the force-isolated step-128 checkpoint: all 177
+  inherited tensors exact, all 48 attention tensors live, optimizer state
+  attention-only at Adam step 128, all serialized state finite, protected
+  control/reference hashes intact, 128 applied balanced updates, and bounded
+  memory. Preserve the audit JSON beside the run.
 - [ ] Pass steps 152/280, the first trained selector at 512, repeated selectors,
   and the declared plateau in the force-isolated campaign before scaling
   capacity.

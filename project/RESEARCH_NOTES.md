@@ -58,6 +58,16 @@ supports the isolation mechanism but does not prove the event is harmless to
 accuracy; checkpoint 128, the former 152/280 boundaries, and fixed selector
 512 remain required.
 
+The durable step-128 checkpoint confirms that the optimization experiment is
+actually isolated: 177 inherited tensors have zero bitwise changes, every one
+of 48 attention tensors changes, and the only 48 Adam states belong to those
+attention parameters at step 128. All serialized state and linked protected
+artifacts pass finite/hash checks. The sampled step-128 identity switches
+match the preceding collision-isolated control on the identical seed/window;
+aggregate sampled rate is `0.8608%`. This rules out scope drift, dead attention
+capacity, corrupted optimizer state, and protected-reference mutation through
+the checkpoint, but it does not establish held-out accuracy.
+
 Exact capacity census for later one-axis studies:
 
 - current/data-only: `3,004,656` total, `1,103,626` attention parameters;
