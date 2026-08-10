@@ -32,6 +32,12 @@
   `runs/20260810-114053-attention-pilot-stage-a/` with Standard launch QoS,
   `KeepAlive=false`, clean source provenance, MPS measurement, CPU closed loop,
   and the protocol-14 step-64 runtime protected as its initialization control.
+- The campaign's complete 32-episode initialization selector exactly
+  reproduces the protected graph score `0.3213162196`. Its first eight
+  attention-only updates are finite and supported, draw each scenario once,
+  apply every optimizer update, keep perception gradients at zero, and bound
+  the raw attention gradient `3.6997645 -> 0.9999997`; this is progress
+  evidence, not an accuracy promotion.
 
 ### 2026-08-10 fast-ROI ownership stability
 

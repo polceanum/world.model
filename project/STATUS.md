@@ -82,7 +82,7 @@ finite, supported, scope-clean, and memory-bounded, but it has no accuracy or
 generalization promotion yet; the declared 8,192-update attention-only
 campaign is the next convergence target
 
-## 2026-08-10 — typed-attention stage A implemented and smoke-qualified
+## 2026-08-10 — typed-attention stage A implemented and training
 
 Primary-source review retained the useful Transformer mechanism—parallel
 content-dependent interaction—while rejecting language-token assumptions that
@@ -149,11 +149,21 @@ The clean sustained campaign is active at
 `com.polceanum.orpheus.attention-20260810-114053`. Launchd reports one running
 Standard/default, `KeepAlive=false` job under `caffeinate`; metadata records a
 clean source fingerprint, PyTorch `2.10.0`, MPS measurement, CPU closed loop,
-float32, and RGB-only/no-oracle runtime. Initial fixed validation has begun
-with protocol hash
-`6064c5b1a055e943a3f3900ed63596b6402c7d7ad5a4d45f7b2d77351bc8c648`;
-its first episode completed in `30.24 s`. This is live progress only, not a
-candidate metric. Logs are
+float32, and RGB-only/no-oracle runtime. Initial fixed validation completed all
+32 episodes in `977.689 s` under protocol hash
+`6064c5b1a055e943a3f3900ed63596b6402c7d7ad5a4d45f7b2d77351bc8c648`.
+The exact zero-output initialization reproduces and protects the protocol-14
+graph incumbent at score `0.3213162196`; this is an equality control, not an
+attention accuracy claim.
+
+The first logged balanced block reached update 8 with one draw from each
+scenario, loss `0.5049295`, 349 supported trajectory targets, all eight
+objective rows supported, and all optimizer updates applied. Its attention/
+global raw norm `3.6997645` is correctly bounded to `0.9999997` by the local
+interaction cap; the frozen perception gradient is exactly zero, skipped
+draws and stderr bytes are zero, and peak recorded RSS is `2,837,905,408`
+bytes. This is healthy early optimization evidence only. No trained selector
+or generalization promotion exists yet. Logs are
 `/private/tmp/20260810-114053-attention-pilot-stage-a.stdout.log` and
 `/private/tmp/20260810-114053-attention-pilot-stage-a.stderr.log`.
 

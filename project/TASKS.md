@@ -1,6 +1,6 @@
 # Tasks
 
-## Active convergence target — corrected control before attention scaling
+## Active convergence target — typed attention scaling from corrected control
 
 - [x] Diagnose protocol-17 step-2,048 per-axis/per-scenario regression with
   exact learned-corrector scale and updater/dynamics checkpoint ablations.
@@ -90,7 +90,9 @@
   retain the protocol-14 step-64 graph runtime as the protected control. The
   clean one-shot run is active at
   `runs/20260810-114053-attention-pilot-stage-a/`; partial validation/training
-  progress is not acceptance evidence.
+  progress is not acceptance evidence. Its zero-output 32-episode selector
+  exactly reproduces score `0.3213162196`; the first eight updates pass the
+  finite/support/scope/clip/resource audit but precede any trained selector.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.
