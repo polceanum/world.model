@@ -184,6 +184,21 @@ a time, increasing continuously varied balanced data with parameters and
 requiring fixed disjoint RGB-only validation/test/OOD non-regression before a
 single-CUDA-GPU scale-up.
 
+The verified repair was committed and pushed to `main` as `b3b69c1`. A fresh
+weights-only campaign is active at
+`runs/20260810-213857-attention-force-isolated-stage-a/` under one-shot
+Standard/default LaunchAgent
+`com.polceanum.orpheus.attention-force-isolated-20260810-213857`,
+`KeepAlive=false`, with trainer PID `2209` at launch audit. Metadata records the
+clean immutable commit and source fingerprint, PyTorch 2.10.0, MPS available,
+MPS RGB measurement, CPU closed loop, float32, RGB-only runtime, no debug
+oracle, and the protected protocol-14 graph checkpoint initializer. The
+resolved protocol hash is
+`6612f9107c4817436ddb71f6dac53f3a1754dcea25533629468c819d52adbc6f`.
+The mandatory initial 32-episode selector is in progress with durable
+per-episode heartbeats and zero stderr; no optimizer update, trained selector,
+accuracy improvement, or convergence claim exists yet.
+
 ## 2026-08-10 — typed-attention scene context and input conditioning repaired
 
 Primary-source review retained the useful Transformer mechanism—parallel

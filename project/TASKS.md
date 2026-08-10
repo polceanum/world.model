@@ -184,9 +184,14 @@
 - [x] Add a configured joint force-row cap before the complete interaction
   hierarchy, preserve raw row/group/stage diagnostics, protocol-bind it, make
   the auditor inspect it, and correct stale checkpoint specification metadata.
-- [ ] Relaunch a fresh weights-only 3.00M-parameter stage-A campaign from the
-  protected graph control. Pass steps 152/280, the first trained selector at
-  512, repeated selectors, and the declared plateau before scaling capacity.
+- [x] Relaunch a fresh weights-only 3.00M-parameter stage-A campaign from the
+  protected graph control at
+  `runs/20260810-213857-attention-force-isolated-stage-a/`, clean commit
+  `b3b69c1`, under one-shot Standard launchd with MPS measurement, CPU closed
+  loop, and no oracle. Its mandatory step-zero selector is active.
+- [ ] Pass steps 152/280, the first trained selector at 512, repeated selectors,
+  and the declared plateau in the force-isolated campaign before scaling
+  capacity.
 - [ ] Run a one-axis-at-a-time scaling study after stage A qualifies: matched
   data-only, width, depth, and bounded-history rungs with increasing balanced
   episode draws, fixed disjoint RGB-only validation/test/OOD manifests, and

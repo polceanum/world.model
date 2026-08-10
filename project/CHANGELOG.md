@@ -48,6 +48,15 @@
   this changes no forward dynamics. Also corrected checkpoint specification
   metadata from stale 1.25 to specification 1.27.
 
+- Passed the repaired full gates (`664 passed, 5 skipped, 1 deselected` in the
+  non-device suite; host device marker passed; all five direct host-MPS tests
+  passed; Ruff, format, compileall, dry run, and diff check passed), committed
+  and pushed `b3b69c1`, then launched the fresh weights-only stage-A campaign
+  at `runs/20260810-213857-attention-force-isolated-stage-a/`. Its one-shot
+  Standard launchd job uses MPS RGB measurement, CPU closed loop, float32,
+  clean source provenance, no oracle input, and the protected graph control.
+  The initial 32-episode selector is active; no trained result is claimed.
+
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,
   scaled dot-product attention, and SwiGLU feed-forwards add `1,103,626`
