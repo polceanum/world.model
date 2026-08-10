@@ -111,8 +111,10 @@
   retain the protocol-14 step-64 graph runtime as the protected control. The
   first run at `runs/20260810-114053-attention-pilot-stage-a/` is stopped and
   cannot count because its scene input was dead. The corrected quality gate and
-  host smoke pass; launch a new timestamped clean run from the same protected
-  graph checkpoint.
+  host smoke pass. The new clean run is active at
+  `runs/20260810-134330-attention-live-scene-stage-a/` from the same protected
+  graph checkpoint; partial initialization/training remains non-promotion
+  evidence.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

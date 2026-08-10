@@ -63,6 +63,11 @@
   skips, and no oracle input. Exact checkpoint audit leaves all 177 inherited
   tensors unchanged, changes all 48 attention tensors, and gives the scene
   projection a nonzero parameter delta and Adam moment by update two.
+- Launched the corrected 8,192-update campaign at
+  `runs/20260810-134330-attention-live-scene-stage-a/` from clean commit
+  `25d82d8` as one Standard/default, `KeepAlive=false` LaunchAgent. Metadata
+  verifies MPS RGB, CPU closed loop, no oracle, and clean repaired-runtime
+  provenance; the first 32-episode initialization heartbeat is finite.
 
 ### 2026-08-10 fast-ROI ownership stability
 

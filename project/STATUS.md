@@ -242,6 +242,20 @@ perception gradient is zero, data draw is exactly two, and source provenance
 is clean commit `c9f9dc6`. This closes the dead-scene wiring defect; sustained
 accuracy and convergence are still unproven.
 
+The corrected sustained campaign is active at
+`runs/20260810-134330-attention-live-scene-stage-a/` under one-shot
+Standard/default LaunchAgent
+`com.polceanum.orpheus.attention-live-20260810-134330`, `KeepAlive=false` and
+`caffeinate`. Launchd reports authoritative PID `81275`; metadata records clean
+commit `25d82d8`, runtime fingerprint
+`b80851654c0c85ea1c16fb9b80a388221568ffeeb6b9ccfb1cece1c09716bc79`,
+PyTorch `2.10.0`, MPS built/available and used for RGB measurement, CPU closed
+loop, float32, RGB-only/no-oracle runtime, and the protected protocol-14 graph
+checkpoint as its source. The first initialization episode completed in
+`24.999 s` under unchanged selector hash
+`6064c5b1a055e943a3f3900ed63596b6402c7d7ad5a4d45f7b2d77351bc8c648`;
+stderr is empty. This is live process evidence only, not a trained candidate.
+
 Historical verification for specification 1.22 before the live-scene repair:
 
 - `conda run --no-capture-output -n orpheus pytest -q -p no:cacheprovider -m 'not device'`
