@@ -27,6 +27,12 @@
   interaction cap retains about `0.7592` rather than `0.05648`. Forward
   physics and capacity are unchanged. Only a fresh fixed-selector learning
   curve can qualify the repair or unlock width/depth/history scaling.
+  The fresh force-isolated campaign subsequently passes the first historical
+  step-152 boundary with raw interaction norm `2.46615` and retained
+  interaction-stage coefficient `0.48940`, versus `28.1387/0.03554` before
+  row isolation and `7.11114/0.14308` after collision-only isolation. This is
+  boundary-specific optimizer evidence; step 280 and fixed selectors remain
+  mandatory before qualifying the decision for accuracy or scaling.
 
 ## ADR-098 — Localize the complete attention gradient before another repair
 

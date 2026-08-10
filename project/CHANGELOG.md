@@ -96,6 +96,14 @@
   at step 64, frozen perception, and bounded RSS. This is scope/integrity
   evidence only; no trained fixed selector exists yet.
 
+- Passed the exact historical step-152 event-window boundary. On identical
+  seeds/frames, raw interaction norm and retained stage coefficient improve
+  from `28.1387/0.03554` before row isolation and `7.11114/0.14308` after
+  collision isolation to `2.46615/0.48940` in the force-isolated run. Force is
+  ordinary and unclipped, support/identity/uncertainty/scope/resource checks
+  pass, and the auditor retains only the isolated step-64 warning. Step 280 and
+  the first trained fixed selector remain pending.
+
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,
   scaled dot-product attention, and SwiGLU feed-forwards add `1,103,626`

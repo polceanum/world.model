@@ -277,6 +277,22 @@ audit artifact is
 This proves scope and continuation integrity, not accuracy promotion; former
 boundaries 152/280 and fixed selector 512 remain required.
 
+The repaired run passes the exact historical step-152 boundary. On the same
+seed manifest (`9664,8881,1058,2123,7628,3477,2326,12831`) and frames 7--11,
+the normalized pre-isolation campaign had raw interaction norm `28.1387` and
+retained `0.03554`; collision-row isolation improved this to `7.11114` and
+`0.14308`. The force-isolated campaign now has raw norm `2.46615`: force rows
+are ordinary at `0.25152` and unclipped, collision is `1.70491` with row
+coefficient `0.58654`, and the complete interaction-stage coefficient is
+`0.48940`. Support is 343 across all 13 objective terms, the update is applied,
+sampled identity switches are zero, future correction is positive `0.02992 m`,
+coverage90 is `92.16%`, perception gradient is zero, and maximum RSS remains
+bounded at `2,897,362,944` bytes. The complete dynamics auditor passes with
+152 exactly balanced applied updates, zero skips/hard failures, and only the
+already recorded isolated step-64 force-row warning. This boundary repair is
+optimizer-health evidence, not fixed-selector accuracy evidence; step 280 and
+selector 512 remain required.
+
 An architecture/scaling review against the original Transformer, modern dense
 LLM practice, compute-optimal scaling, set attention, Perceiver-style latent
 bottlenecks, and recent video-world-model evidence does not justify changing

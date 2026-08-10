@@ -218,7 +218,12 @@
   attention-only at Adam step 128, all serialized state finite, protected
   control/reference hashes intact, 128 applied balanced updates, and bounded
   memory. Preserve the audit JSON beside the run.
-- [ ] Pass steps 152/280, the first trained selector at 512, repeated selectors,
+- [x] Pass the exact historical step-152 failure boundary. On the identical
+  seeds/window, improve raw interaction norm/retained stage coefficient from
+  `28.1387/0.03554` before row isolation and `7.11114/0.14308` after collision
+  isolation to `2.46615/0.48940`; keep force ordinary and preserve complete
+  support, identity, uncertainty, finite-state, scope, and resource health.
+- [ ] Pass step 280, the first trained selector at 512, repeated selectors,
   and the declared plateau in the force-isolated campaign before scaling
   capacity.
 - [ ] Run a one-axis-at-a-time scaling study after stage A qualifies: matched

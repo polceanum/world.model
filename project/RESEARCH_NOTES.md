@@ -68,6 +68,16 @@ aggregate sampled rate is `0.8608%`. This rules out scope drift, dead attention
 capacity, corrupted optimizer state, and protected-reference mutation through
 the checkpoint, but it does not establish held-out accuracy.
 
+The next exact schedule landmark, step 152 on frames 7--11, confirms a large
+optimizer-health improvement. Raw interaction norm/retained stage coefficient
+progresses from `28.1387/0.03554` in the normalized campaign to
+`7.11114/0.14308` with collision isolation and `2.46615/0.48940` with force
+isolation. In the current run the force group is only `0.25152` and unclipped;
+collision is locally bounded from `1.70491`, all objectives have support,
+identity switches are zero, future correction is positive, and the update is
+finite/applied. This validates the repair at one historical boundary but does
+not replace step 280 or broad fixed validation.
+
 Exact capacity census for later one-axis studies:
 
 - current/data-only: `3,004,656` total, `1,103,626` attention parameters;
