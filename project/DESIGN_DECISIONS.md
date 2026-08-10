@@ -60,6 +60,15 @@
   that the remaining limitation sits in trajectory-level association feedback.
   Complete step 512 for the declared endpoint; do not promote any late
   candidate unless the unchanged full selector passes.
+- **Step-512 decision:** The endpoint was rejected at `0.3216317` by
+  `reference_pairs` current-x and x@100-ms guardrails. The complete 512-update
+  audit passes with all 64 balanced blocks applied, no skips/clips/failures,
+  finite support/uncertainty, bounded memory, clean process exit, and exact
+  y-row-only model/Adam state. Seven consecutive candidates after step 64 did
+  not improve it. Protocol 20 is therefore a completed bounded-recovery
+  plateau. Stop extending the same y-only optimizer direction; retain step 64
+  and target the discontinuous association/trajectory feedback before adding
+  attention capacity.
 
 ## ADR-091 — Continue correction recovery on the accepted y row only
 

@@ -61,6 +61,15 @@
   finite, balanced, unclipped, supported, and exactly confined to mean-head y
   row 1, proving the x failure is downstream association feedback rather than
   optimizer scope leakage.
+- Completed all 512 protocol-20 updates and final validation in `19,798.94 s`.
+  Step 512 was rejected at `0.3216317` by `reference_pairs` current-x and
+  x@100-ms guardrails; protected step 64 remains best at `0.3215594`.
+- Passed the full-run dynamics audit: 64/64 applied balanced blocks, exactly 64
+  draws per scenario, zero skipped/clipped updates, finite gradients and
+  uncertainty, causal support `123--519`, bounded `1.285--1.347 GB` RSS, empty
+  stderr, and launch-agent exit code zero. Exact checkpoint comparison proves
+  only mean-head y row 1 and its Adam moments changed. Record the campaign as a
+  healthy association-sensitive plateau rather than a convergence promotion.
 
 ### 2026-08-09 scenario-balanced optimization
 

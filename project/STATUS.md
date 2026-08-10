@@ -69,9 +69,11 @@ than dynamics or identification; the updater was found to discard axis/sign
 innovation and to apply unconstrained learned mean/variance residuals to
 unsupported packed fields; specification 1.20 now provides innovation-
 anchored, support-masked correction plus exact row-isolated recovery; the
-step-192 y-only composition is the first guardrail-clean corrected incumbent,
-but it remains behind the legacy fixed reference, so sustained y-only
-convergence and any subsequent attention-capacity pilot remain pending
+step-192 y-only composition is the first guardrail-clean corrected incumbent;
+the subsequent 512-update y-only campaign is now complete and rejected as a
+stable association-sensitive plateau, still behind the legacy fixed reference,
+so the next correction/association intervention and any subsequent attention-
+capacity pilot remain pending
 
 ## 2026-08-10 — joint recovery stopped; y-only corrected incumbent accepted
 
@@ -244,13 +246,31 @@ L2 `0.0001126` and bias delta `0.0000080`; every excluded tensor remains
 bitwise fixed. The segment audit again passes all optimizer, support,
 uncertainty, identity, sampling, memory, and numerical checks.
 
-Step 64 remains the immutable selected incumbent. Although the four latest
-64-step candidates contain no acceptance and less than 1% raw gain, they do
-not satisfy the sustained campaign's required 512-step spacing. The unchanged
-512-update recovery run therefore continues toward step 512; it
-has not completed its declared budget or established the applicable plateau
-evidence. No deployment replacement, generalization result, or attention-
-scaling authorization exists yet.
+The campaign completed all 512 declared updates and its final 32-episode
+selector in `19,798.94 s`. The one-shot launch agent exited with code zero and
+stderr remained empty. Step 512 was rejected at score `0.3216317`, current
+position `0.2537522 m`, velocity `1.0953680 m/s`, identity `0.0142764`, and
+pooled horizons `0.267573/0.277447/0.309314/0.335455/0.358436 m`. It failed
+current x and 0.10-second x guardrails only in `reference_pairs`, despite y
+RMSE reaching the run minimum `0.2075070 m`. Step 64 remains the protected
+best at score `0.3215594`.
+
+The completed learning curve alternates between near-identical clean and
+rejected association regimes while its sole trainable row moves smoothly.
+Across all 64 logged optimizer blocks, every update applied, every scenario
+appeared exactly 64 times, no draw was skipped, no gradient was clipped,
+gradient norms were finite (`0.0000239--0.062438`, median `0.001527`), causal
+support was `123--519`, and RSS remained `1.285--1.347 GB`. Full step-zero to
+step-512 comparison finds only `mean_head.{weight,bias}` row 1 changed (weight
+L2 `0.002242`, bias L2 `0.000166`); Adam moments are nonzero only in row 1.
+Protocol 20 therefore establishes a healthy but non-improving plateau. More
+updates in the same y-only direction are not justified; the next accuracy
+work must make association/trajectory feedback robust before capacity scaling.
+
+Step 64 remains the immutable selected incumbent. The run completed its
+predeclared 512-update budget without another acceptance and established the
+applicable bounded-recovery plateau evidence. It is not a deployment
+replacement or an attention-scaling authorization.
 
 ## 2026-08-09 — protocol-18 rejection and innovation-anchored repair
 

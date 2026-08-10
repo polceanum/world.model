@@ -50,7 +50,7 @@
 - [x] Launch a clean y-only sustained recovery from the accepted step-192 row
   composition without reactivating x/z. At step 64, independently verify that
   only mean-head row 1 changed and every excluded Adam moment remains zero.
-- [ ] Train protocol 20 through repeated exact validation and a declared
+- [x] Train protocol 20 through repeated exact validation and a declared
   plateau. Step 64 is guardrail-clean and internally accepted at `0.3215594`,
   while steps 128/192 are rejected at `0.3216703/0.3216706` after the same
   baseline association threshold regressed coverage, identity, and
@@ -59,13 +59,19 @@
   to the same rejected baseline threshold at `0.3216708`; step 384 returns to
   the clean regime at `0.3215634` but does not beat step 64; step 448 crosses
   back to a rejected baseline association regime at `0.3216787`. Continue the
-  declared 512-update run with step 64 protected, and inspect
-  pooled and per-scenario
+  declared 512-update run with step 64 protected, and inspect pooled and per-scenario
   current/velocity, x/y/z, every horizon, identity, lifecycle, events,
-  calibration, support, optimizer state, and memory.
-- [ ] Continue through the predeclared balanced minimum and only declare
-  convergence after four comparable fixed validations satisfy the existing
-  plateau rule; extend rather than promote a broad regression.
+  calibration, support, optimizer state, and memory. Step 512 is rejected at
+  `0.3216317` by `reference_pairs` x/current and x@100-ms guardrails; the full
+  optimizer/scope/resource audit passes and step 64 remains protected.
+- [x] Continue through the predeclared 512-update balanced minimum and reject
+  promotion after seven consecutive candidates fail to improve protected step
+  64. Record this as a healthy bounded-recovery plateau, not deployment
+  convergence.
+- [ ] Make online association robust to small axis-local correction changes so
+  a smooth y-row trajectory cannot toggle baseline/reference-pair identity,
+  coverage, and x metrics discontinuously. Preserve explicit lifecycle,
+  uncertainty, and cheap persistent-state correction contracts.
 - [ ] After the corrected control qualifies, implement the Mac attention pilot:
   2--4 pre-normalized entity/relation/event blocks, width 128, four heads,
   bounded belief history, typed residual decoders, and 1--4M added parameters.
