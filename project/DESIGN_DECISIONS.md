@@ -2276,9 +2276,11 @@
   loading old absolute-delta heads under the gain interpretation is a mixed,
   invalid transfer: the pooled score improved slightly, but velocity, short
   horizons, and several scenarios regressed, and one finite balanced update
-  worsened every x metric. Changed mean/variance/gate heads must therefore be
-  deterministically reset with composition provenance and requalified before
-  sustained training.
+  worsened every x metric. Exact reset ablations then showed that only the mean
+  head should reset: resetting mean/variance/gate worsened score to `0.350730`,
+  while mean-only reached `0.324176`. Both are rejected for deployment, but the
+  mean-only candidate is the typed mutable start for updater-only recovery
+  before dynamics are unfrozen.
 
 ## ADR-089 — Scale transformers over explicit predictive abstractions
 

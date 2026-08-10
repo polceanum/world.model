@@ -145,11 +145,28 @@ checkpoint remains the run's internal best but is not promoted over the legacy
 reference.
 
 `scripts/evaluate_modular_candidate.py` now supports a deterministic
-`--fresh-initialization` donor with explicit seed/module provenance. The next
-exact qualification resets the mean, variance, and gate output heads whose
-semantics changed while retaining the compatible corrector trunk and
-mode/existence/visibility heads. Sustained protocol 19 remains blocked on that
-unchanged-selector result, not on training loss.
+`--fresh-initialization` donor with explicit seed/module provenance. Resetting
+mean, variance, and gate heads together was safely rejected at
+`runs/20260809-235830-protocol19-anchored-reset-heads/`: score worsened to
+`0.350730`, although every horizon gained forecast coverage. This reset was too
+broad because variance remains a log-variance residual and the gate remains a
+gate; their mathematical meanings did not change.
+
+The exact mean-only reset is preserved at
+`runs/20260810-000755-protocol19-anchored-reset-mean/`. It retained support and
+the compatible variance/gate/trunk/lifecycle outputs, but score still worsened
+from the inherited-gain `0.318015` to `0.324176`; horizons became
+`0.270262/0.279750/0.311927/0.337838/0.361140 m`, and the selector reported 71
+guardrail failures. This is expected evidence that the old absolute residual
+had learned useful measurement-bias correction; it is not accepted, deleted,
+or mislabelled as a gain model.
+
+The mean-only `candidate.pt` is now the clean mutable recovery start. A new
+`updater` trainable scope freezes dynamics, identifier, and all RGB perception
+while training the anchored filter (excluding its already disconnected
+visibility head). The next bounded campaign must recover the fixed legacy
+reference with updater-only balanced optimization before any joint dynamics
+phase or attention-capacity pilot.
 
 Specification 1.19 also records the compute path reviewed against transformer,
 Perceiver IO, compute-optimal scaling, JEPA/video-world-model, and recent

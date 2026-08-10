@@ -28,10 +28,16 @@
   fixed RGB-only qualification of the innovation-anchored inherited-head
   control; reject it as mixed because old absolute-delta heads cannot be
   reinterpreted as innovation gains despite a slightly better pooled score.
-- [ ] Reset the changed corrector mean/variance/gate heads from deterministic
-  fresh initialization, record composition provenance, and pass the same exact
-  32-episode fixed selector before any sustained run.
-- [ ] If the repaired control is non-regressing, train balanced protocol 19
+- [x] Qualify deterministic three-head and mean-only resets with composition
+  provenance. Reject both as deployment candidates; retain the cleaner
+  mean-only candidate as mutable recovery state because only that output's
+  mathematical meaning changed.
+- [x] Add an updater-only trainable scope that freezes dynamics, identification,
+  and perception while the clean innovation-gain head recovers.
+- [ ] Run a sustained balanced updater-only recovery from the mean-reset
+  candidate until the exact 32-episode selector regains the legacy fixed
+  reference without axis/horizon/scenario regressions.
+- [ ] If the recovered control is non-regressing, train balanced protocol 19
   long enough for repeated fixed validation and a declared plateau; inspect
   pooled and per-scenario
   current/velocity, x/y/z, every horizon, identity, lifecycle, events,

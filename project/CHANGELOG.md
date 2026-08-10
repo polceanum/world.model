@@ -1269,3 +1269,10 @@ further gravity-axis threshold tuning.
 - Added deterministic fresh-initialization module donation to the modular
   qualifier so changed corrector output heads can be reset and evaluated with
   explicit seed/prefix provenance before sustained training.
+- Rejected the full mean/variance/gate reset (`0.350730`) and the semantically
+  precise mean-only reset (`0.324176`) against the inherited-gain candidate;
+  preserved both exact 32-episode reports and selected mean-only solely as the
+  clean mutable recovery state.
+- Added an updater-only causal trainability scope so the new gain head can
+  recover broad correction accuracy without simultaneous dynamics,
+  identification, or perception drift.

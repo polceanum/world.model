@@ -175,6 +175,9 @@ Working rules:
 - Reset and record any checkpoint head whose mathematical output meaning
   changes across protocols; never reinterpret inherited residual-head numbers
   as gains merely because their tensor shapes still load.
+- Recover a neutrally reset correction head in an updater-only trainable scope
+  before joint dynamics adaptation, and require broad fixed validation rather
+  than treating recovery from the deliberately weaker start as promotion.
 - Scale attention over entity, relation, event, scene/camera, and bounded
   history tokens derived from `WorldBelief`. Decode outputs into typed
   proposals; attention never becomes an opaque replacement for persistent

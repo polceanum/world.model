@@ -2729,6 +2729,10 @@ def set_closed_loop_trainable_scope(
     if scope == "dynamics":
         model.dynamics.requires_grad_(True)
         return
+    if scope == "updater":
+        model.updater.requires_grad_(True)
+        _freeze_disconnected_training_heads(model)
+        return
     if scope == "state_dynamics":
         model.dynamics.requires_grad_(True)
         model.updater.requires_grad_(True)
@@ -2757,7 +2761,7 @@ def set_closed_loop_trainable_scope(
         _freeze_disconnected_training_heads(model)
         return
     raise ValueError(
-        "closed-loop trainable scope must be 'all', 'dynamics', "
+        "closed-loop trainable scope must be 'all', 'dynamics', 'updater', "
         "'fast_roi', 'state_dynamics', 'state_dynamics_fast_roi', or "
         "'state_dynamics_roi'"
     )
@@ -5192,6 +5196,9 @@ def train_from_config(
                 )
                 result.metrics["closed_loop_scope_state_dynamics_only"] = float(
                     active_closed_loop_scope == "state_dynamics"
+                )
+                result.metrics["closed_loop_scope_updater_only"] = float(
+                    active_closed_loop_scope == "updater"
                 )
             for parameter_group in optimizer.param_groups:
                 parameter_group["lr"] = target_learning_rate

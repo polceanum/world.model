@@ -5955,6 +5955,12 @@ to its declared neutral initialization with explicit checkpoint provenance.
 Loading its old numerical weights under the new interpretation is not a valid
 weights-only transfer.
 
+When a neutral reset temporarily removes a previously useful correction, the
+recovery curriculum may train the updater alone while freezing dynamics,
+identifier, and perception. It must regain broad fixed-manifest accuracy before
+joint state/dynamics adaptation; joint co-adaptation from a cold correction
+head is not evidence that the new correction learned the intended function.
+
 ## 190. Attention operates on predictive abstractions
 
 The Transformer's durable contribution is content-dependent interaction among
