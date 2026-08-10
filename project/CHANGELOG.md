@@ -4,6 +4,14 @@
 
 ### 2026-08-10 typed-attention stage-A pilot
 
+- Committed and pushed the collision-row isolation as `70c2e3b`, then launched
+  the fresh weights-only MPS campaign at
+  `runs/20260810-180502-attention-collision-isolated-stage-a/`. Initial
+  metadata records clean immutable source, RGB-only/no-oracle execution, MPS
+  measurement, CPU closed loop, float32, and the protected protocol-14 graph
+  checkpoint as initializer. The mandatory step-zero 32-episode selector is
+  running; no trained accuracy or convergence claim exists yet.
+
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,
   scaled dot-product attention, and SwiGLU feed-forwards add `1,103,626`

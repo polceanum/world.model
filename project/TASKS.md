@@ -150,11 +150,13 @@
 - [x] Pass repaired gates: focused `236 passed`, final affected `216 passed`,
   complete non-device `657 passed, 5 skipped, 1 deselected`, host MPS
   `1 passed, 662 deselected`, Ruff, format, compileall, and diff check.
-- [ ] Launch the collision-isolated attention campaign weights-only from the
-  same protected protocol-14 graph control; prove the periodic frames 7--11
-  batches no longer suppress unrelated gradients before accepting its first
-  complete selector. Continue through repeated selectors and the declared
-  plateau. Partial training remains non-promotion evidence.
+- [ ] Complete the collision-isolated attention campaign at
+  `runs/20260810-180502-attention-collision-isolated-stage-a/`, launched
+  weights-only from the same protected protocol-14 graph control and clean
+  commit `70c2e3b`. Prove the periodic frames 7--11 batches no longer suppress
+  unrelated gradients before accepting its first complete selector. Continue
+  through repeated selectors and the declared plateau. Partial training
+  remains non-promotion evidence.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

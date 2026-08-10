@@ -409,8 +409,30 @@ Repair verification reports `236 passed` for the first focused set and
 non-device verification reports `657 passed, 5 skipped, 1 deselected` in
 `164.77 s`; host MPS reports `1 passed, 662 deselected` in `3.02 s`.
 Ruff check/format, compileall, and diff checks pass. A fresh weights-only
-campaign from the protected graph control remains pending; no accuracy or
-convergence improvement is claimed from optimizer isolation alone.
+campaign is now active at
+`runs/20260810-180502-attention-collision-isolated-stage-a/` under one-shot
+Standard/default LaunchAgent
+`com.polceanum.orpheus.attention-collision-isolated-20260810-180502`,
+`KeepAlive=false`, with trainer PID `88970`. It starts from pushed clean commit
+`70c2e3b`; metadata verifies PyTorch `2.10.0`, MPS built/available and used for
+RGB measurement, CPU closed loop, float32, RGB-only/no-oracle execution, and
+the protected protocol-14 graph checkpoint as its weights-only initializer.
+The resolved protocol hash is
+`9cff424179133097847955f041cf35c73efb5947b66cd877b395b9c57f516fcb`.
+The mandatory step-zero 32-episode selector is in progress; no accuracy or
+convergence improvement is claimed from optimizer isolation or launch alone.
+
+The present capacity is `1,103,626` typed-attention parameters and `3,004,656`
+parameters for the complete model, with at most 22 scene/entity/relation
+tokens under the six-slot contract. Review of the original Transformer and
+current dense/MoE systems supports retaining dense scaled-dot-product
+attention, pre-RMSNorm, and SwiGLU for this rung. GQA/latent attention/local
+attention primarily address long-context KV cost, while MoE introduces a
+routing/load-balancing axis; neither addresses the current short structured
+set or earns inclusion before dense stage A converges. Capacity will therefore
+increase one dense axis at a time only after broad promotion, with data draws
+and disjoint/OOD qualification increased alongside it as required by
+specification section 191.
 
 Historical verification for specification 1.22 before the live-scene repair:
 
