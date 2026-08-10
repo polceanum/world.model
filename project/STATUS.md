@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-10
-**Specification:** `PROJECT_SPEC.md` 1.22
+**Specification:** `PROJECT_SPEC.md` 1.23
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -80,9 +80,14 @@ small control without a broad regression, step 64 remains better than step
 exact zero-output graph residual, and its one-update hybrid MPS/CPU smoke is
 finite, supported, scope-clean, and memory-bounded, but it has no accuracy or
 generalization promotion yet; the declared 8,192-update attention-only
-campaign is the next convergence target
+campaign reached a durable, finite step-128 checkpoint but was stopped after
+exact tensor audit proved its scene projection consumed an always-zero
+`global_code`; specification 1.23 repairs the scene token to consume live
+global, gravity, camera-pose/motion/intrinsics/uncertainty, and calibration
+belief context while preserving exact zero-output graph identity; corrected
+smoke and sustained convergence remain pending
 
-## 2026-08-10 — typed-attention stage A implemented and training
+## 2026-08-10 — typed-attention stage A scene context repaired
 
 Primary-source review retained the useful Transformer mechanism—parallel
 content-dependent interaction—while rejecting language-token assumptions that
@@ -94,15 +99,17 @@ slots. Typed decoders propose bounded node acceleration, antisymmetric pair
 force, event-logit/jump, and process-noise residuals through the existing
 analytic/event/uncertainty contracts. `WorldBelief` remains authoritative.
 
-The module adds `1,098,634` parameters to the `1,901,030`-parameter accepted
-runtime for `2,999,664` total. All output heads initialize at exact zero. Unit
+The corrected module adds `1,103,626` parameters to the
+`1,901,030`-parameter accepted runtime for `3,004,656` total. Its 55-wide
+scene input is derived from authoritative belief fields rather than only the
+reserved global code. All output heads initialize at exact zero. Unit
 tests prove exact graph equality at initialization and permutation equivariance
 after nonzero decoding. Weight-only growth rejects any unexpected key and
 allows missing keys only below `dynamics.attention_interactions.*`. The first
 training stage exposes only those new parameters; attention also shares the
 interaction-local gradient clip and diagnostics.
 
-The host smoke is preserved at
+The original host smoke is preserved at
 `runs/20260810-111959-attention-pilot-smoke/`. Exact command:
 
 ```bash
@@ -143,10 +150,10 @@ stage-B timestamped history, a parameter-matched graph/MLP control, and
 disjoint test/OOD qualification. No accuracy improvement is claimed from the
 smoke.
 
-The clean sustained campaign is active at
+The first sustained campaign is preserved at
 `runs/20260810-114053-attention-pilot-stage-a/`, launched from commit
 `a84ef20` with label
-`com.polceanum.orpheus.attention-20260810-114053`. Launchd reports one running
+`com.polceanum.orpheus.attention-20260810-114053`. It ran as one
 Standard/default, `KeepAlive=false` job under `caffeinate`; metadata records a
 clean source fingerprint, PyTorch `2.10.0`, MPS measurement, CPU closed loop,
 float32, and RGB-only/no-oracle runtime. Initial fixed validation completed all
@@ -178,7 +185,32 @@ applied updates. It now reports the authoritative completed trainer step
 warning that loss/gradient distributions are sparse. Hard finite-state,
 support, and clipping checks still execute on every update.
 
-Final verification for specification 1.22:
+The pilot reached a durable `checkpoints/last.pt` at update/data draw
+`128/128`, with zero skipped draws and no stderr. Exact checkpoint audit finds
+all 177 inherited tensors bitwise equal to step zero, 48 optimizer states all
+owned by attention, finite model/optimizer tensors, and intact best/reference
+hashes at protected score `0.3213162196`. Forty-seven attention tensors changed;
+only `scene_projection.weight` remained exactly unchanged with a zero Adam
+first moment. Repository-wide use audit proved why: `WorldBelief.global_code`
+is initialized to zero and no runtime path updates it. The learned scene-token
+bias could still aggregate entity/relation tokens, but the declared global and
+camera scene input was dead.
+
+The job and PID were stopped after step 128 and are confirmed absent. This run
+is finite architecture-diagnostic evidence, not a trained selector, plateau,
+or accuracy result, and it must not be resumed. Specification 1.23 replaces
+the dead input with a fixed context derived from global code, summarized global
+uncertainty, gravity, camera transform/motion/intrinsics, summarized camera
+uncertainty, and calibration state. The corrected model has a `128 x 55` scene
+projection; a regression proves its weight receives finite nonzero gradient
+even while global code is zero. The focused dynamics/scope/checkpoint suite
+reports `129 passed` in `18.54 s`. The complete non-device suite reports
+`650 passed, 5 skipped, 1 deselected` in `171.69 s`; the host-MPS device marker
+reports `1 passed, 655 deselected` in `3.04 s`. `ruff check .`,
+`ruff format --check .`, compileall, and `git diff --check` pass. A new clean
+host smoke remains pending.
+
+Historical verification for specification 1.22 before the live-scene repair:
 
 - `conda run --no-capture-output -n orpheus pytest -q -p no:cacheprovider -m 'not device'`
   reports `649 passed, 5 skipped, 1 deselected` in `168.52 s`.

@@ -78,7 +78,7 @@
   simulator identity or cross-assigning source-bound ROI rows.
 - [x] Implement stage A of the Mac attention pilot as four RMS-pre-normalized
   scene/entity/relation blocks, width 128, four heads, SwiGLU width 512, typed
-  zero-initialized residual decoders, and 1.099M added parameters. Preserve
+  zero-initialized residual decoders, and 1.104M added parameters. Preserve
   object-slot permutation equivariance and exact graph behavior at
   initialization.
 - [x] Add strict architecture-growth loading and an attention-only optimization
@@ -89,14 +89,25 @@
   distinguish absolute completed trainer step from logged optimizer
   confirmations, expose step gaps, and warn that sampled loss/gradient
   distributions are not per-update curves.
+- [x] Stop and preserve the first attention pilot at its durable update-128
+  checkpoint after exact audit found that 47/48 attention tensors changed but
+  `scene_projection.weight` did not: its sole input, `global_code`, remains
+  zero throughout the current runtime. Verify all inherited weights and linked
+  control hashes remained exact and every serialized tensor stayed finite.
+- [x] Repair the scene token to consume live authoritative belief context:
+  global code/uncertainty, gravity, camera transform/motion/intrinsics/
+  uncertainty, and calibration. Preserve zero-output graph identity and prove
+  finite nonzero scene-projection gradient with zero global code.
+- [x] Pass the corrected focused suite (`129 passed`), complete non-device
+  suite (`650 passed, 5 skipped, 1 deselected`), host-MPS device marker
+  (`1 passed, 655 deselected`), Ruff, format, compileall, and diff gates.
 - [ ] Run the declared 8,192-update, 65,536-draw balanced attention-only
   campaign through repeated complete 32-episode selectors and a real plateau;
   retain the protocol-14 step-64 graph runtime as the protected control. The
-  clean one-shot run is active at
-  `runs/20260810-114053-attention-pilot-stage-a/`; partial validation/training
-  progress is not acceptance evidence. Its zero-output 32-episode selector
-  exactly reproduces score `0.3213162196`; the first eight updates pass the
-  finite/support/scope/clip/resource audit but precede any trained selector.
+  first run at `runs/20260810-114053-attention-pilot-stage-a/` is stopped and
+  cannot count because its scene input was dead. Complete the full quality
+  gate and corrected host smoke, then launch a new timestamped clean run from
+  the same protected graph checkpoint.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

@@ -6,8 +6,8 @@
 
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,
-  scaled dot-product attention, and SwiGLU feed-forwards add `1,098,634`
-  parameters (`1,901,030 -> 2,999,664` total) without making tokens persistent
+  scaled dot-product attention, and SwiGLU feed-forwards add `1,103,626`
+  parameters (`1,901,030 -> 3,004,656` total) without making tokens persistent
   state.
 - Kept current object/relation tokens permutation-equivariant: there are no
   slot-index position embeddings or RoPE. Output heads decode bounded node/
@@ -43,6 +43,20 @@
   now reports the authoritative absolute trainer step, logged confirmations,
   metric gaps, and an explicit sparse-telemetry warning; five focused tests
   cover the new contract.
+- Stopped and preserved the first sustained pilot at durable update 128 after
+  exact checkpoint audit found all inherited tensors unchanged and all state
+  finite, but only 47/48 attention tensors learned: `scene_projection.weight`
+  was dead because runtime `global_code` is always zero. The run is diagnostic
+  evidence and cannot count toward convergence.
+- Replaced that dead scene input with a 55-value context derived from
+  authoritative global uncertainty, gravity, camera transform/motion/
+  intrinsics/uncertainty, calibration, and reserved global code. Exact graph
+  identity and permutation consistency remain intact; a new regression proves
+  live scene-projection gradient when global code is zero.
+- Corrected verification reports `129 passed` for focused dynamics/scope/
+  checkpoint coverage, `650 passed, 5 skipped, 1 deselected` for the complete
+  non-device suite, and `1 passed, 655 deselected` on host MPS; Ruff, format,
+  compileall, and diff checks pass.
 
 ### 2026-08-10 fast-ROI ownership stability
 

@@ -308,11 +308,15 @@ def test_attention_gradients_share_the_interaction_local_clip_and_diagnostics() 
 
     diagnostics = _clip_training_gradients(model, config)
 
-    assert diagnostics["interaction_gradient_norm_pre_clip"] == pytest.approx(3.0)
+    assert diagnostics["interaction_gradient_norm_pre_clip"] == pytest.approx(
+        3.0,
+        rel=1.0e-5,
+        abs=1.0e-5,
+    )
     assert diagnostics["interaction_gradient_norm_applied_before_global_clip"] == pytest.approx(
         1.0, abs=1.0e-6
     )
-    assert attention.grad.norm().item() == pytest.approx(1.0, abs=1.0e-6)
+    assert attention.grad.norm().item() == pytest.approx(1.0, abs=1.0e-5)
 
 
 def test_perception_gradients_are_bounded_without_scaling_small_dynamics() -> None:

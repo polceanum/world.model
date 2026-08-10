@@ -2498,3 +2498,35 @@
   behavior. It may learn more slowly, but any fixed-validation change is
   attributable to the intended semantic repair rather than shared-trunk or
   sibling-head forgetting.
+
+## ADR-091 — Reject a scene token whose declared input is dead
+
+- **Date:** 2026-08-10
+- **Status:** accepted and implemented; corrected campaign pending
+- **Context:** The first typed-attention campaign reached a finite durable
+  update-128 checkpoint with all inherited parameters frozen exactly and 48
+  attention optimizer states. Exact deltas showed 47 attention tensors had
+  changed, while `scene_projection.weight` and its Adam first moment remained
+  exactly zero. Its only input was `WorldBelief.global_code`; repository-wide
+  use audit showed this reserved field is initialized to zero and never
+  corrected by the current RGB runtime. A learned bias/type embedding still
+  let the token aggregate objects, but it did not carry the global fields and
+  calibrated camera context required by the attention contract.
+- **Decision:** Stop and preserve the pilot at its durable step-128 boundary;
+  do not resume it or count its updates toward the corrected rung. Derive the
+  stage-A scene input from authoritative `WorldBelief`: global code, summaries
+  of global uncertainty, gravity, camera transform, linear/angular motion,
+  intrinsics, summaries of camera uncertainty, and calibration. Summarize
+  covariance vectors so dynamics does not depend on modality-specific packing
+  widths. Retain zero-output residual initialization, unordered object-token
+  semantics, and attention-only optimization.
+- **Alternatives considered:** continue 8,192 updates because the scene bias
+  can still aggregate objects; delete the unused scene token; fabricate a
+  learned global code outside the filter; resume the trained entity/relation
+  stack under a changed scene projection.
+- **Consequences:** The corrected Mac rung adds 1,103,626 parameters and has a
+  55-value scene input in the current configuration. A focused regression
+  proves the scene projection receives finite nonzero gradient even when
+  global code is zero. The corrected run restarts weights-only from the same
+  protected graph control, so no incompatible optimizer/history state is
+  smuggled across the semantic change.

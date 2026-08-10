@@ -184,7 +184,7 @@ training:
   interaction_grad_clip_norm: 1.0
   closed_loop_perception_grad_clip_norm: 1.0
   checkpoint_every: 128
-  # A 32-episode selector costs about ten minutes on this Mac; cadence 512
+  # A 32-episode selector costs about sixteen minutes on this Mac; cadence 512
   # keeps frequent durable checkpoints while spending most wall time learning.
   eval_every: 512
   log_every: 8

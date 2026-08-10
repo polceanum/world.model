@@ -391,7 +391,7 @@ class DynamicsModel(nn.Module):
         if self.attention_interactions is not None:
             interaction = self.attention_interactions(
                 objects,
-                belief.global_code,
+                belief,
                 interaction,
             )
         total_residual = modal.residual_acceleration + interaction.residual_acceleration

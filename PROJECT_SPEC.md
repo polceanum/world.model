@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.22
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, and zero-initialized typed-attention pilot amendments 10 August 2026
+**Version:** 1.23
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, and live scene-context amendments 10 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6085,6 +6085,30 @@ combinations, OOD object counts/camera paths, recovery perturbations, and no
 material regression against both the smaller accepted model and the analytic
 low-complexity prior. Training loss alone, a shorter run, or one improved slice
 cannot justify scaling.
+
+## 192. Scene tokens must consume live belief context
+
+A declared scene/camera token may not be implemented as a projection of a
+reserved tensor that the online runtime never updates. Before sustained
+attention training, audit gradient and checkpoint deltas for every new input
+projection. A wholly unchanged projection after more than one supported
+update is a defect unless the specification explicitly declares that input
+inactive.
+
+The stage-A scene token is derived directly from authoritative
+`WorldBelief`: global code, summaries of global uncertainty, gravity, camera
+pose, camera linear/angular motion, intrinsics, summaries of camera
+uncertainty, and calibration state. Variance summaries keep the dynamics
+interface independent of modality-specific covariance packing widths. The
+scene token may aggregate entity/relation tokens through attention, but a
+learned bias or type embedding alone does not satisfy the scene-context
+contract.
+
+This input repair preserves exact zero-output graph identity and the isolated
+attention-only optimization scope. A pilot trained with the dead scene input
+is retained as diagnostic evidence but cannot be resumed or counted toward
+the corrected capacity rung; corrected training restarts weights-only from
+the same protected graph control.
 
 ---
 

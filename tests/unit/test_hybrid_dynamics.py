@@ -110,7 +110,7 @@ def test_interaction_graph_is_permutation_equivariant_and_pair_force_is_antisymm
     )
 
 
-def _attention_residual(objects, global_code) -> TypedAttentionInteractionResidual:
+def _attention_residual(objects, belief) -> TypedAttentionInteractionResidual:
     return TypedAttentionInteractionResidual(
         modal_count=objects.modal_count,
         modal_dim=objects.modal_dim,
@@ -119,7 +119,7 @@ def _attention_residual(objects, global_code) -> TypedAttentionInteractionResidu
         residual_dynamics_dim=objects.residual_dynamics_dim,
         parameter_memory_dim=objects.parameter_memory.shape[-1],
         motion_mode_dim=objects.motion_mode_logits.shape[-1],
-        global_code_dim=global_code.shape[-1],
+        global_code_dim=belief.global_code.shape[-1],
         width=128,
         heads=4,
         layers=4,
@@ -131,9 +131,9 @@ def test_typed_attention_starts_as_exact_graph_identity_with_mac_scale_capacity(
     belief, objects = _two_objects()
     graph = InteractionGraph(4, 3, hidden_dim=16, interaction_radius=1.0)
     base = graph(objects, belief.global_code)
-    attention = _attention_residual(objects, belief.global_code)
+    attention = _attention_residual(objects, belief)
 
-    output = attention(objects, belief.global_code, base)
+    output = attention(objects, belief, base)
 
     for item in fields(base):
         torch.testing.assert_close(
@@ -150,17 +150,17 @@ def test_typed_attention_is_permutation_equivariant_after_nonzero_decoding() -> 
     torch.manual_seed(17)
     belief, objects = _two_objects()
     graph = InteractionGraph(4, 3, hidden_dim=16, interaction_radius=1.0)
-    attention = _attention_residual(objects, belief.global_code)
+    attention = _attention_residual(objects, belief)
     with torch.no_grad():
         attention.node_decoder.weight.normal_(std=0.01)
         attention.relation_decoder.weight.normal_(std=0.01)
 
     base = graph(objects, belief.global_code)
-    output = attention(objects, belief.global_code, base)
+    output = attention(objects, belief, base)
     order = torch.tensor([1, 0])
     permuted = _permute_objects(objects, order)
     permuted_base = graph(permuted, belief.global_code)
-    permuted_output = attention(permuted, belief.global_code, permuted_base)
+    permuted_output = attention(permuted, belief, permuted_base)
 
     torch.testing.assert_close(
         permuted_output.residual_acceleration[:, order],
@@ -181,6 +181,26 @@ def test_typed_attention_is_permutation_equivariant_after_nonzero_decoding() -> 
         atol=1.0e-7,
         rtol=1.0e-7,
     )
+
+
+def test_typed_attention_scene_context_is_live_when_global_code_is_zero() -> None:
+    torch.manual_seed(23)
+    belief, objects = _two_objects()
+    assert torch.count_nonzero(belief.global_code) == 0
+    graph = InteractionGraph(4, 3, hidden_dim=16, interaction_radius=1.0)
+    attention = _attention_residual(objects, belief)
+    with torch.no_grad():
+        attention.node_decoder.weight.normal_(std=0.01)
+        attention.relation_decoder.weight.normal_(std=0.01)
+
+    output = attention(objects, belief, graph(objects, belief.global_code))
+    loss = output.residual_acceleration.square().sum() + output.collision_logits.square().sum()
+    loss.backward()
+
+    gradient = attention.scene_projection.weight.grad
+    assert gradient is not None
+    assert torch.isfinite(gradient).all()
+    assert torch.count_nonzero(gradient) > 0
 
 
 def test_structured_pair_jump_conserves_momentum_and_separates_spheres() -> None:

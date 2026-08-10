@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor, nn
 
-from world_model.belief import ObjectBeliefTensor
+from world_model.belief import ObjectBeliefTensor, WorldBelief
 from world_model.dynamics.graph import InteractionOutput
 
 
@@ -91,6 +91,11 @@ class TypedAttentionInteractionResidual(nn.Module):
 
     relation_feature_dim = 13
     relation_output_dim = 7
+    # Two global-variance summaries + gravity + camera transform + camera
+    # linear/angular velocity + intrinsics + two camera-variance summaries +
+    # calibrated flag. Variances are summarized so the scene contract is
+    # independent of modality-specific covariance packing widths.
+    fixed_scene_feature_dim = 2 + 3 + 16 + 3 + 3 + 9 + 2 + 1
 
     def __init__(
         self,
@@ -140,7 +145,11 @@ class TypedAttentionInteractionResidual(nn.Module):
         self.max_node_acceleration = max_node_acceleration
         self.max_event_logit_residual = max_event_logit_residual
         self.max_process_noise_residual = max_process_noise_residual
-        self.scene_projection = nn.Linear(global_code_dim, width)
+        self.global_code_dim = global_code_dim
+        self.scene_projection = nn.Linear(
+            global_code_dim + self.fixed_scene_feature_dim,
+            width,
+        )
         self.entity_projection = nn.Linear(entity_feature_dim, width)
         self.relation_projection = nn.Linear(self.relation_feature_dim, width)
         self.type_embedding = nn.Embedding(3, width)
@@ -190,6 +199,36 @@ class TypedAttentionInteractionResidual(nn.Module):
                 objects.fast_log_variance,
                 objects.slow_log_variance,
                 objects.parameter_memory,
+            ),
+            dim=-1,
+        )
+
+    def _scene_features(self, belief: WorldBelief) -> Tensor:
+        if belief.global_code.shape[-1] != self.global_code_dim:
+            raise ValueError("belief global code does not match configured attention dimension")
+
+        def variance_summary(value: Tensor) -> Tensor:
+            if value.shape[-1] == 0:
+                return belief.global_code.new_zeros(belief.batch_size, 2)
+            return torch.stack(
+                (
+                    value.mean(dim=-1),
+                    value.amax(dim=-1),
+                ),
+                dim=-1,
+            )
+
+        return torch.cat(
+            (
+                belief.global_code,
+                variance_summary(belief.global_log_variance),
+                belief.gravity,
+                belief.camera.world_from_camera.flatten(start_dim=-2),
+                belief.camera.linear_velocity,
+                belief.camera.angular_velocity,
+                belief.camera.intrinsics.flatten(start_dim=-2),
+                variance_summary(belief.camera.log_variance),
+                belief.camera.calibrated.to(belief.dtype).unsqueeze(-1),
             ),
             dim=-1,
         )
@@ -255,12 +294,12 @@ class TypedAttentionInteractionResidual(nn.Module):
     def forward(
         self,
         objects: ObjectBeliefTensor,
-        global_code: Tensor,
+        belief: WorldBelief,
         base: InteractionOutput,
     ) -> InteractionOutput:
         batch, count = objects.active.shape
-        if global_code.shape[0] != batch:
-            raise ValueError("global code batch does not match object belief")
+        if belief.batch_size != batch:
+            raise ValueError("world belief batch does not match object belief")
         if base.edge_mask.shape != (batch, count, count):
             raise ValueError("base interaction edge mask has incompatible shape")
 
@@ -271,7 +310,7 @@ class TypedAttentionInteractionResidual(nn.Module):
             objects
         )
 
-        scene_tokens = self.scene_projection(global_code).unsqueeze(1)
+        scene_tokens = self.scene_projection(self._scene_features(belief)).unsqueeze(1)
         entity_tokens = self.entity_projection(self._entity_features(objects))
         selected_relation_features = relation_features[:, pair_i, pair_j]
         relation_tokens = self.relation_projection(selected_relation_features)
