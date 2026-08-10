@@ -224,10 +224,30 @@ nonzero, and all excluded model/optimizer rows remain exact. This strengthens
 the association-threshold diagnosis rather than indicating optimizer
 oscillation or scope leakage.
 
+Step 384 returned to the guardrail-clean regime. Its score `0.3215634`,
+current position `0.2532533 m`, velocity `1.0953645 m/s`, identity `0.0142487`,
+coverage, precision, collision F1, calibration, axes, and all five horizons
+are again effectively the protected step-64 behavior. It was not accepted:
+the score is `0.00000405` worse than step 64 and fails only the required
+minimum-improvement condition. The post-320 audit reports eight applied
+balanced blocks, zero skips/clips/failures, gradients
+`0.000215--0.006305`, support `232--468`, and unchanged bounded RSS.
+
+Step 448 crossed into the rejected association regime. Score is `0.3216787`,
+current position `0.2536490 m`, velocity `1.0969621 m/s`, and identity
+`0.0155440`. The baseline scenario fails coverage and identity against the
+fixed reference, and also fails 0.10-second x RMSE against both the protected
+incumbent and fixed reference. This x regression is a downstream trajectory
+effect rather than x-head drift: exact checkpoint comparison from step 384
+to 448 finds changes only in `mean_head.{weight,bias}` row 1, with weight-row
+L2 `0.0001126` and bias delta `0.0000080`; every excluded tensor remains
+bitwise fixed. The segment audit again passes all optimizer, support,
+uncertainty, identity, sampling, memory, and numerical checks.
+
 Step 64 remains the immutable selected incumbent. Although the four latest
 64-step candidates contain no acceptance and less than 1% raw gain, they do
 not satisfy the sustained campaign's required 512-step spacing. The unchanged
-512-update recovery run therefore continues toward steps 384, 448, and 512; it
+512-update recovery run therefore continues toward step 512; it
 has not completed its declared budget or established the applicable plateau
 evidence. No deployment replacement, generalization result, or attention-
 scaling authorization exists yet.

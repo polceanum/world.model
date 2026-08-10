@@ -53,6 +53,14 @@
   and optimizer state remain smooth, finite, and y-only. Closely spaced
   64-update rejections do not satisfy the formal 512-step plateau spacing, so
   continue the declared run with step 64 protected.
+- Completed step 384 in the guardrail-clean regime at `0.3215634`, but rejected
+  it because it remained `0.00000405` worse than protected step 64. The
+  post-320 audit and exact y-row-only checkpoint isolation pass.
+- Rejected step 448 at `0.3216787` after baseline coverage, identity, and
+  x@100-ms crossed guardrails again. The 384--448 optimizer segment remains
+  finite, balanced, unclipped, supported, and exactly confined to mean-head y
+  row 1, proving the x failure is downstream association feedback rather than
+  optimizer scope leakage.
 
 ### 2026-08-09 scenario-balanced optimization
 

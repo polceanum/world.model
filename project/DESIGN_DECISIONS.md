@@ -48,6 +48,18 @@
   without acceptance are useful bounded-recovery saturation evidence but do
   not meet the sustained policy's 512-step spacing; complete the declared
   512-update run rather than claiming convergence early.
+- **Step-384 evidence:** The candidate returned to the guardrail-clean regime
+  at `0.3215634`, but remained `0.00000405` worse than step 64. All optimizer,
+  support, memory, uncertainty, and y-row-isolation checks pass. Treat the
+  repeated clean/rejected band changes as evidence of a discontinuous online
+  association response to a smooth parameter trajectory, not useful monotonic
+  convergence.
+- **Step-448 evidence:** The candidate crossed back into the rejected regime
+  at `0.3216787`, including a baseline x@100-ms failure even though exact
+  tensor comparison proves only y row 1 changed. This is stronger evidence
+  that the remaining limitation sits in trajectory-level association feedback.
+  Complete step 512 for the declared endpoint; do not promote any late
+  candidate unless the unchanged full selector passes.
 
 ## ADR-091 — Continue correction recovery on the accepted y row only
 

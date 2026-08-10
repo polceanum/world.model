@@ -56,8 +56,10 @@
   baseline association threshold regressed coverage, identity, and
   0.10-second x. Step 256 returns to zero guardrail failures at `0.3215611` but
   is microscopically worse than step 64 and is not accepted; step 320 returns
-  to the same rejected baseline threshold at `0.3216708`. Continue the declared
-  512-update run with step 64 protected, and inspect
+  to the same rejected baseline threshold at `0.3216708`; step 384 returns to
+  the clean regime at `0.3215634` but does not beat step 64; step 448 crosses
+  back to a rejected baseline association regime at `0.3216787`. Continue the
+  declared 512-update run with step 64 protected, and inspect
   pooled and per-scenario
   current/velocity, x/y/z, every horizon, identity, lifecycle, events,
   calibration, support, optimizer state, and memory.
