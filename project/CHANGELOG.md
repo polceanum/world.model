@@ -27,6 +27,11 @@
   only the four zero-initialized decoder tensors acquire nonzero moments.
 - Focused architecture/config/checkpoint verification reports `251 passed`;
   final complete-suite and host-MPS outcomes are recorded in project status.
+- Committed/pushed the stage-A implementation as `a84ef20` and launched the
+  clean 8,192-update one-shot campaign at
+  `runs/20260810-114053-attention-pilot-stage-a/` with Standard launch QoS,
+  `KeepAlive=false`, clean source provenance, MPS measurement, CPU closed loop,
+  and the protocol-14 step-64 runtime protected as its initialization control.
 
 ### 2026-08-10 fast-ROI ownership stability
 

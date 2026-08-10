@@ -143,6 +143,20 @@ stage-B timestamped history, a parameter-matched graph/MLP control, and
 disjoint test/OOD qualification. No accuracy improvement is claimed from the
 smoke.
 
+The clean sustained campaign is active at
+`runs/20260810-114053-attention-pilot-stage-a/`, launched from commit
+`a84ef20` with label
+`com.polceanum.orpheus.attention-20260810-114053`. Launchd reports one running
+Standard/default, `KeepAlive=false` job under `caffeinate`; metadata records a
+clean source fingerprint, PyTorch `2.10.0`, MPS measurement, CPU closed loop,
+float32, and RGB-only/no-oracle runtime. Initial fixed validation has begun
+with protocol hash
+`6064c5b1a055e943a3f3900ed63596b6402c7d7ad5a4d45f7b2d77351bc8c648`;
+its first episode completed in `30.24 s`. This is live progress only, not a
+candidate metric. Logs are
+`/private/tmp/20260810-114053-attention-pilot-stage-a.stdout.log` and
+`/private/tmp/20260810-114053-attention-pilot-stage-a.stderr.log`.
+
 Final verification for specification 1.22:
 
 - `conda run --no-capture-output -n orpheus pytest -q -p no:cacheprovider -m 'not device'`

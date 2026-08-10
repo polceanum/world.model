@@ -87,7 +87,10 @@
   tensors, with finite supported loss/gradients and bounded memory.
 - [ ] Run the declared 8,192-update, 65,536-draw balanced attention-only
   campaign through repeated complete 32-episode selectors and a real plateau;
-  retain the protocol-14 step-64 graph runtime as the protected control.
+  retain the protocol-14 step-64 graph runtime as the protected control. The
+  clean one-shot run is active at
+  `runs/20260810-114053-attention-pilot-stage-a/`; partial validation/training
+  progress is not acceptance evidence.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.
