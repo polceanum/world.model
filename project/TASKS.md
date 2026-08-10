@@ -34,10 +34,14 @@
   mathematical meaning changed.
 - [x] Add an updater-only trainable scope that freezes dynamics, identification,
   and perception while the clean innovation-gain head recovers.
-- [ ] Complete the active 512-update balanced updater-only recovery from the
-  mean-reset
-  candidate until the exact 32-episode selector regains the legacy fixed
-  reference without axis/horizon/scenario regressions.
+- [x] Stop the first updater-wide recovery at durable step 64 after exact
+  validation rejected it and checkpoint deltas proved that the compatible
+  trunk, gate, variance, existence, and mode paths had drifted with the reset
+  mean head.
+- [ ] Complete the corrected 512-update balanced mean-head-only recovery from
+  the clean mean-reset candidate at reduced effective learning rate until the
+  exact 32-episode selector regains the legacy fixed reference without
+  axis/horizon/scenario regressions.
 - [ ] If the recovered control is non-regressing, train balanced protocol 19
   long enough for repeated fixed validation and a declared plateau; inspect
   pooled and per-scenario

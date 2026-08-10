@@ -1297,3 +1297,11 @@ further gravity-axis threshold tuning.
   blocks, equal scenario counts, no skipped or clipped updates, median gradient
   `0.3560`, median trajectory support `334`, and a warning-free dynamics
   audit; the exact trained selector is in progress and no promotion is claimed.
+- Completed and rejected the step-64 selector: score worsened from `0.324176`
+  to `0.338432`, current position and all five pooled horizons regressed, and
+  elastic-pair x forecasts failed severely despite better velocity and
+  collision F1.
+- Found that the nominal updater recovery changed the already-compatible
+  trunk, variance, gate, mode, and existence paths as well as the reset mean
+  head. Added an `updater_mean` scope that exposes exactly the mean-head weight
+  and bias, with focused schedule/config coverage.

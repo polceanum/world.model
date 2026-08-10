@@ -252,6 +252,12 @@ def test_closed_loop_trainable_scope_is_explicit() -> None:
             overrides=["training.closed_loop_trainable_scope=perception"],
         )
 
+    config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=["training.closed_loop_trainable_scope=updater_mean"],
+    )
+    assert config.training.closed_loop_trainable_scope == "updater_mean"
+
 
 @pytest.mark.parametrize(
     "overrides",

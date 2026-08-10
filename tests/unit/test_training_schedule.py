@@ -511,6 +511,18 @@ def test_updater_scope_isolates_correction_recovery() -> None:
     )
 
 
+def test_updater_mean_scope_isolates_semantically_reset_gain_head() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+
+    set_closed_loop_trainable_scope(model, scope="updater_mean")
+
+    trainable = {name for name, parameter in model.named_parameters() if parameter.requires_grad}
+    assert trainable == {
+        "updater.learned_corrector.mean_head.weight",
+        "updater.learned_corrector.mean_head.bias",
+    }
+
+
 def test_state_dynamics_roi_scope_trains_fast_rgb_without_global_perception() -> None:
     model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
     rgb = model.observation_modules["rgb"]

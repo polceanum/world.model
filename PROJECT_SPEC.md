@@ -5960,6 +5960,11 @@ recovery curriculum may train the updater alone while freezing dynamics,
 identifier, and perception. It must regain broad fixed-manifest accuracy before
 joint state/dynamics adaptation; joint co-adaptation from a cold correction
 head is not evidence that the new correction learned the intended function.
+If only one output head changed semantics, the first recovery stage must freeze
+the compatible updater trunk and sibling heads and train that reset head alone.
+Only broaden updater trainability after an exact fixed validation shows that
+the isolated head is useful but capacity-limited; do not let a broad recovery
+scope erase compatible behavior merely because it belongs to the same module.
 
 ## 190. Attention operates on predictive abstractions
 

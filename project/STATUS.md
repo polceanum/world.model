@@ -199,9 +199,28 @@ At the step-64 boundary, all eight logged optimizer blocks had applied with
 every scenario represented exactly eight times, zero skipped draws, no clipped
 or severe-clipped block, median raw gradient `0.3560`, median causal support
 `334`, and peak RSS `1,332,187,136` bytes. The dynamics auditor reports
-`status=pass` with no failures or warnings. Step-64 exact validation is active;
-this is still optimization-health evidence, not an accuracy or convergence
-claim, until that fixed manifest completes.
+`status=pass` with no failures or warnings. Exact validation then rejected the
+step-64 candidate: score worsened `0.3241755 -> 0.3384320`, current position
+worsened `0.2559540 -> 0.2747649 m`, coverage fell `0.3765 -> 0.36075`, and all
+five horizons worsened from `0.270262/0.279750/0.311927/0.337838/0.361140 m`
+to `0.286194/0.293699/0.328519/0.354228/0.371656 m`. Velocity improved
+`1.096677 -> 1.068461 m/s` and collision F1 improved
+`0.187817 -> 0.213270`, but these do not offset broad position regression;
+elastic-pair x forecasts failed particularly severely. The selector retained
+step zero and the one-shot job was stopped at the durable step-64 checkpoint.
+
+Checkpoint deltas exposed a narrower protocol defect: `updater` trained the
+compatible corrector trunk, modality embedding, variance/gate, mode, and
+existence paths alongside the reset mean head. Shared trunk matrices moved by
+`0.10--0.22` L2 while the new mean-head weight moved only `0.0068`, confounding
+semantic recovery with broad updater forgetting. A new `updater_mean` scope
+now makes exactly `mean_head.weight` and `mean_head.bias` trainable. Focused
+schedule/config tests report `200 passed`; the complete non-device suite reports
+`638 passed, 5 skipped, 1 deselected` in `190.97 s`, and the host device suite
+reports `1 passed, 643 deselected` in `4.64 s`. Ruff lint and repository-wide
+format checks pass.
+The corrected campaign must restart from the clean mean-reset candidate at
+effective learning rate `5e-6`, not continue from the rejected step-64 state.
 
 Specification 1.19 also records the compute path reviewed against transformer,
 Perceiver IO, compute-optimal scaling, JEPA/video-world-model, and recent

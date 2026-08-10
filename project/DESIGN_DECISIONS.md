@@ -2310,3 +2310,30 @@
   parameters, data exposure, throughput, memory, plateau evidence, and broad
   RGB-only/OOD metrics. Attention proposes typed updates and cannot bypass the
   analytic/filtering contracts.
+
+## ADR-090 — Recover a semantically reset correction head in isolation
+
+- **Date:** 2026-08-10
+- **Status:** accepted after exact step-64 rejection
+- **Context:** The innovation-anchored migration changed only the learned mean
+  output from an absolute delta to an innovation gain. The first recovery
+  scope froze perception, dynamics, and identification but still trained the
+  complete updater. Its optimizer was numerically healthy, yet exact step-64
+  validation worsened score `0.324176 -> 0.338432`, regressed current position
+  and all horizons, and severely damaged elastic-pair x prediction. Tensor
+  deltas showed that the compatible trunk and sibling heads changed alongside
+  the reset mean head.
+- **Decision:** Add an `updater_mean` scope that trains exactly the learned
+  corrector's mean-head weight and bias. Restart from the clean mean-reset
+  checkpoint with effective learning rate `5e-6`; do not continue from the
+  rejected updater-wide state. Broadening the scope requires prior fixed-
+  manifest evidence that mean-only recovery is useful but capacity-limited.
+- **Alternatives considered:** continue the updater-wide run to 512 updates;
+  resume from its rejected step-64 iterate; lower learning rate without
+  narrowing scope; unfreeze dynamics to compensate; proceed to attention
+  scaling despite the regression.
+- **Consequences:** The next result isolates whether the new gain head can
+  recover useful bias correction while preserving all compatible updater
+  behavior. It may learn more slowly, but any fixed-validation change is
+  attributable to the intended semantic repair rather than shared-trunk or
+  sibling-head forgetting.
