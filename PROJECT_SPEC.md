@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.25
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, and collision-head gradient-isolation amendments 10 August 2026
+**Version:** 1.26
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, and complete typed-attention gradient localization amendments 10 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6169,6 +6169,31 @@ Adam moments localizing the dominant variance to the collision-logit row.
 The pre-repair campaign is diagnostic only and cannot resume or count toward
 convergence; repaired training restarts weights-only from the protected graph
 control.
+
+## 195. Severe shared-gradient recurrence requires complete localization
+
+A row-local repair is qualified only for the failure it actually isolates. If
+the same deterministic schedule position later produces severe complete-block
+clipping while the repaired row is ordinary, stop at the last durable clean
+checkpoint. Do not infer that the prior row remains causal, add another cap by
+guess, lower the whole learning rate, or continue merely because gradients and
+parameters remain finite.
+
+Before any further optimizer repair, record the true raw norm of every trainable
+attention parameter and each typed node/relation decoder row before any local or
+global mutation. The diagnostics must be read-only, finite-checked, use stable
+semantic names, and distinguish contact/collision logits, normal/tangent force,
+impulse multiplier/additive, process noise, and node x/y/z outputs. Reproduce
+the failure by exact optimizer/RNG/data continuation from the last clean
+checkpoint and compare seeds, physical event counts, objective support, loss,
+and association/lifecycle evidence. Only the reproduced dominant path may
+receive a targeted conditioning or isolation change.
+
+In the collision-isolated stage-A campaign, update 280 still produces a raw
+interaction norm of `17.7050` and retains only `0.05648`, while the collision
+row norm is an ordinary unclipped `0.23553`. The repaired run therefore stops
+at its exact durable step-256 checkpoint. It cannot count toward convergence;
+its step-280 update is diagnostic evidence for the complete-localization replay.
 
 ---
 

@@ -2484,6 +2484,80 @@ def _gradient_clip_diagnostics(
     )
 
 
+def _attention_gradient_diagnostics(model: OnlineWorldModel) -> dict[str, float]:
+    """Record raw attention parameter and typed-decoder row norms read-only."""
+
+    attention = model.dynamics.attention_interactions
+    if attention is None:
+        return {}
+
+    named_gradient_groups: list[tuple[str, tuple[Tensor, ...]]] = []
+    for name, parameter in attention.named_parameters():
+        gradients = () if parameter.grad is None else (parameter.grad,)
+        metric_name = f"attention_parameter_gradient_norm_pre_clip__{name.replace('.', '__')}"
+        named_gradient_groups.append((metric_name, gradients))
+
+    node_labels = ("x", "y", "z")
+    for row, label in enumerate(node_labels):
+        gradients = tuple(
+            gradient
+            for gradient in (
+                None
+                if attention.node_decoder.weight.grad is None
+                else attention.node_decoder.weight.grad[row],
+                None
+                if attention.node_decoder.bias.grad is None
+                else attention.node_decoder.bias.grad[row],
+            )
+            if gradient is not None
+        )
+        named_gradient_groups.append(
+            (f"attention_node_output_gradient_norm_pre_clip@{label}", gradients)
+        )
+
+    relation_labels = (
+        "contact",
+        "collision",
+        "normal_force",
+        "tangent_force",
+        "impulse_multiplier",
+        "impulse_additive",
+        "process_noise",
+    )
+    if len(relation_labels) != attention.relation_output_dim:
+        raise AssertionError("typed-attention relation gradient labels are incomplete")
+    for row, label in enumerate(relation_labels):
+        gradients = tuple(
+            gradient
+            for gradient in (
+                None
+                if attention.relation_decoder.weight.grad is None
+                else attention.relation_decoder.weight.grad[row],
+                None
+                if attention.relation_decoder.bias.grad is None
+                else attention.relation_decoder.bias.grad[row],
+            )
+            if gradient is not None
+        )
+        named_gradient_groups.append(
+            (f"attention_relation_output_gradient_norm_pre_clip@{label}", gradients)
+        )
+
+    squared_norms = []
+    for _, gradients in named_gradient_groups:
+        if gradients:
+            squared_norms.append(sum(gradient.detach().square().sum() for gradient in gradients))
+        else:
+            squared_norms.append(torch.zeros((), device=next(attention.parameters()).device))
+    norms = torch.stack(squared_norms).sqrt()
+    if not bool(torch.isfinite(norms).all()):
+        raise FloatingPointError("nonfinite typed-attention raw gradient diagnostic")
+    values = norms.detach().cpu().tolist()
+    return {
+        name: float(value) for (name, _), value in zip(named_gradient_groups, values, strict=True)
+    }
+
+
 def _clip_attention_collision_gradients(
     model: OnlineWorldModel,
     maximum_gradient_norm: float | None,
@@ -2566,6 +2640,7 @@ def _clip_training_gradients(
         perception_clip_norm,
     )
 
+    attention_gradient_diagnostics = _attention_gradient_diagnostics(model)
     (
         attention_collision_pre_clip,
         attention_collision_coefficient,
@@ -2643,6 +2718,7 @@ def _clip_training_gradients(
         "gradient_clip_coefficient": global_coefficient,
         "gradient_total_clip_coefficient": total_coefficient,
         "gradient_norm_applied": applied,
+        **attention_gradient_diagnostics,
     }
 
 

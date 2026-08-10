@@ -171,6 +171,16 @@
   owners are live at Adam step 256, and 256 balanced updates have zero hard
   audit failure. Track the isolated step-248 trusted-identity spike (`6.35%`;
   aggregate `0.975%`) through fixed validation without tuning to one batch.
+  Stop the run after step 280 reproduces severe whole-interaction clipping
+  (`17.7050`, coefficient `0.05648`) outside the collision row (`0.23553`).
+  Preserve exact step 256 and do not count this campaign toward convergence.
+- [x] Add read-only raw-gradient telemetry for every named attention parameter
+  and all semantic node/relation decoder rows before any clipping; finite-check
+  the complete diagnostic without changing gradients or forward behavior.
+- [ ] Replay exact steps 257--280 from the durable checkpoint with optimizer,
+  RNG, and deterministic data continuity; localize the dominant parameter/row,
+  implement only the evidence-backed repair, pass gates, and relaunch from the
+  protected graph control.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

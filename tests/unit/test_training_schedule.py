@@ -27,6 +27,7 @@ from world_model.training.loop import (
 )
 from world_model.training.trainer import (
     _ROLLOUT_SELECTION_METRIC_VERSION,
+    _attention_gradient_diagnostics,
     _causal_training_support,
     _clip_training_gradients,
     _closed_loop_trainable_scope_for_step,
@@ -365,6 +366,60 @@ def test_attention_collision_row_is_bounded_before_complete_interaction_clip() -
     )
     assert collision_gradient.norm().item() == pytest.approx(1.0, abs=1.0e-6)
     assert other.grad.norm().item() == pytest.approx(4.0, abs=1.0e-6)
+
+
+def test_attention_raw_gradient_diagnostics_localize_parameters_and_typed_rows() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+
+    scene_gradient = attention.scene_projection.bias
+    scene_gradient.grad = torch.ones_like(scene_gradient)
+    scene_gradient.grad.mul_(4.0 / scene_gradient.grad.norm())
+
+    relation_weight = attention.relation_decoder.weight
+    relation_bias = attention.relation_decoder.bias
+    relation_weight.grad = torch.zeros_like(relation_weight)
+    relation_bias.grad = torch.zeros_like(relation_bias)
+    normal_row = relation_weight.grad[2]
+    normal_row.fill_(1.0)
+    normal_row.mul_(3.0 / normal_row.norm())
+    relation_bias.grad[2] = 4.0
+
+    node_weight = attention.node_decoder.weight
+    node_weight.grad = torch.zeros_like(node_weight)
+    node_x = node_weight.grad[0]
+    node_x.fill_(1.0)
+    node_x.mul_(2.0 / node_x.norm())
+
+    before = {
+        name: parameter.grad.detach().clone()
+        for name, parameter in attention.named_parameters()
+        if parameter.grad is not None
+    }
+    diagnostics = _attention_gradient_diagnostics(model)
+
+    assert diagnostics[
+        "attention_parameter_gradient_norm_pre_clip__scene_projection__bias"
+    ] == pytest.approx(4.0)
+    assert diagnostics[
+        "attention_parameter_gradient_norm_pre_clip__relation_decoder__weight"
+    ] == pytest.approx(3.0)
+    assert diagnostics[
+        "attention_parameter_gradient_norm_pre_clip__relation_decoder__bias"
+    ] == pytest.approx(4.0)
+    assert diagnostics["attention_relation_output_gradient_norm_pre_clip@normal_force"] == (
+        pytest.approx(5.0)
+    )
+    assert diagnostics["attention_node_output_gradient_norm_pre_clip@x"] == pytest.approx(2.0)
+    assert diagnostics["attention_relation_output_gradient_norm_pre_clip@collision"] == 0.0
+    for name, parameter in attention.named_parameters():
+        if name in before:
+            assert torch.equal(parameter.grad, before[name])
 
 
 def test_perception_gradients_are_bounded_without_scaling_small_dynamics() -> None:

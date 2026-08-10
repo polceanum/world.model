@@ -30,6 +30,14 @@
   a fixed-selector warning. Update 280 and the first trained selector remain
   pending; no trained accuracy or convergence claim exists yet.
 
+- Stopped the collision-isolated campaign after step 280 reproduced a severe
+  complete-interaction coefficient of `0.05648` despite an ordinary unclipped
+  collision-row norm of `0.23553`. The failed update is not checkpointed and
+  exact step 256 remains protected. Added specification 1.26 plus read-only,
+  finite-checked raw-gradient diagnostics for every attention parameter and
+  semantic node/relation decoder row so the exact replay can localize the real
+  source without guessing another cap.
+
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,
   scaled dot-product attention, and SwiGLU feed-forwards add `1,103,626`

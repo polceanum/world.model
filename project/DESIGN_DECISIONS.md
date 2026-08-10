@@ -1,5 +1,27 @@
 # Design decisions
 
+## ADR-098 — Localize the complete attention gradient before another repair
+
+- **Date:** 2026-08-10
+- **Status:** accepted and instrumented; exact replay pending
+- **Context:** Collision-row isolation improves the former step-152 failure,
+  but repaired update 280 still has raw interaction norm `17.7050` and retains
+  `0.05648`. Its collision row is only `0.23553` and is not clipped, proving
+  that the remaining recurrence lies elsewhere in the shared attention model.
+- **Decision:** Stop at exact durable step 256. Record pre-mutation raw norms
+  for all named attention parameters and semantic decoder rows, finite-check
+  them, and replay steps 257--280 with optimizer/RNG/data continuity. Repair
+  only the reproduced dominant path, then restart the qualification from the
+  protected graph control.
+- **Alternatives considered:** continue because the update is finite; assume
+  the collision row remains causal; cap every decoder row; lower the complete
+  learning rate; widen the interaction cap; diagnose from checkpoint moments
+  after the failed update was not durably saved.
+- **Consequences:** The stopped run cannot count toward convergence, but its
+  clean step-256 state supports exact localization. Telemetry grows by stable
+  scalar fields without changing forward computation or gradients. A later
+  targeted repair must still pass the former boundaries and fixed selectors.
+
 ## ADR-097 — Require repaired checkpoint and selector evidence before scaling
 
 - **Date:** 2026-08-10

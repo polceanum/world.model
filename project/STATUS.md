@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-10
-**Specification:** `PROJECT_SPEC.md` 1.25
+**Specification:** `PROJECT_SPEC.md` 1.26
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -483,7 +483,25 @@ trusted identity switches over 63 associations (`6.35%`), versus `3.08%` on
 the stopped conditioned control; update 256 returns to zero and aggregate
 trusted switching remains 14/1,436 (`0.975%`). This warning remains reserved
 for fixed-selector judgment rather than being hidden or prematurely repaired.
-The former step-280 recurrence and first trained selector remain pending.
+At update 280 the periodic severe whole-interaction failure recurs in a new
+form. Raw norm is reduced from the conditioned run's `52.9646` to `17.7050`,
+but the interaction-stage coefficient is still severe at `0.05648`. Crucially,
+the collision-row norm is only `0.23553` and receives no row-local clipping;
+the post-row interaction norm remains the full `17.7050`. The batch has all 13
+objectives, 145 trajectory targets, 19 ground-contact objects, four pair
+intervals, one wall collision, finite loss/state, and stable RSS. The auditor
+correctly retains the severe warning. The LaunchAgent is stopped and absent;
+shutdown emitted only the known 14-semaphore resource-tracker warning. The
+verified step-256 checkpoint remains exact and the failed update is not
+checkpointed.
+
+Specification 1.26 now requires complete read-only gradient localization
+before another repair. Training telemetry records the raw norm of every named
+attention parameter and every semantically labelled node/relation output row
+before clipping. This is observability only and does not mutate gradients or
+forward dynamics. The next experiment is an exact optimizer/RNG/data replay
+from step 256 through 280 to identify the actual dominant path. No first
+trained selector or convergence result exists.
 
 The present capacity is `1,103,626` typed-attention parameters and `3,004,656`
 parameters for the complete model, with at most 22 scene/entity/relation
