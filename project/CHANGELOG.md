@@ -1293,3 +1293,7 @@ further gravity-axis threshold tuning.
   maturity gating rather than lost rollout supervision; the mature step-16
   row restored all 13 objectives including deterministic multistep position
   and velocity losses.
+- Reached the durable step-64 validation boundary with eight clean logged
+  blocks, equal scenario counts, no skipped or clipped updates, median gradient
+  `0.3560`, median trajectory support `334`, and a warning-free dynamics
+  audit; the exact trained selector is in progress and no promotion is claimed.

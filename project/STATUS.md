@@ -195,6 +195,14 @@ restored all 13 causal objectives, including rollout position and velocity.
 The first trained fixed selector remains due at step 64; each selector must
 compare against both the clean reset start and the legacy fixed reference.
 
+At the step-64 boundary, all eight logged optimizer blocks had applied with
+every scenario represented exactly eight times, zero skipped draws, no clipped
+or severe-clipped block, median raw gradient `0.3560`, median causal support
+`334`, and peak RSS `1,332,187,136` bytes. The dynamics auditor reports
+`status=pass` with no failures or warnings. Step-64 exact validation is active;
+this is still optimization-health evidence, not an accuracy or convergence
+claim, until that fixed manifest completes.
+
 Specification 1.19 also records the compute path reviewed against transformer,
 Perceiver IO, compute-optimal scaling, JEPA/video-world-model, and recent
 object-centric physical-prediction literature. The first scale rung is not a
