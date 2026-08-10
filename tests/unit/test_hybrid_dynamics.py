@@ -203,6 +203,26 @@ def test_typed_attention_scene_context_is_live_when_global_code_is_zero() -> Non
     assert torch.count_nonzero(gradient) > 0
 
 
+def test_typed_attention_bounds_mixed_unit_scene_input_before_projection() -> None:
+    belief, objects = _two_objects()
+    attention = _attention_residual(objects, belief)
+    extreme_camera = belief.camera.replace(intrinsics=belief.camera.intrinsics * 1_000.0)
+    extreme_belief = replace(belief, camera=extreme_camera)
+
+    raw = attention._scene_features(extreme_belief)
+    normalized = attention.scene_input_norm(raw)
+
+    assert raw.abs().max() >= 1_000.0
+    assert torch.isfinite(normalized).all()
+    expected_norm = normalized.new_tensor(normalized.shape[-1]).sqrt()
+    torch.testing.assert_close(
+        torch.linalg.vector_norm(normalized, dim=-1),
+        expected_norm.expand(normalized.shape[0]),
+        atol=1.0e-5,
+        rtol=1.0e-5,
+    )
+
+
 def test_structured_pair_jump_conserves_momentum_and_separates_spheres() -> None:
     _, objects = _two_objects()
     resolver = SphereContactResolver()

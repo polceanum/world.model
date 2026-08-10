@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-10
-**Specification:** `PROJECT_SPEC.md` 1.23
+**Specification:** `PROJECT_SPEC.md` 1.24
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -84,10 +84,14 @@ campaign reached a durable, finite step-128 checkpoint but was stopped after
 exact tensor audit proved its scene projection consumed an always-zero
 `global_code`; specification 1.23 repairs the scene token to consume live
 global, gravity, camera-pose/motion/intrinsics/uncertainty, and calibration
-belief context while preserving exact zero-output graph identity; corrected
-smoke and sustained convergence remain pending
+belief context while preserving exact zero-output graph identity; its corrected
+smoke passes, but the first sustained live-scene run was stopped at sampled
+update 64 after mixed-unit raw scene features caused a `45.3456` interaction
+gradient and `0.02205` local clip coefficient; specification 1.24 adds fixed
+non-affine pre-projection RMS conditioning; corrected sustained convergence
+remains pending
 
-## 2026-08-10 — typed-attention stage A scene context repaired
+## 2026-08-10 — typed-attention scene context and input conditioning repaired
 
 Primary-source review retained the useful Transformer mechanism—parallel
 content-dependent interaction—while rejecting language-token assumptions that
@@ -242,19 +246,19 @@ perception gradient is zero, data draw is exactly two, and source provenance
 is clean commit `c9f9dc6`. This closes the dead-scene wiring defect; sustained
 accuracy and convergence are still unproven.
 
-The corrected sustained campaign is active at
+The first corrected sustained campaign is preserved at
 `runs/20260810-134330-attention-live-scene-stage-a/` under one-shot
 Standard/default LaunchAgent
 `com.polceanum.orpheus.attention-live-20260810-134330`, `KeepAlive=false` and
-`caffeinate`. Launchd reports authoritative PID `81275`; metadata records clean
+`caffeinate`. Its former PID `81275` and job are now stopped; metadata records clean
 commit `25d82d8`, runtime fingerprint
 `b80851654c0c85ea1c16fb9b80a388221568ffeeb6b9ccfb1cece1c09716bc79`,
 PyTorch `2.10.0`, MPS built/available and used for RGB measurement, CPU closed
 loop, float32, RGB-only/no-oracle runtime, and the protected protocol-14 graph
 checkpoint as its source. The first initialization episode completed in
 `24.999 s` under unchanged selector hash
-`6064c5b1a055e943a3f3900ed63596b6402c7d7ad5a4d45f7b2d77351bc8c648`;
-stderr is empty. The complete 32-episode initialization finished in
+`6064c5b1a055e943a3f3900ed63596b6402c7d7ad5a4d45f7b2d77351bc8c648`.
+The complete 32-episode initialization finished in
 `966.681 s` and exactly reproduces score/current/velocity
 `0.3213162196 / 0.2514599 m / 1.0931909 m/s`, axes
 `0.281775/0.201906/0.263691 m`, and horizons
@@ -270,6 +274,35 @@ from every scenario, zero skipped draws and sampled distance-gated identity
 switches, zero perception gradient, every horizon supported, peak RSS
 `2,810,531,840` bytes, and empty stderr. This is live optimizer-health evidence
 only, not a trained selector or accuracy promotion.
+
+The run was intentionally stopped after its sampled update-64 metric exposed
+a conditioning failure. The exact update-64 seeds, window, two pair-collision
+intervals, four ground-collision objects, one wall collision, and one external
+actuation match the old dead-scene control. Most objective terms are close,
+including rollout NLL `-0.6872` versus `-0.6829`, but raw interaction gradient
+is `45.3456` versus `1.3231`; the local coefficient collapses to `0.02205`.
+Earlier sampled live norms were
+`0.2631/1.9980/4.7883/5.5396/6.2062/2.2633/6.4135`, so update 64 is the
+endpoint of a scale-sensitive path rather than nonfinite loss or one uniquely
+difficult physical batch. Global clipping kept the applied update finite, but
+continuing would spend most updates at a resolution-dependent effective rate.
+
+Root cause is the 55-value scene vector mixing pixel-scale intrinsics with
+latent values, log variances, gravity, camera pose/motion, and calibration
+before `scene_projection`; block RMSNorm occurs only after that projection.
+Specification 1.24 and the implementation now apply fixed non-affine RMS
+normalization immediately before the scene projection. It adds no parameter,
+retains exact zero-output graph behavior, and keeps absolute physical fields
+unchanged for analytic dynamics. A focused regression scales intrinsics by
+`1000x` and verifies finite scene input with vector norm `sqrt(55)` before
+projection. The focused dynamics file reports `20 passed`; complete gates and
+a normalized host conditioning smoke are the next required steps. Complete
+non-device verification reports `651 passed, 5 skipped, 1 deselected` in
+`171.34 s`; the host-MPS marker reports `1 passed, 656 deselected` in `3.01 s`.
+Ruff check, Ruff format check, compileall, and `git diff --check` pass. Shutdown
+emitted only Python's resource-tracker warning for 14 worker semaphores; the
+process is confirmed absent. The stopped run has no trained selector or
+promotion and cannot count toward convergence.
 
 Historical verification for specification 1.22 before the live-scene repair:
 

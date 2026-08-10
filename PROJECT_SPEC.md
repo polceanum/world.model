@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.23
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, and live scene-context amendments 10 August 2026
+**Version:** 1.24
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, and mixed-unit scene-conditioning amendments 10 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6109,6 +6109,31 @@ attention-only optimization scope. A pilot trained with the dead scene input
 is retained as diagnostic evidence but cannot be resumed or counted toward
 the corrected capacity rung; corrected training restarts weights-only from
 the same protected graph control.
+
+## 193. Mixed-unit token inputs require bounded pre-projection conditioning
+
+Typed token features may combine latent coordinates, log variances, physical
+SI-like quantities, homogeneous transforms, and sensor coordinates. Transformer
+block pre-normalization occurs after token projection and therefore cannot
+protect the input projection's weight gradient from raw feature scale. A
+finite loss plus a repeatedly clipped projection gradient is a conditioning
+defect, not evidence that a larger clip or longer training is required.
+
+The stage-A scene vector receives a fixed non-affine RMS normalization
+immediately before its learned projection. This bounds projection input norm
+independently of pixel-space camera scale, adds no trainable scale parameter,
+and preserves exact zero-output graph identity. Absolute analytic quantities
+remain available to the structured dynamics; this normalization conditions
+only the learned residual token. Any later typed input with heterogeneous
+units must either use an explicit documented nondimensionalization or prove
+equivalent bounded projection-gradient behavior on the declared data range.
+
+A sustained capacity campaign must stop when sampled local gradient
+coefficients show a new systematic order-of-magnitude collapse attributable
+to an architectural input path. Preserve the diagnostic metrics, repair the
+conditioning, pass a focused extreme-scale regression and complete gates, and
+restart weights-only from the protected smaller control. Do not resume or
+count the flawed campaign toward convergence.
 
 ---
 

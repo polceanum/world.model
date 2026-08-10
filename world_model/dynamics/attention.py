@@ -146,6 +146,17 @@ class TypedAttentionInteractionResidual(nn.Module):
         self.max_event_logit_residual = max_event_logit_residual
         self.max_process_noise_residual = max_process_noise_residual
         self.global_code_dim = global_code_dim
+        # Scene features mix latent values, log variances, world-space
+        # quantities, homogeneous transforms, and pixel-space intrinsics.  A
+        # fixed pre-projection normalization prevents those units from making
+        # the scene projection's backward conditioning depend on image
+        # resolution.  It is deliberately non-affine: the attention branch
+        # can learn feature weights in ``scene_projection`` without an
+        # unbounded scale parameter in front of it.
+        self.scene_input_norm = nn.RMSNorm(
+            global_code_dim + self.fixed_scene_feature_dim,
+            elementwise_affine=False,
+        )
         self.scene_projection = nn.Linear(
             global_code_dim + self.fixed_scene_feature_dim,
             width,
@@ -310,7 +321,8 @@ class TypedAttentionInteractionResidual(nn.Module):
             objects
         )
 
-        scene_tokens = self.scene_projection(self._scene_features(belief)).unsqueeze(1)
+        scene_features = self.scene_input_norm(self._scene_features(belief))
+        scene_tokens = self.scene_projection(scene_features).unsqueeze(1)
         entity_tokens = self.entity_projection(self._entity_features(objects))
         selected_relation_features = relation_features[:, pair_i, pair_j]
         relation_tokens = self.relation_projection(selected_relation_features)

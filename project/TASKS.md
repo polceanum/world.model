@@ -106,17 +106,28 @@
   skipped draws and frozen-perception gradient, all 177 inherited tensors
   exact, all 48 attention tensors changed, and nonzero scene-projection weight
   plus Adam moment by update two.
+- [x] Stop the first live-scene sustained campaign at sampled update 64 after
+  its interaction gradient rose to `45.3456` and the local clip coefficient
+  collapsed to `0.02205` on an ordinary matched control batch. Trace the
+  defect to mixed-unit raw scene features entering the projection before any
+  Transformer normalization.
+- [x] Add fixed non-affine pre-projection RMS conditioning for the scene token
+  and an extreme-intrinsics regression that proves bounded finite projection
+  input without adding a learnable scale or changing zero-output graph
+  identity.
+- [x] Pass the normalized implementation gates: focused dynamics `20 passed`,
+  complete non-device `651 passed, 5 skipped, 1 deselected`, host MPS
+  `1 passed, 656 deselected`, Ruff check/format, compileall, and diff check.
 - [ ] Run the declared 8,192-update, 65,536-draw balanced attention-only
   campaign through repeated complete 32-episode selectors and a real plateau;
   retain the protocol-14 step-64 graph runtime as the protected control. The
   first run at `runs/20260810-114053-attention-pilot-stage-a/` is stopped and
-  cannot count because its scene input was dead. The corrected quality gate and
-  host smoke pass. The new clean run is active at
-  `runs/20260810-134330-attention-live-scene-stage-a/` from the same protected
-  graph checkpoint. Its complete step-zero selector exactly reproduces score
-  `0.3213162196`; the first eight repaired updates pass finite/support/scope/
-  identity/resource auditing without clipping. Partial training remains
-  non-promotion evidence.
+  cannot count because its scene input was dead. The live-scene run at
+  `runs/20260810-134330-attention-live-scene-stage-a/` is also stopped and
+  cannot count because mixed-unit scene inputs caused severe projection
+  gradient conditioning by sampled update 64. Relaunch the normalized model
+  from the same protected graph checkpoint only after complete gates and a
+  short conditioning smoke. Partial training remains non-promotion evidence.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

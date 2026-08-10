@@ -73,6 +73,18 @@
   supported and scope-clean with loss `0.4890857`, unclipped gradient
   `0.2631448`, zero skips/identity switches/stderr, and bounded memory; this is
   optimizer evidence, not promotion.
+- Stopped the corrected live-scene campaign at sampled update 64 after its raw
+  attention gradient reached `45.3456` and the interaction-local coefficient
+  fell to `0.02205`, versus `1.3231` on the exact same episode batch in the
+  dead-scene control. Ordinary, closely matched objective terms and identical
+  seeds isolate this as conditioning rather than a uniquely difficult batch.
+- Added fixed non-affine RMS normalization immediately before the 55-to-128
+  scene projection. It bounds mixed latent/variance/world/pixel feature scale,
+  adds no trainable parameter, and preserves the zero-output residual. An
+  extreme `1000x` intrinsics regression verifies finite RMS-bounded input.
+- Normalized-model verification reports `20 passed` focused, `651 passed,
+  5 skipped, 1 deselected` complete non-device, and `1 passed, 656 deselected`
+  on host MPS; Ruff check/format, compileall, and diff checks pass.
 
 ### 2026-08-10 fast-ROI ownership stability
 

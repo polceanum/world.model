@@ -1,5 +1,33 @@
 # Design decisions
 
+## ADR-095 — Normalize mixed-unit scene features before projection
+
+- **Date:** 2026-08-10
+- **Status:** accepted and implemented; corrected relaunch pending
+- **Context:** The repaired scene token became live, but the first sustained
+  run's sampled interaction norm grew from `0.2631` at update 8 to `45.3456`
+  at update 64. On the exact update-64 seeds/window, the old control was only
+  `1.3231`; losses and physical event counts were ordinary and closely
+  matched. The scene vector mixed pixel-space intrinsics with latent values,
+  log variances, gravity, camera motion, and a homogeneous transform before
+  its first linear layer. RMS pre-normalization inside each Transformer block
+  occurs after that projection and cannot condition its weight gradient.
+- **Decision:** Stop the campaign rather than normalize the failure away with
+  a larger clip. Apply fixed, non-affine RMS normalization to the complete
+  scene feature vector immediately before `scene_projection`. Keep analytic
+  physical quantities unchanged in `WorldBelief` and structured dynamics;
+  only condition the learned residual token. Restart weights-only from the
+  protected graph control after gates and a short smoke.
+- **Alternatives considered:** continue because global clipping kept updates
+  finite; increase the clip; lower learning rate without repairing scale;
+  divide intrinsics by a hard-coded image size; add a learnable affine input
+  norm; normalize all entity/relation fields without evidence they are the
+  failing path.
+- **Consequences:** Projection input has fixed RMS independently of camera
+  pixel scale, there is no new unbounded affine factor, and zero-output graph
+  identity remains exact. The stopped live-scene run is diagnostic only and
+  does not count toward the 8,192-update convergence budget.
+
 ## ADR-094 — Scale relational capacity as a zero-initialized typed residual
 
 - **Date:** 2026-08-10
