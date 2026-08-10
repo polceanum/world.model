@@ -64,7 +64,11 @@ def test_audit_canonicalizes_replayed_tail_without_double_counting(tmp_path) -> 
 
     assert report["status"] == "pass"
     assert report["unique_training_blocks"] == 2
-    assert report["optimizer_updates_applied"] == 2.0
+    assert report["optimizer_updates_applied"] == 16
+    assert report["logged_optimizer_update_confirmations"] == 2.0
+    assert report["training_metric_cadence_sparse"] is True
+    assert report["training_metric_step_gaps"] == [8]
+    assert any("cadence samples" in warning for warning in report["warnings"])
     assert report["duplicate_rows"] == [
         {
             "split": "train",
@@ -157,10 +161,10 @@ def test_audit_warns_about_severe_global_or_interaction_clipping(tmp_path) -> No
             "interaction_coefficient": 0.035,
         }
     ]
-    assert report["warnings"] == [
+    assert (
         "severe gradient clipping retained less than 10% of at least one "
         "raw parameter-group/update gradient"
-    ]
+    ) in report["warnings"]
 
 
 def test_audit_rejects_divergent_replayed_tail(tmp_path) -> None:

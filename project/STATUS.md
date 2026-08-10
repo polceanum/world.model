@@ -167,6 +167,17 @@ or generalization promotion exists yet. Logs are
 `/private/tmp/20260810-114053-attention-pilot-stage-a.stdout.log` and
 `/private/tmp/20260810-114053-attention-pilot-stage-a.stderr.log`.
 
+At update 32 the run remains finite and supported, with zero stderr and a
+nearly flat `2,867,974,144`-byte peak RSS. Sparse update-8/16/24/32 losses
+`0.5049/3.4646/5.4748/3.0221` are not a monotonic failure signal: event loss
+is absent in the first sampled window and contributes `2.2928/3.5294/3.5814`
+in the next three, whose ground/pair-contact loads differ substantially. The
+offline dynamics auditor previously mislabeled four cadence samples as four
+applied updates. It now reports the authoritative completed trainer step
+(`32`), four logged confirmations, explicit `[8, 8, 8]` sampling gaps, and a
+warning that loss/gradient distributions are sparse. Hard finite-state,
+support, and clipping checks still execute on every update.
+
 Final verification for specification 1.22:
 
 - `conda run --no-capture-output -n orpheus pytest -q -p no:cacheprovider -m 'not device'`

@@ -38,6 +38,11 @@
   apply every optimizer update, keep perception gradients at zero, and bound
   the raw attention gradient `3.6997645 -> 0.9999997`; this is progress
   evidence, not an accuracy promotion.
+- Corrected the offline training-dynamics auditor so `log_every > 1` no longer
+  mislabels sampled metric-row count as completed optimizer-update count. It
+  now reports the authoritative absolute trainer step, logged confirmations,
+  metric gaps, and an explicit sparse-telemetry warning; five focused tests
+  cover the new contract.
 
 ### 2026-08-10 fast-ROI ownership stability
 

@@ -85,6 +85,10 @@
   scope. A one-update hybrid MPS/CPU smoke leaves all 177 inherited tensors
   bitwise unchanged and gives optimizer moments only to the four output-head
   tensors, with finite supported loss/gradients and bounded memory.
+- [x] Repair the offline dynamics auditor's sparse-cadence progress count:
+  distinguish absolute completed trainer step from logged optimizer
+  confirmations, expose step gaps, and warn that sampled loss/gradient
+  distributions are not per-update curves.
 - [ ] Run the declared 8,192-update, 65,536-draw balanced attention-only
   campaign through repeated complete 32-episode selectors and a real plateau;
   retain the protocol-14 step-64 graph runtime as the protected control. The

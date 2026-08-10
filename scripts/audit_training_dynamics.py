@@ -205,6 +205,21 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
     if skipped_max > 0.0:
         warnings.append(f"the data stream contains {int(skipped_max)} bounded skipped draw(s)")
 
+    training_steps = [int(record["step"]) for record in training]
+    metric_step_gaps = [
+        later - earlier for earlier, later in zip(training_steps, training_steps[1:], strict=False)
+    ]
+    first_expected_step = after_step + 1
+    sparse_training_metrics = bool(
+        training_steps
+        and (training_steps[0] > first_expected_step or any(gap > 1 for gap in metric_step_gaps))
+    )
+    if sparse_training_metrics:
+        warnings.append(
+            "training loss/gradient distributions are cadence samples rather than "
+            "one record per completed optimizer update"
+        )
+
     losses = [float(record["loss_total"]) for record in training if "loss_total" in record]
     gradients = [
         float(record["gradient_norm_pre_clip"])
@@ -345,9 +360,15 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
         "unique_training_blocks": len(training),
         "first_training_step": int(training[0]["step"]) if training else None,
         "last_training_step": int(training[-1]["step"]) if training else None,
-        "optimizer_updates_applied": sum(
+        # A trainer step advances only after an optimizer update succeeds.  The
+        # absolute step is therefore the authoritative completed-update count;
+        # summing persisted confirmations undercounts whenever log_every > 1.
+        "optimizer_updates_applied": int(training[-1]["step"]) if training else 0,
+        "logged_optimizer_update_confirmations": sum(
             float(record.get("optimizer_update_applied", 0.0)) for record in training
         ),
+        "training_metric_cadence_sparse": sparse_training_metrics,
+        "training_metric_step_gaps": metric_step_gaps,
         "loss_total": _distribution(losses),
         "gradient_norm_pre_clip": _distribution(gradients),
         "clipped_block_count": sum(coefficient < 1.0 for coefficient in clip_coefficients),
