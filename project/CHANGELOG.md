@@ -1279,3 +1279,17 @@ further gravity-axis threshold tuning.
 - Launched clean one-shot protocol-19 updater recovery from the mean-reset
   candidate: 512 balanced updates, validation/checkpoint every 64, 2e-5
   updater LR, MPS measurement plus CPU closed loop, Standard QoS, no oracle.
+
+## 2026-08-10 — protocol-19 recovery initialization and causal health
+
+- Completed the recovery run's exact 32-episode RGB-only initialization in
+  `700.677 s`; score `0.3241755` exactly reproduced the independent mean-reset
+  qualification.
+- Verified updater-only optimization at logged steps 8 and 16: finite
+  unclipped gradients, frozen perception and interaction dynamics, all eight
+  scenarios per update, nonzero causal trajectory support, and zero skipped
+  draws.
+- Confirmed that the cold-start step-8 row's eight objectives were intentional
+  maturity gating rather than lost rollout supervision; the mature step-16
+  row restored all 13 objectives including deterministic multistep position
+  and velocity losses.

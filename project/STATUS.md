@@ -1,7 +1,7 @@
 # Project status
 
-**Date:** 2026-08-09
-**Specification:** `PROJECT_SPEC.md` 1.18
+**Date:** 2026-08-10
+**Specification:** `PROJECT_SPEC.md` 1.19
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -177,15 +177,23 @@ PID `46547` at
 metadata records clean commit `d97b613`, PyTorch `2.10.0`, MPS built/available,
 MPS RGB measurement, CPU closed-loop dynamics, RGB-only runtime, no oracle,
 and the exact mean-reset `candidate.pt` source. Stderr is empty and the fixed
-initialization heartbeat is advancing through the expected ordered scenarios.
+initialization completed all 32 episodes in `700.677 s` through the expected
+ordered scenarios. Its score was exactly `0.3241755`, matching the independent
+mean-reset qualification and confirming reproducible checkpoint loading and
+selector execution.
 
 The bounded recovery declares 512 balanced updater-only updates, 4,096 episode
 draws, learning rate `2e-5`, exact 32-episode validation/checkpoint cadence 64,
 and logging cadence 8. It is not a convergence or promotion claim. The first
-causal log must still verify updater-only scope, finite nonzero gradient,
-frozen dynamics/identifier/perception, complete objective support, and zero
-skipped draws; each 64-step selector must compare against both the clean reset
-start and the legacy fixed reference.
+causal rows at steps 8 and 16 verify updater-only scope, finite nonzero
+unclipped gradients (`0.2613` and `0.3101`), zero perception/interaction
+gradient, balanced eight-scenario membership, and zero skipped draws. Step 8
+had eight contributing objectives because its frame-3 anchor contained only
+cold-start tracks; deterministic rollout losses were correctly withheld while
+rollout NLL remained supported. Step 16 used a mature frame-9 anchor and
+restored all 13 causal objectives, including rollout position and velocity.
+The first trained fixed selector remains due at step 64; each selector must
+compare against both the clean reset start and the legacy fixed reference.
 
 Specification 1.19 also records the compute path reviewed against transformer,
 Perceiver IO, compute-optimal scaling, JEPA/video-world-model, and recent
