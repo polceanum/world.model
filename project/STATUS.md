@@ -173,7 +173,22 @@ only `updater.learned_corrector.mean_head.{weight,bias}` changed, only leading
 row 1 changed within those tensors, all other model tensors are bitwise equal
 to step zero, and Adam `exp_avg`/`exp_avg_sq` are nonzero only in row 1. The
 checkpoint retains specification 1.20 and clean source/runtime provenance.
-Training continues toward the step-128 selector; no plateau, deployment
+
+The unchanged mutable trajectory then completed step 128 without an optimizer,
+support, numerical, clipping, memory, or scope failure, but its fixed candidate
+was correctly rejected. Score regressed from the protected step-64 incumbent
+to `0.3216703`, current position to `0.2536474 m`, velocity to
+`1.0969573 m/s`, and identity to `0.0155440`. The selector reported three
+fixed-reference failures and two moving-incumbent failures. They localize to
+the baseline scenario: target coverage fell `0.32885 -> 0.32308`, identity
+switch rate rose `0.00488 -> 0.01456`, and 0.10-second x RMSE rose
+`0.41439 -> 0.42383 m`. Other scenarios are essentially flat or slightly
+improved, and tensor comparison still finds changes only in mean-head y row 1.
+
+This is a scenario/association threshold regression, not evidence of numerical
+collapse. Because the earlier y-row learning curve also rejected step 128 and
+recovered by step 192, and because the best checkpoint is protected, training
+continues unchanged toward the step-192 selector. No plateau, deployment
 replacement, generalization result, or attention-scaling authorization exists
 yet.
 

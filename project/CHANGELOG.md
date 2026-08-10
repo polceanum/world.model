@@ -32,6 +32,11 @@
 - Proved from the numbered runtime checkpoint that every model tensor except
   the learned mean-head weight/bias is bitwise frozen, only y row 1 changes,
   and excluded Adam moment rows remain exactly zero through weight decay.
+- Rejected protocol 20 step 128 after it regressed score to `0.3216703` and
+  crossed baseline scenario coverage, identity, and 0.10-second x guardrails.
+  The optimizer/support/resource audit still passes and all other scenarios
+  are nearly flat, so the protected step-64 incumbent remains selected while
+  the unchanged trajectory continues to the predeclared step-192 gate.
 
 ### 2026-08-09 scenario-balanced optimization
 

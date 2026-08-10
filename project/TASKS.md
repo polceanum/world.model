@@ -52,8 +52,9 @@
   only mean-head row 1 changed and every excluded Adam moment remains zero.
 - [ ] Train protocol 20 through repeated exact validation and a declared
   plateau. Step 64 is guardrail-clean and internally accepted at `0.3215594`,
-  but its gain is small and the long-horizon/velocity changes are mixed within
-  tolerance, so convergence remains pending. Continue to inspect
+  while step 128 is rejected at `0.3216703` after a baseline association
+  threshold regressed coverage, identity, and 0.10-second x. Continue through
+  step 192 with the step-64 incumbent protected, and inspect
   pooled and per-scenario
   current/velocity, x/y/z, every horizon, identity, lifecycle, events,
   calibration, support, optimizer state, and memory.

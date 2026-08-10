@@ -24,6 +24,12 @@
   while longer training can show whether the small short-horizon gain compounds,
   plateaus, or reverses. Any later regression leaves this numbered checkpoint
   intact and cannot silently reactivate the known x/z failure mode.
+- **Step-128 evidence:** The next candidate regressed pooled score to
+  `0.3216703` and was rejected. Its failures are confined to baseline coverage,
+  identity, and 0.10-second x after an association threshold crossing; the
+  training audit and y-row tensor isolation still pass. Continue to step 192
+  because the prior y-only curve recovered after the same intermediate gate,
+  while retaining step 64 as the immutable incumbent.
 
 ## ADR-091 — Continue correction recovery on the accepted y row only
 
