@@ -68,6 +68,11 @@
   `25d82d8` as one Standard/default, `KeepAlive=false` LaunchAgent. Metadata
   verifies MPS RGB, CPU closed loop, no oracle, and clean repaired-runtime
   provenance; the first 32-episode initialization heartbeat is finite.
+- The corrected initialization selector completes in `966.681 s` and exactly
+  reproduces protected score `0.3213162196`. Update 8 is finite, fully
+  supported and scope-clean with loss `0.4890857`, unclipped gradient
+  `0.2631448`, zero skips/identity switches/stderr, and bounded memory; this is
+  optimizer evidence, not promotion.
 
 ### 2026-08-10 fast-ROI ownership stability
 

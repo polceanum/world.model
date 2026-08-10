@@ -254,7 +254,22 @@ loop, float32, RGB-only/no-oracle runtime, and the protected protocol-14 graph
 checkpoint as its source. The first initialization episode completed in
 `24.999 s` under unchanged selector hash
 `6064c5b1a055e943a3f3900ed63596b6402c7d7ad5a4d45f7b2d77351bc8c648`;
-stderr is empty. This is live process evidence only, not a trained candidate.
+stderr is empty. The complete 32-episode initialization finished in
+`966.681 s` and exactly reproduces score/current/velocity
+`0.3213162196 / 0.2514599 m / 1.0931909 m/s`, axes
+`0.281775/0.201906/0.263691 m`, and horizons
+`0.265184/0.277452/0.309911/0.335387/0.357837 m`. All 177 inherited tensors
+match the earlier zero-output control exactly and both typed decoders remain
+zero at step zero.
+
+The first repaired training block reached update 8 with loss `0.4890857` and
+raw/applied interaction gradient `0.2631448/0.2631448`, so neither clip fired;
+the superseded dead-scene pilot had `3.6998 -> 1.0` on the identical sampled
+draw. It has 349 trajectory targets, all eight objective terms, one example
+from every scenario, zero skipped draws and sampled distance-gated identity
+switches, zero perception gradient, every horizon supported, peak RSS
+`2,810,531,840` bytes, and empty stderr. This is live optimizer-health evidence
+only, not a trained selector or accuracy promotion.
 
 Historical verification for specification 1.22 before the live-scene repair:
 

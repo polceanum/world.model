@@ -113,8 +113,10 @@
   cannot count because its scene input was dead. The corrected quality gate and
   host smoke pass. The new clean run is active at
   `runs/20260810-134330-attention-live-scene-stage-a/` from the same protected
-  graph checkpoint; partial initialization/training remains non-promotion
-  evidence.
+  graph checkpoint. Its complete step-zero selector exactly reproduces score
+  `0.3213162196`; the first eight repaired updates pass finite/support/scope/
+  identity/resource auditing without clipping. Partial training remains
+  non-promotion evidence.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.
