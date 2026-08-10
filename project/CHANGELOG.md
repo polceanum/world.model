@@ -1308,3 +1308,9 @@ further gravity-axis threshold tuning.
 - Launched a clean 512-update replacement from the untouched mean-reset
   candidate with mean-head-only trainability, effective LR `5e-6`, MPS RGB
   measurement, CPU closed loop, and exact validation every 64 updates.
+- Completed corrected step-64 validation. Exact tensor comparison confirmed
+  only the mean-head weight/bias changed. The candidate was rejected by 16
+  guardrails with a near-flat score (`0.324176 -> 0.324672`), versus 110
+  failures and score `0.338432` under updater-wide training; all pooled x
+  metrics improved while small y/z and velocity regressions remained, mainly
+  in `reference_pairs`. Continued the declared run toward step 128.

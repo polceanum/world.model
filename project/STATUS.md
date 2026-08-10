@@ -228,7 +228,26 @@ job `com.polceanum.orpheus.protocol19-mean-recovery-20260810-012053` as PID
 built/available, MPS measurement, CPU closed loop, RGB-only runtime, no oracle,
 the clean mean-reset source, scope `updater_mean`, and effective LR `5e-6`.
 The process is actively computing the exact step-zero selector at roughly
-`542%` CPU with empty stderr; no trained accuracy result exists yet.
+`542%` CPU with empty stderr. Initialization completed all 32 episodes in
+`741.313 s` and reproduced score `0.3241755` exactly.
+
+The corrected campaign then reached durable step 64 with eight balanced logged
+blocks, zero skips or clips, median raw gradient `0.01269`, median causal
+support `334`, peak RSS `1,327,321,088` bytes, and a warning-free dynamics
+audit. Exact checkpoint comparison proves only
+`updater.learned_corrector.mean_head.weight` and `.bias` changed; every other
+model tensor is bitwise unchanged. This validates the new scope.
+
+Fixed step-64 validation was near-neutral but rejected: score changed
+`0.3241755 -> 0.3246722`, current position `0.2559540 -> 0.2562508 m`, and
+velocity `1.0966767 -> 1.1053538 m/s`. Coverage, precision, identity, and
+collision F1 were flat or better. Every pooled x metric improved, including
+1-second x RMSE `0.4856162 -> 0.4811387 m`, while small y/z regressions were
+concentrated in `reference_pairs`. Guardrail failures fell from 110 in the
+rejected updater-wide step 64 to 16. The selector retained step zero; the
+mean-only mutable iterate remains numerically viable and is continuing toward
+step 128 under the declared long run. This is recovery evidence, not promotion
+or convergence.
 
 Specification 1.19 also records the compute path reviewed against transformer,
 Perceiver IO, compute-optimal scaling, JEPA/video-world-model, and recent
