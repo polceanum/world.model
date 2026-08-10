@@ -380,7 +380,10 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
             "latest": rss[-1] if rss else None,
             "maximum": max(rss) if rss else None,
         },
+        # These counts come from persisted metric rows, not unlogged batches.
+        # Keep the legacy key for consumers, but make its scope machine-readable.
         "scenario_draw_counts": dict(sorted(scenario_counts.items())),
+        "scenario_draw_counts_scope": "logged_metric_rows_only",
         "live_physical_diagnostics": live_physical_diagnostics,
         "validations": validation_summary,
     }

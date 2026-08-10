@@ -68,6 +68,8 @@ def test_audit_canonicalizes_replayed_tail_without_double_counting(tmp_path) -> 
     assert report["logged_optimizer_update_confirmations"] == 2.0
     assert report["training_metric_cadence_sparse"] is True
     assert report["training_metric_step_gaps"] == [8]
+    assert report["scenario_draw_counts"] == {"baseline": 2, "elastic_pairs": 2}
+    assert report["scenario_draw_counts_scope"] == "logged_metric_rows_only"
     assert any("cadence samples" in warning for warning in report["warnings"])
     assert report["duplicate_rows"] == [
         {
