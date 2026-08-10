@@ -76,9 +76,21 @@
 - [ ] Extend local ownership evidence to touching/merged same-component RGB
   objects using observation-derived appearance or basin evidence, without
   simulator identity or cross-assigning source-bound ROI rows.
-- [ ] After the corrected control qualifies, implement the Mac attention pilot:
-  2--4 pre-normalized entity/relation/event blocks, width 128, four heads,
-  bounded belief history, typed residual decoders, and 1--4M added parameters.
+- [x] Implement stage A of the Mac attention pilot as four RMS-pre-normalized
+  scene/entity/relation blocks, width 128, four heads, SwiGLU width 512, typed
+  zero-initialized residual decoders, and 1.099M added parameters. Preserve
+  object-slot permutation equivariance and exact graph behavior at
+  initialization.
+- [x] Add strict architecture-growth loading and an attention-only optimization
+  scope. A one-update hybrid MPS/CPU smoke leaves all 177 inherited tensors
+  bitwise unchanged and gives optimizer moments only to the four output-head
+  tensors, with finite supported loss/gradients and bounded memory.
+- [ ] Run the declared 8,192-update, 65,536-draw balanced attention-only
+  campaign through repeated complete 32-episode selectors and a real plateau;
+  retain the protocol-14 step-64 graph runtime as the protected control.
+- [ ] Add stage-B bounded timestamped belief/innovation history only after the
+  current-belief attention stage qualifies; use temporal-relative encoding,
+  never arbitrary object-slot order.
 - [ ] Compare the attention pilot against the accepted control and a
   parameter-matched graph/MLP control on disjoint validation/test and OOD
   manifests; scale data with capacity and reject any broad regression.

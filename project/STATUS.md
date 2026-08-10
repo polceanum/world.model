@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-10
-**Specification:** `PROJECT_SPEC.md` 1.21
+**Specification:** `PROJECT_SPEC.md` 1.22
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -76,8 +76,83 @@ ownership tie, not optimizer collapse; specification 1.21 and rollout protocol
 14 now reject only numerically tied disconnected components and leave recovery
 to global discovery; paired public and exact physical validation improve the
 small control without a broad regression, step 64 remains better than step
-512, and the next bounded task is the Mac-scale typed attention pilot rather
-than more y-only training
+512; stage A of the Mac-scale typed attention pilot is now implemented as an
+exact zero-output graph residual, and its one-update hybrid MPS/CPU smoke is
+finite, supported, scope-clean, and memory-bounded, but it has no accuracy or
+generalization promotion yet; the declared 8,192-update attention-only
+campaign is the next convergence target
+
+## 2026-08-10 — typed-attention stage A implemented and smoke-qualified
+
+Primary-source review retained the useful Transformer mechanism—parallel
+content-dependent interaction—while rejecting language-token assumptions that
+conflict with Orpheus. The new optional dynamics module uses four
+RMS-pre-normalized scaled-dot-product attention blocks, width 128, four heads,
+and SwiGLU width 512 over derived scene, entity, and candidate-relation tokens.
+There are no object-slot positional embeddings and no RoPE on unordered padded
+slots. Typed decoders propose bounded node acceleration, antisymmetric pair
+force, event-logit/jump, and process-noise residuals through the existing
+analytic/event/uncertainty contracts. `WorldBelief` remains authoritative.
+
+The module adds `1,098,634` parameters to the `1,901,030`-parameter accepted
+runtime for `2,999,664` total. All output heads initialize at exact zero. Unit
+tests prove exact graph equality at initialization and permutation equivariance
+after nonzero decoding. Weight-only growth rejects any unexpected key and
+allows missing keys only below `dynamics.attention_interactions.*`. The first
+training stage exposes only those new parameters; attention also shares the
+interaction-local gradient clip and diagnostics.
+
+The host smoke is preserved at
+`runs/20260810-111959-attention-pilot-smoke/`. Exact command:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/attention_pilot_mps.yaml \
+  --initialize-from runs/20260810-042627-protocol20-y-only-recovery/checkpoints/validation_step_000064.pt \
+  --run-name attention-pilot-smoke \
+  --set training.steps=1 \
+  --set training.checkpoint_every=1 \
+  --set training.eval_every=1 \
+  --set training.validation_episodes=16 \
+  --set evaluation.episodes=16
+```
+
+It completed one optimizer update in `626.51 s` with RGB measurement on MPS,
+closed loop on CPU, float32, no oracle input, loss `3.7291617`, raw/applied
+gradient norm `1.8602252/1.8602252`, no skipped update, and maximum RSS
+`2,004,131,840` bytes. It drew one example from each of the eight scenarios.
+The reduced smoke manifest intentionally cannot satisfy the full selector's
+per-scenario support contract, so `last.pt` is correctly labelled
+`last_unvalidated`; it is wiring evidence, not an accuracy candidate.
+
+Exact checkpoint audit finds 177 inherited keys and zero changed inherited
+tensors. All 48 new attention tensors receive optimizer state, but only
+`node_decoder.weight/bias` and `relation_decoder.weight/bias` have nonzero
+first moments after update one, the expected gradient flow from zero output
+heads. The smoke exposed one observability omission: the local interaction
+gradient group originally named only the legacy graph. The attention module is
+now included and a focused regression test verifies its local clip/metric.
+
+`configs/attention_pilot_mps.yaml` declares 8,192 balanced attention-only
+updates, 65,536 episode draws (four nominal passes over 16,384 continuously
+varied episodes), checkpoints every 128 updates, and a full 32-episode selector
+every 512 updates. Measured representative CPU prediction cost is
+`0.0363 -> 0.0603 s` per 50 ms step; fixed validation costs roughly 16--19
+seconds per episode on this Mac. Remaining work is the full convergence run,
+stage-B timestamped history, a parameter-matched graph/MLP control, and
+disjoint test/OOD qualification. No accuracy improvement is claimed from the
+smoke.
+
+Final verification for specification 1.22:
+
+- `conda run --no-capture-output -n orpheus pytest -q -p no:cacheprovider -m 'not device'`
+  reports `649 passed, 5 skipped, 1 deselected` in `168.52 s`.
+- Host-MPS `PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q -p no:cacheprovider -m device`
+  reports `1 passed, 654 deselected` in `3.11 s`.
+- The final focused attention/config/scope/checkpoint set reports `251 passed`
+  in `20.54 s`.
+- `ruff check .`, `ruff format --check .`, `git diff --check`, and compileall
+  pass.
 
 ## 2026-08-10 — fast-ROI ownership tie repaired; small control de-noised
 

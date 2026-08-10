@@ -2505,6 +2505,8 @@ def _clip_training_gradients(
 
     perception_parameters = tuple(model.observation_modules["rgb"].parameters())
     interaction_parameters = tuple(model.dynamics.interactions.parameters())
+    if model.dynamics.attention_interactions is not None:
+        interaction_parameters += tuple(model.dynamics.attention_interactions.parameters())
     perception_ids = {id(parameter) for parameter in perception_parameters}
     interaction_ids = {id(parameter) for parameter in interaction_parameters}
     if not perception_ids.isdisjoint(interaction_ids):
@@ -2726,6 +2728,11 @@ def set_closed_loop_trainable_scope(
         _freeze_disconnected_training_heads(model)
         return
     model.requires_grad_(False)
+    if scope == "attention":
+        if model.dynamics.attention_interactions is None:
+            raise ValueError("attention scope requires typed attention dynamics")
+        model.dynamics.attention_interactions.requires_grad_(True)
+        return
     if scope == "dynamics":
         model.dynamics.requires_grad_(True)
         return
@@ -2767,7 +2774,7 @@ def set_closed_loop_trainable_scope(
         _freeze_disconnected_training_heads(model)
         return
     raise ValueError(
-        "closed-loop trainable scope must be 'all', 'dynamics', 'updater', "
+        "closed-loop trainable scope must be 'all', 'attention', 'dynamics', 'updater', "
         "'updater_mean', 'updater_mean_y', 'fast_roi', 'state_dynamics', "
         "'state_dynamics_fast_roi', or "
         "'state_dynamics_roi'"
@@ -3844,6 +3851,11 @@ def train_from_config(
         load_model_weights(
             source,
             model=model,
+            allowed_missing_prefixes=(
+                ("dynamics.attention_interactions.",)
+                if config.model.dynamics.attention_residual_enabled
+                else ()
+            ),
         )
         initialized_from = str(source)
     model_parameter_count = sum(parameter.numel() for parameter in model.parameters())
@@ -5256,6 +5268,9 @@ def train_from_config(
                 )
                 result.metrics["closed_loop_scope_fast_roi_only"] = float(
                     active_closed_loop_scope == "fast_roi"
+                )
+                result.metrics["closed_loop_scope_attention_only"] = float(
+                    active_closed_loop_scope == "attention"
                 )
                 result.metrics["closed_loop_scope_state_dynamics_only"] = float(
                     active_closed_loop_scope == "state_dynamics"

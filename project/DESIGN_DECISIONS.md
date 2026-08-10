@@ -1,5 +1,36 @@
 # Design decisions
 
+## ADR-094 — Scale relational capacity as a zero-initialized typed residual
+
+- **Date:** 2026-08-10
+- **Status:** accepted for stage-A qualification; accuracy promotion pending
+- **Context:** Protocol 20 is a healthy, de-noised y-only plateau and no longer
+  has a known numerical or optimizer defect. The original Transformer shows
+  that multi-head scaled dot-product attention shortens content-dependent
+  interaction paths; later foundation models commonly use pre-normalization,
+  RMSNorm, gated feed-forwards, and relative/rotary temporal encoding. Orpheus
+  entities are an unordered persistent-ID set, not language positions, and the
+  Mac must establish a causal scaling curve before larger compute is useful.
+- **Decision:** Add four RMS-pre-normalized width-128/four-head blocks with
+  SwiGLU width 512 over derived scene/entity/relation tokens. Do not use learned
+  slot positions or RoPE on current object order. Decode a bounded residual
+  into the existing graph/event/uncertainty contract, initialize its heads at
+  zero, strictly transfer all inherited weights, and optimize the 1.099M new
+  parameters alone first. Add timestamp-relative history only as a separately
+  qualified next stage.
+- **Alternatives considered:** replace `WorldBelief` and analytic dynamics with
+  a video transformer; train the larger model from scratch; add slot-position
+  embeddings; use a decoder-only causal language layout; unfreeze the whole
+  runtime immediately; add temporal history in the same first experiment.
+- **Consequences:** The pilot is exactly the accepted graph at step zero,
+  remains permutation-equivariant, fits at 3.00M total parameters, and can be
+  rejected without damaging inherited weights. Attention costs about 1.66x a
+  representative CPU prediction step and roughly 16--19 seconds per full
+  fixed-validation episode on this Mac. The declared run therefore validates
+  every 512 updates while checkpointing every 128. Stage-A accuracy, bounded
+  history, parameter-matched control, disjoint test/OOD, and CUDA scaling all
+  remain pending.
+
 ## ADR-093 — Reject only numerically tied fast-ROI component ownership
 
 - **Date:** 2026-08-10

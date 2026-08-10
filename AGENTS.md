@@ -37,6 +37,12 @@ Working rules:
   complete, or propose abstractions. They must not replace `WorldBelief` with
   an opaque sensor latent or make generated pixels the primary evidence of
   physical correctness.
+- Treat entity/relation tokens as unordered typed sets. Do not add slot-index
+  positional embeddings or RoPE to arbitrary padded object order; temporal
+  encodings belong only to explicitly timestamped bounded-history tokens.
+- New attention capacity must begin as a zero-output residual around the
+  qualified structured model, load every inherited weight strictly, and train
+  in an isolated scope before any shared module is unfrozen.
 - Preserve at least one familiar, invariant-tested reference-physics regime.
   Unusual and compound dynamics are valid learnable scenarios, but label and
   evaluate them separately so simulator quirks cannot masquerade as model

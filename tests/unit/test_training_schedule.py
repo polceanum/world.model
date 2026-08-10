@@ -200,6 +200,29 @@ def test_dynamics_only_scope_preserves_rgb_and_filter_weights() -> None:
         assert parameter.requires_grad is (not disconnected), name
 
 
+def test_attention_scope_isolates_new_typed_residual() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    model = OnlineWorldModel.from_config(config)
+
+    set_closed_loop_trainable_scope(model, scope="attention")
+
+    trainable = {name for name, parameter in model.named_parameters() if parameter.requires_grad}
+    assert trainable
+    assert all(name.startswith("dynamics.attention_interactions.") for name in trainable)
+    assert model.dynamics.attention_interactions is not None
+    assert len(trainable) == len(list(model.dynamics.attention_interactions.parameters()))
+
+
+def test_attention_scope_requires_enabled_attention() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+
+    with pytest.raises(ValueError, match="requires typed attention"):
+        set_closed_loop_trainable_scope(model, scope="attention")
+
+
 @pytest.mark.parametrize(
     ("pre_clip", "maximum", "expected_coefficient", "expected_applied"),
     [
@@ -261,6 +284,35 @@ def test_interaction_gradients_are_bounded_before_global_clipping() -> None:
     )
     assert interaction.grad.norm().item() == pytest.approx(1.0, abs=1.0e-6)
     assert other.grad.norm().item() == pytest.approx(4.0, abs=1.0e-6)
+
+
+def test_attention_gradients_share_the_interaction_local_clip_and_diagnostics() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            grad_clip_norm=10.0,
+            interaction_grad_clip_norm=1.0,
+            closed_loop_perception_grad_clip_norm=10.0,
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    assert model.dynamics.attention_interactions is not None
+    attention = next(model.dynamics.attention_interactions.parameters())
+    attention.grad = torch.ones_like(attention)
+    attention.grad.mul_(3.0 / attention.grad.norm())
+
+    diagnostics = _clip_training_gradients(model, config)
+
+    assert diagnostics["interaction_gradient_norm_pre_clip"] == pytest.approx(3.0)
+    assert diagnostics["interaction_gradient_norm_applied_before_global_clip"] == pytest.approx(
+        1.0, abs=1.0e-6
+    )
+    assert attention.grad.norm().item() == pytest.approx(1.0, abs=1.0e-6)
 
 
 def test_perception_gradients_are_bounded_without_scaling_small_dynamics() -> None:

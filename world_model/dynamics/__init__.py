@@ -1,6 +1,10 @@
 """Hybrid structured and learned belief dynamics."""
 
 from world_model.dynamics.analytic import AnalyticKinematics
+from world_model.dynamics.attention import (
+    AttentionTokenLayout,
+    TypedAttentionInteractionResidual,
+)
 from world_model.dynamics.contacts import (
     ContactPlane,
     ContactResult,
@@ -28,6 +32,7 @@ from world_model.dynamics.uncertainty import (
 
 __all__ = [
     "AnalyticKinematics",
+    "AttentionTokenLayout",
     "ContactPlane",
     "ContactResult",
     "DynamicsConfig",
@@ -41,6 +46,7 @@ __all__ = [
     "RolloutEngine",
     "RolloutStep",
     "SphereContactResolver",
+    "TypedAttentionInteractionResidual",
     "UncertaintyDynamics",
     "UncertaintyOutput",
     "geodesic_orientation_loss",

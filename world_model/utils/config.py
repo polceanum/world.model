@@ -199,6 +199,12 @@ class DynamicsConfig:
     process_noise_velocity: float = 2e-3
     modal_acceleration_scale: float = 0.25
     residual_acceleration_scale: float = 0.5
+    attention_residual_enabled: bool = False
+    attention_width: int = 128
+    attention_heads: int = 4
+    attention_layers: int = 4
+    attention_feed_forward_width: int = 512
+    attention_dropout: float = 0.0
     contact_margin: float = 0.0
     boundary_contact_tolerance: float = 1.0e-4
     penetration_slop: float = 1e-4
@@ -822,6 +828,27 @@ class OrpheusConfig:
             )
         if model.dynamics.max_substep <= 0:
             raise ValueError("model.dynamics.max_substep must be positive")
+        if not isinstance(model.dynamics.attention_residual_enabled, bool):
+            raise ValueError("model.dynamics.attention_residual_enabled must be boolean")
+        for name in ("attention_width", "attention_heads", "attention_layers"):
+            value = getattr(model.dynamics, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"model.dynamics.{name} must be a positive integer")
+        if model.dynamics.attention_width % model.dynamics.attention_heads != 0:
+            raise ValueError("model.dynamics.attention_width must be divisible by attention_heads")
+        if (
+            isinstance(model.dynamics.attention_feed_forward_width, bool)
+            or not isinstance(model.dynamics.attention_feed_forward_width, int)
+            or model.dynamics.attention_feed_forward_width <= 0
+        ):
+            raise ValueError(
+                "model.dynamics.attention_feed_forward_width must be a positive integer"
+            )
+        if (
+            not math.isfinite(model.dynamics.attention_dropout)
+            or not 0.0 <= model.dynamics.attention_dropout < 1.0
+        ):
+            raise ValueError("model.dynamics.attention_dropout must lie in [0,1)")
         for name, value in (
             ("contact_margin", model.dynamics.contact_margin),
             (
@@ -996,6 +1023,7 @@ class OrpheusConfig:
             raise ValueError("training.closed_loop_global_trainable_steps must be nonnegative")
         valid_closed_loop_scopes = {
             "all",
+            "attention",
             "dynamics",
             "updater",
             "updater_mean",
@@ -1008,7 +1036,7 @@ class OrpheusConfig:
         if self.training.closed_loop_trainable_scope not in valid_closed_loop_scopes:
             raise ValueError(
                 "training.closed_loop_trainable_scope must be "
-                "'all', 'dynamics', 'updater', 'updater_mean', "
+                "'all', 'attention', 'dynamics', 'updater', 'updater_mean', "
                 "'updater_mean_y', 'fast_roi', "
                 "'state_dynamics', "
                 "'state_dynamics_fast_roi', or 'state_dynamics_roi'"

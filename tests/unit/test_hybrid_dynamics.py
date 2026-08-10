@@ -13,6 +13,7 @@ from world_model.dynamics import (
     InteractionGraph,
     InteractionOutput,
     SphereContactResolver,
+    TypedAttentionInteractionResidual,
 )
 from world_model.simulator.collisions import resolve_axis_aligned_boundaries
 
@@ -106,6 +107,79 @@ def test_interaction_graph_is_permutation_equivariant_and_pair_force_is_antisymm
         output.residual_acceleration,
         atol=1e-6,
         rtol=1e-6,
+    )
+
+
+def _attention_residual(objects, global_code) -> TypedAttentionInteractionResidual:
+    return TypedAttentionInteractionResidual(
+        modal_count=objects.modal_count,
+        modal_dim=objects.modal_dim,
+        geometry_dim=objects.geometry_dim,
+        appearance_dim=objects.appearance_dim,
+        residual_dynamics_dim=objects.residual_dynamics_dim,
+        parameter_memory_dim=objects.parameter_memory.shape[-1],
+        motion_mode_dim=objects.motion_mode_logits.shape[-1],
+        global_code_dim=global_code.shape[-1],
+        width=128,
+        heads=4,
+        layers=4,
+        feed_forward_width=512,
+    )
+
+
+def test_typed_attention_starts_as_exact_graph_identity_with_mac_scale_capacity() -> None:
+    belief, objects = _two_objects()
+    graph = InteractionGraph(4, 3, hidden_dim=16, interaction_radius=1.0)
+    base = graph(objects, belief.global_code)
+    attention = _attention_residual(objects, belief.global_code)
+
+    output = attention(objects, belief.global_code, base)
+
+    for item in fields(base):
+        torch.testing.assert_close(
+            getattr(output, item.name),
+            getattr(base, item.name),
+            rtol=0.0,
+            atol=0.0,
+        )
+    parameter_count = sum(parameter.numel() for parameter in attention.parameters())
+    assert 1_000_000 <= parameter_count <= 4_000_000
+
+
+def test_typed_attention_is_permutation_equivariant_after_nonzero_decoding() -> None:
+    torch.manual_seed(17)
+    belief, objects = _two_objects()
+    graph = InteractionGraph(4, 3, hidden_dim=16, interaction_radius=1.0)
+    attention = _attention_residual(objects, belief.global_code)
+    with torch.no_grad():
+        attention.node_decoder.weight.normal_(std=0.01)
+        attention.relation_decoder.weight.normal_(std=0.01)
+
+    base = graph(objects, belief.global_code)
+    output = attention(objects, belief.global_code, base)
+    order = torch.tensor([1, 0])
+    permuted = _permute_objects(objects, order)
+    permuted_base = graph(permuted, belief.global_code)
+    permuted_output = attention(permuted, belief.global_code, permuted_base)
+
+    torch.testing.assert_close(
+        permuted_output.residual_acceleration[:, order],
+        output.residual_acceleration,
+        atol=2.0e-6,
+        rtol=2.0e-6,
+    )
+    permuted_pair_force = permuted_output.pair_force[:, order][:, :, order]
+    torch.testing.assert_close(
+        permuted_pair_force,
+        output.pair_force,
+        atol=2.0e-6,
+        rtol=2.0e-6,
+    )
+    torch.testing.assert_close(
+        output.pair_force,
+        -output.pair_force.transpose(1, 2),
+        atol=1.0e-7,
+        rtol=1.0e-7,
     )
 
 

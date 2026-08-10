@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.21
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery and fast-ROI ownership-stability amendments 10 August 2026
+**Version:** 1.22
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, and zero-initialized typed-attention pilot amendments 10 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6008,6 +6008,33 @@ Its outputs must decode into typed proposals and pass through the existing
 analytic dynamics, event, uncertainty, association, and filtering contracts.
 It must preserve masking, permutation consistency, explicit timestamps, cheap
 online updates, and the authoritative `WorldBelief`.
+
+The first attention rung is an optional residual around the accepted
+interaction graph. It uses RMS pre-normalization, scaled dot-product
+multi-head attention, and SwiGLU feed-forward residuals over one scene token,
+active entity tokens, and candidate-relation tokens. It has no learned object-
+slot position embedding: current-belief entities and relations are sets, and
+inventing a sequence order would violate permutation consistency. Rotary or
+relative time encoding is reserved for later bounded history tokens carrying
+explicit timestamp offsets; it must not be applied to arbitrary padded slot
+indices.
+
+Attention output heads start at exact zero and decode only into bounded node
+acceleration, antisymmetric pair force, contact/collision logits, event-jump
+residuals, and process-noise residuals. Enabling the module must therefore be
+numerically identical to the inherited graph before optimization. A weights-
+only architecture-growth transfer may accept missing keys only under the new
+attention module prefix; every inherited tensor remains required and is
+audited bitwise. The first optimization phase trains only the new module, and
+its gradients share the existing interaction-local clip and finite diagnostics
+before any inherited dynamics/filter/perception parameters may be unfrozen.
+
+The four-block width-128 current-belief pilot is stage A of the Mac rung, not
+the complete temporal model. Stage B adds a short timestamped history of
+sparse belief/innovation changes only after stage A improves or safely matches
+the fixed selector. This ordering separates relational-capacity evidence from
+history-capacity evidence and avoids committing scarce Mac compute to two
+untested axes at once.
 
 Dense RGB/audio/depth features may later cross-attend into a fixed-size latent
 or object-token bottleneck in the style of Perceiver IO. Self-supervised masked

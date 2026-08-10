@@ -17,6 +17,7 @@ from world_model.belief import (
     WorldBelief,
 )
 from world_model.dynamics.analytic import AnalyticKinematics
+from world_model.dynamics.attention import TypedAttentionInteractionResidual
 from world_model.dynamics.contacts import ContactPlane, SphereContactResolver
 from world_model.dynamics.events import EventModel
 from world_model.dynamics.graph import InteractionGraph
@@ -62,6 +63,9 @@ class DynamicsConfig:
     modal_dim: int = 2
     residual_dynamics_dim: int = 8
     global_code_dim: int = 8
+    geometry_dim: int = 8
+    appearance_dim: int = 32
+    parameter_memory_dim: int = 48
     max_substep: float = 1.0 / 120.0
     graph_hidden_dim: int = 64
     uncertainty_hidden_dim: int = 32
@@ -70,6 +74,12 @@ class DynamicsConfig:
     max_modal_acceleration: float = 5.0
     max_pair_force: float = 2.0
     max_node_acceleration: float = 2.0
+    attention_residual_enabled: bool = False
+    attention_width: int = 128
+    attention_heads: int = 4
+    attention_layers: int = 4
+    attention_feed_forward_width: int = 512
+    attention_dropout: float = 0.0
     base_process_variance_per_second: float = 1e-5
     process_noise_position: float | None = None
     process_noise_velocity: float | None = None
@@ -98,6 +108,16 @@ class DynamicsConfig:
             raise ValueError("constant_mode_count is outside modal bank")
         if self.residual_dynamics_dim < 0 or self.global_code_dim < 0:
             raise ValueError("dynamics code dimensions must be nonnegative")
+        if self.geometry_dim <= 0 or self.appearance_dim < 0 or self.parameter_memory_dim < 0:
+            raise ValueError("typed attention state dimensions are invalid")
+        if self.attention_width <= 0 or self.attention_heads <= 0 or self.attention_layers <= 0:
+            raise ValueError("attention width, heads, and layers must be positive")
+        if self.attention_width % self.attention_heads != 0:
+            raise ValueError("attention width must be divisible by attention heads")
+        if self.attention_feed_forward_width <= 0:
+            raise ValueError("attention feed-forward width must be positive")
+        if not 0.0 <= self.attention_dropout < 1.0:
+            raise ValueError("attention dropout must lie in [0,1)")
         if self.max_substep <= 0 or not math.isfinite(self.max_substep):
             raise ValueError("max_substep must be finite and positive")
         if self.interaction_radius <= 0:
@@ -165,6 +185,27 @@ class DynamicsModel(nn.Module):
             interaction_radius=self.config.interaction_radius,
             max_pair_force=self.config.max_pair_force,
             max_node_acceleration=self.config.max_node_acceleration,
+        )
+        self.attention_interactions = (
+            TypedAttentionInteractionResidual(
+                modal_count=self.config.modal_count,
+                modal_dim=self.config.modal_dim,
+                geometry_dim=self.config.geometry_dim,
+                appearance_dim=self.config.appearance_dim,
+                residual_dynamics_dim=self.config.residual_dynamics_dim,
+                parameter_memory_dim=self.config.parameter_memory_dim,
+                motion_mode_dim=len(MotionMode),
+                global_code_dim=self.config.global_code_dim,
+                width=self.config.attention_width,
+                heads=self.config.attention_heads,
+                layers=self.config.attention_layers,
+                feed_forward_width=self.config.attention_feed_forward_width,
+                dropout=self.config.attention_dropout,
+                max_pair_force=self.config.max_pair_force,
+                max_node_acceleration=self.config.max_node_acceleration,
+            )
+            if self.config.attention_residual_enabled
+            else None
         )
         resolver = SphereContactResolver(
             planes=self._environment_planes(),
@@ -247,6 +288,9 @@ class DynamicsModel(nn.Module):
             modal_dim=int(state.modal_dim),
             residual_dynamics_dim=int(state.residual_dynamics_dim),
             global_code_dim=int(state.global_dim),
+            geometry_dim=int(state.geometry_dim),
+            appearance_dim=int(state.appearance_dim),
+            parameter_memory_dim=int(state.parameter_memory_dim),
             max_substep=float(dynamics.max_substep),
             graph_hidden_dim=int(dynamics.hidden_dim),
             uncertainty_hidden_dim=max(16, int(dynamics.hidden_dim) // 2),
@@ -254,6 +298,12 @@ class DynamicsModel(nn.Module):
             max_modal_acceleration=float(dynamics.modal_acceleration_scale),
             max_pair_force=float(dynamics.residual_acceleration_scale),
             max_node_acceleration=float(dynamics.residual_acceleration_scale),
+            attention_residual_enabled=bool(dynamics.attention_residual_enabled),
+            attention_width=int(dynamics.attention_width),
+            attention_heads=int(dynamics.attention_heads),
+            attention_layers=int(dynamics.attention_layers),
+            attention_feed_forward_width=int(dynamics.attention_feed_forward_width),
+            attention_dropout=float(dynamics.attention_dropout),
             process_noise_position=float(dynamics.process_noise_position),
             process_noise_velocity=float(dynamics.process_noise_velocity),
             log_variance_min=float(state.fast_log_variance_min),
@@ -290,6 +340,9 @@ class DynamicsModel(nn.Module):
             modal_dim=belief.objects.modal_dim,
             residual_dynamics_dim=belief.objects.residual_dynamics_dim,
             global_code_dim=belief.global_code.shape[-1],
+            geometry_dim=belief.objects.geometry_dim,
+            appearance_dim=belief.objects.appearance_dim,
+            parameter_memory_dim=belief.objects.parameter_memory.shape[-1],
             **settings,
         )
 
@@ -335,6 +388,12 @@ class DynamicsModel(nn.Module):
             belief.global_code,
             modal_acceleration=modal.residual_acceleration,
         )
+        if self.attention_interactions is not None:
+            interaction = self.attention_interactions(
+                objects,
+                belief.global_code,
+                interaction,
+            )
         total_residual = modal.residual_acceleration + interaction.residual_acceleration
         objects = self.analytic(
             objects,

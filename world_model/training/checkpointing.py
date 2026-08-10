@@ -121,6 +121,12 @@ _DYNAMICS_LEGACY_DEFAULTS = {
     "contact_confidence_sigma": 0.25,
     "pair_collision_speed_epsilon": 1.0e-4,
     "boundary_collision_speed_epsilon": 0.1,
+    "attention_residual_enabled": False,
+    "attention_width": 128,
+    "attention_heads": 4,
+    "attention_layers": 4,
+    "attention_feed_forward_width": 512,
+    "attention_dropout": 0.0,
 }
 _ASSOCIATION_MIGRATION_DEFAULT_FIELDS = ("minimum_measurement_confidence",)
 _LIFECYCLE_MIGRATION_DEFAULT_FIELDS = (
@@ -755,6 +761,7 @@ def load_model_weights(
     *,
     model: nn.Module,
     expected_config: OrpheusConfig | None = None,
+    allowed_missing_prefixes: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Load only model weights while keeping the full payload in CPU memory.
 
@@ -776,5 +783,21 @@ def load_model_weights(
     _assert_finite_tensor_tree(payload["model_state"], root="model_state")
     if expected_config is not None:
         validate_checkpoint_config(payload, expected_config)
-    model.load_state_dict(payload["model_state"])
+    incompatible = model.load_state_dict(payload["model_state"], strict=False)
+    if incompatible.unexpected_keys:
+        raise RuntimeError(
+            "initialization checkpoint has unexpected model keys: "
+            + ", ".join(incompatible.unexpected_keys)
+        )
+    disallowed_missing = [
+        key
+        for key in incompatible.missing_keys
+        if not any(key.startswith(prefix) for prefix in allowed_missing_prefixes)
+    ]
+    if disallowed_missing:
+        raise RuntimeError(
+            "initialization checkpoint is missing required model keys: "
+            + ", ".join(disallowed_missing)
+        )
+    payload["weight_load_missing_keys"] = tuple(incompatible.missing_keys)
     return payload

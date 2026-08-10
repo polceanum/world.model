@@ -14,6 +14,7 @@ from world_model.runtime import OnlineWorldModel
 from world_model.training.checkpointing import (
     checkpoint_payload,
     load_checkpoint,
+    load_model_weights,
     save_checkpoint,
     validate_checkpoint_config,
     validate_training_resume_config,
@@ -141,6 +142,54 @@ def test_checkpoint_roundtrip_preserves_trained_state(tmp_path):
     incompatible.validate()
     with pytest.raises(ValueError, match=r"simulator\.world_bounds"):
         validate_checkpoint_config(payload, incompatible)
+
+
+def test_weight_only_transfer_allows_only_new_typed_attention_parameters(tmp_path) -> None:
+    control_config = _small_config()
+    control = OnlineWorldModel.from_config(control_config, device="cpu")
+    checkpoint = save_checkpoint(
+        tmp_path / "control.pt",
+        model=control,
+        optimizer=None,
+        config=control_config,
+        step=0,
+    )
+    pilot_config = replace(
+        control_config,
+        model=replace(
+            control_config.model,
+            dynamics=replace(
+                control_config.model.dynamics,
+                attention_residual_enabled=True,
+                attention_width=128,
+                attention_heads=4,
+                attention_layers=4,
+                attention_feed_forward_width=512,
+            ),
+        ),
+    )
+    pilot_config.validate()
+    pilot = OnlineWorldModel.from_config(pilot_config, device="cpu")
+
+    with pytest.raises(RuntimeError, match="missing required model keys"):
+        load_model_weights(checkpoint, model=pilot)
+    payload = load_model_weights(
+        checkpoint,
+        model=pilot,
+        allowed_missing_prefixes=("dynamics.attention_interactions.",),
+    )
+
+    missing = payload["weight_load_missing_keys"]
+    assert missing
+    assert all(key.startswith("dynamics.attention_interactions.") for key in missing)
+    pilot_state = pilot.state_dict()
+    for name, value in control.state_dict().items():
+        torch.testing.assert_close(pilot_state[name], value, rtol=0.0, atol=0.0)
+    assert pilot.dynamics.attention_interactions is not None
+    torch.testing.assert_close(
+        pilot.dynamics.attention_interactions.node_decoder.weight,
+        torch.zeros_like(pilot.dynamics.attention_interactions.node_decoder.weight),
+    )
 
 
 def test_checkpoint_save_rejects_nonfinite_model_and_optimizer_state(tmp_path) -> None:

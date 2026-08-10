@@ -2,6 +2,32 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-10 typed-attention stage-A pilot
+
+- Added an optional four-block, width-128, four-head typed attention residual
+  over scene, entity, and candidate-relation tokens. RMS pre-normalization,
+  scaled dot-product attention, and SwiGLU feed-forwards add `1,098,634`
+  parameters (`1,901,030 -> 2,999,664` total) without making tokens persistent
+  state.
+- Kept current object/relation tokens permutation-equivariant: there are no
+  slot-index position embeddings or RoPE. Output heads decode bounded node/
+  antisymmetric-pair forces, event logits/jumps, and uncertainty residuals and
+  initialize to exact graph identity.
+- Added strict weights-only architecture growth: every inherited checkpoint
+  tensor is required, and only `dynamics.attention_interactions.*` may be
+  absent. Added an attention-only training scope and included the module in
+  interaction-local gradient clipping/diagnostics.
+- Added `configs/attention_pilot_mps.yaml`: 8,192 balanced updates, 65,536
+  episode draws, eight scenarios, 128-step durable checkpoints, 512-step exact
+  selectors, MPS RGB measurement, and CPU closed-loop attention.
+- Hybrid host smoke `runs/20260810-111959-attention-pilot-smoke/` completes one
+  supported update in `626.51 s`, with loss `3.729162`, raw/applied gradient
+  norm `1.8602/1.8602`, zero skipped updates, `2,004,131,840` bytes maximum
+  RSS, and no oracle input. All 177 inherited tensors are bitwise unchanged;
+  only the four zero-initialized decoder tensors acquire nonzero moments.
+- Focused architecture/config/checkpoint verification reports `251 passed`;
+  final complete-suite and host-MPS outcomes are recorded in project status.
+
 ### 2026-08-10 fast-ROI ownership stability
 
 - Traced protocol 20's apparent association wobble to an exact disconnected-
