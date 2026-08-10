@@ -165,7 +165,12 @@
   non-promotion evidence. The former step-152 event-heavy failure now improves
   raw norm/retained interaction coefficient from `28.1387/0.03554` to
   `7.1111/0.14308` with complete support and no severe clip. Step 280 recurrence
-  and the step-512 selector are still pending.
+  and the step-512 selector are still pending. Durable step 256 independently
+  passes exact tensor/optimizer/hash/finite/resource audit: all inherited
+  tensors remain exact, all 48 attention tensors and only those optimizer
+  owners are live at Adam step 256, and 256 balanced updates have zero hard
+  audit failure. Track the isolated step-248 trusted-identity spike (`6.35%`;
+  aggregate `0.975%`) through fixed validation without tuning to one batch.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

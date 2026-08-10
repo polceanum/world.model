@@ -22,8 +22,13 @@
   preserve materially more unrelated interaction gradient as intended. The
   former update-152 event-heavy failure improves from raw norm `28.1387` and
   retained coefficient `0.03554` to `7.1111/0.14308`, with complete support
-  and no severe clip. Update 280 and the first trained selector remain pending;
-  no trained accuracy or convergence claim exists yet.
+  and no severe clip. Durable step 256 passes exact scope/state/hash audit with
+  all inherited tensors unchanged, all 48 attention tensors live, attention-
+  only Adam state at step 256, finite state, balanced support, stable RSS, and
+  zero hard audit failure. An isolated step-248 trusted-identity rate of
+  `6.35%` returns to zero at step 256 and is `0.975%` in aggregate; it remains
+  a fixed-selector warning. Update 280 and the first trained selector remain
+  pending; no trained accuracy or convergence claim exists yet.
 
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,

@@ -468,6 +468,23 @@ stderr is empty. The post-128 auditor passes with zero failures/severe clips.
 This directly qualifies the update-152 repair but does not substitute for the
 second recurrence at 280 or fixed-selector accuracy.
 
+The durable step-256 checkpoint also passes exact scope and integrity audit.
+All 177 inherited tensors remain bitwise equal to step zero, all 48 attention
+tensors changed, and all 48 serialized optimizer states map only to named
+attention parameters at Adam step 256. Model and optimizer state are finite;
+the mutable hash
+`a53faf0a5e32aace06cffcd1a3a595eb3d6f4740d110c8c6f578f00059712690`
+matches metadata, while all three protected step-zero artifacts retain exact
+hash `1354bdfca1cef965c0cd907ea8c157c0fd82169e64f24da656eb42dd1a96df91`.
+The aggregate auditor reports 256 applied updates, 32 draws from each scenario,
+zero skips/failures/severe clips, trajectory support `154..504` (median `339`),
+and unchanged `2,990,858,240`-byte peak RSS. One update-248 batch reaches four
+trusted identity switches over 63 associations (`6.35%`), versus `3.08%` on
+the stopped conditioned control; update 256 returns to zero and aggregate
+trusted switching remains 14/1,436 (`0.975%`). This warning remains reserved
+for fixed-selector judgment rather than being hidden or prematurely repaired.
+The former step-280 recurrence and first trained selector remain pending.
+
 The present capacity is `1,103,626` typed-attention parameters and `3,004,656`
 parameters for the complete model, with at most 22 scene/entity/relation
 tokens under the six-slot contract. Review of the original Transformer and

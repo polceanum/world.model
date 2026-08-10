@@ -3,7 +3,7 @@
 ## ADR-097 — Require repaired checkpoint and selector evidence before scaling
 
 - **Date:** 2026-08-10
-- **Status:** accepted; step-152 repair passed, campaign continuing
+- **Status:** accepted; step-256 integrity passed, campaign continuing
 - **Context:** The collision-isolated campaign reached durable update 128 with
   128 applied balanced updates, no numerical/support/resource failure, exact
   inherited-weight isolation, all 48 attention tensors live, and attention-
@@ -28,6 +28,10 @@
   The first former periodic failure at update 152 now retains `0.14308` rather
   than `0.03554` of the interaction-stage gradient and passes the auditor; the
   update-280 recurrence and fixed selectors remain required.
+  Durable step 256 also passes exact optimizer/scope/hash/resource integrity.
+  One sampled trusted-identity spike at step 248 is retained as a selector
+  warning rather than a reason to tune against a single stochastic outcome;
+  its aggregate rate through step 256 is `0.975%` and the next block is zero.
 
 ## ADR-096 — Isolate collision-logit gradients before the interaction group
 
