@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.26
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, and complete typed-attention gradient localization amendments 10 August 2026
+**Version:** 1.27
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6194,6 +6194,64 @@ interaction norm of `17.7050` and retains only `0.05648`, while the collision
 row norm is an ordinary unclipped `0.23553`. The repaired run therefore stops
 at its exact durable step-256 checkpoint. It cannot count toward convergence;
 its step-280 update is diagnostic evidence for the complete-localization replay.
+
+## 196. Scale the data and model only from a qualified stable rung
+
+The original Transformer established that scaled dot-product multi-head
+attention gives short content-dependent paths and parallel computation, but it
+did not establish that parameter count alone creates physical abstraction or
+out-of-distribution generalization. Modern dense transformers commonly add
+pre-normalization, RMSNorm, gated feed-forwards such as SwiGLU, and efficient
+attention kernels. Grouped-query attention, sparse experts, and IO-aware
+attention primarily reduce long-context or large-batch cost. They are not
+automatic accuracy improvements for the current set of at most 22 structured
+tokens.
+
+Project Orpheus therefore retains dense RMS-pre-normalized attention and
+SwiGLU for the Mac rung. It does not add object-slot positional encoding or
+RoPE to unordered entity/relation sets. Relative/rotary time features become
+eligible only for explicitly timestamped bounded-history tokens. Flash-style
+CUDA kernels, grouped-query attention, sparse experts, and distributed
+sharding become eligible only when measured token length, memory, or compute
+profiles identify the bottleneck they solve.
+
+Scaling experiments use a fixed ladder rather than one expensive jump:
+
+1. qualify the 3.00M-parameter width-128/four-block model through repeated
+   fixed selectors and a declared plateau after all known semantic and
+   optimizer defects are repaired;
+2. run matched small-rung controls that vary one axis at a time (data draws,
+   width, depth, then bounded temporal context), preserving the accepted model
+   as a fixed reference;
+3. fit empirical validation-loss/error versus parameters, examples, and
+   compute, and advance only when the smaller model is capacity-limited rather
+   than data-limited or optimization-limited;
+4. increase continuously varied balanced episodes with parameters, following
+   the compute-optimal lesson that larger undertrained models are wasteful;
+5. require disjoint RGB-only validation/test, held-out physical-parameter
+   combinations, novel object counts/camera paths, and per-scenario/every-
+   horizon non-regression before promotion; and
+6. move the unchanged contracts to a single CUDA GPU only after the Mac rung
+   predicts a useful gain and records a portable resolved config, manifest,
+   checkpoint, and throughput/memory budget.
+
+Training loss is a diagnostic. Convergence requires the existing broad fixed-
+manifest plateau rule, and generalization requires improvement on manifests
+that were not used for architecture or checkpoint selection. Scaling video
+generation alone is insufficient evidence: recent physical-law evaluations
+show strong in-distribution performance can coexist with failure to extrapolate
+the underlying dynamics. The explicit object/relation/event belief and
+invariant-tested physics regimes remain the generalization probes.
+
+Primary references for this decision:
+
+- Vaswani et al., “Attention Is All You Need,” arXiv:1706.03762;
+- Hoffmann et al., “Training Compute-Optimal Large Language Models,”
+  arXiv:2203.15556;
+- Dao, “FlashAttention-2,” arXiv:2307.08691;
+- Yang et al., “Qwen3 Technical Report,” arXiv:2505.09388; and
+- Kang et al., “How Far Is Video Generation from World Model: A Physical Law
+  Perspective,” ICML 2025.
 
 ---
 

@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-10
-**Specification:** `PROJECT_SPEC.md` 1.26
+**Specification:** `PROJECT_SPEC.md` 1.27
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -91,8 +91,98 @@ gradient and `0.02205` local clip coefficient; specification 1.24 adds fixed
 non-affine pre-projection RMS conditioning; that repair removes the matched
 scene spike, but a later campaign is stopped at clean step 256 after collision-
 logit row spikes recur exactly 128 updates apart; specification 1.25 isolates
-that typed proposal row before the complete interaction cap; repaired
-sustained convergence remains pending
+that typed proposal row before the complete interaction cap; exact replay now
+localizes the remaining recurrence to the typed normal/tangent force rows, a
+joint force-row cap is implemented under specification 1.27, and repaired
+sustained convergence and any further capacity scaling remain pending
+
+## 2026-08-10 — exact force-head localization and scale/no-scale decision
+
+The collision-isolated step-256 checkpoint was replayed from clean detached
+commit `70c2e3b3dfd590a470077ceca7c224977152945a` with its exact optimizer,
+CPU/MPS RNG, and deterministic sampler state. External instrumentation wrapper
+SHA-256 `187fa606488e6aa9f4fab4c05678c69c9540affa1ac7452294d81263cbea1683`
+collected raw named-parameter and semantic decoder-row norms before calling the
+unaltered committed clip function. It did not change forward values, losses,
+gradients, optimizer state, RNG, data order, or checkpoint semantics. All 362
+shared deterministic fields at step 264 and all 308 shared fields at step 272
+match the original with zero differences; step 280 exactly reproduces loss
+`2.7366230488`, raw interaction norm `17.7049923`, and retained coefficient
+`0.05648124`.
+
+The failure is now localized. At step 280 the relation-decoder weight norm is
+`17.6189251`; semantic normal/tangent force rows are `17.3893547/3.2159121`
+(joint `17.6842231`). The collision row is ordinary at `0.2355342` and the
+remaining interaction gradient is approximately `0.8573238`. A joint unit
+force-row cap would leave approximately `1.3171956` before the existing unit
+interaction cap, retaining about `0.7591881` rather than `0.0564812`. This is
+specific evidence for force-row optimizer isolation, not evidence for lower
+global learning rate or more model capacity. The replay service is stopped;
+its stale `training_state.json` says running only because launchd bootout was
+an external stop. No update-280 checkpoint exists.
+
+Specification 1.27 and the implementation now add an optional joint
+normal/tangent force-row cap before the interaction/global hierarchy. The cap
+changes no forward physics, targets, or parameters. Telemetry retains raw
+semantic rows plus raw/applied group/stage/global norms; the offline auditor
+includes the new coefficient; the resolved validation protocol binds it.
+`configs/attention_pilot_mps.yaml` sets both collision-row and force-row caps to
+`1.0`. Checkpoint metadata now correctly reports specification 1.27 rather than
+the stale 1.25 constant discovered during this audit.
+
+Focused verification completed:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q \
+  -p no:cacheprovider tests/unit/test_training_schedule.py \
+  tests/unit/test_config.py tests/unit/test_audit_training_dynamics.py
+```
+
+Result: `223 passed in 14.90s`. Final verification also completed:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q \
+  -p no:cacheprovider -m 'not device'
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q \
+  -p no:cacheprovider -m device
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q \
+  -p no:cacheprovider <five exact hardware-conditional MPS node IDs>
+PYTHONPATH=. conda run --no-capture-output -n orpheus ruff format --check .
+PYTHONPATH=. conda run --no-capture-output -n orpheus ruff check .
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-force-clip-pycache PYTHONPATH=. \
+  conda run --no-capture-output -n orpheus python -m compileall -q \
+  world_model train.py evaluate.py demo.py scripts tests
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/attention_pilot_mps.yaml --dry-run --device cpu
+git diff --check
+```
+
+Results: non-device suite `664 passed, 5 skipped, 1 deselected in 170.03s`;
+host device marker `1 passed, 669 deselected in 3.07s`; five direct host-MPS
+tests `5 passed in 7.66s`; Ruff format/check, compileall, dry run, and diff
+check pass. The dry run resolves 8,192 balanced updates, 65,536 episode draws,
+eight scenarios, 32 validation episodes, Python 3.10 environment, PyTorch
+2.10.0, and MPS built. The sandboxed process reports MPS unavailable; direct
+hardware tests prove host MPS availability. A first direct-MPS command used
+three stale historical node names and collected no tests; the corrected exact
+command above is the reported result. A fresh training smoke and sustained
+launch remain pending at this status update. The evidence artifact is
+`runs/20260810-180502-attention-collision-isolated-stage-a/gradient_localization_report.json`;
+the diagnostic replay is under
+`/private/tmp/orpheus-replay-70c2e3b-20260810/runs/20260810-211022-gradient-localization-replay/`.
+
+Review of the original Transformer, compute-optimal scaling, current efficient
+attention/dense-MoE practice, and recent physical-law evaluation supports the
+existing staged decision. The 3,004,656-parameter pilot already has four
+pre-RMSNorm width-128/four-head blocks and SwiGLU over at most 22 typed tokens.
+RoPE remains reserved for true timestamped history rather than arbitrary set
+order. FlashAttention/GQA/MoE solve unmeasured long-context or routing costs at
+this rung and are deferred. First qualify the repaired dense model through the
+former failure boundaries, repeated complete selectors, and the declared
+plateau. Then compare data-only, width, depth, and bounded-history rungs one at
+a time, increasing continuously varied balanced data with parameters and
+requiring fixed disjoint RGB-only validation/test/OOD non-regression before a
+single-CUDA-GPU scale-up.
 
 ## 2026-08-10 — typed-attention scene context and input conditioning repaired
 

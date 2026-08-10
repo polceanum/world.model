@@ -27,6 +27,9 @@ persistent WorldBelief
           │
           ├── reversible typed belief tokens
           │       └── scene / camera / kinematic / programme / lifecycle
+          ├── optional typed attention residual
+          │       ├── dense pre-RMSNorm + SwiGLU set processing
+          │       └── bounded force / event / uncertainty proposals
           │
           ▼
 analytic kinematics + stable modes + interactions + event jumps + uncertainty

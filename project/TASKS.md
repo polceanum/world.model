@@ -150,7 +150,7 @@
 - [x] Pass repaired gates: focused `236 passed`, final affected `216 passed`,
   complete non-device `657 passed, 5 skipped, 1 deselected`, host MPS
   `1 passed, 662 deselected`, Ruff, format, compileall, and diff check.
-- [ ] Complete the collision-isolated attention campaign at
+- [x] Stop and preserve the collision-isolated attention campaign at
   `runs/20260810-180502-attention-collision-isolated-stage-a/`, launched
   weights-only from the same protected protocol-14 graph control and clean
   commit `70c2e3b`. Its 32-episode step-zero selector exactly reproduces score
@@ -177,10 +177,20 @@
 - [x] Add read-only raw-gradient telemetry for every named attention parameter
   and all semantic node/relation decoder rows before any clipping; finite-check
   the complete diagnostic without changing gradients or forward behavior.
-- [ ] Replay exact steps 257--280 from the durable checkpoint with optimizer,
-  RNG, and deterministic data continuity; localize the dominant parameter/row,
-  implement only the evidence-backed repair, pass gates, and relaunch from the
-  protected graph control.
+- [x] Replay exact steps 257--280 from the durable checkpoint with optimizer,
+  RNG, and deterministic data continuity. Shared telemetry is bit-exact at
+  steps 264/272/280; step 280 localizes `17.6842` joint raw gradient to the
+  normal/tangent force rows inside `17.7050` total interaction gradient.
+- [x] Add a configured joint force-row cap before the complete interaction
+  hierarchy, preserve raw row/group/stage diagnostics, protocol-bind it, make
+  the auditor inspect it, and correct stale checkpoint specification metadata.
+- [ ] Relaunch a fresh weights-only 3.00M-parameter stage-A campaign from the
+  protected graph control. Pass steps 152/280, the first trained selector at
+  512, repeated selectors, and the declared plateau before scaling capacity.
+- [ ] Run a one-axis-at-a-time scaling study after stage A qualifies: matched
+  data-only, width, depth, and bounded-history rungs with increasing balanced
+  episode draws, fixed disjoint RGB-only validation/test/OOD manifests, and
+  the accepted smaller checkpoint as a non-regression reference.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

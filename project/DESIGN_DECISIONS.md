@@ -1,5 +1,33 @@
 # Design decisions
 
+## ADR-099 — Isolate the reproduced force-head spike before scaling
+
+- **Date:** 2026-08-10
+- **Status:** accepted and implemented; fresh qualification pending
+- **Context:** Exact continuation from the collision-isolated step-256
+  checkpoint reproduces steps 264/272/280 with zero difference across all
+  shared deterministic telemetry. At step 280, normal/tangent force decoder
+  rows have raw norms `17.3894/3.2159` and joint norm `17.6842` inside the
+  complete `17.7050` interaction norm. The collision row is only `0.2355`.
+  The relation-decoder weight norm is `17.6189`; remaining interaction
+  gradient outside the two force rows is approximately `0.8573`.
+- **Decision:** Add one optional joint normal/tangent-force row cap before the
+  existing interaction and global caps, configured to `1.0` for stage A.
+  Preserve read-only semantic row telemetry and reconstruct the true raw
+  hierarchy. Bind the new cap into resume/selector protocol semantics and the
+  offline auditor. Correct checkpoint specification metadata from stale 1.25
+  to current specification 1.27. Relaunch weights-only from the protected
+  graph control after gates; do not resume or count either flawed campaign.
+- **Alternatives considered:** scale the Transformer immediately; lower the
+  whole learning rate; cap all decoder rows; widen the interaction cap; treat
+  the finite step as healthy noise; add GQA/MoE/FlashAttention for a 22-token
+  set.
+- **Consequences:** On the reproduced raw gradient, the force cap would reduce
+  the pre-interaction-cap norm to approximately `1.3172`, so the existing 1.0
+  interaction cap retains about `0.7592` rather than `0.05648`. Forward
+  physics and capacity are unchanged. Only a fresh fixed-selector learning
+  curve can qualify the repair or unlock width/depth/history scaling.
+
 ## ADR-098 — Localize the complete attention gradient before another repair
 
 - **Date:** 2026-08-10

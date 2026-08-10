@@ -243,11 +243,15 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
         attention_collision_coefficient = float(
             record.get("attention_collision_gradient_clip_coefficient", 1.0)
         )
+        attention_force_coefficient = float(
+            record.get("attention_force_gradient_clip_coefficient", 1.0)
+        )
         if (
             min(
                 total_coefficient,
                 interaction_coefficient,
                 attention_collision_coefficient,
+                attention_force_coefficient,
             )
             < _SEVERE_CLIP_COEFFICIENT
         ):
@@ -258,6 +262,8 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
             }
             if "attention_collision_gradient_clip_coefficient" in record:
                 details["attention_collision_coefficient"] = attention_collision_coefficient
+            if "attention_force_gradient_clip_coefficient" in record:
+                details["attention_force_coefficient"] = attention_force_coefficient
             severe_clipped_steps.append(details)
     if severe_clipped_steps:
         warnings.append(

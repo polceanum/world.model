@@ -38,6 +38,16 @@
   semantic node/relation decoder row so the exact replay can localize the real
   source without guessing another cap.
 
+- Replayed the exact step-256 continuation from clean commit `70c2e3b` under
+  external read-only instrumentation. Steps 264/272/280 match the original
+  deterministic telemetry exactly. Step 280 localizes raw norms
+  `17.3894/3.2159` to normal/tangent force rows (joint `17.6842`) inside the
+  `17.7050` interaction norm; collision is ordinary at `0.2355`. Added an
+  optional joint force-row cap, raw/applied diagnostics, protocol binding,
+  auditor coverage, and focused tests. The stage-A config sets the cap to 1.0;
+  this changes no forward dynamics. Also corrected checkpoint specification
+  metadata from stale 1.25 to specification 1.27.
+
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,
   scaled dot-product attention, and SwiGLU feed-forwards add `1,103,626`

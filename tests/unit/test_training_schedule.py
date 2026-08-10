@@ -368,6 +368,55 @@ def test_attention_collision_row_is_bounded_before_complete_interaction_clip() -
     assert other.grad.norm().item() == pytest.approx(4.0, abs=1.0e-6)
 
 
+def test_attention_force_rows_are_jointly_bounded_before_complete_interaction_clip() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            grad_clip_norm=20.0,
+            interaction_grad_clip_norm=20.0,
+            attention_force_grad_clip_norm=1.0,
+            closed_loop_perception_grad_clip_norm=20.0,
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+    decoder = attention.relation_decoder
+    decoder.weight.grad = torch.zeros_like(decoder.weight)
+    normal_gradient = decoder.weight.grad[attention.force_output_indices[0]]
+    tangent_gradient = decoder.weight.grad[attention.force_output_indices[1]]
+    normal_gradient.fill_(1.0)
+    normal_gradient.mul_(3.0 / normal_gradient.norm())
+    tangent_gradient.fill_(1.0)
+    tangent_gradient.mul_(4.0 / tangent_gradient.norm())
+    other = attention.scene_projection.bias
+    other.grad = torch.ones_like(other)
+    other.grad.mul_(12.0 / other.grad.norm())
+
+    diagnostics = _clip_training_gradients(model, config)
+
+    assert diagnostics["attention_force_gradient_norm_pre_clip"] == pytest.approx(5.0)
+    assert diagnostics["attention_force_gradient_clip_coefficient"] == pytest.approx(
+        1.0 / (5.0 + 1.0e-6)
+    )
+    assert diagnostics[
+        "attention_force_gradient_norm_applied_before_interaction_clip"
+    ] == pytest.approx(1.0, abs=1.0e-6)
+    assert diagnostics["interaction_gradient_norm_after_attention_row_clips"] == pytest.approx(
+        math.sqrt(145.0), abs=1.0e-5
+    )
+    assert diagnostics["interaction_gradient_norm_pre_clip"] == pytest.approx(13.0, abs=1.0e-5)
+    assert torch.linalg.vector_norm(
+        torch.stack((normal_gradient.norm(), tangent_gradient.norm()))
+    ).item() == pytest.approx(1.0, abs=1.0e-6)
+    assert other.grad.norm().item() == pytest.approx(12.0, abs=1.0e-6)
+
+
 def test_attention_raw_gradient_diagnostics_localize_parameters_and_typed_rows() -> None:
     config = load_config(
         "configs/tiny_overfit.yaml",

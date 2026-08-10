@@ -15,6 +15,26 @@ checkpoint, split/seeds, device, commands, metrics, and failure cases.
 
 ## Evidence so far
 
+### Typed-attention stability and scaling decision
+
+The current Mac rung is a 3,004,656-parameter model, including a 1,103,626-
+parameter width-128/four-block dense typed-attention residual over at most 22
+scene/entity/relation tokens. It already uses pre-RMSNorm, scaled dot-product
+multi-head attention, and SwiGLU. Exact replay of the first collision-isolated
+campaign found that its recurrent step-280 failure is not lack of capacity: a
+joint `17.6842` raw gradient is localized to the normal/tangent force output
+rows, leaving about `0.8573` in the rest of the interaction module. A typed
+force-row optimizer cap is therefore the next controlled repair.
+
+The next scale decision is gated on a fresh repaired learning curve and broad
+plateau, not training loss. Once qualified, compare data-only, width, depth,
+and bounded-history rungs one at a time, increasing balanced continuously
+varied episode draws with parameter count. Use fixed disjoint RGB-only
+validation/test/OOD manifests and keep the accepted smaller model as a
+non-regression control. Long-context efficiency techniques and MoE are
+deferred because the current token set is short and neither addresses the
+measured failure.
+
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
 

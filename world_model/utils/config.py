@@ -322,6 +322,11 @@ class TrainingConfig:
     # before the complete interaction group so event imbalance cannot reduce
     # the effective update of unrelated force, uncertainty, and token paths.
     attention_collision_grad_clip_norm: float | None = None
+    # Recursive force residuals can accumulate through many rollout substeps
+    # and make the typed normal/tangent decoder rows dominate the complete
+    # attention gradient. Optionally bound those two semantic rows jointly
+    # before the interaction cap, without changing their forward outputs.
+    attention_force_grad_clip_norm: float | None = None
     # RGB discovery and the shared ROI backbone can likewise dominate the
     # whole-model norm during causal adaptation. Bound the complete, disjoint
     # RGB observation module before the global clip.
@@ -1112,6 +1117,17 @@ class OrpheusConfig:
         ):
             raise ValueError(
                 "training.attention_collision_grad_clip_norm must be finite and positive "
+                "when configured"
+            )
+        attention_force_clip = self.training.attention_force_grad_clip_norm
+        if attention_force_clip is not None and (
+            isinstance(attention_force_clip, bool)
+            or not isinstance(attention_force_clip, (int, float))
+            or not math.isfinite(attention_force_clip)
+            or attention_force_clip <= 0
+        ):
+            raise ValueError(
+                "training.attention_force_grad_clip_norm must be finite and positive "
                 "when configured"
             )
         if (

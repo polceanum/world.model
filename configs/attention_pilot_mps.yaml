@@ -185,6 +185,9 @@ training:
   # Isolate rare collision-logit head spikes before the complete attention/
   # graph cap so they cannot suppress unrelated typed residual gradients.
   attention_collision_grad_clip_norm: 1.0
+  # Exact step-280 replay localizes the remaining recurrent spike to the
+  # normal/tangent force rows (joint raw norm 17.684), not shared attention.
+  attention_force_grad_clip_norm: 1.0
   closed_loop_perception_grad_clip_norm: 1.0
   checkpoint_every: 128
   # A 32-episode selector costs about sixteen minutes on this Mac; cadence 512
