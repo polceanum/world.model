@@ -109,6 +109,13 @@
   dynamics auditor reports 128 applied balanced updates, zero skips/failures/
   severe clips, raw sampled gradients `0.2535..6.3168`, and bounded
   `2,905,124,864`-byte peak RSS. Accuracy remains pending the step-512 selector.
+- The durable step-256 audit again leaves all 177 inherited tensors exact,
+  changes all 48 attention tensors, keeps 48 optimizer states attention-only
+  at step 256, preserves protected hashes, and finds no nonfinite state or
+  skips. One event-heavy update-152 batch is explicitly warned for severe
+  clipping (`28.1387 -> 1.0`); twelve subsequent sampled blocks are normal,
+  making it isolated rather than a continuing collapse through this boundary.
+  Peak RSS grows only about 10.5 MB to `2,915,614,720` bytes.
 
 ### 2026-08-10 fast-ROI ownership stability
 

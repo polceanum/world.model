@@ -135,8 +135,11 @@
   The durable step-128 checkpoint passes exact scope/optimizer/finite/hash/
   support/resource audit: 177 inherited tensors exact, all 48 attention
   tensors live, optimizer state attention-only at step 128, and no severe
-  clips or skips. Continue through repeated selectors and the declared plateau.
-  Partial training remains non-promotion evidence.
+  clips or skips. Step 256 repeats the exact checkpoint pass; one event-heavy
+  step-152 severe clip remains an explicit isolated warning, followed by twelve
+  normal sampled blocks and no resource growth. Continue through repeated
+  selectors and the declared plateau. Partial training remains non-promotion
+  evidence.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

@@ -362,6 +362,25 @@ Peak recorded RSS remains `2,905,124,864` bytes and stderr remains empty.
 Scope, optimizer, support, finite-state, and resource health are proven through
 the first checkpoint; trained accuracy remains unproven until update 512.
 
+The durable step-256 checkpoint also passes exact integrity audit. All 177
+inherited tensors remain bitwise unchanged, all 48 attention tensors changed,
+all 48 optimizer states remain attention-only at Adam step 256, protected
+step-zero hashes remain exact, and model/optimizer state is finite. Its mutable
+model hash is
+`f9a95062e94b2a426a84d711d9cd5c095dbe04988cd5a8ac088b8c5db6b9514d`.
+Peak recorded RSS is `2,915,614,720` bytes, only about 10.5 MB above step 128;
+there are zero skipped draws, stderr bytes, or audit failures.
+
+One explicit severe-clip warning remains at sampled update 152: an unusually
+event-heavy batch with 22 ground-collision objects and seven pair-collision
+intervals produced finite loss `3.4391`, raw gradient `28.1387`, and local
+coefficient `0.03554`. It retained complete trajectory/objective support and
+was followed by twelve consecutive sampled blocks with gradients
+`0.1672..3.8626`; no second severe event occurred through step 256. The
+post-128 audit therefore passes with this isolated warning rather than showing
+a systematic scale collapse. The run continues to the first trained complete
+selector at update 512; that selector, not sampled loss, decides accuracy.
+
 Historical verification for specification 1.22 before the live-scene repair:
 
 - `conda run --no-capture-output -n orpheus pytest -q -p no:cacheprovider -m 'not device'`
