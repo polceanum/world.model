@@ -327,6 +327,19 @@ event loss and x/y rollout terms are worse on this single sample. These are
 early conditioning results only; update 64, durable checkpoint integrity,
 full selectors, broad non-regression, and plateau remain pending.
 
+The matched update-64 conditioning check now passes. Seeds, frame window, two
+pair-collision intervals, four ground-collision objects, one wall collision,
+one external actuation, support `154/13`, coverage/precision/identity, and
+coverage90 are identical to the unnormalized run. Loss is effectively
+unchanged (`2.0483899 -> 2.0493994`), but raw gradient falls
+`45.3455582 -> 2.2960890` (19.75x) and the retained local coefficient rises
+`0.0220529 -> 0.4355230`. Rollout NLL worsens slightly
+`-0.6871663 -> -0.6790932`; no accuracy claim is made from this sampled batch.
+All eight logged blocks are finite,
+supported, applied, and stderr-free; peak RSS is `2,903,666,688` bytes. The
+specific projection-scale collapse is resolved. The run continues toward its
+first durable step-128 integrity audit and step-512 complete selector.
+
 Historical verification for specification 1.22 before the live-scene repair:
 
 - `conda run --no-capture-output -n orpheus pytest -q -p no:cacheprovider -m 'not device'`

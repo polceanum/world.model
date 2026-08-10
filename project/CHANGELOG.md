@@ -96,6 +96,12 @@
   gradients `0.2535/1.3194`, improved from `0.2631/1.9980` before scene
   normalization; both are finite, supported, and applied with zero stderr.
   This is conditioning/optimizer evidence only, not an accuracy promotion.
+- The exact update-64 failure batch confirms the repair: matched seeds/events/
+  support and effectively unchanged loss now produce raw gradient `2.2961`
+  instead of `45.3456`, improving the local coefficient `0.02205 -> 0.43552`.
+  All first 64 updates remain finite and applied, sampled telemetry has zero
+  skips/stderr, and peak RSS stays bounded at `2,903,666,688` bytes. Sustained
+  selector accuracy and convergence remain unproven.
 
 ### 2026-08-10 fast-ROI ownership stability
 

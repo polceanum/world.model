@@ -129,8 +129,10 @@
   active at `runs/20260810-144901-attention-conditioned-stage-a/` from the same
   protected graph checkpoint. Its complete step-zero selector exactly
   reproduces score `0.3213162196`; updates 8/16 are finite and improve matched
-  raw-gradient conditioning from `0.2631/1.9980` to `0.2535/1.3194`. Continue
-  through update 64, a durable checkpoint, repeated selectors, and the declared
+  raw-gradient conditioning from `0.2631/1.9980` to `0.2535/1.3194`. The exact
+  update-64 failure batch improves `45.3456 -> 2.2961` at effectively unchanged
+  loss and complete matched support, confirming the conditioning repair.
+  Continue through a durable checkpoint, repeated selectors, and the declared
   plateau. Partial training remains non-promotion evidence.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
