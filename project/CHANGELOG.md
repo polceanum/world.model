@@ -67,6 +67,17 @@
   clipping, zero trusted identity switches, bounded 2.874 GB RSS, and empty
   trainer/supervisor stderr. No trained selector is yet available.
 
+- Audited sampled updates 16, 24, and 32 of the force-isolated campaign. All are
+  finite, supported attention-only updates with zero perception gradient and
+  bounded RSS. At step 24 a raw `4.45588` collision-row norm is locally capped
+  before the remaining `2.36835` interaction norm is capped; the offline
+  auditor reports no severe clip or hard failure; step 32 independently
+  contains a `3.23987` collision-row norm, applies its update, keeps exact
+  scenario balance and returns sampled trusted identity switches to zero.
+  Recorded an exact capacity census for later data-only, depth-6, width-192, and
+  width-256/depth-6 rungs, but did not launch or promote a larger model before
+  fixed-selector and plateau evidence.
+
 - Added an optional four-block, width-128, four-head typed attention residual
   over scene, entity, and candidate-relation tokens. RMS pre-normalization,
   scaled dot-product attention, and SwiGLU feed-forwards add `1,103,626`

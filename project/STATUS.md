@@ -231,6 +231,34 @@ distance-gated identity switches are zero, and maximum RSS is
 `2,874,376,192` bytes. This is early optimizer health only; steps 152/280 and
 the first trained selector at 512 remain required.
 
+Sampled updates 16, 24, and 32 remain finite, supported, and scope-clean. At step
+24 the collision row produces a raw norm of `4.45588`; its configured local
+cap reduces it to `1.0`, after which the complete interaction cap reduces the
+remaining `2.36835` norm to `1.0`. The true raw whole-model norm is `4.94611`,
+the final total coefficient is `0.202179`, the optimizer update is applied,
+perception gradient remains exactly zero, RSS is `2,891,427,840` bytes, and
+the offline dynamics auditor reports no severe clip or hard failure. Step 32
+similarly reduces a raw collision norm of `3.23987` to `1.0`; the subsequent
+interaction coefficient is a mild `0.929705`, all 32 balanced updates are
+applied, every scenario has four sampled blocks, trusted identity switches are
+zero in the block, and RSS stays flat. This is evidence that the hierarchy
+contains collision-row outliers, not selector evidence of an accuracy gain.
+
+An architecture/scaling review against the original Transformer, modern dense
+LLM practice, compute-optimal scaling, set attention, Perceiver-style latent
+bottlenecks, and recent video-world-model evidence does not justify changing
+the active pilot. It already uses pre-RMSNorm, scaled dense multi-head
+attention, SwiGLU, typed permutation-equivariant set tokens, and bounded typed
+decoders. FlashAttention, GQA/MLA, and MoE address unmeasured long-context,
+cache, or large-model bottlenecks at the current maximum of 22 tokens. Exact
+local capacity census for proposed later rungs is: current/data-only
+`3,004,656` total (`1,103,626` attention), depth-6 `3,530,480`
+(`1,629,450` attention), width-192/four-block `4,342,896` (`2,441,866`
+attention), and future single-GPU width-256/depth-6 `8,305,648`
+(`6,404,618` attention). None is launched. Promotion order remains data-only,
+width, depth, then bounded timestamped history, with parameter-scaled data and
+fixed disjoint RGB-only validation/test/OOD gates.
+
 ## 2026-08-10 — typed-attention scene context and input conditioning repaired
 
 Primary-source review retained the useful Transformer mechanism—parallel

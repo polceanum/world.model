@@ -35,6 +35,32 @@ non-regression control. Long-context efficiency techniques and MoE are
 deferred because the current token set is short and neither addresses the
 measured failure.
 
+The fresh force-isolated run remains healthy through sampled update 32. The
+step-24 raw collision-row norm is `4.45588`, its row coefficient is `0.224422`,
+the post-row interaction norm/coefficient are `2.36835/0.422235`, and the true
+raw whole-model/final coefficient are `4.94611/0.202179`. This is a contained
+outlier rather than a severe shared-gradient collapse; the update is finite and
+applied, supported trajectory count is 396, frozen perception gradient is zero,
+and RSS is `2,891,427,840` bytes. Step 32 independently contains a raw
+collision-row norm of `3.23987`; its subsequent interaction coefficient is
+`0.929705`, the update is applied, all scenarios have four sampled blocks, and
+sampled trusted identity switches are zero. There is still no trained fixed
+selector.
+
+Exact capacity census for later one-axis studies:
+
+- current/data-only: `3,004,656` total, `1,103,626` attention parameters;
+- depth six at width 128: `3,530,480` total, `1,629,450` attention parameters;
+- width 192/four blocks/SwiGLU 768: `4,342,896` total, `2,441,866` attention
+  parameters; and
+- future single-GPU width 256/six blocks/SwiGLU 1024: `8,305,648` total,
+  `6,404,618` attention parameters.
+
+These are design points, not accepted checkpoints. Modern long-context and
+sparse-inference mechanisms are deferred because 22 structured tokens do not
+exercise their intended bottlenecks. Data coverage and held-out physical
+generalization must scale with capacity.
+
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
 

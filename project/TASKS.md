@@ -201,6 +201,12 @@
   trajectory targets, no skipped draws, frozen perception, finite unclipped
   gradients, zero trusted identity switches, bounded RSS, and a passing live
   dynamics report.
+- [x] Audit sampled updates 16/24/32. Every update is finite and supported; the
+  step-24/32 collision-row outliers are contained by the row cap before the
+  interaction/global hierarchy, no severe coefficient or hard auditor failure
+  occurs, frozen perception remains exact, all scenarios remain balanced, and
+  RSS remains bounded. Do not infer an accuracy direction before the fixed
+  selector.
 - [ ] Pass steps 152/280, the first trained selector at 512, repeated selectors,
   and the declared plateau in the force-isolated campaign before scaling
   capacity.
