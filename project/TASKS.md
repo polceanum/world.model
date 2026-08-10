@@ -132,8 +132,11 @@
   raw-gradient conditioning from `0.2631/1.9980` to `0.2535/1.3194`. The exact
   update-64 failure batch improves `45.3456 -> 2.2961` at effectively unchanged
   loss and complete matched support, confirming the conditioning repair.
-  Continue through a durable checkpoint, repeated selectors, and the declared
-  plateau. Partial training remains non-promotion evidence.
+  The durable step-128 checkpoint passes exact scope/optimizer/finite/hash/
+  support/resource audit: 177 inherited tensors exact, all 48 attention
+  tensors live, optimizer state attention-only at step 128, and no severe
+  clips or skips. Continue through repeated selectors and the declared plateau.
+  Partial training remains non-promotion evidence.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

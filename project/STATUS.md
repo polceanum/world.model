@@ -340,6 +340,28 @@ supported, applied, and stderr-free; peak RSS is `2,903,666,688` bytes. The
 specific projection-scale collapse is resolved. The run continues toward its
 first durable step-128 integrity audit and step-512 complete selector.
 
+The durable `checkpoints/last.pt` at update 128 passes exact integrity audit.
+All 177 inherited tensors remain bitwise equal to step zero; all 48 attention
+tensors changed, including `scene_projection.weight`. All 48 optimizer states
+belong only to attention and have Adam step exactly 128. Model and optimizer
+contain no nonfinite tensors. Protected `best_rollout.pt`,
+`reference_rollout.pt`, and `validation_step_000000.pt` retain the identical
+model hash
+`1354bdfca1cef965c0cd907ea8c157c0fd82169e64f24da656eb42dd1a96df91`
+at step zero; the mutable step-128 hash is
+`2edab07779258fb9ed39f116bb77f129b74a25f58674883d8b9980493095b383`.
+
+The offline dynamics audit reports 128 authoritative applied updates, 16
+sparse telemetry blocks at exact eight-update cadence, 16 draws from each of
+the eight scenarios in those balanced blocks, zero skipped draws, failures,
+or severe clips, and trajectory support `154..471` (median `329`). Sampled
+loss is `0.4891..5.6757` (median `3.6210`); raw gradient is
+`0.2535..6.3168` (median `3.2646`, p95 `6.0123`). Fourteen of 16 sampled blocks
+use the ordinary 1.0 local cap, but none retain less than 10% of the raw norm.
+Peak recorded RSS remains `2,905,124,864` bytes and stderr remains empty.
+Scope, optimizer, support, finite-state, and resource health are proven through
+the first checkpoint; trained accuracy remains unproven until update 512.
+
 Historical verification for specification 1.22 before the live-scene repair:
 
 - `conda run --no-capture-output -n orpheus pytest -q -p no:cacheprovider -m 'not device'`

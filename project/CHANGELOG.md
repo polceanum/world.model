@@ -102,6 +102,13 @@
   All first 64 updates remain finite and applied, sampled telemetry has zero
   skips/stderr, and peak RSS stays bounded at `2,903,666,688` bytes. Sustained
   selector accuracy and convergence remain unproven.
+- The conditioned run's durable step-128 checkpoint passes exact audit: all
+  177 inherited tensors remain bitwise unchanged, all 48 attention tensors
+  change, optimizer state belongs only to attention at step 128, protected
+  step-zero hashes remain exact, and every serialized tensor is finite. The
+  dynamics auditor reports 128 applied balanced updates, zero skips/failures/
+  severe clips, raw sampled gradients `0.2535..6.3168`, and bounded
+  `2,905,124,864`-byte peak RSS. Accuracy remains pending the step-512 selector.
 
 ### 2026-08-10 fast-ROI ownership stability
 
