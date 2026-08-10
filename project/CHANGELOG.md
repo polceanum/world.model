@@ -43,6 +43,11 @@
   of every excluded tensor; this is behavioral saturation, not scope or
   optimizer collapse. Continue the declared 512-update run for sufficient
   plateau evidence while retaining step 64.
+- Completed step 256 with zero guardrail failures and near-exact recovery of
+  the step-64 behavior, but correctly rejected its `0.3215611` score because it
+  is `0.00000167` worse than the protected incumbent. Smooth y-row checkpoint
+  motion produces a nonmonotonic discrete association response; optimizer,
+  support, uncertainty, resources, and scope isolation remain healthy.
 
 ### 2026-08-09 scenario-balanced optimization
 

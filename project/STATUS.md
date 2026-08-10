@@ -200,10 +200,25 @@ clip, gradients `0.000489--0.029813`, 156--486 trajectory-support rows, equal
 scenario counts, finite uncertainty, and bounded RSS through
 `1,346,781,184` bytes.
 
-Step 64 remains the immutable selected incumbent. Two near-identical rejected
-points are insufficient for the declared convergence rule, so the unchanged
-512-update recovery run continues toward step 256 and later fixed gates. No
-plateau, deployment replacement, generalization result, or attention-scaling
+Step 256 returned across the discontinuous baseline association threshold and
+passed every fixed-reference and moving-incumbent guardrail. Its score
+`0.3215611`, current position `0.2532510 m`, velocity `1.0953627 m/s`, identity
+`0.0142487`, coverage, precision, collision F1, calibration, axes, and horizons
+are all effectively the protected step-64 regime. It was correctly not
+accepted because its score is still `0.00000167` worse than step 64.
+
+Checkpoint geometry shows continued small y-row movement rather than an Adam
+oscillation or scope defect: weight-row L2 changes were
+`0.001135/0.000489/0.0000756/0.0001115` across the four 64-update segments,
+finite row-1 moments persist, and every excluded row/tensor remains bitwise
+fixed. The online association response is nonmonotonic across this smooth
+parameter path, explaining why steps 128/192 shared one discrete identity and
+steps 64/256 another.
+
+Step 64 remains the immutable selected incumbent. The unchanged 512-update
+recovery run continues toward step 320 and later fixed gates; it has not yet
+completed its declared budget or established the applicable plateau evidence.
+No deployment replacement, generalization result, or attention-scaling
 authorization exists yet.
 
 ## 2026-08-09 — protocol-18 rejection and innovation-anchored repair

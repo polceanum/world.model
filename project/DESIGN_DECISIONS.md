@@ -36,6 +36,12 @@
   moments persist and excluded tensors remain bitwise fixed. Treat this as the
   first repeated saturation evidence, not enough by itself to declare a
   plateau; continue the already-declared 512-update run with step 64 protected.
+- **Step-256 evidence:** The candidate crossed back into the guardrail-clean
+  association regime at score `0.3215611`, only `0.00000167` worse than step
+  64, and was not accepted. Consecutive y-row deltas are smooth and row-local,
+  so the discrete baseline identity changes are an association-threshold
+  response rather than optimizer oscillation. Continue the declared run and
+  retain step 64; do not promote metric equivalence as a new improvement.
 
 ## ADR-091 — Continue correction recovery on the accepted y row only
 

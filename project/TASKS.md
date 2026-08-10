@@ -54,8 +54,9 @@
   plateau. Step 64 is guardrail-clean and internally accepted at `0.3215594`,
   while steps 128/192 are rejected at `0.3216703/0.3216706` after the same
   baseline association threshold regressed coverage, identity, and
-  0.10-second x. Continue the declared 512-update run with step 64 protected,
-  and inspect
+  0.10-second x. Step 256 returns to zero guardrail failures at `0.3215611` but
+  is microscopically worse than step 64 and is not accepted. Continue the
+  declared 512-update run with step 64 protected, and inspect
   pooled and per-scenario
   current/velocity, x/y/z, every horizon, identity, lifecycle, events,
   calibration, support, optimizer state, and memory.
