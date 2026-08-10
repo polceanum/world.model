@@ -34,7 +34,8 @@
   mathematical meaning changed.
 - [x] Add an updater-only trainable scope that freezes dynamics, identification,
   and perception while the clean innovation-gain head recovers.
-- [ ] Run a sustained balanced updater-only recovery from the mean-reset
+- [ ] Complete the active 512-update balanced updater-only recovery from the
+  mean-reset
   candidate until the exact 32-episode selector regains the legacy fixed
   reference without axis/horizon/scenario regressions.
 - [ ] If the recovered control is non-regressing, train balanced protocol 19

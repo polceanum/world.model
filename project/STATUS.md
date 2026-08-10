@@ -168,6 +168,25 @@ visibility head). The next bounded campaign must recover the fixed legacy
 reference with updater-only balanced optimization before any joint dynamics
 phase or attention-capacity pilot.
 
+The recovery scope and evidence were committed/pushed as clean `d97b613` after
+`200` focused schedule/config/spec tests plus Ruff and format checks passed.
+One-shot Standard launchd job
+`com.polceanum.orpheus.protocol19-updater-recovery-20260810-0020` is active as
+PID `46547` at
+`runs/20260810-001838-protocol19-anchored-updater-recovery/`. Its immutable
+metadata records clean commit `d97b613`, PyTorch `2.10.0`, MPS built/available,
+MPS RGB measurement, CPU closed-loop dynamics, RGB-only runtime, no oracle,
+and the exact mean-reset `candidate.pt` source. Stderr is empty and the fixed
+initialization heartbeat is advancing through the expected ordered scenarios.
+
+The bounded recovery declares 512 balanced updater-only updates, 4,096 episode
+draws, learning rate `2e-5`, exact 32-episode validation/checkpoint cadence 64,
+and logging cadence 8. It is not a convergence or promotion claim. The first
+causal log must still verify updater-only scope, finite nonzero gradient,
+frozen dynamics/identifier/perception, complete objective support, and zero
+skipped draws; each 64-step selector must compare against both the clean reset
+start and the legacy fixed reference.
+
 Specification 1.19 also records the compute path reviewed against transformer,
 Perceiver IO, compute-optimal scaling, JEPA/video-world-model, and recent
 object-centric physical-prediction literature. The first scale rung is not a

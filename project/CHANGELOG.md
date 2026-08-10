@@ -1276,3 +1276,6 @@ further gravity-axis threshold tuning.
 - Added an updater-only causal trainability scope so the new gain head can
   recover broad correction accuracy without simultaneous dynamics,
   identification, or perception drift.
+- Launched clean one-shot protocol-19 updater recovery from the mean-reset
+  candidate: 512 balanced updates, validation/checkpoint every 64, 2e-5
+  updater LR, MPS measurement plus CPU closed loop, Standard QoS, no oracle.
