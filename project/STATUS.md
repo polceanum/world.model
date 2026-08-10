@@ -304,6 +304,29 @@ emitted only Python's resource-tracker warning for 14 worker semaphores; the
 process is confirmed absent. The stopped run has no trained selector or
 promotion and cannot count toward convergence.
 
+The normalized sustained campaign is active at
+`runs/20260810-144901-attention-conditioned-stage-a/` under one-shot
+Standard/default LaunchAgent
+`com.polceanum.orpheus.attention-conditioned-20260810-144901`,
+`KeepAlive=false`, with trainer PID `84633`. It starts from clean pushed commit
+`de06fcb`; metadata verifies PyTorch `2.10.0`, MPS available and used for RGB
+measurement, CPU closed loop, float32, RGB-only/no-oracle execution, and the
+unchanged protected graph checkpoint. The fixed protocol hash remains
+`6064c5b1a055e943a3f3900ed63596b6402c7d7ad5a4d45f7b2d77351bc8c648`.
+
+The complete 32-episode step-zero selector finished in `1001.259 s`, visited
+every scenario four times, emitted no stderr, and exactly reproduced protected
+score `0.3213162196`. Update 8 uses the same seeds/window as both prior pilots:
+loss is `0.4891017`, raw/applied gradient `0.2534595/0.2534595`, all 349
+trajectory targets and eight objective terms are supported, and there are no
+skips or sampled distance-gated identity switches. Update 16 remains finite on
+the matched harder contact block; its raw norm is `1.3194281` versus `1.9979866`
+before normalization and the local clip coefficient improves from `0.50050`
+to `0.75790`. Coverage/precision/identity/calibration improve slightly, while
+event loss and x/y rollout terms are worse on this single sample. These are
+early conditioning results only; update 64, durable checkpoint integrity,
+full selectors, broad non-regression, and plateau remain pending.
+
 Historical verification for specification 1.22 before the live-scene repair:
 
 - `conda run --no-capture-output -n orpheus pytest -q -p no:cacheprovider -m 'not device'`

@@ -85,6 +85,17 @@
 - Normalized-model verification reports `20 passed` focused, `651 passed,
   5 skipped, 1 deselected` complete non-device, and `1 passed, 656 deselected`
   on host MPS; Ruff check/format, compileall, and diff checks pass.
+- Committed and pushed the conditioning repair as `de06fcb`, then launched
+  `runs/20260810-144901-attention-conditioned-stage-a/` under one-shot
+  Standard/default LaunchAgent
+  `com.polceanum.orpheus.attention-conditioned-20260810-144901`. Clean runtime
+  metadata records PyTorch 2.10, MPS RGB measurement, CPU closed loop,
+  float32, RGB-only/no-oracle execution, and the protected graph source.
+- The exact 32-episode initialization selector completes in `1001.259 s` and
+  reproduces protected score `0.3213162196`. Matched updates 8/16 have raw
+  gradients `0.2535/1.3194`, improved from `0.2631/1.9980` before scene
+  normalization; both are finite, supported, and applied with zero stderr.
+  This is conditioning/optimizer evidence only, not an accuracy promotion.
 
 ### 2026-08-10 fast-ROI ownership stability
 

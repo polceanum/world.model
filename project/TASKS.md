@@ -125,9 +125,13 @@
   cannot count because its scene input was dead. The live-scene run at
   `runs/20260810-134330-attention-live-scene-stage-a/` is also stopped and
   cannot count because mixed-unit scene inputs caused severe projection
-  gradient conditioning by sampled update 64. Relaunch the normalized model
-  from the same protected graph checkpoint only after complete gates and a
-  short conditioning smoke. Partial training remains non-promotion evidence.
+  gradient conditioning by sampled update 64. The normalized campaign is now
+  active at `runs/20260810-144901-attention-conditioned-stage-a/` from the same
+  protected graph checkpoint. Its complete step-zero selector exactly
+  reproduces score `0.3213162196`; updates 8/16 are finite and improve matched
+  raw-gradient conditioning from `0.2631/1.9980` to `0.2535/1.3194`. Continue
+  through update 64, a durable checkpoint, repeated selectors, and the declared
+  plateau. Partial training remains non-promotion evidence.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.
