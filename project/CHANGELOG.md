@@ -25,6 +25,13 @@
   step-192 y-row candidate. Metadata records MPS measurement, CPU closed loop,
   RGB-only/no-oracle runtime, clean source, 512 balanced updates, effective
   learning rate `5e-6`, and exact validation cadence 64.
+- Completed protocol 20's first 64 balanced updates and fixed 32-episode
+  selector with no optimizer/support/numerical failure. Step 64 is
+  guardrail-clean at score `0.3215594`, but its small gain and mixed
+  velocity/late-horizon deltas are only interim evidence, not convergence.
+- Proved from the numbered runtime checkpoint that every model tensor except
+  the learned mean-head weight/bias is bitwise frozen, only y row 1 changes,
+  and excluded Adam moment rows remain exactly zero through weight decay.
 
 ### 2026-08-09 scenario-balanced optimization
 

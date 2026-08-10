@@ -48,11 +48,12 @@
 - [x] Add an exact `updater_mean_y` training scope that masks excluded rows,
   restores them across AdamW decay, and clears their optimizer moments.
 - [x] Launch a clean y-only sustained recovery from the accepted step-192 row
-  composition and train through repeated exact validation to a declared
-  plateau without reactivating x/z. The one-shot protocol-20 worker is active;
-  convergence remains pending.
-- [ ] If the recovered control is non-regressing, train balanced protocol 19
-  long enough for repeated fixed validation and a declared plateau; inspect
+  composition without reactivating x/z. At step 64, independently verify that
+  only mean-head row 1 changed and every excluded Adam moment remains zero.
+- [ ] Train protocol 20 through repeated exact validation and a declared
+  plateau. Step 64 is guardrail-clean and internally accepted at `0.3215594`,
+  but its gain is small and the long-horizon/velocity changes are mixed within
+  tolerance, so convergence remains pending. Continue to inspect
   pooled and per-scenario
   current/velocity, x/y/z, every horizon, identity, lifecycle, events,
   calibration, support, optimizer state, and memory.

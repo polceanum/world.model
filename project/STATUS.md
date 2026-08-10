@@ -143,15 +143,39 @@ learning rate, and exact validation every 64 updates. The corrected incumbent
 still scores above the approximately `0.318` legacy reference, so it is not a
 deployment replacement and does not yet unlock the attention pilot.
 
-That campaign is now active at
+That campaign is active at
 `runs/20260810-042627-protocol20-y-only-recovery/` under one-shot launchd label
 `com.polceanum.orpheus.protocol20-y-recovery-20260810-042609` as PID `58922`.
 Metadata records clean commit `3ad5ee2`, PyTorch `2.10.0`, MPS built/available,
 MPS measurement, CPU closed loop, RGB-only/no-oracle runtime, the accepted
 step-192 y-row initialization, `updater_mean_y`, 512 balanced updates, effective
-learning rate `5e-6`, and checkpoint/evaluation cadence 64. Initialization is
-advancing through the exact 32-episode manifest with empty stderr; no new
-trained result or convergence claim exists yet.
+learning rate `5e-6`, and checkpoint/evaluation cadence 64. Initialization and
+the first 64 optimizer updates completed with no skip, clip, nonfinite value,
+scope failure, or restart. The eight logged balanced blocks contain equal
+support from every scenario, 156--442 causal trajectory rows, finite gradients
+from `0.000500` to `0.029813`, 382 gated identity associations with five
+switches, and bounded RSS through `1,346,781,184` bytes.
+
+Exact step-64 RGB-only validation is preserved at
+`runs/20260810-042627-protocol20-y-only-recovery/checkpoints/validation_step_000064.pt`.
+It passed every moving-incumbent
+guardrail and was internally accepted: score `0.3216427 -> 0.3215594`, current
+position `0.2537443 -> 0.2532523 m`, and identity `0.0142579 -> 0.0142487`.
+Current x/y/z each improved. The 0.10-second horizon improved
+`0.2677536 -> 0.2669477 m`, but 0.50--1.00 seconds changed by only
+`0.0000008--0.0000061 m` in the worse direction; velocity also changed
+`1.0949210 -> 1.0953541 m/s`. These are guardrail-safe, not evidence of broad
+convergence, and the corrected control remains behind the approximately
+`0.318` legacy reference.
+
+Independent checkpoint comparison proves the optimizer scope held at runtime:
+only `updater.learned_corrector.mean_head.{weight,bias}` changed, only leading
+row 1 changed within those tensors, all other model tensors are bitwise equal
+to step zero, and Adam `exp_avg`/`exp_avg_sq` are nonzero only in row 1. The
+checkpoint retains specification 1.20 and clean source/runtime provenance.
+Training continues toward the step-128 selector; no plateau, deployment
+replacement, generalization result, or attention-scaling authorization exists
+yet.
 
 ## 2026-08-09 — protocol-18 rejection and innovation-anchored repair
 

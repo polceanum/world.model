@@ -1,5 +1,30 @@
 # Design decisions
 
+## ADR-092 — Treat the first y-only gain as interim, not convergence
+
+- **Date:** 2026-08-10
+- **Status:** accepted monitoring decision after the first fixed selector
+- **Context:** Protocol 20 completed 64 balanced y-only updates without a
+  numerical, support, identity, lifecycle, uncertainty, optimizer, or resource
+  failure. Its exact selector passed every guardrail and improved pooled score
+  `0.3216427 -> 0.3215594` and current RMSE
+  `0.2537443 -> 0.2532523 m`. The gain is nevertheless small: velocity worsened
+  by `0.0004332 m/s`, coverage/precision fell by about `0.00025/0.00015`, and
+  0.50--1.00-second RMSE worsened by only micrometres. Exact tensor inspection
+  proves this is real y-row behavior rather than scope leakage.
+- **Decision:** Retain step 64 as the internal guardrail-safe incumbent while
+  continuing the unchanged mutable y-only trajectory through repeated fixed
+  selectors. Do not call this convergence, a legacy-reference replacement, or
+  permission to scale attention. Judge the direction from the complete
+  learning curve and the existing plateau/generalization contracts.
+- **Alternatives considered:** stop on the first lower pooled score; reject the
+  candidate for sub-tolerance late-horizon changes; unfreeze x/z to accelerate
+  progress; skip directly to a larger transformer.
+- **Consequences:** The selector still protects a recoverable best checkpoint,
+  while longer training can show whether the small short-horizon gain compounds,
+  plateaus, or reverses. Any later regression leaves this numbered checkpoint
+  intact and cannot silently reactivate the known x/z failure mode.
+
 ## ADR-091 — Continue correction recovery on the accepted y row only
 
 - **Date:** 2026-08-10
