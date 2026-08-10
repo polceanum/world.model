@@ -1305,3 +1305,6 @@ further gravity-axis threshold tuning.
   trunk, variance, gate, mode, and existence paths as well as the reset mean
   head. Added an `updater_mean` scope that exposes exactly the mean-head weight
   and bias, with focused schedule/config coverage.
+- Launched a clean 512-update replacement from the untouched mean-reset
+  candidate with mean-head-only trainability, effective LR `5e-6`, MPS RGB
+  measurement, CPU closed loop, and exact validation every 64 updates.

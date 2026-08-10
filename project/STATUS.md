@@ -221,6 +221,14 @@ reports `1 passed, 643 deselected` in `4.64 s`. Ruff lint and repository-wide
 format checks pass.
 The corrected campaign must restart from the clean mean-reset candidate at
 effective learning rate `5e-6`, not continue from the rejected step-64 state.
+That replacement is active at
+`runs/20260810-012116-protocol19-anchored-mean-recovery/` under one-shot launchd
+job `com.polceanum.orpheus.protocol19-mean-recovery-20260810-012053` as PID
+`49490`. Metadata records clean commit `c3f982c`, PyTorch `2.10.0`, MPS
+built/available, MPS measurement, CPU closed loop, RGB-only runtime, no oracle,
+the clean mean-reset source, scope `updater_mean`, and effective LR `5e-6`.
+The process is actively computing the exact step-zero selector at roughly
+`542%` CPU with empty stderr; no trained accuracy result exists yet.
 
 Specification 1.19 also records the compute path reviewed against transformer,
 Perceiver IO, compute-optimal scaling, JEPA/video-world-model, and recent
