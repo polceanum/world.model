@@ -2,6 +2,25 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-10 axis-isolated correction recovery
+
+- Stopped the healthy but regressive mean-head-only protocol-19 worker at its
+  durable step-192 checkpoint after three exact fixed selectors plateaued at
+  15, 17, and 24 guardrail failures; step zero remained protected.
+- Added schema-checked, provenance-recorded leading-row checkpoint composition
+  to the modular evaluator, with focused tests and CLI validation.
+- Qualified x/y/z independently at step 64 and y at steps 128/192. X alone
+  reproduced the downstream reference-pair y/z regression; z was rejected;
+  step-192 y-only passed every guardrail and improved score to `0.3216427`,
+  current position to `0.2537443 m`, velocity to `1.0949210 m/s`, identity,
+  and every joint horizon.
+- Added exact `updater_mean_y` training scope semantics: excluded rows have
+  gradients and moments masked and are restored after AdamW, including
+  decoupled weight decay. Focused tests report `208 passed`; the complete
+  non-device suite reports `641 passed, 5 skipped, 1 deselected`, and host MPS
+  device validation reports `1 passed, 646 deselected`. Ruff lint and format
+  checks pass.
+
 ### 2026-08-09 scenario-balanced optimization
 
 - Audited protocol-17 step 2,048 and exact module/scale ablations. Training is

@@ -2733,10 +2733,10 @@ def set_closed_loop_trainable_scope(
         model.updater.requires_grad_(True)
         _freeze_disconnected_training_heads(model)
         return
-    if scope == "updater_mean":
+    if scope in {"updater_mean", "updater_mean_y"}:
         corrector = model.updater.learned_corrector
         if corrector is None:
-            raise ValueError("updater_mean scope requires the learned fast corrector")
+            raise ValueError(f"{scope} scope requires the learned fast corrector")
         corrector.mean_head.requires_grad_(True)
         return
     if scope == "state_dynamics":
@@ -2768,10 +2768,66 @@ def set_closed_loop_trainable_scope(
         return
     raise ValueError(
         "closed-loop trainable scope must be 'all', 'dynamics', 'updater', "
-        "'updater_mean', 'fast_roi', 'state_dynamics', "
+        "'updater_mean', 'updater_mean_y', 'fast_roi', 'state_dynamics', "
         "'state_dynamics_fast_roi', or "
         "'state_dynamics_roi'"
     )
+
+
+def _prepare_restricted_updater_mean_update(
+    model: OnlineWorldModel,
+    optimizer: torch.optim.AdamW,
+    *,
+    scope: str,
+) -> list[tuple[Tensor, Tensor, Tensor]]:
+    """Mask and snapshot rows excluded by an axis-restricted mean scope.
+
+    AdamW applies decoupled weight decay and can retain per-element moments,
+    so a zero gradient alone does not freeze a row.  Snapshotting the excluded
+    values and clearing their matching optimizer-state rows makes the scope an
+    exact tensor contract, including after resume or a configured scope
+    transition.
+    """
+
+    selected_row = {"updater_mean_y": 1}.get(scope)
+    if selected_row is None:
+        return []
+    corrector = model.updater.learned_corrector
+    if corrector is None:
+        raise ValueError(f"{scope} scope requires the learned fast corrector")
+    snapshots: list[tuple[Tensor, Tensor, Tensor]] = []
+    for parameter in (corrector.mean_head.weight, corrector.mean_head.bias):
+        if parameter.ndim == 0 or selected_row >= parameter.shape[0]:
+            raise ValueError(f"{scope} is incompatible with the learned mean-head shape")
+        frozen_rows = torch.as_tensor(
+            [row for row in range(parameter.shape[0]) if row != selected_row],
+            dtype=torch.int64,
+            device=parameter.device,
+        )
+        frozen_values = parameter.detach().index_select(0, frozen_rows).clone()
+        if parameter.grad is not None:
+            parameter.grad.index_fill_(0, frozen_rows, 0)
+        state = optimizer.state.get(parameter, {})
+        for value in state.values():
+            if isinstance(value, Tensor) and value.shape == parameter.shape:
+                value.index_fill_(0, frozen_rows, 0)
+        snapshots.append((parameter, frozen_rows, frozen_values))
+    return snapshots
+
+
+def _restore_restricted_updater_mean_update(
+    optimizer: torch.optim.AdamW,
+    snapshots: list[tuple[Tensor, Tensor, Tensor]],
+) -> None:
+    """Restore excluded rows after AdamW and keep their moments exactly zero."""
+
+    with torch.no_grad():
+        for parameter, frozen_rows, frozen_values in snapshots:
+            parameter.index_copy_(0, frozen_rows, frozen_values)
+            state = optimizer.state.get(parameter, {})
+            for value in state.values():
+                if isinstance(value, Tensor) and value.shape == parameter.shape:
+                    value.index_fill_(0, frozen_rows, 0)
 
 
 def _closed_loop_trainable_scope_for_step(
@@ -5210,6 +5266,9 @@ def train_from_config(
                 result.metrics["closed_loop_scope_updater_mean_only"] = float(
                     active_closed_loop_scope == "updater_mean"
                 )
+                result.metrics["closed_loop_scope_updater_mean_y_only"] = float(
+                    active_closed_loop_scope == "updater_mean_y"
+                )
             for parameter_group in optimizer.param_groups:
                 parameter_group["lr"] = target_learning_rate
             if not bool(torch.isfinite(result.total_loss)):
@@ -5228,6 +5287,11 @@ def train_from_config(
                 ) = _causal_training_support(result)
             if result.total_loss.requires_grad and causal_support_present:
                 result.total_loss.backward()
+            restricted_mean_snapshots = _prepare_restricted_updater_mean_update(
+                model,
+                optimizer,
+                scope=active_closed_loop_scope,
+            )
             try:
                 gradient_diagnostics = _clip_training_gradients(
                     model,
@@ -5241,6 +5305,10 @@ def train_from_config(
             effective_gradient_norm = gradient_diagnostics["gradient_norm_pre_global_clip"]
             if _has_effective_gradient(effective_gradient_norm, config):
                 optimizer.step()
+                _restore_restricted_updater_mean_update(
+                    optimizer,
+                    restricted_mean_snapshots,
+                )
                 finite_check_started = time.perf_counter()
                 try:
                     _assert_finite_optimizer_update(model, optimizer)

@@ -37,6 +37,8 @@ from world_model.training.trainer import (
     _make_loader,
     _mean_batch_results,
     _mutable_causal_training_support_failures,
+    _prepare_restricted_updater_mean_update,
+    _restore_restricted_updater_mean_update,
     _rollout_selection_improves,
     _rollout_selection_is_compatible,
     _rollout_selection_metrics,
@@ -521,6 +523,55 @@ def test_updater_mean_scope_isolates_semantically_reset_gain_head() -> None:
         "updater.learned_corrector.mean_head.weight",
         "updater.learned_corrector.mean_head.bias",
     }
+
+
+def test_updater_mean_y_scope_preserves_every_excluded_row_through_adamw() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+    set_closed_loop_trainable_scope(model, scope="updater_mean_y")
+    corrector = model.updater.learned_corrector
+    assert corrector is not None
+    with torch.no_grad():
+        corrector.mean_head.weight.copy_(
+            torch.arange(
+                corrector.mean_head.weight.numel(),
+                dtype=corrector.mean_head.weight.dtype,
+            ).reshape_as(corrector.mean_head.weight)
+            / 1000
+        )
+        corrector.mean_head.bias.copy_(
+            torch.arange(
+                corrector.mean_head.bias.numel(),
+                dtype=corrector.mean_head.bias.dtype,
+            )
+            / 1000
+        )
+    before_weight = corrector.mean_head.weight.detach().clone()
+    before_bias = corrector.mean_head.bias.detach().clone()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.1, weight_decay=0.1)
+    corrector.mean_head.weight.grad = torch.ones_like(corrector.mean_head.weight)
+    corrector.mean_head.bias.grad = torch.ones_like(corrector.mean_head.bias)
+
+    snapshots = _prepare_restricted_updater_mean_update(
+        model,
+        optimizer,
+        scope="updater_mean_y",
+    )
+    assert torch.count_nonzero(corrector.mean_head.weight.grad[0]) == 0
+    assert torch.count_nonzero(corrector.mean_head.weight.grad[1]) > 0
+    assert torch.count_nonzero(corrector.mean_head.weight.grad[2:]) == 0
+    optimizer.step()
+    _restore_restricted_updater_mean_update(optimizer, snapshots)
+
+    torch.testing.assert_close(corrector.mean_head.weight[0], before_weight[0])
+    assert not torch.equal(corrector.mean_head.weight[1], before_weight[1])
+    torch.testing.assert_close(corrector.mean_head.weight[2:], before_weight[2:])
+    torch.testing.assert_close(corrector.mean_head.bias[0], before_bias[0])
+    assert not torch.equal(corrector.mean_head.bias[1], before_bias[1])
+    torch.testing.assert_close(corrector.mean_head.bias[2:], before_bias[2:])
+    for parameter in (corrector.mean_head.weight, corrector.mean_head.bias):
+        state = optimizer.state[parameter]
+        frozen = torch.cat((state["exp_avg"][:1], state["exp_avg"][2:]), dim=0)
+        assert torch.count_nonzero(frozen) == 0
 
 
 def test_state_dynamics_roi_scope_trains_fast_rgb_without_global_perception() -> None:

@@ -999,6 +999,7 @@ class OrpheusConfig:
             "dynamics",
             "updater",
             "updater_mean",
+            "updater_mean_y",
             "fast_roi",
             "state_dynamics",
             "state_dynamics_fast_roi",
@@ -1007,7 +1008,8 @@ class OrpheusConfig:
         if self.training.closed_loop_trainable_scope not in valid_closed_loop_scopes:
             raise ValueError(
                 "training.closed_loop_trainable_scope must be "
-                "'all', 'dynamics', 'updater', 'updater_mean', 'fast_roi', "
+                "'all', 'dynamics', 'updater', 'updater_mean', "
+                "'updater_mean_y', 'fast_roi', "
                 "'state_dynamics', "
                 "'state_dynamics_fast_roi', or 'state_dynamics_roi'"
             )

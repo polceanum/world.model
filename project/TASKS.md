@@ -38,10 +38,18 @@
   validation rejected it and checkpoint deltas proved that the compatible
   trunk, gate, variance, existence, and mode paths had drifted with the reset
   mean head.
-- [ ] Complete the corrected 512-update balanced mean-head-only recovery from
-  the clean mean-reset candidate at reduced effective learning rate until the
-  exact 32-episode selector regains the legacy fixed reference without
-  axis/horizon/scenario regressions.
+- [x] Stop the corrected mean-head-only recovery at durable step 192 after
+  three exact selectors proved a systematic rejected plateau despite 1,536
+  balanced episode draws and healthy optimizer/support/resource dynamics.
+- [x] Add provenance-recorded row-level checkpoint composition and qualify the
+  step-64 x/y/z rows plus the step-128/192 y learning curve. Reject x and z;
+  retain step-192 y-only as the guardrail-clean corrected incumbent
+  (`0.3241755 -> 0.3216427`).
+- [x] Add an exact `updater_mean_y` training scope that masks excluded rows,
+  restores them across AdamW decay, and clears their optimizer moments.
+- [ ] Launch a clean y-only sustained recovery from the accepted step-192 row
+  composition and train through repeated exact validation to a declared
+  plateau without reactivating x/z.
 - [ ] If the recovered control is non-regressing, train balanced protocol 19
   long enough for repeated fixed validation and a declared plateau; inspect
   pooled and per-scenario

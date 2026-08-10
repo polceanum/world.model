@@ -546,6 +546,29 @@ exact continuation semantics; changing them requires weights-only
 initialization. This schedule does not promote the step-512 candidate or relax
 any fixed-manifest guardrail.
 
+Specification 1.20 also permits axis-row recovery when a semantically reset
+mean head is useful on one output row but another row triggers a downstream
+association/trajectory regression. Qualify rows with the full selector:
+
+```bash
+python scripts/evaluate_modular_candidate.py \
+  --config configs/sustained_accuracy_balanced_mps.yaml \
+  --base <accepted-base-checkpoint> \
+  --donor <trained-donor-checkpoint> \
+  --tensor-row updater.learned_corrector.mean_head.weight:1 \
+  --tensor-row updater.learned_corrector.mean_head.bias:1 \
+  --output runs/<descriptive-y-row-name> \
+  --device cpu --num-workers 2
+```
+
+The command exits zero only when score, every reference guardrail, training
+support, and mutable support pass. `updater_mean_y` is the corresponding
+training scope. It makes the mean-head weight/bias trainable but masks all
+non-y gradient and optimizer-state rows and restores their exact values after
+AdamW decay. This is stronger than setting excluded gradients to zero. A row
+candidate can still alter all future axes through association and recurrent
+rollout, so no per-axis shortcut evaluation is valid.
+
 Protocol 15 proved that freezing perception tensors alone was insufficient:
 the prior-conditioned fast ROI remained differentiable through its input, so
 its auxiliary measurement loss trained the physical stack during the

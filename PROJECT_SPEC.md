@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.19
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026
+**Version:** 1.20
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery amendment 10 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5965,6 +5965,17 @@ the compatible updater trunk and sibling heads and train that reset head alone.
 Only broaden updater trainability after an exact fixed validation shows that
 the isolated head is useful but capacity-limited; do not let a broad recovery
 scope erase compatible behavior merely because it belongs to the same module.
+
+An output head with axis-labelled rows may be composed and qualified one row
+at a time when joint recovery creates a cross-axis runtime regression. This is
+an ablation and optimization control, not an assumption that full trajectories
+are axis-independent: one row may change later association, identity, and all
+future axes. Every row candidate therefore runs the complete fixed RGB-only
+selector. A row-restricted training scope must preserve excluded parameter
+rows exactly across gradients, optimizer moments, and decoupled weight decay;
+zeroing gradients alone is not sufficient. Continue only from a guardrail-
+clean row composition, and retain the prior incumbent until the corrected
+model also passes the broader deployment reference.
 
 ## 190. Attention operates on predictive abstractions
 

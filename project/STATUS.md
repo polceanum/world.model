@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-10
-**Specification:** `PROJECT_SPEC.md` 1.19
+**Specification:** `PROJECT_SPEC.md` 1.20
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -67,10 +67,81 @@ step-128 checkpoint after exact fixed validation rejected every forecast
 horizon and localized the dominant regression to the learned updater rather
 than dynamics or identification; the updater was found to discard axis/sign
 innovation and to apply unconstrained learned mean/variance residuals to
-unsupported packed fields; specification 1.19 and the next protocol now add an
-explicit opt-in innovation-anchored, per-axis support-masked corrector; focused
-tests pass, but its complete fixed-manifest qualification and any subsequent
-attention-capacity pilot remain pending
+unsupported packed fields; specification 1.20 now provides innovation-
+anchored, support-masked correction plus exact row-isolated recovery; the
+step-192 y-only composition is the first guardrail-clean corrected incumbent,
+but it remains behind the legacy fixed reference, so sustained y-only
+convergence and any subsequent attention-capacity pilot remain pending
+
+## 2026-08-10 — joint recovery stopped; y-only corrected incumbent accepted
+
+The isolated mean-head campaign at
+`runs/20260810-012116-protocol19-anchored-mean-recovery/` was stopped cleanly
+at durable step 192. The launchd service and PID are gone; no stale state file
+is being treated as a live worker. Across 24 logged eight-scenario blocks it
+applied every optimizer update, skipped and clipped none, kept RSS bounded at
+`1,327,321,088` bytes, and passed support/identity/uncertainty auditing. Its
+three exact trained selectors nevertheless confirmed a rejected plateau:
+
+| step | score | current RMSE | velocity RMSE | failures |
+|---:|---:|---:|---:|---:|
+| 64 | 0.3246722 | 0.2562508 m | 1.1053538 m/s | 15 |
+| 128 | 0.3246772 | 0.2566319 m | 1.1048962 m/s | 17 |
+| 192 | 0.3249595 | 0.2568297 m | 1.1040418 m/s | 24 |
+
+The step-zero corrected reference remained protected at score `0.3241755`.
+The worker was not allowed to consume the remaining declared updates after
+1,536 balanced episode draws and a third comparable rejection proved that the
+same joint-row direction was worsening rather than recovering.
+
+Row-level composition now supplies exact source/donor/tensor provenance and
+runs the unchanged 32-episode RGB-only selector. Results are preserved at:
+
+- `runs/20260810-033923-protocol19-step64-x-row/`: rejected, score
+  `0.3246780`, 15 failures. X alone reproduced almost all downstream
+  reference-pair y/z regression through later association and rollout.
+- `runs/20260810-034635-protocol19-step64-y-row/`: accepted, score
+  `0.3234974`, zero failures.
+- `runs/20260810-035350-protocol19-step64-z-row/`: rejected, score
+  `0.3242361`, two failures.
+- `runs/20260810-040115-protocol19-step128-y-row/`: rejected despite score
+  `0.3235735`, two scenario guardrail failures.
+- `runs/20260810-040840-protocol19-step192-y-row/`: accepted, score
+  `0.3216427`, zero failures. This is the new corrected recovery incumbent.
+
+The accepted step-192 y-only candidate improves current position
+`0.2559540 -> 0.2537443 m`, velocity `1.0966767 -> 1.0949210 m/s`, identity
+switch rate `0.0155844 -> 0.0142579`, and every joint horizon from
+`0.270262/0.279750/0.311927/0.337838/0.361140 m` to
+`0.267754/0.277482/0.309300/0.335433/0.358422 m`. Current x/z and one-second
+x/z also improve through the full online trajectory, even though only row 1
+of the mean-head weight/bias comes from the donor. This confirms that output-
+row ablations are not trajectory-axis-independent.
+
+Specification 1.20 and `updater_mean_y` now make the next optimizer scope
+exact: non-y rows have gradients and per-element Adam moments cleared, and
+their values are restored after decoupled weight decay. Verification commands
+and outcomes on this Mac were:
+
+```text
+conda run -n orpheus pytest tests/unit/test_training_schedule.py tests/unit/test_config.py tests/unit/test_checkpoint_composition.py
+# 208 passed in 13.59s
+conda run -n orpheus pytest -q -p no:cacheprovider -m 'not device'
+# 641 passed, 5 skipped, 1 deselected in 164.33s
+conda run -n orpheus pytest -q -p no:cacheprovider -m device
+# 1 passed, 646 deselected in 3.02s on host MPS
+conda run -n orpheus ruff check ...
+conda run -n orpheus ruff format --check ...
+# pass
+```
+
+The next concrete action is a clean weights-only y-scope campaign initialized
+from
+`runs/20260810-040840-protocol19-step192-y-row/candidate.pt`, with MPS RGB
+measurement, CPU closed-loop execution, balanced batches, reduced effective
+learning rate, and exact validation every 64 updates. The corrected incumbent
+still scores above the approximately `0.318` legacy reference, so it is not a
+deployment replacement and does not yet unlock the attention pilot.
 
 ## 2026-08-09 — protocol-18 rejection and innovation-anchored repair
 

@@ -1,5 +1,33 @@
 # Design decisions
 
+## ADR-091 — Continue correction recovery on the accepted y row only
+
+- **Date:** 2026-08-10
+- **Status:** accepted after three fixed validations and five row ablations
+- **Context:** Mean-head-only protocol 19 remained numerically healthy through
+  192 balanced updates, but exact scores plateaued/regressed at `0.3246722`,
+  `0.3246772`, and `0.3249595`, with 15, 17, and 24 guardrail failures. The
+  x row alone reproduced almost the complete y/z reference-pair trajectory
+  regression because its current correction changed later association. The
+  z row was slightly regressive. Y-only was guardrail-clean at steps 64 and
+  192; step 192 improved score `0.3241755 -> 0.3216427`, current position
+  `0.2559540 -> 0.2537443 m`, velocity `1.0966767 -> 1.0949210 m/s`, identity,
+  and all five horizons.
+- **Decision:** Stop the joint mean-row campaign at durable step 192. Promote
+  its y-only composition as the corrected recovery incumbent, not yet as the
+  legacy deployment replacement. Add schema-checked row composition and an
+  `updater_mean_y` scope that exactly preserves excluded values and AdamW
+  moments. Continue sustained optimization only on y with the unchanged full
+  selector; x and z remain at the neutral mean-reset values.
+- **Alternatives considered:** run the rejected joint rows to 512; promote the
+  attractive x slice despite its downstream failures; combine y with rejected
+  z; assume row-local output implies trajectory-local effects; proceed to the
+  attention pilot before the corrected control reaches the legacy reference.
+- **Consequences:** The next campaign has a validated improving start and
+  cannot recreate the known x/z correction cascade through optimizer leakage.
+  It must still demonstrate repeated plateau/generalization evidence and beat
+  the legacy fixed reference before attention scaling.
+
 ## ADR-089 — Surface severe clipping; do not redesign from one bounded hard window
 
 - **Date:** 2026-08-09
