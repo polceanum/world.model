@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-10
-**Specification:** `PROJECT_SPEC.md` 1.20
+**Specification:** `PROJECT_SPEC.md` 1.21
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -70,10 +70,90 @@ innovation and to apply unconstrained learned mean/variance residuals to
 unsupported packed fields; specification 1.20 now provides innovation-
 anchored, support-masked correction plus exact row-isolated recovery; the
 step-192 y-only composition is the first guardrail-clean corrected incumbent;
-the subsequent 512-update y-only campaign is now complete and rejected as a
-stable association-sensitive plateau, still behind the legacy fixed reference,
-so the next correction/association intervention and any subsequent attention-
-capacity pilot remain pending
+the subsequent 512-update y-only campaign is complete and plateaued; its
+apparent late association wobble was traced to an exact fast-ROI component-
+ownership tie, not optimizer collapse; specification 1.21 and rollout protocol
+14 now reject only numerically tied disconnected components and leave recovery
+to global discovery; paired public and exact physical validation improve the
+small control without a broad regression, step 64 remains better than step
+512, and the next bounded task is the Mac-scale typed attention pilot rather
+than more y-only training
+
+## 2026-08-10 — fast-ROI ownership tie repaired; small control de-noised
+
+The protocol-20 endpoint regression was localized to validation seed `100024`
+(`reference_pairs`). Before any assignment changed, a `0.0000765` maximum
+change in the predicted RGB measurement at `1.60 s` changed one structured ROI
+centre by `0.2807869` normalized image units. The two disconnected foreground
+components had ownership margins `0.0` and `2.98e-8`; the crop sampler was
+therefore choosing an identity-bearing component at a numerical tie. The later
+ROI miss and global ambiguity were downstream effects. Collision masks,
+boundary events, modes, and association structure were unchanged before the
+measurement jump.
+
+A blanket fast-path distance cap was explicitly rejected: it improved the
+failing episode and identity count but worsened the 32-episode public posterior
+and every model horizon by rejecting legitimate long-range evidence. The
+implemented repair instead grows the selected RGB-connected component, finds
+the nearest supported pixel outside it, records the ownership margin, and
+rejects only margins within a scale-aware `32 * eps` equality tolerance. The
+source-bound ROI retains its predicted centre; global discovery remains the
+only large/ambiguous recovery path. Rollout validation advances from protocol
+13 to 14.
+
+On the exact failing episode, corrected step 64 and step 512 have no structural
+association difference, no measurement delta above `0.01`, and no posterior
+state delta above `0.001`. Their x SSE/count are respectively
+`6.3904306/66` and `6.3918110/66`, versus the old `6.7835381/72` and
+`8.2411388/72` discontinuous pair.
+
+Paired 32-episode RGB-only public evaluation of the same step-64 weights gives:
+
+| metric | protocol-13 behavior | ownership-tie repair |
+|---|---:|---:|
+| posterior current position RMSE | 0.8087382 m | 0.8079388 m |
+| posterior current x RMSE | 0.7304025 m | 0.7169902 m |
+| posterior current velocity RMSE | 1.1085611 m/s | 1.0949822 m/s |
+| model 0.10/0.25/0.50/0.75/1.00 s RMSE | 0.692976/0.689654/0.695147/0.701112/0.693358 m | 0.692282/0.689676/0.694432/0.697434/0.690292 m |
+| distance-gated identity switches | 37 | 35 |
+| collision F1 | 0.166227 | 0.171504 |
+| forecast Gaussian NLL | 1.197517 | 1.190278 |
+
+Detection recall/precision change only `0.35875 -> 0.35800` and
+`0.334421 -> 0.333955`; y/z posterior RMSE change by `+0.64%/+0.52%` while
+the joint posterior, x, velocity, identity, collision, calibration likelihood,
+and four of five horizons improve. There are zero nonfinite outputs.
+
+The stricter 32-episode physical selector improves protected step 64 from the
+stored protocol-13 score/current/velocity/identity values
+`0.3215594 / 0.2532523 m / 1.0953541 m/s / 0.0142487` to protocol-14 values
+`0.3213162 / 0.2514599 m / 1.0931909 m/s / 0.0135922`. Target coverage remains
+`0.37625`; horizons are
+`0.265184/0.277452/0.309911/0.335387/0.357837 m`. Re-evaluated step 512 is
+effectively identical but still worse at score `0.3213287`, so longer y-only
+training did not improve the corrected plateau and step 64 remains the small
+control.
+
+Durable audit artifacts are under
+`runs/20260810-105616-fast-roi-ownership-audit/`; public baseline/candidate
+reports and the complete step-512 physical log are preserved there. Known
+limitations remain real-video/OOD qualification, same-connected-component
+overlap ownership, legacy-reference replacement, and the unimplemented typed
+attention pilot.
+
+Final verification on this tree:
+
+- `conda run -n orpheus pytest -q -p no:cacheprovider tests/integration/test_checkpoint_roundtrip.py`
+  reports `27 passed`.
+- `conda run --no-capture-output -n orpheus pytest -q -p no:cacheprovider -m 'not device'`
+  reports `642 passed, 5 skipped, 1 deselected` in `167.63 s`.
+- Host-MPS `PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q -p no:cacheprovider -m device`
+  reports `1 passed, 647 deselected` in `3.27 s`.
+- `conda run -n orpheus ruff check .`, `ruff format --check .`,
+  `git diff --check`, and compileall all pass. The first full-suite attempt
+  correctly exposed a stale checkpoint specification constant (`1.20`); it is
+  updated to `1.21`, the focused checkpoint suite passes, and the complete
+  suite was rerun successfully.
 
 ## 2026-08-10 — joint recovery stopped; y-only corrected incumbent accepted
 

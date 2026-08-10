@@ -2,6 +2,32 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-10 fast-ROI ownership stability
+
+- Traced protocol 20's apparent association wobble to an exact disconnected-
+  component ownership tie in the structured RGB fast path: a `0.0000765`
+  predicted-measurement change produced a `0.2807869` centre jump before any
+  structural assignment difference.
+- Rejected a blanket `0.20` distance cap after paired full validation showed
+  that it removed useful long-range evidence and regressed overall accuracy.
+- Added explicit fast-ROI ownership margin/ambiguity output and reject only
+  scale-aware floating-point ties; source-bound measurements retain their
+  predicted centre and global discovery owns ambiguous recovery.
+- Advanced `PROJECT_SPEC.md` to 1.21 and rollout validation to protocol 14;
+  synchronized checkpoint metadata to 1.21, and added focused disconnected-
+  component/subpixel regression coverage.
+- Paired 32-episode public evaluation improves joint posterior RMSE
+  `0.8087382 -> 0.8079388 m`, x `0.7304025 -> 0.7169902 m`, velocity
+  `1.1085611 -> 1.0949822 m/s`, identity switches `37 -> 35`, collision F1
+  `0.166227 -> 0.171504`, and four of five horizons with zero nonfinite output.
+- Exact physical validation improves protected step 64 score/current/velocity/
+  identity to `0.3213162 / 0.2514599 m / 1.0931909 m/s / 0.0135922`.
+  Corrected step 512 remains microscopically worse at `0.3213287`; retain step
+  64 and stop extending the converged y-only direction.
+- Final checks report `642 passed, 5 skipped, 1 deselected` off-device and
+  `1 passed, 647 deselected` on host MPS; Ruff, format, diff, and compileall
+  checks pass.
+
 ### 2026-08-10 axis-isolated correction recovery
 
 - Stopped the healthy but regressive mean-head-only protocol-19 worker at its

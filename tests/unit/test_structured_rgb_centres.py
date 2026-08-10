@@ -607,6 +607,44 @@ def test_roi_refinement_applies_distance_and_degenerate_roi_gates() -> None:
     torch.testing.assert_close(result.centres, proposals)
 
 
+def test_roi_refinement_rejects_near_tied_disconnected_component_ownership() -> None:
+    height = width = 25
+    image = torch.zeros((1, 3, height, width), dtype=torch.float32)
+    _paint_block(
+        image,
+        batch_index=0,
+        top=10,
+        left=5,
+        height=5,
+        width=5,
+        colour=(0.9, 0.2, 0.1),
+    )
+    _paint_block(
+        image,
+        batch_index=0,
+        top=10,
+        left=15,
+        height=5,
+        width=5,
+        colour=(0.1, 0.4, 0.9),
+    )
+    rois = torch.tensor([[[-1.0, -1.0, 1.0, 1.0]]])
+
+    for offset in (-1.0e-7, 1.0e-7):
+        proposals = torch.tensor([[[offset, 0.0]]])
+        result = structured_disc_centres_in_rois(
+            image,
+            proposals,
+            rois,
+            output_size=25,
+        )
+
+        assert result.ambiguous_mask.tolist() == [[True]]
+        assert result.valid_mask.tolist() == [[False]]
+        assert result.depth_valid_mask.tolist() == [[False]]
+        torch.testing.assert_close(result.centres, proposals)
+
+
 def test_roi_refinement_rejects_invalid_shapes() -> None:
     image = torch.zeros((1, 3, 16, 16))
     proposals = torch.zeros((1, 2, 2))

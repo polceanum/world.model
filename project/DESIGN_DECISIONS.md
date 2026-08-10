@@ -1,5 +1,37 @@
 # Design decisions
 
+## ADR-093 — Reject only numerically tied fast-ROI component ownership
+
+- **Date:** 2026-08-10
+- **Status:** accepted and implemented under rollout protocol 14
+- **Context:** Protocol 20 changed only learned-corrector y row 1 smoothly, yet
+  some checkpoints toggled reference-pair x/identity behavior. Exact replay of
+  seed `100024` showed that before association changed, a `0.0000765` predicted
+  RGB change caused a `0.2807869` structured-centre jump. Two disconnected
+  components had equal nearest supported distance (`0.0` versus `2.98e-8`
+  ownership margin). A blanket `0.20` residual cap removed the jump but
+  regressed the full public posterior and horizons by discarding legitimate
+  recovery evidence.
+- **Decision:** After growing the selected local RGB component, compare its
+  nearest supported distance with the nearest supported pixel outside that
+  component. If their margin is within scale-aware `32 * eps` equality
+  tolerance, mark ownership ambiguous, preserve the predicted centre, and let
+  global discovery recover. Retain the configured ordinary fast-path distance
+  range. Expose finite ownership-margin and ambiguity diagnostics and advance
+  rollout validation from protocol 13 to 14.
+- **Alternatives considered:** tighten every ROI to `0.20`; add association
+  hysteresis after the bad measurement; accept whichever component tensor
+  ordering returns first; use simulator identity; scale the updater before
+  repairing perception; treat the discontinuity as optimizer noise.
+- **Consequences:** The failing step-64/512 replay becomes structurally and
+  numerically stable. Paired 32-episode public evaluation improves joint/x/
+  velocity accuracy, identity, collision F1, NLL, and four horizons with only
+  sub-percent y/z/detection tradeoffs. The exact physical selector improves
+  step 64 to `0.3213162`; step 512 remains worse at `0.3213287`, confirming a
+  genuine y-only plateau. Touching objects already merged into one RGB
+  component remain a documented observation-ownership limitation for the
+  attention-era perception work.
+
 ## ADR-092 — Treat the first y-only gain as interim, not convergence
 
 - **Date:** 2026-08-10

@@ -879,6 +879,11 @@ class RGBObservationModule(ObservationModule):
             dtype=torch.int64,
         )
         structured_depth_valid = torch.zeros_like(structured_valid)
+        structured_ambiguous = torch.zeros_like(structured_valid)
+        structured_ownership_margin = values.new_full(
+            values.shape[:2],
+            torch.finfo(values.dtype).max,
+        )
         if self.config.structured_disc_center_enabled:
             structured = structured_disc_centres_in_rois(
                 image,
@@ -893,6 +898,8 @@ class RGBObservationModule(ObservationModule):
             centre = values[..., :2] + (structured.centres - values[..., :2]).detach()
             values = torch.cat((centre, values[..., 2:]), dim=-1)
             structured_valid = structured.valid_mask
+            structured_ambiguous = structured.ambiguous_mask
+            structured_ownership_margin = structured.ownership_margin
             structured_count = structured.valid_mask.sum(dim=-1)
             if self.config.structured_disc_fast_depth_enabled:
                 normalized_radius = (structured.radius_pixels / (0.5 * min(image_size))).clamp_min(
@@ -1015,6 +1022,8 @@ class RGBObservationModule(ObservationModule):
             "appearance_gate": output.appearance_gate,
             "raw_centre": raw_centre,
             "structured_centre_valid": structured_valid,
+            "structured_centre_ambiguous": structured_ambiguous,
+            "structured_centre_ownership_margin": structured_ownership_margin,
             "structured_depth_valid": structured_depth_valid,
             "structured_component_count": structured_count,
         }

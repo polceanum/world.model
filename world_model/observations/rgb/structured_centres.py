@@ -41,6 +41,8 @@ class StructuredROICentreOutput:
     centres: Tensor
     radius_pixels: Tensor
     valid_mask: Tensor
+    ambiguous_mask: Tensor
+    ownership_margin: Tensor
     depth_valid_mask: Tensor
     component_pixel_count: Tensor
 
@@ -303,6 +305,15 @@ def structured_disc_centres_in_rois(
                 device=output_device,
                 dtype=torch.bool,
             ),
+            ambiguous_mask=torch.zeros(
+                (batch, 0),
+                device=output_device,
+                dtype=torch.bool,
+            ),
+            ownership_margin=proposal_centres.new_full(
+                (batch, 0),
+                torch.finfo(proposal_centres.dtype).max,
+            ),
             depth_valid_mask=torch.zeros(
                 (batch, 0),
                 device=output_device,
@@ -394,6 +405,48 @@ def structured_disc_centres_in_rois(
         ) & flat_foreground
     component = reached.reshape(batch, objects, output_size, output_size)
     component_pixel_count = component.sum(dim=(-1, -2), dtype=torch.int64)
+    # The source-conditioned fast path may reject a crop, but it must not let
+    # a subpixel prior change switch ownership between two nearby objects.  A
+    # second disconnected foreground component at the same nearest supported
+    # distance is an unresolved local tie.  Leave that recovery to global
+    # discovery instead of emitting a discontinuous, identity-bearing
+    # residual measurement.
+    selected_seed_distance_squared = flat_seed_scores.gather(
+        dim=-1,
+        index=seed_index.unsqueeze(-1),
+    ).squeeze(-1)
+    alternative_seed_scores = torch.where(
+        seed_candidates & ~component,
+        distance_squared,
+        infinity,
+    )
+    alternative_seed_distance_squared = alternative_seed_scores.reshape(
+        batch,
+        objects,
+        -1,
+    ).amin(dim=-1)
+    selected_seed_distance = selected_seed_distance_squared.clamp_min(0.0).sqrt()
+    alternative_seed_distance = alternative_seed_distance_squared.clamp_min(0.0).sqrt()
+    has_alternative = torch.isfinite(alternative_seed_distance_squared)
+    ownership_margin = torch.where(
+        has_seed & has_alternative,
+        alternative_seed_distance - selected_seed_distance,
+        torch.full_like(
+            selected_seed_distance,
+            torch.finfo(selected_seed_distance.dtype).max,
+        ),
+    )
+    comparison_alternative_distance = torch.where(
+        has_alternative,
+        alternative_seed_distance,
+        selected_seed_distance,
+    )
+    tie_scale = torch.maximum(
+        torch.maximum(selected_seed_distance, comparison_alternative_distance),
+        torch.ones_like(selected_seed_distance),
+    )
+    tie_tolerance = 32.0 * torch.finfo(distance_squared.dtype).eps * tie_scale
+    ambiguous = has_seed & has_alternative & (ownership_margin <= tie_tolerance)
     touches_crop_border = (
         component[..., 0, :].any(dim=-1)
         | component[..., -1, :].any(dim=-1)
@@ -416,6 +469,7 @@ def structured_disc_centres_in_rois(
     matched = (
         usable_roi
         & has_seed
+        & ~ambiguous
         & (component_pixel_count >= minimum_pixels)
         & torch.isfinite(candidate_centres).all(dim=-1)
         & (assignment_distance <= maximum_assignment_distance)
@@ -443,6 +497,8 @@ def structured_disc_centres_in_rois(
         dtype=output_dtype,
     )
     matched = matched.to(device=output_device)
+    ambiguous = ambiguous.to(device=output_device)
+    ownership_margin = ownership_margin.to(device=output_device, dtype=output_dtype)
     depth_valid = depth_valid.to(device=output_device)
     radius_pixels = radius_pixels.to(device=output_device, dtype=output_dtype)
     component_pixel_count = component_pixel_count.to(device=output_device)
@@ -459,6 +515,8 @@ def structured_disc_centres_in_rois(
             torch.zeros_like(radius_pixels),
         ),
         valid_mask=matched,
+        ambiguous_mask=ambiguous,
+        ownership_margin=ownership_margin,
         depth_valid_mask=depth_valid,
         component_pixel_count=component_pixel_count,
     )

@@ -118,6 +118,10 @@ Working rules:
 - Bind prior-conditioned fast ROI rows to their explicit source belief slot and
   object ID. They may be rejected by normal gates but may never cross-update a
   different persistent identity; global discovery remains freely associated.
+- Reject numerically tied ownership between disconnected foreground components
+  on the source-conditioned fast ROI path. Preserve the predicted centre and
+  leave ambiguous or large recovery to global discovery rather than allowing a
+  subpixel crop change to create a discontinuous identity-bearing correction.
 - Derive slow drag/restitution supervision only from accepted runtime
   observations across clean causally observable intervals. Simulator track
   existence or a newborn may map supervision/evaluation identities, but it

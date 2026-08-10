@@ -68,10 +68,14 @@
   promotion after seven consecutive candidates fail to improve protected step
   64. Record this as a healthy bounded-recovery plateau, not deployment
   convergence.
-- [ ] Make online association robust to small axis-local correction changes so
-  a smooth y-row trajectory cannot toggle baseline/reference-pair identity,
-  coverage, and x metrics discontinuously. Preserve explicit lifecycle,
-  uncertainty, and cheap persistent-state correction contracts.
+- [x] Trace the apparent association wobble to a fast-ROI measurement bug and
+  reject numerically tied disconnected-component ownership without reducing
+  the ordinary `0.75` recovery range. Exact replay removes the subpixel-to-
+  `0.28` centre jump and makes step 64/512 behavior stable; paired public and
+  physical validation improve the small control under rollout protocol 14.
+- [ ] Extend local ownership evidence to touching/merged same-component RGB
+  objects using observation-derived appearance or basin evidence, without
+  simulator identity or cross-assigning source-bound ROI rows.
 - [ ] After the corrected control qualifies, implement the Mac attention pilot:
   2--4 pre-normalized entity/relation/event blocks, width 128, four heads,
   bounded belief history, typed residual decoders, and 1--4M added parameters.
