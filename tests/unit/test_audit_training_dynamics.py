@@ -169,6 +169,33 @@ def test_audit_warns_about_severe_global_or_interaction_clipping(tmp_path) -> No
     ) in report["warnings"]
 
 
+def test_audit_reports_attention_collision_row_clipping(tmp_path) -> None:
+    run = tmp_path / "run"
+    _write_metrics(
+        run,
+        [
+            _record(
+                8,
+                gradient_total_clip_coefficient=0.5,
+                interaction_gradient_total_clip_coefficient=0.4,
+                attention_collision_gradient_clip_coefficient=0.02,
+            )
+        ],
+    )
+
+    report = audit_run(run)
+
+    assert report["status"] == "pass"
+    assert report["severe_clipped_steps"] == [
+        {
+            "step": 8,
+            "total_coefficient": 0.5,
+            "interaction_coefficient": 0.4,
+            "attention_collision_coefficient": 0.02,
+        }
+    ]
+
+
 def test_audit_rejects_divergent_replayed_tail(tmp_path) -> None:
     run = tmp_path / "run"
     _write_metrics(run, [_record(8, loss_total=1.0), _record(8, loss_total=2.0)])

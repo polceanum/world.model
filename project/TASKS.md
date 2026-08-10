@@ -125,8 +125,8 @@
   cannot count because its scene input was dead. The live-scene run at
   `runs/20260810-134330-attention-live-scene-stage-a/` is also stopped and
   cannot count because mixed-unit scene inputs caused severe projection
-  gradient conditioning by sampled update 64. The normalized campaign is now
-  active at `runs/20260810-144901-attention-conditioned-stage-a/` from the same
+  gradient conditioning by sampled update 64. The normalized campaign at
+  `runs/20260810-144901-attention-conditioned-stage-a/` started from the same
   protected graph checkpoint. Its complete step-zero selector exactly
   reproduces score `0.3213162196`; updates 8/16 are finite and improve matched
   raw-gradient conditioning from `0.2631/1.9980` to `0.2535/1.3194`. The exact
@@ -136,10 +136,25 @@
   support/resource audit: 177 inherited tensors exact, all 48 attention
   tensors live, optimizer state attention-only at step 128, and no severe
   clips or skips. Step 256 repeats the exact checkpoint pass; one event-heavy
-  step-152 severe clip remains an explicit isolated warning, followed by twelve
-  normal sampled blocks and no resource growth. Continue through repeated
-  selectors and the declared plateau. Partial training remains non-promotion
-  evidence.
+  step-152 severe clip is followed by twelve normal sampled blocks and no
+  resource growth, but recurs exactly 128 updates later at step 280 with raw
+  norm `52.9646` and coefficient `0.01888`. The run is stopped at durable step
+  256 without a selector and cannot count toward convergence.
+- [x] Localize the periodic severe gradient with per-parameter Adam moments:
+  the relation decoder collision-logit row dominates by orders of magnitude;
+  normalized scene, entity/relation projections, and other typed rows do not.
+- [x] Add optional attention collision-row clipping before the complete
+  interaction/global hierarchy, preserve reconstructed true raw norms and
+  row/interaction/global coefficients, bind the cap into protocol semantics,
+  and extend the offline auditor plus focused tests.
+- [x] Pass repaired gates: focused `236 passed`, final affected `216 passed`,
+  complete non-device `657 passed, 5 skipped, 1 deselected`, host MPS
+  `1 passed, 662 deselected`, Ruff, format, compileall, and diff check.
+- [ ] Launch the collision-isolated attention campaign weights-only from the
+  same protected protocol-14 graph control; prove the periodic frames 7--11
+  batches no longer suppress unrelated gradients before accepting its first
+  complete selector. Continue through repeated selectors and the declared
+  plateau. Partial training remains non-promotion evidence.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

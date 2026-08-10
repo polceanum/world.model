@@ -234,15 +234,31 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
     severe_clipped_steps: list[dict[str, float | int]] = []
     for record in training:
         total_coefficient = float(record.get("gradient_total_clip_coefficient", 1.0))
-        interaction_coefficient = float(record.get("interaction_gradient_clip_coefficient", 1.0))
-        if min(total_coefficient, interaction_coefficient) < _SEVERE_CLIP_COEFFICIENT:
-            severe_clipped_steps.append(
-                {
-                    "step": int(record["step"]),
-                    "total_coefficient": total_coefficient,
-                    "interaction_coefficient": interaction_coefficient,
-                }
+        interaction_coefficient = float(
+            record.get(
+                "interaction_gradient_total_clip_coefficient",
+                record.get("interaction_gradient_clip_coefficient", 1.0),
             )
+        )
+        attention_collision_coefficient = float(
+            record.get("attention_collision_gradient_clip_coefficient", 1.0)
+        )
+        if (
+            min(
+                total_coefficient,
+                interaction_coefficient,
+                attention_collision_coefficient,
+            )
+            < _SEVERE_CLIP_COEFFICIENT
+        ):
+            details: dict[str, float | int] = {
+                "step": int(record["step"]),
+                "total_coefficient": total_coefficient,
+                "interaction_coefficient": interaction_coefficient,
+            }
+            if "attention_collision_gradient_clip_coefficient" in record:
+                details["attention_collision_coefficient"] = attention_collision_coefficient
+            severe_clipped_steps.append(details)
     if severe_clipped_steps:
         warnings.append(
             "severe gradient clipping retained less than 10% of at least one "

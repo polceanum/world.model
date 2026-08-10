@@ -182,6 +182,9 @@ training:
   validation_minimum_supported_episodes_per_scenario: 2
   grad_clip_norm: 2.0
   interaction_grad_clip_norm: 1.0
+  # Isolate rare collision-logit head spikes before the complete attention/
+  # graph cap so they cannot suppress unrelated typed residual gradients.
+  attention_collision_grad_clip_norm: 1.0
   closed_loop_perception_grad_clip_norm: 1.0
   checkpoint_every: 128
   # A 32-episode selector costs about sixteen minutes on this Mac; cadence 512

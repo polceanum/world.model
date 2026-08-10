@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-10
-**Specification:** `PROJECT_SPEC.md` 1.24
+**Specification:** `PROJECT_SPEC.md` 1.25
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -88,8 +88,11 @@ belief context while preserving exact zero-output graph identity; its corrected
 smoke passes, but the first sustained live-scene run was stopped at sampled
 update 64 after mixed-unit raw scene features caused a `45.3456` interaction
 gradient and `0.02205` local clip coefficient; specification 1.24 adds fixed
-non-affine pre-projection RMS conditioning; corrected sustained convergence
-remains pending
+non-affine pre-projection RMS conditioning; that repair removes the matched
+scene spike, but a later campaign is stopped at clean step 256 after collision-
+logit row spikes recur exactly 128 updates apart; specification 1.25 isolates
+that typed proposal row before the complete interaction cap; repaired
+sustained convergence remains pending
 
 ## 2026-08-10 — typed-attention scene context and input conditioning repaired
 
@@ -304,11 +307,11 @@ emitted only Python's resource-tracker warning for 14 worker semaphores; the
 process is confirmed absent. The stopped run has no trained selector or
 promotion and cannot count toward convergence.
 
-The normalized sustained campaign is active at
+The normalized sustained campaign is preserved at
 `runs/20260810-144901-attention-conditioned-stage-a/` under one-shot
 Standard/default LaunchAgent
 `com.polceanum.orpheus.attention-conditioned-20260810-144901`,
-`KeepAlive=false`, with trainer PID `84633`. It starts from clean pushed commit
+`KeepAlive=false`; its former trainer PID `84633` is stopped. It starts from clean pushed commit
 `de06fcb`; metadata verifies PyTorch `2.10.0`, MPS available and used for RGB
 measurement, CPU closed loop, float32, RGB-only/no-oracle execution, and the
 unchanged protected graph checkpoint. The fixed protocol hash remains
@@ -378,8 +381,36 @@ coefficient `0.03554`. It retained complete trajectory/objective support and
 was followed by twelve consecutive sampled blocks with gradients
 `0.1672..3.8626`; no second severe event occurred through step 256. The
 post-128 audit therefore passes with this isolated warning rather than showing
-a systematic scale collapse. The run continues to the first trained complete
-selector at update 512; that selector, not sampled loss, decides accuracy.
+a systematic scale collapse through that boundary.
+
+The warning later recurred at sampled update 280, exactly 128 updates after
+step 152. Both failures use deterministic frames 7--11, heavy ground/pair
+contact, no external actuation, ordinary finite total loss, and complete
+objective support. Step 280 has loss `2.9351`, raw interaction gradient
+`52.9646`, and retained coefficient `0.01888`; it followed a normal step 264
+and therefore is not monotonic parameter divergence. This exact periodic
+recurrence makes the failure systematic enough to stop. The job was unloaded
+immediately, preserving clean durable step 256; shutdown emitted only Python's
+14-semaphore resource-tracker warning. The run has no trained selector and
+cannot resume or count toward convergence.
+
+Checkpoint Adam-moment audit localizes the dominant variance to the typed
+relation decoder's collision-logit row: its weight second-moment RMS is
+`0.03050`, versus `0.01542/0.01380` for normal/tangent force,
+`3.13e-5` for relation projection, `7.41e-6` for entity projection, and
+`1.43e-6` for the normalized scene projection. This rules out another scene
+input-scale failure. Specification 1.25 adds an optional collision-row norm cap
+before the complete interaction/global caps, with true raw hierarchy
+reconstruction and auditor visibility. The attention pilot config sets this
+row cap to `1.0`; forward physics and event semantics are unchanged.
+
+Repair verification reports `236 passed` for the first focused set and
+`216 passed` for the final affected config/training/auditor set. Complete
+non-device verification reports `657 passed, 5 skipped, 1 deselected` in
+`164.77 s`; host MPS reports `1 passed, 662 deselected` in `3.02 s`.
+Ruff check/format, compileall, and diff checks pass. A fresh weights-only
+campaign from the protected graph control remains pending; no accuracy or
+convergence improvement is claimed from optimizer isolation alone.
 
 Historical verification for specification 1.22 before the live-scene repair:
 

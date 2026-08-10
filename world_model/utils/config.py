@@ -317,6 +317,11 @@ class TrainingConfig:
     # residual across many substeps. Bound that subsystem before the global
     # clip so one edge-Jacobian spike cannot suppress unrelated gradients.
     interaction_grad_clip_norm: float = 1.0
+    # Rare collision-event batches can put a large direct gradient on the
+    # typed attention collision-logit decoder row.  Optionally bound that row
+    # before the complete interaction group so event imbalance cannot reduce
+    # the effective update of unrelated force, uncertainty, and token paths.
+    attention_collision_grad_clip_norm: float | None = None
     # RGB discovery and the shared ROI backbone can likewise dominate the
     # whole-model norm during causal adaptation. Bound the complete, disjoint
     # RGB observation module before the global clip.
@@ -1098,6 +1103,17 @@ class OrpheusConfig:
             or self.training.interaction_grad_clip_norm <= 0
         ):
             raise ValueError("training.interaction_grad_clip_norm must be finite and positive")
+        attention_collision_clip = self.training.attention_collision_grad_clip_norm
+        if attention_collision_clip is not None and (
+            isinstance(attention_collision_clip, bool)
+            or not isinstance(attention_collision_clip, (int, float))
+            or not math.isfinite(attention_collision_clip)
+            or attention_collision_clip <= 0
+        ):
+            raise ValueError(
+                "training.attention_collision_grad_clip_norm must be finite and positive "
+                "when configured"
+            )
         if (
             not math.isfinite(self.training.closed_loop_perception_grad_clip_norm)
             or self.training.closed_loop_perception_grad_clip_norm <= 0

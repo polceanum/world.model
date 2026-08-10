@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.24
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, and mixed-unit scene-conditioning amendments 10 August 2026
+**Version:** 1.25
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, and collision-head gradient-isolation amendments 10 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6134,6 +6134,41 @@ to an architectural input path. Preserve the diagnostic metrics, repair the
 conditioning, pass a focused extreme-scale regression and complete gates, and
 restart weights-only from the protected smaller control. Do not resume or
 count the flawed campaign toward convergence.
+
+## 194. Typed proposal heads require hierarchical gradient isolation
+
+A typed decoder may jointly emit event logits, forces, impulses, and process
+noise. These outputs share representation capacity but do not necessarily
+share loss frequency or gradient scale. Rare class-balanced collision
+supervision may put a large direct gradient on the collision-logit row even
+when the complete loss, support, state, and all other proposal rows are
+ordinary. Clipping the whole interaction module alone keeps the update finite
+but suppresses unrelated force, uncertainty, and token learning by the same
+small coefficient.
+
+When repeated evidence localizes such spikes to one declared proposal row,
+apply an optional row-local norm cap before the complete interaction-local and
+whole-model caps. This is an optimizer isolation mechanism, not a hard-coded
+collision rule: forward predictions, labels, event semantics, and the shared
+attention representation are unchanged. The cap is part of the resolved
+training and validation protocol and must be absent or explicitly configured.
+
+Diagnostics must retain the true raw row norm, row coefficient and applied
+norm, the interaction norm before and after row isolation, the interaction
+stage coefficient, the effective total interaction coefficient, the true raw
+whole-model norm, and the final applied norm. Reconstruct raw hierarchical
+norms algebraically so local clipping cannot make training appear better
+conditioned than it was. The dynamics auditor must treat any configured row
+coefficient below its severe threshold as visible warning evidence.
+
+The stage-A Mac pilot config caps the collision-logit row of the typed relation
+decoder at norm 1.0 before the existing interaction cap of 1.0. This choice is
+supported by two severe spikes exactly 128 updates apart at steps 152 and 280,
+both on deterministic frames 7--11 contact-heavy batches, and by checkpoint
+Adam moments localizing the dominant variance to the collision-logit row.
+The pre-repair campaign is diagnostic only and cannot resume or count toward
+convergence; repaired training restarts weights-only from the protected graph
+control.
 
 ---
 

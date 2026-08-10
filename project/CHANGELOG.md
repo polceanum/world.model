@@ -116,6 +116,20 @@
   clipping (`28.1387 -> 1.0`); twelve subsequent sampled blocks are normal,
   making it isolated rather than a continuing collapse through this boundary.
   Peak RSS grows only about 10.5 MB to `2,915,614,720` bytes.
+- Stopped the normalized campaign after severe clipping recurred at update 280,
+  exactly 128 updates after step 152, on another deterministic frames 7--11
+  contact-heavy batch. Raw norm `52.9646` retained only `0.01888`; durable step
+  256 remains scope-clean and finite, but the run has no selector and cannot
+  count toward convergence.
+- Localized the failure to the typed relation decoder collision-logit row via
+  Adam moments. Added an optional norm-1 row-local cap before the interaction
+  and global caps, while reconstructing/logging true raw row, interaction, and
+  whole-model norms and extending severe-clip auditing. This changes optimizer
+  protocol only; forward collision/event semantics remain unchanged.
+- Collision-isolation verification reports `236 passed` focused, `216 passed`
+  final affected, `657 passed, 5 skipped, 1 deselected` complete non-device,
+  and `1 passed, 662 deselected` on host MPS. Ruff, formatting, compileall, and
+  diff checks pass.
 
 ### 2026-08-10 fast-ROI ownership stability
 

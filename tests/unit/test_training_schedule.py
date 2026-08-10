@@ -319,6 +319,54 @@ def test_attention_gradients_share_the_interaction_local_clip_and_diagnostics() 
     assert attention.grad.norm().item() == pytest.approx(1.0, abs=1.0e-5)
 
 
+def test_attention_collision_row_is_bounded_before_complete_interaction_clip() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            grad_clip_norm=10.0,
+            interaction_grad_clip_norm=10.0,
+            attention_collision_grad_clip_norm=1.0,
+            closed_loop_perception_grad_clip_norm=10.0,
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+    decoder = attention.relation_decoder
+    decoder.weight.grad = torch.zeros_like(decoder.weight)
+    collision_gradient = decoder.weight.grad[attention.collision_output_index]
+    collision_gradient.fill_(1.0)
+    collision_gradient.mul_(3.0 / collision_gradient.norm())
+    other = attention.scene_projection.bias
+    other.grad = torch.ones_like(other)
+    other.grad.mul_(4.0 / other.grad.norm())
+
+    diagnostics = _clip_training_gradients(model, config)
+
+    assert diagnostics["attention_collision_gradient_norm_pre_clip"] == pytest.approx(3.0)
+    assert diagnostics["attention_collision_gradient_clip_coefficient"] == pytest.approx(
+        1.0 / (3.0 + 1.0e-6)
+    )
+    assert diagnostics[
+        "attention_collision_gradient_norm_applied_before_interaction_clip"
+    ] == pytest.approx(1.0, abs=1.0e-6)
+    assert diagnostics["interaction_gradient_norm_after_attention_collision_clip"] == pytest.approx(
+        math.sqrt(17.0), abs=1.0e-5
+    )
+    assert diagnostics["interaction_gradient_norm_pre_clip"] == pytest.approx(5.0, abs=1.0e-5)
+    assert diagnostics["interaction_gradient_total_clip_coefficient"] == pytest.approx(
+        math.sqrt(17.0) / 5.0,
+        abs=1.0e-5,
+    )
+    assert collision_gradient.norm().item() == pytest.approx(1.0, abs=1.0e-6)
+    assert other.grad.norm().item() == pytest.approx(4.0, abs=1.0e-6)
+
+
 def test_perception_gradients_are_bounded_without_scaling_small_dynamics() -> None:
     config = load_config("configs/tiny_overfit.yaml")
     config = replace(

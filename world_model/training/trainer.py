@@ -683,6 +683,9 @@ def _rollout_validation_protocol_from_mapping(
         "optimization_stability": {
             "grad_clip_norm": training["grad_clip_norm"],
             "interaction_grad_clip_norm": training["interaction_grad_clip_norm"],
+            "attention_collision_grad_clip_norm": training.get(
+                "attention_collision_grad_clip_norm"
+            ),
             "closed_loop_perception_grad_clip_norm": training[
                 "closed_loop_perception_grad_clip_norm"
             ],
@@ -2481,6 +2484,39 @@ def _gradient_clip_diagnostics(
     )
 
 
+def _clip_attention_collision_gradients(
+    model: OnlineWorldModel,
+    maximum_gradient_norm: float | None,
+) -> tuple[float, float, float]:
+    """Clip only the typed collision-logit decoder row and retain raw evidence."""
+
+    attention = model.dynamics.attention_interactions
+    if attention is None:
+        return 0.0, 1.0, 0.0
+    row = attention.collision_output_index
+    gradients: list[Tensor] = []
+    if attention.relation_decoder.weight.grad is not None:
+        gradients.append(attention.relation_decoder.weight.grad[row])
+    if attention.relation_decoder.bias.grad is not None:
+        gradients.append(attention.relation_decoder.bias.grad[row])
+    if not gradients:
+        return 0.0, 1.0, 0.0
+    squared_norm = sum(gradient.detach().square().sum() for gradient in gradients)
+    pre_clip_tensor = squared_norm.sqrt()
+    if not bool(torch.isfinite(pre_clip_tensor)):
+        raise FloatingPointError("nonfinite typed-attention collision gradient norm")
+    pre_clip = float(pre_clip_tensor.detach().cpu())
+    if maximum_gradient_norm is None:
+        return pre_clip, 1.0, pre_clip
+    coefficient, applied = _gradient_clip_diagnostics(
+        pre_clip,
+        maximum_gradient_norm,
+    )
+    for gradient in gradients:
+        gradient.mul_(coefficient)
+    return pre_clip, coefficient, applied
+
+
 def _clip_training_gradients(
     model: OnlineWorldModel,
     config: OrpheusConfig,
@@ -2530,17 +2566,35 @@ def _clip_training_gradients(
         perception_clip_norm,
     )
 
-    interaction_pre_clip_tensor = torch.nn.utils.clip_grad_norm_(
+    (
+        attention_collision_pre_clip,
+        attention_collision_coefficient,
+        attention_collision_applied,
+    ) = _clip_attention_collision_gradients(
+        model,
+        config.training.attention_collision_grad_clip_norm,
+    )
+
+    interaction_after_collision_clip_tensor = torch.nn.utils.clip_grad_norm_(
         interaction_parameters,
         config.training.interaction_grad_clip_norm,
         error_if_nonfinite=False,
     )
-    if not bool(torch.isfinite(interaction_pre_clip_tensor)):
+    if not bool(torch.isfinite(interaction_after_collision_clip_tensor)):
         raise FloatingPointError("nonfinite learned-interaction gradient norm")
-    interaction_pre_clip = float(interaction_pre_clip_tensor.detach().cpu())
-    interaction_coefficient, interaction_applied = _gradient_clip_diagnostics(
-        interaction_pre_clip,
+    interaction_after_collision_clip = float(interaction_after_collision_clip_tensor.detach().cpu())
+    interaction_stage_coefficient, interaction_applied = _gradient_clip_diagnostics(
+        interaction_after_collision_clip,
         config.training.interaction_grad_clip_norm,
+    )
+    interaction_raw_squared = (
+        interaction_after_collision_clip * interaction_after_collision_clip
+        - attention_collision_applied * attention_collision_applied
+        + attention_collision_pre_clip * attention_collision_pre_clip
+    )
+    interaction_pre_clip = math.sqrt(max(0.0, interaction_raw_squared))
+    interaction_total_coefficient = (
+        interaction_applied / interaction_pre_clip if interaction_pre_clip > 0.0 else 1.0
     )
 
     pre_global_clip_tensor = torch.nn.utils.clip_grad_norm_(
@@ -2570,8 +2624,20 @@ def _clip_training_gradients(
         "perception_gradient_local_clip_enabled": float(apply_perception_local_clip),
         "perception_gradient_clip_coefficient": perception_coefficient,
         "perception_gradient_norm_applied_before_global_clip": perception_applied,
+        "attention_collision_gradient_local_clip_enabled": float(
+            config.training.attention_collision_grad_clip_norm is not None
+        ),
+        "attention_collision_gradient_norm_pre_clip": attention_collision_pre_clip,
+        "attention_collision_gradient_clip_coefficient": attention_collision_coefficient,
+        "attention_collision_gradient_norm_applied_before_interaction_clip": (
+            attention_collision_applied
+        ),
         "interaction_gradient_norm_pre_clip": interaction_pre_clip,
-        "interaction_gradient_clip_coefficient": interaction_coefficient,
+        "interaction_gradient_norm_after_attention_collision_clip": (
+            interaction_after_collision_clip
+        ),
+        "interaction_gradient_clip_coefficient": interaction_stage_coefficient,
+        "interaction_gradient_total_clip_coefficient": interaction_total_coefficient,
         "interaction_gradient_norm_applied_before_global_clip": interaction_applied,
         "gradient_norm_pre_global_clip": pre_global_clip,
         "gradient_clip_coefficient": global_coefficient,

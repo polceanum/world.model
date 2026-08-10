@@ -1,5 +1,33 @@
 # Design decisions
 
+## ADR-096 — Isolate collision-logit gradients before the interaction group
+
+- **Date:** 2026-08-10
+- **Status:** accepted and implemented; repaired campaign pending
+- **Context:** Scene pre-projection normalization removed the matched update-64
+  scale failure, but severe finite gradients appeared at updates 152 and 280,
+  exactly 128 updates apart on deterministic frames 7--11 contact-heavy
+  batches. Their retained interaction coefficients were `0.03554/0.01888`.
+  The complete interaction cap kept state finite but reduced every unrelated
+  attention gradient by the same factor. Step-256 Adam moments localize the
+  dominant variance to relation-decoder collision row 1 (`0.03050` RMS), not
+  the normalized scene or entity/relation projections.
+- **Decision:** Stop the run at its clean durable step-256 boundary. Add an
+  optional collision-row norm cap before the existing interaction and global
+  caps; set it to `1.0` for the pilot. Reconstruct and report the true raw
+  hierarchy algebraically, expose row/stage/total coefficients, bind the cap
+  into protocol compatibility, and make the auditor inspect it. Restart
+  weights-only from the protected graph control.
+- **Alternatives considered:** continue because the global cap is finite;
+  normalize all entity/relation inputs; lower the complete learning rate;
+  reduce collision loss globally; increase the interaction cap; hide the row
+  spike in post-clip telemetry; resume the step-256 optimizer state.
+- **Consequences:** Rare event supervision can no longer monopolize the shared
+  interaction update, while force, impulse, uncertainty, labels, forward
+  predictions, and collision physics remain unchanged. The new run must still
+  prove periodic-batch conditioning, broad selector accuracy, and convergence;
+  the repair itself earns no promotion.
+
 ## ADR-095 — Normalize mixed-unit scene features before projection
 
 - **Date:** 2026-08-10

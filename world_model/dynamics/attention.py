@@ -91,6 +91,7 @@ class TypedAttentionInteractionResidual(nn.Module):
 
     relation_feature_dim = 13
     relation_output_dim = 7
+    collision_output_index = 1
     # Two global-variance summaries + gravity + camera transform + camera
     # linear/angular velocity + intrinsics + two camera-variance summaries +
     # calibrated flag. Variances are summarized so the scene contract is

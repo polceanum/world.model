@@ -137,6 +137,10 @@ Working rules:
   network is locally clipped before the whole model: log raw subsystem and
   total norms, both coefficients, the pre-global norm, total coefficient, and
   final applied norm. Treat both clip limits as resume/protocol semantics.
+- When one typed attention proposal row repeatedly dominates the complete
+  interaction gradient, isolate that row before the interaction/global caps
+  and retain raw/applied diagnostics at every hierarchy. Do not let rare event
+  supervision suppress unrelated force, uncertainty, or token gradients.
 - Apply the configured RGB perception-local gradient cap only during causal
   training, before the whole-model cap, and retain the true reconstructed raw
   total. Paired RGB pretraining keeps its original whole-model clipping
