@@ -239,6 +239,17 @@ live audit passes all 152 applied updates with each scenario represented 19
 times across logged blocks and no terminal or uncontained failure. Update 200,
 280, and fixed selectors remain required.
 
+The same fresh run clears the former catastrophic update-200 impulse boundary.
+Its raw/applied gradient is `1.14436/1.0`; impulse multiplier/additive norms are
+`0.18604/0.00781` rather than the old failure's `830.383/210.310`; all impulse
+row coefficients are `1.0`, and the complete interaction retains `0.873850`.
+The update has 339 causal targets, all 13 objective terms, every horizon,
+finite uncertainty, and no skip. Cumulatively, the auditor passes all 200
+updates with each scenario represented 25 times, no terminal or uncontained
+failure, trusted identity 14/1,127 (`1.24%`), coverage90 `90.25%`, and bounded
+RSS. This causally validates the impulse repair on the fresh trajectory; it is
+not a fixed-selector accuracy result.
+
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
 

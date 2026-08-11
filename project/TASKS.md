@@ -298,7 +298,10 @@
   exact logged scenario balance, 343 causal targets, every horizon supported,
   `0.344214` complete-stage retention, and cumulative trusted identity rate
   `1.34%`. This clears the update-60/64/152 and first checkpoint-integrity gates
-  only; 200/280 and all selectors remain open.
+  only. Update 200 then passes with ordinary impulse multiplier/additive norms
+  `0.18604/0.00781`, `0.873850` complete retention, 339 causal targets, exact
+  scenario balance, no skip/failure, and cumulative trusted identity `1.24%`.
+  Update 280 and all selectors remain open.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

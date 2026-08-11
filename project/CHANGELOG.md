@@ -56,6 +56,14 @@
   the historical update-152 stress position with `0.344214` complete-stage
   retention, 343 causal targets, every horizon supported, cumulative trusted
   identity 11/820 (`1.34%`), and no skipped, terminal, or uncontained update.
+- Passed the former catastrophic update-200 impulse boundary in the fresh run.
+  Raw/applied gradient is `1.14436/1.0`; impulse multiplier/additive norms are
+  ordinary at `0.18604/0.00781`; complete retention is `0.873850`; 339 causal
+  targets and every horizon are supported. The live audit passes all 200
+  updates with exact logged scenario balance, zero skips/failures/uncontained
+  clips, cumulative trusted identity 14/1,127 (`1.24%`), finite uncertainty,
+  and bounded memory. This remains training-health rather than selector
+  accuracy evidence.
 
 ### 2026-08-11 impulse-gradient isolation and fail-fast monitoring
 

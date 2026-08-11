@@ -213,9 +213,15 @@ active and the live audit also passes the historical update-152 stress
 position: all 152 updates apply, each scenario appears 19 times across logged
 blocks, cumulative trusted identity is 11/820 (`1.34%`), and update 152 retains
 `0.344214` at the complete interaction stage with 343 causal targets and every
-horizon supported. These are optimizer/training-window health results, not a
-trained fixed selector, accuracy promotion, generalization, plateau,
-convergence, or capacity result.
+horizon supported. It subsequently passes the former catastrophic update-200
+impulse boundary with raw/applied gradient `1.14436/1.0`, impulse multiplier/
+additive norms `0.18604/0.00781`, `0.873850` complete-stage retention, 339
+causal targets, and every horizon supported. The cumulative audit passes all
+200 updates with each scenario represented 25 times, zero skips/failures/
+uncontained clips, trusted identity 14/1,127 (`1.24%`), pooled coverage90
+`90.25%`, finite uncertainty, and bounded `2,922,790,912`-byte RSS. These are
+optimizer/training-window health results, not a trained fixed selector,
+accuracy promotion, generalization, plateau, convergence, or capacity result.
 
 Exact verification commands:
 
