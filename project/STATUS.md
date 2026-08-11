@@ -209,9 +209,13 @@ weighted position RMSE has support at every horizon (`0.2958/0.3253/0.3714/
 to 1.0 seconds), while y remains comparatively flat (`0.2494 -> 0.2537 m`).
 The checkpoint audit is
 `attention_checkpoint_step_000128_audit.json` beside the run. Training remains
-active; these are optimizer/training-window health results, not a trained fixed
-selector, accuracy promotion, generalization, plateau, convergence, or
-capacity result.
+active and the live audit also passes the historical update-152 stress
+position: all 152 updates apply, each scenario appears 19 times across logged
+blocks, cumulative trusted identity is 11/820 (`1.34%`), and update 152 retains
+`0.344214` at the complete interaction stage with 343 causal targets and every
+horizon supported. These are optimizer/training-window health results, not a
+trained fixed selector, accuracy promotion, generalization, plateau,
+convergence, or capacity result.
 
 Exact verification commands:
 

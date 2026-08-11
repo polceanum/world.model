@@ -230,6 +230,15 @@ weighted support, and position RMSE grows from `0.2958 m` at 0.1 seconds to
 diagnostics and causal repair evidence, not proof that the fixed-selector
 accuracy curve has plateaued or generalized.
 
+The repaired run also passes the historical update-152 stress position. Raw
+interaction norm is `2.90517`; after local force/collision/impulse rows the
+complete stage retains `0.344214`, and Adam applies with 343 causal targets and
+all 13 objective terms. Every horizon is supported, uncertainty is finite,
+skips remain zero, and cumulative trusted identity is 11/820 (`1.34%`). The
+live audit passes all 152 applied updates with each scenario represented 19
+times across logged blocks and no terminal or uncontained failure. Update 200,
+280, and fixed selectors remain required.
+
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
 

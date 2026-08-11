@@ -52,7 +52,10 @@
   177 inherited tensors exact, all 48 attention tensors changed, exactly 48
   attention-owned Adam states at step 128, finite serialized state, and intact
   architecture/source/protocol/model hashes. This is optimizer-health evidence,
-  not a fixed-selector convergence or scale result.
+  not a fixed-selector convergence or scale result. The live audit then passes
+  the historical update-152 stress position with `0.344214` complete-stage
+  retention, 343 causal targets, every horizon supported, cumulative trusted
+  identity 11/820 (`1.34%`), and no skipped, terminal, or uncontained update.
 
 ### 2026-08-11 impulse-gradient isolation and fail-fast monitoring
 

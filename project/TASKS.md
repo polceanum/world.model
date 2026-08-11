@@ -294,8 +294,11 @@
   bounded RSS, cumulative trusted identity rate `1.006%`, calibrated finite
   uncertainty, and support at every axis/horizon. The durable checkpoint audit
   passes with 177 inherited tensors exact, all 48 attention tensors live, and
-  attention-only Adam state at step 128. This clears the update-60/64 and first
-  checkpoint-integrity gates only; 152/200/280 and all selectors remain open.
+  attention-only Adam state at step 128. Update 152 subsequently passes with
+  exact logged scenario balance, 343 causal targets, every horizon supported,
+  `0.344214` complete-stage retention, and cumulative trusted identity rate
+  `1.34%`. This clears the update-60/64/152 and first checkpoint-integrity gates
+  only; 200/280 and all selectors remain open.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam
