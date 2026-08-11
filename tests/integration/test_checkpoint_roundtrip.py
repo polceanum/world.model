@@ -461,6 +461,7 @@ def test_training_resume_normalizes_explicit_legacy_defaults() -> None:
     checkpoint_config["training"].pop("joint_collision_long_horizon_sampling")
     checkpoint_config["training"].pop("minimum_rollout_age_steps")
     for field_name in (
+        "attention_node_grad_clip_norm",
         "attention_node_output_grad_clip_norm",
         "attention_collision_output_grad_clip_norm",
         "attention_force_output_grad_clip_norm",

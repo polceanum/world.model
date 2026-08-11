@@ -116,6 +116,14 @@ _MEASUREMENT_ADDITIVE_METRICS = frozenset(
 )
 
 
+class InteractionGradientRetentionError(FloatingPointError):
+    """A rejected causal update with durable pre-mutation diagnostics."""
+
+    def __init__(self, message: str, diagnostics: Mapping[str, Any]) -> None:
+        super().__init__(message)
+        self.diagnostics = dict(diagnostics)
+
+
 def _is_additive_physical_metric(name: str) -> bool:
     """Whether a metric is an exact manifest-additive physical quantity."""
 
@@ -686,6 +694,7 @@ def _rollout_validation_protocol_from_mapping(
             "minimum_interaction_gradient_retention": training.get(
                 "minimum_interaction_gradient_retention"
             ),
+            "attention_node_grad_clip_norm": training.get("attention_node_grad_clip_norm"),
             "attention_collision_grad_clip_norm": training.get(
                 "attention_collision_grad_clip_norm"
             ),
@@ -1673,10 +1682,18 @@ def _assert_interaction_gradient_retention(
         return
     retained = diagnostics["interaction_gradient_clip_coefficient"]
     if retained < minimum:
-        raise FloatingPointError(
-            "complete interaction gradient retained only "
-            f"{retained:.6g}, below configured minimum {minimum:.6g}, "
-            f"at optimiser step {optimizer_step}"
+        raise InteractionGradientRetentionError(
+            (
+                "complete interaction gradient retained only "
+                f"{retained:.6g}, below configured minimum {minimum:.6g}, "
+                f"at optimiser step {optimizer_step}"
+            ),
+            {
+                **diagnostics,
+                "optimizer_step_attempted": float(optimizer_step),
+                "minimum_interaction_gradient_retention": float(minimum),
+                "optimizer_update_applied": 0.0,
+            },
         )
 
 
@@ -2628,6 +2645,38 @@ def _clip_attention_collision_gradients(
     return pre_clip, coefficient, applied
 
 
+def _clip_attention_node_gradients(
+    model: OnlineWorldModel,
+    maximum_gradient_norm: float | None,
+) -> tuple[float, float, float]:
+    """Jointly clip accumulated typed x/y/z node-decoder gradients."""
+
+    attention = model.dynamics.attention_interactions
+    if attention is None:
+        return 0.0, 1.0, 0.0
+    gradients = [
+        gradient
+        for gradient in (
+            attention.node_decoder.weight.grad,
+            attention.node_decoder.bias.grad,
+        )
+        if gradient is not None
+    ]
+    if not gradients:
+        return 0.0, 1.0, 0.0
+    squared_norm = sum(gradient.detach().square().sum() for gradient in gradients)
+    pre_clip_tensor = squared_norm.sqrt()
+    if not bool(torch.isfinite(pre_clip_tensor)):
+        raise FloatingPointError("nonfinite typed-attention node gradient norm")
+    pre_clip = float(pre_clip_tensor.detach().cpu())
+    if maximum_gradient_norm is None:
+        return pre_clip, 1.0, pre_clip
+    coefficient, applied = _gradient_clip_diagnostics(pre_clip, maximum_gradient_norm)
+    for gradient in gradients:
+        gradient.mul_(coefficient)
+    return pre_clip, coefficient, applied
+
+
 def _clip_attention_force_gradients(
     model: OnlineWorldModel,
     maximum_gradient_norm: float | None,
@@ -2743,6 +2792,14 @@ def _clip_training_gradients(
         {} if attention is None else attention.output_gradient_diagnostics()
     )
     (
+        attention_node_pre_clip,
+        attention_node_coefficient,
+        attention_node_applied,
+    ) = _clip_attention_node_gradients(
+        model,
+        config.training.attention_node_grad_clip_norm,
+    )
+    (
         attention_collision_pre_clip,
         attention_collision_coefficient,
         attention_collision_applied,
@@ -2791,10 +2848,16 @@ def _clip_training_gradients(
         + attention_force_pre_clip * attention_force_pre_clip
     )
     interaction_after_collision_clip = math.sqrt(max(0.0, interaction_after_collision_clip_squared))
-    interaction_raw_squared = (
+    interaction_after_node_clip_squared = (
         interaction_after_collision_clip * interaction_after_collision_clip
         - attention_collision_applied * attention_collision_applied
         + attention_collision_pre_clip * attention_collision_pre_clip
+    )
+    interaction_after_node_clip = math.sqrt(max(0.0, interaction_after_node_clip_squared))
+    interaction_raw_squared = (
+        interaction_after_node_clip * interaction_after_node_clip
+        - attention_node_applied * attention_node_applied
+        + attention_node_pre_clip * attention_node_pre_clip
     )
     interaction_pre_clip = math.sqrt(max(0.0, interaction_raw_squared))
     interaction_total_coefficient = (
@@ -2828,6 +2891,12 @@ def _clip_training_gradients(
         "perception_gradient_local_clip_enabled": float(apply_perception_local_clip),
         "perception_gradient_clip_coefficient": perception_coefficient,
         "perception_gradient_norm_applied_before_global_clip": perception_applied,
+        "attention_node_gradient_local_clip_enabled": float(
+            config.training.attention_node_grad_clip_norm is not None
+        ),
+        "attention_node_gradient_norm_pre_clip": attention_node_pre_clip,
+        "attention_node_gradient_clip_coefficient": attention_node_coefficient,
+        "attention_node_gradient_norm_applied_before_interaction_clip": (attention_node_applied),
         "attention_collision_gradient_local_clip_enabled": float(
             config.training.attention_collision_grad_clip_norm is not None
         ),
@@ -2851,6 +2920,7 @@ def _clip_training_gradients(
             attention_impulse_applied
         ),
         "interaction_gradient_norm_pre_clip": interaction_pre_clip,
+        "interaction_gradient_norm_after_attention_node_clip": interaction_after_node_clip,
         "interaction_gradient_norm_after_attention_collision_clip": (
             interaction_after_collision_clip
         ),
@@ -5205,10 +5275,18 @@ def train_from_config(
                     "measurement incumbent",
                     flush=True,
                 )
-    elif start_step == 0 and config.training.rgb_pretrain_steps == 0 and config.training.steps > 0:
+    elif (
+        start_step == 0
+        and config.training.rgb_pretrain_steps == 0
+        and config.training.steps > 0
+        and reference_rollout_selection is None
+    ):
         # A fresh causal-only run still needs one immutable pre-update
-        # reference. Later retries happen only at ``eval_every`` rather than
-        # before every optimizer update.
+        # reference. An exact resume from a numbered step-zero selector has
+        # already restored and tensor-verified that reference above, so do not
+        # repeat the expensive manifest or perturb the diagnostic timeline.
+        # Later retries happen only at ``eval_every`` rather than before every
+        # optimizer update.
         _, accepted, _, _ = validate_closed_loop_incumbent(
             completed_step=0,
             learning_rate=float(optimizer.param_groups[0]["lr"]),
@@ -5622,7 +5700,39 @@ def train_from_config(
                         config,
                         optimizer_step=step + 1,
                     )
-                except FloatingPointError:
+                except InteractionGradientRetentionError as error:
+                    failure_diagnostics = _result_metrics(
+                        result,
+                        learning_rate=target_learning_rate,
+                        gradient_norm=pre_clip_gradient_norm,
+                    )
+                    failure_diagnostics.update(error.diagnostics)
+                    failure_diagnostics.update(
+                        {
+                            "causal_training_support_present": float(causal_support_present),
+                            "causal_trajectory_support_count": causal_trajectory_support,
+                            "causal_fast_support_count": causal_fast_support,
+                            "causal_objective_term_support_count": (causal_objective_term_support),
+                            "training_data_draw_step": float(training_data_draw_step),
+                            "no_gradient_batches_before_update": float(no_gradient_attempts),
+                            "skipped_no_gradient_batches": float(skipped_no_gradient_batches),
+                            "global_perception_trainable": float(global_perception_trainable),
+                        }
+                    )
+                    episode_seeds = raw_batch.get("seed")
+                    if isinstance(episode_seeds, Tensor):
+                        failure_diagnostics["episode_seeds"] = ",".join(
+                            str(int(value))
+                            for value in episode_seeds.detach().cpu().flatten().tolist()
+                        )
+                    metadata = raw_batch.get("metadata")
+                    if isinstance(metadata, Mapping):
+                        scenarios = metadata.get("scenario")
+                        if isinstance(scenarios, list):
+                            failure_diagnostics["scenario_names"] = ",".join(
+                                str(item) for item in scenarios
+                            )
+                    error.diagnostics = failure_diagnostics
                     optimizer.zero_grad(set_to_none=True)
                     raise
             if _has_effective_gradient(effective_gradient_norm, config):

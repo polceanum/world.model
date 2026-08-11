@@ -97,6 +97,37 @@ def _decoded_list_length(value: Any) -> int | None:
     return len(decoded) if isinstance(decoded, list) else None
 
 
+def _terminal_optimizer_failure(run_directory: Path) -> dict[str, Any] | None:
+    """Return a concise durable terminal optimizer failure, when present."""
+
+    path = run_directory / "training_failure.json"
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as error:
+        raise ValueError(f"invalid terminal training failure artifact: {path}") from error
+    if not isinstance(payload, dict) or payload.get("state") != "failed":
+        raise ValueError(f"terminal training failure artifact is not a failed state: {path}")
+    exception_type = str(payload.get("exception_type") or "UnknownError")
+    if exception_type not in {
+        "FloatingPointError",
+        "InteractionGradientRetentionError",
+    }:
+        return None
+    diagnostics = payload.get("diagnostics")
+    if diagnostics is not None and not isinstance(diagnostics, dict):
+        raise ValueError(f"terminal optimizer diagnostics are not an object: {path}")
+    nonfinite = _finite_numbers(diagnostics or {})
+    return {
+        "exception_type": exception_type,
+        "message": str(payload.get("message") or "no failure message recorded"),
+        "updated_utc": payload.get("updated_utc"),
+        "diagnostics": diagnostics,
+        "nonfinite_diagnostic_fields": nonfinite,
+    }
+
+
 def _canonical_records(
     records: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -159,6 +190,18 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
     ]
     failures: list[str] = []
     warnings: list[str] = []
+    terminal_optimizer_failure = _terminal_optimizer_failure(run_directory)
+    if terminal_optimizer_failure is not None:
+        failures.append(
+            "terminal optimizer failure: "
+            f"{terminal_optimizer_failure['exception_type']}: "
+            f"{terminal_optimizer_failure['message']}"
+        )
+        if terminal_optimizer_failure["nonfinite_diagnostic_fields"]:
+            failures.append(
+                "terminal optimizer diagnostics contain nonfinite fields: "
+                + ",".join(terminal_optimizer_failure["nonfinite_diagnostic_fields"])
+            )
     for record in training:
         step = int(record["step"])
         nonfinite = _finite_numbers(record)
@@ -247,6 +290,9 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
         attention_collision_coefficient = float(
             record.get("attention_collision_gradient_clip_coefficient", 1.0)
         )
+        attention_node_coefficient = float(
+            record.get("attention_node_gradient_clip_coefficient", 1.0)
+        )
         attention_force_coefficient = float(
             record.get("attention_force_gradient_clip_coefficient", 1.0)
         )
@@ -281,6 +327,7 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
             min(
                 total_coefficient,
                 interaction_coefficient,
+                attention_node_coefficient,
                 attention_collision_coefficient,
                 attention_force_coefficient,
                 attention_impulse_coefficient,
@@ -298,6 +345,8 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
             }
             if "attention_collision_gradient_clip_coefficient" in record:
                 details["attention_collision_coefficient"] = attention_collision_coefficient
+            if "attention_node_gradient_clip_coefficient" in record:
+                details["attention_node_coefficient"] = attention_node_coefficient
             if "attention_force_gradient_clip_coefficient" in record:
                 details["attention_force_coefficient"] = attention_force_coefficient
             if "attention_impulse_gradient_clip_coefficient" in record:
@@ -440,6 +489,7 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
         "status": "pass" if not failures else "fail",
         "failures": failures,
         "warnings": warnings,
+        "terminal_optimizer_failure": terminal_optimizer_failure,
         "duplicate_rows": duplicates,
         "unique_training_blocks": len(training),
         "first_training_step": int(training[0]["step"]) if training else None,

@@ -135,6 +135,43 @@ def test_audit_reports_numerical_support_and_scope_failures(tmp_path) -> None:
     assert any("frozen state/dynamics scope" in failure for failure in report["failures"])
 
 
+def test_audit_rejects_durable_terminal_optimizer_failure(tmp_path) -> None:
+    run = tmp_path / "run"
+    _write_metrics(run, [_record(56)])
+    (run / "training_failure.json").write_text(
+        json.dumps(
+            {
+                "state": "failed",
+                "exception_type": "InteractionGradientRetentionError",
+                "message": "complete interaction gradient retained only 0.085",
+                "updated_utc": "2026-08-11T00:00:00+00:00",
+                "diagnostics": {
+                    "optimizer_step_attempted": 60.0,
+                    "interaction_gradient_clip_coefficient": 0.085,
+                    "optimizer_update_applied": 0.0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = audit_run(run)
+
+    assert report["status"] == "fail"
+    assert report["terminal_optimizer_failure"] == {
+        "exception_type": "InteractionGradientRetentionError",
+        "message": "complete interaction gradient retained only 0.085",
+        "updated_utc": "2026-08-11T00:00:00+00:00",
+        "diagnostics": {
+            "optimizer_step_attempted": 60.0,
+            "interaction_gradient_clip_coefficient": 0.085,
+            "optimizer_update_applied": 0.0,
+        },
+        "nonfinite_diagnostic_fields": [],
+    }
+    assert any("terminal optimizer failure" in item for item in report["failures"])
+
+
 def test_audit_rejects_severe_complete_interaction_clipping(tmp_path) -> None:
     run = tmp_path / "run"
     _write_metrics(
@@ -196,6 +233,33 @@ def test_audit_reports_attention_collision_row_clipping(tmp_path) -> None:
             "total_coefficient": 0.5,
             "interaction_coefficient": 0.4,
             "attention_collision_coefficient": 0.02,
+        }
+    ]
+
+
+def test_audit_reports_attention_node_row_clipping(tmp_path) -> None:
+    run = tmp_path / "run"
+    _write_metrics(
+        run,
+        [
+            _record(
+                8,
+                gradient_total_clip_coefficient=0.5,
+                interaction_gradient_total_clip_coefficient=0.4,
+                attention_node_gradient_clip_coefficient=0.02,
+            )
+        ],
+    )
+
+    report = audit_run(run)
+
+    assert report["status"] == "pass"
+    assert report["severe_clipped_steps"] == [
+        {
+            "step": 8,
+            "total_coefficient": 0.5,
+            "interaction_coefficient": 0.4,
+            "attention_node_coefficient": 0.02,
         }
     ]
 

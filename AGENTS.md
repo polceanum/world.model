@@ -141,6 +141,10 @@ Working rules:
   interaction gradient, isolate that row before the interaction/global caps
   and retain raw/applied diagnostics at every hierarchy. Do not let rare event
   supervision suppress unrelated force, uncertainty, or token gradients.
+- Per-invocation typed-output clipping does not bound gradients accumulated by
+  a decoder reused across recursive rollout calls. Keep accumulated node,
+  collision, force, and impulse decoder groups separately configurable and
+  observable before the complete interaction cap.
 - A decoder parameter-row cap runs too late to protect shared attention state.
   When exact replay localizes recursive amplification before the decoder, cap
   separately configured node/collision/force/impulse gradients on each typed
@@ -151,6 +155,10 @@ Working rules:
   configured semantic isolation as an uncontained failure. Reject that update
   before Adam mutates state; a severe coefficient confined to a local typed
   group may remain a visible warning when the complete stage is healthy.
+- Persist rejected optimizer diagnostics atomically, including attempted step,
+  seeds/scenarios, causal support, gradient hierarchy, and an explicit
+  zero-applied-update marker. Offline health audits must fail such a terminal
+  artifact even if the last cadence-sampled metric row was healthy.
 - Apply the configured RGB perception-local gradient cap only during causal
   training, before the whole-model cap, and retain the true reconstructed raw
   total. Paired RGB pretraining keeps its original whole-model clipping

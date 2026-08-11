@@ -2,6 +2,44 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-11 accumulated node-gradient repair and scale gate
+
+- Stopped the fresh specification-1.30 attention campaign after the pre-Adam
+  retention gate rejected deterministic attempted update 60 at `0.0850405`.
+  The run had applied 59 supported updates but had no durable trained selector;
+  none of its mutable state is promoted or resumed.
+- Added structured terminal optimizer diagnostics and made the offline dynamics
+  auditor fail durable numerical/retention failures even when the last sampled
+  training row is healthy. Exact replay matched all 400--454 comparable
+  model/data fields at updates 8--56 and captured update-60 seeds, scenarios,
+  support, physical metrics, and the full pre-mutation gradient hierarchy.
+- Localized the residual gradient to the accumulated node decoder: norm
+  `11.6617`, world-y row `11.5014`, versus maximum shared non-decoder norm
+  `0.124876`. A joint accumulated node x/y/z cap of `1.0` reconstructs
+  `0.552059` complete-stage retention on the failed gradient, versus the
+  required `0.1`.
+- Advanced the contract/runtime to specification 1.31. Added the node decoder
+  group cap before collision/force/impulse/interaction/global clipping,
+  protocol/resume and legacy-null semantics, raw/applied/intermediate
+  telemetry, config/checkpoint/auditor coverage, and focused regression tests.
+- Ran a fresh non-promotable protected-control replay with MPS RGB and CPU
+  closed loop. Its 225 tensors and 2,583 comparable initial-selector metrics
+  are exact at score `0.3213162196`. On the same update-60 seeds it remains
+  fully supported and retains `0.565343` at the complete interaction stage;
+  the diagnostic deliberately stops before Adam and records
+  `node_row_repair_report.json` beside the run.
+- Refreshed the evidence-gated scale ladder against the original Transformer,
+  Llama 3, Gemma 3, V-JEPA 2, and compute-optimal scaling evidence. Orpheus
+  keeps its modern RMS-pre-norm/SwiGLU set Transformer; GQA, RoPE, local
+  attention, sparse experts, and long-context kernels remain deferred until
+  their bottlenecks exist. Minimum proportional exposure is now explicit:
+  9,728/12,288/23,040 updates for the 3.53M/4.34M/8.31M rungs. Scaling remains
+  blocked until the repaired 3.00M control reaches fixed-selector plateau.
+- Passed the complete non-device suite (`706 passed, 5 skipped, 1 deselected`),
+  host MPS marker (`1 passed, 711 deselected`), five direct MPS regressions,
+  focused affected suites, Ruff format/check, compileall, diff check, and host
+  MPS dry-run resolution (`measurement=mps`, `closed_loop=cpu`).
+
 ### 2026-08-11 impulse-gradient isolation and fail-fast monitoring
 
 - Stopped the fresh output-isolated campaign after update 200 exposed an

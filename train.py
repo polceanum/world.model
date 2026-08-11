@@ -9,6 +9,7 @@ import fcntl
 import json
 import os
 import traceback
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -225,6 +226,9 @@ def main() -> int:
             "message": str(error),
             "traceback": traceback.format_exc(),
         }
+        diagnostics = getattr(error, "diagnostics", None)
+        if isinstance(diagnostics, Mapping):
+            failure["diagnostics"] = dict(diagnostics)
         encoded_failure = json.dumps(failure, indent=2, sort_keys=True) + "\n"
         atomic_write_text(failure_path, encoded_failure)
         atomic_write_text(state_path, encoded_failure)

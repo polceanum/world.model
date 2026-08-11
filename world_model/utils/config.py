@@ -321,6 +321,10 @@ class TrainingConfig:
     # smaller retained fraction means local isolation failed, so applying the
     # normalized update would starve the complete interaction model.
     minimum_interaction_gradient_retention: float | None = None
+    # Recursive node-acceleration residuals can accumulate across rollout
+    # substeps even after every invocation is locally bounded. Bound the
+    # complete x/y/z decoder group before the interaction-wide cap.
+    attention_node_grad_clip_norm: float | None = None
     # Rare collision-event batches can put a large direct gradient on the
     # typed attention collision-logit decoder row.  Optionally bound that row
     # before the complete interaction group so event imbalance cannot reduce
@@ -1134,39 +1138,22 @@ class OrpheusConfig:
             raise ValueError(
                 "training.minimum_interaction_gradient_retention must be in (0, 1] when configured"
             )
-        attention_collision_clip = self.training.attention_collision_grad_clip_norm
-        if attention_collision_clip is not None and (
-            isinstance(attention_collision_clip, bool)
-            or not isinstance(attention_collision_clip, (int, float))
-            or not math.isfinite(attention_collision_clip)
-            or attention_collision_clip <= 0
+        for config_field in (
+            "attention_node_grad_clip_norm",
+            "attention_collision_grad_clip_norm",
+            "attention_force_grad_clip_norm",
+            "attention_impulse_grad_clip_norm",
         ):
-            raise ValueError(
-                "training.attention_collision_grad_clip_norm must be finite and positive "
-                "when configured"
-            )
-        attention_force_clip = self.training.attention_force_grad_clip_norm
-        if attention_force_clip is not None and (
-            isinstance(attention_force_clip, bool)
-            or not isinstance(attention_force_clip, (int, float))
-            or not math.isfinite(attention_force_clip)
-            or attention_force_clip <= 0
-        ):
-            raise ValueError(
-                "training.attention_force_grad_clip_norm must be finite and positive "
-                "when configured"
-            )
-        attention_impulse_clip = self.training.attention_impulse_grad_clip_norm
-        if attention_impulse_clip is not None and (
-            isinstance(attention_impulse_clip, bool)
-            or not isinstance(attention_impulse_clip, (int, float))
-            or not math.isfinite(attention_impulse_clip)
-            or attention_impulse_clip <= 0
-        ):
-            raise ValueError(
-                "training.attention_impulse_grad_clip_norm must be finite and positive "
-                "when configured"
-            )
+            value = getattr(self.training, config_field)
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
+                raise ValueError(
+                    f"training.{config_field} must be finite and positive when configured"
+                )
         for config_field in (
             "attention_node_output_grad_clip_norm",
             "attention_collision_output_grad_clip_norm",

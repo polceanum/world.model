@@ -369,6 +369,96 @@ def test_attention_collision_row_is_bounded_before_complete_interaction_clip() -
     assert other.grad.norm().item() == pytest.approx(4.0, abs=1.0e-6)
 
 
+def test_attention_node_rows_are_jointly_bounded_before_complete_interaction_clip() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            grad_clip_norm=20.0,
+            interaction_grad_clip_norm=20.0,
+            attention_node_grad_clip_norm=1.0,
+            closed_loop_perception_grad_clip_norm=20.0,
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+    decoder = attention.node_decoder
+    decoder.weight.grad = torch.zeros_like(decoder.weight)
+    decoder.weight.grad[0].fill_(1.0)
+    decoder.weight.grad[0].mul_(3.0 / decoder.weight.grad[0].norm())
+    decoder.weight.grad[1].fill_(1.0)
+    decoder.weight.grad[1].mul_(4.0 / decoder.weight.grad[1].norm())
+    other = attention.scene_projection.bias
+    other.grad = torch.ones_like(other)
+    other.grad.mul_(12.0 / other.grad.norm())
+
+    diagnostics = _clip_training_gradients(model, config)
+
+    assert diagnostics["attention_node_gradient_norm_pre_clip"] == pytest.approx(5.0)
+    assert diagnostics["attention_node_gradient_clip_coefficient"] == pytest.approx(
+        1.0 / (5.0 + 1.0e-6)
+    )
+    assert diagnostics[
+        "attention_node_gradient_norm_applied_before_interaction_clip"
+    ] == pytest.approx(1.0, abs=1.0e-6)
+    assert diagnostics["interaction_gradient_norm_after_attention_node_clip"] == pytest.approx(
+        math.sqrt(145.0), abs=1.0e-5
+    )
+    assert diagnostics["interaction_gradient_norm_pre_clip"] == pytest.approx(13.0, abs=1.0e-5)
+    assert decoder.weight.grad.norm().item() == pytest.approx(1.0, abs=1.0e-6)
+    assert other.grad.norm().item() == pytest.approx(12.0, abs=1.0e-6)
+
+
+def test_attention_node_and_relation_row_hierarchy_reconstructs_raw_norm() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            grad_clip_norm=20.0,
+            interaction_grad_clip_norm=20.0,
+            attention_node_grad_clip_norm=1.0,
+            attention_collision_grad_clip_norm=1.0,
+            closed_loop_perception_grad_clip_norm=20.0,
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+    attention.node_decoder.weight.grad = torch.zeros_like(attention.node_decoder.weight)
+    node_gradient = attention.node_decoder.weight.grad[0]
+    node_gradient.fill_(1.0)
+    node_gradient.mul_(3.0 / node_gradient.norm())
+    attention.relation_decoder.weight.grad = torch.zeros_like(attention.relation_decoder.weight)
+    collision_gradient = attention.relation_decoder.weight.grad[attention.collision_output_index]
+    collision_gradient.fill_(1.0)
+    collision_gradient.mul_(4.0 / collision_gradient.norm())
+    other = attention.scene_projection.bias
+    other.grad = torch.ones_like(other)
+    other.grad.mul_(12.0 / other.grad.norm())
+
+    diagnostics = _clip_training_gradients(model, config)
+
+    assert diagnostics["interaction_gradient_norm_pre_clip"] == pytest.approx(13.0, abs=1.0e-5)
+    assert diagnostics["interaction_gradient_norm_after_attention_node_clip"] == pytest.approx(
+        math.sqrt(161.0), abs=1.0e-5
+    )
+    assert diagnostics["interaction_gradient_norm_after_attention_collision_clip"] == pytest.approx(
+        math.sqrt(146.0), abs=1.0e-5
+    )
+    assert diagnostics["interaction_gradient_norm_after_attention_row_clips"] == pytest.approx(
+        math.sqrt(146.0), abs=1.0e-5
+    )
+
+
 def test_attention_force_rows_are_jointly_bounded_before_complete_interaction_clip() -> None:
     config = load_config(
         "configs/tiny_overfit.yaml",
@@ -475,12 +565,25 @@ def test_complete_interaction_retention_gate_rejects_starved_update() -> None:
         overrides=["training.minimum_interaction_gradient_retention=0.1"],
     )
 
-    with pytest.raises(FloatingPointError, match=r"retained only 0\.002.*optimiser step 200"):
+    with pytest.raises(
+        FloatingPointError,
+        match=r"retained only 0\.002.*optimiser step 200",
+    ) as captured:
         _assert_interaction_gradient_retention(
-            {"interaction_gradient_clip_coefficient": 0.002},
+            {
+                "interaction_gradient_clip_coefficient": 0.002,
+                "interaction_gradient_norm_pre_clip": 500.0,
+            },
             config,
             optimizer_step=200,
         )
+    assert captured.value.diagnostics == {
+        "interaction_gradient_clip_coefficient": 0.002,
+        "interaction_gradient_norm_pre_clip": 500.0,
+        "optimizer_step_attempted": 200.0,
+        "minimum_interaction_gradient_retention": 0.1,
+        "optimizer_update_applied": 0.0,
+    }
 
     _assert_interaction_gradient_retention(
         {"interaction_gradient_clip_coefficient": 0.1},

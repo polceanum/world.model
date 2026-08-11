@@ -5,6 +5,7 @@ import json
 import pytest
 
 import train
+from world_model.training.trainer import InteractionGradientRetentionError
 
 
 def test_training_lock_rejects_concurrent_owner(tmp_path) -> None:
@@ -59,6 +60,49 @@ def test_fresh_cli_failure_persists_terminal_diagnostic(tmp_path, monkeypatch) -
         .splitlines()
     ]
     assert history == [failure]
+
+
+def test_cli_failure_persists_structured_optimizer_diagnostics(tmp_path, monkeypatch) -> None:
+    def fail_training(*_args, **_kwargs):
+        raise InteractionGradientRetentionError(
+            "complete interaction gradient was starved",
+            {
+                "optimizer_step_attempted": 60.0,
+                "interaction_gradient_clip_coefficient": 0.085,
+                "episode_seeds": "1,2,3,4,5,6,7,8",
+            },
+        )
+
+    monkeypatch.setattr(
+        "world_model.training.trainer.train_from_config",
+        fail_training,
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "train.py",
+            "--config",
+            "configs/tiny_overfit.yaml",
+            "--run-name",
+            "structured-failure-state",
+            "--set",
+            f"project.output_dir={tmp_path / 'runs'}",
+        ],
+    )
+
+    with pytest.raises(
+        InteractionGradientRetentionError,
+        match="complete interaction gradient was starved",
+    ):
+        train.main()
+
+    run_directory = next((tmp_path / "runs").glob("*-structured-failure-state"))
+    failure = json.loads((run_directory / "training_failure.json").read_text())
+    assert failure["diagnostics"] == {
+        "optimizer_step_attempted": 60.0,
+        "interaction_gradient_clip_coefficient": 0.085,
+        "episode_seeds": "1,2,3,4,5,6,7,8",
+    }
 
 
 def test_fresh_cli_retry_cannot_overwrite_early_failure_directory(

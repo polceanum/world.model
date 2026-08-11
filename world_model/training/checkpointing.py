@@ -157,6 +157,7 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
     # Checkpoints predating the switch ran the proposal transformer natively
     # on the selected device.
     ("device", "global_detector_cpu_on_mps"): False,
+    ("training", "attention_node_grad_clip_norm"): None,
     ("training", "attention_node_output_grad_clip_norm"): None,
     ("training", "attention_collision_output_grad_clip_norm"): None,
     ("training", "attention_force_output_grad_clip_norm"): None,

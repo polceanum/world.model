@@ -253,17 +253,37 @@
   complete-stage retention `0.001167 -> 0.64704`; pass the offline replay audit
   with no severe or uncontained blocks. Keep this branch explicitly
   non-promotable because earlier repaired updates change the learned weights.
-- [ ] Complete the new immutable weights-only 3.00M stage-A campaign at
+- [x] Stop the new immutable weights-only 3.00M stage-A campaign at
   `runs/20260811-042704-attention-impulse-isolated-stage-a/`, launched from the
   protected graph control under specification 1.30 and clean commit `d38cc9b`.
   Its 32-episode step-zero selector is tensor/metric exact with the protected
   control (`0.3213162196`), and sampled update 8 is finite, fully balanced,
-  supported, and entirely unclipped (`0.6740` raw/applied interaction norm).
-  Pass the matched
-  step-64/152/200/280 stress positions, durable checkpoint integrity, the first
-  trained fixed selector at 512, repeated selectors, and the declared plateau;
-  retain identity, per-axis, every-horizon, lifecycle, event, uncertainty, and
-  scenario guardrails before scaling capacity.
+  supported, and entirely unclipped (`0.6740` raw/applied interaction norm),
+  but attempted update 60 is deterministically rejected before Adam at
+  `0.0850405` complete-stage retention. Do not count its 59 applied updates or
+  reuse its mutable state.
+- [x] Replay the exact failed trajectory through update 60 with durable
+  structured failure diagnostics. Match all 400--454 comparable model/data
+  fields at logged updates 8--56, localize the remaining `11.6617` accumulated
+  node-decoder norm to world-y `11.5014`, and verify the largest shared
+  non-decoder attention tensor is only `0.124876`.
+- [x] Add a joint accumulated node x/y/z decoder cap before the existing
+  collision/force/impulse/interaction/global hierarchy; protocol-bind it,
+  normalize legacy checkpoints to `null`, expose raw/applied/intermediate
+  diagnostics, make terminal optimizer failures durable, and make the offline
+  auditor fail them.
+- [x] Complete the fresh protected-control node-row-repaired causal replay
+  through update 60. Its initial selector is tensor/metric exact; on the same
+  seeds it is fully supported and retains `0.565343` at the complete stage.
+  Preserve its deliberate pre-Adam stop and report as diagnostic-only.
+- [x] Pass full regression gates: `706 passed, 5 skipped, 1 deselected`
+  non-device; host MPS marker and five direct regressions pass; Ruff,
+  compileall, diff, and host dry-run placement pass.
+- [ ] Launch a new clean specification-1.31 campaign. It must pass update 60,
+  the later 64/152/200/280
+  stress positions, durable checkpoint integrity, fixed selector 512, repeated
+  selectors, and plateau while retaining identity, per-axis, every-horizon,
+  lifecycle, event, uncertainty, and scenario guardrails before scaling.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

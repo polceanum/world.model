@@ -185,6 +185,9 @@ training:
   # Local semantic isolation must retain at least 10% at the complete
   # interaction stage; otherwise reject the update before Adam is mutated.
   minimum_interaction_gradient_retention: 0.1
+  # Per-invocation node caps can still accumulate through 144 recursive calls.
+  # Bound the complete x/y/z node decoder group before the interaction cap.
+  attention_node_grad_clip_norm: 1.0
   # Isolate rare collision-logit head spikes before the complete attention/
   # graph cap so they cannot suppress unrelated typed residual gradients.
   attention_collision_grad_clip_norm: 1.0

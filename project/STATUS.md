@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-11
-**Specification:** `PROJECT_SPEC.md` 1.30
+**Specification:** `PROJECT_SPEC.md` 1.31
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -103,8 +103,106 @@ impulse-multiplier/additive path that again starves the shared stage;
 specification 1.30 isolates impulse outputs and decoder rows, rejects any
 post-isolation complete interaction retention below 10% before Adam mutates,
 and makes the offline auditor fail the same condition; matched diagnostic
-replay contains update 200, but a fresh selector, plateau, convergence result,
-and any capacity promotion remain pending
+replay contains update 200, but the fresh campaign is stopped after attempted
+update 60 exposes unbounded accumulation in the node decoder; specification
+1.31 isolates that x/y/z group, persists complete terminal optimizer evidence,
+and passes a fresh protected-control update-60 causal replay at `0.565343`
+retention; full regression gates, a clean sustained relaunch, fixed trained
+selectors, plateau, convergence, and every capacity promotion remain pending
+
+## 2026-08-11 — accumulated node-gradient repair; small-rung relaunch pending
+
+The trainer and supervisor for
+`runs/20260811-042704-attention-impulse-isolated-stage-a/` are stopped. The
+campaign applied 59 finite supported updates but never reached a durable
+trained checkpoint or selector. Attempted update 60 was rejected before Adam
+because complete interaction retention fell to `0.0850405`, below the declared
+`0.1`. Its exact balanced seeds are
+`13760,11713,9514,12171,15788,5701,3510,15031`; all eight scenarios and 332
+causal trajectory targets were present, so this is not support collapse.
+
+The exact diagnostic run
+`runs/20260811-053408-step60-retention-replay-v3/` reproduces every comparable
+model/data field at logged updates 8--56 (400 fields at step 8, 454 at most
+later rows, zero mismatches after excluding timing/RSS) and atomically records
+the rejected update. Its raw/post-existing-row interaction norm is
+`28.2744/11.7591`. The node decoder is `11.6617`, dominated by world-y
+`11.5014`; the largest shared non-decoder attention gradient is only
+`0.124876`. Force isolation reduces its raw `25.7085` group to `1.0`; collision
+and impulse are not the remaining cause. The offline dynamics audit now
+correctly returns `fail` because the run has a terminal optimizer artifact.
+The concise report is `step60_retention_failure_report.json` beside the run.
+
+Specification 1.31 adds `training.attention_node_grad_clip_norm`; the active
+profile uses `1.0`. It jointly clips the accumulated x/y/z node decoder before
+the existing collision, force, impulse, complete-interaction, and global
+hierarchy. Forward values, tensor shapes, inference, the 3,004,656 parameter
+count, and `WorldBelief` contracts are unchanged. A direct reconstruction of
+the failed gradient gives post-row norm `1.81140` and retention `0.552059`.
+Structured retention failures now persist attempted step, zero applied-update
+marker, seeds/scenarios, support/physical metrics, and all gradient levels;
+the offline auditor treats a terminal numerical/retention artifact as a hard
+failure even if sampled JSONL rows were healthy.
+
+The fresh causal repair replay at
+`runs/20260811-055605-step60-node-row-repair-replay-v1/` starts weights-only
+from the same protected graph control. Its 32-episode initial selector is
+exact: 225/225 tensors bitwise equal, 2,583/2,583 comparable metrics equal,
+model hash `1354bdfc...f91`, and score `0.3213162196`. It uses host MPS for RGB,
+CPU for closed loop, float32, RGB-only runtime, and no oracle. It reaches the
+same attempted update-60 seeds with all eight scenarios and 332 causal targets;
+raw/post-row interaction norm is `1.96175/1.76884`, complete-stage retention is
+`0.565343`, and maximum shared non-decoder norm is `0.004064`. The wrapper
+deliberately stops before Adam after the retention check so the diagnostic is
+non-promotable. Its report is `node_row_repair_report.json` beside the run.
+
+The Transformer scaling review confirms the current block already uses the
+relevant modern core: RMS pre-normalization, scaled multi-head attention,
+SwiGLU, residual paths, typed set tokens, and zero-output growth. GQA/local
+attention/FlashAttention address long-token inference or kernel bottlenecks
+that do not exist at at most 22 structured tokens; RoPE remains invalid for
+unordered slots. The evidence-gated ladder remains 3.00M control, 3.53M
+depth-six, 4.34M width-192, then 8.31M width-256/depth-six on CUDA, with minimum
+parameter-proportional balanced exposures of 8,192/9,728/12,288/23,040 updates.
+No larger rung is authorized until a clean specification-1.31 3.00M campaign
+completes fixed selectors and the declared plateau without broad regression.
+
+Verification at this boundary passes: affected config/trainer/checkpoint/
+entrypoint/auditor tests reported `294 passed` before the final hierarchy
+assertion; the complete non-device suite then reported `706 passed, 5 skipped,
+1 deselected in 173.60 s`; the host device marker reported `1 passed, 711
+deselected in 3.05 s`; five direct MPS regressions reported `5 passed in
+7.76 s`. Ruff format (`193 files already formatted`), Ruff check, compileall,
+and `git diff --check` pass. The host dry run resolves PyTorch `2.10.0`, MPS
+built/available, MPS RGB measurement, CPU closed loop, float32, 8,192 updates,
+65,536 balanced episode draws, eight scenarios, RGB-only evaluation, and no
+oracle. A clean committed sustained relaunch is the next action; no new
+accuracy, generalization, fixed trained selector, plateau, convergence, or
+capacity result is claimed here.
+
+Exact verification commands:
+
+```bash
+PYTHONPATH=. conda run -n orpheus pytest -q \
+  tests/unit/test_training_schedule.py tests/unit/test_config.py \
+  tests/unit/test_audit_training_dynamics.py tests/unit/test_train_entrypoint.py \
+  tests/integration/test_checkpoint_roundtrip.py
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -m "not device"
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q -m device
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q \
+  tests/integration/test_rgb_measurements.py::test_roi_sampling_mps_training_mode_no_grad_uses_inference_path \
+  tests/integration/test_rgb_measurements.py::test_roi_sampling_mps_training_native_bilinear_path_is_differentiable \
+  tests/integration/test_rgb_measurements.py::test_global_rgb_cpu_detector_trains_and_roundtrips_with_mps_backbone \
+  tests/unit/test_association.py::test_association_transfers_cost_to_cpu_without_mps_float64 \
+  tests/unit/test_evaluation_parameter_update_metrics.py::test_directional_parameter_metrics_transfer_before_float64_accumulation
+PYTHONPATH=. conda run -n orpheus ruff format --check .
+PYTHONPATH=. conda run -n orpheus ruff check .
+PYTHONPYCACHEPREFIX=/tmp/orpheus-pycache PYTHONPATH=. \
+  conda run -n orpheus python -m compileall train.py world_model scripts tests
+PYTHONPATH=. conda run --no-capture-output -n orpheus python train.py \
+  --config configs/attention_pilot_mps.yaml --device mps --dry-run
+git diff --check
+```
 
 ## 2026-08-11 — impulse-gradient path repaired; scaling remains gated
 
@@ -161,7 +259,7 @@ until a new immutable small-rung campaign completes fixed selectors and the
 declared plateau.
 
 The repair was committed and pushed to `main` as `d38cc9b`. A fresh
-weights-only campaign is active at
+weights-only campaign was launched at
 `runs/20260811-042704-attention-impulse-isolated-stage-a/` under one-shot
 Standard/default LaunchAgent
 `com.polceanum.orpheus.attention-impulse-isolated-20260811-042704`, trainer PID
@@ -188,7 +286,7 @@ trusted identity-switch rate is `1.3592%`, and position coverage90 is
 `93.3861%`. Checkpoint metadata records specification 1.30 and float32. The
 equality report is
 `runs/20260811-042704-attention-impulse-isolated-stage-a/checkpoint_step_000000_equality_audit.json`.
-Training is now active; there is still no trained selector, accuracy gain,
+Training then became active; there was still no trained selector, accuracy gain,
 generalization result, plateau, convergence, or scale promotion.
 
 The first sampled training block at update 8 is healthy. Its batch contains
@@ -198,9 +296,10 @@ Raw and applied whole-interaction gradient norms are both `0.673975`; all
 typed-output, decoder-row, complete-interaction, and global clip coefficients
 are `1.0`. The largest semantic row is ordinary normal force at `0.652459`;
 impulse multiplier/additive norms are `3.22e-10/1.82e-11`. RSS is
-`2,935,676,928` bytes. Both launchd services remain on their first invocation
-with empty stderr. This is only early optimizer-health evidence; the historical
-64/152/200/280 stress positions and fixed selector 512 remain pending.
+`2,935,676,928` bytes. Both launchd services were then on their first invocation
+with empty stderr. This was only early optimizer-health evidence; the later
+attempted update-60 failure and specification-1.31 repair above supersede its
+active-state description.
 
 Exact commands used for this repair boundary:
 

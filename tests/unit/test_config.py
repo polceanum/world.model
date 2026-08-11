@@ -441,6 +441,15 @@ def test_collision_positive_weight_is_at_least_one() -> None:
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "nan", "inf"])
+def test_attention_node_gradient_clip_is_positive_when_configured(value: str) -> None:
+    with pytest.raises(ValueError, match="attention_node_grad_clip_norm"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.attention_node_grad_clip_norm={value}"],
+        )
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf"])
 def test_attention_collision_gradient_clip_is_positive_when_configured(value: str) -> None:
     with pytest.raises(ValueError, match="attention_collision_grad_clip_norm"):
         load_config(

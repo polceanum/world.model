@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.30
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output and impulse-jump backpropagation isolation plus measured compute/data scaling amendments 11 August 2026
+**Version:** 1.31
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, and accumulated node-gradient isolation plus measured compute/data scaling amendments 11 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6243,6 +6243,18 @@ attention primarily reduce long-context or large-batch cost. They are not
 automatic accuracy improvements for the current set of at most 22 structured
 tokens.
 
+A primary-source review of later dense systems reinforces that restraint.
+Llama 3 attributes most gains to data quality/diversity and training scale,
+keeps a stable dense Transformer, and uses grouped-query attention primarily
+for decode efficiency. Its recipe combines linear warmup, cosine decay,
+staged context growth, explicit short-context recovery checks, and final
+annealing/checkpoint averaging. Gemma 3 mixes local and global attention to
+control long-context KV-cache memory. V-JEPA 2 scales curated video data,
+model size, duration, and resolution progressively and applies a cooldown only
+after measured plateauing. These are scaling-process lessons; GQA, local
+attention, or a billion-parameter video encoder do not solve Orpheus's current
+short-token recursive-gradient defect.
+
 Project Orpheus therefore retains dense RMS-pre-normalized attention and
 SwiGLU for the Mac rung. It does not add object-slot positional encoding or
 RoPE to unordered entity/relation sets. Relative/rotary time features become
@@ -6281,6 +6293,13 @@ The first concrete capacity census is fixed before running the ladder:
   in attention; and
 - the first single-CUDA candidate is width 256/six blocks, `8,305,648` total
   with `6,404,618` in attention.
+
+Using the control's 8,192-update/65,536-episode minimum as the data floor and
+rounding parameter-proportional budgets upward to complete 512-update selector
+intervals gives concrete lower bounds of 9,728 updates/77,824 episodes for the
+depth-six rung, 12,288/98,304 for width 192, and 23,040/184,320 for the first
+width-256/depth-six CUDA rung. These are minimum exposure budgets, not stopping
+rules: every rung still continues to the same fixed-manifest plateau condition.
 
 These counts are design points, not evidence that the larger candidates should
 win. The active control's full 8,192--24,576-update plateau trajectory is also
@@ -6321,6 +6340,10 @@ Primary references for this decision:
 - Vaswani et al., “Attention Is All You Need,” arXiv:1706.03762;
 - Hoffmann et al., “Training Compute-Optimal Large Language Models,”
   arXiv:2203.15556;
+- Grattafiori et al., “The Llama 3 Herd of Models,” arXiv:2407.21783;
+- Gemma Team, “Gemma 3 Technical Report,” arXiv:2503.19786;
+- Assran et al., “V-JEPA 2: Self-Supervised Video Models Enable Understanding,
+  Prediction and Planning,” arXiv:2506.09985;
 - Yang et al., “Tensor Programs V: Tuning Large Neural Networks via Zero-Shot
   Hyperparameter Transfer,” arXiv:2203.03466;
 - Dao, “FlashAttention-2,” arXiv:2307.08691;
@@ -6376,6 +6399,44 @@ A fresh qualification must still initialize weights-only from the protected
 graph control, pass the matched step-200 stress batch, complete fixed RGB-only
 selectors, and reach the declared plateau before width, depth, history, or
 video-representation capacity is increased.
+
+## 198. Bound accumulated node-decoder gradients after recursive output isolation
+
+Per-invocation typed-output isolation does not bound the sum accumulated by a
+decoder parameter that is reused throughout a recursive rollout. The first
+fresh specification-1.30 campaign deterministically reached a fully supported
+update 60 whose complete interaction stage retained only `0.0850405`; the
+trainer correctly rejected it before Adam mutation. Exact replay matched every
+comparable logged model/data field through update 56 and captured the rejected
+batch's complete hierarchy.
+
+The raw interaction gradient was `28.2744`. Existing collision, force, and
+impulse row caps reduced their groups as configured, but the remaining
+interaction norm was `11.7591`. The accumulated node decoder alone was
+`11.6617`, dominated by its world-y row at `11.5014`; the largest shared
+non-decoder attention parameter was only `0.124876`. This is a missing semantic
+row cap, not evidence that shared attention, MPS, support, or model capacity
+collapsed. A one-update norm reconstruction shows a joint node cap of `1.0`
+would leave a `1.81140` interaction norm and `0.552059` complete-stage
+retention, comfortably above the required `0.1`.
+
+Training therefore supports a separately configured joint accumulated node
+x/y/z decoder-gradient cap. It runs after per-invocation node-output hooks and
+before collision, force, impulse, complete-interaction, and global caps. It
+must report raw/applied node norm and coefficient plus the interaction norm
+after node isolation, participate in exact resume/selector protocol hashing,
+normalize to `null` for historical checkpoints, and remain visible to the
+offline severe-clipping auditor. The repair changes backward conditioning
+only: forward values, inference, tensor shapes, parameter count, typed outputs,
+and `WorldBelief` contracts remain unchanged.
+
+A durable numerical failure artifact is part of convergence evidence. The
+trainer must persist the rejected optimizer step, batch seeds/scenarios,
+support and physical diagnostics, full gradient hierarchy, configured minimum,
+and an explicit zero applied-update marker. The offline auditor must fail a run
+with such a terminal optimizer artifact even when its last sampled JSONL row
+was healthy. Scaling remains prohibited until a fresh repaired small-rung run
+passes fixed selectors and the declared plateau.
 
 ---
 

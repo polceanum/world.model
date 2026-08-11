@@ -2776,3 +2776,37 @@
   observes gradients after output conditioning. The replay qualifies a fresh
   weights-only campaign, not its weights, accuracy, generalization, plateau,
   or convergence. Capacity scaling remains gated on that campaign.
+
+## ADR-093 — Isolate accumulated node rows and make optimizer rejection durable
+
+- **Date:** 2026-08-11
+- **Status:** accepted, implemented, and causally replayed; sustained selector pending
+- **Context:** The fresh impulse-isolated campaign exactly reproduced the
+  protected step-zero selector and remained finite/support-complete through
+  update 59, but its update-60 complete interaction stage retained only
+  `0.0850405`. The pre-Adam fail-fast correctly rejected the update. The
+  original failure artifact lacked the gradient hierarchy, and the offline
+  auditor looked only at sampled metric rows, so a terminal failed run could
+  appear healthy. An instrumented exact replay matched all 400--454 comparable
+  model/data fields at every logged update 8--56 and captured update 60. The
+  node decoder was `11.6617`, dominated by world-y `11.5014`, while the largest
+  shared non-decoder tensor was `0.124876`. Existing force isolation worked;
+  per-invocation node clipping had not bounded accumulation across 144 calls.
+- **Decision:** Add a joint accumulated x/y/z node-decoder cap before the
+  collision/force/impulse and complete-interaction caps, with raw/applied and
+  intermediate interaction telemetry and full resume/protocol semantics.
+  Persist structured diagnostics on every interaction-retention rejection and
+  make the offline auditor fail durable terminal numerical/optimizer
+  failures. Keep the rejected trajectory and all replays non-promotable.
+- **Alternatives considered:** lower the whole learning rate; raise or remove
+  the 10% gate; accept finite normalized updates; enlarge the attention stack;
+  cap only the y row; infer the cause from sampled rows without exact replay.
+- **Consequences:** Forward values, parameter count, tensors, inference, and
+  the typed dynamics contract are unchanged. A one-update reconstruction
+  predicts post-row norm `1.81140` and complete-stage retention `0.552059` with
+  the configured cap `1.0`. A fresh protected-control replay exactly reproduced
+  the initial selector and reached the same update-60 seeds with complete
+  support, raw/post-row norm `1.96175/1.76884`, and healthy `0.565343`
+  retention; it deliberately stopped before Adam. No capacity rung is
+  authorized until the repaired 3.00M control reaches complete selectors and
+  plateau.

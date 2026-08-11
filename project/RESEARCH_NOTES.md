@@ -142,7 +142,7 @@ replay trajectory is not forward-exact because earlier newly bounded updates
 change the weights. It qualifies a fresh start, not accuracy, generalization,
 or convergence.
 
-The fresh specification-1.30 campaign is active at
+The fresh specification-1.30 campaign at
 `runs/20260811-042704-attention-impulse-isolated-stage-a/` from clean commit
 `d38cc9b`. Its 32-episode RGB-only step-zero selector is a strict control:
 all 225 tensors are bitwise equal, all 2,583 comparable non-protocol metrics
@@ -153,7 +153,20 @@ raw/applied interaction gradient with every local/stage/global coefficient at
 `1.0`. Impulse rows are ordinary on this batch and RSS is `2,935,676,928`
 bytes. This establishes clean launch and early optimizer health only. The
 historical stress positions, fixed selector 512, repeated selectors, and the
-declared plateau still gate any accuracy or capacity decision.
+declared plateau still gate any accuracy or capacity decision. It was later
+stopped before a trained selector: attempted update 60 deterministically fell
+below the new gate at `0.0850405` complete-stage retention.
+
+The structured exact replay shows why. Every comparable logged field at
+updates 8--56 is exact. Update 60 has complete support but an accumulated node
+decoder norm `11.6617`, dominated by world-y `11.5014`; the largest shared
+non-decoder tensor is only `0.124876`. Per-invocation node hooks protected the
+shared stack but not the decoder sum across 144 calls. Specification 1.31 adds
+a joint accumulated node cap and durable terminal optimizer diagnostics. A
+fresh protected-control replay exactly reproduces all 225 initial tensors and
+2,583 selector metrics, then reaches the same update-60 seeds at `0.565343`
+complete-stage retention with full support. It deliberately stops before Adam
+and is optimizer-health evidence, not accuracy or convergence.
 
 Exact capacity census for later one-axis studies:
 
@@ -178,6 +191,20 @@ must first win as a separate matched physical-prediction control. V-JEPA 2.1's
 dense masked/deep self-supervision supports a later scalable RGB representation
 stage, but its distributed visual features should be distilled or cross-
 attended into typed proposals while `WorldBelief` remains authoritative.
+
+The 11 August primary-source refresh leads to the same operational conclusion.
+The original Transformer couples multi-head attention with residual paths,
+normalization, Adam warmup/decay, large balanced batches, and long training;
+parameter count alone was never the recipe. Llama 3 keeps a stable dense
+architecture and attributes most gains to curated/diverse data and scale, with
+linear warmup, cosine decay, staged context increases, recovery checks, and
+final annealing. Gemma 3's local/global alternation primarily controls
+long-context KV memory. V-JEPA 2 improves with curated video, capacity,
+duration, resolution, and cooldown in measured stages. Orpheus already has
+RMS-pre-norm and SwiGLU; at no more than 22 unordered structured tokens, GQA,
+RoPE, local attention, sparse experts, and flash kernels target absent
+bottlenecks. The next capacity result must therefore be the declared one-axis
+depth/data ladder after small-rung convergence, not an LLM-shaped rewrite.
 
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
