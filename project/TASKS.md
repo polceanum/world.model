@@ -391,9 +391,16 @@
   uncertainty/axis/horizon regression before scaling.
   The campaign is now active at
   `runs/20260811-170842-attention-aggregate-isolated-stage-a/` from clean commit
-  `23ecf9d`; trainer/supervisor each run once with empty stderr and the initial
-  32-episode selector is in progress. Keep this task open until selectors,
-  plateau, test/OOD, and broad non-regression actually pass.
+  `23ecf9d`; trainer/supervisor each run once with empty stderr. The initial
+  32-episode selector completed exactly: `225/225` tensors and `2,584/2,584`
+  metrics match the protected selector at score `0.3213162195855908`. The
+  first balanced optimizer block is active. Keep this task open until trained
+  selectors, plateau, test/OOD, and broad non-regression actually pass.
+  Step 8 subsequently completed with all eight updates applied, exact
+  eight-scenario balance, `349` causal trajectories, zero skips, interaction
+  retention `1.0`, applied gradient `0.283628`, and a passing whole-run audit.
+  Continue unchanged to durable checkpoint/selector boundaries; do not infer
+  convergence from this single healthy block.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

@@ -39,8 +39,19 @@
   `runs/20260811-170842-attention-aggregate-isolated-stage-a/` weights-only from
   the protected graph control. Trainer and immutable-source supervisor are
   active once with empty stderr under the declared 8,192/4,096/24,576
-  convergence envelope. Initial fixed validation is active; no trained
-  accuracy, convergence, or scale claim exists.
+  convergence envelope. Initial fixed validation completed in `978.263 s`
+  with all `225/225` tensors and `2,584/2,584` metrics exactly equal to the
+  prior protected selector, including score `0.3213162195855908`; the first
+  balanced optimizer block is active. No trained accuracy, convergence, or
+  scale claim exists.
+- Audited the first logged balanced block at step 8. All eight optimizer
+  updates apply with exact eight-scenario balance, `349` causal trajectories,
+  zero skipped draws, interaction retention `1.0`, applied gradient `0.283628`,
+  and `0.489052` loss. The whole-run dynamics auditor passes without failure,
+  duplicate, uncontained interaction clip, or terminal artifact. Its severe
+  typed-output warning reflects the declared aggregate node/force budgets;
+  the complete interaction update is not clipped. Peak sampled RSS is
+  `2,936,651,776` bytes. This is health evidence, not convergence.
 
 - Audited the live immutable campaign through durable step 896. All updates
   apply with exact eight-scenario logged balance, no skip/terminal/uncontained

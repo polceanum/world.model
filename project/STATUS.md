@@ -214,9 +214,30 @@ built/available, measurement on MPS, closed loop on CPU, RGB-only input, no
 oracle, and weights-only initialization from the protected step-64 graph
 checkpoint. The supervisor enforces 8,192 minimum updates, 4,096-update
 extensions, a four-selector/1% plateau rule, and a truthful 24,576 hard limit.
-The mandatory 32-episode step-zero selector is in progress; no optimizer
-update, trained selector, accuracy gain, plateau, generalization result, or
-capacity authorization exists yet.
+The mandatory 32-episode step-zero selector completed in `978.263 s` and is
+exactly reproducible against the prior protected-control selector: all
+`225/225` model tensors are bitwise equal and all `2,584/2,584` checkpoint
+metrics are exactly equal, including selection score `0.3213162195855908`.
+The trainer then entered its first balanced optimizer block and remains
+genuinely active (`R` state, approximately `541%` CPU and `1.95 GB` RSS at the
+18:28 host check); the launch count remains one and stderr is empty. No trained
+metric, accuracy gain, plateau, generalization result, or capacity
+authorization exists yet.
+
+The first logged balanced block reached step 8 in `1,276.365 s` total. It uses
+the same seeds and scenario order as the predecessor, applies all eight
+optimizer updates, has zero skipped-gradient draws, `349` causal trajectories,
+and the expected eight cold-start objective terms. Loss is `0.4890517` versus
+the predecessor's `0.4890301`. Aggregate node/force output budgets reduce their
+raw norms `0.69604/0.15816` to `0.01015/0.01350`; collision/impulse are
+negligible. The resulting complete interaction coefficient is `1.0`, the
+finite applied attention/global norm is `0.283628`, and no global clip occurs.
+The dynamics auditor passes with no failures, duplicates, skipped draws,
+uncontained interaction clips, or terminal artifact; its severe local-output
+clip warning is expected observability of the new aggregate budget rather than
+evidence that the complete interaction update was starved. Peak sampled RSS is
+`2,936,651,776` bytes. This proves early optimizer health only, not an accuracy
+trend or convergence.
 
 ## 2026-08-11 — pooled convergence-trend observability implemented
 
