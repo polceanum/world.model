@@ -2734,6 +2734,7 @@ def _group_closed_loop_terms(
         "rollout_position_y",
         "rollout_position_z",
         "rollout_velocity",
+        "attention_node_complexity",
     ):
         if name in details:
             terms[name] = details[name]
@@ -2826,7 +2827,10 @@ def _weighted_closed_loop_total(
     # written must be opt-in by exact key.  Letting ``weighted_total`` fall
     # back from ``rollout_nll`` to an absent ``rollout`` key assigns weight
     # 1.0, fifty times the declared default 0.02.
-    optional_exact_weight_terms = {"rollout_nll"}
+    optional_exact_weight_terms = {
+        "rollout_nll",
+        "attention_node_complexity",
+    }
     selected: dict[str, Tensor] = {
         name: value
         for name, value in terms.items()
@@ -2853,6 +2857,33 @@ def _weighted_closed_loop_total(
         # accidental unit fallback weight.
         return next(iter(terms.values())).sum() * 0
     return weighted_total(selected, weights)
+
+
+def _attention_node_complexity_details(model: OnlineWorldModel) -> dict[str, Tensor]:
+    """Return an axis-neutral parsimony prior for attention node residuals.
+
+    RMS-normalized entity tokens make decoder-row energy a stable proxy for
+    the capacity assigned to persistent learned acceleration.  Averaging the
+    squared L2 energy of the three typed rows penalizes a disproportionately
+    large axis more strongly without forbidding evidence-supported residuals
+    or changing inference.  The objective remains opt-in through the exact
+    ``attention_node_complexity`` loss weight.
+    """
+
+    attention = model.dynamics.attention_interactions
+    if attention is None:
+        return {}
+    weight = attention.node_decoder.weight
+    bias = attention.node_decoder.bias
+    row_energy = weight.square().sum(dim=-1)
+    if bias is not None:
+        row_energy = row_energy + bias.square()
+    details = {
+        "attention_node_complexity": row_energy.mean(),
+    }
+    for axis_index, axis_name in enumerate(("x", "y", "z")):
+        details[f"attention_node_complexity_{axis_name}"] = row_energy[axis_index]
+    return details
 
 
 def select_closed_loop_window(
@@ -3663,6 +3694,7 @@ def run_closed_loop_batch(
     if fast_measurement is not None:
         details["measurement_fast"] = fast_measurement
     details = _globally_weight_horizon_details(details, config, reference)
+    details.update(_attention_node_complexity_details(model))
     terms = _group_closed_loop_terms(details, reference)
     total = _weighted_closed_loop_total(terms, config.training.loss_weights)
     metrics = {name: float(value.detach().cpu()) for name, value in details.items()}

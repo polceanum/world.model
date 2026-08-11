@@ -2924,3 +2924,40 @@
   retention; it deliberately stopped before Adam. No capacity rung is
   authorized until the repaired 3.00M control reaches complete selectors and
   plateau.
+
+## ADR-094 — Penalize unsupported attention-node complexity before scaling
+
+- **Date:** 2026-08-11
+- **Status:** accepted and implemented; sustained qualification pending
+- **Context:** The corrected aggregate-gradient campaign's complete step-512
+  RGB-only selector is a genuine model rejection rather than corruption or
+  optimizer collapse. The latest persisted candidate scores `0.3251911`
+  versus the protected `0.3213162`. Exact decoder ablations show that removing
+  only the trained node-y row improves current position, x/y/z, velocity,
+  collision F1, and all five position horizons relative to the protected
+  control, although strict scenario and short-horizon coverage guardrails
+  still reject it. At step 512 the x/y/z decoder-row L2 norms are
+  `0.01242/0.11143/0.01207`; y therefore holds about `97.6%` of node-row
+  squared energy. The vertical residual changes contact timing and can redirect
+  structured pair impulses into x, explaining the apparently cross-axis
+  failure. Zero initialization and ordinary AdamW decay did not preserve the
+  intended inertial bias.
+- **Decision:** Add an opt-in `attention_node_complexity` loss equal to the
+  mean squared L2 energy of the three identically treated node-decoder rows,
+  including bias. Log the aggregate and each axis. Historical configs without
+  the exact weight contribute zero. Use a recorded weight of `1.0` for the
+  first repaired campaign; at the rejected checkpoint this is a small
+  `0.004239` loss with a finite `0.07518` restoring-gradient norm. Preserve all
+  forward equations, tensor shapes, residual bounds, attention capacity, and
+  the ability for multistep/event evidence to learn acceleration on any axis.
+- **Alternatives considered:** permanently zero or freeze world-y; reduce only
+  the y learning rate; weaken vertical rollout supervision; enlarge the
+  Transformer; relax scenario guardrails; rely on global weight decay; accept
+  the no-y diagnostic as a deployment checkpoint.
+- **Consequences:** This is a soft complexity prior, not a hardcoded constant-
+  velocity law or axis exception. It directly implements the specification's
+  requirement that learned residuals pay evidence to rewrite predictable
+  inertial motion. Focused schedule/objective/config/checkpoint tests pass
+  (`312 passed`). A fresh protected-control smoke and complete fixed-manifest
+  campaign remain required; no capacity increase is authorized by the
+  diagnostic ablations.

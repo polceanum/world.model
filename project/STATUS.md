@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-11
-**Specification:** `PROJECT_SPEC.md` 1.35
+**Specification:** `PROJECT_SPEC.md` 1.36
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -113,6 +113,93 @@ every capacity promotion remain pending; specification 1.32 additionally
 preflights weight-only handoffs and rejects unsafe partial learned attention
 growth before any destination tensor is copied; specification 1.33 adds an
 exact identity-initialized exception for contiguous appended depth only
+
+## 2026-08-11 — step-512 failure localized; residual-parsimony repair implemented
+
+The specification-1.35 campaign is preserved and intentionally stopped at its
+durable step-640 checkpoint after the causal defect was localized; its safe
+deployment incumbent stays at step zero. The latest persisted complete
+step-512 selector is rejected at score `0.3251911400` versus protected
+`0.3213162196`. Candidate/current position is `0.267023 m` versus
+`0.251460 m`; velocity improves `1.093191 -> 1.040257 m/s`, but x regresses
+`0.281775 -> 0.326179 m`, target coverage falls `0.37625 -> 0.36575`,
+precision falls `0.357312 -> 0.347258`, collision F1 falls
+`0.195489 -> 0.144186`, and identity-switch rate rises
+`1.359% -> 1.723%`. The fixed position horizons change by
+`+0.009407/+0.015413/+0.003433/+0.002079/-0.001947 m`; only one second
+improves. The selector has complete support and the exact checkpoint audit
+passes: all 48 attention tensors changed, all 177 inherited tensors remain
+bitwise exact, exactly 48 complete finite Adam states are at step 512, and all
+source/config/protocol/model hashes agree. This is a behavioral regression,
+not corruption, scope leakage, or collapse.
+
+Typed ablations localize the broad error. Node-only and relation-only
+candidates score `0.374304` and `0.332082`; a half-strength complete attention
+residual scores `0.328838`. Restoring only the node-y decoder row to exact zero
+scores `0.308092` and improves current position (`0.251460 -> 0.247369 m`),
+velocity (`1.093191 -> 1.038949 m/s`), collision F1
+(`0.195489 -> 0.207048`), all three current axes, and every position horizon:
+`0.265184/0.277452/0.309911/0.335387/0.357837 ->`
+`0.256247/0.268004/0.294245/0.320580/0.344243 m`. It still fails two pooled
+short-horizon coverage guards and 77 scenario-specific guards, so it is a
+diagnostic rather than a promotable checkpoint. The dominant full-candidate
+failure is `reference_pairs`: current position `0.212965 -> 0.340263 m`, driven
+by x `0.242694 -> 0.523379 m`, even while its velocity improves.
+
+The node decoder's x/y/z row L2 norms are
+`0.012420/0.111429/0.012073`; corresponding energies are
+`0.000154/0.012417/0.000146`. Specification 1.36 adds an opt-in, axis-neutral
+`attention_node_complexity` objective: mean squared L2 row energy including
+bias, with per-axis diagnostics and exact-zero contribution for historical
+configs. Weight `1.0` gives `0.004239` loss and `0.07518` restoring-gradient
+norm at the rejected checkpoint. It preserves forward behavior, shapes, all
+axes, and evidence-supported acceleration; it is a soft inertial-complexity
+prior, not a frozen y rule. Focused schedule/objective/config/checkpoint tests
+report `312 passed in 32.87 s`; the three new focused tests report
+`3 passed`. The existing live YAML was restored unchanged so its exact-resume
+protocol was not silently mutated. The final `last.pt` is step 640 under
+specification 1.35. Both one-shot launch services were cleanly booted out; the
+only shutdown stderr is the expected multiprocessing cleanup warning for 14
+semaphores. A separately recorded override and fresh protected-control
+campaign are required before any scale rung.
+
+Primary diagnostic artifacts:
+
+- full checkpoint audit:
+  `runs/20260811-170842-attention-aggregate-isolated-stage-a/attention_checkpoint_audit_step_000512.json`;
+- node-only:
+  `runs/20260811-223628-attention-node-only-step512/`;
+- relation-only:
+  `runs/20260811-224740-attention-relation-only-step512/`;
+- half residual:
+  `runs/20260811-225939-attention-half-step512/`;
+- node-y restored to zero:
+  `runs/20260811-231155-attention-without-node-y-step512/report.json`.
+
+Implementation verification on Python `3.10.20` / PyTorch `2.10.0`:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q \
+  tests/unit/test_training_schedule.py tests/unit/test_training_objective_regressions.py \
+  tests/unit/test_config.py tests/integration/test_checkpoint_roundtrip.py
+# 312 passed in 32.87 s
+
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -m 'not device'
+# 716 passed, 5 skipped, 1 deselected in 213.71 s
+
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q \
+  tests/integration/test_rgb_measurements.py::test_roi_sampling_mps_training_mode_no_grad_uses_inference_path \
+  tests/integration/test_rgb_measurements.py::test_roi_sampling_mps_training_native_bilinear_path_is_differentiable \
+  tests/integration/test_rgb_measurements.py::test_global_rgb_cpu_detector_trains_and_roundtrips_with_mps_backbone \
+  tests/unit/test_association.py::test_association_transfers_cost_to_cpu_without_mps_float64 \
+  tests/unit/test_evaluation_parameter_update_metrics.py::test_directional_parameter_metrics_transfer_before_float64_accumulation
+# 5 passed in 8.85 s on host MPS
+```
+
+Ruff format/check, compileall, `git diff --check`, and the full 8,192-update
+dry-run with `training.loss_weights.attention_node_complexity=1.0` pass. The
+dry run resolves 65,536 balanced episode draws, eight scenarios, and 32
+RGB-only validation episodes.
 
 ## 2026-08-11 — specification-1.35 campaign passes durable step 384
 
@@ -780,28 +867,26 @@ is still pending, so no accuracy, generalization, convergence, plateau, or
 capacity promotion is claimed.
 
 The first trained fixed selector at step 512 is complete and rejected. All 32
-RGB-only validation episodes (`100000`--`100031`) completed in `1,178.75 s`,
-with four episodes for each of the eight scenarios and no support failure. The
-candidate score is `0.3307719713`, worse than the protected step-zero
-incumbent/reference score `0.3213162196`; `selection_accepted=0` and the safe
-incumbent remains step zero. Pooled current position RMSE regresses
-`0.251460 -> 0.295016 m`, target coverage `0.37625 -> 0.34775`, prediction
-precision `0.357312 -> 0.329465`, and x/z current RMSE
-`0.281775/0.263691 -> 0.362714/0.304134 m`. Forecast x RMSE regresses at
-0.1/0.25/0.5/0.75 seconds, forecast z at 0.1/0.25/0.5 seconds, and pooled
-forecast target coverage regresses through 0.75 seconds. The largest scenario
-failures are reference pairs and impulse perturbations; the fixed comparison
-records 131 reference guardrail failures plus the worse selection score.
-Position coverage90 is `93.28%`, so the principal failure is point/state,
-tracking support, and broad scenario non-regression rather than nonfinite
-uncertainty.
+RGB-only validation episodes (`100000`--`100031`) completed, with four episodes
+for each of the eight scenarios and no support failure. The latest persisted
+candidate score is `0.3251911400`, worse than protected step-zero
+`0.3213162196`; `selection_accepted=0` and the safe incumbent remains step
+zero. Pooled current position RMSE regresses `0.251460 -> 0.267023 m`, target
+coverage `0.37625 -> 0.36575`, prediction precision
+`0.357312 -> 0.347258`, and x/z current RMSE
+`0.281775/0.263691 -> 0.326179/0.268807 m`; y and velocity improve. The
+largest scenario failure is reference pairs, especially its x trajectory. The
+comparison records 113 incumbent guardrail failures plus the worse selection
+score. Position coverage90 remains stable at `93.43%`, so the principal
+failure is point/state, events, identity, lifecycle, and broad scenario
+non-regression rather than nonfinite uncertainty.
 
 The candidate checkpoint itself is valid: all 177 inherited tensors remain
 bitwise exact, all 48 attention tensors changed, exactly those 48 own finite
 Adam state at step 512, and every architecture/source/runtime/protocol/model
-hash passes. The report is `attention_checkpoint_step_000512_audit.json`
+hash passes. The report is `attention_checkpoint_audit_step_000512.json`
 beside the run; checkpoint SHA-256 is
-`0f6fcc97e4fb52eaa79c1f1e7d45569eef55ebb4a305e4a04da4051a7c65f16c`.
+`23e0f5dcd1b429cca8e8686a77a38fcbc45a11fa44fd81b3251403f15ab382fb`.
 The dynamics audit passes all 512 applied updates with exact 64-block scenario
 balance, zero skips/terminal failures/uncontained clips, and bounded memory.
 This localizes the failure to the learned attention residual rather than

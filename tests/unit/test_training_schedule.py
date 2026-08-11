@@ -12,6 +12,7 @@ from torch import nn
 from world_model.runtime import OnlineWorldModel
 from world_model.training.loop import (
     TrainingBatchResult,
+    _attention_node_complexity_details,
     _combine_measurement_objectives,
     _distance_gate_physical_matches,
     _fast_measurement_has_trainable_perception_path,
@@ -1290,6 +1291,46 @@ def test_closed_loop_terms_expose_physical_components_without_double_counting() 
         ),
         torch.tensor(10.5),
     )
+
+
+def test_attention_node_complexity_is_axis_neutral_and_opt_in() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+    with torch.no_grad():
+        attention.node_decoder.weight.zero_()
+        attention.node_decoder.bias.zero_()
+        attention.node_decoder.weight[0, 0] = 3.0
+        attention.node_decoder.weight[1, 0] = 4.0
+
+    details = _attention_node_complexity_details(model)
+    terms = _group_closed_loop_terms(details, torch.zeros(()))
+
+    torch.testing.assert_close(details["attention_node_complexity_x"], torch.tensor(9.0))
+    torch.testing.assert_close(details["attention_node_complexity_y"], torch.tensor(16.0))
+    torch.testing.assert_close(details["attention_node_complexity_z"], torch.tensor(0.0))
+    torch.testing.assert_close(
+        details["attention_node_complexity"],
+        torch.tensor(25.0 / 3.0),
+    )
+    torch.testing.assert_close(
+        _weighted_closed_loop_total(terms, {}),
+        torch.tensor(0.0),
+    )
+    torch.testing.assert_close(
+        _weighted_closed_loop_total(terms, {"attention_node_complexity": 2.0}),
+        torch.tensor(50.0 / 3.0),
+    )
+
+
+def test_attention_node_complexity_is_absent_without_attention() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"), device="cpu")
+
+    assert _attention_node_complexity_details(model) == {}
 
 
 def test_measurement_weights_keep_metric_position_primary() -> None:

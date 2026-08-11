@@ -4,6 +4,31 @@
 
 ### 2026-08-11 accumulated node-gradient repair and scale gate
 
+- Advanced the training contract to specification 1.36 after the latest
+  persisted step-512 selector and exact typed ablations localized a broad
+  generalization failure to the attention node-y decoder row. Added an opt-in,
+  axis-neutral `attention_node_complexity` objective equal to mean squared L2
+  decoder-row energy, including bias, plus per-axis diagnostics. Historical
+  configs omit it exactly; no forward equation, tensor shape, runtime rule, or
+  axis capability changes. Focused schedule/objective/config/checkpoint tests
+  pass (`312 passed`).
+- Preserved the live YAML unchanged for exact continuation. The repair will be
+  enabled only by a separately recorded override at weight `1.0`. At the
+  rejected checkpoint x/y/z row energies are
+  `0.000154/0.012417/0.000146`, so the prior targets the disproportionate row
+  without a y-specific rule. Capacity scaling remains blocked pending a fresh
+  protected-control campaign and fixed-manifest qualification.
+- Intentionally stopped the rejected specification-1.35 trajectory at its
+  durable step-640 checkpoint after the next equal training window reversed
+  the temporary post-selector improvement. Booted out its trainer and
+  supervisor; the only shutdown stderr is the expected multiprocessing
+  semaphore cleanup warning. The protected deployment incumbent remains step
+  zero.
+- Passed final implementation gates: `716 passed, 5 skipped, 1 deselected`
+  non-device; five direct host-MPS tests; Ruff format/check; compileall; diff
+  check; and an 8,192-update/65,536-draw dry run with the explicit complexity
+  override.
+
 - Stopped the specification-1.31 campaign after the trainer safely rejected
   attempted optimizer step 988 before Adam. Complete interaction retention was
   `0.0971759`, below the declared `0.1` minimum; the supervisor detected the
@@ -262,11 +287,11 @@
   RMSE is `0.2926/0.3206/0.3651/0.4123/0.4515 m`; this remains training-window
   evidence, not fixed-selector accuracy or convergence.
 - Completed the first trained fixed selector at step 512 on all 32 RGB-only
-  validation episodes. It is decisively rejected: score `0.330772` versus the
-  protected step-zero `0.321316`; current position RMSE `0.295016` versus
-  `0.251460 m`; target coverage `0.34775` versus `0.37625`; precision
-  `0.329465` versus `0.357312`; and broad x/z, reference-pair, and
-  impulse-perturbation regressions. All scenarios have four episodes and no
+  validation episodes. Its latest persisted evaluation is rejected: score
+  `0.325191` versus protected step-zero `0.321316`; current position RMSE
+  `0.267023` versus `0.251460 m`; target coverage `0.36575` versus `0.37625`;
+  precision `0.347258` versus `0.357312`; collision F1 `0.144186` versus
+  `0.195489`; and broad x/reference-pair regressions. All scenarios have four episodes and no
   support failure, so this is not a manifest artifact. The step-512 artifact
   audit passes with 177 inherited tensors exact, all 48 attention tensors live,
   attention-only Adam step 512, finite state, and intact hashes; the dynamics

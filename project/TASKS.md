@@ -459,6 +459,19 @@
   later velocity horizons, lifecycle, and identity. Preserve the repaired x
   direction without promotion; fixed selector 512 remains authoritative and
   the no-regression scaling prerequisite remains false.
+- [x] Complete the latest persisted step-512 audit and typed decoder
+  ablations. Prove the checkpoint is finite/scope-clean, localize the broad
+  regression to a node-y row whose L2 norm is about nine times x/z, and retain
+  the zero-y composition only as a non-promotable diagnostic despite its
+  pooled all-horizon improvement.
+- [x] Implement specification-1.36 residual parsimony as an opt-in,
+  axis-neutral attention-node decoder-row energy objective with exact legacy
+  zero contribution and per-axis diagnostics. Focused tests pass (`312`).
+- [ ] Qualify the residual-parsimony repair from the protected graph control
+  with a recorded `training.loss_weights.attention_node_complexity=1.0`
+  override. Require a finite scope-clean smoke, complete 32-episode fixed
+  selectors, repeated plateau evidence, and strict per-scenario/test/OOD
+  non-regression before scaling depth or width.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam
