@@ -6535,6 +6535,19 @@ samples may differ materially even under scenario-balanced batches. Capacity
 and optimizer decisions therefore remain bound to repeated fixed selectors and
 the declared plateau protocol.
 
+When a prior trajectory is used as a deterministic diagnostic reference, the
+auditor must offer an explicit matched-reference mode rather than relying on
+ad hoc visual or scalar comparisons. Candidate cadence rows align by optimizer
+step and must exactly match episode seeds, scenario order, data-draw index,
+frame-window bounds, and rollout-anchor selection. A missing reference step or
+schedule mismatch is a failed comparison, not permission to compare different
+samples. Candidate and reference metrics are independently pooled from their
+physical sufficient statistics over the aligned rows before reporting signed
+candidate-minus-reference deltas for state, axes, every position/velocity
+horizon, lifecycle, identity, uncertainty, collisions, observability, support,
+gradient health, and resources. Such matched training evidence is stronger
+diagnosis, but it remains subordinate to fixed selector/test/OOD promotion.
+
 ## 202. Recursive typed-output caps are aggregate per-draw budgets
 
 Per-invocation output clipping and accumulated decoder-row clipping do not by

@@ -43,7 +43,10 @@
   and coverage counts before deriving physical metrics; expose position axes,
   position/velocity horizons, lifecycle, identity, uncertainty, collision F1,
   parameter observability, causal support, gradient retention, and memory.
-  Mark every tail window complete or incomplete.
+  Mark every tail window complete or incomplete. For deterministic predecessor
+  investigations, align candidate/reference rows by step and require exact
+  seed, scenario, draw, frame-window, and rollout-anchor schedules before
+  emitting independently pooled summaries and signed deltas.
 - **Alternatives considered:** continue one-off `jq` calculations; average
   already-derived per-row metrics; run extra validation at every log line;
   treat noisy training windows as selector evidence.
@@ -51,6 +54,12 @@
   reproducibly without touching the live optimizer or paying validation cost.
   These heterogeneous windows remain diagnostic only and cannot promote,
   reject, scale, or declare convergence without fixed-manifest evidence.
+- **Evidence:** The matched-reference mode has focused pass/fail coverage and
+  rejects a seed mismatch. On the live specification-1.35 campaign, all 11
+  cadence rows at steps 192--272 align exactly with the predecessor; the pooled
+  report exposes simultaneous long-position neutrality and broad velocity,
+  collision, lifecycle, and current-state regressions that one-row comparisons
+  obscured.
 
 ## ADR-103 — Grow attention depth with appended exact-identity blocks
 

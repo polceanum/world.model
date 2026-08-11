@@ -13,6 +13,17 @@ from typing import Any
 
 _HORIZONS = ("0.100s", "0.250s", "0.500s", "0.750s", "1.000s")
 _SEVERE_CLIP_COEFFICIENT = 0.1
+_MATCHED_SCHEDULE_FIELDS = (
+    "episode_seeds",
+    "scenario_names",
+    "training_data_draw_step",
+    "window_start_frame",
+    "window_stop_frame",
+    "rollout_anchor_candidate_count",
+    "rollout_anchor_count",
+    "rollout_anchor_min_frame",
+    "rollout_anchor_max_frame",
+)
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -295,6 +306,84 @@ def _training_trend_windows(
     return windows
 
 
+def _numeric_deltas(candidate: Any, reference: Any) -> Any:
+    """Return candidate-minus-reference deltas for matching numeric leaves."""
+
+    if (
+        isinstance(candidate, (int, float))
+        and not isinstance(candidate, bool)
+        and isinstance(reference, (int, float))
+        and not isinstance(reference, bool)
+    ):
+        return float(candidate) - float(reference)
+    if isinstance(candidate, dict) and isinstance(reference, dict):
+        deltas = {
+            key: delta
+            for key in candidate.keys() & reference.keys()
+            if (delta := _numeric_deltas(candidate[key], reference[key])) is not None
+        }
+        return dict(sorted(deltas.items())) or None
+    return None
+
+
+def _matched_reference_comparison(
+    candidate: list[dict[str, Any]],
+    reference_run_directory: Path,
+    *,
+    after_step: int,
+) -> dict[str, Any]:
+    """Compare count-pooled physical trends on an exactly aligned data schedule."""
+
+    reference_run_directory = reference_run_directory.expanduser().resolve()
+    metrics_path = reference_run_directory / "metrics.jsonl"
+    if not metrics_path.is_file():
+        raise FileNotFoundError(f"reference metrics file not found: {metrics_path}")
+    reference_canonical, _ = _canonical_records(_read_jsonl(metrics_path))
+    reference_training = {
+        int(record["step"]): record
+        for record in reference_canonical
+        if record.get("split") == "train"
+        and record.get("phase") == "closed_loop_rgb"
+        and int(record["step"]) >= after_step
+    }
+    candidate_by_step = {int(record["step"]): record for record in candidate}
+    missing_reference_steps = sorted(set(candidate_by_step) - set(reference_training))
+    matched_steps = sorted(set(candidate_by_step) & set(reference_training))
+    schedule_mismatches: list[dict[str, Any]] = []
+    for step in matched_steps:
+        candidate_record = candidate_by_step[step]
+        reference_record = reference_training[step]
+        for field in _MATCHED_SCHEDULE_FIELDS:
+            candidate_value = candidate_record.get(field)
+            reference_value = reference_record.get(field)
+            if candidate_value != reference_value:
+                schedule_mismatches.append(
+                    {
+                        "step": step,
+                        "field": field,
+                        "candidate": candidate_value,
+                        "reference": reference_value,
+                    }
+                )
+    matched_candidate = [candidate_by_step[step] for step in matched_steps]
+    matched_reference = [reference_training[step] for step in matched_steps]
+    candidate_summary = (
+        _training_window_summary(matched_candidate, complete=True) if matched_candidate else None
+    )
+    reference_summary = (
+        _training_window_summary(matched_reference, complete=True) if matched_reference else None
+    )
+    return {
+        "reference_run_directory": str(reference_run_directory),
+        "matched_steps": matched_steps,
+        "missing_reference_steps": missing_reference_steps,
+        "schedule_mismatches": schedule_mismatches,
+        "candidate": candidate_summary,
+        "reference": reference_summary,
+        "candidate_minus_reference": _numeric_deltas(candidate_summary, reference_summary),
+    }
+
+
 def _decoded_list_length(value: Any) -> int | None:
     if not isinstance(value, str):
         return None
@@ -380,6 +469,7 @@ def audit_run(
     *,
     after_step: int = 0,
     trend_window_blocks: int = 8,
+    reference_run_directory: Path | None = None,
 ) -> dict[str, Any]:
     """Return a deterministic audit of unique closed-loop optimizer blocks."""
 
@@ -696,6 +786,25 @@ def audit_run(
         "perturbed": _pooled_identity_summary(perturbed_training),
         "unperturbed": _pooled_identity_summary(unperturbed_training),
     }
+    matched_reference_comparison = None
+    if reference_run_directory is not None:
+        matched_reference_comparison = _matched_reference_comparison(
+            training,
+            reference_run_directory,
+            after_step=after_step,
+        )
+        missing_steps = matched_reference_comparison["missing_reference_steps"]
+        if missing_steps:
+            failures.append(
+                "reference run is missing candidate training steps: "
+                + ",".join(str(step) for step in missing_steps)
+            )
+        schedule_mismatches = matched_reference_comparison["schedule_mismatches"]
+        if schedule_mismatches:
+            failures.append(
+                "candidate/reference deterministic training schedule differs at "
+                f"{len(schedule_mismatches)} field(s)"
+            )
     return {
         "run_directory": str(run_directory),
         "after_step": after_step,
@@ -738,6 +847,7 @@ def audit_run(
             training,
             window_blocks=trend_window_blocks,
         ),
+        "matched_reference_comparison": matched_reference_comparison,
         "validations": validation_summary,
     }
 
@@ -747,6 +857,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run", required=True, type=Path)
     parser.add_argument("--after-step", type=int, default=0)
     parser.add_argument("--trend-window-blocks", type=int, default=8)
+    parser.add_argument("--reference-run", type=Path)
     return parser.parse_args()
 
 
@@ -760,6 +871,7 @@ def main() -> int:
         args.run,
         after_step=args.after_step,
         trend_window_blocks=args.trend_window_blocks,
+        reference_run_directory=args.reference_run,
     )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["status"] == "pass" else 1

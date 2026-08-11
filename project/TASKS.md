@@ -433,6 +433,19 @@
   A refreshed primary-source review finds no missing long-context/MoE kernel
   that addresses this 22-token bottleneck; keep the one-axis capacity ladder
   gated on fixed selector, plateau, and disjoint test/OOD evidence.
+- [x] Add deterministic matched-reference mode to the dynamics auditor. Require
+  exact step/seed/scenario/draw/frame/anchor alignment, fail missing or
+  mismatched schedules, and independently pool sufficient statistics before
+  signed candidate-minus-reference deltas. Focused tests pass (`15 passed`).
+  The exact steps 192--272 comparison is schedule-clean but shows all velocity
+  horizons and collision/lifecycle/current-state slices regressing while long
+  position and median uncertainty are nearly flat/slightly better. Preserve
+  this warning and keep fixed selector 512 authoritative.
+  The historical step-280 stress block also passes with `0.462814` complete
+  retention and all aggregate semantic output norms below `0.1`. Exact matched
+  physical evidence improves current/all position horizons but regresses
+  collision F1 and three velocity horizons, especially one second. Keep the
+  run unchanged; this is repair qualification plus another accuracy tradeoff.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

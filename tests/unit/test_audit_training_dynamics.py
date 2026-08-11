@@ -546,3 +546,104 @@ def test_audit_pools_complete_and_partial_training_trend_windows(tmp_path) -> No
     assert partial["last_step"] == 24
     assert partial["logged_blocks"] == 1
     assert partial["complete"] is False
+
+
+def test_audit_compares_count_pooled_matched_reference_schedule(tmp_path) -> None:
+    candidate = tmp_path / "candidate"
+    reference = tmp_path / "reference"
+    shared = {
+        "episode_seeds": "1,2",
+        "window_start_frame": 4.0,
+        "window_stop_frame": 8.0,
+        "physical_state_position_coordinate_count": 3.0,
+        "physical_state_velocity_coordinate_count": 3.0,
+        "physical_distance_gated_matched_object_frames": 4.0,
+        "physical_distance_gated_target_object_frames": 8.0,
+        "physical_distance_gated_predicted_object_frames": 10.0,
+    }
+    _write_metrics(
+        candidate,
+        [
+            _record(
+                8,
+                physical_state_position_sse=3.0,
+                physical_state_velocity_sse=12.0,
+                **shared,
+            ),
+            _record(
+                16,
+                physical_state_position_sse=12.0,
+                physical_state_velocity_sse=27.0,
+                **shared,
+            ),
+        ],
+    )
+    _write_metrics(
+        reference,
+        [
+            _record(
+                8,
+                physical_state_position_sse=12.0,
+                physical_state_velocity_sse=3.0,
+                **shared,
+            ),
+            _record(
+                16,
+                physical_state_position_sse=12.0,
+                physical_state_velocity_sse=12.0,
+                **shared,
+            ),
+        ],
+    )
+
+    report = audit_run(candidate, reference_run_directory=reference)
+    comparison = report["matched_reference_comparison"]
+
+    assert report["status"] == "pass"
+    assert comparison["matched_steps"] == [8, 16]
+    assert comparison["missing_reference_steps"] == []
+    assert comparison["schedule_mismatches"] == []
+    assert comparison["candidate"]["current_position_rmse_m"] == (15.0 / 6.0) ** 0.5
+    assert comparison["reference"]["current_position_rmse_m"] == 2.0
+    assert comparison["candidate_minus_reference"]["current_position_rmse_m"] == (
+        (15.0 / 6.0) ** 0.5 - 2.0
+    )
+    assert comparison["candidate_minus_reference"]["current_velocity_rmse_mps"] == (
+        (39.0 / 6.0) ** 0.5 - (15.0 / 6.0) ** 0.5
+    )
+
+
+def test_audit_rejects_mismatched_reference_schedule(tmp_path) -> None:
+    candidate = tmp_path / "candidate"
+    reference = tmp_path / "reference"
+    _write_metrics(candidate, [_record(8, episode_seeds="1,2")])
+    _write_metrics(reference, [_record(8, episode_seeds="3,4")])
+
+    report = audit_run(candidate, reference_run_directory=reference)
+
+    assert report["status"] == "fail"
+    comparison = report["matched_reference_comparison"]
+    assert comparison["schedule_mismatches"] == [
+        {
+            "step": 8,
+            "field": "episode_seeds",
+            "candidate": "1,2",
+            "reference": "3,4",
+        }
+    ]
+    assert any("deterministic training schedule differs" in item for item in report["failures"])
+
+
+def test_audit_rejects_missing_reference_step(tmp_path) -> None:
+    candidate = tmp_path / "candidate"
+    reference = tmp_path / "reference"
+    _write_metrics(candidate, [_record(8), _record(16)])
+    _write_metrics(reference, [_record(8)])
+
+    report = audit_run(candidate, reference_run_directory=reference)
+
+    assert report["status"] == "fail"
+    comparison = report["matched_reference_comparison"]
+    assert comparison["matched_steps"] == [8]
+    assert comparison["missing_reference_steps"] == [16]
+    assert any("missing candidate training steps: 16" in item for item in report["failures"])

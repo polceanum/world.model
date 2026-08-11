@@ -364,6 +364,42 @@ regresses velocity/event slices. The fixed step-512 selector, repeated
 selectors, plateau, disjoint test/OOD, and broad non-regression therefore remain
 mandatory before the prepared depth-six handoff is used.
 
+The dynamics auditor now has an optional matched-reference mode so repeated
+manual `jq` comparisons cannot accidentally mix different training samples.
+It canonicalizes both append-only streams, aligns by optimizer step, and hard-
+fails missing reference steps or differences in seeds, scenario order, draw
+index, frame-window bounds, or rollout-anchor selection. Each aligned set is
+then independently count-pooled before reporting nested signed deltas across
+the complete physical trend summary. Focused tests report `15 passed`; Ruff
+check/format and diff checks pass.
+
+Applied to the corrected run versus its deterministic predecessor at steps
+192--272, all 11 logged blocks align with zero schedule mismatch. The repaired
+candidate has current position `0.293305` versus `0.289235 m` (`+0.004070`),
+with x improving `0.001046 m` but y/z worsening `0.003712/0.010458 m`. Position
+horizons change by `+0.002671/+0.001173/+0.001576/-0.001407/-0.000196 m`, while
+all velocity horizons regress by `0.005839--0.046315 m/s`. Collision F1 falls
+`0.197044 -> 0.165049`, mostly from the one-second slice; identity remains five
+switches with four more associations, lifecycle precision/coverage weaken by
+`0.002964/0.003870`, and coverage90 weakens by `0.000843`. Median uncertainty
+NLL improves by `-0.008281` while its worst sampled value weakens. This is
+schedule-controlled diagnostic evidence of a broad tradeoff, not a selector;
+continue unchanged to fixed step 512 without promotion or scaling.
+
+The historically important step-280 schedule position subsequently completes
+without optimizer failure. It has the exact predecessor seeds/scenarios,
+`145` causal trajectories, all 13 objective terms, raw interaction norm
+`2.160692`, and complete retention `0.462814`; no uncontained clip occurs.
+Aggregate applied node/collision/force/impulse output norms are
+`0.05592/0.01675/0.06437/0.00857`, all below the configured `0.1` budgets.
+Against the matched predecessor, current position improves `0.242093 ->
+0.238464 m`, all axes improve, and the five position horizons improve by
+`0.00687/0.01266/0.02120/0.03090/0.02051 m`. Current velocity improves
+`0.01068 m/s`, but velocity at 0.25/0.5/1.0 seconds regresses by
+`0.11140/0.00977/0.22061 m/s`; collision F1 falls `0.5 -> 0.3333` while
+identity, lifecycle, support, and coverage are exact. The corrected gradient
+hierarchy is functioning, but physical accuracy remains mixed.
+
 ## 2026-08-11 — pooled convergence-trend observability implemented
 
 The whole-run auditor previously proved optimizer/support/resource integrity

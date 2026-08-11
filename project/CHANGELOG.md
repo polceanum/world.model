@@ -102,6 +102,24 @@
   dense mechanisms; efficiency machinery for long KV caches or sparse experts
   is deferred, and the existing physical regressions keep capacity promotion
   blocked until fixed-selector plateau and disjoint test/OOD non-regression.
+- Added an optional deterministic matched-reference mode to the training-
+  dynamics auditor. It canonicalizes both streams, requires exact alignment of
+  optimizer step, seeds, scenarios, draw index, frame window, and rollout
+  anchors, fails missing/mismatched schedules, and reports independently
+  sufficient-statistic-pooled candidate/reference summaries plus signed nested
+  deltas. Focused tests report `15 passed`; Ruff and diff gates pass.
+- Audited the corrected and predecessor steps 192--272 with the new mode. All
+  11 rows align exactly. Long-position and median uncertainty are nearly flat
+  or slightly better, but current position is `0.004070 m` worse, every
+  velocity horizon regresses, collision F1 falls `0.197044 -> 0.165049`, and
+  lifecycle precision/coverage weaken. This schedule-controlled warning does
+  not replace the fixed step-512 selector or authorize capacity growth.
+- Passed the deterministic step-280 historical stress boundary in the live
+  repaired campaign. All support is present, semantic applied norms remain
+  below `0.1`, and the complete interaction stage retains `0.462814` with no
+  failure. Same-seed current position and all five position horizons improve,
+  while collision F1 and 0.25/0.5/1.0-second velocity regress. Preserved this
+  as optimizer-repair evidence and an accuracy tradeoff, not promotion.
 
 - Audited the live immutable campaign through durable step 896. All updates
   apply with exact eight-scenario logged balance, no skip/terminal/uncontained
