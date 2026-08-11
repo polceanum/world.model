@@ -24,9 +24,14 @@ auditor output. The live step-712--768 complete window has current x/y/z RMSE
 `1.151526 m/s`, identity `2/314`, current coverage90 `99.37%`, collision F1
 `0.1333`, and minimum shared retention `0.6885`. All 13 causal objective terms
 are present, with 2,096 trajectory targets and balanced eight-way scenario
-exposure. The step-776--800 tail has only four of eight declared logged blocks;
-its `4/162` identity count and other values are explicitly incomplete and are
-not comparable or selector evidence. The whole-run audit remains `pass`.
+exposure. The former step-776--800 partial tail closes at 832 with eight blocks.
+It regresses against 712--768 on current/every position horizon, identity, and
+uncertainty, but remains better than 648--704 on current and four of five
+position horizons. Lifecycle coverage/precision, forecast coverage, event F1,
+correction medians, gradient retention, and memory remain healthy; velocity is
+mixed. Classify this as sampled optimizer wobble and continue unchanged to the
+fixed selector, not as convergence, collapse, or model-change evidence. The
+whole-run audit remains `pass`.
 
 The current Mac rung is a 3,004,656-parameter model, including a 1,103,626-
 parameter width-128/four-block dense typed-attention residual over at most 22

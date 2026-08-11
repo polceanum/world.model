@@ -99,6 +99,9 @@
   position/velocity horizon, coverage, collision F1, identity, lifecycle,
   uncertainty, parameter observability, support, gradient retention, and
   memory; explicitly label incomplete tails and keep selectors authoritative.
+  The first live tail closes at step 832 with mixed position/velocity/identity
+  movement but healthy support/lifecycle/event/gradient/resource evidence; do
+  not intervene before fixed selector 1024.
 - [x] Stop and preserve the first attention pilot at its durable update-128
   checkpoint after exact audit found that 47/48 attention tensors changed but
   `scene_projection.weight` did not: its sole input, `global_code`, remains

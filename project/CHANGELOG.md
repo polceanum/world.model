@@ -10,6 +10,11 @@
   identity, uncertainty, event F1, slow-parameter observability, support,
   gradient retention, and memory. Focused tests reject the prior temptation to
   average unequal-support derived metrics.
+- Closed the first newly reported live trend tail at step 832. It regresses
+  from the preceding unusually strong sampled window but remains better than
+  the prior window on current and four of five position horizons, with healthy
+  lifecycle/event/support/gradient/resource evidence. It is recorded as
+  optimization wobble; no weights, optimizer controls, or promotion change.
 - Advanced the contract to specification 1.33 and implemented the narrow
   function-preserving depth handoff anticipated by ADR-102. A trained shallow
   attention stack may now seed only contiguous appended blocks; new MHA and

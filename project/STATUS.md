@@ -141,13 +141,22 @@ restitution observable counts are `191/30`, uncertainty NLL median is
 `-0.9156`, and minimum complete-interaction retention is `0.6885` with stable
 `2,922,790,912`-byte RSS.
 
-The current step-776--800 tail contains only four of eight declared blocks. Its
-position and velocity values, coverage, and `4/162` identity count are now
-visibly labelled incomplete rather than compared to a full window. It has
-1,180 causal targets, positive median current/future corrections, `0.7384`
-minimum shared retention, and no audit failure. This is a watch item, not a
-regression or optimizer/model change. Fixed selector 1024 remains the next
-promotion decision.
+The step-776--800 tail was correctly labelled incomplete; it subsequently
+closed at step 832 with eight blocks and 2,628 causal targets. Against the
+exceptionally strong 712--768 sample it regresses current position
+`0.184647 -> 0.248962 m`, all position horizons
+`0.184250/0.209727/0.265618/0.320229/0.347584 ->
+0.242408/0.272900/0.333325/0.364523/0.370667 m`, identity `2/314 -> 6/371`,
+coverage90 `99.37% -> 97.68%`, and median uncertainty NLL
+`-0.9156 -> -0.7432`. Against 648--704 it still improves current, 0.10, 0.25,
+0.50, and 1.00-second position; only 0.75-second position is modestly worse.
+Lifecycle target coverage/precision improve to `40.15%/37.60%`, forecast
+coverage is `98.08--100%`, collision F1 improves to `0.2373`, drag/restitution
+observability is `164/41`, median current/future corrections remain positive,
+minimum complete-interaction retention is `0.7384`, RSS stays exactly flat,
+and the audit has no failure. Velocity is horizon-mixed. This is real sampled
+optimization wobble, not broad collapse or matched evidence; fixed selector
+1024 remains the next promotion/model-change decision.
 
 ## 2026-08-11 — function-preserving depth growth implemented
 
