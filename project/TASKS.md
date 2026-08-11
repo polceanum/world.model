@@ -253,8 +253,13 @@
   complete-stage retention `0.001167 -> 0.64704`; pass the offline replay audit
   with no severe or uncontained blocks. Keep this branch explicitly
   non-promotable because earlier repaired updates change the learned weights.
-- [ ] Launch and complete a new immutable weights-only 3.00M stage-A campaign
-  from the protected graph control under specification 1.30. Pass the matched
+- [ ] Complete the new immutable weights-only 3.00M stage-A campaign at
+  `runs/20260811-042704-attention-impulse-isolated-stage-a/`, launched from the
+  protected graph control under specification 1.30 and clean commit `d38cc9b`.
+  Its 32-episode step-zero selector is tensor/metric exact with the protected
+  control (`0.3213162196`), and sampled update 8 is finite, fully balanced,
+  supported, and entirely unclipped (`0.6740` raw/applied interaction norm).
+  Pass the matched
   step-64/152/200/280 stress positions, durable checkpoint integrity, the first
   trained fixed selector at 512, repeated selectors, and the declared plateau;
   retain identity, per-axis, every-horizon, lifecycle, event, uncertainty, and

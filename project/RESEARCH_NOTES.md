@@ -142,6 +142,19 @@ replay trajectory is not forward-exact because earlier newly bounded updates
 change the weights. It qualifies a fresh start, not accuracy, generalization,
 or convergence.
 
+The fresh specification-1.30 campaign is active at
+`runs/20260811-042704-attention-impulse-isolated-stage-a/` from clean commit
+`d38cc9b`. Its 32-episode RGB-only step-zero selector is a strict control:
+all 225 tensors are bitwise equal, all 2,583 comparable non-protocol metrics
+are exact, and score remains `0.3213162196`; only the expected protocol hash
+changes. Sampled update 8 contains all eight scenario families, eight supported
+objective terms, 349 causal trajectory targets, and a finite `0.673975`
+raw/applied interaction gradient with every local/stage/global coefficient at
+`1.0`. Impulse rows are ordinary on this batch and RSS is `2,935,676,928`
+bytes. This establishes clean launch and early optimizer health only. The
+historical stress positions, fixed selector 512, repeated selectors, and the
+declared plateau still gate any accuracy or capacity decision.
+
 Exact capacity census for later one-axis studies:
 
 - current/data-only: `3,004,656` total, `1,103,626` attention parameters;

@@ -160,6 +160,48 @@ scenarios, and 32 RGB-only validation episodes. No larger model is justified
 until a new immutable small-rung campaign completes fixed selectors and the
 declared plateau.
 
+The repair was committed and pushed to `main` as `d38cc9b`. A fresh
+weights-only campaign is active at
+`runs/20260811-042704-attention-impulse-isolated-stage-a/` under one-shot
+Standard/default LaunchAgent
+`com.polceanum.orpheus.attention-impulse-isolated-20260811-042704`, trainer PID
+`26459` at launch audit. Metadata records clean commit
+`d38cc9bf049e84d868c098217684dbd698897733`, runtime-source fingerprint
+`9b1ed8e51c5e0c5c4b877356011c1303a4f864e4b970565aac53ad70f6786eda`,
+PyTorch 2.10.0, host MPS RGB measurement, CPU closed loop, float32, RGB-only
+runtime, and no oracle. An immutable detached-copy supervisor is active as
+`com.polceanum.orpheus.attention-impulse-convergence-20260811-042704`, PID
+`26586` at attachment, with the unchanged 8,192 minimum, 4,096 extensions,
+four-selector/1% plateau rule, and 24,576 hard limit. Both stderr files are
+empty and neither service has restarted.
+
+The mandatory 32-episode initial selector completed in `964.832 s` and exactly
+reproduces the prior graph control. All 225 tensors are bitwise equal with
+model hash `1354bdfca1cef965c0cd907ea8c157c0fd82169e64f24da656eb42dd1a96df91`;
+all 2,583 comparable non-protocol selector fields are exact. Only the expected
+protocol hash changes from `21daf4a8...d7f` to
+`b98691adcf0d242568a7f46710f9b4a6f3f93dd1a9583a3a8e971f40f3ca3701`.
+Score remains `0.3213162196`; current position/velocity RMSE are
+`0.251460 m / 1.093191 m/s`; 0.10/0.25/0.50/0.75/1.00-second position RMSE is
+`0.265184/0.277452/0.309911/0.335387/0.357837 m`; collision F1 is `0.195489`,
+trusted identity-switch rate is `1.3592%`, and position coverage90 is
+`93.3861%`. Checkpoint metadata records specification 1.30 and float32. The
+equality report is
+`runs/20260811-042704-attention-impulse-isolated-stage-a/checkpoint_step_000000_equality_audit.json`.
+Training is now active; there is still no trained selector, accuracy gain,
+generalization result, plateau, convergence, or scale promotion.
+
+The first sampled training block at update 8 is healthy. Its batch contains
+all eight scenario families, eight supported objective terms, 349 causal
+trajectory targets, no skipped/no-gradient draw, and a finite applied update.
+Raw and applied whole-interaction gradient norms are both `0.673975`; all
+typed-output, decoder-row, complete-interaction, and global clip coefficients
+are `1.0`. The largest semantic row is ordinary normal force at `0.652459`;
+impulse multiplier/additive norms are `3.22e-10/1.82e-11`. RSS is
+`2,935,676,928` bytes. Both launchd services remain on their first invocation
+with empty stderr. This is only early optimizer-health evidence; the historical
+64/152/200/280 stress positions and fixed selector 512 remain pending.
+
 Exact commands used for this repair boundary:
 
 ```bash

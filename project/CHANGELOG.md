@@ -31,6 +31,17 @@
   deselected`), five direct MPS regressions, Ruff, compileall, dry run, and diff
   checks. Capacity scaling remains gated on a fresh small-rung fixed-selector
   learning curve and plateau.
+- Committed and pushed the repair as `d38cc9b`, then launched the fresh
+  specification-1.30 campaign at
+  `runs/20260811-042704-attention-impulse-isolated-stage-a/` with MPS RGB,
+  CPU closed loop, immutable source provenance, and the unchanged supervised
+  convergence envelope. The complete initial selector exactly reproduces all
+  225 tensors and 2,583 comparable metrics at score `0.3213162196`; its
+  equality audit is retained beside the run.
+- Audited sampled update 8: all eight scenario families and causal support are
+  present, raw/applied interaction norm is `0.673975`, no local or global clip
+  fires, the update is finite/applied, RSS is bounded, and trainer/supervisor
+  stderr remain empty. This is launch health, not convergence or promotion.
 
 ### 2026-08-11 typed-output backpropagation isolation
 
