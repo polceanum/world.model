@@ -107,10 +107,11 @@ replay contains update 200, but the fresh campaign is stopped after attempted
 update 60 exposes unbounded accumulation in the node decoder; specification
 1.31 isolates that x/y/z group, persists complete terminal optimizer evidence,
 and passes a fresh protected-control update-60 causal replay at `0.565343`
-retention; full regression gates, a clean sustained relaunch, fixed trained
-selectors, plateau, convergence, and every capacity promotion remain pending
+retention; full regression gates and an exact clean sustained step-zero
+relaunch now pass, while fixed trained selectors, plateau, convergence, and
+every capacity promotion remain pending
 
-## 2026-08-11 — accumulated node-gradient repair; small-rung relaunch pending
+## 2026-08-11 — accumulated node-gradient repair; small-rung campaign active
 
 The trainer and supervisor for
 `runs/20260811-042704-attention-impulse-isolated-stage-a/` are stopped. The
@@ -176,8 +177,25 @@ deselected in 3.05 s`; five direct MPS regressions reported `5 passed in
 and `git diff --check` pass. The host dry run resolves PyTorch `2.10.0`, MPS
 built/available, MPS RGB measurement, CPU closed loop, float32, 8,192 updates,
 65,536 balanced episode draws, eight scenarios, RGB-only evaluation, and no
-oracle. A clean committed sustained relaunch is the next action; no new
-accuracy, generalization, fixed trained selector, plateau, convergence, or
+oracle.
+
+A clean sustained relaunch is active at
+`runs/20260811-063308-attention-node-isolated-stage-a/` from committed source
+`5b2da41dbc7467d86fb1b2fe3b3be2ca349df612`, with dirty source false and
+runtime fingerprint
+`703fe9c9b5775f32d8f04fb85d30cf9d92a5715e56dd31cdf5ca7a22e05ef42a`.
+The one-shot Standard trainer
+`com.polceanum.orpheus.attention-node-isolated-20260811-063238` and immutable-
+source supervisor
+`com.polceanum.orpheus.attention-node-convergence-20260811-063238` are both
+running once with empty stderr. Host placement is MPS RGB measurement plus CPU
+closed loop, float32, RGB-only, and no oracle. The complete 32-episode initial
+selector persisted score `0.3213162196`; exact audit finds all 225 tensors
+bitwise equal and all 2,578 comparable metric fields equal to the preceding
+protected control, with only the expected protocol hash different. The
+supervisor enforces 8,192 minimum updates, 4,096-update extensions, a 1,024-
+update tail, 1% plateau threshold, and a 24,576 hard limit. Training is active;
+no trained selector, accuracy, generalization, plateau, convergence, or
 capacity result is claimed here.
 
 Exact verification commands:

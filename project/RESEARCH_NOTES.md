@@ -206,6 +206,16 @@ RoPE, local attention, sparse experts, and flash kernels target absent
 bottlenecks. The next capacity result must therefore be the declared one-axis
 depth/data ladder after small-rung convergence, not an LLM-shaped rewrite.
 
+The clean specification-1.31 run is now active at
+`runs/20260811-063308-attention-node-isolated-stage-a/` from commit `5b2da41`.
+Its fixed 32-episode initial selector exactly preserves the preceding control:
+all 225 model tensors and all 2,578 comparable non-protocol fields match at
+score `0.3213162196`. Both trainer and immutable-source convergence supervisor
+are running once with empty stderr. This rules out initialization and launch
+drift, but it is deliberately not counted as trained accuracy, generalization,
+or convergence; fixed trained selectors and the declared plateau remain the
+scale gate.
+
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
 

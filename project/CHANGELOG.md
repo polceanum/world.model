@@ -39,6 +39,13 @@
   host MPS marker (`1 passed, 711 deselected`), five direct MPS regressions,
   focused affected suites, Ruff format/check, compileall, diff check, and host
   MPS dry-run resolution (`measurement=mps`, `closed_loop=cpu`).
+- Launched the clean committed specification-1.31 campaign at
+  `runs/20260811-063308-attention-node-isolated-stage-a/` under one-shot
+  Standard launchd with an immutable-source convergence supervisor. Its
+  32-episode initial RGB-only selector is exact against the protected control:
+  225/225 tensors and 2,578/2,578 comparable metrics equal, score
+  `0.3213162196`, and only the expected protocol hash differs. Training remains
+  active; this is initialization evidence, not a convergence or scale result.
 
 ### 2026-08-11 impulse-gradient isolation and fail-fast monitoring
 

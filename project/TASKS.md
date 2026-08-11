@@ -279,8 +279,13 @@
 - [x] Pass full regression gates: `706 passed, 5 skipped, 1 deselected`
   non-device; host MPS marker and five direct regressions pass; Ruff,
   compileall, diff, and host dry-run placement pass.
-- [ ] Launch a new clean specification-1.31 campaign. It must pass update 60,
-  the later 64/152/200/280
+- [x] Launch a new clean specification-1.31 campaign at
+  `runs/20260811-063308-attention-node-isolated-stage-a/` from clean commit
+  `5b2da41`. Its complete 32-episode step-zero selector is tensor/metric exact
+  with the protected control at score `0.3213162196`; trainer and immutable-
+  source convergence supervisor are active once with empty stderr.
+- [ ] Monitor the active campaign. It must pass update 60, the later
+  64/152/200/280
   stress positions, durable checkpoint integrity, fixed selector 512, repeated
   selectors, and plateau while retaining identity, per-axis, every-horizon,
   lifecycle, event, uncertainty, and scenario guardrails before scaling.
