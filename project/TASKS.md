@@ -471,7 +471,10 @@
   with a recorded `training.loss_weights.attention_node_complexity=1.0`
   override. Require a finite scope-clean smoke, complete 32-episode fixed
   selectors, repeated plateau evidence, and strict per-scenario/test/OOD
-  non-regression before scaling depth or width.
+  non-regression before scaling depth or width. The fresh run is active at
+  `runs/20260811-234157-attention-node-parsimony-stage-a/` from clean commit
+  `bbdb3ad`; its one-shot trainer and immutable-source supervisor each run
+  once with empty stderr, and initial protected-control validation is active.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

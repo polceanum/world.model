@@ -28,6 +28,14 @@
   non-device; five direct host-MPS tests; Ruff format/check; compileall; diff
   check; and an 8,192-update/65,536-draw dry run with the explicit complexity
   override.
+- Committed and pushed specification 1.36 as `bbdb3ad`, then launched the
+  fresh repaired campaign at
+  `runs/20260811-234157-attention-node-parsimony-stage-a/`. Trainer and
+  immutable-commit convergence supervisor are running once with empty stderr.
+  Metadata confirms clean source, MPS RGB measurement, CPU closed loop, no
+  oracle, and the exact `attention_node_complexity=1.0` override. Initial
+  32-episode protected-control validation is active; no trained accuracy or
+  convergence claim exists yet.
 
 - Stopped the specification-1.31 campaign after the trainer safely rejected
   attempted optimizer step 988 before Adam. Complete interaction retention was

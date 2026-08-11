@@ -176,6 +176,24 @@ Primary diagnostic artifacts:
 - node-y restored to zero:
   `runs/20260811-231155-attention-without-node-y-step512/report.json`.
 
+The repair is committed and pushed on `main` as `bbdb3ad`. A fresh one-shot
+campaign is active at
+`runs/20260811-234157-attention-node-parsimony-stage-a/`, weights-only from the
+protected protocol-14 graph checkpoint. Trainer label
+`com.polceanum.orpheus.attention-parsimony-20260811-234134` and immutable-source
+supervisor label
+`com.polceanum.orpheus.attention-parsimony-convergence-20260811-234134` have
+each launched exactly once with empty stderr. Metadata records clean commit
+`bbdb3ad2e75498708c4bdd36741df973bd45f66a`, PyTorch `2.10.0`, MPS built and
+available, measurement on MPS, closed-loop state/dynamics on CPU, RGB-only
+input, and oracle disabled. The resolved config records
+`attention_node_complexity: 1.0`, 8,192 minimum updates, 65,536 balanced
+episode draws, 32-episode selectors every 512 updates, and checkpoints every
+128. The immutable supervisor enforces 4,096-update extensions, four-selector
+1% plateau evidence, and a 24,576 hard limit. Initial protected-control
+validation is advancing normally; it must complete exact step-zero equality
+before the first optimizer update.
+
 Implementation verification on Python `3.10.20` / PyTorch `2.10.0`:
 
 ```bash
