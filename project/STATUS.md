@@ -400,6 +400,29 @@ Against the matched predecessor, current position improves `0.242093 ->
 identity, lifecycle, support, and coverage are exact. The corrected gradient
 hierarchy is functioning, but physical accuracy remains mixed.
 
+The complete schedule-matched steps 264--320 window now closes with eight
+logged blocks, exact eight-draw exposure per scenario, `2,198` causal
+trajectories, no skip/failure/uncontained clip, minimum complete retention
+`0.350875`, median/max raw gradient `1.060409/2.850016`, and unchanged sampled
+RSS `2,991,591,424` bytes. Candidate current position is effectively flat
+against the predecessor (`0.237349 -> 0.237564 m`): x regresses `0.007085 m`,
+y improves `0.007561 m`, and z regresses only `0.000529 m`. Current velocity
+improves `0.008360 m/s`.
+
+The forecast tradeoff remains broad. Position at 0.1/0.25 seconds improves by
+`0.006267/0.002683 m`, while 0.5/0.75/1.0 seconds regress by
+`0.003060/0.003405/0.005307 m`. Every x horizon regresses by
+`0.005056--0.011497 m`; every y horizon and four of five z horizons improve.
+Velocity at 0.1 seconds improves `0.001307 m/s`, but the other four horizons
+regress by `0.001952--0.045895 m/s`. Collision F1 is almost flat
+(`0.184615 -> 0.180451`) with large offsetting horizon changes. Lifecycle
+precision/coverage improve about `0.0012`, coverage90 falls `0.002660`, median
+uncertainty NLL weakens `0.001046` while its worst sampled value improves, and
+drag/restitution observability each gain one object. Identity is the clearest
+regression: six switches/297 associations versus three/294. This is a complete
+deterministic training-trend warning with healthy optimization, not fixed
+validation; continue unchanged to selector 512 without promotion or scaling.
+
 ## 2026-08-11 — pooled convergence-trend observability implemented
 
 The whole-run auditor previously proved optimizer/support/resource integrity

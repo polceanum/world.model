@@ -120,6 +120,13 @@
   failure. Same-seed current position and all five position horizons improve,
   while collision F1 and 0.25/0.5/1.0-second velocity regress. Preserved this
   as optimizer-repair evidence and an accuracy tradeoff, not promotion.
+- Closed the complete schedule-exact steps 264--320 trend window. All eight
+  scenarios, support, optimizer updates, gradient containment, observability,
+  and resources remain healthy. Short position and y improve, but every x
+  horizon, medium/long pooled position, four velocity horizons, coverage90,
+  and identity regress; switches increase from three to six on nearly equal
+  association support. Preserved the window as a broad warning and kept fixed
+  selector 512 authoritative.
 
 - Audited the live immutable campaign through durable step 896. All updates
   apply with exact eight-scenario logged balance, no skip/terminal/uncontained

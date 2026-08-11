@@ -446,6 +446,11 @@
   physical evidence improves current/all position horizons but regresses
   collision F1 and three velocity horizons, especially one second. Keep the
   run unchanged; this is repair qualification plus another accuracy tradeoff.
+  The complete matched steps 264--320 window remains optimizer/support clean
+  but is non-promotable: short position and y improve, while every x horizon,
+  medium/long pooled position, four velocity horizons, coverage90, and identity
+  regress. Identity doubles from three to six switches on nearly equal support.
+  Require the fixed step-512 selector; do not tune from this training window.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam
