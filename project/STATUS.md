@@ -227,6 +227,41 @@ not a durable checkpoint and is optimizer evidence only. The first durable
 trained checkpoint is step 128 and the first trained complete selector is step
 512.
 
+Durable step 128 passes a new reusable checkpoint-isolation audit. The exact
+numbered checkpoint is preserved at
+`runs/20260811-012103-attention-output-isolated-stage-a/checkpoints/step_000128.pt`
+(file SHA-256 `954ee4990e2f7b6e575bfae24057fca0d0f17ae0cdaf1cc4d3467c87806c1700`,
+model hash `07bfffec5d0c51c9b7c753d340fcbc5852c4efb8d4513e493efc6b0b373a77bd`).
+All 177 inherited tensors remain bitwise exact; all 48 attention tensors have
+changed; all 48 and only those attention parameters own Adam state at step 128;
+every serialized numeric value is finite; configured names/shapes/dtypes
+match; and both protected selector checkpoints retain model hash
+`1354bdfca1cef965c0cd907ea8c157c0fd82169e64f24da656eb42dd1a96df91`.
+The report is `checkpoint_step_000128_audit.json` beside the run.
+
+The complete dynamics audit through step 128 passes 128 applied updates, exact
+16-way exposure for every scenario, zero skipped draws or hard failures,
+frozen perception, and stable `2.886 GB` maximum RSS. Only the already known
+step-8 typed-output warning is severe. Median effective node/force coefficients
+are `1.0` and collision is `0.815`; the repair is not a universal low-gradient
+gate. Sampled identity remains a real warning: the output-isolated run has
+`8/694 = 1.153%` trusted switches versus `6/697 = 0.861%` in the paired
+force-row predecessor, with the difference concentrated at step 128. Aggregate
+sampled 0.25/0.50/0.75/1.00-second RMSE improves, 0.10-second RMSE is
+`0.00017 m` worse, and coverage is slightly higher. These sparse heterogeneous
+batches neither promote nor reject the model; the complete step-512 selector
+must resolve identity and every axis/horizon/scenario guardrail.
+
+`scripts/audit_attention_checkpoint.py` now makes the previously ad hoc
+architecture-growth audit repeatable. It recomputes model and whole-file
+hashes, checks recursive finiteness, verifies configured tensor shapes/dtypes,
+compares inherited and protected tensors exactly, maps serialized optimizer
+IDs back to named parameters, and validates Adam steps. Its unit/integration
+tests pass (`3 passed`; focused checkpoint/auditor group `39 passed`). The
+complete non-device suite passes `681 passed, 5 skipped, 1 deselected in
+215.22 s`; hardware-only tests were not rerun at this boundary. Trainer and
+supervisor remain live with empty stderr.
+
 Review of the original Transformer and current primary scaling/video-model
 work is now encoded in specification 1.29. The current implementation already
 has the applicable small-token ingredients: dense scaled dot-product attention,

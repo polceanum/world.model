@@ -473,6 +473,27 @@ axes/horizons, but it never uses heterogeneous training
 loss as a convergence signal. Duplicate exact-
 resume tail rows remain in the append-only source and must agree in all
 model/data metrics; the audit counts their latest replay once.
+At each durable attention-only architecture-growth checkpoint, also verify the
+serialized state and isolation contract with:
+
+```bash
+python scripts/audit_attention_checkpoint.py \
+  --checkpoint runs/TIMESTAMPED_RUN/checkpoints/last.pt \
+  --initial-checkpoint runs/TIMESTAMPED_RUN/checkpoints/validation_step_000000.pt \
+  --config runs/TIMESTAMPED_RUN/config.resolved.yaml \
+  --protected runs/TIMESTAMPED_RUN/checkpoints/best_rollout.pt \
+  --protected runs/TIMESTAMPED_RUN/checkpoints/reference_rollout.pt \
+  --require-all-attention-changed \
+  --require-complete-attention-optimizer-state \
+  --output runs/TIMESTAMPED_RUN/checkpoint_step_000128_audit.json
+```
+
+This read-only command independently recomputes tensor hashes, checks every
+serialized numeric value for finiteness, requires inherited tensors and
+protected checkpoints to remain exact, validates checkpoint shapes/dtypes
+against the resolved architecture, and maps serialized Adam state back to
+named parameters and step counters. It exits nonzero on failure. The output is
+scope/integrity evidence, not a substitute for fixed-selector accuracy.
 Training workers start only on the first actual draw. Post-step and checkpoint
 finite-state checks terminate before corrupt parameters/moments can become a
 resumable artifact. See `project/STATUS.md` for the exact failures, smokes, and

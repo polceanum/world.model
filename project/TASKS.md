@@ -244,9 +244,16 @@
   auditor. On the identical former step-64 force failure, reduce raw total
   gradient `21.5377 -> 2.14592`, force-row norm `21.4665 -> 1.75123`, and
   maximum shared-stack norm `0.04242 -> 0.00540` without sampled horizon
-  regression. Audit durable step 128, then pass step 280, the first trained
-  selector at 512, repeated selectors, and the declared plateau before scaling
-  capacity.
+  regression. Durable step 128 passes exact scope/optimizer/hash/finite-state
+  audit: 177 inherited tensors exact, all 48 attention tensors and only those
+  Adam states live at step 128, and protected artifacts unchanged. Track the
+  sparse sampled identity warning (`8/694` versus predecessor `6/697`) without
+  tuning against it; pass steps 152/280, the first trained selector at 512,
+  repeated selectors, and the declared plateau before scaling capacity.
+- [x] Add a reusable read-only attention-checkpoint auditor that records whole-
+  file/model hashes, recursive finiteness, configured shape/dtype agreement,
+  inherited/protected tensor equality, named optimizer ownership, and Adam
+  steps; preserve the exact step-128 checkpoint and JSON report.
 - [ ] Run a one-axis-at-a-time scaling study after stage A qualifies: matched
   data-only, width, depth, and bounded-history rungs with increasing balanced
   episode draws, fixed disjoint RGB-only validation/test/OOD manifests, and

@@ -55,6 +55,20 @@
   history, and an 8.31M single-CUDA rung with parameter-scaled data and disjoint
   validation/test/OOD gates. Deferred long-context/sparse infrastructure that
   does not solve a measured 22-token bottleneck.
+- Added `scripts/audit_attention_checkpoint.py` and focused tests so every
+  architecture-growth checkpoint can independently prove full-file/model
+  hashes, recursive finiteness, resolved tensor shape/dtype compatibility,
+  inherited/protected tensor equality, named optimizer ownership, and Adam
+  steps. Documented the reproducible command in `project/TRAINING.md`.
+- Preserved and audited the output-isolated step-128 checkpoint. All 177
+  inherited tensors remain exact, all 48 attention tensors changed, all 48 and
+  only those parameters own Adam state at step 128, protected hashes are
+  unchanged, and every serialized value is finite. The dynamics audit passes
+  128 balanced applied updates with zero skips/hard failures and stable memory.
+  Retained the sparse sampled identity increase (`1.153%` versus paired
+  predecessor `0.861%`) as a mandatory step-512 selector warning rather than
+  tuning to heterogeneous train batches. The complete non-device suite passes
+  `681 passed, 5 skipped, 1 deselected`.
 
 ### 2026-08-10 typed-attention stage-A pilot
 

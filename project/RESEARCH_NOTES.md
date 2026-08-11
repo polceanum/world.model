@@ -110,6 +110,18 @@ fractionally better (`0.377141` versus `0.377330 m`). This is strong causal
 optimizer evidence, not durable-checkpoint, selector, plateau, or
 generalization evidence.
 
+Durable step 128 proves the repaired experiment remains isolated and live: 177
+inherited tensors are exact, every one of 48 attention tensors changed, only
+those 48 parameters own Adam state at step 128, all state is finite, and the
+protected model hash is unchanged. Across the 16 sparsely logged training
+blocks, pooled 0.25--1.00-second position RMSE improves relative to the paired
+force-row run, while 0.10-second RMSE is `0.00017 m` worse and trusted identity
+switching is `8/694 = 1.153%` versus `6/697 = 0.861%`. The extra switches are
+concentrated in the step-128 batch. This is a real fixed-selector warning but
+not a causal failure diagnosis: sampled batches are heterogeneous and do not
+support per-scenario guardrails. Preserve the unchanged model through the
+historical step-152/280 boundaries and complete selector 512.
+
 Exact capacity census for later one-axis studies:
 
 - current/data-only: `3,004,656` total, `1,103,626` attention parameters;
