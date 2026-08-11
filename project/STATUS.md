@@ -338,6 +338,32 @@ row exactly matches the predecessor's sparse batch support and is not support
 collapse. This is a second heterogeneous accuracy warning with clean optimizer
 health; continue to the declared step-512 fixed selector without promotion.
 
+The next logged block at step 264 also passes the read-only dynamics audit.
+All `264/264` optimizer updates have applied with exact eight-scenario balance,
+no skipped draw, duplicate row, terminal failure, or uncontained interaction
+clip. The block has `313` causal trajectories and all 13 objective terms; RSS
+remains exactly at the sampled `2,991,591,424`-byte plateau. Its raw interaction
+gradient reaches `2.850016`, but the semantic/row hierarchy contains it at
+`0.350875` complete retention, above the declared `0.1` rejection floor. The
+very small force/node per-invocation coefficients remain visible warnings, not
+hidden evidence of collapse. Trainer and supervisor each remain active once,
+both stderr files are empty, and no `training_failure.json` exists.
+
+The primary-source Transformer refresh does not change the promotion decision.
+The current 3.00M model already implements the applicable short-set backbone:
+dense scaled dot-product attention, pre-RMSNorm, SwiGLU, residual paths, typed
+permutation-equivariant tokens, and bounded typed decoders. Llama 3 and the
+original Transformer reinforce long, data-rich training of a stable dense
+backbone; Chinchilla reinforces scaling examples with parameters. Gemma 3,
+DeepSeek-V3, and FlashAttention target long-context KV memory, sparse capacity,
+or accelerator bandwidth that are not bottlenecks for at most 22 tokens.
+V-JEPA 2 and ObjectForesight support the later complementary path: large-scale
+latent video pretraining plus explicit object-level trajectories. They do not
+justify replacing authoritative `WorldBelief` or enlarging a rung that still
+regresses velocity/event slices. The fixed step-512 selector, repeated
+selectors, plateau, disjoint test/OOD, and broad non-regression therefore remain
+mandatory before the prepared depth-six handoff is used.
+
 ## 2026-08-11 — pooled convergence-trend observability implemented
 
 The whole-run auditor previously proved optimizer/support/resource integrity

@@ -240,6 +240,20 @@ RoPE, local attention, sparse experts, and flash kernels target absent
 bottlenecks. The next capacity result must therefore be the declared one-axis
 depth/data ladder after small-rung convergence, not an LLM-shaped rewrite.
 
+DeepSeek-V3 and ObjectForesight sharpen that conclusion rather than changing
+it. DeepSeek-V3's MLA and MoE choices make a 671B-parameter language model with
+long autoregressive KV state economical; neither mechanism supplies free
+physical accuracy to a dense set of at most 22 tokens. ObjectForesight instead
+shows the directly relevant scaling pattern: retain explicit 3D object
+trajectories and build millions of automatically curated, geometrically gated
+training clips around them. For Orpheus, future compute should therefore scale
+two complementary paths: a larger self-supervised RGB/video encoder that emits
+typed evidence, and the explicit object/relation/history predictor that updates
+`WorldBelief`. The active 3.00M rung must first establish a fixed-selector
+learning curve, plateau, and held-out generalization; otherwise increasing
+width or depth cannot distinguish capacity limitation from optimization or
+objective limitation.
+
 A handoff audit found an orthogonal pre-scale defect: the allowed attention
 missing-key prefix also permitted a trained four-block source to seed a
 six-block destination with two random blocks. Because its typed decoders are

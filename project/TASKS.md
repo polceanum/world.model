@@ -425,6 +425,14 @@
   finiteness audit. Its matched 192--248 window regresses every velocity
   horizon, collision F1, and uncertainty while position is nearly flat and
   identity improves slightly. Continue without promotion to fixed step 512.
+  Step 264 remains live and contained: all 264 updates apply, exact scenario
+  balance and all 13 objectives are present, RSS remains `2.992 GB`, and the
+  `2.850016` raw interaction gradient retains `0.350875` after the declared
+  semantic/row hierarchy. No runtime failure exists, but the earlier physical
+  regressions mean the no-regression prerequisite for scaling is still false.
+  A refreshed primary-source review finds no missing long-context/MoE kernel
+  that addresses this 22-token bottleneck; keep the one-axis capacity ladder
+  gated on fixed selector, plateau, and disjoint test/OOD evidence.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

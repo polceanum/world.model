@@ -91,6 +91,17 @@
   position nearly flat but regresses every velocity horizon, collision F1
   (`0.222222 -> 0.189873`), and uncertainty; identity improves slightly.
   Retained the checkpoint as integrity evidence without accuracy promotion.
+- Extended the corrected campaign audit through step 264. All updates apply
+  with exact eight-scenario balance, complete causal/objective support, stable
+  `2,991,591,424`-byte RSS, and no terminal or uncontained failure. The latest
+  raw interaction gradient `2.850016` is contained at `0.350875` complete
+  retention; severe typed-output coefficients remain truthfully visible.
+  Refreshed the Transformer/scaling review against the original Transformer,
+  Chinchilla, Llama 3, Gemma 3, DeepSeek-V3, FlashAttention, V-JEPA 2, and
+  ObjectForesight. The current short-set architecture already has the relevant
+  dense mechanisms; efficiency machinery for long KV caches or sparse experts
+  is deferred, and the existing physical regressions keep capacity promotion
+  blocked until fixed-selector plateau and disjoint test/OOD non-regression.
 
 - Audited the live immutable campaign through durable step 896. All updates
   apply with exact eight-scenario logged balance, no skip/terminal/uncontained
