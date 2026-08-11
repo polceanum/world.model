@@ -182,18 +182,26 @@ training:
   validation_minimum_supported_episodes_per_scenario: 2
   grad_clip_norm: 2.0
   interaction_grad_clip_norm: 1.0
+  # Local semantic isolation must retain at least 10% at the complete
+  # interaction stage; otherwise reject the update before Adam is mutated.
+  minimum_interaction_gradient_retention: 0.1
   # Isolate rare collision-logit head spikes before the complete attention/
   # graph cap so they cannot suppress unrelated typed residual gradients.
   attention_collision_grad_clip_norm: 1.0
   # Exact step-280 replay localizes the remaining recurrent spike to the
   # normal/tangent force rows (joint raw norm 17.684), not shared attention.
   attention_force_grad_clip_norm: 1.0
+  # Multiplier/additive jump rows are a distinct recursive path. The stopped
+  # step-200 run exposed an 857-norm uncapped impulse update, so isolate these
+  # rows before the complete interaction hierarchy as well.
+  attention_impulse_grad_clip_norm: 1.0
   # Cap each recursive typed-output backpropagation signal before it enters
   # decoder weights and the shared token stack. Parameter-row caps alone run
   # too late to prevent a rare rollout Jacobian from starving shared learning.
   attention_node_output_grad_clip_norm: 0.1
   attention_collision_output_grad_clip_norm: 0.1
   attention_force_output_grad_clip_norm: 0.1
+  attention_impulse_output_grad_clip_norm: 0.1
   closed_loop_perception_grad_clip_norm: 1.0
   checkpoint_every: 128
   # A 32-episode selector costs about sixteen minutes on this Mac; cadence 512

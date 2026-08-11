@@ -94,6 +94,7 @@ class TypedAttentionInteractionResidual(nn.Module):
     relation_output_dim = 7
     collision_output_index = 1
     force_output_indices = (2, 3)
+    impulse_output_indices = (4, 5)
     # Two global-variance summaries + gravity + camera transform + camera
     # linear/angular velocity + intrinsics + two camera-variance summaries +
     # calibrated flag. Variances are summarized so the scene contract is
@@ -192,11 +193,13 @@ class TypedAttentionInteractionResidual(nn.Module):
             "node": None,
             "collision": None,
             "force": None,
+            "impulse": None,
         }
         self._output_gradient_records: dict[str, list[tuple[Tensor, Tensor]]] = {
             "node": [],
             "collision": [],
             "force": [],
+            "impulse": [],
         }
 
     def configure_output_gradient_clipping(
@@ -205,6 +208,7 @@ class TypedAttentionInteractionResidual(nn.Module):
         node: float | None,
         collision: float | None,
         force: float | None,
+        impulse: float | None = None,
     ) -> None:
         """Configure per-invocation semantic backpropagation caps.
 
@@ -212,7 +216,12 @@ class TypedAttentionInteractionResidual(nn.Module):
         checkpoint tensors, and inference behavior remain unchanged.
         """
 
-        values = {"node": node, "collision": collision, "force": force}
+        values = {
+            "node": node,
+            "collision": collision,
+            "force": force,
+            "impulse": impulse,
+        }
         for name, value in values.items():
             if value is not None and (
                 isinstance(value, bool)
@@ -228,13 +237,18 @@ class TypedAttentionInteractionResidual(nn.Module):
     def reset_output_gradient_diagnostics(self) -> None:
         """Clear transient records before one optimizer data draw."""
 
-        self._output_gradient_records = {"node": [], "collision": [], "force": []}
+        self._output_gradient_records = {
+            "node": [],
+            "collision": [],
+            "force": [],
+            "impulse": [],
+        }
 
     def output_gradient_diagnostics(self) -> dict[str, float]:
         """Return aggregate raw/applied evidence from the latest backward."""
 
         metrics: dict[str, float] = {}
-        for name in ("node", "collision", "force"):
+        for name in ("node", "collision", "force", "impulse"):
             records = self._output_gradient_records[name]
             enabled = self._output_gradient_clip_norms[name] is not None
             if records:
@@ -284,6 +298,7 @@ class TypedAttentionInteractionResidual(nn.Module):
         relation_groups = {
             "collision": (self.collision_output_index,),
             "force": self.force_output_indices,
+            "impulse": self.impulse_output_indices,
         }
         if relation_values.requires_grad and any(
             self._output_gradient_clip_norms[name] is not None for name in relation_groups

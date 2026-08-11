@@ -232,8 +232,12 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
         if "gradient_total_clip_coefficient" in record
     ]
     severe_clipped_steps: list[dict[str, float | int]] = []
+    uncontained_interaction_clipped_steps: list[dict[str, float | int]] = []
     for record in training:
         total_coefficient = float(record.get("gradient_total_clip_coefficient", 1.0))
+        interaction_stage_coefficient = float(
+            record.get("interaction_gradient_clip_coefficient", 1.0)
+        )
         interaction_coefficient = float(
             record.get(
                 "interaction_gradient_total_clip_coefficient",
@@ -245,6 +249,9 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
         )
         attention_force_coefficient = float(
             record.get("attention_force_gradient_clip_coefficient", 1.0)
+        )
+        attention_impulse_coefficient = float(
+            record.get("attention_impulse_gradient_clip_coefficient", 1.0)
         )
         attention_node_output_coefficient = float(
             record.get(
@@ -264,15 +271,23 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
                 1.0,
             )
         )
+        attention_impulse_output_coefficient = float(
+            record.get(
+                "attention_impulse_output_backprop_gradient_minimum_clip_coefficient",
+                1.0,
+            )
+        )
         if (
             min(
                 total_coefficient,
                 interaction_coefficient,
                 attention_collision_coefficient,
                 attention_force_coefficient,
+                attention_impulse_coefficient,
                 attention_node_output_coefficient,
                 attention_collision_output_coefficient,
                 attention_force_output_coefficient,
+                attention_impulse_output_coefficient,
             )
             < _SEVERE_CLIP_COEFFICIENT
         ):
@@ -285,6 +300,8 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
                 details["attention_collision_coefficient"] = attention_collision_coefficient
             if "attention_force_gradient_clip_coefficient" in record:
                 details["attention_force_coefficient"] = attention_force_coefficient
+            if "attention_impulse_gradient_clip_coefficient" in record:
+                details["attention_impulse_coefficient"] = attention_impulse_coefficient
             if "attention_node_output_backprop_gradient_minimum_clip_coefficient" in record:
                 details["attention_node_output_coefficient"] = attention_node_output_coefficient
             if "attention_collision_output_backprop_gradient_minimum_clip_coefficient" in record:
@@ -293,11 +310,27 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
                 )
             if "attention_force_output_backprop_gradient_minimum_clip_coefficient" in record:
                 details["attention_force_output_coefficient"] = attention_force_output_coefficient
+            if "attention_impulse_output_backprop_gradient_minimum_clip_coefficient" in record:
+                details["attention_impulse_output_coefficient"] = (
+                    attention_impulse_output_coefficient
+                )
             severe_clipped_steps.append(details)
+        if interaction_stage_coefficient < _SEVERE_CLIP_COEFFICIENT:
+            uncontained_interaction_clipped_steps.append(
+                {
+                    "step": int(record["step"]),
+                    "interaction_stage_coefficient": interaction_stage_coefficient,
+                }
+            )
     if severe_clipped_steps:
         warnings.append(
             "severe gradient clipping retained less than 10% of at least one "
             "raw typed-output/parameter-group update gradient"
+        )
+    if uncontained_interaction_clipped_steps:
+        failures.append(
+            "severe complete-interaction clipping retained less than 10% after "
+            "all configured typed-output and decoder-row isolation"
         )
     trajectory_support = [
         float(record["causal_trajectory_support_count"])
@@ -424,6 +457,7 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
         "gradient_norm_pre_clip": _distribution(gradients),
         "clipped_block_count": sum(coefficient < 1.0 for coefficient in clip_coefficients),
         "severe_clipped_steps": severe_clipped_steps,
+        "uncontained_interaction_clipped_steps": uncontained_interaction_clipped_steps,
         "trajectory_support_count": _distribution(trajectory_support),
         "maximum_skipped_draws": skipped_max,
         "process_rss_bytes": {

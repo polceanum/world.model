@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.29
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output backpropagation isolation and measured compute/data scaling amendments 11 August 2026
+**Version:** 1.30
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output and impulse-jump backpropagation isolation plus measured compute/data scaling amendments 11 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6329,6 +6329,53 @@ Primary references for this decision:
   Self-Supervised Learning,” arXiv:2603.14482; and
 - Kang et al., “How Far Is Video Generation from World Model: A Physical Law
   Perspective,” ICML 2025.
+
+## 197. Isolate every observed recursive impulse-gradient path before scaling
+
+The first fresh typed-output-isolated campaign exposed a distinct failure at
+optimizer update 200. The update was finite and fully supported, but the raw
+interaction norm reached `857.1579`. Typed impulse-multiplier and impulse-
+additive decoder rows contributed `830.3828` and `210.3096`; the configured
+node, collision, and force output caps did not cover those two jump outputs.
+Shared attention projections and blocks consequently received order-one to
+order-six gradients before the later complete interaction cap retained only
+`0.001167` of the update. This is optimizer starvation, not useful hard-
+example learning, and the campaign must not count toward convergence.
+
+Impulse multiplier/additive outputs are one semantic group and require the
+same two-level isolation as recursive force outputs:
+
+- a separately configured per-invocation output-gradient cap runs at the typed
+  decoder boundary before the impulse gradient enters decoder weights or the
+  shared token stack; and
+- a separately configured joint decoder-row cap bounds the accumulated
+  multiplier/additive parameter gradient before the complete interaction and
+  whole-model caps.
+
+Both levels are training-only and leave forward values, inference behavior,
+parameter count, tensor shapes, and zero-output initialization unchanged.
+Their configuration belongs to resume/selector protocol semantics, and their
+raw norm, applied norm, coefficient, invocation count, and minimum per-
+invocation coefficient must remain visible in live and offline diagnostics.
+Legacy checkpoints without these fields reproduce their historical uncapped
+behavior by normalizing both values to `null`.
+
+The active attention qualification also configures a minimum complete-
+interaction retention of `0.1` after all semantic output and decoder-row
+caps. Falling below that value means isolation did not contain the outlier:
+the trainer must clear gradients and reject the update before Adam state or
+weights change. The offline dynamics auditor treats the same condition as a
+hard failure, while a severe coefficient confined to a semantic local cap may
+remain a warning when the complete interaction stage retains at least `0.1`.
+The fail-fast threshold is optional protocol state so historical checkpoints
+without it preserve their original behavior as `null`.
+
+The failed step-200 update may be replayed from the preceding durable step-128
+model/optimizer/RNG/sampler state only as a clearly non-promotable diagnostic.
+A fresh qualification must still initialize weights-only from the protected
+graph control, pass the matched step-200 stress batch, complete fixed RGB-only
+selectors, and reach the declared plateau before width, depth, history, or
+video-representation capacity is increased.
 
 ---
 

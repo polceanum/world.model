@@ -458,12 +458,31 @@ def test_attention_force_gradient_clip_is_positive_when_configured(value: str) -
         )
 
 
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf"])
+def test_attention_impulse_gradient_clip_is_positive_when_configured(value: str) -> None:
+    with pytest.raises(ValueError, match="attention_impulse_grad_clip_norm"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.attention_impulse_grad_clip_norm={value}"],
+        )
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "1.1", "nan", "inf"])
+def test_minimum_interaction_gradient_retention_is_bounded(value: str) -> None:
+    with pytest.raises(ValueError, match="minimum_interaction_gradient_retention"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.minimum_interaction_gradient_retention={value}"],
+        )
+
+
 @pytest.mark.parametrize(
     "field",
     [
         "attention_node_output_grad_clip_norm",
         "attention_collision_output_grad_clip_norm",
         "attention_force_output_grad_clip_norm",
+        "attention_impulse_output_grad_clip_norm",
     ],
 )
 @pytest.mark.parametrize("value", ["0", "-1", "nan", "inf"])

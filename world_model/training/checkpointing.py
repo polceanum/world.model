@@ -160,6 +160,9 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
     ("training", "attention_node_output_grad_clip_norm"): None,
     ("training", "attention_collision_output_grad_clip_norm"): None,
     ("training", "attention_force_output_grad_clip_norm"): None,
+    ("training", "attention_impulse_grad_clip_norm"): None,
+    ("training", "attention_impulse_output_grad_clip_norm"): None,
+    ("training", "minimum_interaction_gradient_retention"): None,
 }
 
 _RUNTIME_SOURCE_ROOT_FILES = frozenset({"train.py"})

@@ -460,6 +460,15 @@ def test_training_resume_normalizes_explicit_legacy_defaults() -> None:
     checkpoint_config["training"].pop("normalize_rollout_axes_over_configured_horizons")
     checkpoint_config["training"].pop("joint_collision_long_horizon_sampling")
     checkpoint_config["training"].pop("minimum_rollout_age_steps")
+    for field_name in (
+        "attention_node_output_grad_clip_norm",
+        "attention_collision_output_grad_clip_norm",
+        "attention_force_output_grad_clip_norm",
+        "attention_impulse_grad_clip_norm",
+        "attention_impulse_output_grad_clip_norm",
+        "minimum_interaction_gradient_retention",
+    ):
+        checkpoint_config["training"].pop(field_name)
     checkpoint_config["device"].pop("closed_loop_preference")
     checkpoint_config["device"].pop("global_detector_cpu_on_mps")
     payload = {"config": checkpoint_config}

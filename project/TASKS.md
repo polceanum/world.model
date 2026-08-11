@@ -236,20 +236,29 @@
   bound the maximum shared parameter gradient to `0.0851`, retain `0.6979` at
   the post-row interaction stage, apply a finite supported update, and keep
   localized severe output/row coefficients visible as warnings.
-- [ ] Complete the fresh immutable weights-only 3.00M-parameter stage-A
-  campaign at `runs/20260811-012103-attention-output-isolated-stage-a/`, clean
-  commit `9d0502b`, from the protected graph control with typed-output
-  isolation. Its exact-source one-shot convergence supervisor is attached; the
-  step-zero selector is bitwise/metric-exact and all 64 early updates pass the
-  auditor. On the identical former step-64 force failure, reduce raw total
-  gradient `21.5377 -> 2.14592`, force-row norm `21.4665 -> 1.75123`, and
-  maximum shared-stack norm `0.04242 -> 0.00540` without sampled horizon
-  regression. Durable step 128 passes exact scope/optimizer/hash/finite-state
-  audit: 177 inherited tensors exact, all 48 attention tensors and only those
-  Adam states live at step 128, and protected artifacts unchanged. Track the
-  sparse sampled identity warning (`8/694` versus predecessor `6/697`) without
-  tuning against it; pass steps 152/280, the first trained selector at 512,
-  repeated selectors, and the declared plateau before scaling capacity.
+- [x] Stop the first fresh output-isolated campaign immediately after update
+  200 exposes a previously uncapped impulse multiplier/additive gradient:
+  raw total `857.1579`, impulse rows `830.3828/210.3096`, shared maximum
+  `6.2401`, and complete-stage retention `0.001167`. Preserve step 128 as the
+  last durable source and do not count step 200 or this run toward convergence.
+- [x] Add separately configured per-invocation and accumulated decoder-row
+  isolation for the joint impulse outputs, protocol-bind the controls, validate
+  legacy `null` behavior, and expose raw/applied/minimum/effective telemetry.
+- [x] Make sub-10% complete interaction retention after all local isolation a
+  hard offline-audit failure, and add an active fail-fast gate that clears
+  gradients and rejects the update before Adam state or weights change.
+- [x] Replay updates 129--200 from the durable step-128 model/optimizer/RNG/
+  sampler state. On the same update-200 seeds/window/support, reduce raw norm
+  `857.1579 -> 7.4410`, maximum shared norm `6.2401 -> 0.05334`, and increase
+  complete-stage retention `0.001167 -> 0.64704`; pass the offline replay audit
+  with no severe or uncontained blocks. Keep this branch explicitly
+  non-promotable because earlier repaired updates change the learned weights.
+- [ ] Launch and complete a new immutable weights-only 3.00M stage-A campaign
+  from the protected graph control under specification 1.30. Pass the matched
+  step-64/152/200/280 stress positions, durable checkpoint integrity, the first
+  trained fixed selector at 512, repeated selectors, and the declared plateau;
+  retain identity, per-axis, every-horizon, lifecycle, event, uncertainty, and
+  scenario guardrails before scaling capacity.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

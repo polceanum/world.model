@@ -683,10 +683,14 @@ def _rollout_validation_protocol_from_mapping(
         "optimization_stability": {
             "grad_clip_norm": training["grad_clip_norm"],
             "interaction_grad_clip_norm": training["interaction_grad_clip_norm"],
+            "minimum_interaction_gradient_retention": training.get(
+                "minimum_interaction_gradient_retention"
+            ),
             "attention_collision_grad_clip_norm": training.get(
                 "attention_collision_grad_clip_norm"
             ),
             "attention_force_grad_clip_norm": training.get("attention_force_grad_clip_norm"),
+            "attention_impulse_grad_clip_norm": training.get("attention_impulse_grad_clip_norm"),
             "attention_node_output_grad_clip_norm": training.get(
                 "attention_node_output_grad_clip_norm"
             ),
@@ -695,6 +699,9 @@ def _rollout_validation_protocol_from_mapping(
             ),
             "attention_force_output_grad_clip_norm": training.get(
                 "attention_force_output_grad_clip_norm"
+            ),
+            "attention_impulse_output_grad_clip_norm": training.get(
+                "attention_impulse_output_grad_clip_norm"
             ),
             "closed_loop_perception_grad_clip_norm": training[
                 "closed_loop_perception_grad_clip_norm"
@@ -1651,6 +1658,26 @@ def _has_effective_gradient(
     """Whether a consumed batch produced an optimizer-relevant gradient."""
 
     return gradient_norm > config.training.minimum_effective_gradient_norm
+
+
+def _assert_interaction_gradient_retention(
+    diagnostics: Mapping[str, float],
+    config: OrpheusConfig,
+    *,
+    optimizer_step: int,
+) -> None:
+    """Reject a causal update whose semantic isolation still starves the stage."""
+
+    minimum = config.training.minimum_interaction_gradient_retention
+    if minimum is None:
+        return
+    retained = diagnostics["interaction_gradient_clip_coefficient"]
+    if retained < minimum:
+        raise FloatingPointError(
+            "complete interaction gradient retained only "
+            f"{retained:.6g}, below configured minimum {minimum:.6g}, "
+            f"at optimiser step {optimizer_step}"
+        )
 
 
 def _finite_nonnegative_integer(value: Any, *, name: str) -> int:
@@ -2631,6 +2658,36 @@ def _clip_attention_force_gradients(
     return pre_clip, coefficient, applied
 
 
+def _clip_attention_impulse_gradients(
+    model: OnlineWorldModel,
+    maximum_gradient_norm: float | None,
+) -> tuple[float, float, float]:
+    """Jointly clip typed impulse-multiplier/additive decoder rows."""
+
+    attention = model.dynamics.attention_interactions
+    if attention is None:
+        return 0.0, 1.0, 0.0
+    gradients: list[Tensor] = []
+    for row in attention.impulse_output_indices:
+        if attention.relation_decoder.weight.grad is not None:
+            gradients.append(attention.relation_decoder.weight.grad[row])
+        if attention.relation_decoder.bias.grad is not None:
+            gradients.append(attention.relation_decoder.bias.grad[row])
+    if not gradients:
+        return 0.0, 1.0, 0.0
+    squared_norm = sum(gradient.detach().square().sum() for gradient in gradients)
+    pre_clip_tensor = squared_norm.sqrt()
+    if not bool(torch.isfinite(pre_clip_tensor)):
+        raise FloatingPointError("nonfinite typed-attention impulse gradient norm")
+    pre_clip = float(pre_clip_tensor.detach().cpu())
+    if maximum_gradient_norm is None:
+        return pre_clip, 1.0, pre_clip
+    coefficient, applied = _gradient_clip_diagnostics(pre_clip, maximum_gradient_norm)
+    for gradient in gradients:
+        gradient.mul_(coefficient)
+    return pre_clip, coefficient, applied
+
+
 def _clip_training_gradients(
     model: OnlineWorldModel,
     config: OrpheusConfig,
@@ -2701,6 +2758,14 @@ def _clip_training_gradients(
         model,
         config.training.attention_force_grad_clip_norm,
     )
+    (
+        attention_impulse_pre_clip,
+        attention_impulse_coefficient,
+        attention_impulse_applied,
+    ) = _clip_attention_impulse_gradients(
+        model,
+        config.training.attention_impulse_grad_clip_norm,
+    )
 
     interaction_after_row_clips_tensor = torch.nn.utils.clip_grad_norm_(
         interaction_parameters,
@@ -2714,18 +2779,22 @@ def _clip_training_gradients(
         interaction_after_row_clips,
         config.training.interaction_grad_clip_norm,
     )
-    interaction_after_collision_clip_squared = (
+    interaction_after_force_clip_squared = (
         interaction_after_row_clips * interaction_after_row_clips
+        - attention_impulse_applied * attention_impulse_applied
+        + attention_impulse_pre_clip * attention_impulse_pre_clip
+    )
+    interaction_after_force_clip = math.sqrt(max(0.0, interaction_after_force_clip_squared))
+    interaction_after_collision_clip_squared = (
+        interaction_after_force_clip * interaction_after_force_clip
         - attention_force_applied * attention_force_applied
         + attention_force_pre_clip * attention_force_pre_clip
     )
     interaction_after_collision_clip = math.sqrt(max(0.0, interaction_after_collision_clip_squared))
     interaction_raw_squared = (
-        interaction_after_row_clips * interaction_after_row_clips
+        interaction_after_collision_clip * interaction_after_collision_clip
         - attention_collision_applied * attention_collision_applied
         + attention_collision_pre_clip * attention_collision_pre_clip
-        - attention_force_applied * attention_force_applied
-        + attention_force_pre_clip * attention_force_pre_clip
     )
     interaction_pre_clip = math.sqrt(max(0.0, interaction_raw_squared))
     interaction_total_coefficient = (
@@ -2773,10 +2842,19 @@ def _clip_training_gradients(
         "attention_force_gradient_norm_pre_clip": attention_force_pre_clip,
         "attention_force_gradient_clip_coefficient": attention_force_coefficient,
         "attention_force_gradient_norm_applied_before_interaction_clip": (attention_force_applied),
+        "attention_impulse_gradient_local_clip_enabled": float(
+            config.training.attention_impulse_grad_clip_norm is not None
+        ),
+        "attention_impulse_gradient_norm_pre_clip": attention_impulse_pre_clip,
+        "attention_impulse_gradient_clip_coefficient": attention_impulse_coefficient,
+        "attention_impulse_gradient_norm_applied_before_interaction_clip": (
+            attention_impulse_applied
+        ),
         "interaction_gradient_norm_pre_clip": interaction_pre_clip,
         "interaction_gradient_norm_after_attention_collision_clip": (
             interaction_after_collision_clip
         ),
+        "interaction_gradient_norm_after_attention_force_clip": interaction_after_force_clip,
         "interaction_gradient_norm_after_attention_row_clips": interaction_after_row_clips,
         "interaction_gradient_clip_coefficient": interaction_stage_coefficient,
         "interaction_gradient_total_clip_coefficient": interaction_total_coefficient,
@@ -5425,6 +5503,7 @@ def train_from_config(
                     node=config.training.attention_node_output_grad_clip_norm,
                     collision=(config.training.attention_collision_output_grad_clip_norm),
                     force=config.training.attention_force_output_grad_clip_norm,
+                    impulse=config.training.attention_impulse_output_grad_clip_norm,
                 )
                 attention.reset_output_gradient_diagnostics()
             if step < config.training.rgb_pretrain_steps:
@@ -5536,6 +5615,16 @@ def train_from_config(
                 raise FloatingPointError(f"{error} at optimiser step {step}") from error
             pre_clip_gradient_norm = gradient_diagnostics["gradient_norm_pre_clip"]
             effective_gradient_norm = gradient_diagnostics["gradient_norm_pre_global_clip"]
+            if step >= config.training.rgb_pretrain_steps:
+                try:
+                    _assert_interaction_gradient_retention(
+                        gradient_diagnostics,
+                        config,
+                        optimizer_step=step + 1,
+                    )
+                except FloatingPointError:
+                    optimizer.zero_grad(set_to_none=True)
+                    raise
             if _has_effective_gradient(effective_gradient_norm, config):
                 optimizer.step()
                 _restore_restricted_updater_mean_update(

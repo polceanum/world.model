@@ -2,6 +2,36 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-11 impulse-gradient isolation and fail-fast monitoring
+
+- Stopped the fresh output-isolated campaign after update 200 exposed an
+  uncovered recursive impulse path: raw gradient `857.1579`, impulse
+  multiplier/additive rows `830.3828/210.3096`, maximum shared norm `6.2401`,
+  and only `0.001167` complete-stage retention. Preserved the independently
+  audited step-128 checkpoint as the last durable source; no trained selector
+  or convergence claim was made.
+- Advanced the contract/runtime to specification 1.30. Added joint impulse
+  per-invocation output and accumulated decoder-row caps, configuration and
+  resume/selector semantics, legacy-null normalization, and complete named
+  telemetry without changing forward values, parameter count, or tensor
+  shapes.
+- Added an optional complete-interaction retention fail-fast gate; the active
+  pilot rejects sub-10% post-isolation retention before Adam mutates. The
+  offline auditor now treats the same pattern as a hard failure while retaining
+  successfully contained local semantic clips as warnings.
+- Replayed the durable step-128 model/Adam/RNG/sampler state through the same
+  step-200 seeds/window. Raw norm fell to `7.4410`, maximum shared norm to
+  `0.05334`, complete-stage retention rose to `0.64704`, and 1-second sampled
+  RMSE improved `0.441224 -> 0.437779 m` with identical support/identity/
+  coverage. The replay audit passes with no severe or uncontained blocks; the
+  non-promotable report is
+  `runs/20260811-033712-step200-impulse-gradient-replay-v1/impulse_gradient_replay_report.json`.
+- Passed focused tests (`281`), complete non-device tests (`697 passed,
+  5 skipped, 1 deselected`), the host device marker (`1 passed, 702
+  deselected`), five direct MPS regressions, Ruff, compileall, dry run, and diff
+  checks. Capacity scaling remains gated on a fresh small-rung fixed-selector
+  learning curve and plateau.
+
 ### 2026-08-11 typed-output backpropagation isolation
 
 - Stopped the force-row-isolated sustained campaign at durable step 256 after

@@ -27,6 +27,7 @@ from world_model.training.loop import (
 )
 from world_model.training.trainer import (
     _ROLLOUT_SELECTION_METRIC_VERSION,
+    _assert_interaction_gradient_retention,
     _attention_gradient_diagnostics,
     _causal_training_support,
     _clip_training_gradients,
@@ -417,6 +418,77 @@ def test_attention_force_rows_are_jointly_bounded_before_complete_interaction_cl
     assert other.grad.norm().item() == pytest.approx(12.0, abs=1.0e-6)
 
 
+def test_attention_impulse_rows_are_jointly_bounded_before_complete_interaction_clip() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            grad_clip_norm=20.0,
+            interaction_grad_clip_norm=20.0,
+            attention_impulse_grad_clip_norm=1.0,
+            closed_loop_perception_grad_clip_norm=20.0,
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+    decoder = attention.relation_decoder
+    decoder.weight.grad = torch.zeros_like(decoder.weight)
+    multiplier_gradient = decoder.weight.grad[attention.impulse_output_indices[0]]
+    additive_gradient = decoder.weight.grad[attention.impulse_output_indices[1]]
+    multiplier_gradient.fill_(1.0)
+    multiplier_gradient.mul_(6.0 / multiplier_gradient.norm())
+    additive_gradient.fill_(1.0)
+    additive_gradient.mul_(8.0 / additive_gradient.norm())
+    other = attention.scene_projection.bias
+    other.grad = torch.ones_like(other)
+    other.grad.mul_(12.0 / other.grad.norm())
+
+    diagnostics = _clip_training_gradients(model, config)
+
+    assert diagnostics["attention_impulse_gradient_norm_pre_clip"] == pytest.approx(10.0)
+    assert diagnostics["attention_impulse_gradient_clip_coefficient"] == pytest.approx(
+        1.0 / (10.0 + 1.0e-6)
+    )
+    assert diagnostics[
+        "attention_impulse_gradient_norm_applied_before_interaction_clip"
+    ] == pytest.approx(1.0, abs=1.0e-6)
+    assert diagnostics["interaction_gradient_norm_after_attention_row_clips"] == pytest.approx(
+        math.sqrt(145.0), abs=1.0e-5
+    )
+    assert diagnostics["interaction_gradient_norm_pre_clip"] == pytest.approx(
+        math.sqrt(244.0), abs=1.0e-5
+    )
+    assert torch.linalg.vector_norm(
+        torch.stack((multiplier_gradient.norm(), additive_gradient.norm()))
+    ).item() == pytest.approx(1.0, abs=1.0e-6)
+    assert other.grad.norm().item() == pytest.approx(12.0, abs=1.0e-6)
+
+
+def test_complete_interaction_retention_gate_rejects_starved_update() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["training.minimum_interaction_gradient_retention=0.1"],
+    )
+
+    with pytest.raises(FloatingPointError, match=r"retained only 0\.002.*optimiser step 200"):
+        _assert_interaction_gradient_retention(
+            {"interaction_gradient_clip_coefficient": 0.002},
+            config,
+            optimizer_step=200,
+        )
+
+    _assert_interaction_gradient_retention(
+        {"interaction_gradient_clip_coefficient": 0.1},
+        config,
+        optimizer_step=200,
+    )
+
+
 def test_attention_typed_output_hooks_clip_before_shared_backpropagation() -> None:
     config = load_config(
         "configs/tiny_overfit.yaml",
@@ -430,6 +502,7 @@ def test_attention_typed_output_hooks_clip_before_shared_backpropagation() -> No
         node=0.1,
         collision=0.1,
         force=0.1,
+        impulse=0.1,
     )
     attention.reset_output_gradient_diagnostics()
 
@@ -446,6 +519,8 @@ def test_attention_typed_output_hooks_clip_before_shared_backpropagation() -> No
     relation_signal[..., attention.collision_output_index] = 3.0
     relation_signal[..., attention.force_output_indices[0]] = 3.0
     relation_signal[..., attention.force_output_indices[1]] = 4.0
+    relation_signal[..., attention.impulse_output_indices[0]] = 6.0
+    relation_signal[..., attention.impulse_output_indices[1]] = 8.0
 
     ((node_values * node_signal).sum() + (relation_values * relation_signal).sum()).backward()
 
@@ -467,9 +542,18 @@ def test_attention_typed_output_hooks_clip_before_shared_backpropagation() -> No
     )
     source_force_gradient = relation_source.grad[..., list(attention.force_output_indices)]
     assert source_force_gradient.norm().item() == pytest.approx(0.2, abs=1.0e-6)
+    impulse_gradient = relation_values.grad[..., list(attention.impulse_output_indices)]
+    assert impulse_gradient.norm().item() == pytest.approx(0.1, abs=1.0e-6)
+    source_impulse_gradient = relation_source.grad[..., list(attention.impulse_output_indices)]
+    assert source_impulse_gradient.norm().item() == pytest.approx(0.2, abs=1.0e-6)
 
     diagnostics = attention.output_gradient_diagnostics()
-    for name, raw in (("node", 5.0), ("collision", 3.0), ("force", 5.0)):
+    for name, raw in (
+        ("node", 5.0),
+        ("collision", 3.0),
+        ("force", 5.0),
+        ("impulse", 10.0),
+    ):
         prefix = f"attention_{name}_output_backprop_gradient"
         assert diagnostics[f"{prefix}_local_clip_enabled"] == 1.0
         assert diagnostics[f"{prefix}_invocation_count"] == 1.0

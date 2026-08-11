@@ -1,5 +1,34 @@
 # Design decisions
 
+## ADR-101 — Isolate impulse jumps and fail before shared-stage starvation
+
+- **Date:** 2026-08-11
+- **Status:** accepted and implemented; fresh qualification pending
+- **Context:** The fresh node/collision/force-output-isolated campaign reaches
+  update 200 with complete physical support but raw total/interaction norm
+  `857.1579`. Impulse multiplier/additive decoder rows contribute
+  `830.3828/210.3096`, shared projection/block gradients reach `6.2401`, and
+  the later complete interaction clip retains only `0.001167`. The existing
+  auditor calls this a severe warning but still returns `pass`; the finite
+  global norm therefore hides near-total shared-update starvation.
+- **Decision:** Treat multiplier/additive impulse proposals as one explicit
+  semantic group with a `0.1` per-invocation output-gradient cap and `1.0`
+  accumulated decoder-row cap in the active pilot. Add protocol-bound optional
+  minimum complete-interaction retention, set it to `0.1`, clear gradients and
+  fail before Adam on violation, and make the offline auditor fail the same
+  post-isolation condition. Preserve legacy missing controls as `null`.
+- **Alternatives considered:** scale width/depth; lower the global learning
+  rate; accept finite global clipping as sufficient; cap the whole relation
+  tensor and mix unrelated semantics; silently discard the bad batch; tune
+  against sampled forecast metrics.
+- **Consequences:** Forward dynamics, parameter count, tensor shapes, and
+  inference are unchanged. A matched non-promotable step-128--200 replay
+  reduces raw norm to `7.4410`, shared maximum to `0.05334`, and raises
+  complete-stage retention to `0.64704`, but earlier bounded updates change
+  weights so it is not a forward-exact one-update ablation. A fresh
+  weights-only campaign and fixed selectors remain mandatory before any
+  capacity scaling.
+
 ## ADR-100 — Scale predictive abstractions with matched compute/data evidence
 
 - **Date:** 2026-08-11

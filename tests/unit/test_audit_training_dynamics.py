@@ -135,7 +135,7 @@ def test_audit_reports_numerical_support_and_scope_failures(tmp_path) -> None:
     assert any("frozen state/dynamics scope" in failure for failure in report["failures"])
 
 
-def test_audit_warns_about_severe_global_or_interaction_clipping(tmp_path) -> None:
+def test_audit_rejects_severe_complete_interaction_clipping(tmp_path) -> None:
     run = tmp_path / "run"
     _write_metrics(
         run,
@@ -155,7 +155,7 @@ def test_audit_warns_about_severe_global_or_interaction_clipping(tmp_path) -> No
 
     report = audit_run(run)
 
-    assert report["status"] == "pass"
+    assert report["status"] == "fail"
     assert report["severe_clipped_steps"] == [
         {
             "step": 8,
@@ -167,6 +167,10 @@ def test_audit_warns_about_severe_global_or_interaction_clipping(tmp_path) -> No
         "severe gradient clipping retained less than 10% of at least one "
         "raw typed-output/parameter-group update gradient"
     ) in report["warnings"]
+    assert report["uncontained_interaction_clipped_steps"] == [
+        {"step": 8, "interaction_stage_coefficient": 0.035}
+    ]
+    assert any("complete-interaction clipping" in failure for failure in report["failures"])
 
 
 def test_audit_reports_attention_collision_row_clipping(tmp_path) -> None:
@@ -233,6 +237,8 @@ def test_audit_reports_typed_output_backpropagation_clipping(tmp_path) -> None:
                 attention_node_output_backprop_gradient_minimum_clip_coefficient=0.25,
                 attention_collision_output_backprop_gradient_minimum_clip_coefficient=0.08,
                 attention_force_output_backprop_gradient_minimum_clip_coefficient=0.04,
+                attention_impulse_gradient_clip_coefficient=0.03,
+                attention_impulse_output_backprop_gradient_minimum_clip_coefficient=0.02,
             )
         ],
     )
@@ -248,8 +254,34 @@ def test_audit_reports_typed_output_backpropagation_clipping(tmp_path) -> None:
             "attention_node_output_coefficient": 0.25,
             "attention_collision_output_coefficient": 0.08,
             "attention_force_output_coefficient": 0.04,
+            "attention_impulse_coefficient": 0.03,
+            "attention_impulse_output_coefficient": 0.02,
         }
     ]
+
+
+def test_audit_rejects_uncontained_complete_interaction_clipping(tmp_path) -> None:
+    run = tmp_path / "run"
+    _write_metrics(
+        run,
+        [
+            _record(
+                8,
+                gradient_total_clip_coefficient=0.001,
+                interaction_gradient_total_clip_coefficient=0.001,
+                interaction_gradient_clip_coefficient=0.002,
+                attention_impulse_gradient_clip_coefficient=1.0,
+            )
+        ],
+    )
+
+    report = audit_run(run)
+
+    assert report["status"] == "fail"
+    assert report["uncontained_interaction_clipped_steps"] == [
+        {"step": 8, "interaction_stage_coefficient": 0.002}
+    ]
+    assert any("complete-interaction clipping" in failure for failure in report["failures"])
 
 
 def test_audit_rejects_divergent_replayed_tail(tmp_path) -> None:

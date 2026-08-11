@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-11
-**Specification:** `PROJECT_SPEC.md` 1.29
+**Specification:** `PROJECT_SPEC.md` 1.30
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -98,8 +98,97 @@ step-280 batch contaminates the shared stack before its decoder-row cap;
 specification 1.28 adds typed-output backpropagation isolation, exact replay
 contains the known failure without shared collapse, and a fresh sustained
 qualification now passes the identical step-64 stress position without shared
-collapse; its first durable trained checkpoint, fixed selector, plateau, and
-any capacity promotion remain pending
+collapse, but that campaign is stopped after update 200 exposes an uncapped
+impulse-multiplier/additive path that again starves the shared stage;
+specification 1.30 isolates impulse outputs and decoder rows, rejects any
+post-isolation complete interaction retention below 10% before Adam mutates,
+and makes the offline auditor fail the same condition; matched diagnostic
+replay contains update 200, but a fresh selector, plateau, convergence result,
+and any capacity promotion remain pending
+
+## 2026-08-11 — impulse-gradient path repaired; scaling remains gated
+
+The trainer and convergence supervisor for
+`runs/20260811-012103-attention-output-isolated-stage-a/` were intentionally
+stopped immediately after logged update 200. The last durable source remains
+the independently audited step-128 checkpoint (file SHA-256
+`954ee4990e2f7b6e575bfae24057fca0d0f17ae0cdaf1cc4d3467c87806c1700`);
+the step-200 update is not reusable and the campaign cannot count toward
+convergence. Its launch services are unloaded. The two stderr lines are the
+expected multiprocessing semaphore warning from forced shutdown, not a
+training exception.
+
+On seeds `15928,9665,8986,13355,2028,5437,12662,4399`, frames 4--8,
+the update was finite and supported across all 13 objective terms but had raw
+total/interaction norm `857.1579`. Impulse multiplier/additive decoder rows
+were `830.3828/210.3096`; the largest shared projection/block norm was
+`6.24006`; post-row interaction norm was still `856.8679`, so the complete
+interaction stage retained only `0.001167`. The old offline auditor emitted a
+severe warning but returned `pass`, which was also inadequate monitoring.
+
+Specification 1.30 adds separately configured joint impulse output and
+decoder-row caps without changing forward values, tensor shapes, parameter
+count, or inference. It also adds an optional protocol-bound
+`minimum_interaction_gradient_retention`; the active config uses `0.1` and
+rejects a starved causal update before `optimizer.step()`. The offline auditor
+now reports any sub-10% complete-stage retention after local isolation as a
+hard failure while retaining successfully contained local typed clips as
+warnings. Legacy checkpoints normalize all new controls to `null`.
+
+The non-promotable replay at
+`runs/20260811-033712-step200-impulse-gradient-replay-v1/` resumes the exact
+step-128 model/Adam/RNG/sampler state and reaches the same update-200 seeds,
+frames, support, identity (`1/59`), and coverage90 (`0.86222`) on host MPS RGB
+plus CPU closed loop. Earlier bounded impulse updates change the learned
+trajectory, so this is not a forward-exact one-update ablation. At step 200,
+raw norm is `7.44100`, post-row interaction norm is `1.54550`, complete-stage
+retention is `0.64704`, impulse-row norm is `0.14373`, and maximum shared norm
+is `0.05334`. One-second RMSE is `0.437779 m` versus `0.441224 m` in the failed
+trajectory. The offline replay audit passes nine logged blocks with no severe
+or uncontained clipping and maximum RSS `2,929,733,632` bytes. The report is
+`impulse_gradient_replay_report.json` inside that run. The replay was
+intentionally interrupted after step 200 and is not a checkpoint, selector,
+accuracy promotion, or convergence result.
+
+Verification after the repair: focused config/trainer/auditor/checkpoint tests
+`281 passed in 20.27 s`; complete non-device suite `697 passed, 5 skipped,
+1 deselected in 174.47 s`; host device marker `1 passed, 702 deselected in
+2.98 s`; five direct MPS regressions `5 passed in 7.38 s`; Ruff format/check,
+compileall, dry run, and `git diff --check` pass. The dry run still resolves
+the unchanged 3.00M rung, 8,192 updates, 65,536 balanced episode draws, eight
+scenarios, and 32 RGB-only validation episodes. No larger model is justified
+until a new immutable small-rung campaign completes fixed selectors and the
+declared plateau.
+
+Exact commands used for this repair boundary:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python \
+  /private/tmp/replay_orpheus_step200_impulse_clips.py
+PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py \
+  --run runs/20260811-033712-step200-impulse-gradient-replay-v1 \
+  --after-step 128
+PYTHONPATH=. conda run -n orpheus pytest -q \
+  tests/unit/test_training_schedule.py tests/unit/test_config.py \
+  tests/unit/test_audit_training_dynamics.py \
+  tests/integration/test_checkpoint_roundtrip.py
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -m "not device"
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q -m device
+PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q \
+  tests/integration/test_rgb_measurements.py::test_roi_sampling_mps_training_mode_no_grad_uses_inference_path \
+  tests/integration/test_rgb_measurements.py::test_roi_sampling_mps_training_native_bilinear_path_is_differentiable \
+  tests/integration/test_rgb_measurements.py::test_global_rgb_cpu_detector_trains_and_roundtrips_with_mps_backbone \
+  tests/unit/test_association.py::test_association_transfers_cost_to_cpu_without_mps_float64 \
+  tests/unit/test_evaluation_parameter_update_metrics.py::test_directional_parameter_metrics_transfer_before_float64_accumulation
+PYTHONPATH=. conda run -n orpheus python train.py \
+  --config configs/attention_pilot_mps.yaml --device cpu --dry-run
+PYTHONPATH=. conda run -n orpheus ruff format --check .
+PYTHONPATH=. conda run -n orpheus ruff check .
+PYTHONPYCACHEPREFIX=/tmp/orpheus-pycache PYTHONPATH=. \
+  conda run -n orpheus python -m compileall \
+  world_model scripts train.py evaluate.py demo.py
+git diff --check
+```
 
 ## 2026-08-11 — shared-gradient failure repaired before capacity scaling
 

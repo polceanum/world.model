@@ -122,6 +122,26 @@ not a causal failure diagnosis: sampled batches are heterogeneous and do not
 support per-scenario guardrails. Preserve the unchanged model through the
 historical step-152/280 boundaries and complete selector 512.
 
+Update 200 invalidates that campaign before its first trained selector. On an
+otherwise supported batch, uncapped impulse multiplier/additive rows reach
+`830.3828/210.3096`, raw interaction norm reaches `857.1579`, shared block/
+projection gradients reach `6.2401`, and the complete stage retains only
+`0.001167`. This is a distinct recursive jump path, not evidence that the
+3.00M rung lacks capacity. The trainer and supervisor are stopped; durable
+step 128 remains the last reusable artifact.
+
+Specification 1.30 gives the joint impulse outputs the same causal two-level
+isolation as force: per-invocation output backpropagation plus accumulated
+decoder-row clipping. It also rejects any active causal update whose complete
+interaction stage retains less than `0.1` after local isolation, before Adam
+mutates state, and makes the offline auditor fail the same condition. A
+non-promotable step-128--200 replay reaches the same stress seeds/window with
+raw norm `7.4410`, shared maximum `0.05334`, and complete-stage retention
+`0.64704`; the nine logged replay blocks have no severe/uncontained clip. The
+replay trajectory is not forward-exact because earlier newly bounded updates
+change the weights. It qualifies a fresh start, not accuracy, generalization,
+or convergence.
+
 Exact capacity census for later one-axis studies:
 
 - current/data-only: `3,004,656` total, `1,103,626` attention parameters;

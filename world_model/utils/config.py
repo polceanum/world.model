@@ -317,6 +317,10 @@ class TrainingConfig:
     # residual across many substeps. Bound that subsystem before the global
     # clip so one edge-Jacobian spike cannot suppress unrelated gradients.
     interaction_grad_clip_norm: float = 1.0
+    # Optional fail-fast gate after all typed-output and decoder-row caps. A
+    # smaller retained fraction means local isolation failed, so applying the
+    # normalized update would starve the complete interaction model.
+    minimum_interaction_gradient_retention: float | None = None
     # Rare collision-event batches can put a large direct gradient on the
     # typed attention collision-logit decoder row.  Optionally bound that row
     # before the complete interaction group so event imbalance cannot reduce
@@ -327,13 +331,17 @@ class TrainingConfig:
     # attention gradient. Optionally bound those two semantic rows jointly
     # before the interaction cap, without changing their forward outputs.
     attention_force_grad_clip_norm: float | None = None
+    # Recursive collision impulses use distinct multiplier/additive outputs.
+    # Bound those rows separately so one jump cannot starve force/event paths.
+    attention_impulse_grad_clip_norm: float | None = None
     # Parameter-row caps run after gradients have already traversed the shared
     # attention stack. These optional per-invocation output-gradient caps act
-    # at the typed decoder boundary so rare recursive node/event/force signals
-    # cannot first dominate every shared token projection and block.
+    # at the typed decoder boundary so rare recursive node/event/force/impulse
+    # signals cannot first dominate every shared token projection and block.
     attention_node_output_grad_clip_norm: float | None = None
     attention_collision_output_grad_clip_norm: float | None = None
     attention_force_output_grad_clip_norm: float | None = None
+    attention_impulse_output_grad_clip_norm: float | None = None
     # RGB discovery and the shared ROI backbone can likewise dominate the
     # whole-model norm during causal adaptation. Bound the complete, disjoint
     # RGB observation module before the global clip.
@@ -1115,6 +1123,17 @@ class OrpheusConfig:
             or self.training.interaction_grad_clip_norm <= 0
         ):
             raise ValueError("training.interaction_grad_clip_norm must be finite and positive")
+        minimum_interaction_retention = self.training.minimum_interaction_gradient_retention
+        if minimum_interaction_retention is not None and (
+            isinstance(minimum_interaction_retention, bool)
+            or not isinstance(minimum_interaction_retention, (int, float))
+            or not math.isfinite(minimum_interaction_retention)
+            or minimum_interaction_retention <= 0
+            or minimum_interaction_retention > 1
+        ):
+            raise ValueError(
+                "training.minimum_interaction_gradient_retention must be in (0, 1] when configured"
+            )
         attention_collision_clip = self.training.attention_collision_grad_clip_norm
         if attention_collision_clip is not None and (
             isinstance(attention_collision_clip, bool)
@@ -1137,10 +1156,22 @@ class OrpheusConfig:
                 "training.attention_force_grad_clip_norm must be finite and positive "
                 "when configured"
             )
+        attention_impulse_clip = self.training.attention_impulse_grad_clip_norm
+        if attention_impulse_clip is not None and (
+            isinstance(attention_impulse_clip, bool)
+            or not isinstance(attention_impulse_clip, (int, float))
+            or not math.isfinite(attention_impulse_clip)
+            or attention_impulse_clip <= 0
+        ):
+            raise ValueError(
+                "training.attention_impulse_grad_clip_norm must be finite and positive "
+                "when configured"
+            )
         for config_field in (
             "attention_node_output_grad_clip_norm",
             "attention_collision_output_grad_clip_norm",
             "attention_force_output_grad_clip_norm",
+            "attention_impulse_output_grad_clip_norm",
         ):
             value = getattr(self.training, config_field)
             if value is not None and (
