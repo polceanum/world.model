@@ -417,6 +417,10 @@
   improving identity and short/mid velocity; keep it as a trend warning.
   `checkpoint_every=128` and `eval_every=512` are intentional, so the first
   trained fixed selector is step 512, not step 128.
+  The complete matched 128--184 window improves 0.5--1.0-second position and
+  identity but regresses collision F1, lifecycle, and slightly current/short
+  position; velocity is mixed. Preserve this as an event/identity tradeoff and
+  require the step-512 selector rather than promoting training-window gains.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

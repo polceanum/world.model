@@ -301,6 +301,22 @@ warning; the protocol intentionally checkpoints every 128 updates but runs its
 expensive fixed 32-episode selector every 512 updates. No step-128 validation
 was expected or missed. Continue unchanged to the fixed step-512 selector.
 
+The next complete matched training window, steps 128--184, confirms a real
+event/identity tradeoff without optimizer collapse. Relative to the failed
+predecessor on identical seeds, 0.5/0.75/1.0-second position RMSE improves
+`0.346603/0.407169/0.444389 -> 0.340015/0.399048/0.436764 m`, driven mainly by
+the z axis at one second (`0.461908 -> 0.439423 m`); current/0.1/0.25-second
+position regress slightly. Identity improves from nine switches/386
+associations to two/380, while collision F1 regresses `0.242775 -> 0.210526`
+and lifecycle precision/coverage regress `0.37173/0.40336 ->
+0.36735/0.39706`. Velocity is mixed across horizons; median uncertainty NLL
+is essentially flat/slightly better. All eight scenarios have eight draws,
+all 13 objectives remain supported, no update skips or fails, and RSS remains
+`2.992 GB`. One step-136 force-decoder spike is contained by the row/global
+hierarchy with complete retention `0.23550` and maximum shared gradient only
+`0.06889`; it does not recur in the next six logged blocks. Continue without
+promotion or protocol mutation to fixed validation at step 512.
+
 ## 2026-08-11 — pooled convergence-trend observability implemented
 
 The whole-run auditor previously proved optimizer/support/resource integrity

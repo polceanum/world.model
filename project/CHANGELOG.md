@@ -77,6 +77,13 @@
   warning without promotion. Clarified the intentional cadence: checkpoints
   occur every 128 updates, while fixed 32-episode selectors occur every 512;
   no step-128 selector was expected.
+- Completed the matched steps 128--184 training-window audit. Long position
+  improves at 0.5/0.75/1.0 seconds and identity switches fall from 9/386 to
+  2/380, but collision F1 falls `0.242775 -> 0.210526`, lifecycle weakens, and
+  current/short position regresses slightly. Optimizer/support/memory health
+  remains clean. A step-136 force-row spike is contained with `0.23550`
+  complete retention and does not immediately recur. Retained the result as a
+  tradeoff without promotion or protocol mutation pending fixed step 512.
 
 - Audited the live immutable campaign through durable step 896. All updates
   apply with exact eight-scenario logged balance, no skip/terminal/uncontained
