@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.33
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, and identity-initialized appended-depth amendments 11 August 2026
+**Version:** 1.34
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, and pooled training-trend observability amendments 11 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6503,6 +6503,37 @@ validation, test, OOD, scenario, uncertainty, identity, event, and horizon
 non-regression gates. Width growth remains unsupported and therefore starts
 from the neutral structured graph control until a separately proved
 function-preserving transform exists.
+
+## 201. Training trends must pool physical sufficient statistics
+
+Sparse training-cadence records are health and diagnostic samples, not fixed-
+manifest validation. The dynamics auditor must nevertheless expose consecutive
+non-overlapping trend windows so support collapse, identity/lifecycle drift,
+uncertainty failure, axis imbalance, horizon trade-offs, event failure,
+parameter observability loss, gradient starvation, and resource growth are
+visible before a selector boundary. Every window records its first/last step,
+logged-block count, scenario exposure, and whether it is complete. An
+incomplete tail window must never be compared as if it had the declared
+support of a complete window.
+
+Physical errors must be pooled from persisted sums of squared errors and
+coordinate counts before taking a square root. Coverage and precision must be
+pooled from their count numerators/denominators; collision F1 must be derived
+from pooled true-positive, false-positive, and false-negative counts; identity
+must pool switches and associations. Averaging already-derived per-batch RMSE,
+coverage, precision, F1, or switch-rate values is forbidden because unequal
+support would bias the trend. The same report includes current and every
+configured forecast horizon for position and velocity, current position axes,
+coverage, uncertainty NLL distribution, corrections, lifecycle support, slow-
+parameter observability, causal support, minimum complete-interaction gradient
+retention, and memory.
+
+Trend windows can diagnose collapse or motivate a matched investigation, but
+they cannot promote weights, declare convergence, authorize scaling, or
+override fixed RGB-only selector/test/OOD guardrails. Heterogeneous training
+samples may differ materially even under scenario-balanced batches. Capacity
+and optimizer decisions therefore remain bound to repeated fixed selectors and
+the declared plateau protocol.
 
 ---
 

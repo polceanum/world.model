@@ -383,3 +383,166 @@ def test_audit_exposes_validation_axes_horizons_and_guardrails(tmp_path) -> None
     assert summary["horizon_position_rmse_m"]["1.000s"] == 0.3
     assert summary["horizon_position_rmse_by_axis_m"]["x"]["1.000s"] == 0.4
     assert summary["horizon_target_coverage"]["1.000s"] == 0.75
+
+
+def test_audit_pools_complete_and_partial_training_trend_windows(tmp_path) -> None:
+    run = tmp_path / "run"
+    records = []
+    for index, step in enumerate((8, 16, 24), start=1):
+        records.append(
+            _record(
+                step,
+                causal_trajectory_support_count=float(index * 10),
+                physical_state_position_sse=float(index * index * 3),
+                physical_state_position_coordinate_count=3.0,
+                physical_state_position_x_sse=float(index * index),
+                physical_state_position_x_coordinate_count=1.0,
+                physical_state_position_y_sse=float(index * index),
+                physical_state_position_y_coordinate_count=1.0,
+                physical_state_position_z_sse=float(index * index),
+                physical_state_position_z_coordinate_count=1.0,
+                physical_state_position_coverage90_hit_count=float(index * 2),
+                physical_state_position_coverage90_coordinate_count=float(index * 3),
+                physical_state_velocity_sse=float(index * index * 3),
+                physical_state_velocity_coordinate_count=3.0,
+                physical_distance_gated_matched_object_frames=float(index * 4),
+                physical_distance_gated_target_object_frames=float(index * 5),
+                physical_distance_gated_predicted_object_frames=float(index * 8),
+                matched_object_frames=float(index * 6),
+                existence_negative_supervision_object_frames=float(index * 7),
+                physical_collision_true_positive_count=float(index * 2),
+                physical_collision_false_positive_count=float(index),
+                physical_collision_false_negative_count=float(index),
+                parameter_drag_observable_object_count=float(index * 3),
+                parameter_restitution_observable_object_count=float(index),
+                **{
+                    f"physical_rollout_position@{horizon}_sse": float(index * index * 3)
+                    for horizon in (
+                        "0.100s",
+                        "0.250s",
+                        "0.500s",
+                        "0.750s",
+                        "1.000s",
+                    )
+                },
+                **{
+                    f"physical_rollout_position@{horizon}_coordinate_count": 3.0
+                    for horizon in (
+                        "0.100s",
+                        "0.250s",
+                        "0.500s",
+                        "0.750s",
+                        "1.000s",
+                    )
+                },
+                **{
+                    f"physical_forecast_predictable_target_count@{horizon}": float(index * 2)
+                    for horizon in (
+                        "0.100s",
+                        "0.250s",
+                        "0.500s",
+                        "0.750s",
+                        "1.000s",
+                    )
+                },
+                **{
+                    f"physical_forecast_target_count@{horizon}": float(index * 4)
+                    for horizon in (
+                        "0.100s",
+                        "0.250s",
+                        "0.500s",
+                        "0.750s",
+                        "1.000s",
+                    )
+                },
+                **{
+                    f"physical_rollout_velocity@{horizon}_sse": float(index * index * 3)
+                    for horizon in (
+                        "0.100s",
+                        "0.250s",
+                        "0.500s",
+                        "0.750s",
+                        "1.000s",
+                    )
+                },
+                **{
+                    f"physical_rollout_velocity@{horizon}_coordinate_count": 3.0
+                    for horizon in (
+                        "0.100s",
+                        "0.250s",
+                        "0.500s",
+                        "0.750s",
+                        "1.000s",
+                    )
+                },
+                **{
+                    f"physical_collision_true_positive_count@{horizon}": float(index * 2)
+                    for horizon in (
+                        "0.100s",
+                        "0.250s",
+                        "0.500s",
+                        "0.750s",
+                        "1.000s",
+                    )
+                },
+                **{
+                    f"physical_collision_false_positive_count@{horizon}": float(index)
+                    for horizon in (
+                        "0.100s",
+                        "0.250s",
+                        "0.500s",
+                        "0.750s",
+                        "1.000s",
+                    )
+                },
+                **{
+                    f"physical_collision_false_negative_count@{horizon}": float(index)
+                    for horizon in (
+                        "0.100s",
+                        "0.250s",
+                        "0.500s",
+                        "0.750s",
+                        "1.000s",
+                    )
+                },
+            )
+        )
+    _write_metrics(run, records)
+
+    report = audit_run(run, trend_window_blocks=2)
+    complete, partial = report["training_trend_windows"]
+
+    assert report["training_trend_window_blocks"] == 2
+    assert complete["first_step"] == 8
+    assert complete["last_step"] == 16
+    assert complete["logged_blocks"] == 2
+    assert complete["complete"] is True
+    assert complete["causal_trajectory_support_count"] == 30.0
+    assert complete["current_position_rmse_m"] == (5.0 / 2.0) ** 0.5
+    assert complete["current_position_rmse_by_axis_m"] == {
+        "x": (5.0 / 2.0) ** 0.5,
+        "y": (5.0 / 2.0) ** 0.5,
+        "z": (5.0 / 2.0) ** 0.5,
+    }
+    assert complete["current_position_coverage90"] == 2.0 / 3.0
+    assert complete["current_velocity_rmse_mps"] == (5.0 / 2.0) ** 0.5
+    assert complete["lifecycle"] == {
+        "matched_object_frames": 18.0,
+        "existence_negative_supervision_object_frames": 21.0,
+        "distance_gated_target_coverage": 0.8,
+        "distance_gated_prediction_precision": 0.5,
+    }
+    assert complete["horizon_position_rmse_m"]["1.000s"] == (5.0 / 2.0) ** 0.5
+    assert complete["horizon_target_coverage"]["1.000s"] == 0.5
+    assert complete["horizon_velocity_rmse_mps"]["1.000s"] == (5.0 / 2.0) ** 0.5
+    assert complete["collision_f1"] == 2.0 / 3.0
+    assert complete["collision_f1_by_horizon"]["1.000s"] == 2.0 / 3.0
+    assert complete["parameter_observability"] == {
+        "drag_object_count": 9.0,
+        "restitution_object_count": 3.0,
+    }
+    assert complete["identity"]["switch_rate"] == 0.1
+    assert partial["first_step"] == 24
+    assert partial["last_step"] == 24
+    assert partial["logged_blocks"] == 1
+    assert partial["complete"] is False

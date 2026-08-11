@@ -1,5 +1,27 @@
 # Design decisions
 
+## ADR-104 — Pool comparable training-trend windows from sufficient statistics
+
+- **Date:** 2026-08-11
+- **Status:** accepted and implemented; selectors remain authoritative
+- **Context:** The whole-run dynamics audit exposed distributions, but
+  consecutive per-axis/horizon comparisons were assembled ad hoc. Averaging
+  per-batch RMSE or rates would bias windows with unequal physical support, and
+  partial tails could look spuriously better or worse than complete windows.
+- **Decision:** Emit non-overlapping configurable logged-block windows from the
+  existing read-only auditor. Pool SSE/counts, event counts, association counts,
+  and coverage counts before deriving physical metrics; expose position axes,
+  position/velocity horizons, lifecycle, identity, uncertainty, collision F1,
+  parameter observability, causal support, gradient retention, and memory.
+  Mark every tail window complete or incomplete.
+- **Alternatives considered:** continue one-off `jq` calculations; average
+  already-derived per-row metrics; run extra validation at every log line;
+  treat noisy training windows as selector evidence.
+- **Consequences:** Collapse and axis/horizon trade-offs can be monitored
+  reproducibly without touching the live optimizer or paying validation cost.
+  These heterogeneous windows remain diagnostic only and cannot promote,
+  reject, scale, or declare convergence without fixed-manifest evidence.
+
 ## ADR-103 — Grow attention depth with appended exact-identity blocks
 
 - **Date:** 2026-08-11

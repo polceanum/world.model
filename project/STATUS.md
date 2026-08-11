@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-11
-**Specification:** `PROJECT_SPEC.md` 1.33
+**Specification:** `PROJECT_SPEC.md` 1.34
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -113,6 +113,41 @@ every capacity promotion remain pending; specification 1.32 additionally
 preflights weight-only handoffs and rejects unsafe partial learned attention
 growth before any destination tensor is copied; specification 1.33 adds an
 exact identity-initialized exception for contiguous appended depth only
+
+## 2026-08-11 — pooled convergence-trend observability implemented
+
+The whole-run auditor previously proved optimizer/support/resource integrity
+and exposed physical distributions, but consecutive axis/horizon comparisons
+were one-off calculations. It now emits configurable non-overlapping windows
+(`--trend-window-blocks`, default eight logged cadence blocks), marks incomplete
+tails, and pools physical sufficient statistics before deriving metrics. RMSE
+uses summed SSE/coordinate counts; coverage and precision use pooled counts;
+identity uses switches/associations; collision F1 uses pooled TP/FP/FN. Each
+window includes current position axes and velocity, all configured position and
+velocity horizons, forecast coverage, lifecycle support, uncertainty,
+correction improvement, event F1, drag/restitution observability, causal
+support, scenario balance, gradient retention, and memory. Focused auditor
+tests pass (`12 passed`).
+
+The live run remains unaffected and its updated auditor returns `pass` through
+step 800 with no failures. Its latest complete window, steps 712--768, has
+2,096 causal trajectory targets, all 13 objective terms in every logged block,
+balanced eight-way scenario exposure, current position RMSE `0.184647 m`
+(`x/y/z = 0.182561/0.170300/0.199884 m`), current velocity RMSE
+`1.151526 m/s`, and position horizons
+`0.184250/0.209727/0.265618/0.320229/0.347584 m`. Identity is `2/314`,
+current coverage90 is `99.37%`, pooled collision F1 is `0.1333`, drag/
+restitution observable counts are `191/30`, uncertainty NLL median is
+`-0.9156`, and minimum complete-interaction retention is `0.6885` with stable
+`2,922,790,912`-byte RSS.
+
+The current step-776--800 tail contains only four of eight declared blocks. Its
+position and velocity values, coverage, and `4/162` identity count are now
+visibly labelled incomplete rather than compared to a full window. It has
+1,180 causal targets, positive median current/future corrections, `0.7384`
+minimum shared retention, and no audit failure. This is a watch item, not a
+regression or optimizer/model change. Fixed selector 1024 remains the next
+promotion decision.
 
 ## 2026-08-11 — function-preserving depth growth implemented
 

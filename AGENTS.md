@@ -67,6 +67,10 @@ Working rules:
   model or claim convergence until its declared balanced minimum training
   coverage has completed and broad validation has reached a predeclared
   plateau.
+- Pool training-trend errors from SSE/counts and rates from physical event,
+  association, and coverage counts. Label incomplete tail windows explicitly
+  and never use heterogeneous training windows as checkpoint-promotion
+  evidence.
 - When heterogeneous scenario updates demonstrably trade accuracy between
   regimes, use deterministic manifest-bound scenario-balanced optimizer
   batches; never describe a randomly shuffled dataset as per-update balance.

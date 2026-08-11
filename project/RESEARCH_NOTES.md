@@ -17,6 +17,17 @@ checkpoint, split/seeds, device, commands, metrics, and failure cases.
 
 ### Typed-attention stability and scaling decision
 
+Specification 1.34 replaces ad hoc training-window calculations with pooled
+auditor output. The live step-712--768 complete window has current x/y/z RMSE
+`0.182561/0.170300/0.199884 m`, position-horizon RMSE
+`0.184250/0.209727/0.265618/0.320229/0.347584 m`, current velocity RMSE
+`1.151526 m/s`, identity `2/314`, current coverage90 `99.37%`, collision F1
+`0.1333`, and minimum shared retention `0.6885`. All 13 causal objective terms
+are present, with 2,096 trajectory targets and balanced eight-way scenario
+exposure. The step-776--800 tail has only four of eight declared logged blocks;
+its `4/162` identity count and other values are explicitly incomplete and are
+not comparable or selector evidence. The whole-run audit remains `pass`.
+
 The current Mac rung is a 3,004,656-parameter model, including a 1,103,626-
 parameter width-128/four-block dense typed-attention residual over at most 22
 scene/entity/relation tokens. It already uses pre-RMSNorm, scaled dot-product

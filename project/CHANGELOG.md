@@ -4,6 +4,12 @@
 
 ### 2026-08-11 accumulated node-gradient repair and scale gate
 
+- Advanced the observability contract to specification 1.34. The dynamics
+  auditor now emits configurable complete/incomplete training-trend windows
+  with count-pooled position axes, position/velocity horizons, lifecycle,
+  identity, uncertainty, event F1, slow-parameter observability, support,
+  gradient retention, and memory. Focused tests reject the prior temptation to
+  average unequal-support derived metrics.
 - Advanced the contract to specification 1.33 and implemented the narrow
   function-preserving depth handoff anticipated by ADR-102. A trained shallow
   attention stack may now seed only contiguous appended blocks; new MHA and

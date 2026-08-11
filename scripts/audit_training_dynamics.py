@@ -87,6 +87,214 @@ def _pooled_identity_summary(records: list[dict[str, Any]]) -> dict[str, float |
     }
 
 
+def _sum_metric(records: list[dict[str, Any]], key: str) -> float:
+    return sum(
+        float(record[key])
+        for record in records
+        if isinstance(record.get(key), (int, float))
+        and not isinstance(record.get(key), bool)
+        and math.isfinite(float(record[key]))
+    )
+
+
+def _pooled_ratio(
+    records: list[dict[str, Any]],
+    numerator: str,
+    denominator: str,
+) -> float | None:
+    denominator_value = _sum_metric(records, denominator)
+    if denominator_value <= 0.0:
+        return None
+    return _sum_metric(records, numerator) / denominator_value
+
+
+def _pooled_rmse(
+    records: list[dict[str, Any]],
+    sse: str,
+    coordinate_count: str,
+) -> float | None:
+    mean_squared_error = _pooled_ratio(records, sse, coordinate_count)
+    return None if mean_squared_error is None else math.sqrt(mean_squared_error)
+
+
+def _pooled_f1(
+    records: list[dict[str, Any]],
+    *,
+    suffix: str = "",
+) -> float | None:
+    true_positive = _sum_metric(records, f"physical_collision_true_positive_count{suffix}")
+    false_positive = _sum_metric(records, f"physical_collision_false_positive_count{suffix}")
+    false_negative = _sum_metric(records, f"physical_collision_false_negative_count{suffix}")
+    denominator = 2.0 * true_positive + false_positive + false_negative
+    return None if denominator <= 0.0 else 2.0 * true_positive / denominator
+
+
+def _training_window_summary(
+    records: list[dict[str, Any]],
+    *,
+    complete: bool,
+) -> dict[str, Any]:
+    scenario_counts: Counter[str] = Counter()
+    for record in records:
+        names = record.get("scenario_names")
+        if isinstance(names, str):
+            scenario_counts.update(name for name in names.split(",") if name)
+    objective_support = [
+        float(record["causal_objective_term_support_count"])
+        for record in records
+        if isinstance(record.get("causal_objective_term_support_count"), (int, float))
+        and not isinstance(record.get("causal_objective_term_support_count"), bool)
+    ]
+    interaction_retention = [
+        float(
+            record.get(
+                "interaction_gradient_total_clip_coefficient",
+                record.get("interaction_gradient_clip_coefficient", 1.0),
+            )
+        )
+        for record in records
+    ]
+    rss = [
+        float(record["process_max_rss_bytes"])
+        for record in records
+        if isinstance(record.get("process_max_rss_bytes"), (int, float))
+        and not isinstance(record.get("process_max_rss_bytes"), bool)
+    ]
+    return {
+        "first_step": int(records[0]["step"]),
+        "last_step": int(records[-1]["step"]),
+        "logged_blocks": len(records),
+        "complete": complete,
+        "scenario_draw_counts": dict(sorted(scenario_counts.items())),
+        "causal_trajectory_support_count": _sum_metric(records, "causal_trajectory_support_count"),
+        "minimum_causal_objective_term_support_count": (
+            min(objective_support) if objective_support else None
+        ),
+        "identity": _pooled_identity_summary(records),
+        "lifecycle": {
+            "matched_object_frames": _sum_metric(records, "matched_object_frames"),
+            "existence_negative_supervision_object_frames": _sum_metric(
+                records, "existence_negative_supervision_object_frames"
+            ),
+            "distance_gated_target_coverage": _pooled_ratio(
+                records,
+                "physical_distance_gated_matched_object_frames",
+                "physical_distance_gated_target_object_frames",
+            ),
+            "distance_gated_prediction_precision": _pooled_ratio(
+                records,
+                "physical_distance_gated_matched_object_frames",
+                "physical_distance_gated_predicted_object_frames",
+            ),
+        },
+        "current_position_rmse_m": _pooled_rmse(
+            records,
+            "physical_state_position_sse",
+            "physical_state_position_coordinate_count",
+        ),
+        "current_position_rmse_by_axis_m": {
+            axis: _pooled_rmse(
+                records,
+                f"physical_state_position_{axis}_sse",
+                f"physical_state_position_{axis}_coordinate_count",
+            )
+            for axis in ("x", "y", "z")
+        },
+        "current_position_coverage90": _pooled_ratio(
+            records,
+            "physical_state_position_coverage90_hit_count",
+            "physical_state_position_coverage90_coordinate_count",
+        ),
+        "current_velocity_rmse_mps": _pooled_rmse(
+            records,
+            "physical_state_velocity_sse",
+            "physical_state_velocity_coordinate_count",
+        ),
+        "horizon_position_rmse_m": {
+            horizon: _pooled_rmse(
+                records,
+                f"physical_rollout_position@{horizon}_sse",
+                f"physical_rollout_position@{horizon}_coordinate_count",
+            )
+            for horizon in _HORIZONS
+        },
+        "horizon_position_rmse_by_axis_m": {
+            axis: {
+                horizon: _pooled_rmse(
+                    records,
+                    f"physical_rollout_position_{axis}@{horizon}_sse",
+                    f"physical_rollout_position_{axis}@{horizon}_coordinate_count",
+                )
+                for horizon in _HORIZONS
+            }
+            for axis in ("x", "y", "z")
+        },
+        "horizon_target_coverage": {
+            horizon: _pooled_ratio(
+                records,
+                f"physical_forecast_predictable_target_count@{horizon}",
+                f"physical_forecast_target_count@{horizon}",
+            )
+            for horizon in _HORIZONS
+        },
+        "horizon_velocity_rmse_mps": {
+            horizon: _pooled_rmse(
+                records,
+                f"physical_rollout_velocity@{horizon}_sse",
+                f"physical_rollout_velocity@{horizon}_coordinate_count",
+            )
+            for horizon in _HORIZONS
+        },
+        "uncertainty_position_nll": _metric_distribution(records, "uncertainty_position_nll"),
+        "collision_f1": _pooled_f1(records),
+        "collision_f1_by_horizon": {
+            horizon: _pooled_f1(records, suffix=f"@{horizon}") for horizon in _HORIZONS
+        },
+        "parameter_observability": {
+            "drag_object_count": _sum_metric(records, "parameter_drag_observable_object_count"),
+            "restitution_object_count": _sum_metric(
+                records, "parameter_restitution_observable_object_count"
+            ),
+        },
+        "current_correction_improvement_m": _metric_distribution(
+            records, "current_correction_improvement_m"
+        ),
+        "future_correction_improvement_m": _metric_distribution(
+            records, "future_correction_improvement_m"
+        ),
+        "loss_total": _metric_distribution(records, "loss_total"),
+        "gradient_norm_pre_clip": _metric_distribution(records, "gradient_norm_pre_clip"),
+        "minimum_complete_interaction_gradient_retention": (
+            min(interaction_retention) if interaction_retention else None
+        ),
+        "process_rss_bytes": {
+            "latest": rss[-1] if rss else None,
+            "maximum": max(rss) if rss else None,
+        },
+    }
+
+
+def _training_trend_windows(
+    records: list[dict[str, Any]],
+    *,
+    window_blocks: int,
+) -> list[dict[str, Any]]:
+    if window_blocks <= 0:
+        raise ValueError("training trend window blocks must be positive")
+    windows: list[dict[str, Any]] = []
+    for start in range(0, len(records), window_blocks):
+        selected = records[start : start + window_blocks]
+        if not selected:
+            continue
+        windows.append(
+            _training_window_summary(
+                selected,
+                complete=len(selected) == window_blocks,
+            )
+        )
+    return windows
+
+
 def _decoded_list_length(value: Any) -> int | None:
     if not isinstance(value, str):
         return None
@@ -167,7 +375,12 @@ def _canonical_records(
     return canonical, duplicates
 
 
-def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
+def audit_run(
+    run_directory: Path,
+    *,
+    after_step: int = 0,
+    trend_window_blocks: int = 8,
+) -> dict[str, Any]:
     """Return a deterministic audit of unique closed-loop optimizer blocks."""
 
     run_directory = run_directory.expanduser().resolve()
@@ -520,6 +733,11 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
         "scenario_draw_counts": dict(sorted(scenario_counts.items())),
         "scenario_draw_counts_scope": "logged_metric_rows_only",
         "live_physical_diagnostics": live_physical_diagnostics,
+        "training_trend_window_blocks": trend_window_blocks,
+        "training_trend_windows": _training_trend_windows(
+            training,
+            window_blocks=trend_window_blocks,
+        ),
         "validations": validation_summary,
     }
 
@@ -528,6 +746,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True, type=Path)
     parser.add_argument("--after-step", type=int, default=0)
+    parser.add_argument("--trend-window-blocks", type=int, default=8)
     return parser.parse_args()
 
 
@@ -535,7 +754,13 @@ def main() -> int:
     args = parse_args()
     if args.after_step < 0:
         raise ValueError("--after-step must be nonnegative")
-    report = audit_run(args.run, after_step=args.after_step)
+    if args.trend_window_blocks <= 0:
+        raise ValueError("--trend-window-blocks must be positive")
+    report = audit_run(
+        args.run,
+        after_step=args.after_step,
+        trend_window_blocks=args.trend_window_blocks,
+    )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["status"] == "pass" else 1
 

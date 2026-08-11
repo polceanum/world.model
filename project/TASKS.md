@@ -94,6 +94,11 @@
   distinguish absolute completed trainer step from logged optimizer
   confirmations, expose step gaps, and warn that sampled loss/gradient
   distributions are not per-update curves.
+- [x] Add reproducible non-overlapping training-trend windows to the dynamics
+  auditor. Pool physical sufficient statistics for current axes, every
+  position/velocity horizon, coverage, collision F1, identity, lifecycle,
+  uncertainty, parameter observability, support, gradient retention, and
+  memory; explicitly label incomplete tails and keep selectors authoritative.
 - [x] Stop and preserve the first attention pilot at its durable update-128
   checkpoint after exact audit found that 47/48 attention tensors changed but
   `scene_projection.weight` did not: its sole input, `global_code`, remains

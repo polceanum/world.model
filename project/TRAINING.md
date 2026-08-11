@@ -462,7 +462,8 @@ For causal optimizer health, use the replay-aware read-only audit:
 ```bash
 python scripts/audit_training_dynamics.py \
   --run runs/<timestamped-run> \
-  --after-step <first-step-to-audit>
+  --after-step <first-step-to-audit> \
+  --trend-window-blocks 8
 ```
 
 The command exits nonzero on numerical, optimizer, support, frozen-scope, or
@@ -473,6 +474,11 @@ axes/horizons, but it never uses heterogeneous training
 loss as a convergence signal. Duplicate exact-
 resume tail rows remain in the append-only source and must agree in all
 model/data metrics; the audit counts their latest replay once.
+It also emits consecutive non-overlapping training-trend windows. Derived
+errors and rates are pooled from their persisted physical counts rather than
+averaged across unequal-support rows, and an incomplete tail is explicitly
+marked `complete: false`. These windows diagnose health only; checkpoint
+promotion and convergence remain fixed-selector decisions.
 At each durable attention-only architecture-growth checkpoint, also verify the
 serialized state and isolation contract with:
 

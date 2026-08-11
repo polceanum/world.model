@@ -31,6 +31,11 @@ all smaller-model tensors load strictly. This removes relearning as a depth
 comparison confound. It does not weaken the selector/plateau gate, and width
 growth remains graph-initialized until it has its own proved handoff.
 
+Every rung now uses the same count-pooled consecutive training-trend report for
+early collapse diagnosis. Scale decisions still require fixed disjoint RGB-only
+selectors/test/OOD; noisy or incomplete training windows cannot authorize a
+larger model.
+
 ## Milestone 3
 
 Add exactly one useful second modality behind the existing observation contract.
