@@ -252,6 +252,28 @@ is nearly flat at `2.937--2.970 GB`. The whole-run auditor still passes; its
 four-block physical window is deliberately incomplete and cannot substitute
 for the first fixed trained selector.
 
+The first complete eight-block training window now passes through step 64.
+All `64/64` updates apply with exactly eight draws per scenario, `2,461`
+causal trajectories, zero skipped draws or duplicate rows, no terminal or
+uncontained interaction clip, and minimum complete retention `0.585590`.
+Median/max raw gradient is `0.986608/1.707679`; four blocks use the ordinary
+global clip. On the identical step-64 batch, the repair reduces raw gradient
+`3.24257 -> 0.96806` while keeping loss close (`2.05477 -> 2.08984`), and all
+13 objectives remain supported. RSS stays bounded at `2.937--2.992 GB`.
+
+The complete heterogeneous training-window diagnostics are recorded without
+promotion: current position RMSE is `0.267191 m` (`x/y/z =
+0.282210/0.217194/0.295563 m`), current velocity RMSE is `1.460520 m/s`, and
+0.1/0.25/0.5/0.75/1.0-second position RMSE is
+`0.264288/0.303162/0.364353/0.420610/0.443199 m`. At 1 second, axis RMSE is
+`x/y/z = 0.614303/0.231116/0.398114 m`; x is the hardest axis. Horizon target
+coverage is `98.73/98.73/94.58/94.58/94.58%`; current coverage90 is `96.60%`.
+There are three trusted switches in 386 associations (`0.7772%`), collision F1
+is `0.176`, lifecycle target coverage/precision is `0.39135/0.37896`, median
+uncertainty position NLL is `-0.84906`, and drag/restitution observability has
+`167/39` objects. These are on-policy training-window health diagnostics, not
+the fixed step-128 selector or generalization evidence.
+
 ## 2026-08-11 — pooled convergence-trend observability implemented
 
 The whole-run auditor previously proved optimizer/support/resource integrity

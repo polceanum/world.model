@@ -405,6 +405,11 @@
   balance per scenario, minimum complete retention `0.716607`, no failure, and
   nearly flat RSS. Continue to the first fixed trained selector without a
   protocol mutation.
+  Step 64 also passes the complete eight-block audit: 64 applied updates,
+  eight draws per scenario, `2,461` causal trajectories, zero skip/duplicate/
+  terminal/uncontained failure, minimum retention `0.585590`, and bounded
+  `2.992 GB` RSS. Axis/horizon/lifecycle/identity/uncertainty diagnostics are
+  recorded in STATUS; keep this task open for fixed selector evidence.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

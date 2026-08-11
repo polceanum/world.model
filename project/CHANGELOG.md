@@ -59,6 +59,14 @@
   predecessor while repaired gradient norms fall from `4.8887/1.8296` to
   `0.8720/0.4513`. The incomplete training window is not a fixed-selector
   accuracy result.
+- Completed the first eight-block step-64 dynamics audit. It passes with 64
+  applied updates, exact eight-way scenario balance, `2,461` trajectories,
+  zero skipped/duplicate/terminal/uncontained failures, minimum interaction
+  retention `0.585590`, and bounded `2.992 GB` RSS. The complete training
+  window records current position RMSE `0.267191 m`, 0.1--1.0-second RMSE
+  `0.264288/0.303162/0.364353/0.420610/0.443199 m`, identity-switch rate
+  `0.7772%`, coverage90 `96.60%`, collision F1 `0.176`, and median uncertainty
+  NLL `-0.84906`. These are health diagnostics, not fixed validation.
 
 - Audited the live immutable campaign through durable step 896. All updates
   apply with exact eight-scenario logged balance, no skip/terminal/uncontained
