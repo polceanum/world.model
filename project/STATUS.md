@@ -237,6 +237,26 @@ and bounded memory. These are optimizer/training-window health results, not a
 trained fixed selector, accuracy promotion, generalization, plateau,
 convergence, or capacity result.
 
+The unchanged campaign now has a second independently audited boundary at
+step 384. The checkpoint audit passes with all 177 inherited tensors bitwise
+exact, all 48 attention tensors changed, exactly those 48 parameters owning
+finite Adam state at step 384, and matching architecture, source, runtime,
+protocol, model-state, and protected-control hashes. The checkpoint file
+SHA-256 is `bcfa31c34e8d7084bd2f256e4d11fbdd850083e5eaf9933845607f077f21e179`;
+the report is `attention_checkpoint_step_000384_audit.json` beside the run.
+The live dynamics audit passes all 384 applied updates with no skipped draw,
+terminal failure, or uncontained interaction clip. Each of the eight scenarios
+appears exactly 48 times in the cadence rows; cumulative causal trajectory
+support is 15,083 targets, trusted identity is 26/2,105 (`1.235%`), pooled
+position coverage90 is 8,548/9,462 (`90.34%`), and maximum RSS remains
+`2,922,790,912` bytes. Weighted position RMSE has support at every horizon and
+is `0.2926/0.3206/0.3651/0.4123/0.4515 m` at 0.1/0.25/0.5/0.75/1.0 seconds.
+X remains the hardest axis and reaches `0.6174 m` at 1 second, versus
+`0.2523 m` for y and `0.4083 m` for z. These are balanced training-window and
+state-integrity diagnostics only. The first trained fixed selector at step 512
+is still pending, so no accuracy, generalization, convergence, plateau, or
+capacity promotion is claimed.
+
 Exact verification commands:
 
 ```bash

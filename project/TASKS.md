@@ -306,7 +306,14 @@
   Update 280 then passes with raw/post-row interaction `2.86878/1.29273`,
   `0.348580` complete retention, 145 causal targets, every horizon supported,
   no skip/failure, and cumulative trusted identity `1.24%`. All historical
-  optimizer stress gates now pass; fixed selectors and plateau remain open.
+  optimizer stress gates now pass. The independent step-384 checkpoint audit
+  also passes: 177 inherited tensors remain exact, all 48 attention tensors
+  are live, exactly those 48 own finite Adam state at step 384, and all hashes
+  agree. Across 384 updates, every scenario has 48 logged blocks, no update is
+  skipped or uncontained, cumulative identity is 26/2,105 (`1.235%`), pooled
+  coverage90 is `90.34%`, all horizons have weighted support, and memory remains
+  bounded. Fixed selector 512, repeated selectors, plateau, and held-out
+  generalization remain open.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

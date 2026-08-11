@@ -264,6 +264,19 @@ times, no terminal/uncontained failure, trusted identity 19/1,532 (`1.24%`),
 coverage90 `90.27%`, and bounded memory. This closes the known optimizer
 stress boundaries but does not substitute for the fixed selector at 512.
 
+The unchanged run remains intact through an independently audited step-384
+checkpoint. All inherited tensors are exact, every attention tensor is live,
+and attention-only Adam ownership and step counts are complete. Across the 48
+logged balanced blocks, all 384 optimizer updates apply, cumulative causal
+support is 15,083 targets, trusted identity is 26/2,105 (`1.235%`), and pooled
+coverage90 is `90.34%`. Weighted position RMSE is `0.2926/0.3206/0.3651/
+0.4123/0.4515 m` from 0.1 through 1.0 seconds. The x axis remains the principal
+training-window error (`0.6174 m` at 1 second), while y is `0.2523 m` and z is
+`0.4083 m`. This is evidence that the repaired optimizer remains stable and
+causally supported, not evidence that accuracy has improved: fixed-manifest
+step-512 validation, repeated selectors, plateau, and held-out tests remain
+the gates for convergence and any scale decision.
+
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
 

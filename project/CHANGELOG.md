@@ -75,6 +75,16 @@
   balance, no terminal/uncontained failure, trusted identity 19/1,532
   (`1.24%`), finite uncertainty, and bounded memory. Fixed-selector accuracy
   remains pending.
+- Preserved and independently audited the unchanged campaign at step 384.
+  All 177 inherited tensors remain exact; all 48 attention tensors changed;
+  exactly those 48 parameters own finite Adam state at step 384; serialized
+  state and architecture/source/runtime/protocol/protected hashes pass. The
+  live audit reports 384 applied updates, exact 48-block support for every
+  scenario, zero skips/terminal failures/uncontained clips, trusted identity
+  26/2,105 (`1.235%`), pooled coverage90 `90.34%`, every-horizon weighted
+  support, and unchanged `2.923 GB` peak RSS. Weighted 0.1--1.0-second position
+  RMSE is `0.2926/0.3206/0.3651/0.4123/0.4515 m`; this remains training-window
+  evidence, not fixed-selector accuracy or convergence.
 
 ### 2026-08-11 impulse-gradient isolation and fail-fast monitoring
 
