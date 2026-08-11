@@ -257,6 +257,37 @@ state-integrity diagnostics only. The first trained fixed selector at step 512
 is still pending, so no accuracy, generalization, convergence, plateau, or
 capacity promotion is claimed.
 
+The first trained fixed selector at step 512 is complete and rejected. All 32
+RGB-only validation episodes (`100000`--`100031`) completed in `1,178.75 s`,
+with four episodes for each of the eight scenarios and no support failure. The
+candidate score is `0.3307719713`, worse than the protected step-zero
+incumbent/reference score `0.3213162196`; `selection_accepted=0` and the safe
+incumbent remains step zero. Pooled current position RMSE regresses
+`0.251460 -> 0.295016 m`, target coverage `0.37625 -> 0.34775`, prediction
+precision `0.357312 -> 0.329465`, and x/z current RMSE
+`0.281775/0.263691 -> 0.362714/0.304134 m`. Forecast x RMSE regresses at
+0.1/0.25/0.5/0.75 seconds, forecast z at 0.1/0.25/0.5 seconds, and pooled
+forecast target coverage regresses through 0.75 seconds. The largest scenario
+failures are reference pairs and impulse perturbations; the fixed comparison
+records 131 reference guardrail failures plus the worse selection score.
+Position coverage90 is `93.28%`, so the principal failure is point/state,
+tracking support, and broad scenario non-regression rather than nonfinite
+uncertainty.
+
+The candidate checkpoint itself is valid: all 177 inherited tensors remain
+bitwise exact, all 48 attention tensors changed, exactly those 48 own finite
+Adam state at step 512, and every architecture/source/runtime/protocol/model
+hash passes. The report is `attention_checkpoint_step_000512_audit.json`
+beside the run; checkpoint SHA-256 is
+`0f6fcc97e4fb52eaa79c1f1e7d45569eef55ebb4a305e4a04da4051a7c65f16c`.
+The dynamics audit passes all 512 applied updates with exact 64-block scenario
+balance, zero skips/terminal failures/uncontained clips, and bounded memory.
+This localizes the failure to the learned attention residual rather than
+corruption, scope drift, missing support, optimizer collapse, or a scheduler
+jump. The mutable trajectory remains active, as required for causal repair of
+rejected candidates; this first rejection is not plateau evidence and does not
+authorize capacity scaling.
+
 Exact verification commands:
 
 ```bash

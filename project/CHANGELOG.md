@@ -85,6 +85,18 @@
   support, and unchanged `2.923 GB` peak RSS. Weighted 0.1--1.0-second position
   RMSE is `0.2926/0.3206/0.3651/0.4123/0.4515 m`; this remains training-window
   evidence, not fixed-selector accuracy or convergence.
+- Completed the first trained fixed selector at step 512 on all 32 RGB-only
+  validation episodes. It is decisively rejected: score `0.330772` versus the
+  protected step-zero `0.321316`; current position RMSE `0.295016` versus
+  `0.251460 m`; target coverage `0.34775` versus `0.37625`; precision
+  `0.329465` versus `0.357312`; and broad x/z, reference-pair, and
+  impulse-perturbation regressions. All scenarios have four episodes and no
+  support failure, so this is not a manifest artifact. The step-512 artifact
+  audit passes with 177 inherited tensors exact, all 48 attention tensors live,
+  attention-only Adam step 512, finite state, and intact hashes; the dynamics
+  audit passes 512 applied updates with exact balance and no optimizer failure.
+  The safe incumbent remains step zero and scaling stays blocked while the
+  rejected mutable trajectory continues toward the next selector.
 
 ### 2026-08-11 impulse-gradient isolation and fail-fast monitoring
 

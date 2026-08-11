@@ -277,6 +277,32 @@ causally supported, not evidence that accuracy has improved: fixed-manifest
 step-512 validation, repeated selectors, plateau, and held-out tests remain
 the gates for convergence and any scale decision.
 
+The first held-out learning result is negative. At step 512 the full fixed
+32-episode RGB-only selector has complete eight-scenario support but rejects
+the candidate at score `0.330772` versus the exact step-zero control's
+`0.321316`. Pooled current position RMSE worsens `0.251460 -> 0.295016 m`,
+target coverage `0.37625 -> 0.34775`, prediction precision
+`0.357312 -> 0.329465`, and current x/z RMSE
+`0.281775/0.263691 -> 0.362714/0.304134 m`. Reference pairs and impulse
+perturbations dominate the 131 fixed-reference guardrail failures, with
+additional camera, baseline, and glancing regressions. The model remains
+calibrated in aggregate (`93.28%` position coverage90), so increasing variance
+would not repair the principal point/state error.
+
+This is not optimizer or checkpoint collapse. The independent artifact audit
+proves exact inherited tensors, all attention tensors live, complete
+attention-only Adam state at step 512, finite serialization, and intact hashes;
+the dynamics audit proves all 512 balanced updates apply without support or
+retention failure. Since the inherited graph model is unchanged and the
+attention branch began at exact zero output, the learned typed residual is
+causally responsible for the regression. Its node decoder is strongly
+anisotropic (row norms x/y/z `0.0116/0.1154/0.0150`) while the relation decoder
+is largest on collision (`0.1745`), indicating coupled state/event damage rather
+than direct growth of the failed x/z heads. Preserve the safe step-zero
+incumbent and continue the rejected mutable trajectory to test repair at later
+fixed selectors; one rejected candidate is neither convergence nor plateau and
+does not justify scaling.
+
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
 

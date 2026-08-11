@@ -313,7 +313,15 @@
   skipped or uncontained, cumulative identity is 26/2,105 (`1.235%`), pooled
   coverage90 is `90.34%`, all horizons have weighted support, and memory remains
   bounded. Fixed selector 512, repeated selectors, plateau, and held-out
-  generalization remain open.
+  generalization remain open. The fixed step-512 selector subsequently
+  completes all 32 episodes with full eight-scenario support but is rejected:
+  score `0.330772` versus step-zero `0.321316`, pooled current position RMSE
+  `0.295016` versus `0.251460 m`, target coverage `0.34775` versus `0.37625`,
+  and broad x/z, reference-pair, and impulse-perturbation regressions. Its
+  checkpoint audit is scope/optimizer/hash clean and the live audit passes all
+  512 updates, so preserve the safe step-zero incumbent while continuing the
+  mutable trajectory toward the next selector. Repeated selectors, repair,
+  plateau, held-out generalization, and scaling remain open.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam
