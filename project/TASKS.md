@@ -289,6 +289,11 @@
   stress positions, durable checkpoint integrity, fixed selector 512, repeated
   selectors, and plateau while retaining identity, per-axis, every-horizon,
   lifecycle, event, uncertainty, and scenario guardrails before scaling.
+  Through update 64, the live audit passes with all 64 updates applied, exact
+  logged scenario balance, zero skips/failures/uncontained interaction clips,
+  bounded RSS, and `0.308398` complete-stage retention on the step-64 local
+  node/force event. This clears the former update-60 optimizer failure only;
+  all later gates remain open.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

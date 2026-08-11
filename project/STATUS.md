@@ -194,9 +194,15 @@ selector persisted score `0.3213162196`; exact audit finds all 225 tensors
 bitwise equal and all 2,578 comparable metric fields equal to the preceding
 protected control, with only the expected protocol hash different. The
 supervisor enforces 8,192 minimum updates, 4,096-update extensions, a 1,024-
-update tail, 1% plateau threshold, and a 24,576 hard limit. Training is active;
-no trained selector, accuracy, generalization, plateau, convergence, or
-capacity result is claimed here.
+update tail, 1% plateau threshold, and a 24,576 hard limit. The live auditor
+passes through 64 applied updates, proving that the former unsampled update-60
+pre-Adam failure no longer recurs. Across eight logged blocks every scenario
+appears exactly eight times, causal support spans 154--442 targets, skipped
+draws remain zero, no uncontained interaction clip or terminal failure exists,
+and maximum RSS is `2,883,448,832` bytes. Update 64 locally bounds node/force
+signals but retains `0.308398` at the complete interaction stage and applies
+successfully. Training remains active; no trained selector, accuracy,
+generalization, plateau, convergence, or capacity result is claimed here.
 
 Exact verification commands:
 

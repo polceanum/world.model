@@ -45,7 +45,12 @@
   32-episode initial RGB-only selector is exact against the protected control:
   225/225 tensors and 2,578/2,578 comparable metrics equal, score
   `0.3213162196`, and only the expected protocol hash differs. Training remains
-  active; this is initialization evidence, not a convergence or scale result.
+  active. Its live dynamics audit now passes through 64 applied updates with
+  exact logged scenario balance, zero skipped draws or terminal failures, and
+  no uncontained interaction clip. The former update-60 rejection is therefore
+  cleared; update 64 retains `0.308398` at the complete stage after local
+  node/force isolation. This is optimizer-health evidence, not a convergence
+  or scale result.
 
 ### 2026-08-11 impulse-gradient isolation and fail-fast monitoring
 

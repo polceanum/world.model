@@ -216,6 +216,16 @@ drift, but it is deliberately not counted as trained accuracy, generalization,
 or convergence; fixed trained selectors and the declared plateau remain the
 scale gate.
 
+The same fresh run passes the former update-60 failure boundary and persists
+update 64. The live auditor reports all 64 updates applied, each scenario
+exactly eight times across logged blocks, 154--442 causal targets per block,
+zero skipped draws, no terminal failure or uncontained interaction clip, and
+maximum RSS `2,883,448,832` bytes. At update 64, severe per-invocation node and
+force signals remain locally visible; the accumulated node row is below its
+cap, the post-row complete interaction retains `0.308398`, and Adam applies.
+This is causal evidence for the gradient-isolation repair, not evidence that
+the accuracy curve has plateaued or generalized.
+
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
 
