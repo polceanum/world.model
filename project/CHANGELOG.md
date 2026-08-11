@@ -25,8 +25,19 @@
 - Advanced the architectural contract and runtime metadata to specification
   1.28. Added focused tests proving the hook bounds typed gradients before they
   reach upstream shared features and that the offline auditor reports the new
-  hierarchy. A fresh immutable weights-only campaign and complete regression
-  gates remain pending; capacity scaling is still gated.
+  hierarchy. At that repair boundary, a fresh immutable weights-only campaign
+  and complete regression gates remained pending; capacity scaling stayed
+  gated.
+- Passed final gates (`297` affected/checkpoint tests; `678 passed, 5 skipped,
+  1 deselected` non-device; host MPS marker and five direct MPS regressions;
+  Ruff, compileall, dry run, and diff check), committed/pushed `9d0502b`, and
+  launched the clean weights-only campaign at
+  `runs/20260811-012103-attention-output-isolated-stage-a/`. Trainer metadata
+  records clean immutable source, MPS RGB/CPU closed-loop placement, RGB-only
+  input, no oracle, and protocol hash `21daf4a8...d7f`. An exact-source
+  one-shot supervisor carries the 8,192 minimum, 4,096 extensions,
+  four-selector/1% plateau rule, and 24,576 hard limit. Initial fixed
+  validation is active; no trained accuracy or convergence claim exists.
 
 ### 2026-08-10 typed-attention stage-A pilot
 

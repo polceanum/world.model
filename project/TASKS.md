@@ -236,10 +236,12 @@
   bound the maximum shared parameter gradient to `0.0851`, retain `0.6979` at
   the post-row interaction stage, apply a finite supported update, and keep
   localized severe output/row coefficients visible as warnings.
-- [ ] Launch a fresh immutable weights-only 3.00M-parameter stage-A campaign
-  from the protected graph control with typed-output isolation. Pass step 280,
-  the first trained selector at 512, repeated selectors, and the declared
-  plateau before scaling capacity.
+- [ ] Complete the fresh immutable weights-only 3.00M-parameter stage-A
+  campaign at `runs/20260811-012103-attention-output-isolated-stage-a/`, clean
+  commit `9d0502b`, from the protected graph control with typed-output
+  isolation. Its exact-source one-shot convergence supervisor is attached.
+  Pass step 280, the first trained selector at 512, repeated selectors, and the
+  declared plateau before scaling capacity.
 - [ ] Run a one-axis-at-a-time scaling study after stage A qualifies: matched
   data-only, width, depth, and bounded-history rungs with increasing balanced
   episode draws, fixed disjoint RGB-only validation/test/OOD manifests, and

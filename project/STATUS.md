@@ -172,6 +172,32 @@ data-only scaling; width; depth; bounded timestamped history; then single-CUDA
 GPU. Dense JEPA-style RGB pretraining may later be distilled into explicit
 `WorldBelief`, not replace it.
 
+The repair and synchronized specification/project memory were committed and
+pushed to `main` as `9d0502b`. A fresh weights-only campaign is active at
+`runs/20260811-012103-attention-output-isolated-stage-a/` under one-shot
+Standard/default LaunchAgent
+`com.polceanum.orpheus.attention-output-isolated-20260811-012103`,
+`KeepAlive=false`, with trainer PID `14294` at launch audit. Metadata records
+clean immutable commit `9d0502b4153a80e5f37d93a6142f9ffd3a0b3359`, runtime
+source fingerprint
+`82647f40748936058b3ec33201d63cc5026ea23935be7e7d7f3d644fa15f4232`,
+PyTorch 2.10.0, MPS available/built, MPS RGB measurement, CPU closed loop,
+float32, RGB-only runtime, no oracle, and the protected protocol-14 graph
+checkpoint initializer. The resolved selector protocol hash is
+`21daf4a8b1349429f3f631282bbc69fce202ffbba028a3a9cee06ca06b311d7f`.
+
+An exact-source convergence supervisor is attached from a clean detached copy
+of the same commit under one-shot LaunchAgent
+`com.polceanum.orpheus.attention-output-convergence-20260811-012103`,
+supervisor PID `14684` at attachment. Its independently computed commit,
+runtime-source, and worktree fingerprints exactly match the trainer. It records
+the unchanged 8,192-update minimum, complete 4,096-update extensions,
+four-selector/1% plateau rule, and truthful 24,576 hard limit. Trainer and
+supervisor stderr are empty. The mandatory initial 32-episode selector is
+running with durable per-episode heartbeats; five episodes had completed at the
+first attachment audit. No optimizer update, trained selector, accuracy gain,
+generalization result, plateau, convergence, or scale promotion exists yet.
+
 ## 2026-08-10 — exact force-head localization and scale/no-scale decision
 
 The collision-isolated step-256 checkpoint was replayed from clean detached
