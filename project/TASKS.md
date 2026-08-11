@@ -421,6 +421,10 @@
   identity but regresses collision F1, lifecycle, and slightly current/short
   position; velocity is mixed. Preserve this as an event/identity tradeoff and
   require the step-512 selector rather than promoting training-window gains.
+  The step-256 checkpoint also passes exact attention-only tensor/Adam/
+  finiteness audit. Its matched 192--248 window regresses every velocity
+  horizon, collision F1, and uncertainty while position is nearly flat and
+  identity improves slightly. Continue without promotion to fixed step 512.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

@@ -317,6 +317,27 @@ hierarchy with complete retention `0.23550` and maximum shared gradient only
 `0.06889`; it does not recur in the next six logged blocks. Continue without
 promotion or protocol mutation to fixed validation at step 512.
 
+The second durable trained checkpoint at step 256 also passes exact artifact
+and whole-run audits. All 48 attention tensors changed, all 177 inherited
+tensors remain bitwise unchanged, exactly the 48 attention parameters own
+finite Adam state at step 256, and the model hash is
+`3635dae3b120a41236cbcceaf4e450814c36774ffb4709f02d2bb8f767ca6a5b`.
+Across all 256 updates the 32 logged blocks contain exactly 32 draws per
+scenario, zero skipped draws, duplicate rows, uncontained interaction clips,
+or terminal failures; RSS remains bounded at `2.992 GB`. The reusable artifact
+report is `attention_checkpoint_audit_step_000256.json` beside the run.
+
+The complete matched steps 192--248 window is not promotable. Current position
+is nearly flat (`0.298443 -> 0.299372 m`); 0.25/0.75/1.0-second position
+improves only slightly while 0.1/0.5 seconds regress slightly. Every velocity
+horizon regresses, collision F1 falls `0.222222 -> 0.189873` (including
+one-second F1 `0.214286 -> 0.066667`), and median uncertainty NLL weakens
+slightly. Identity improves from five switches/376 associations to four/374;
+lifecycle coverage/precision are unchanged. The late eight-objective step-232
+row exactly matches the predecessor's sparse batch support and is not support
+collapse. This is a second heterogeneous accuracy warning with clean optimizer
+health; continue to the declared step-512 fixed selector without promotion.
+
 ## 2026-08-11 — pooled convergence-trend observability implemented
 
 The whole-run auditor previously proved optimizer/support/resource integrity

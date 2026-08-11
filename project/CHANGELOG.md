@@ -84,6 +84,13 @@
   remains clean. A step-136 force-row spike is contained with `0.23550`
   complete retention and does not immediately recur. Retained the result as a
   tradeoff without promotion or protocol mutation pending fixed step 512.
+- Audited the durable step-256 checkpoint: all 48 attention tensors changed,
+  all 177 inherited tensors remain exact, exactly 48 attention parameters own
+  finite step-256 Adam state, and all 256 updates retain balanced support with
+  no skip/duplicate/failure or RSS growth. The matched 192--248 window keeps
+  position nearly flat but regresses every velocity horizon, collision F1
+  (`0.222222 -> 0.189873`), and uncertainty; identity improves slightly.
+  Retained the checkpoint as integrity evidence without accuracy promotion.
 
 - Audited the live immutable campaign through durable step 896. All updates
   apply with exact eight-scenario logged balance, no skip/terminal/uncontained
