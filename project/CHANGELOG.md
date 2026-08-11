@@ -4,6 +4,19 @@
 
 ### 2026-08-11 accumulated node-gradient repair and scale gate
 
+- Advanced the contract to specification 1.32 after a pre-scale handoff audit
+  found that a trained four-block attention checkpoint could partially seed a
+  six-block destination while leaving random new blocks on the learned decoder
+  path. Weight-only loading now validates all keys and shapes before copying,
+  rejects partially present allowed module prefixes, and leaves rejected
+  destinations unchanged. Added a regression test and made the rung order
+  consistently data-only, depth, width, bounded history, then single CUDA.
+- Re-audited the immutable specification-1.31 campaign through update 704:
+  all updates apply with exact logged scenario balance, no skipped/terminal/
+  uncontained failure, stable 2.92 GB RSS, and a passing dynamics audit. The
+  latest equal training window improves medium/long horizons but regresses
+  current/short error and identity, so selector 1024 remains the next decision
+  point and capacity scaling remains blocked.
 - Stopped the fresh specification-1.30 attention campaign after the pre-Adam
   retention gate rejected deterministic attempted update 60 at `0.0850405`.
   The run had applied 59 supported updates but had no durable trained selector;

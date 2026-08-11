@@ -335,13 +335,23 @@
   deterministic windows differ, so classify this as training-sample wobble,
   not a matched regression or repair. The auditor still passes all 640 updates
   and step 640 retains `0.6927` after semantic isolation. Keep selector 1024 as
-  the next decision point.
+  the next decision point. Through step 704, the auditor still passes all
+  updates with exact logged balance, zero skips/failures/uncontained clips,
+  and stable memory. The next equal window is mixed: current/short horizons and
+  identity worsen, 0.50--1.00-second horizons improve materially, coverage is
+  flat, and shared-stage retention is healthy. Continue unchanged; this is not
+  matched selector evidence.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam
   steps; preserve the exact step-128 checkpoint and JSON report.
+- [x] Harden the future scale handoff under specification 1.32: preflight all
+  checkpoint keys and tensor shapes before copying; reject partial learned
+  attention-prefix growth such as a trained four-block source into a random
+  six-block destination; prove rejection leaves the destination bitwise
+  unchanged. The active graph-control-to-attention run is unaffected.
 - [ ] Run a one-axis-at-a-time scaling study after stage A qualifies: matched
-  data-only, width, depth, and bounded-history rungs with increasing balanced
+  data-only, depth, width, and bounded-history rungs with increasing balanced
   episode draws, fixed disjoint RGB-only validation/test/OOD manifests, and
   the accepted smaller checkpoint as a non-regression reference. Preserve the
   current 8,192--24,576-update curve as the data-only evidence; compare the

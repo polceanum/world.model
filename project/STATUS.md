@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-11
-**Specification:** `PROJECT_SPEC.md` 1.31
+**Specification:** `PROJECT_SPEC.md` 1.32
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -109,7 +109,52 @@ update 60 exposes unbounded accumulation in the node decoder; specification
 and passes a fresh protected-control update-60 causal replay at `0.565343`
 retention; full regression gates and an exact clean sustained step-zero
 relaunch now pass, while fixed trained selectors, plateau, convergence, and
-every capacity promotion remain pending
+every capacity promotion remain pending; specification 1.32 additionally
+preflights weight-only handoffs and rejects partial learned attention growth
+before any destination tensor is copied
+
+## 2026-08-11 — scaling handoff integrity repaired
+
+The modern-Transformer review still supports gradual evidence-gated scaling,
+but the current 3.00M rung has not qualified: fixed selector 512 was rejected
+at score `0.330772` versus the protected `0.321316`, with pooled current
+position RMSE `0.295016` versus `0.251460 m` and broad x/z and scenario
+regressions. The mutable trajectory remains healthy through update 704: every
+update is applied, all eight scenarios have 88 logged blocks, no skipped draw,
+terminal failure, or uncontained interaction clip exists, memory is bounded at
+`2,922,790,912` bytes, and the offline dynamics audit returns `pass`. This is
+continued optimization evidence, not a scale authorization; selector 1024 is
+the next comparable decision point.
+
+The equal eight-block training window at steps 648--704 is mixed against
+584--640. It improves pooled 0.50/0.75/1.00-second RMSE from
+`0.4035/0.4669/0.5161` to `0.3571/0.3416/0.3860 m`, but worsens current,
+0.10, and 0.25-second RMSE from `0.2961/0.2984/0.3475` to
+`0.3799/0.3823/0.4052 m`; x/z current error and trusted identity also worsen,
+while y and long-horizon z improve. Coverage90 is essentially flat
+(`96.11% -> 96.08%`), support is comparable (`2,054 -> 2,122` targets), and
+minimum shared-stage retention improves (`0.6927 -> 0.9072`). These are
+heterogeneous training samples, not a fixed-manifest gain or regression, so no
+architecture or optimizer change is justified before selector 1024.
+
+A pre-scale code audit found that the weight-only loader could accept a trained
+four-block attention checkpoint for a six-block destination because the added
+block keys were under the allowed attention prefix. Those random blocks change
+the representations seen by learned typed decoders before training, violating
+the zero-output/function-preserving handoff contract. The loader now preflights
+all source/destination keys and tensor shapes before copying, rejects any
+partially present allowed module prefix, and leaves a rejected destination
+bitwise unchanged. The active run is unaffected: it loaded the entire new
+attention prefix from the graph-only control under immutable commit `5b2da41`.
+
+The gradual order is now consistently data-only, depth six, width 192, bounded
+timestamped history, then width-256/depth-six single CUDA. Architecture rungs
+start from the structured graph control until an exact identity-preserving
+growth transform exists; the accepted smaller attention model remains the
+fixed non-regression reference. Focused checkpoint tests pass (`29 passed`);
+the complete non-device suite passes (`707 passed, 5 skipped, 1 deselected in
+236.26 s`); Ruff format/check, compileall, diff check, and the unchanged
+8,192-update/65,536-draw CPU dry-run pass.
 
 ## 2026-08-11 — accumulated node-gradient repair; small-rung campaign active
 
@@ -738,7 +783,7 @@ RoPE remains reserved for true timestamped history rather than arbitrary set
 order. FlashAttention/GQA/MoE solve unmeasured long-context or routing costs at
 this rung and are deferred. First qualify the repaired dense model through the
 former failure boundaries, repeated complete selectors, and the declared
-plateau. Then compare data-only, width, depth, and bounded-history rungs one at
+plateau. Then compare data-only, depth, width, and bounded-history rungs one at
 a time, increasing continuously varied balanced data with parameters and
 requiring fixed disjoint RGB-only validation/test/OOD non-regression before a
 single-CUDA-GPU scale-up.
@@ -864,7 +909,7 @@ local capacity census for proposed later rungs is: current/data-only
 (`1,629,450` attention), width-192/four-block `4,342,896` (`2,441,866`
 attention), and future single-GPU width-256/depth-6 `8,305,648`
 (`6,404,618` attention). None is launched. Promotion order remains data-only,
-width, depth, then bounded timestamped history, with parameter-scaled data and
+depth, width, then bounded timestamped history, with parameter-scaled data and
 fixed disjoint RGB-only validation/test/OOD gates.
 
 ## 2026-08-10 — typed-attention scene context and input conditioning repaired

@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.31
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, and accumulated node-gradient isolation plus measured compute/data scaling amendments 11 August 2026
+**Version:** 1.32
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, and function-preserving architecture-handoff amendments 11 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6269,7 +6269,7 @@ Scaling experiments use a fixed ladder rather than one expensive jump:
    fixed selectors and a declared plateau after all known semantic and
    optimizer defects are repaired;
 2. run matched small-rung controls that vary one axis at a time (data draws,
-   width, depth, then bounded temporal context), preserving the accepted model
+   depth, width, then bounded temporal context), preserving the accepted model
    as a fixed reference;
 3. fit empirical validation-loss/error versus parameters, examples, and
    compute, and advance only when the smaller model is capacity-limited rather
@@ -6437,6 +6437,32 @@ and an explicit zero applied-update marker. The offline auditor must fail a run
 with such a terminal optimizer artifact even when its last sampled JSONL row
 was healthy. Scaling remains prohibited until a fresh repaired small-rung run
 passes fixed selectors and the declared plateau.
+
+## 199. Architecture-growth handoffs must reject partial learned modules
+
+An allowed missing-key prefix means that the source checkpoint contains none
+of a newly introduced module and the destination creates the complete module
+at its declared neutral initialization. It must never mean that an existing
+learned module may be partially copied while missing layers are randomly
+initialized. In particular, loading a trained four-block attention residual
+into a six-block destination changes the hidden representation seen by the
+learned typed decoders before any optimizer update; it is not a zero-output or
+function-preserving growth operation.
+
+Weight-only loading must therefore preflight source/destination keys and tensor
+shapes before copying any value. It rejects unexpected keys, disallowed
+missing keys, incompatible shapes, and any allowed prefix that is present in
+the source but only partially covers the destination. A rejected handoff leaves
+the destination model bitwise unchanged.
+
+Until an explicit identity-initialized block-growth transform is implemented
+and proves exact forward equality, every wider/deeper attention rung starts
+weights-only from the qualified structured graph control, where the complete
+attention prefix is absent and the typed decoders start at exact zero. The
+accepted smaller attention checkpoint remains the fixed non-regression
+reference; it is not silently used as a partial initializer. This preserves a
+clean capacity comparison and prevents random new blocks from masquerading as
+training or generalization evidence.
 
 ---
 

@@ -192,6 +192,51 @@ def test_weight_only_transfer_allows_only_new_typed_attention_parameters(tmp_pat
     )
 
 
+def test_weight_only_transfer_rejects_partial_typed_attention_growth(tmp_path) -> None:
+    control_config = _small_config()
+    shallow_config = replace(
+        control_config,
+        model=replace(
+            control_config.model,
+            dynamics=replace(
+                control_config.model.dynamics,
+                attention_residual_enabled=True,
+                attention_width=128,
+                attention_heads=4,
+                attention_layers=4,
+                attention_feed_forward_width=512,
+            ),
+        ),
+    )
+    shallow = OnlineWorldModel.from_config(shallow_config, device="cpu")
+    checkpoint = save_checkpoint(
+        tmp_path / "shallow_attention.pt",
+        model=shallow,
+        optimizer=None,
+        config=shallow_config,
+        step=0,
+    )
+    deeper_config = replace(
+        shallow_config,
+        model=replace(
+            shallow_config.model,
+            dynamics=replace(shallow_config.model.dynamics, attention_layers=6),
+        ),
+    )
+    deeper = OnlineWorldModel.from_config(deeper_config, device="cpu")
+    state_before = {name: value.detach().clone() for name, value in deeper.state_dict().items()}
+
+    with pytest.raises(RuntimeError, match="partial architecture growth"):
+        load_model_weights(
+            checkpoint,
+            model=deeper,
+            allowed_missing_prefixes=("dynamics.attention_interactions.",),
+        )
+
+    for name, value in deeper.state_dict().items():
+        torch.testing.assert_close(value, state_before[name], rtol=0.0, atol=0.0)
+
+
 def test_checkpoint_save_rejects_nonfinite_model_and_optimizer_state(tmp_path) -> None:
     config = _small_config()
     model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))

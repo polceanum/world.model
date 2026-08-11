@@ -19,7 +19,7 @@ selection while retaining per-abstraction accuracy and complexity gates.
 
 The active capacity ladder is evidence-gated: first qualify the repaired
 3.00M-parameter dense typed-attention rung on repeated fixed selectors; then
-compare data-only, width, depth, and bounded timestamped-history changes one at
+compare data-only, depth, width, and bounded timestamped-history changes one at
 a time. A Mac result advances to a tens-of-millions single-CUDA-GPU rung only
 after disjoint RGB-only validation/test/OOD evidence shows a stable capacity
 ceiling and predicts a useful gain. The runtime belief/filter contracts do not

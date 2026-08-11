@@ -790,15 +790,28 @@ def load_model_weights(
     _assert_finite_tensor_tree(payload["model_state"], root="model_state")
     if expected_config is not None:
         validate_checkpoint_config(payload, expected_config)
-    incompatible = model.load_state_dict(payload["model_state"], strict=False)
-    if incompatible.unexpected_keys:
+    source_state = payload["model_state"]
+    target_state = model.state_dict()
+    source_keys = set(source_state)
+    target_keys = set(target_state)
+    unexpected_keys = sorted(source_keys - target_keys)
+    missing_keys = sorted(target_keys - source_keys)
+    if unexpected_keys:
         raise RuntimeError(
-            "initialization checkpoint has unexpected model keys: "
-            + ", ".join(incompatible.unexpected_keys)
+            "initialization checkpoint has unexpected model keys: " + ", ".join(unexpected_keys)
         )
+    for prefix in allowed_missing_prefixes:
+        source_has_prefix = any(key.startswith(prefix) for key in source_keys)
+        missing_under_prefix = [key for key in missing_keys if key.startswith(prefix)]
+        if source_has_prefix and missing_under_prefix:
+            raise RuntimeError(
+                "initialization checkpoint contains only part of an allowed new "
+                f"module prefix {prefix!r}; partial architecture growth is not "
+                "function-preserving: " + ", ".join(missing_under_prefix)
+            )
     disallowed_missing = [
         key
-        for key in incompatible.missing_keys
+        for key in missing_keys
         if not any(key.startswith(prefix) for prefix in allowed_missing_prefixes)
     ]
     if disallowed_missing:
@@ -806,5 +819,25 @@ def load_model_weights(
             "initialization checkpoint is missing required model keys: "
             + ", ".join(disallowed_missing)
         )
-    payload["weight_load_missing_keys"] = tuple(incompatible.missing_keys)
+    incompatible_shapes = [
+        (
+            key,
+            tuple(source_state[key].shape),
+            tuple(target_state[key].shape),
+        )
+        for key in sorted(source_keys & target_keys)
+        if source_state[key].shape != target_state[key].shape
+    ]
+    if incompatible_shapes:
+        details = ", ".join(
+            f"{key}: checkpoint {source_shape}, model {target_shape}"
+            for key, source_shape, target_shape in incompatible_shapes
+        )
+        raise RuntimeError(
+            "initialization checkpoint has incompatible model tensor shapes: " + details
+        )
+    incompatible = model.load_state_dict(source_state, strict=False)
+    if incompatible.unexpected_keys or sorted(incompatible.missing_keys) != missing_keys:
+        raise RuntimeError("model state changed during validated weight loading")
+    payload["weight_load_missing_keys"] = tuple(missing_keys)
     return payload

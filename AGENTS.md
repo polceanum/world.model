@@ -218,3 +218,7 @@ Working rules:
   regression and has completed a fixed-manifest plateau check. Scale data with
   parameters and require disjoint RGB-only generalization plus broad
   non-regression against the accepted smaller control.
+- Treat an allowed checkpoint missing-key prefix as an all-or-none new module.
+  Reject partial learned-module growth and every key/shape incompatibility
+  before copying tensors into the destination; a failed handoff leaves it
+  bitwise unchanged.

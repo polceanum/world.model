@@ -1,5 +1,35 @@
 # Design decisions
 
+## ADR-102 — Reject partial learned-module growth before tensor loading
+
+- **Date:** 2026-08-11
+- **Status:** accepted and implemented; larger rungs remain evidence-gated
+- **Context:** The generic weight-only loader allowed all missing keys below
+  the new attention prefix. That is correct when a graph-only source contains
+  no attention module, but it also allowed a trained four-block source to seed
+  a six-block destination with two random new blocks. The random blocks alter
+  the features consumed by learned typed decoders before optimization, so the
+  handoff is neither zero-output nor function-preserving. PyTorch's ordinary
+  load path could also copy compatible tensors before reporting a later
+  incompatibility.
+- **Decision:** Preflight source/destination keys and shapes before any copy.
+  An allowed missing prefix is all-or-none: if the source contains any key in
+  that module, it must completely cover the destination. Reject unexpected,
+  disallowed-missing, partial-prefix, and shape-incompatible handoffs without
+  mutating the destination. Until identity-initialized block growth is
+  implemented and exactly qualified, larger attention rungs initialize from
+  the structured graph control; the accepted smaller model is their fixed
+  evaluation reference.
+- **Alternatives considered:** accept random added blocks; silently reset the
+  learned decoder; partially embed wider tensors; treat `strict=False` as
+  sufficient; implement an untested identity-growth transform during the live
+  campaign.
+- **Consequences:** The active run is unchanged because its source had no
+  attention prefix. Future depth/width experiments cannot accidentally report
+  random architecture drift as training or generalization. The smallest next
+  capacity step is depth six, followed by width 192, after the current rung
+  qualifies.
+
 ## ADR-101 — Isolate impulse jumps and fail before shared-stage starvation
 
 - **Date:** 2026-08-11

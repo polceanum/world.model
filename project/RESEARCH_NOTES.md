@@ -29,7 +29,7 @@ the shared stack; specification 1.28 therefore isolates typed output gradients
 at every recursive invocation before they enter decoder/shared parameters.
 
 The next scale decision is gated on a fresh repaired learning curve and broad
-plateau, not training loss. Once qualified, compare data-only, width, depth,
+plateau, not training loss. Once qualified, compare data-only, depth, width,
 and bounded-history rungs one at a time, increasing balanced continuously
 varied episode draws with parameter count. Use fixed disjoint RGB-only
 validation/test/OOD manifests and keep the accepted smaller model as a
@@ -206,6 +206,16 @@ RoPE, local attention, sparse experts, and flash kernels target absent
 bottlenecks. The next capacity result must therefore be the declared one-axis
 depth/data ladder after small-rung convergence, not an LLM-shaped rewrite.
 
+A handoff audit found an orthogonal pre-scale defect: the allowed attention
+missing-key prefix also permitted a trained four-block source to seed a
+six-block destination with two random blocks. Because its typed decoders are
+already learned, that changes predictions at initialization. Specification
+1.32 now makes allowed new modules all-or-none and preflights every key and
+shape before copying. Rejected partial growth leaves the destination bitwise
+unchanged. Larger attention rungs therefore start neutrally from the graph
+control until an explicitly identity-preserving growth transform is qualified;
+the smaller attention checkpoint remains the non-regression reference.
+
 The clean specification-1.31 run is now active at
 `runs/20260811-063308-attention-node-isolated-stage-a/` from commit `5b2da41`.
 Its fixed 32-episode initial selector exactly preserves the preceding control:
@@ -332,6 +342,18 @@ difficulty despite exact scenario balance. This reverses the apparent repair
 direction but does not prove continued held-out regression. It strengthens the
 need for selector 1024 and rules out claiming convergence from a favourable
 training prefix.
+
+The next equal window, steps 648--704, is mixed rather than a stable reversal.
+Pooled 0.50/0.75/1.00-second RMSE improves to
+`0.3571/0.3416/0.3860 m`, while current/0.10/0.25-second RMSE worsens to
+`0.3799/0.3823/0.4052 m`; current x/z and trusted identity worsen, but y and
+long-horizon z improve. Coverage90 is flat near `96.1%`, causal support is
+comparable (`2,122` versus `2,054`), and minimum complete shared-stage
+retention improves to `0.9072`. The full auditor passes 704 applied updates,
+88 logged blocks per scenario, zero skipped draws, no terminal failure, no
+uncontained interaction clip, and bounded `2,922,790,912`-byte RSS. This is
+continued healthy but heterogeneous optimization, not selector evidence or a
+capacity authorization.
 
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
