@@ -195,14 +195,23 @@ bitwise equal and all 2,578 comparable metric fields equal to the preceding
 protected control, with only the expected protocol hash different. The
 supervisor enforces 8,192 minimum updates, 4,096-update extensions, a 1,024-
 update tail, 1% plateau threshold, and a 24,576 hard limit. The live auditor
-passes through 64 applied updates, proving that the former unsampled update-60
-pre-Adam failure no longer recurs. Across eight logged blocks every scenario
-appears exactly eight times, causal support spans 154--442 targets, skipped
-draws remain zero, no uncontained interaction clip or terminal failure exists,
-and maximum RSS is `2,883,448,832` bytes. Update 64 locally bounds node/force
-signals but retains `0.308398` at the complete interaction stage and applies
-successfully. Training remains active; no trained selector, accuracy,
-generalization, plateau, convergence, or capacity result is claimed here.
+passes through 128 applied updates, proving that the former unsampled update-60
+pre-Adam failure no longer recurs. Across 16 logged blocks every scenario
+appears exactly 16 times, causal support spans 154--471 targets, skipped draws
+remain zero, no uncontained interaction clip or terminal failure exists, and
+maximum RSS is `2,896,859,136` bytes. The independent durable-checkpoint audit
+passes: all 177 inherited tensors remain bitwise exact, all 48 attention
+tensors changed, exactly those 48 parameters own finite Adam state at step 128,
+and architecture/source/protocol/model hashes agree. Cumulative trusted
+identity switches are 7/696 (`1.006%`), position coverage90 is `91.01%`, and
+weighted position RMSE has support at every horizon (`0.2958/0.3253/0.3714/
+0.4145/0.4347 m`). X remains the hardest axis (`0.3386 -> 0.5963 m` from 0.1
+to 1.0 seconds), while y remains comparatively flat (`0.2494 -> 0.2537 m`).
+The checkpoint audit is
+`attention_checkpoint_step_000128_audit.json` beside the run. Training remains
+active; these are optimizer/training-window health results, not a trained fixed
+selector, accuracy promotion, generalization, plateau, convergence, or
+capacity result.
 
 Exact verification commands:
 

@@ -289,11 +289,13 @@
   stress positions, durable checkpoint integrity, fixed selector 512, repeated
   selectors, and plateau while retaining identity, per-axis, every-horizon,
   lifecycle, event, uncertainty, and scenario guardrails before scaling.
-  Through update 64, the live audit passes with all 64 updates applied, exact
+  Through update 128, the live audit passes with all updates applied, exact
   logged scenario balance, zero skips/failures/uncontained interaction clips,
-  bounded RSS, and `0.308398` complete-stage retention on the step-64 local
-  node/force event. This clears the former update-60 optimizer failure only;
-  all later gates remain open.
+  bounded RSS, cumulative trusted identity rate `1.006%`, calibrated finite
+  uncertainty, and support at every axis/horizon. The durable checkpoint audit
+  passes with 177 inherited tensors exact, all 48 attention tensors live, and
+  attention-only Adam state at step 128. This clears the update-60/64 and first
+  checkpoint-integrity gates only; 152/200/280 and all selectors remain open.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

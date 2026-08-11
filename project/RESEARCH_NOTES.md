@@ -216,15 +216,19 @@ drift, but it is deliberately not counted as trained accuracy, generalization,
 or convergence; fixed trained selectors and the declared plateau remain the
 scale gate.
 
-The same fresh run passes the former update-60 failure boundary and persists
-update 64. The live auditor reports all 64 updates applied, each scenario
-exactly eight times across logged blocks, 154--442 causal targets per block,
-zero skipped draws, no terminal failure or uncontained interaction clip, and
-maximum RSS `2,883,448,832` bytes. At update 64, severe per-invocation node and
-force signals remain locally visible; the accumulated node row is below its
-cap, the post-row complete interaction retains `0.308398`, and Adam applies.
-This is causal evidence for the gradient-isolation repair, not evidence that
-the accuracy curve has plateaued or generalized.
+The same fresh run passes the former update-60 failure boundary and persists a
+fully audited step-128 checkpoint. The live auditor reports all 128 updates
+applied, each scenario exactly 16 times across logged blocks, 154--471 causal
+targets per block, zero skipped draws, no terminal failure or uncontained
+interaction clip, and maximum RSS `2,896,859,136` bytes. Artifact audit proves
+all 177 inherited tensors exact, all 48 attention tensors live, exactly those
+48 Adam owners at step 128, finite state, and intact hashes. Cumulative trusted
+identity rate is `1.006%`, position coverage90 is `91.01%`, every horizon has
+weighted support, and position RMSE grows from `0.2958 m` at 0.1 seconds to
+`0.4347 m` at 1 second. X is hardest (`0.3386 -> 0.5963 m`); y is flat
+(`0.2494 -> 0.2537 m`). These are heterogeneous training-window health
+diagnostics and causal repair evidence, not proof that the fixed-selector
+accuracy curve has plateaued or generalized.
 
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
