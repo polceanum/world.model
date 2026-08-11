@@ -410,6 +410,13 @@
   terminal/uncontained failure, minimum retention `0.585590`, and bounded
   `2.992 GB` RSS. Axis/horizon/lifecycle/identity/uncertainty diagnostics are
   recorded in STATUS; keep this task open for fixed selector evidence.
+  The durable step-128 checkpoint passes: all 48 attention tensors changed,
+  all 177 inherited tensors remain exact, and finite Adam state belongs to
+  exactly the 48 attention parameters at step 128. The matched 72--128 window
+  slightly regresses all position horizons and lifecycle/uncertainty while
+  improving identity and short/mid velocity; keep it as a trend warning.
+  `checkpoint_every=128` and `eval_every=512` are intentional, so the first
+  trained fixed selector is step 512, not step 128.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

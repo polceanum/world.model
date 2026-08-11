@@ -272,7 +272,34 @@ There are three trusted switches in 386 associations (`0.7772%`), collision F1
 is `0.176`, lifecycle target coverage/precision is `0.39135/0.37896`, median
 uncertainty position NLL is `-0.84906`, and drag/restitution observability has
 `167/39` objects. These are on-policy training-window health diagnostics, not
-the fixed step-128 selector or generalization evidence.
+the fixed step-512 selector or generalization evidence.
+
+The first durable trained checkpoint at step 128 now passes both artifact and
+whole-run audits. All `128/128` updates apply with exactly 16 draws per
+scenario, no skips, duplicate rows, terminal failure, or uncontained
+interaction clip; sampled RSS remains `2.992 GB`. The checkpoint contains 225
+model tensors: all 48 attention tensors changed, all 177 inherited tensors are
+bitwise unchanged, and exactly the 48 attention parameters own finite Adam
+state at step 128. Its model hash is
+`417baf91fadd6797052df2eefd56f7812bcc28e8fe71d4c6a72920d1540bc7ac`;
+the reusable report is `attention_checkpoint_audit_step_000128.json` beside
+the run.
+
+The matched steps 72--128 training window is mixed and therefore remains a
+warning rather than a promotion. Relative to the failed predecessor on the
+same seeds, current position is nearly flat (`0.322644 -> 0.323073 m`) but all
+five pooled position horizons regress slightly:
+`0.326410/0.347188/0.375946/0.408533/0.427788 ->
+0.327745/0.350080/0.378844/0.409725/0.432133 m`. Current y/z improve while x
+regresses; short/mid velocity improves, 0.75/1.0-second velocity regresses
+slightly. Identity improves from four switches/310 associations to one/313,
+collision F1 is nearly flat (`0.12346 -> 0.12579`), lifecycle coverage and
+precision regress by about half a percentage point, and median uncertainty
+NLL regresses slightly (`-0.70091 -> -0.69714`). Minimum complete interaction
+retention improves `0.22271 -> 0.50595`. This is a genuine heterogeneous trend
+warning; the protocol intentionally checkpoints every 128 updates but runs its
+expensive fixed 32-episode selector every 512 updates. No step-128 validation
+was expected or missed. Continue unchanged to the fixed step-512 selector.
 
 ## 2026-08-11 — pooled convergence-trend observability implemented
 

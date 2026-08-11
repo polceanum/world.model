@@ -67,6 +67,16 @@
   `0.264288/0.303162/0.364353/0.420610/0.443199 m`, identity-switch rate
   `0.7772%`, coverage90 `96.60%`, collision F1 `0.176`, and median uncertainty
   NLL `-0.84906`. These are health diagnostics, not fixed validation.
+- Audited the durable specification-1.35 step-128 checkpoint. All 128 updates
+  apply with exact 16-per-scenario balance and no skip/duplicate/terminal/
+  uncontained failure. All 48 attention tensors change, all 177 inherited
+  tensors remain exact, exactly 48 attention parameters own finite step-128
+  Adam state, and RSS stays at `2.992 GB`. The matched 72--128 training window
+  slightly regresses every position horizon plus lifecycle/uncertainty while
+  improving identity and short/mid velocity, so it is retained as a trend
+  warning without promotion. Clarified the intentional cadence: checkpoints
+  occur every 128 updates, while fixed 32-episode selectors occur every 512;
+  no step-128 selector was expected.
 
 - Audited the live immutable campaign through durable step 896. All updates
   apply with exact eight-scenario logged balance, no skip/terminal/uncontained
