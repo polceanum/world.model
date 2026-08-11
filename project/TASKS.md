@@ -401,6 +401,10 @@
   retention `1.0`, applied gradient `0.283628`, and a passing whole-run audit.
   Continue unchanged to durable checkpoint/selector boundaries; do not infer
   convergence from this single healthy block.
+  The run is now healthy through step 32: all updates apply, exact four-draw
+  balance per scenario, minimum complete retention `0.716607`, no failure, and
+  nearly flat RSS. Continue to the first fixed trained selector without a
+  protocol mutation.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

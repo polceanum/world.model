@@ -239,6 +239,19 @@ evidence that the complete interaction update was starved. Peak sampled RSS is
 `2,936,651,776` bytes. This proves early optimizer health only, not an accuracy
 trend or convergence.
 
+The same run is healthy through logged step 32. All `32/32` updates apply;
+each scenario appears exactly four times, with no skipped draws, duplicate
+rows, terminal failure, or uncontained interaction clip. The four sampled
+losses span `0.489052--5.764816` because cold-start support and heterogeneous
+event/rollout batches differ; on every matched seed block they remain close to
+the predecessor. Median pre-clip gradient is `0.661644`; only step 16 uses the
+ordinary global clip, and minimum complete interaction retention is `0.716607`.
+At steps 24 and 32 the repaired norms are `0.8720/0.4513`, versus predecessor
+norms `4.8887/1.8296`, while their losses remain close or slightly lower. RSS
+is nearly flat at `2.937--2.970 GB`. The whole-run auditor still passes; its
+four-block physical window is deliberately incomplete and cannot substitute
+for the first fixed trained selector.
+
 ## 2026-08-11 — pooled convergence-trend observability implemented
 
 The whole-run auditor previously proved optimizer/support/resource integrity

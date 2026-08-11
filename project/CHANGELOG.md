@@ -52,6 +52,13 @@
   typed-output warning reflects the declared aggregate node/force budgets;
   the complete interaction update is not clipped. Peak sampled RSS is
   `2,936,651,776` bytes. This is health evidence, not convergence.
+- Extended the live audit through step 32: all 32 updates apply, every scenario
+  has four logged draws, minimum complete interaction retention is `0.716607`,
+  no skip/duplicate/terminal/uncontained-interaction failure occurs, and RSS
+  remains within `2.937--2.970 GB`. Matched step-24/32 losses stay close to the
+  predecessor while repaired gradient norms fall from `4.8887/1.8296` to
+  `0.8720/0.4513`. The incomplete training window is not a fixed-selector
+  accuracy result.
 
 - Audited the live immutable campaign through durable step 896. All updates
   apply with exact eight-scenario logged balance, no skip/terminal/uncontained
