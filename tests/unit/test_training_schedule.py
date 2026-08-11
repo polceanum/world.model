@@ -666,6 +666,52 @@ def test_attention_typed_output_hooks_clip_before_shared_backpropagation() -> No
         )
 
 
+def test_attention_typed_output_hooks_bound_aggregate_recursive_gradient() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+    attention.train()
+    attention.configure_output_gradient_clipping(
+        node=0.1,
+        collision=0.1,
+        force=0.1,
+        impulse=0.1,
+    )
+    attention.reset_output_gradient_diagnostics()
+
+    invocation_count = 16
+    node_values = [torch.zeros(1, 1, 3, requires_grad=True) for _ in range(invocation_count)]
+    relation_values = [
+        torch.zeros(1, 1, attention.relation_output_dim, requires_grad=True)
+        for _ in range(invocation_count)
+    ]
+    for node_value, relation_value in zip(node_values, relation_values, strict=True):
+        attention._register_output_gradient_hooks(node_value, relation_value)
+
+    losses = []
+    for node_value, relation_value in zip(node_values, relation_values, strict=True):
+        relation_signal = torch.zeros_like(relation_value)
+        relation_signal[..., attention.collision_output_index] = 3.0
+        relation_signal[..., attention.force_output_indices[0]] = 3.0
+        relation_signal[..., attention.force_output_indices[1]] = 4.0
+        relation_signal[..., attention.impulse_output_indices[0]] = 6.0
+        relation_signal[..., attention.impulse_output_indices[1]] = 8.0
+        losses.append((node_value * 5.0).sum() + (relation_value * relation_signal).sum())
+    torch.stack(losses).sum().backward()
+
+    diagnostics = attention.output_gradient_diagnostics()
+    for name in ("node", "collision", "force", "impulse"):
+        prefix = f"attention_{name}_output_backprop_gradient"
+        assert diagnostics[f"{prefix}_invocation_count"] == float(invocation_count)
+        assert diagnostics[f"{prefix}_norm_applied_before_parameter_clips"] == pytest.approx(
+            0.1, abs=2.0e-6
+        )
+
+
 def test_attention_raw_gradient_diagnostics_localize_parameters_and_typed_rows() -> None:
     config = load_config(
         "configs/tiny_overfit.yaml",

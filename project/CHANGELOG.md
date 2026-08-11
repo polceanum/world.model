@@ -4,6 +4,22 @@
 
 ### 2026-08-11 accumulated node-gradient repair and scale gate
 
+- Stopped the specification-1.31 campaign after the trainer safely rejected
+  attempted optimizer step 988 before Adam. Complete interaction retention was
+  `0.0971759`, below the declared `0.1` minimum; the supervisor detected the
+  durable terminal artifact and did not relaunch. No step-1024 selector or
+  convergence result exists.
+- Localized the missing isolation level to recursive accumulation into shared
+  attention. Across 144 calls, nominal `0.1` per-invocation caps allowed
+  aggregate force/impulse output norms `0.219855/0.115811`; normal-force and
+  maximum shared gradients reached `10.9076/5.01609` despite later decoder-row
+  clipping.
+- Advanced the contract/runtime to specification 1.35 and made semantic output
+  caps aggregate per-optimizer-draw L2 budgets. Each of `K` registered calls
+  receives `cap / sqrt(K)`; one-call behavior is exact. Added multi-invocation
+  regression coverage; the focused attention/config/checkpoint/auditor suite
+  passes (`314 passed`). Matched replay from durable step 896 remains pending.
+
 - Audited the live immutable campaign through durable step 896. All updates
   apply with exact eight-scenario logged balance, no skip/terminal/uncontained
   failure, stable RSS, 177 inherited tensors exact, all 48 attention tensors

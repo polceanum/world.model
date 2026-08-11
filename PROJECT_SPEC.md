@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.34
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, and pooled training-trend observability amendments 11 August 2026
+**Version:** 1.35
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, and aggregate recursive semantic-gradient budgeting amendments 11 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6534,6 +6534,38 @@ override fixed RGB-only selector/test/OOD guardrails. Heterogeneous training
 samples may differ materially even under scenario-balanced batches. Capacity
 and optimizer decisions therefore remain bound to repeated fixed selectors and
 the declared plateau protocol.
+
+## 202. Recursive typed-output caps are aggregate per-draw budgets
+
+Per-invocation output clipping and accumulated decoder-row clipping do not by
+themselves bound the sum that repeated recursive invocations send through the
+shared attention projections and blocks. The specification-1.31 small-rung
+campaign proved this at attempted optimizer step 988. All 13 causal objectives
+were supported and every tensor remained finite, but 144 attention invocations
+produced aggregate force and impulse output-gradient norms of `0.219855` and
+`0.227758` around nominal `0.1` caps. Token activations amplified the normal-
+force decoder-weight gradient to `10.9076`; shared block gradients reached
+`5.01609`; and the complete interaction stage retained only `0.0971759`, below
+the declared `0.1` minimum. The trainer correctly rejected the update before
+Adam and the supervisor correctly stopped the campaign before selector 1024.
+
+Configured node, collision, force, and impulse output-gradient caps therefore
+mean aggregate L2 budgets over one optimizer draw. If a semantic group has
+`K` registered recursive invocations, each invocation receives a local limit
+of `cap / sqrt(K)`. The sum of squared applied invocation norms is then bounded
+by `cap^2` while a single invocation retains the historical behavior exactly.
+Registration counts reset once per optimizer draw and must be complete before
+backward. Diagnostics continue to report raw/applied aggregate norms,
+invocation count, and minimum/effective coefficients; the cap value remains
+resume/selector protocol state.
+
+This repair changes backward conditioning only. Forward dynamics, inference,
+parameter count, checkpoint tensor shapes, zero-output initialization,
+`WorldBelief`, and every modality/runtime contract remain unchanged. The failed
+trajectory is non-promotable. A repaired replay must begin from the preceding
+durable step-896 optimizer/RNG/sampler state, contain the same step-988 draw,
+and remain diagnostic; a clean small-rung campaign still requires repeated
+fixed selectors and plateau before any capacity increase.
 
 ---
 

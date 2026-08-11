@@ -1,5 +1,29 @@
 # Design decisions
 
+## ADR-105 — Budget recursive typed-output gradients across the optimizer draw
+
+- **Date:** 2026-08-11
+- **Status:** accepted and implemented; matched replay pending
+- **Context:** The specification-1.31 campaign safely rejected attempted update
+  988 at `0.0971759` complete interaction retention. The normal-force decoder
+  row reached `10.9076` and shared block gradients reached `5.01609` even
+  though every invocation obeyed its local output cap. Across 144 recursive
+  calls, force/impulse applied output norms accumulated to `0.219855/0.115811`
+  around nominal `0.1` caps. Decoder-row caps cannot repair gradients that have
+  already entered the shared stack.
+- **Decision:** Interpret each semantic output cap as an aggregate per-draw L2
+  budget. With `K` registered invocations, apply `cap / sqrt(K)` locally. Reset
+  registration counts per optimizer draw and retain the existing aggregate
+  raw/applied/minimum-coefficient diagnostics and downstream row/global gates.
+- **Alternatives considered:** remove or lower the 10% retention gate; accept
+  the finite globally normalized update; lower all learning rates; enlarge the
+  model; add only another decoder-row cap.
+- **Consequences:** Single-invocation behavior and all forward outputs are
+  unchanged, while repeated semantic gradients have a true total budget before
+  reaching shared attention. The failed campaign remains non-promotable and
+  scaling remains blocked pending a step-896 matched replay, fresh selectors,
+  and plateau.
+
 ## ADR-104 — Pool comparable training-trend windows from sufficient statistics
 
 - **Date:** 2026-08-11

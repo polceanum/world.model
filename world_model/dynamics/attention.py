@@ -201,6 +201,12 @@ class TypedAttentionInteractionResidual(nn.Module):
             "force": [],
             "impulse": [],
         }
+        self._output_gradient_registration_counts: dict[str, int] = {
+            "node": 0,
+            "collision": 0,
+            "force": 0,
+            "impulse": 0,
+        }
 
     def configure_output_gradient_clipping(
         self,
@@ -243,6 +249,20 @@ class TypedAttentionInteractionResidual(nn.Module):
             "force": [],
             "impulse": [],
         }
+        self._output_gradient_registration_counts = {
+            "node": 0,
+            "collision": 0,
+            "force": 0,
+            "impulse": 0,
+        }
+
+    def _aggregate_output_gradient_limit(self, name: str, maximum: float) -> float:
+        """Return one invocation's share of a per-draw semantic L2 budget."""
+
+        invocation_count = self._output_gradient_registration_counts[name]
+        if invocation_count <= 0:
+            raise AssertionError(f"attention {name} output hook was not registered")
+        return maximum / math.sqrt(invocation_count)
 
     def output_gradient_diagnostics(self) -> dict[str, float]:
         """Return aggregate raw/applied evidence from the latest backward."""
@@ -286,10 +306,12 @@ class TypedAttentionInteractionResidual(nn.Module):
 
         node_cap = self._output_gradient_clip_norms["node"]
         if node_cap is not None and node_values.requires_grad:
+            self._output_gradient_registration_counts["node"] += 1
 
             def clip_node(gradient: Tensor) -> Tensor:
                 raw = torch.linalg.vector_norm(gradient)
-                coefficient = (raw.new_tensor(node_cap) / (raw + 1.0e-6)).clamp(max=1.0)
+                local_limit = self._aggregate_output_gradient_limit("node", node_cap)
+                coefficient = (raw.new_tensor(local_limit) / (raw + 1.0e-6)).clamp(max=1.0)
                 self._output_gradient_records["node"].append((raw.detach(), coefficient.detach()))
                 return gradient * coefficient
 
@@ -303,6 +325,9 @@ class TypedAttentionInteractionResidual(nn.Module):
         if relation_values.requires_grad and any(
             self._output_gradient_clip_norms[name] is not None for name in relation_groups
         ):
+            for name in relation_groups:
+                if self._output_gradient_clip_norms[name] is not None:
+                    self._output_gradient_registration_counts[name] += 1
 
             def clip_relation(gradient: Tensor) -> Tensor:
                 clipped = gradient.clone()
@@ -312,7 +337,8 @@ class TypedAttentionInteractionResidual(nn.Module):
                         continue
                     selected = gradient[..., list(rows)]
                     raw = torch.linalg.vector_norm(selected)
-                    coefficient = (raw.new_tensor(maximum) / (raw + 1.0e-6)).clamp(max=1.0)
+                    local_limit = self._aggregate_output_gradient_limit(name, maximum)
+                    coefficient = (raw.new_tensor(local_limit) / (raw + 1.0e-6)).clamp(max=1.0)
                     clipped[..., list(rows)] = selected * coefficient
                     self._output_gradient_records[name].append((raw.detach(), coefficient.detach()))
                 return clipped

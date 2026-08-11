@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-11
-**Specification:** `PROJECT_SPEC.md` 1.34
+**Specification:** `PROJECT_SPEC.md` 1.35
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -149,6 +149,33 @@ target coverage falls `40.15% -> 34.88%`, and collision F1 falls
 resources remain healthy. This is a real heterogeneous training-trend warning,
 not matched checkpoint evidence. The fixed step-1024 RGB-only selector remains
 the next accuracy/model-change decision; no scale promotion is authorized.
+
+## 2026-08-11 — attempted step 988 exposes aggregate recursive-gradient gap
+
+The specification-1.31 attention campaign is stopped and is not converged.
+The trainer applied 987 finite supported updates, then correctly rejected
+attempted optimizer step 988 before Adam because complete interaction-gradient
+retention was `0.0971759`, below the configured `0.1` floor. The convergence
+supervisor consumed `training_failure.json`, reported `CampaignIncompleteError`,
+booted out the failed launch agent, and did not relaunch. The safe deployment
+incumbent remains protected step zero; selector 1024 never ran.
+
+The failure is finite and localized. All 13 objectives have support with 284
+causal trajectories. Raw interaction norm is `15.1704`; the normal-force
+decoder row is `10.9076`, node z is `2.1911`, and the largest shared block
+gradient is `5.01609`. Per-invocation hooks individually obeyed their caps, but
+144 recursive calls accumulated applied force/impulse output norms of
+`0.219855/0.115811` around nominal `0.1` caps. Later decoder-row clipping cannot
+remove the gradient already accumulated in shared attention.
+
+Specification 1.35 repairs that gap by treating each typed node/collision/
+force/impulse output cap as one aggregate per-draw L2 budget. With `K`
+registered invocations, each hook receives `cap / sqrt(K)`, which bounds the
+sum of applied squared norms while preserving single-call behavior exactly.
+Forward inference, parameter/tensor shapes, and `WorldBelief` are unchanged.
+Focused attention/config/checkpoint/auditor tests pass (`314 passed`); Ruff and
+diff checks pass. A diagnostic exact-state replay from durable step 896 through
+the same step-988 draw is the next gate. No capacity increase is authorized.
 
 ## 2026-08-11 — pooled convergence-trend observability implemented
 

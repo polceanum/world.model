@@ -364,6 +364,22 @@
   healthy coverage, uncertainty, support, gradients, and memory. Treat this as
   a trend warning and continue unchanged to the fixed selector at step 1024;
   do not promote, scale, or mutate the protocol from heterogeneous windows.
+  The campaign subsequently terminated safely at attempted optimizer step 988:
+  complete interaction retention `0.0971759` fell below the `0.1` floor, so
+  Adam did not mutate and selector 1024 never ran. The supervisor verified the
+  durable failure and stopped without relaunch. This is a failed,
+  non-promotable campaign rather than convergence evidence.
+- [x] Localize attempted step 988. Per-invocation output hooks allowed 144
+  recursive force/impulse gradients to accumulate beyond their nominal budget,
+  producing normal-force/shared norms `10.9076/5.01609` despite decoder-row
+  isolation. Do not remove or lower the complete-retention gate.
+- [x] Implement specification-1.35 aggregate per-draw semantic output budgets
+  using `cap / sqrt(K)` for `K` registered calls; preserve exact one-call and
+  forward behavior. Focused regression gates pass (`314 passed`).
+- [ ] Replay exact model/Adam/RNG/sampler state from durable step 896 through
+  attempted step 988 under specification 1.35. Require aggregate semantic
+  norms at/below configured caps, complete retention at/above `0.1`, and a
+  deliberate pre-Adam diagnostic stop before any fresh sustained campaign.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam
