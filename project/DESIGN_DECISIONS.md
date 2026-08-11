@@ -1,5 +1,39 @@
 # Design decisions
 
+## ADR-100 — Scale predictive abstractions with matched compute/data evidence
+
+- **Date:** 2026-08-11
+- **Status:** accepted as the next gated ladder; current rung still qualifying
+- **Context:** The typed-output repair passes the former step-64 optimizer
+  failure on identical data: raw gradient is `2.14592` rather than `21.5377`,
+  force-row norm is `1.75123` rather than `21.4665`, maximum non-decoder shared
+  norm is `0.00540` rather than `0.04242`, and sampled 1-second error is not
+  worse. The current model already implements the relevant modern dense-
+  Transformer mechanisms over at most 22 structured tokens. It does not yet
+  have a trained fixed selector or plateau, so more capacity is not yet a
+  defensible remedy.
+- **Decision:** Preserve the complete 3.00M control trajectory as the data-only
+  curve. After it qualifies, vary one axis at a time: 3.53M depth six, 4.34M
+  width 192, bounded timestamped belief/innovation history, then an 8.31M
+  width-256/depth-six single-CUDA rung. Give every candidate at least the
+  control's continuously varied balanced draws and increase draws with
+  parameters to a complete selector interval. Require disjoint RGB-only
+  validation/test/OOD non-regression. Reserve RoPE/relative positions for real
+  timestamped history; defer FlashAttention/GQA/MLA/MoE/sharding until measured
+  token, memory, or throughput evidence calls for them. Treat maximal-update
+  parameterization as a separate matched experiment. Later dense JEPA-style
+  RGB pretraining must feed typed proposals into authoritative `WorldBelief`.
+- **Alternatives considered:** scale width/depth immediately; replace the
+  explicit belief with an autoregressive video transformer; add every modern
+  LLM optimization at once; reuse the same data budget for a larger model;
+  infer generalization from training loss or video reconstruction quality.
+- **Consequences:** The Mac run remains slow but scientifically useful: it
+  establishes optimizer health, a real small-rung learning curve, and whether
+  the next limitation is data, capacity, or missing temporal context. Cloud
+  compute can later accelerate the same contracts without making the local
+  experiment disposable. Scaling remains blocked by evidence gates, not by a
+  speculative architectural preference.
+
 ## ADR-099 — Isolate the reproduced force-head spike before scaling
 
 - **Date:** 2026-08-10

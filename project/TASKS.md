@@ -239,13 +239,22 @@
 - [ ] Complete the fresh immutable weights-only 3.00M-parameter stage-A
   campaign at `runs/20260811-012103-attention-output-isolated-stage-a/`, clean
   commit `9d0502b`, from the protected graph control with typed-output
-  isolation. Its exact-source one-shot convergence supervisor is attached.
-  Pass step 280, the first trained selector at 512, repeated selectors, and the
-  declared plateau before scaling capacity.
+  isolation. Its exact-source one-shot convergence supervisor is attached; the
+  step-zero selector is bitwise/metric-exact and all 64 early updates pass the
+  auditor. On the identical former step-64 force failure, reduce raw total
+  gradient `21.5377 -> 2.14592`, force-row norm `21.4665 -> 1.75123`, and
+  maximum shared-stack norm `0.04242 -> 0.00540` without sampled horizon
+  regression. Audit durable step 128, then pass step 280, the first trained
+  selector at 512, repeated selectors, and the declared plateau before scaling
+  capacity.
 - [ ] Run a one-axis-at-a-time scaling study after stage A qualifies: matched
   data-only, width, depth, and bounded-history rungs with increasing balanced
   episode draws, fixed disjoint RGB-only validation/test/OOD manifests, and
-  the accepted smaller checkpoint as a non-regression reference.
+  the accepted smaller checkpoint as a non-regression reference. Preserve the
+  current 8,192--24,576-update curve as the data-only evidence; compare the
+  declared 3.53M depth-six and 4.34M width-192 candidates before the 8.31M
+  single-CUDA rung. Test maximal-update parameterization only as a separate
+  matched control, never as an implicit checkpoint reinterpretation.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

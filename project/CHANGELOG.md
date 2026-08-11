@@ -38,6 +38,23 @@
   one-shot supervisor carries the 8,192 minimum, 4,096 extensions,
   four-selector/1% plateau rule, and 24,576 hard limit. Initial fixed
   validation is active; no trained accuracy or convergence claim exists.
+- Completed the fresh run's 32-episode initialization selector in `969.521 s`.
+  All 225 model tensors, the protected model hash, and all 2,583 comparable
+  non-protocol metrics are exact. Preserved the equality audit beside the run.
+- Passed the former step-64 force-gradient stress position on identical seeds
+  and support. Typed-output isolation reduces raw total gradient
+  `21.5377 -> 2.14592`, joint force-row norm `21.4665 -> 1.75123`, and maximum
+  non-decoder shared norm `0.04242 -> 0.00540`; all 64 updates are applied and
+  the dynamics auditor reports no hard failure. Training remains active toward
+  durable step 128 and selector 512; no accuracy/convergence promotion is
+  claimed from a sampled batch.
+- Advanced the scaling contract to specification 1.29 after reviewing the
+  original Transformer, compute-optimal scaling, maximal-update transfer, and
+  current dense video-world-model evidence. Fixed a one-axis ladder from the
+  3.00M control/data curve through 3.53M depth, 4.34M width, bounded timestamped
+  history, and an 8.31M single-CUDA rung with parameter-scaled data and disjoint
+  validation/test/OOD gates. Deferred long-context/sparse infrastructure that
+  does not solve a measured 22-token bottleneck.
 
 ### 2026-08-10 typed-attention stage-A pilot
 

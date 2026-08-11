@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-11
-**Specification:** `PROJECT_SPEC.md` 1.28
+**Specification:** `PROJECT_SPEC.md` 1.29
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -97,7 +97,9 @@ force-row-isolated campaign is also stopped at durable step 256 after the same
 step-280 batch contaminates the shared stack before its decoder-row cap;
 specification 1.28 adds typed-output backpropagation isolation, exact replay
 contains the known failure without shared collapse, and a fresh sustained
-qualification plus any capacity scaling remain pending
+qualification now passes the identical step-64 stress position without shared
+collapse; its first durable trained checkpoint, fixed selector, plateau, and
+any capacity promotion remain pending
 
 ## 2026-08-11 — shared-gradient failure repaired before capacity scaling
 
@@ -194,9 +196,49 @@ runtime-source, and worktree fingerprints exactly match the trainer. It records
 the unchanged 8,192-update minimum, complete 4,096-update extensions,
 four-selector/1% plateau rule, and truthful 24,576 hard limit. Trainer and
 supervisor stderr are empty. The mandatory initial 32-episode selector is
-running with durable per-episode heartbeats; five episodes had completed at the
-first attachment audit. No optimizer update, trained selector, accuracy gain,
+complete and training is active. No trained selector, accuracy gain,
 generalization result, plateau, convergence, or scale promotion exists yet.
+
+The initial selector completed all 32 episodes in `969.521 s`. All 225 model
+tensors are bitwise identical to the preceding protected step-zero checkpoint,
+both hashes are
+`1354bdfca1cef965c0cd907ea8c157c0fd82169e64f24da656eb42dd1a96df91`,
+and all 2,583 comparable non-protocol metrics are exact. Score is
+`0.3213162196`; current position/velocity RMSE are `0.251460 m / 1.093191
+m/s`; 0.10/0.25/0.50/0.75/1.00-second position RMSE is
+`0.265184/0.277452/0.309911/0.335387/0.357837 m`; collision F1 is `0.195489`,
+trusted identity-switch rate is `1.3592%`, and position coverage90 is
+`93.3861%`. The equality artifact is
+`runs/20260811-012103-attention-output-isolated-stage-a/checkpoint_step_000000_equality_audit.json`.
+
+The fresh campaign passes the identical historical step-64 schedule position.
+Relative to the force-row-only predecessor on the same seeds, frames, and 154
+trajectory targets, raw whole/interaction gradient falls `21.5377 -> 2.14592`,
+the joint force parameter-row norm falls `21.4665 -> 1.75123`, relation-decoder
+weight norm falls `21.4054 -> 2.01100`, and the maximum non-decoder shared-stack
+parameter norm falls `0.04242 -> 0.00540`. The post-row interaction stage
+retains `0.62863`, versus `0.49616`, while 1-second sampled RMSE is fractionally
+better (`0.377141` versus `0.377330 m`). All 64 updates are applied with exact
+scenario balance, zero skipped draws or hard audit failures, frozen perception,
+zero trusted switches on the stress batch, stable `2.883 GB` maximum RSS, and
+empty stderr. One severe step-8 typed-output coefficient remains truthfully
+reported; later sampled blocks do not show systematic starvation. Step 64 is
+not a durable checkpoint and is optimizer evidence only. The first durable
+trained checkpoint is step 128 and the first trained complete selector is step
+512.
+
+Review of the original Transformer and current primary scaling/video-model
+work is now encoded in specification 1.29. The current implementation already
+has the applicable small-token ingredients: dense scaled dot-product attention,
+pre-RMSNorm, SwiGLU, typed set tokens, and bounded typed outputs. Flash-style
+kernels, GQA/MLA, MoE, sharding, and language-style positional order do not
+address a measured bottleneck at 22 tokens. The fixed next ladder is the
+completed control/data learning curve, then one-axis depth and width controls
+with parameter-proportional balanced draws, then timestamped bounded history,
+then an 8.31M single-CUDA candidate. A later JEPA-style dense RGB pretraining
+stage must distill or cross-attend into explicit belief proposals and pass the
+same state/horizon/identity/event/calibration/OOD gates. No larger candidate is
+launched before selector and plateau evidence qualify the current rung.
 
 ## 2026-08-10 — exact force-head localization and scale/no-scale decision
 

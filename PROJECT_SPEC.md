@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.28
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output backpropagation isolation amendment 11 August 2026
+**Version:** 1.29
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output backpropagation isolation and measured compute/data scaling amendments 11 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6271,6 +6271,43 @@ Scaling experiments use a fixed ladder rather than one expensive jump:
    predicts a useful gain and records a portable resolved config, manifest,
    checkpoint, and throughput/memory budget.
 
+The first concrete capacity census is fixed before running the ladder:
+
+- the control is `3,004,656` total parameters with `1,103,626` in the
+  width-128/four-block attention residual;
+- a depth-only six-block candidate is `3,530,480` total with `1,629,450` in
+  attention;
+- a width-only 192/four-block candidate is `4,342,896` total with `2,441,866`
+  in attention; and
+- the first single-CUDA candidate is width 256/six blocks, `8,305,648` total
+  with `6,404,618` in attention.
+
+These counts are design points, not evidence that the larger candidates should
+win. The active control's full 8,192--24,576-update plateau trajectory is also
+the data-only learning curve; do not discard it and rerun an arbitrarily short
+"data control." A capacity candidate receives at least the same continuously
+varied balanced episode draws and increases them in proportion to parameter
+growth, rounded upward to a complete 512-update selector interval. Report
+wall-clock time and RGB/closed-loop device placement because small structured
+tokens may remain CPU- or simulator-bound even when dense video work benefits
+from MPS/CUDA.
+
+Maximal-update parameterization may be tested as a separate matched control
+before transferring learning-rate choices across materially different widths.
+It is not retrofitted silently into an existing checkpoint and is not assumed
+to transfer merely because it does so for language models. Conventional
+parameterization remains the reference until the same fixed physical selector
+shows a stable advantage.
+
+After structured stage A and bounded timestamped history qualify, the next
+perception scale axis is masked latent video pretraining with dense spatial and
+temporal supervision, followed by distillation or cross-attention into typed
+entity/relation proposals. The dense encoder may retain distributed physical
+features that explicit probes miss, but `WorldBelief` remains the online source
+of truth and current/horizon state accuracy, identity, events, calibration, and
+OOD physics remain the promotion criteria. Video reconstruction quality or
+video-language benchmark accuracy alone is insufficient.
+
 Training loss is a diagnostic. Convergence requires the existing broad fixed-
 manifest plateau rule, and generalization requires improvement on manifests
 that were not used for architecture or checkpoint selection. Scaling video
@@ -6284,8 +6321,12 @@ Primary references for this decision:
 - Vaswani et al., “Attention Is All You Need,” arXiv:1706.03762;
 - Hoffmann et al., “Training Compute-Optimal Large Language Models,”
   arXiv:2203.15556;
+- Yang et al., “Tensor Programs V: Tuning Large Neural Networks via Zero-Shot
+  Hyperparameter Transfer,” arXiv:2203.03466;
 - Dao, “FlashAttention-2,” arXiv:2307.08691;
-- Yang et al., “Qwen3 Technical Report,” arXiv:2505.09388; and
+- Yang et al., “Qwen3 Technical Report,” arXiv:2505.09388;
+- Mur-Labadia et al., “V-JEPA 2.1: Unlocking Dense Features in Video
+  Self-Supervised Learning,” arXiv:2603.14482; and
 - Kang et al., “How Far Is Video Generation from World Model: A Physical Law
   Perspective,” ICML 2025.
 

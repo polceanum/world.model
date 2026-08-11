@@ -23,8 +23,10 @@ scene/entity/relation tokens. It already uses pre-RMSNorm, scaled dot-product
 multi-head attention, and SwiGLU. Exact replay of the first collision-isolated
 campaign found that its recurrent step-280 failure is not lack of capacity: a
 joint `17.6842` raw gradient is localized to the normal/tangent force output
-rows, leaving about `0.8573` in the rest of the interaction module. A typed
-force-row optimizer cap is therefore the next controlled repair.
+rows, leaving about `0.8573` in the rest of the interaction module. A later
+force-row-only campaign showed that parameter clipping ran too late to protect
+the shared stack; specification 1.28 therefore isolates typed output gradients
+at every recursive invocation before they enter decoder/shared parameters.
 
 The next scale decision is gated on a fresh repaired learning curve and broad
 plateau, not training loss. Once qualified, compare data-only, width, depth,
@@ -97,6 +99,17 @@ visible. This establishes causal optimizer repair, not accuracy or
 generalization. A fresh weights-only campaign must still pass selector 512 and
 the declared plateau before any scale rung advances.
 
+That fresh campaign exactly reproduces the protected step-zero selector and
+passes the former step-64 force failure on identical seeds, frames, and support.
+Raw whole/interaction gradient falls from `21.5377` to `2.14592`, force-row
+norm from `21.4665` to `1.75123`, relation-decoder weight norm from `21.4054`
+to `2.01100`, and maximum non-decoder shared norm from `0.04242` to `0.00540`.
+The post-row interaction stage retains `0.62863`, all 64 updates are applied,
+scenario balance/support/resource checks pass, and sampled 1-second RMSE is
+fractionally better (`0.377141` versus `0.377330 m`). This is strong causal
+optimizer evidence, not durable-checkpoint, selector, plateau, or
+generalization evidence.
+
 Exact capacity census for later one-axis studies:
 
 - current/data-only: `3,004,656` total, `1,103,626` attention parameters;
@@ -110,6 +123,16 @@ These are design points, not accepted checkpoints. Modern long-context and
 sparse-inference mechanisms are deferred because 22 structured tokens do not
 exercise their intended bottlenecks. Data coverage and held-out physical
 generalization must scale with capacity.
+
+Primary-source review adds two useful modern qualifications. Compute-optimal
+training means the current full plateau trajectory should be retained as the
+data-only curve and larger candidates should receive parameter-proportional
+balanced draws; larger-but-undertrained is not a valid scale result. Maximal-
+update parameterization may make later width hyperparameters transferable, but
+must first win as a separate matched physical-prediction control. V-JEPA 2.1's
+dense masked/deep self-supervision supports a later scalable RGB representation
+stage, but its distributed visual features should be distilled or cross-
+attended into typed proposals while `WorldBelief` remains authoritative.
 
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
