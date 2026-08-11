@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.32
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, and function-preserving architecture-handoff amendments 11 August 2026
+**Version:** 1.33
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, and identity-initialized appended-depth amendments 11 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6440,14 +6440,16 @@ passes fixed selectors and the declared plateau.
 
 ## 199. Architecture-growth handoffs must reject partial learned modules
 
-An allowed missing-key prefix means that the source checkpoint contains none
-of a newly introduced module and the destination creates the complete module
-at its declared neutral initialization. It must never mean that an existing
-learned module may be partially copied while missing layers are randomly
-initialized. In particular, loading a trained four-block attention residual
-into a six-block destination changes the hidden representation seen by the
-learned typed decoders before any optimizer update; it is not a zero-output or
-function-preserving growth operation.
+An allowed missing-key prefix ordinarily means that the source checkpoint
+contains none of a newly introduced module and the destination creates the
+complete module at its declared neutral initialization. It must never mean
+that an existing learned module may be partially copied while missing layers
+are randomly initialized. In particular, loading a trained four-block
+attention residual into a six-block destination with ordinary random new
+blocks changes the hidden representation seen by the learned typed decoders
+before any optimizer update; it is not a zero-output or function-preserving
+growth operation. The exact appended-block transform in section 200 is the
+only supported exception.
 
 Weight-only loading must therefore preflight source/destination keys and tensor
 shapes before copying any value. It rejects unexpected keys, disallowed
@@ -6455,14 +6457,52 @@ missing keys, incompatible shapes, and any allowed prefix that is present in
 the source but only partially covers the destination. A rejected handoff leaves
 the destination model bitwise unchanged.
 
-Until an explicit identity-initialized block-growth transform is implemented
-and proves exact forward equality, every wider/deeper attention rung starts
-weights-only from the qualified structured graph control, where the complete
-attention prefix is absent and the typed decoders start at exact zero. The
-accepted smaller attention checkpoint remains the fixed non-regression
-reference; it is not silently used as a partial initializer. This preserves a
-clean capacity comparison and prevents random new blocks from masquerading as
+Any attention growth that does not satisfy the explicit identity-initialized
+depth transform in section 200 starts weights-only from the qualified
+structured graph control, where the complete attention prefix is absent and
+the typed decoders start at exact zero. The accepted smaller attention
+checkpoint remains the fixed non-regression reference. This preserves a clean
+capacity comparison and prevents random new blocks from masquerading as
 training or generalization evidence.
+
+## 200. Appended attention depth may inherit through exact identity blocks
+
+The supported depth-growth transform is deliberately narrower than generic
+partial state-dict loading. The source and destination must have contiguous
+zero-based attention block indices, every inherited tensor must have the same
+name and shape, and the only missing tensors may belong to blocks appended
+after the complete source stack. Width changes, holes, reordered blocks,
+missing tensors in an inherited block, and missing attention projections or
+typed decoders remain hard preflight failures that leave the destination
+unchanged.
+
+The destination's resolved configuration is mandatory for this transform.
+Checkpoint and destination model/runtime/simulator semantics must be identical
+under the ordinary checkpoint compatibility contract after substituting only
+the larger `attention_layers` value. This catches shape-invisible changes such
+as attention head count, dropout, bounded-output scales, filter behavior, or
+world geometry. Training/evaluation budgets and data volume may change because
+the handoff starts a new optimizer/RNG schedule rather than an exact resume.
+
+Each appended pre-normalized residual block is initialized as the exact
+identity by zeroing its multi-head-attention output weight and bias and its
+SwiGLU output weight. Internal query/key/value and feed-forward input weights
+retain their ordinary finite initialization. The zero output projections make
+both residual branches emit exact zero at handoff, while receiving a usable
+gradient on the first optimizer update; deeper internal paths become live as
+those projections move away from zero. The loader must record the appended
+block indices in initialization provenance and tests must prove zero-tolerance
+equality of the shallow and grown token streams and decoded outputs.
+
+This transform changes the depth rung's initialization policy, not its
+promotion gate. A qualified smaller attention checkpoint may now initialize a
+depth-only candidate without changing its predictions at step zero. The
+smaller checkpoint remains the fixed reference, the candidate starts a new
+optimizer/RNG/data schedule, and it must still pass repeated fixed RGB-only
+validation, test, OOD, scenario, uncertainty, identity, event, and horizon
+non-regression gates. Width growth remains unsupported and therefore starts
+from the neutral structured graph control until a separately proved
+function-preserving transform exists.
 
 ---
 

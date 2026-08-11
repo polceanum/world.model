@@ -3850,6 +3850,7 @@ def _write_run_metadata(
         "resume_path": resolved_resume_path,
         "resume_history": resume_history,
         "initialize_from_path": preserved_initialization_path,
+        "initialization_transform": existing.get("initialization_transform"),
         "source_provenance": initial_source_provenance,
         "initial_source_provenance": initial_source_provenance,
         "latest_source_provenance": dict(source_provenance),
@@ -4206,7 +4207,7 @@ def train_from_config(
         source = Path(initialize_from_path).expanduser().resolve()
         if not source.is_file():
             raise FileNotFoundError(f"Initialization checkpoint not found: {source}")
-        load_model_weights(
+        initialization_payload = load_model_weights(
             source,
             model=model,
             allowed_missing_prefixes=(
@@ -4214,7 +4215,22 @@ def train_from_config(
                 if config.model.dynamics.attention_residual_enabled
                 else ()
             ),
+            architecture_growth_config=config,
         )
+        identity_grown_blocks = initialization_payload.get(
+            "identity_grown_attention_blocks",
+            (),
+        )
+        if identity_grown_blocks:
+            run_metadata["initialization_transform"] = {
+                "type": "identity_attention_depth_growth",
+                "source_checkpoint": str(source),
+                "appended_blocks": list(identity_grown_blocks),
+            }
+            atomic_write_text(
+                run_directory / "run_metadata.json",
+                json.dumps(run_metadata, indent=2, sort_keys=True) + "\n",
+            )
         initialized_from = str(source)
     model_parameter_count = sum(parameter.numel() for parameter in model.parameters())
     model.train()

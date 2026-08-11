@@ -85,6 +85,11 @@
   scope. A one-update hybrid MPS/CPU smoke leaves all 177 inherited tensors
   bitwise unchanged and gives optimizer moments only to the four output-head
   tensors, with finite supported loss/gradients and bounded memory.
+- [x] Add a function-preserving depth-only handoff for a qualified attention
+  incumbent: accept only contiguous appended blocks, initialize their MHA and
+  SwiGLU output projections to exact zero, prove zero-tolerance shallow/grown
+  output equality, require identical non-depth runtime semantics, persist the
+  transform provenance, and keep malformed/width partial transfers fail-atomic.
 - [x] Repair the offline dynamics auditor's sparse-cadence progress count:
   distinguish absolute completed trainer step from logged optimizer
   confirmations, expose step gaps, and warn that sampled loss/gradient
@@ -339,8 +344,10 @@
   updates with exact logged balance, zero skips/failures/uncontained clips,
   and stable memory. The next equal window is mixed: current/short horizons and
   identity worsen, 0.50--1.00-second horizons improve materially, coverage is
-  flat, and shared-stage retention is healthy. Continue unchanged; this is not
-  matched selector evidence.
+  flat, and shared-stage retention is healthy. The following 712--768 window
+  improves current and every horizon, identity, and current-state coverage;
+  the exact step-768 scope/optimizer/finite/protected audit passes. Continue
+  unchanged; neither heterogeneous window is matched selector evidence.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam
@@ -356,8 +363,10 @@
   the accepted smaller checkpoint as a non-regression reference. Preserve the
   current 8,192--24,576-update curve as the data-only evidence; compare the
   declared 3.53M depth-six and 4.34M width-192 candidates before the 8.31M
-  single-CUDA rung. Test maximal-update parameterization only as a separate
-  matched control, never as an implicit checkpoint reinterpretation.
+  single-CUDA rung. Initialize depth six through the exact identity-appended
+  transform; width remains graph-initialized. Test maximal-update
+  parameterization only as a separate matched control, never as an implicit
+  checkpoint reinterpretation.
 - [ ] Add stage-B bounded timestamped belief/innovation history only after the
   current-belief attention stage qualifies; use temporal-relative encoding,
   never arbitrary object-slot order.

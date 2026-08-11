@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-11
-**Specification:** `PROJECT_SPEC.md` 1.32
+**Specification:** `PROJECT_SPEC.md` 1.33
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -110,8 +110,66 @@ and passes a fresh protected-control update-60 causal replay at `0.565343`
 retention; full regression gates and an exact clean sustained step-zero
 relaunch now pass, while fixed trained selectors, plateau, convergence, and
 every capacity promotion remain pending; specification 1.32 additionally
-preflights weight-only handoffs and rejects partial learned attention growth
-before any destination tensor is copied
+preflights weight-only handoffs and rejects unsafe partial learned attention
+growth before any destination tensor is copied; specification 1.33 adds an
+exact identity-initialized exception for contiguous appended depth only
+
+## 2026-08-11 — function-preserving depth growth implemented
+
+The next depth rung no longer needs to discard a future qualified four-block
+attention function. The weight-only loader now recognizes exactly one safe
+partial transfer: contiguous zero-based attention blocks appended after a
+complete inherited stack. It copies every inherited tensor strictly, retains
+ordinary finite internal initialization in the new blocks, and zeros each new
+MHA output weight/bias and SwiGLU output weight. Because both pre-norm residual
+branches then emit exact zero, focused tests prove the shallow and grown token
+streams plus learned decoded outputs are equal at `rtol=0, atol=0` before any
+optimizer update.
+
+The transform remains fail-atomic. A deliberately malformed source missing an
+output tensor from inherited block two is rejected and every destination
+tensor remains bitwise unchanged. Width changes, holes, reordered blocks, and
+missing projections/decoders are still unsupported. The loader records grown
+block indices `(4, 5)` in returned initialization provenance. Focused
+checkpoint tests pass (`31 passed`). The trainer durably records the transform,
+source checkpoint, and appended indices in `run_metadata.json`; exact resume
+preserves that record. A shape-compatible four-to-eight-head change is also
+rejected because the complete model/runtime/simulator semantics must match
+except for increased `attention_layers`. This is scaling-path infrastructure,
+not evidence that the current model has converged or that depth six should
+launch.
+
+The immutable specification-1.31 attention campaign is unaffected by these
+repository changes and remains live. Its audit passes through update 720 with
+all 720 updates applied, exactly 90 sampled blocks for each of eight scenarios,
+zero skipped draws, zero terminal/uncontained failure, empty trainer/supervisor
+stderr, and bounded maximum RSS `2,922,790,912` bytes. Selector 512 remains
+rejected; selector 1024 remains the next matched accuracy decision.
+
+The next durable boundary at step 768 also passes both audits. All 48 attention
+tensors have changed, all 177 inherited tensors remain exact, optimizer state
+belongs only to all 48 attention tensors at Adam step 768, protected checkpoint
+hashes are unchanged, and every serialized tensor is finite. The dynamics
+audit records all 768 updates applied, 96 logged blocks per scenario, zero
+skips/failures/uncontained interaction clips, and unchanged `2,922,790,912`-
+byte peak RSS. The audit artifact is
+`runs/20260811-063308-attention-node-isolated-stage-a/attention_checkpoint_step_000768_audit.json`.
+
+The equal sampled training window 712--768 improves 648--704 on current and
+every horizon: current RMSE `0.379947 -> 0.184647 m`; 0.10/0.25/0.50/0.75/1.00
+second RMSE `0.382316/0.405186/0.357122/0.341593/0.385963 ->
+0.184250/0.209727/0.265618/0.320229/0.347584 m`. Current x/y/z RMSE becomes
+`0.182561/0.170300/0.199884 m`, trusted identity improves from `6/326` to
+`2/314`, and current-state coverage90 rises `96.08% -> 99.37%` with comparable
+causal support (`2,122 -> 2,096`). Minimum complete-interaction retention
+remains healthy (`0.6885`) and maximum raw gradient is `1.4524`. These are
+heterogeneous sampled batches, not a fixed-manifest selector; they justify
+continuing unchanged to selector 1024, not scaling early.
+
+Final repository gates after the depth-handoff semantic repair pass: focused
+checkpoint tests `31 passed`; complete non-device suite `709 passed, 5 skipped,
+1 deselected in 214.35 s`; host MPS marker `1 passed, 714 deselected`; Ruff
+format/check, compileall, and diff check pass.
 
 ## 2026-08-11 — scaling handoff integrity repaired
 
@@ -119,8 +177,8 @@ The modern-Transformer review still supports gradual evidence-gated scaling,
 but the current 3.00M rung has not qualified: fixed selector 512 was rejected
 at score `0.330772` versus the protected `0.321316`, with pooled current
 position RMSE `0.295016` versus `0.251460 m` and broad x/z and scenario
-regressions. The mutable trajectory remains healthy through update 704: every
-update is applied, all eight scenarios have 88 logged blocks, no skipped draw,
+regressions. The mutable trajectory remains healthy through update 720: every
+update is applied, all eight scenarios have 90 logged blocks, no skipped draw,
 terminal failure, or uncontained interaction clip exists, memory is bounded at
 `2,922,790,912` bytes, and the offline dynamics audit returns `pass`. This is
 continued optimization evidence, not a scale authorization; selector 1024 is

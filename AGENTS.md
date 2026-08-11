@@ -43,6 +43,11 @@ Working rules:
 - New attention capacity must begin as a zero-output residual around the
   qualified structured model, load every inherited weight strictly, and train
   in an isolated scope before any shared module is unfrozen.
+- Depth-only attention growth may inherit a qualified smaller attention model
+  only through the tested appended-block transform: contiguous new blocks,
+  exact inherited shapes, and zero attention/SwiGLU output projections that
+  preserve the complete shallow function. Other partial-module growth remains
+  forbidden.
 - Preserve at least one familiar, invariant-tested reference-physics regime.
   Unusual and compound dynamics are valid learnable scenarios, but label and
   evaluate them separately so simulator quirks cannot masquerade as model

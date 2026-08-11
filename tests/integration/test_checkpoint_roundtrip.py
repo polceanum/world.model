@@ -192,7 +192,96 @@ def test_weight_only_transfer_allows_only_new_typed_attention_parameters(tmp_pat
     )
 
 
-def test_weight_only_transfer_rejects_partial_typed_attention_growth(tmp_path) -> None:
+def test_weight_only_transfer_identity_grows_appended_attention_depth(tmp_path) -> None:
+    control_config = _small_config()
+    shallow_config = replace(
+        control_config,
+        model=replace(
+            control_config.model,
+            dynamics=replace(
+                control_config.model.dynamics,
+                attention_residual_enabled=True,
+                attention_width=128,
+                attention_heads=4,
+                attention_layers=4,
+                attention_feed_forward_width=512,
+            ),
+        ),
+    )
+    shallow = OnlineWorldModel.from_config(shallow_config, device="cpu")
+    shallow_attention = shallow.dynamics.attention_interactions
+    assert shallow_attention is not None
+    with torch.no_grad():
+        shallow_attention.node_decoder.weight.normal_(std=0.02)
+        shallow_attention.relation_decoder.weight.normal_(std=0.02)
+    checkpoint = save_checkpoint(
+        tmp_path / "shallow_attention.pt",
+        model=shallow,
+        optimizer=None,
+        config=shallow_config,
+        step=0,
+    )
+    deeper_config = replace(
+        shallow_config,
+        model=replace(
+            shallow_config.model,
+            dynamics=replace(shallow_config.model.dynamics, attention_layers=6),
+        ),
+    )
+    deeper = OnlineWorldModel.from_config(deeper_config, device="cpu")
+    payload = load_model_weights(
+        checkpoint,
+        model=deeper,
+        allowed_missing_prefixes=("dynamics.attention_interactions.",),
+        architecture_growth_config=deeper_config,
+    )
+
+    assert payload["identity_grown_attention_blocks"] == (4, 5)
+    deeper_attention = deeper.dynamics.attention_interactions
+    assert deeper_attention is not None
+    tokens = torch.randn(2, 7, 128)
+    valid_mask = torch.tensor(
+        [
+            [True, True, True, True, True, True, True],
+            [True, True, True, False, False, False, False],
+        ]
+    )
+    shallow_tokens = tokens
+    for block in shallow_attention.blocks:
+        shallow_tokens = block(shallow_tokens, valid_mask)
+    deeper_tokens = tokens
+    for block in deeper_attention.blocks:
+        deeper_tokens = block(deeper_tokens, valid_mask)
+    torch.testing.assert_close(deeper_tokens, shallow_tokens, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(
+        deeper_attention.node_decoder(deeper_attention.output_norm(deeper_tokens)),
+        shallow_attention.node_decoder(shallow_attention.output_norm(shallow_tokens)),
+        rtol=0.0,
+        atol=0.0,
+    )
+    for index in (4, 5):
+        block = deeper_attention.blocks[index]
+        torch.testing.assert_close(
+            block.attention.out_proj.weight,
+            torch.zeros_like(block.attention.out_proj.weight),
+        )
+        torch.testing.assert_close(
+            block.feed_forward.output.weight,
+            torch.zeros_like(block.feed_forward.output.weight),
+        )
+    deeper_tokens.square().mean().backward()
+    for index in (4, 5):
+        block = deeper_attention.blocks[index]
+        for output_weight in (
+            block.attention.out_proj.weight,
+            block.feed_forward.output.weight,
+        ):
+            assert output_weight.grad is not None
+            assert torch.isfinite(output_weight.grad).all()
+            assert torch.count_nonzero(output_weight.grad) > 0
+
+
+def test_weight_only_transfer_rejects_malformed_attention_depth_growth(tmp_path) -> None:
     control_config = _small_config()
     shallow_config = replace(
         control_config,
@@ -210,12 +299,16 @@ def test_weight_only_transfer_rejects_partial_typed_attention_growth(tmp_path) -
     )
     shallow = OnlineWorldModel.from_config(shallow_config, device="cpu")
     checkpoint = save_checkpoint(
-        tmp_path / "shallow_attention.pt",
+        tmp_path / "malformed_attention.pt",
         model=shallow,
         optimizer=None,
         config=shallow_config,
         step=0,
     )
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    payload["model_state"].pop("dynamics.attention_interactions.blocks.2.attention.out_proj.weight")
+    torch.save(payload, checkpoint)
+
     deeper_config = replace(
         shallow_config,
         model=replace(
@@ -231,9 +324,62 @@ def test_weight_only_transfer_rejects_partial_typed_attention_growth(tmp_path) -
             checkpoint,
             model=deeper,
             allowed_missing_prefixes=("dynamics.attention_interactions.",),
+            architecture_growth_config=deeper_config,
         )
 
     for name, value in deeper.state_dict().items():
+        torch.testing.assert_close(value, state_before[name], rtol=0.0, atol=0.0)
+
+
+def test_weight_only_attention_depth_growth_rejects_changed_head_semantics(tmp_path) -> None:
+    control_config = _small_config()
+    shallow_config = replace(
+        control_config,
+        model=replace(
+            control_config.model,
+            dynamics=replace(
+                control_config.model.dynamics,
+                attention_residual_enabled=True,
+                attention_width=128,
+                attention_heads=4,
+                attention_layers=4,
+                attention_feed_forward_width=512,
+            ),
+        ),
+    )
+    shallow = OnlineWorldModel.from_config(shallow_config, device="cpu")
+    checkpoint = save_checkpoint(
+        tmp_path / "four_heads.pt",
+        model=shallow,
+        optimizer=None,
+        config=shallow_config,
+        step=0,
+    )
+    changed_heads_config = replace(
+        shallow_config,
+        model=replace(
+            shallow_config.model,
+            dynamics=replace(
+                shallow_config.model.dynamics,
+                attention_heads=8,
+                attention_layers=6,
+            ),
+        ),
+    )
+    changed_heads = OnlineWorldModel.from_config(changed_heads_config, device="cpu")
+    state_before = {
+        name: value.detach().clone() for name, value in changed_heads.state_dict().items()
+    }
+
+    with pytest.raises(ValueError, match="model except attention_layers"):
+        load_model_weights(
+            checkpoint,
+            model=changed_heads,
+            allowed_missing_prefixes=("dynamics.attention_interactions.",),
+            architecture_growth_config=changed_heads_config,
+        )
+
+    for name, value in changed_heads.state_dict().items():
         torch.testing.assert_close(value, state_before[name], rtol=0.0, atol=0.0)
 
 

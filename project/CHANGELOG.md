@@ -4,6 +4,19 @@
 
 ### 2026-08-11 accumulated node-gradient repair and scale gate
 
+- Advanced the contract to specification 1.33 and implemented the narrow
+  function-preserving depth handoff anticipated by ADR-102. A trained shallow
+  attention stack may now seed only contiguous appended blocks; new MHA and
+  SwiGLU output projections are exact zero, so shallow and grown token streams
+  and decoded outputs match at zero tolerance. Malformed inherited blocks,
+  width changes, changed shape-invisible head/runtime semantics, and other
+  partial transfers still fail before mutation. Trainer metadata durably names
+  the transform, source checkpoint, and appended indices.
+- Audited the unaffected sustained run through durable step 768. Checkpoint
+  scope, inherited/protected hashes, complete attention-only Adam ownership,
+  finiteness, balanced exposure, support, memory, and dynamics all pass. The
+  newest equal sampled window improves current and every forecast horizon, but
+  selector 1024 remains mandatory before any accuracy or scale decision.
 - Advanced the contract to specification 1.32 after a pre-scale handoff audit
   found that a trained four-block attention checkpoint could partially seed a
   six-block destination while leaving random new blocks on the learned decoder

@@ -25,6 +25,12 @@ after disjoint RGB-only validation/test/OOD evidence shows a stable capacity
 ceiling and predicts a useful gain. The runtime belief/filter contracts do not
 change between rungs.
 
+Depth-only growth now has an exact inherited-function path: contiguous new
+pre-norm residual blocks start with zero MHA/SwiGLU output projections, while
+all smaller-model tensors load strictly. This removes relearning as a depth
+comparison confound. It does not weaken the selector/plateau gate, and width
+growth remains graph-initialized until it has its own proved handoff.
+
 ## Milestone 3
 
 Add exactly one useful second modality behind the existing observation contract.

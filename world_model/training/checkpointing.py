@@ -6,6 +6,7 @@ import hashlib
 import math
 import os
 import random
+import re
 import subprocess
 from collections.abc import Mapping
 from copy import deepcopy
@@ -168,6 +169,17 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
 
 _RUNTIME_SOURCE_ROOT_FILES = frozenset({"train.py"})
 _RUNTIME_SOURCE_SUFFIXES = frozenset({".py", ".pyi"})
+_TYPED_ATTENTION_PREFIX = "dynamics.attention_interactions."
+_TYPED_ATTENTION_BLOCK_PATTERN = re.compile(
+    rf"^{re.escape(_TYPED_ATTENTION_PREFIX)}blocks\.(\d+)\.(.+)$"
+)
+_IDENTITY_ATTENTION_BLOCK_OUTPUTS = frozenset(
+    {
+        "attention.out_proj.weight",
+        "attention.out_proj.bias",
+        "feed_forward.output.weight",
+    }
+)
 
 
 def _is_runtime_source_path(path: Path) -> bool:
@@ -329,6 +341,60 @@ def validate_checkpoint_config(
                 mismatches.append(f"simulator.{field_name}")
     if mismatches:
         raise ValueError("checkpoint configuration is incompatible for: " + ", ".join(mismatches))
+
+
+def _validate_attention_depth_growth_config(
+    payload: Mapping[str, Any],
+    config: OrpheusConfig,
+) -> None:
+    """Require identical runtime semantics except for appended block count."""
+
+    checkpoint_config = payload.get("config")
+    if not isinstance(checkpoint_config, Mapping):
+        raise ValueError("checkpoint does not contain a resolved config mapping")
+    requested = config.to_dict()
+    checkpoint_model = _model_checkpoint_semantics(checkpoint_config.get("model"))
+    requested_model = _model_checkpoint_semantics(requested["model"])
+    if not isinstance(checkpoint_model, Mapping) or not isinstance(requested_model, Mapping):
+        raise ValueError("attention depth growth requires resolved model mappings")
+    checkpoint_model = deepcopy(dict(checkpoint_model))
+    requested_model = deepcopy(dict(requested_model))
+    checkpoint_dynamics = checkpoint_model.get("dynamics")
+    requested_dynamics = requested_model.get("dynamics")
+    if not isinstance(checkpoint_dynamics, Mapping) or not isinstance(requested_dynamics, Mapping):
+        raise ValueError("attention depth growth requires resolved dynamics mappings")
+    checkpoint_dynamics = dict(checkpoint_dynamics)
+    requested_dynamics = dict(requested_dynamics)
+    checkpoint_layers = checkpoint_dynamics.get("attention_layers")
+    requested_layers = requested_dynamics.get("attention_layers")
+    if (
+        isinstance(checkpoint_layers, bool)
+        or not isinstance(checkpoint_layers, int)
+        or isinstance(requested_layers, bool)
+        or not isinstance(requested_layers, int)
+        or requested_layers <= checkpoint_layers
+    ):
+        raise ValueError("attention depth growth requires a strictly larger integer target depth")
+    checkpoint_dynamics["attention_layers"] = requested_layers
+    checkpoint_model["dynamics"] = checkpoint_dynamics
+    requested_model["dynamics"] = requested_dynamics
+    mismatches: list[str] = []
+    if checkpoint_model != requested_model:
+        mismatches.append("model except attention_layers")
+    if checkpoint_config.get("runtime") != requested["runtime"]:
+        mismatches.append("runtime")
+    checkpoint_simulator = checkpoint_config.get("simulator")
+    if not isinstance(checkpoint_simulator, Mapping):
+        mismatches.append("simulator")
+    else:
+        requested_simulator = requested["simulator"]
+        for field_name in _SIMULATOR_COMPATIBILITY_FIELDS:
+            if checkpoint_simulator.get(field_name) != requested_simulator.get(field_name):
+                mismatches.append(f"simulator.{field_name}")
+    if mismatches:
+        raise ValueError(
+            "attention depth growth configuration is incompatible for: " + ", ".join(mismatches)
+        )
 
 
 def _set_missing_path(
@@ -763,12 +829,83 @@ def load_checkpoint(
     return payload
 
 
+def _identity_attention_depth_growth_state(
+    source_state: Mapping[str, Tensor],
+    target_state: Mapping[str, Tensor],
+    *,
+    missing_keys: tuple[str, ...],
+    prefix: str,
+) -> tuple[dict[str, Tensor], tuple[int, ...]] | None:
+    """Prepare an exact-function handoff for appended attention blocks.
+
+    A pre-norm residual block is an identity when both residual branches emit
+    exact zero.  The internal query/key/value and SwiGLU input weights may keep
+    their ordinary initialization; zero attention and feed-forward output
+    projections make the block output exactly equal to its input while leaving
+    a trainable path into those projections on the first optimizer update.
+
+    Only contiguous, appended depth is supported. Width changes, holes,
+    reordered blocks, or any missing non-block attention tensor return ``None``
+    and remain hard loader failures.
+    """
+
+    if prefix != _TYPED_ATTENTION_PREFIX:
+        return None
+
+    def block_keys(state: Mapping[str, Tensor]) -> dict[int, set[str]]:
+        grouped: dict[int, set[str]] = {}
+        for key in state:
+            match = _TYPED_ATTENTION_BLOCK_PATTERN.fullmatch(key)
+            if match is None:
+                continue
+            grouped.setdefault(int(match.group(1)), set()).add(key)
+        return grouped
+
+    source_blocks = block_keys(source_state)
+    target_blocks = block_keys(target_state)
+    source_indices = tuple(sorted(source_blocks))
+    target_indices = tuple(sorted(target_blocks))
+    if (
+        not source_indices
+        or source_indices != tuple(range(len(source_indices)))
+        or target_indices != tuple(range(len(target_indices)))
+        or len(target_indices) <= len(source_indices)
+        or target_indices[: len(source_indices)] != source_indices
+    ):
+        return None
+
+    grown_indices = target_indices[len(source_indices) :]
+    expected_missing = {key for index in grown_indices for key in target_blocks[index]}
+    if set(missing_keys) != expected_missing:
+        return None
+
+    prepared = dict(source_state)
+    for key in sorted(expected_missing):
+        match = _TYPED_ATTENTION_BLOCK_PATTERN.fullmatch(key)
+        if match is None:
+            raise AssertionError("validated attention block key did not parse")
+        suffix = match.group(2)
+        value = target_state[key].detach().clone()
+        if suffix in _IDENTITY_ATTENTION_BLOCK_OUTPUTS:
+            value.zero_()
+        prepared[key] = value
+    for index in grown_indices:
+        suffixes = {
+            _TYPED_ATTENTION_BLOCK_PATTERN.fullmatch(key).group(2)  # type: ignore[union-attr]
+            for key in target_blocks[index]
+        }
+        if not suffixes >= _IDENTITY_ATTENTION_BLOCK_OUTPUTS:
+            return None
+    return prepared, grown_indices
+
+
 def load_model_weights(
     path: str | Path,
     *,
     model: nn.Module,
     expected_config: OrpheusConfig | None = None,
     allowed_missing_prefixes: tuple[str, ...] = (),
+    architecture_growth_config: OrpheusConfig | None = None,
 ) -> dict[str, Any]:
     """Load only model weights while keeping the full payload in CPU memory.
 
@@ -800,15 +937,6 @@ def load_model_weights(
         raise RuntimeError(
             "initialization checkpoint has unexpected model keys: " + ", ".join(unexpected_keys)
         )
-    for prefix in allowed_missing_prefixes:
-        source_has_prefix = any(key.startswith(prefix) for key in source_keys)
-        missing_under_prefix = [key for key in missing_keys if key.startswith(prefix)]
-        if source_has_prefix and missing_under_prefix:
-            raise RuntimeError(
-                "initialization checkpoint contains only part of an allowed new "
-                f"module prefix {prefix!r}; partial architecture growth is not "
-                "function-preserving: " + ", ".join(missing_under_prefix)
-            )
     disallowed_missing = [
         key
         for key in missing_keys
@@ -836,8 +964,40 @@ def load_model_weights(
         raise RuntimeError(
             "initialization checkpoint has incompatible model tensor shapes: " + details
         )
-    incompatible = model.load_state_dict(source_state, strict=False)
-    if incompatible.unexpected_keys or sorted(incompatible.missing_keys) != missing_keys:
+    prepared_state = dict(source_state)
+    identity_grown_attention_blocks: tuple[int, ...] = ()
+    remaining_missing = set(missing_keys)
+    for prefix in allowed_missing_prefixes:
+        source_has_prefix = any(key.startswith(prefix) for key in source_keys)
+        missing_under_prefix = tuple(key for key in missing_keys if key.startswith(prefix))
+        if not source_has_prefix or not missing_under_prefix:
+            continue
+        growth = _identity_attention_depth_growth_state(
+            prepared_state,
+            target_state,
+            missing_keys=missing_under_prefix,
+            prefix=prefix,
+        )
+        if growth is None:
+            raise RuntimeError(
+                "initialization checkpoint contains only part of an allowed new "
+                f"module prefix {prefix!r}; partial architecture growth is not "
+                "function-preserving: " + ", ".join(missing_under_prefix)
+            )
+        if architecture_growth_config is None:
+            raise RuntimeError(
+                "function-preserving attention depth growth requires an explicit "
+                "target configuration"
+            )
+        _validate_attention_depth_growth_config(payload, architecture_growth_config)
+        prepared_state, grown_blocks = growth
+        identity_grown_attention_blocks += grown_blocks
+        remaining_missing.difference_update(missing_under_prefix)
+    incompatible = model.load_state_dict(prepared_state, strict=False)
+    if incompatible.unexpected_keys or sorted(incompatible.missing_keys) != sorted(
+        remaining_missing
+    ):
         raise RuntimeError("model state changed during validated weight loading")
     payload["weight_load_missing_keys"] = tuple(missing_keys)
+    payload["identity_grown_attention_blocks"] = identity_grown_attention_blocks
     return payload

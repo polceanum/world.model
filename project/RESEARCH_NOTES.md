@@ -37,6 +37,24 @@ non-regression control. Long-context efficiency techniques and MoE are
 deferred because the current token set is short and neither addresses the
 measured failure.
 
+The depth comparison can now inherit the qualified four-block function
+exactly. Appended pre-norm blocks zero only their attention output weight/bias
+and SwiGLU output weight, making both residual branches exact identities while
+allowing the output projections to learn immediately. Focused tests prove
+zero-tolerance token-stream and decoded-output equality; a checkpoint missing
+an inherited block tensor or changing shape-invisible head semantics is
+rejected without destination mutation. The trainer persists the transform,
+source, and appended indices in run metadata. This is a handoff-integrity
+result, not accuracy or scale-promotion evidence.
+
+The unaffected specification-1.31 training trajectory passes its durable
+step-768 checkpoint and dynamics audits. The equal 712--768 sampled window
+improves the preceding 648--704 window at current state and all five horizons,
+with trusted switches `6/326 -> 2/314` and current-state coverage90
+`96.08% -> 99.37%`. Because the episode batches differ, this is evidence
+against immediate collapse, not generalization evidence; the fixed selector at
+1024 remains the next promotion/no-scale decision.
+
 The fresh force-isolated run remains healthy through sampled update 32. The
 step-24 raw collision-row norm is `4.45588`, its row coefficient is `0.224422`,
 the post-row interaction norm/coefficient are `2.36835/0.422235`, and the true
@@ -212,9 +230,11 @@ six-block destination with two random blocks. Because its typed decoders are
 already learned, that changes predictions at initialization. Specification
 1.32 now makes allowed new modules all-or-none and preflights every key and
 shape before copying. Rejected partial growth leaves the destination bitwise
-unchanged. Larger attention rungs therefore start neutrally from the graph
-control until an explicitly identity-preserving growth transform is qualified;
-the smaller attention checkpoint remains the non-regression reference.
+unchanged. Specification 1.33 now qualifies one narrow exception: contiguous
+appended depth with zero attention/SwiGLU output projections preserves the
+complete learned shallow function exactly. Width and every other unsupported
+growth still start neutrally from the graph control; the smaller attention
+checkpoint remains the non-regression reference.
 
 The clean specification-1.31 run is now active at
 `runs/20260811-063308-attention-node-isolated-stage-a/` from commit `5b2da41`.

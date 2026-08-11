@@ -1,5 +1,30 @@
 # Design decisions
 
+## ADR-103 — Grow attention depth with appended exact-identity blocks
+
+- **Date:** 2026-08-11
+- **Status:** accepted and implemented; no capacity rung promoted
+- **Context:** ADR-102 correctly rejected random partial depth handoffs, but
+  restarting every deeper candidate from the graph-only control would discard
+  a qualified smaller attention function and confound capacity with relearning.
+  Orpheus uses pre-normalized residual blocks, so appended blocks have a narrow
+  exact identity parameterization.
+- **Decision:** Permit only contiguous appended attention blocks. Copy all
+  inherited tensors strictly; zero each new attention output weight/bias and
+  SwiGLU output weight; retain ordinary finite internal initialization; and
+  record the grown block indices. Require identical resolved runtime model
+  semantics except for increased depth, catching shape-invisible head/dropout
+  changes. Reject width changes, block holes/reordering, or any missing
+  inherited/non-block tensor before destination mutation.
+- **Alternatives considered:** keep every depth rung graph-initialized; copy
+  random appended blocks; reset learned typed decoders; interpolate tensors;
+  allow arbitrary state-dict partial loading.
+- **Consequences:** A future depth-six rung can start bitwise function-equal to
+  a qualified depth-four incumbent and learn new capacity gradually. Width 192
+  still has no function-preserving handoff. This implementation does not
+  authorize scaling before the current rung passes its fixed selectors and
+  plateau/generalization gates.
+
 ## ADR-102 — Reject partial learned-module growth before tensor loading
 
 - **Date:** 2026-08-11
@@ -13,13 +38,11 @@
   load path could also copy compatible tensors before reporting a later
   incompatibility.
 - **Decision:** Preflight source/destination keys and shapes before any copy.
-  An allowed missing prefix is all-or-none: if the source contains any key in
-  that module, it must completely cover the destination. Reject unexpected,
-  disallowed-missing, partial-prefix, and shape-incompatible handoffs without
-  mutating the destination. Until identity-initialized block growth is
-  implemented and exactly qualified, larger attention rungs initialize from
-  the structured graph control; the accepted smaller model is their fixed
-  evaluation reference.
+  An allowed missing prefix is all-or-none unless it satisfies ADR-103's exact
+  appended-depth transform. Reject unexpected, disallowed-missing, unsafe
+  partial-prefix, and shape-incompatible handoffs without mutating the
+  destination. Unsupported attention growth initializes from the structured
+  graph control; the accepted smaller model is its fixed evaluation reference.
 - **Alternatives considered:** accept random added blocks; silently reset the
   learned decoder; partially embed wider tensors; treat `strict=False` as
   sufficient; implement an untested identity-growth transform during the live
