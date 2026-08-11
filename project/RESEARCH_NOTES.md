@@ -322,6 +322,17 @@ agrees and reports no uncontained interaction event. Repeated occurrence may
 be relevant to the learned-residual accuracy failure, but it is not itself an
 optimizer correctness defect.
 
+The immediately following steps 584--640 show why cadence samples cannot drive
+selection. Against the equal scenario-balanced 520--576 window, pooled RMSE
+worsens at every horizon from `0.2229/0.2694/0.3572/0.4052/0.4273` to
+`0.2984/0.3475/0.4035/0.4669/0.5161 m`, and x/z worsen at every horizon.
+Identity improves `1.16% -> 0.76%`, while coverage90 falls
+`89.17% -> 88.10%`. The two windows have different seeds, target counts, and
+difficulty despite exact scenario balance. This reverses the apparent repair
+direction but does not prove continued held-out regression. It strengthens the
+need for selector 1024 and rules out claiming convergence from a favourable
+training prefix.
+
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
 

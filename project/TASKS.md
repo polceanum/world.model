@@ -329,6 +329,13 @@
   force/node outliers with post-isolation shared-stage retention
   `0.3522/0.7547`, safely above the `0.1` gate. Continue unchanged to fixed
   selector 1024; do not treat the sampled repair direction as promotion.
+  The following equal scenario-balanced window, steps 584--640, reverses that
+  direction: every pooled horizon and every x/z horizon worsens, coverage90
+  falls to `88.10%`, while identity improves to `0.76%`. Support counts and
+  deterministic windows differ, so classify this as training-sample wobble,
+  not a matched regression or repair. The auditor still passes all 640 updates
+  and step 640 retains `0.6927` after semantic isolation. Keep selector 1024 as
+  the next decision point.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

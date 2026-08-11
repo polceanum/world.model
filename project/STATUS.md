@@ -310,6 +310,26 @@ identity changes `4/324 -> 4/346`; coverage90 slips `90.49% -> 89.17%`; y at
 confirm whether this is real generalization repair. No model, optimizer,
 curriculum, incumbent, or scale decision changes at this boundary.
 
+The next equal balanced training window, steps 584--640, reverses the sampled
+repair trend. Relative to 520--576, weighted position RMSE at
+0.1/0.25/0.5/0.75/1.0 seconds changes from
+`0.2229/0.2694/0.3572/0.4052/0.4273` to
+`0.2984/0.3475/0.4035/0.4669/0.5161 m`; x and z worsen at every horizon.
+Identity improves from 4/346 (`1.16%`) to 2/262 (`0.76%`), but coverage90 falls
+again from `89.17%` to `88.10%`. The windows have exact scenario balance but
+different deterministic seeds, window difficulty, and support counts
+(`2,627` versus `2,054` causal targets), so this is evidence of an unstable
+training-sample trajectory rather than a matched validation regression.
+
+The full dynamics audit still passes all 640 updates with exact 80-block
+scenario balance, zero skipped/terminal updates, no uncontained clip, and
+bounded memory. Step 640 has raw force norm `4.697`; semantic rows reduce the
+interaction to `1.444`, leaving `0.6927` complete shared-stage retention. The
+fixed step-512 rejection is therefore unresolved: neither the favourable
+520--576 window nor the adverse 584--640 window establishes generalization.
+Continue the unchanged trajectory to fixed selector 1024 and do not promote,
+scale, or retune from these heterogeneous training samples.
+
 Exact verification commands:
 
 ```bash

@@ -106,6 +106,14 @@
   selector rejection, but coverage90 slips `90.49% -> 89.17%` and y at 0.5
   seconds regresses. This is repair-trajectory evidence only; selector 1024
   remains required.
+- Audited the following balanced steps 584--640 and retained the adverse result:
+  every pooled horizon and every x/z horizon worsens relative to steps
+  520--576, while identity improves and coverage90 falls to `88.10%`. Because
+  deterministic windows/support differ, this demonstrates training-sample
+  wobble rather than a matched held-out conclusion. The full auditor passes all
+  640 updates; step 640's force outlier leaves `0.6927` post-isolation
+  shared-stage retention. No promotion, scale, or protocol change is made
+  before selector 1024.
 
 ### 2026-08-11 impulse-gradient isolation and fail-fast monitoring
 
