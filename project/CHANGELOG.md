@@ -4,6 +4,13 @@
 
 ### 2026-08-11 accumulated node-gradient repair and scale gate
 
+- Audited the live immutable campaign through durable step 896. All updates
+  apply with exact eight-scenario logged balance, no skip/terminal/uncontained
+  failure, stable RSS, 177 inherited tensors exact, all 48 attention tensors
+  live, and complete attention-only Adam state at step 896. The newest pooled
+  training window keeps current error flat but regresses every forecast
+  horizon versus the prior window; it is recorded as a trend warning while the
+  unchanged fixed selector at step 1024 remains authoritative.
 - Advanced the observability contract to specification 1.34. The dynamics
   auditor now emits configurable complete/incomplete training-trend windows
   with count-pooled position axes, position/velocity horizons, lifecycle,

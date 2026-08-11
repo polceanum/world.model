@@ -114,6 +114,42 @@ preflights weight-only handoffs and rejects unsafe partial learned attention
 growth before any destination tensor is copied; specification 1.33 adds an
 exact identity-initialized exception for contiguous appended depth only
 
+## 2026-08-11 — attention campaign passes durable step 896
+
+The immutable specification-1.31 attention-only campaign remains active under
+the original trainer and convergence supervisor. Both launchd jobs have run
+exactly once, both stderr files remain empty, no terminal optimizer artifact
+exists, and the dynamics auditor passes through all 896 applied updates. Every
+logged block contains one example from each of the eight declared scenarios,
+there are no skipped draws or uncontained interaction clips, and maximum RSS
+remains flat at `2,922,790,912` bytes.
+
+The independent step-896 checkpoint audit passes. All 48 attention tensors
+have changed, all 177 inherited tensors remain bitwise exact, exactly the 48
+attention parameters own complete finite Adam state at step 896, every
+serialized tensor is finite, source/config/protocol hashes agree, and the
+protected step-zero incumbent/reference checkpoints remain unchanged. The
+artifact is
+`runs/20260811-063308-attention-node-isolated-stage-a/attention_checkpoint_step_000896_audit.json`.
+
+The complete pooled training window at steps 840--896 has 2,169 causal
+trajectory targets, current position RMSE `0.246462 m`
+(`x/y/z = 0.270753/0.218706/0.247167 m`), current velocity RMSE
+`1.228381 m/s`, and position-horizon RMSE
+`0.263285/0.329719/0.414078/0.460056/0.487879 m`. Current coverage90 is
+`97.90%`, identity is `5/298` (`1.678%`), collision F1 is `0.1607`,
+drag/restitution observable counts are `153/28`, median uncertainty NLL is
+`-0.7862`, median current/future correction improvements are positive, and
+minimum complete-interaction retention is `0.6763`.
+
+Against steps 776--832, current error is essentially flat
+(`0.248962 -> 0.246462 m`) but every forecast horizon is worse, lifecycle
+target coverage falls `40.15% -> 34.88%`, and collision F1 falls
+`0.2373 -> 0.1607`; coverage, uncertainty, optimizer support, gradients, and
+resources remain healthy. This is a real heterogeneous training-trend warning,
+not matched checkpoint evidence. The fixed step-1024 RGB-only selector remains
+the next accuracy/model-change decision; no scale promotion is authorized.
+
 ## 2026-08-11 — pooled convergence-trend observability implemented
 
 The whole-run auditor previously proved optimizer/support/resource integrity

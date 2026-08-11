@@ -355,7 +355,15 @@
   flat, and shared-stage retention is healthy. The following 712--768 window
   improves current and every horizon, identity, and current-state coverage;
   the exact step-768 scope/optimizer/finite/protected audit passes. Continue
-  unchanged; neither heterogeneous window is matched selector evidence.
+  unchanged; neither heterogeneous window is matched selector evidence. The
+  step-896 checkpoint also passes with all 48 attention tensors live, all 177
+  inherited tensors exact, attention-only complete Adam state at step 896,
+  finite serialization, and intact protected hashes. Its complete 840--896
+  training window keeps current error nearly flat but regresses every forecast
+  horizon and lifecycle/event slices relative to 776--832 while retaining
+  healthy coverage, uncertainty, support, gradients, and memory. Treat this as
+  a trend warning and continue unchanged to the fixed selector at step 1024;
+  do not promote, scale, or mutate the protocol from heterogeneous windows.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam
