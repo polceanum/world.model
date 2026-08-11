@@ -389,6 +389,11 @@
   selector equality, step-988 containment, repeated fixed selectors, broad
   non-regression, plateau, test/OOD generalization, and no lifecycle/identity/
   uncertainty/axis/horizon regression before scaling.
+  The campaign is now active at
+  `runs/20260811-170842-attention-aggregate-isolated-stage-a/` from clean commit
+  `23ecf9d`; trainer/supervisor each run once with empty stderr and the initial
+  32-episode selector is in progress. Keep this task open until selectors,
+  plateau, test/OOD, and broad non-regression actually pass.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

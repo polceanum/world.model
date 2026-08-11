@@ -203,6 +203,21 @@ dry run confirms 8,192 updates, batch eight, eight-way scenario balance,
 training/replay metadata independently confirms MPS is built and available,
 with measurement on MPS and closed-loop state on CPU.
 
+The fresh specification-1.35 protected-control campaign is active at
+`runs/20260811-170842-attention-aggregate-isolated-stage-a/` from clean commit
+`23ecf9d`. Trainer launch label
+`com.polceanum.orpheus.attention-aggregate-isolated-20260811-170751` and the
+immutable-source convergence supervisor label
+`com.polceanum.orpheus.attention-aggregate-convergence-20260811-170751` have
+each run exactly once with empty stderr. Metadata records PyTorch `2.10.0`, MPS
+built/available, measurement on MPS, closed loop on CPU, RGB-only input, no
+oracle, and weights-only initialization from the protected step-64 graph
+checkpoint. The supervisor enforces 8,192 minimum updates, 4,096-update
+extensions, a four-selector/1% plateau rule, and a truthful 24,576 hard limit.
+The mandatory 32-episode step-zero selector is in progress; no optimizer
+update, trained selector, accuracy gain, plateau, generalization result, or
+capacity authorization exists yet.
+
 ## 2026-08-11 — pooled convergence-trend observability implemented
 
 The whole-run auditor previously proved optimizer/support/resource integrity

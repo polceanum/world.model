@@ -34,6 +34,13 @@
   files; compileall; diff check; and the attention-pilot dry run. The restricted
   device-marker worker has one expected MPS-unavailable skip, while the direct
   host tests and replay metadata prove actual MPS execution.
+- Committed/pushed the replay evidence as `23ecf9d` and launched the fresh
+  specification-1.35 campaign at
+  `runs/20260811-170842-attention-aggregate-isolated-stage-a/` weights-only from
+  the protected graph control. Trainer and immutable-source supervisor are
+  active once with empty stderr under the declared 8,192/4,096/24,576
+  convergence envelope. Initial fixed validation is active; no trained
+  accuracy, convergence, or scale claim exists.
 
 - Audited the live immutable campaign through durable step 896. All updates
   apply with exact eight-scenario logged balance, no skip/terminal/uncontained
