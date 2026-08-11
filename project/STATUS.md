@@ -114,6 +114,72 @@ preflights weight-only handoffs and rejects unsafe partial learned attention
 growth before any destination tensor is copied; specification 1.33 adds an
 exact identity-initialized exception for contiguous appended depth only
 
+## 2026-08-11 — specification-1.35 campaign passes durable step 384
+
+The fresh aggregate-gradient attention campaign remains active at
+`runs/20260811-170842-attention-aggregate-isolated-stage-a/` from clean source
+commit `23ecf9d`. The trainer and convergence supervisor have each launched
+once, both stderr files are empty, no `training_failure.json` exists, and
+measurement remains on host MPS while closed-loop belief/dynamics execute on
+CPU. Through step 384, all optimizer updates apply, every logged block contains
+one draw from all eight scenarios, all 13 causal objectives remain supported,
+no draw is skipped, no interaction update violates the `0.1` retention floor,
+and maximum RSS remains exactly `2,991,591,424` bytes.
+
+The independent step-384 checkpoint audit passes. All 48 attention tensors
+changed, all 177 inherited tensors remain bitwise exact, exactly the 48
+attention parameters own complete finite Adam state at step 384, every
+serialized tensor is finite, and source/config/protocol hashes agree. The
+checkpoint model-state hash is
+`5278374307390e808816c3ecee491e6d66b4e5be7fc3d693cd349ae134b3b2d7`; the
+durable report is
+`runs/20260811-170842-attention-aggregate-isolated-stage-a/attention_checkpoint_audit_step_000384.json`.
+
+The exact schedule-matched steps 328--384 window contains 2,655 candidate
+causal trajectories. Relative to the predecessor on the same seeds,
+scenarios, draws, frames, and rollout anchors, current position improves
+`0.263840 -> 0.257064 m`, current velocity improves
+`1.604568 -> 1.589278 m/s`, collision F1 improves
+`0.178571 -> 0.194805`, and x improves at every horizon by
+`0.004142--0.021893 m`. The result is still non-promotable: pooled horizon
+RMSE worsens by `0.000955/0.001289/0.002553/0.002968/0.007237 m`, z worsens by
+`0.005104--0.052711 m`, three later velocity horizons regress, lifecycle
+precision/coverage slip by about `0.002`, and identity records six rather than
+five switches. This is evidence that the repaired trajectory can correct the
+earlier x weakness, not broad convergence.
+
+The primary-source Transformer review does not expose a missing efficiency
+mechanism for this at-most-22-token model. Dense scaled attention, multiple
+heads, pre-normalization, RMSNorm, and SwiGLU are already present; GQA, MLA,
+MoE, and Flash-style kernels chiefly target long-context memory or very large
+compute. Compute-optimal and current video-world-model results instead support
+the existing policy: scale data with parameters, use a plateau-triggered
+cooldown only as a separately versioned experiment, and require disjoint
+generalization. Capacity scaling therefore remains blocked until fixed
+selector 512, repeated plateau evidence, and test/OOD non-regression pass.
+
+Exact read-only commands run against the live campaign were:
+
+```bash
+PYTHONPATH=. conda run --no-capture-output -n orpheus python \
+  scripts/audit_attention_checkpoint.py \
+  --checkpoint runs/20260811-170842-attention-aggregate-isolated-stage-a/checkpoints/last.pt \
+  --initial-checkpoint runs/20260811-170842-attention-aggregate-isolated-stage-a/checkpoints/validation_step_000000.pt \
+  --config runs/20260811-170842-attention-aggregate-isolated-stage-a/config.resolved.yaml \
+  --require-all-attention-changed \
+  --require-complete-attention-optimizer-state \
+  --output runs/20260811-170842-attention-aggregate-isolated-stage-a/attention_checkpoint_audit_step_000384.json
+PYTHONPATH=. conda run --no-capture-output -n orpheus python \
+  scripts/audit_training_dynamics.py \
+  --run runs/20260811-170842-attention-aggregate-isolated-stage-a \
+  --reference-run runs/20260811-063308-attention-node-isolated-stage-a \
+  --after-step 328 --trend-window-blocks 8
+```
+
+Next: continue the immutable trajectory to the first trained 32-episode fixed
+selector at step 512. Do not alter learning rate, add a cooldown, or launch a
+larger rung from sampled training-window evidence.
+
 ## 2026-08-11 — attention campaign passes durable step 896
 
 The immutable specification-1.31 attention-only campaign remains active under

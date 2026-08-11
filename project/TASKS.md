@@ -451,6 +451,14 @@
   medium/long pooled position, four velocity horizons, coverage90, and identity
   regress. Identity doubles from three to six switches on nearly equal support.
   Require the fixed step-512 selector; do not tune from this training window.
+  The durable step-384 checkpoint also passes: all 48 attention tensors are
+  live, all 177 inherited tensors remain exact, and complete finite Adam state
+  belongs only to the 48 attention parameters at step 384. The matched
+  328--384 window improves current position/velocity, collision F1, and every x
+  horizon, but regresses every pooled forecast horizon, every z horizon, three
+  later velocity horizons, lifecycle, and identity. Preserve the repaired x
+  direction without promotion; fixed selector 512 remains authoritative and
+  the no-regression scaling prerequisite remains false.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

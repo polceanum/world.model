@@ -127,6 +127,14 @@
   and identity regress; switches increase from three to six on nearly equal
   association support. Preserved the window as a broad warning and kept fixed
   selector 512 authoritative.
+- Passed the exact step-384 attention checkpoint audit: all 48 attention
+  tensors changed, all 177 inherited tensors remain exact, optimizer state is
+  complete/finite/attention-only at Adam step 384, and every provenance hash
+  agrees. The matched steps 328--384 window repairs current position/velocity,
+  collision F1, and every x horizon relative to the predecessor, but pooled
+  forecasts, every z horizon, three later velocity horizons, lifecycle, and
+  identity regress. Continued the immutable run toward selector 512 without a
+  learning-rate, cooldown, or capacity mutation.
 
 - Audited the live immutable campaign through durable step 896. All updates
   apply with exact eight-scenario logged balance, no skip/terminal/uncontained
