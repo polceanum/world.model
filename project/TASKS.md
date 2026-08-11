@@ -376,10 +376,19 @@
 - [x] Implement specification-1.35 aggregate per-draw semantic output budgets
   using `cap / sqrt(K)` for `K` registered calls; preserve exact one-call and
   forward behavior. Focused regression gates pass (`314 passed`).
-- [ ] Replay exact model/Adam/RNG/sampler state from durable step 896 through
+- [x] Replay exact model/Adam/RNG/sampler state from durable step 896 through
   attempted step 988 under specification 1.35. Require aggregate semantic
   norms at/below configured caps, complete retention at/above `0.1`, and a
   deliberate pre-Adam diagnostic stop before any fresh sustained campaign.
+  The matched draw passes at `0.647948` retention; raw/post-row norm falls
+  `15.1704/10.2906 -> 4.58029/1.54333`, maximum shared norm falls
+  `5.01609 -> 0.225929`, and every aggregate semantic applied norm is below
+  `0.1`. Preserve the replay as non-promotable.
+- [ ] Launch a fresh immutable specification-1.35 attention-only campaign
+  weights-only from the protected graph control. Require exact step-zero
+  selector equality, step-988 containment, repeated fixed selectors, broad
+  non-regression, plateau, test/OOD generalization, and no lifecycle/identity/
+  uncertainty/axis/horizon regression before scaling.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

@@ -19,6 +19,21 @@
   receives `cap / sqrt(K)`; one-call behavior is exact. Added multi-invocation
   regression coverage; the focused attention/config/checkpoint/auditor suite
   passes (`314 passed`). Matched replay from durable step 896 remains pending.
+- Completed the exact-state step-896-to-988 diagnostic replay on MPS RGB/CPU
+  closed loop. It reproduced the failed draw's seeds, scenario order, 284
+  causal trajectories, and all 13 objective terms. Raw/post-row interaction
+  norm fell `15.1704/10.2906 -> 4.58029/1.54333`, complete retention rose
+  `0.0971759 -> 0.647948`, and maximum shared gradient fell
+  `5.01609 -> 0.225929`; every aggregate semantic norm stayed below `0.1`.
+  The ordinary assertion passed and the harness stopped deliberately before
+  Adam. Its report is `aggregate_gradient_replay_report.json` in the replay
+  run; the generic auditor truthfully returns expected failure because a
+  deliberate stop still uses the durable terminal-artifact channel.
+- Passed the complete post-repair gates: `711 passed, 5 skipped, 1 deselected`
+  non-device; five direct host-MPS regressions; Ruff format/check across 193
+  files; compileall; diff check; and the attention-pilot dry run. The restricted
+  device-marker worker has one expected MPS-unavailable skip, while the direct
+  host tests and replay metadata prove actual MPS execution.
 
 - Audited the live immutable campaign through durable step 896. All updates
   apply with exact eight-scenario logged balance, no skip/terminal/uncontained

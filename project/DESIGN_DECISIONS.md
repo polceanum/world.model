@@ -3,7 +3,7 @@
 ## ADR-105 — Budget recursive typed-output gradients across the optimizer draw
 
 - **Date:** 2026-08-11
-- **Status:** accepted and implemented; matched replay pending
+- **Status:** accepted, implemented, and matched-replay qualified
 - **Context:** The specification-1.31 campaign safely rejected attempted update
   988 at `0.0971759` complete interaction retention. The normal-force decoder
   row reached `10.9076` and shared block gradients reached `5.01609` even
@@ -23,6 +23,12 @@
   reaching shared attention. The failed campaign remains non-promotable and
   scaling remains blocked pending a step-896 matched replay, fresh selectors,
   and plateau.
+- **Evidence:** Exact model/Adam/RNG/sampler replay from durable step 896 used
+  the same attempted-step-988 seeds, scenarios, 284 causal trajectories, and
+  all 13 objective terms. Raw/post-row norm fell `15.1704/10.2906 ->
+  4.58029/1.54333`; complete retention rose `0.0971759 -> 0.647948`; the
+  largest shared gradient fell `5.01609 -> 0.225929`; and all four aggregate
+  semantic applied norms stayed below `0.1`. The harness stopped before Adam.
 
 ## ADR-104 — Pool comparable training-trend windows from sufficient statistics
 

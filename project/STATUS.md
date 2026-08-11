@@ -177,6 +177,32 @@ Focused attention/config/checkpoint/auditor tests pass (`314 passed`); Ruff and
 diff checks pass. A diagnostic exact-state replay from durable step 896 through
 the same step-988 draw is the next gate. No capacity increase is authorized.
 
+That replay is now complete at
+`runs/20260811-162919-step988-aggregate-gradient-replay-v1/`. It reproduces the
+same step-988 seeds, eight scenarios, 284 causal trajectories, and all 13
+objective terms. Raw interaction norm falls `15.1704 -> 4.58029`, post-row norm
+falls `10.2906 -> 1.54333`, complete retention rises `0.0971759 -> 0.647948`,
+and the largest shared gradient falls `5.01609 -> 0.225929`. Aggregate applied
+node/collision/force/impulse output norms are
+`0.04939/0.00442/0.06029/0.00839`, all below `0.1`. The ordinary retention
+assertion passed and the harness then stopped before Adam. The generic offline
+auditor returns expected `fail` because the deliberate diagnostic stop is
+persisted through the terminal-failure channel; the separate concise artifact
+is `aggregate_gradient_replay_report.json`. This qualifies the repair only,
+not weights, accuracy, convergence, or scaling. A fresh protected-control
+campaign remains required.
+
+Broad repair gates pass from clean commit candidate source on macOS with
+Python `3.10.20` and PyTorch `2.10.0`: the complete non-device suite reports
+`711 passed, 5 skipped, 1 deselected` in `176.51 s`; the restricted device
+marker reports one expected MPS-unavailable skip; the five direct host-MPS
+regressions pass in `7.76 s`; all 193 Python files pass Ruff format/check;
+compileall succeeds; `git diff --check` is clean; and the attention-pilot CPU
+dry run confirms 8,192 updates, batch eight, eight-way scenario balance,
+65,536 nominal episode draws, RGB-only validation, and no fixed dataset. Host
+training/replay metadata independently confirms MPS is built and available,
+with measurement on MPS and closed-loop state on CPU.
+
 ## 2026-08-11 — pooled convergence-trend observability implemented
 
 The whole-run auditor previously proved optimizer/support/resource integrity
