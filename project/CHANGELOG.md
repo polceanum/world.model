@@ -97,6 +97,15 @@
   audit passes 512 applied updates with exact balance and no optimizer failure.
   The safe incumbent remains step zero and scaling stays blocked while the
   rejected mutable trajectory continues toward the next selector.
+- Continued the rejected mutable attention trajectory through step 576 without
+  touching the safe incumbent. The audit passes all 576 balanced updates with
+  no skip, terminal failure, or uncontained clip. Local tangent-force/node
+  outliers at steps 560/568 are contained before the shared stage, which
+  retains `0.3522/0.7547` versus the `0.1` minimum. In equal eight-block
+  training samples, every pooled horizon and every x/z horizon improves after
+  selector rejection, but coverage90 slips `90.49% -> 89.17%` and y at 0.5
+  seconds regresses. This is repair-trajectory evidence only; selector 1024
+  remains required.
 
 ### 2026-08-11 impulse-gradient isolation and fail-fast monitoring
 

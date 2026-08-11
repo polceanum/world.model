@@ -288,6 +288,28 @@ jump. The mutable trajectory remains active, as required for causal repair of
 rejected candidates; this first rejection is not plateau evidence and does not
 authorize capacity scaling.
 
+The rejected mutable trajectory has continued through step 576 without
+replacing the step-zero incumbent. The full dynamics audit passes all 576
+updates with exact 72-block support for each scenario, zero skipped or terminal
+updates, no uncontained interaction clip, and unchanged peak RSS. Two local
+typed-gradient outliers occur at steps 560 and 568. Step 560 has raw node/force
+norms `3.822/19.941` (z `3.442`, tangent force `19.364`); semantic rows reduce
+the interaction to `2.839`, leaving `0.3522` complete shared-stage retention.
+Step 568 has raw force `6.634`; rows reduce it to `1.325`, leaving `0.7547`
+shared-stage retention. Both exceed the `0.1` fail-fast threshold after local
+isolation and apply with full causal/objective support. Their lower raw-to-final
+coefficients remain visible warnings, not uncontained failures.
+
+An equal eight-block training-window comparison shows a possible repair
+direction, not held-out promotion. Step 456--512 versus 520--576 weighted
+position RMSE changes across 0.1/0.25/0.5/0.75/1.0 seconds from
+`0.2508/0.3025/0.3707/0.4452/0.4713` to
+`0.2229/0.2694/0.3572/0.4052/0.4273 m`. X and z improve at every horizon;
+identity changes `4/324 -> 4/346`; coverage90 slips `90.49% -> 89.17%`; y at
+0.5 seconds worsens `0.2597 -> 0.3098 m`. The fixed selector at step 1024 must
+confirm whether this is real generalization repair. No model, optimizer,
+curriculum, incumbent, or scale decision changes at this boundary.
+
 Exact verification commands:
 
 ```bash

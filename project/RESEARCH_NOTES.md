@@ -303,6 +303,25 @@ incumbent and continue the rejected mutable trajectory to test repair at later
 fixed selectors; one rejected candidate is neither convergence nor plateau and
 does not justify scaling.
 
+The first balanced post-rejection segment, steps 520--576, is moving in a
+plausible repair direction on training samples. Against the equal step
+456--512 window, weighted position RMSE improves at every horizon from
+`0.2508/0.3025/0.3707/0.4452/0.4713` to
+`0.2229/0.2694/0.3572/0.4052/0.4273 m`; x and z improve at every horizon and
+identity changes from 4/324 to 4/346. This does not reproduce the fixed
+selector protocol, and coverage90 falls `90.49% -> 89.17%` while y at 0.5
+seconds worsens. Therefore it supports continued training, not acceptance.
+
+Steps 560 and 568 also clarify the gradient contract. Raw-to-final retention
+can fall below 10% when a severe typed output is deliberately isolated, but
+the fail-fast gate measures the complete shared-interaction coefficient after
+all semantic output/decoder-row caps. Tangent-force/z outliers are reduced to
+post-row norms `2.839/1.325`, leaving shared-stage coefficients
+`0.3522/0.7547`; both updates remain supported and valid. The offline auditor
+agrees and reports no uncontained interaction event. Repeated occurrence may
+be relevant to the learned-residual accuracy failure, but it is not itself an
+optimizer correctness defect.
+
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
 

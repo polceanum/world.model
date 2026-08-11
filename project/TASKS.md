@@ -322,6 +322,13 @@
   512 updates, so preserve the safe step-zero incumbent while continuing the
   mutable trajectory toward the next selector. Repeated selectors, repair,
   plateau, held-out generalization, and scaling remain open.
+  Through step 576, the continued trajectory remains optimizer/support clean.
+  Equal eight-block training samples improve every pooled horizon and all x/z
+  horizons relative to the pre-selector window, while coverage90 slips
+  `90.49% -> 89.17%` and y at 0.5 seconds worsens. Steps 560/568 contain local
+  force/node outliers with post-isolation shared-stage retention
+  `0.3522/0.7547`, safely above the `0.1` gate. Continue unchanged to fixed
+  selector 1024; do not treat the sampled repair direction as promotion.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam
