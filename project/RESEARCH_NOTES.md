@@ -78,6 +78,25 @@ identity switches are zero, future correction is positive, and the update is
 finite/applied. This validates the repair at one historical boundary but does
 not replace step 280 or broad fixed validation.
 
+Step 280 then disproves the assumption that decoder parameter-row isolation is
+sufficient. Its raw force/total parameter norms are `989.7965/995.5391`; by the
+time the row cap runs, shared projections and attention blocks already carry
+order-one-to-ten gradients and the effective total update retains only
+`0.0010045`. The campaign is stopped at durable step 256 and cannot count
+toward convergence.
+
+Specification 1.28 moves semantic isolation to the causal location: each raw
+node, collision, and joint-force output invocation receives an optional
+backward-only norm cap before the decoder/shared stack, followed by the existing
+parameter hierarchy. Exact diagnostic replay from the same step-256 optimizer,
+RNG, and data state reduces the later step-280 parameter norm to `10.8330`,
+bounds the maximum shared parameter norm to `0.0851`, and leaves a `0.6979`
+post-row interaction-stage coefficient. The batch remains finite, supported,
+applied, and physically comparable; localized severe coefficients remain
+visible. This establishes causal optimizer repair, not accuracy or
+generalization. A fresh weights-only campaign must still pass selector 512 and
+the declared plateau before any scale rung advances.
+
 Exact capacity census for later one-axis studies:
 
 - current/data-only: `3,004,656` total, `1,103,626` attention parameters;

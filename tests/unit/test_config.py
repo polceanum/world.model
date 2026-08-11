@@ -458,6 +458,26 @@ def test_attention_force_gradient_clip_is_positive_when_configured(value: str) -
         )
 
 
+@pytest.mark.parametrize(
+    "field",
+    [
+        "attention_node_output_grad_clip_norm",
+        "attention_collision_output_grad_clip_norm",
+        "attention_force_output_grad_clip_norm",
+    ],
+)
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf"])
+def test_attention_output_gradient_clips_are_positive_when_configured(
+    field: str,
+    value: str,
+) -> None:
+    with pytest.raises(ValueError, match=field):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.{field}={value}"],
+        )
+
+
 @pytest.mark.parametrize("probability", [-0.1, 1.1])
 def test_long_horizon_window_probability_is_bounded(probability: float) -> None:
     with pytest.raises(ValueError, match="long_horizon_window_probability"):

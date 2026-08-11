@@ -8,6 +8,7 @@ event resolver.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import torch
@@ -182,6 +183,126 @@ class TypedAttentionInteractionResidual(nn.Module):
         nn.init.zeros_(self.node_decoder.bias)
         nn.init.zeros_(self.relation_decoder.weight)
         nn.init.zeros_(self.relation_decoder.bias)
+        # These are transient training controls, not model state. Recursive
+        # rollouts can amplify one typed output's backward signal before
+        # parameter-row clipping runs. The trainer may therefore cap semantic
+        # output-gradient groups at each attention invocation so a rare event
+        # cannot first contaminate every shared projection/block gradient.
+        self._output_gradient_clip_norms: dict[str, float | None] = {
+            "node": None,
+            "collision": None,
+            "force": None,
+        }
+        self._output_gradient_records: dict[str, list[tuple[Tensor, Tensor]]] = {
+            "node": [],
+            "collision": [],
+            "force": [],
+        }
+
+    def configure_output_gradient_clipping(
+        self,
+        *,
+        node: float | None,
+        collision: float | None,
+        force: float | None,
+    ) -> None:
+        """Configure per-invocation semantic backpropagation caps.
+
+        The controls affect backward gradients only. Forward values,
+        checkpoint tensors, and inference behavior remain unchanged.
+        """
+
+        values = {"node": node, "collision": collision, "force": force}
+        for name, value in values.items():
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0.0
+            ):
+                raise ValueError(f"attention {name} output gradient cap must be positive")
+        self._output_gradient_clip_norms = {
+            name: None if value is None else float(value) for name, value in values.items()
+        }
+
+    def reset_output_gradient_diagnostics(self) -> None:
+        """Clear transient records before one optimizer data draw."""
+
+        self._output_gradient_records = {"node": [], "collision": [], "force": []}
+
+    def output_gradient_diagnostics(self) -> dict[str, float]:
+        """Return aggregate raw/applied evidence from the latest backward."""
+
+        metrics: dict[str, float] = {}
+        for name in ("node", "collision", "force"):
+            records = self._output_gradient_records[name]
+            enabled = self._output_gradient_clip_norms[name] is not None
+            if records:
+                raw_norms = torch.stack([raw for raw, _ in records])
+                coefficients = torch.stack([coefficient for _, coefficient in records])
+                applied_norms = raw_norms * coefficients
+                raw = float(raw_norms.square().sum().sqrt().detach().cpu())
+                applied = float(applied_norms.square().sum().sqrt().detach().cpu())
+                minimum_coefficient = float(coefficients.amin().detach().cpu())
+            else:
+                raw = 0.0
+                applied = 0.0
+                minimum_coefficient = 1.0
+            effective_coefficient = applied / raw if raw > 0.0 else 1.0
+            prefix = f"attention_{name}_output_backprop_gradient"
+            metrics.update(
+                {
+                    f"{prefix}_local_clip_enabled": float(enabled),
+                    f"{prefix}_invocation_count": float(len(records)),
+                    f"{prefix}_norm_pre_clip": raw,
+                    f"{prefix}_minimum_clip_coefficient": minimum_coefficient,
+                    f"{prefix}_effective_clip_coefficient": effective_coefficient,
+                    f"{prefix}_norm_applied_before_parameter_clips": applied,
+                }
+            )
+        return metrics
+
+    def _register_output_gradient_hooks(
+        self,
+        node_values: Tensor,
+        relation_values: Tensor,
+    ) -> None:
+        if not self.training:
+            return
+
+        node_cap = self._output_gradient_clip_norms["node"]
+        if node_cap is not None and node_values.requires_grad:
+
+            def clip_node(gradient: Tensor) -> Tensor:
+                raw = torch.linalg.vector_norm(gradient)
+                coefficient = (raw.new_tensor(node_cap) / (raw + 1.0e-6)).clamp(max=1.0)
+                self._output_gradient_records["node"].append((raw.detach(), coefficient.detach()))
+                return gradient * coefficient
+
+            node_values.register_hook(clip_node)
+
+        relation_groups = {
+            "collision": (self.collision_output_index,),
+            "force": self.force_output_indices,
+        }
+        if relation_values.requires_grad and any(
+            self._output_gradient_clip_norms[name] is not None for name in relation_groups
+        ):
+
+            def clip_relation(gradient: Tensor) -> Tensor:
+                clipped = gradient.clone()
+                for name, rows in relation_groups.items():
+                    maximum = self._output_gradient_clip_norms[name]
+                    if maximum is None:
+                        continue
+                    selected = gradient[..., list(rows)]
+                    raw = torch.linalg.vector_norm(selected)
+                    coefficient = (raw.new_tensor(maximum) / (raw + 1.0e-6)).clamp(max=1.0)
+                    clipped[..., list(rows)] = selected * coefficient
+                    self._output_gradient_records[name].append((raw.detach(), coefficient.detach()))
+                return clipped
+
+            relation_values.register_hook(clip_relation)
 
     @staticmethod
     def _entity_features(objects: ObjectBeliefTensor) -> Tensor:
@@ -361,6 +482,7 @@ class TypedAttentionInteractionResidual(nn.Module):
         node_residual = self.max_node_acceleration * torch.tanh(node_values)
         node_residual = node_residual * objects.active.unsqueeze(-1)
         relation_values = self.relation_decoder(tokens[:, layout.relation_start :])
+        self._register_output_gradient_hooks(node_values, relation_values)
         relation_values = relation_values * relation_valid.unsqueeze(-1)
 
         upper = objects.position.new_zeros(batch, count, count, self.relation_output_dim)

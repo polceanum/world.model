@@ -246,12 +246,33 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
         attention_force_coefficient = float(
             record.get("attention_force_gradient_clip_coefficient", 1.0)
         )
+        attention_node_output_coefficient = float(
+            record.get(
+                "attention_node_output_backprop_gradient_minimum_clip_coefficient",
+                1.0,
+            )
+        )
+        attention_collision_output_coefficient = float(
+            record.get(
+                "attention_collision_output_backprop_gradient_minimum_clip_coefficient",
+                1.0,
+            )
+        )
+        attention_force_output_coefficient = float(
+            record.get(
+                "attention_force_output_backprop_gradient_minimum_clip_coefficient",
+                1.0,
+            )
+        )
         if (
             min(
                 total_coefficient,
                 interaction_coefficient,
                 attention_collision_coefficient,
                 attention_force_coefficient,
+                attention_node_output_coefficient,
+                attention_collision_output_coefficient,
+                attention_force_output_coefficient,
             )
             < _SEVERE_CLIP_COEFFICIENT
         ):
@@ -264,11 +285,19 @@ def audit_run(run_directory: Path, *, after_step: int = 0) -> dict[str, Any]:
                 details["attention_collision_coefficient"] = attention_collision_coefficient
             if "attention_force_gradient_clip_coefficient" in record:
                 details["attention_force_coefficient"] = attention_force_coefficient
+            if "attention_node_output_backprop_gradient_minimum_clip_coefficient" in record:
+                details["attention_node_output_coefficient"] = attention_node_output_coefficient
+            if "attention_collision_output_backprop_gradient_minimum_clip_coefficient" in record:
+                details["attention_collision_output_coefficient"] = (
+                    attention_collision_output_coefficient
+                )
+            if "attention_force_output_backprop_gradient_minimum_clip_coefficient" in record:
+                details["attention_force_output_coefficient"] = attention_force_output_coefficient
             severe_clipped_steps.append(details)
     if severe_clipped_steps:
         warnings.append(
             "severe gradient clipping retained less than 10% of at least one "
-            "raw parameter-group/update gradient"
+            "raw typed-output/parameter-group update gradient"
         )
     trajectory_support = [
         float(record["causal_trajectory_support_count"])

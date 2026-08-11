@@ -327,6 +327,13 @@ class TrainingConfig:
     # attention gradient. Optionally bound those two semantic rows jointly
     # before the interaction cap, without changing their forward outputs.
     attention_force_grad_clip_norm: float | None = None
+    # Parameter-row caps run after gradients have already traversed the shared
+    # attention stack. These optional per-invocation output-gradient caps act
+    # at the typed decoder boundary so rare recursive node/event/force signals
+    # cannot first dominate every shared token projection and block.
+    attention_node_output_grad_clip_norm: float | None = None
+    attention_collision_output_grad_clip_norm: float | None = None
+    attention_force_output_grad_clip_norm: float | None = None
     # RGB discovery and the shared ROI backbone can likewise dominate the
     # whole-model norm during causal adaptation. Bound the complete, disjoint
     # RGB observation module before the global clip.
@@ -1130,6 +1137,21 @@ class OrpheusConfig:
                 "training.attention_force_grad_clip_norm must be finite and positive "
                 "when configured"
             )
+        for config_field in (
+            "attention_node_output_grad_clip_norm",
+            "attention_collision_output_grad_clip_norm",
+            "attention_force_output_grad_clip_norm",
+        ):
+            value = getattr(self.training, config_field)
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
+                raise ValueError(
+                    f"training.{config_field} must be finite and positive when configured"
+                )
         if (
             not math.isfinite(self.training.closed_loop_perception_grad_clip_norm)
             or self.training.closed_loop_perception_grad_clip_norm <= 0

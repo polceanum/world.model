@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.27
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026
+**Version:** 1.28
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output backpropagation isolation amendment 11 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6161,6 +6161,28 @@ norms algebraically so local clipping cannot make training appear better
 conditioned than it was. The dynamics auditor must treat any configured row
 coefficient below its severe threshold as visible warning evidence.
 
+Decoder parameter-row clipping happens only after autograd has already sent
+that row's signal through the shared output normalization, attention blocks,
+and input projections. It therefore cannot protect the shared representation
+when recursive rollout amplification occurs upstream of the decoder. When an
+exact replay localizes this failure, additionally cap the backward gradient on
+the typed decoder output tensor at every attention invocation, before it enters
+the decoder or shared stack. Keep node x/y/z, collision, and joint
+normal/tangent force as separately configured semantic groups. These caps alter
+backward conditioning only; forward values, tensor contracts, and checkpoint
+weights remain unchanged. Retain the decoder parameter-row caps as a second
+layer because repeated individually bounded invocations can still accumulate a
+large decoder update.
+
+Log each typed-output group's invocation count, root-sum-square raw and applied
+norms, minimum per-invocation coefficient, and effective aggregate
+coefficient. Parameter-gradient diagnostics remain raw with respect to the
+later row/module/global hierarchy but necessarily occur after typed-output
+backpropagation conditioning; reports must state that boundary rather than
+misrepresenting them as the counterfactual no-hook parameter gradient. The
+offline auditor treats a severe typed-output coefficient as visible evidence
+alongside every later hierarchy.
+
 The stage-A Mac pilot config caps the collision-logit row of the typed relation
 decoder at norm 1.0 before the existing interaction cap of 1.0. This choice is
 supported by two severe spikes exactly 128 updates apart at steps 152 and 280,
@@ -6194,6 +6216,20 @@ interaction norm of `17.7050` and retains only `0.05648`, while the collision
 row norm is an ordinary unclipped `0.23553`. The repaired run therefore stops
 at its exact durable step-256 checkpoint. It cannot count toward convergence;
 its step-280 update is diagnostic evidence for the complete-localization replay.
+
+The subsequent force-row-isolated campaign exposes the deeper limitation at
+the same deterministic update: decoder parameter-row clipping sees a raw
+`989.7965` force norm only after that signal has produced order-one-to-ten
+gradients throughout shared projections and blocks. An exact diagnostic branch
+from its durable step 256 applies per-invocation typed-output caps of `0.1`.
+On the identical update-280 seeds and frames, the later parameter-gradient norm
+falls from `995.5391` to `10.8330`, the maximum shared projection/block norm is
+`0.0851`, and the post-row interaction stage retains `0.6979` for shared
+learning rather than an effective `0.0010`. The update is finite, supported,
+and applied. Severe typed-output and decoder-row coefficients remain truthful
+localized warnings; the diagnostic branch is not selector or convergence
+evidence. A corrected campaign must restart weights-only from the protected
+graph control and pass the complete fixed selector and plateau rules.
 
 ## 196. Scale the data and model only from a qualified stable rung
 

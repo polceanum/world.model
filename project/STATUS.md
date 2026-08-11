@@ -1,7 +1,7 @@
 # Project status
 
-**Date:** 2026-08-10
-**Specification:** `PROJECT_SPEC.md` 1.27
+**Date:** 2026-08-11
+**Specification:** `PROJECT_SPEC.md` 1.28
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -92,9 +92,85 @@ non-affine pre-projection RMS conditioning; that repair removes the matched
 scene spike, but a later campaign is stopped at clean step 256 after collision-
 logit row spikes recur exactly 128 updates apart; specification 1.25 isolates
 that typed proposal row before the complete interaction cap; exact replay now
-localizes the remaining recurrence to the typed normal/tangent force rows, a
-joint force-row cap is implemented under specification 1.27, and repaired
-sustained convergence and any further capacity scaling remain pending
+localizes one recurrence to the typed normal/tangent force rows, but the
+force-row-isolated campaign is also stopped at durable step 256 after the same
+step-280 batch contaminates the shared stack before its decoder-row cap;
+specification 1.28 adds typed-output backpropagation isolation, exact replay
+contains the known failure without shared collapse, and a fresh sustained
+qualification plus any capacity scaling remain pending
+
+## 2026-08-11 — shared-gradient failure repaired before capacity scaling
+
+The force-row-isolated trainer and convergence supervisor were intentionally
+stopped after update 280 exposed a real remaining optimizer defect. On seeds
+`15200,2273,6754,8851,11284,4181,6726,3095`, frames 7--11, the update was
+finite and supported but produced raw total/interaction norm `995.5391`, raw
+force-decoder norm `989.7965`, and post-row interaction norm `106.7798`.
+The effective total coefficient was `0.0010045`; shared projections and blocks
+already carried order-one-to-ten gradients before parameter-row clipping ran.
+The last durable source remains step 256 with model hash
+`79b1819d97f1f30ecdf18ce12977bf64b627eedaca6487f98397a6824c02c922`.
+Neither the step-280 update nor the stopped campaign counts toward convergence.
+
+Specification 1.28 and the implementation now add separately configured
+per-invocation backward caps on raw typed node, collision, and joint
+normal/tangent-force outputs. These hooks run before gradients enter the
+decoder or shared attention stack and change no forward values or checkpoint
+tensors. The existing parameter-row caps remain as a second layer for
+accumulation across recursive invocations. Config validation, legacy checkpoint
+normalization, selector/resume protocol hashing, named telemetry, offline audit
+warnings, and upstream-gradient regression tests cover the new hierarchy.
+`configs/attention_pilot_mps.yaml` sets all three output caps to `0.1`.
+
+An explicitly non-promotable diagnostic branch resumed the durable step-256
+model/optimizer/RNG/sampler state and replayed updates 257--280 with the new
+backward conditioning. It used PyTorch 2.10.0, host MPS for RGB measurement,
+CPU for closed-loop state/dynamics, float32, RGB-only input, and no oracle.
+Step 264 preserved every non-gradient forward metric exactly. Step 272 remained
+healthy and unclipped at the parameter hierarchy (`0.3177` total gradient,
+maximum shared-block norm `0.00315`, zero trusted identity switches, 1-second
+RMSE `0.28137` versus source `0.28163`).
+
+The decisive step 280 used the exact same seeds and frames. The later raw
+parameter norm fell `995.5391 -> 10.8330`, force-decoder norm fell
+`989.7965 -> 10.7843`, post-row interaction norm fell
+`106.7798 -> 1.43288`, and the largest shared projection/block parameter norm
+was `0.08506` (combined shared L2 `0.25750`). The post-row interaction stage
+retained `0.69790` and the global stage retained `1.0`; the supported update was
+finite and applied. Trusted identity switches (`1`) and position coverage90
+(`0.88`) match the known batch. The offline dynamics audit reports `pass`, no
+hard failures, and a truthful severe warning for localized node/force output
+and force-row coefficients. This is repair qualification, not fixed-selector,
+accuracy, generalization, plateau, or convergence evidence.
+
+The diagnostic service was booted out immediately after step 280. Its artifacts
+are under `runs/20260811-004400-step280-output-gradient-replay-v1/`, including
+`typed_output_gradient_replay_report.json`; stdout/stderr are
+`/private/tmp/step280-output-gradient-replay-v1.stdout.log` and `.stderr.log`
+(stderr remained empty). The affected unit/checkpoint suite reports
+`297 passed in 52.10 s`; the complete non-device suite reports
+`678 passed, 5 skipped, 1 deselected in 171.77 s`; the host device marker
+reports `1 passed in 2.17 s`; and the five hardware-conditional MPS tests
+report `5 passed in 8.01 s`. Ruff format/check, compileall, dry run, and
+`git diff --check` pass. The CPU dry run resolves 8,192 updates, 65,536 balanced
+episode draws, four nominal passes, eight scenarios, and 32 validation
+episodes; sandbox MPS availability is false while direct host tests prove it is
+available. Immutable commit/push and fresh weights-only sustained launch remain
+pending at this status boundary.
+
+The primary-source scaling review does not justify a capacity jump while this
+fresh small-rung qualification is absent. The original Transformer supports
+scaled multi-head attention, residual normalization, and controlled
+width/depth/head ablations—not unqualified parameter growth. Compute-optimal
+work requires data to scale with parameters; maximal-update parameterization is
+a candidate for transferring tuned hyperparameters across future width rungs;
+and current V-JEPA evidence supports staged latent video pretraining followed by
+an action-conditioned predictor. Conversely, physical-law benchmarks show that
+visually strong video generation can still fail OOD physics. The next order is
+therefore: fresh 3.00M control through step 280/selector/plateau; matched
+data-only scaling; width; depth; bounded timestamped history; then single-CUDA
+GPU. Dense JEPA-style RGB pretraining may later be distilled into explicit
+`WorldBelief`, not replace it.
 
 ## 2026-08-10 — exact force-head localization and scale/no-scale decision
 

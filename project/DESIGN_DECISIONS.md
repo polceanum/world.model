@@ -2675,3 +2675,41 @@
   global code is zero. The corrected run restarts weights-only from the same
   protected graph control, so no incompatible optimizer/history state is
   smuggled across the semantic change.
+
+## ADR-092 — Isolate typed-output backpropagation before shared attention
+
+- **Date:** 2026-08-11
+- **Status:** accepted and implemented; fresh sustained qualification pending
+- **Context:** Collision- and force-decoder parameter-row caps kept optimizer
+  updates finite, but they execute only after autograd has populated every
+  shared attention gradient. At the deterministic step-280 recurrence, the
+  force-row-isolated campaign produced raw total/force norms
+  `995.5391/989.7965`, post-row interaction norm `106.7798`, and effective
+  total coefficient `0.0010045`; shared projections and blocks had already
+  received order-one-to-ten gradients. Finite weights therefore did not mean
+  useful shared learning was preserved.
+- **Decision:** Add optional per-invocation backward hooks on the raw typed
+  node, collision, and joint normal/tangent-force outputs. Cap these semantic
+  groups before gradients enter their decoder or the shared stack, then retain
+  the existing decoder-row, complete-interaction, and global caps for repeated
+  invocation accumulation. Bind all caps into resume/selector protocol
+  semantics and report raw/applied output norms, invocation counts, minimum
+  and aggregate coefficients separately from later parameter gradients.
+- **Evidence:** An explicitly non-promotable branch replayed updates 257--280
+  from the durable step-256 optimizer/RNG/sampler state. On the same step-280
+  seeds and frames, the later parameter norm fell to `10.8330`, the largest
+  shared projection/block norm was `0.0851`, the post-row interaction stage
+  retained `0.6979`, and the supported finite update was applied. The offline
+  audit passes with a truthful warning for severe localized typed-output and
+  force-row coefficients. Step-264 forward metrics remained exactly equal to
+  the source; step-272 1-second RMSE remained effectively neutral
+  (`0.28163 -> 0.28137`).
+- **Alternatives considered:** accept finite but globally suppressed updates;
+  keep adding decoder parameter-row caps; lower the whole learning rate;
+  remove collision/force objectives; increase model capacity before repair.
+- **Consequences:** The repair changes backward conditioning, not forward
+  dynamics or checkpoint tensors. Parameter-gradient telemetry is raw only
+  relative to the later row/module/global hierarchy because it necessarily
+  observes gradients after output conditioning. The replay qualifies a fresh
+  weights-only campaign, not its weights, accuracy, generalization, plateau,
+  or convergence. Capacity scaling remains gated on that campaign.

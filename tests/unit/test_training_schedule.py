@@ -417,6 +417,68 @@ def test_attention_force_rows_are_jointly_bounded_before_complete_interaction_cl
     assert other.grad.norm().item() == pytest.approx(12.0, abs=1.0e-6)
 
 
+def test_attention_typed_output_hooks_clip_before_shared_backpropagation() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+    attention.train()
+    attention.configure_output_gradient_clipping(
+        node=0.1,
+        collision=0.1,
+        force=0.1,
+    )
+    attention.reset_output_gradient_diagnostics()
+
+    node_source = torch.zeros(1, 1, 3, requires_grad=True)
+    relation_source = torch.zeros(1, 1, attention.relation_output_dim, requires_grad=True)
+    node_values = node_source * 2.0
+    relation_values = relation_source * 2.0
+    node_values.retain_grad()
+    relation_values.retain_grad()
+    attention._register_output_gradient_hooks(node_values, relation_values)
+    node_signal = torch.tensor([[[3.0, 4.0, 0.0]]])
+    relation_signal = torch.zeros_like(relation_values)
+    relation_signal[..., 0] = 2.0
+    relation_signal[..., attention.collision_output_index] = 3.0
+    relation_signal[..., attention.force_output_indices[0]] = 3.0
+    relation_signal[..., attention.force_output_indices[1]] = 4.0
+
+    ((node_values * node_signal).sum() + (relation_values * relation_signal).sum()).backward()
+
+    assert node_values.grad is not None
+    assert relation_values.grad is not None
+    assert node_values.grad.norm().item() == pytest.approx(0.1, abs=1.0e-6)
+    assert relation_values.grad[..., 0].item() == pytest.approx(2.0)
+    assert relation_values.grad[..., attention.collision_output_index].norm().item() == (
+        pytest.approx(0.1, abs=1.0e-6)
+    )
+    force_gradient = relation_values.grad[..., list(attention.force_output_indices)]
+    assert force_gradient.norm().item() == pytest.approx(0.1, abs=1.0e-6)
+    assert node_source.grad is not None
+    assert relation_source.grad is not None
+    assert node_source.grad.norm().item() == pytest.approx(0.2, abs=1.0e-6)
+    assert relation_source.grad[..., 0].item() == pytest.approx(4.0)
+    assert relation_source.grad[..., attention.collision_output_index].norm().item() == (
+        pytest.approx(0.2, abs=1.0e-6)
+    )
+    source_force_gradient = relation_source.grad[..., list(attention.force_output_indices)]
+    assert source_force_gradient.norm().item() == pytest.approx(0.2, abs=1.0e-6)
+
+    diagnostics = attention.output_gradient_diagnostics()
+    for name, raw in (("node", 5.0), ("collision", 3.0), ("force", 5.0)):
+        prefix = f"attention_{name}_output_backprop_gradient"
+        assert diagnostics[f"{prefix}_local_clip_enabled"] == 1.0
+        assert diagnostics[f"{prefix}_invocation_count"] == 1.0
+        assert diagnostics[f"{prefix}_norm_pre_clip"] == pytest.approx(raw)
+        assert diagnostics[f"{prefix}_norm_applied_before_parameter_clips"] == pytest.approx(
+            0.1, abs=1.0e-6
+        )
+
+
 def test_attention_raw_gradient_diagnostics_localize_parameters_and_typed_rows() -> None:
     config = load_config(
         "configs/tiny_overfit.yaml",

@@ -223,9 +223,23 @@
   `28.1387/0.03554` before row isolation and `7.11114/0.14308` after collision
   isolation to `2.46615/0.48940`; keep force ordinary and preserve complete
   support, identity, uncertainty, finite-state, scope, and resource health.
-- [ ] Pass step 280, the first trained selector at 512, repeated selectors,
-  and the declared plateau in the force-isolated campaign before scaling
-  capacity.
+- [x] Stop the force-row-isolated campaign at durable step 256 after exact
+  step 280 shows that post-backward decoder-row clipping cannot prevent a raw
+  `989.7965` force signal from first contaminating shared attention gradients;
+  preserve the finite applied update only as diagnostic evidence.
+- [x] Add separately configured per-invocation node, collision, and joint-force
+  typed-output backward caps before the decoder/shared stack, retain the later
+  parameter-row hierarchy, protocol-bind both layers, and expose them to the
+  offline auditor.
+- [x] Replay exact steps 257--280 from the durable source state. On the same
+  step-280 seeds/window, reduce the later parameter norm `995.5391 -> 10.8330`,
+  bound the maximum shared parameter gradient to `0.0851`, retain `0.6979` at
+  the post-row interaction stage, apply a finite supported update, and keep
+  localized severe output/row coefficients visible as warnings.
+- [ ] Launch a fresh immutable weights-only 3.00M-parameter stage-A campaign
+  from the protected graph control with typed-output isolation. Pass step 280,
+  the first trained selector at 512, repeated selectors, and the declared
+  plateau before scaling capacity.
 - [ ] Run a one-axis-at-a-time scaling study after stage A qualifies: matched
   data-only, width, depth, and bounded-history rungs with increasing balanced
   episode draws, fixed disjoint RGB-only validation/test/OOD manifests, and

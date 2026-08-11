@@ -141,6 +141,11 @@ Working rules:
   interaction gradient, isolate that row before the interaction/global caps
   and retain raw/applied diagnostics at every hierarchy. Do not let rare event
   supervision suppress unrelated force, uncertainty, or token gradients.
+- A decoder parameter-row cap runs too late to protect shared attention state.
+  When exact replay localizes recursive amplification before the decoder, cap
+  separately configured node/collision/force gradients on each typed output
+  invocation before shared backpropagation, retain the later row cap for
+  accumulated decoder updates, and report both diagnostic hierarchies.
 - Apply the configured RGB perception-local gradient cap only during causal
   training, before the whole-model cap, and retain the true reconstructed raw
   total. Paired RGB pretraining keeps its original whole-model clipping

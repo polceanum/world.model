@@ -687,6 +687,15 @@ def _rollout_validation_protocol_from_mapping(
                 "attention_collision_grad_clip_norm"
             ),
             "attention_force_grad_clip_norm": training.get("attention_force_grad_clip_norm"),
+            "attention_node_output_grad_clip_norm": training.get(
+                "attention_node_output_grad_clip_norm"
+            ),
+            "attention_collision_output_grad_clip_norm": training.get(
+                "attention_collision_output_grad_clip_norm"
+            ),
+            "attention_force_output_grad_clip_norm": training.get(
+                "attention_force_output_grad_clip_norm"
+            ),
             "closed_loop_perception_grad_clip_norm": training[
                 "closed_loop_perception_grad_clip_norm"
             ],
@@ -2672,6 +2681,10 @@ def _clip_training_gradients(
     )
 
     attention_gradient_diagnostics = _attention_gradient_diagnostics(model)
+    attention = model.dynamics.attention_interactions
+    attention_output_gradient_diagnostics = (
+        {} if attention is None else attention.output_gradient_diagnostics()
+    )
     (
         attention_collision_pre_clip,
         attention_collision_coefficient,
@@ -2772,6 +2785,7 @@ def _clip_training_gradients(
         "gradient_clip_coefficient": global_coefficient,
         "gradient_total_clip_coefficient": total_coefficient,
         "gradient_norm_applied": applied,
+        **attention_output_gradient_diagnostics,
         **attention_gradient_diagnostics,
     }
 
@@ -5405,6 +5419,14 @@ def train_from_config(
             _check_batch_major(raw_batch)
             batch = move_batch_to_device(raw_batch, device)
             optimizer.zero_grad(set_to_none=True)
+            attention = model.dynamics.attention_interactions
+            if attention is not None:
+                attention.configure_output_gradient_clipping(
+                    node=config.training.attention_node_output_grad_clip_norm,
+                    collision=(config.training.attention_collision_output_grad_clip_norm),
+                    force=config.training.attention_force_output_grad_clip_norm,
+                )
+                attention.reset_output_gradient_diagnostics()
             if step < config.training.rgb_pretrain_steps:
                 target_learning_rate = config.training.learning_rate
                 frame_index = measurement_pretrain_frame_index(

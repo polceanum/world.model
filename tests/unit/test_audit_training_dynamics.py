@@ -165,7 +165,7 @@ def test_audit_warns_about_severe_global_or_interaction_clipping(tmp_path) -> No
     ]
     assert (
         "severe gradient clipping retained less than 10% of at least one "
-        "raw parameter-group/update gradient"
+        "raw typed-output/parameter-group update gradient"
     ) in report["warnings"]
 
 
@@ -219,6 +219,35 @@ def test_audit_reports_attention_force_row_clipping(tmp_path) -> None:
             "total_coefficient": 0.5,
             "interaction_coefficient": 0.4,
             "attention_force_coefficient": 0.02,
+        }
+    ]
+
+
+def test_audit_reports_typed_output_backpropagation_clipping(tmp_path) -> None:
+    run = tmp_path / "run"
+    _write_metrics(
+        run,
+        [
+            _record(
+                8,
+                attention_node_output_backprop_gradient_minimum_clip_coefficient=0.25,
+                attention_collision_output_backprop_gradient_minimum_clip_coefficient=0.08,
+                attention_force_output_backprop_gradient_minimum_clip_coefficient=0.04,
+            )
+        ],
+    )
+
+    report = audit_run(run)
+
+    assert report["status"] == "pass"
+    assert report["severe_clipped_steps"] == [
+        {
+            "step": 8,
+            "total_coefficient": 1.0,
+            "interaction_coefficient": 1.0,
+            "attention_node_output_coefficient": 0.25,
+            "attention_collision_output_coefficient": 0.08,
+            "attention_force_output_coefficient": 0.04,
         }
     ]
 

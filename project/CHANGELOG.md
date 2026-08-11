@@ -2,6 +2,32 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-11 typed-output backpropagation isolation
+
+- Stopped the force-row-isolated sustained campaign at durable step 256 after
+  update 280 exposed a remaining causal optimizer defect: decoder parameter-row
+  clipping ran after a raw `989.7965` force signal had already produced severe
+  gradients throughout the shared attention stack. The finite step-280 update
+  is diagnostic only and no trained selector or convergence claim was made.
+- Added separately configurable per-invocation backward caps for typed node,
+  collision, and joint normal/tangent-force outputs before their decoder and
+  shared attention representation. Retained the later parameter-row,
+  interaction, and global caps; bound the new fields into config validation,
+  resume compatibility, and selector protocol hashes; and added raw/applied/
+  minimum/effective output-gradient telemetry plus auditor warnings.
+- Replayed exact updates 257--280 from the durable source state on MPS RGB plus
+  CPU closed loop. At the same step-280 seeds/window, the later raw parameter
+  norm fell `995.5391 -> 10.8330`, the largest shared projection/block norm was
+  `0.0851`, the post-row interaction stage retained `0.6979`, and the supported
+  finite update was applied. The audit passes with localized severe output/row
+  warnings. The diagnostic artifact is
+  `runs/20260811-004400-step280-output-gradient-replay-v1/typed_output_gradient_replay_report.json`.
+- Advanced the architectural contract and runtime metadata to specification
+  1.28. Added focused tests proving the hook bounds typed gradients before they
+  reach upstream shared features and that the offline auditor reports the new
+  hierarchy. A fresh immutable weights-only campaign and complete regression
+  gates remain pending; capacity scaling is still gated.
+
 ### 2026-08-10 typed-attention stage-A pilot
 
 - Committed and pushed the collision-row isolation as `70c2e3b`, then launched

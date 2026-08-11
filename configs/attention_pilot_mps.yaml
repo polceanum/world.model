@@ -188,6 +188,12 @@ training:
   # Exact step-280 replay localizes the remaining recurrent spike to the
   # normal/tangent force rows (joint raw norm 17.684), not shared attention.
   attention_force_grad_clip_norm: 1.0
+  # Cap each recursive typed-output backpropagation signal before it enters
+  # decoder weights and the shared token stack. Parameter-row caps alone run
+  # too late to prevent a rare rollout Jacobian from starving shared learning.
+  attention_node_output_grad_clip_norm: 0.1
+  attention_collision_output_grad_clip_norm: 0.1
+  attention_force_output_grad_clip_norm: 0.1
   closed_loop_perception_grad_clip_norm: 1.0
   checkpoint_every: 128
   # A 32-episode selector costs about sixteen minutes on this Mac; cadence 512
