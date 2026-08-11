@@ -64,6 +64,17 @@
   clips, cumulative trusted identity 14/1,127 (`1.24%`), finite uncertainty,
   and bounded memory. This remains training-health rather than selector
   accuracy evidence.
+- Independently audited the fresh step-256 checkpoint: 177 inherited tensors
+  exact, all 48 attention tensors changed, exactly those 48 own finite Adam
+  state at step 256, and architecture/source/protocol/model hashes agree.
+- Passed the historically recurrent update-280 boundary. Raw interaction fell
+  to `2.86878`, versus `52.9646` before row isolation and `17.7050` after
+  collision-only isolation; post-row norm is `1.29273` and complete retention
+  is `0.348580`. The update applies with 145 causal targets, every horizon, and
+  no skip. The cumulative 280-update audit passes with exact logged scenario
+  balance, no terminal/uncontained failure, trusted identity 19/1,532
+  (`1.24%`), finite uncertainty, and bounded memory. Fixed-selector accuracy
+  remains pending.
 
 ### 2026-08-11 impulse-gradient isolation and fail-fast monitoring
 

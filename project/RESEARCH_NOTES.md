@@ -250,6 +250,20 @@ failure, trusted identity 14/1,127 (`1.24%`), coverage90 `90.25%`, and bounded
 RSS. This causally validates the impulse repair on the fresh trajectory; it is
 not a fixed-selector accuracy result.
 
+The fresh step-256 checkpoint independently preserves the experiment: all 177
+inherited tensors are exact, all 48 attention tensors changed, exactly those
+48 own finite Adam state at step 256, and every recorded hash agrees. The
+fresh trajectory then clears the historically recurrent update-280 boundary.
+Raw interaction is `2.86878`, versus `52.9646` in the normalized campaign and
+`17.7050` after collision-only isolation. Accumulated node/force norms are
+`0.76515/2.74932`; semantic rows reduce the interaction to `1.29273`; complete
+retention is `0.348580`; and Adam applies. The window contains 145 causal
+targets, all 13 objectives, every horizon, finite uncertainty, and no skip.
+Across 280 updates, the live audit passes with each scenario represented 35
+times, no terminal/uncontained failure, trusted identity 19/1,532 (`1.24%`),
+coverage90 `90.27%`, and bounded memory. This closes the known optimizer
+stress boundaries but does not substitute for the fixed selector at 512.
+
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
 

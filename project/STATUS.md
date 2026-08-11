@@ -219,9 +219,23 @@ additive norms `0.18604/0.00781`, `0.873850` complete-stage retention, 339
 causal targets, and every horizon supported. The cumulative audit passes all
 200 updates with each scenario represented 25 times, zero skips/failures/
 uncontained clips, trusted identity 14/1,127 (`1.24%`), pooled coverage90
-`90.25%`, finite uncertainty, and bounded `2,922,790,912`-byte RSS. These are
-optimizer/training-window health results, not a trained fixed selector,
-accuracy promotion, generalization, plateau, convergence, or capacity result.
+`90.25%`, finite uncertainty, and bounded `2,922,790,912`-byte RSS.
+
+The independent step-256 checkpoint audit also passes: all 177 inherited
+tensors remain exact, all 48 attention tensors changed, exactly those 48 own
+finite Adam state at step 256, and every architecture/source/protocol/model
+hash agrees. The report is `attention_checkpoint_step_000256_audit.json`
+beside the run. The fresh trajectory then passes the historically recurrent
+update-280 boundary. Raw interaction is `2.86878`, versus `52.9646` in the
+normalized campaign and `17.7050` after collision-only isolation; accumulated
+node/force norms are `0.76515/2.74932`, post-row norm is `1.29273`, and complete
+retention is `0.348580`. The update applies with 145 causal targets, all 13
+objective terms, every horizon, finite uncertainty, and no skip. Cumulatively,
+all 280 updates pass with each scenario represented 35 times, no terminal or
+uncontained failure, trusted identity 19/1,532 (`1.24%`), coverage90 `90.27%`,
+and bounded memory. These are optimizer/training-window health results, not a
+trained fixed selector, accuracy promotion, generalization, plateau,
+convergence, or capacity result.
 
 Exact verification commands:
 

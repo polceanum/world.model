@@ -301,7 +301,12 @@
   only. Update 200 then passes with ordinary impulse multiplier/additive norms
   `0.18604/0.00781`, `0.873850` complete retention, 339 causal targets, exact
   scenario balance, no skip/failure, and cumulative trusted identity `1.24%`.
-  Update 280 and all selectors remain open.
+  The step-256 checkpoint independently passes with 177 inherited tensors
+  exact, all 48 attention tensors live, and attention-only Adam step 256.
+  Update 280 then passes with raw/post-row interaction `2.86878/1.29273`,
+  `0.348580` complete retention, 145 causal targets, every horizon supported,
+  no skip/failure, and cumulative trusted identity `1.24%`. All historical
+  optimizer stress gates now pass; fixed selectors and plateau remain open.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam
