@@ -555,6 +555,9 @@
   `attention_node_complexity=1.0` and `attention_node_drift=0.08` recorded;
   do not seed it from the rejected step-512 weights. Require repeated fixed selectors,
   validation/test/OOD non-regression, and plateau before scaling capacity.
+  Through durable step 768, the complete 704--760 training window and strict
+  tensor/optimizer/protected-state audit pass without collapse; selector 1024
+  remains pending and authoritative.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

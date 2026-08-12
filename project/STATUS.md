@@ -10,8 +10,8 @@ The immutable residual-parsimony campaign remains operationally healthy and
 unchanged at
 `runs/20260811-234157-attention-node-parsimony-stage-a/`. At the latest health
 check its trainer and convergence supervisor had each launched once, both
-stderr files were empty, sampled RSS remained near `2.91 GB`, and the trainer
-had reached update 728 after completing selector 512. The protected
+stderr files were empty, sampled RSS remained near `2.92 GB`, and the trainer
+had reached durable update 768 after completing selector 512. The protected
 incumbent remains step zero.
 
 The durable specification-1.36 step-640 `last.pt` also passes the strict
@@ -30,6 +30,24 @@ The complete 640--696 window retains at least `0.216657` of the post-typed
 interaction gradient and supports 2,131 trajectories. The 704--728 window is
 only four of eight blocks complete, so its lower sampled position errors are
 not comparable evidence of improvement and are not used for promotion.
+
+The subsequent complete steps 704--760 balanced window also passes: all eight
+scenarios are drawn eight times, all eight updates apply with all 13 causal
+terms, 2,115 trajectories contribute, minimum complete-interaction retention
+is `0.269683`, and there is no terminal failure, skipped draw, uncontained
+interaction clip, or material memory growth. Pooled position RMSE is
+`0.201204/0.227514/0.272258/0.311915/0.337189 m` from 0.10 to 1.00 seconds;
+current position/velocity are `0.215572 m` / `1.252608 m/s`; identity is
+`3/300 = 1.0%`; lifecycle precision/coverage are `0.366213/0.360491`; and
+current position coverage90 is `0.985348`. These are healthy heterogeneous
+training diagnostics, not fixed-manifest validation. The next durable
+step-768 checkpoint passes the strict audit with file SHA-256
+`9a2867ce6d31724311f12be33ae6ff1c76b02f47b44465eba202469fee7c83fc`,
+model hash
+`ddb76172be37fb3196506c2134989db622a74e9d66fd8b0bf1dd0042e07d0764`,
+all 48 attention tensors changed, 177 inherited tensors exact, exactly 48
+complete Adam owners at step 768, finite serialization, and both protected
+checkpoints exact initial.
 
 Step 512 is a valid but rejected learned candidate. Its exact audit passes all
 tensor, inherited-state, Adam ownership/step, finiteness, protected-checkpoint,
@@ -114,9 +132,10 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/measu
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --run-name attention-node-drift-008-dry-run --device mps --initialize-from runs/20260810-042627-protocol20-y-only-recovery/checkpoints/validation_step_000064.pt --set training.loss_weights.attention_node_complexity=1.0 --set training.loss_weights.attention_node_drift=0.08 --dry-run
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --run-name attention-node-drift-008-cpu-smoke --device cpu --initialize-from runs/20260810-042627-protocol20-y-only-recovery/checkpoints/validation_step_000064.pt --set training.steps=1 --set training.train_episodes=8 --set training.validation_episodes=8 --set training.num_workers=0 --set training.eval_every=1 --set training.checkpoint_every=1 --set training.validation.minimum_predictable_targets_per_horizon=1 --set training.validation.minimum_matched_object_frames=1 --set training.validation.minimum_supported_scenarios=1 --set training.loss_weights.attention_node_complexity=1.0 --set training.loss_weights.attention_node_drift=0.08
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --run-name attention-node-drift-008-cpu-smoke --device cpu --resume runs/20260812-065434-attention-node-drift-008-cpu-smoke/checkpoints/last.pt --set training.steps=2 --set training.train_episodes=8 --set training.validation_episodes=8 --set training.num_workers=0 --set training.eval_every=1 --set training.checkpoint_every=1 --set training.validation.minimum_predictable_targets_per_horizon=1 --set training.validation.minimum_matched_object_frames=1 --set training.validation.minimum_supported_scenarios=1 --set training.loss_weights.attention_node_complexity=1.0 --set training.loss_weights.attention_node_drift=0.08
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --config runs/20260812-065434-attention-node-drift-008-cpu-smoke/config.resolved.yaml --checkpoint runs/20260812-065434-attention-node-drift-008-cpu-smoke/checkpoints/last.pt --initial-checkpoint runs/20260812-065434-attention-node-drift-008-cpu-smoke/checkpoints/validation_step_000000.pt --protected-checkpoint runs/20260812-065434-attention-node-drift-008-cpu-smoke/checkpoints/reference_rollout.pt --require-protected-checkpoint --output runs/20260812-065434-attention-node-drift-008-cpu-smoke/attention_checkpoint_audit_step_000002.json
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --config runs/20260811-234157-attention-node-parsimony-stage-a/config.resolved.yaml --checkpoint runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/last.pt --initial-checkpoint runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/validation_step_000000.pt --protected-checkpoint runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/best_rollout.pt --protected-checkpoint runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/reference_rollout.pt --require-protected-checkpoint --output runs/20260811-234157-attention-node-parsimony-stage-a/attention_checkpoint_audit_latest.json
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --config runs/20260812-065434-attention-node-drift-008-cpu-smoke/config.resolved.yaml --checkpoint runs/20260812-065434-attention-node-drift-008-cpu-smoke/checkpoints/last.pt --initial-checkpoint runs/20260812-065434-attention-node-drift-008-cpu-smoke/checkpoints/validation_step_000000.pt --protected runs/20260812-065434-attention-node-drift-008-cpu-smoke/checkpoints/reference_rollout.pt --require-protected-checkpoints --require-all-attention-changed --require-complete-attention-optimizer-state --output runs/20260812-065434-attention-node-drift-008-cpu-smoke/attention_checkpoint_audit_step_000002.json
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --config runs/20260811-234157-attention-node-parsimony-stage-a/config.resolved.yaml --checkpoint runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/last.pt --initial-checkpoint runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/validation_step_000000.pt --protected runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/best_rollout.pt --protected runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/reference_rollout.pt --require-protected-checkpoints --require-all-attention-changed --require-complete-attention-optimizer-state --output runs/20260811-234157-attention-node-parsimony-stage-a/attention_checkpoint_audit_step_000768.json
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260811-234157-attention-node-parsimony-stage-a --after-step 640 --trend-window-blocks 8
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260811-234157-attention-node-parsimony-stage-a --after-step 704 --trend-window-blocks 8
 ```
 
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate

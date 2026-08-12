@@ -70,6 +70,18 @@
   704--728 window is only half complete and is not treated as trend evidence.
   The durable step-640 checkpoint also passes exact tensor, optimizer,
   finiteness, protected-state, hash, and protocol audit.
+- Completed the next full steps 704--760 balanced audit and durable step-768
+  checkpoint audit. All eight blocks apply with equal eight-scenario draws,
+  2,115 supported trajectories, all 13 causal terms, minimum complete-gradient
+  retention `0.269683`, identity `3/300`, and no terminal/resource failure.
+  Every horizon and axis is recorded in the audit; the pooled 0.10--1.00-second
+  position curve is `0.201204/0.227514/0.272258/0.311915/0.337189 m`. Step 768
+  has all 48 attention tensors changed, 177 inherited tensors exact, exactly
+  48 finite Adam owners at step 768, and both protected artifacts exact.
+- Corrected two project-status command examples from obsolete singular
+  checkpoint-auditor flags to the executable's actual repeatable `--protected`
+  and plural `--require-protected-checkpoints` interface, and included the
+  strict changed-tensor and complete-optimizer-state gates used by the audit.
 
 ### 2026-08-11 accumulated node-gradient repair and scale gate
 
