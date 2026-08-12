@@ -43,6 +43,11 @@
   13 mature terms by update 16, and minimum complete interaction retention
   `0.615309`.  Early physical differences are millimetric and mixed, so fixed
   selector 512 remains the first accuracy authority.
+- Extended that matched audit through update 24: 907 causal trajectories,
+  every scenario three times, no schedule/support mismatch, no terminal or
+  uncontained gradient failure, and only millimetric mixed position changes.
+  The rising heterogeneous per-block scalar is therefore not classified as
+  collapse; fixed selector 512 remains the first generalization authority.
 
 - Strictly audited the live specification-1.36 step-512 checkpoint. All 48
   attention tensors changed, all 177 inherited tensors remain exact, exactly
