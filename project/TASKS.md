@@ -543,6 +543,12 @@
   emitted acceleration, separate from residual variation. Verify balanced
   positive/negative activity has zero drift cost, exact legacy opt-out, full
   regression (`719 passed, 6 skipped`), and a `drift=0.08` dry run.
+- [x] Run the specification-1.39 objective for two real balanced CPU updates,
+  including an exact checkpoint resume. Verify a nonzero drift term on update
+  two, all 13 causal terms, 343 supported trajectories, attention-only tensor
+  and Adam ownership, exact inherited/protected state, and finite serialization.
+  Keep the deliberately tiny smoke `last_unvalidated`; it is not an accuracy
+  or generalization promotion.
 - [ ] Continue the immutable specification-1.36 campaign unchanged through
   fixed selector 1024. If broad guardrails remain rejected, launch a clean
   specification-1.39 successor from the protected graph control with both

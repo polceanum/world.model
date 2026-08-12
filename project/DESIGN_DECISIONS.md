@@ -3,7 +3,8 @@
 ## ADR-108 — Penalize context-invariant node drift, not useful variation
 
 - **Date:** 2026-08-12
-- **Status:** accepted and implemented; fresh qualification pending
+- **Status:** accepted and implemented; protected-control smoke passed,
+  sustained qualification pending
 - **Context:** ADR-107 correctly measured a large functional node residual, but
   total mean-squared activity does not distinguish a harmful scene-wide bias
   from useful object-, relation-, or event-conditioned variation. Four
@@ -32,6 +33,11 @@
   (`8 passed`), the full suite passes (`719 passed, 6 skipped`), Ruff passes,
   and the 8,192-update `drift=0.08` dry-run resolves correctly. No accuracy or
   convergence promotion is claimed before a fresh protected-control campaign.
+  A two-update CPU smoke plus exact resume subsequently exercised a genuinely
+  nonzero drift objective, all 13 causal terms, strict attention-only optimizer
+  ownership, inherited/protected equality, and finite checkpoint state. Its
+  deliberately reduced eight-episode validation is `last_unvalidated`; this
+  closes the implementation/wiring risk but not the sustained accuracy gate.
 
 ## ADR-107 — Regularize emitted node activity before increasing capacity
 

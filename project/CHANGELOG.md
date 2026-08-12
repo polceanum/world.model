@@ -55,6 +55,21 @@
   force. Focused tests pass (`8`), full regression passes
   (`719 passed, 6 skipped in 203.45 s`), Ruff passes, and the exact drift dry
   run resolves. The live immutable 1.36 run is unchanged.
+- Completed a real two-update, exact-resume protected-control CPU smoke of the
+  prospective `complexity=1.0`, `drift=0.08` objective. Update two applies all
+  13 causal terms with 343 trajectories and records nonzero activity/drift/
+  variation of `4.98557e-6/4.97644e-6/9.12632e-9`. Its strict checkpoint audit
+  passes with all 48 attention tensors and only those tensors changed, 177
+  inherited tensors exact, 48 complete Adam owners at step two, finite state,
+  and exact protected reference. The eight-episode smoke remains explicitly
+  `last_unvalidated` and makes no accuracy claim.
+- Audited the live immutable campaign through logged update 728. Every update
+  is applied, all eight scenarios have 12 equal draws, RSS is flat near
+  `2.913 GB`, and there is no terminal failure, skipped draw, or uncontained
+  interaction clip. The complete 640--696 balanced window passes; the later
+  704--728 window is only half complete and is not treated as trend evidence.
+  The durable step-640 checkpoint also passes exact tensor, optimizer,
+  finiteness, protected-state, hash, and protocol audit.
 
 ### 2026-08-11 accumulated node-gradient repair and scale gate
 
