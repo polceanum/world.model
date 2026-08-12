@@ -214,6 +214,22 @@ sampled RSS is `2,891,116,544` bytes versus predecessor
 `2,936,651,776`. This is launch/objective integrity evidence, not accuracy,
 plateau, or convergence.
 
+The first complete eight-block trend window now reaches step 64. The dynamics
+auditor returns `pass` with all 64 updates applied, exact eight-draw support
+from each scenario, `2,461` causal trajectories, zero skips or terminal
+failures, minimum complete-interaction retention `0.566722`, and stable sampled
+RSS `2,891,116,544` bytes. Both one-shot launch services remain live once and
+both stderr files remain empty. Exact schedule-matched comparison with the
+unregularized predecessor is still effectively neutral and slightly adverse:
+pooled current position is `+0.000237 m`, current velocity is `+0.005579 m/s`,
+and position horizons at 0.10/0.25/0.50/0.75/1.00 seconds are
+`+0.000262/+0.000278/+0.000404/+0.000731/+0.000758 m`; y improves slightly at
+current and one-second horizons, while x worsens throughout. Trusted identity
+switches are `4/385` versus `3/386`. Coverage support is unchanged. This is an
+early training-window warning, not a fixed-manifest rejection: checkpoint 128
+and the first trained selector at step 512 remain the next integrity and
+accuracy authorities. No depth or width increase is authorized yet.
+
 Implementation verification on Python `3.10.20` / PyTorch `2.10.0`:
 
 ```bash

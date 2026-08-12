@@ -477,8 +477,15 @@
   once with empty stderr. Initial validation exactly matches all 225 control
   tensors and 2,844 common non-resource metrics. The first eight balanced
   updates apply with matched support, no skip, finite gradient, and a passing
-  dynamics audit. Continue to checkpoint 128 and fixed selector 512 without a
-  promotion claim.
+  dynamics audit. Through step 64, the complete eight-block auditor still
+  passes with all scenarios balanced, all updates applied, `2,461` causal
+  trajectories, minimum complete retention `0.566722`, stable memory, and
+  empty trainer/supervisor stderr. Exact matched comparison is slightly adverse
+  on pooled current position (`+0.000237 m`), velocity (`+0.005579 m/s`), all
+  five position horizons (`+0.000262` to `+0.000758 m`), and one trusted
+  identity switch. Treat this as an early warning, not selector evidence.
+  Continue to checkpoint 128 and fixed selector 512 without a promotion or
+  capacity claim.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

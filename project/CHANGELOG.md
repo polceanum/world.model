@@ -43,6 +43,14 @@
   applied gradient `0.254750` versus predecessor `0.283628`. The whole-run
   auditor passes. This qualifies launch/objective wiring only; no trained
   selector or convergence result exists yet.
+- Audited the complete step-8--64 matched training window. All 64 updates
+  apply with exact scenario balance, `2,461` causal trajectories, no skips or
+  terminal failures, minimum complete-interaction retention `0.566722`, stable
+  `2.891 GB` sampled RSS, and empty trainer/supervisor stderr. Relative to the
+  unregularized predecessor, pooled position and velocity are slightly worse,
+  every position horizon changes by less than `0.0008 m`, and trusted identity
+  has one extra switch. This is recorded as an early trend warning; fixed
+  selector 512, not the sampled window, remains the accuracy and scale gate.
 
 - Stopped the specification-1.31 campaign after the trainer safely rejected
   attempted optimizer step 988 before Adam. Complete interaction retention was

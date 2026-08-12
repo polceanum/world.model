@@ -2928,7 +2928,7 @@
 ## ADR-094 — Penalize unsupported attention-node complexity before scaling
 
 - **Date:** 2026-08-11
-- **Status:** accepted and implemented; sustained qualification pending
+- **Status:** accepted and implemented; sustained qualification active
 - **Context:** The corrected aggregate-gradient campaign's complete step-512
   RGB-only selector is a genuine model rejection rather than corruption or
   optimizer collapse. The latest persisted candidate scores `0.3251911`
@@ -2960,4 +2960,7 @@
   inertial motion. Focused schedule/objective/config/checkpoint tests pass
   (`312 passed`). A fresh protected-control smoke and complete fixed-manifest
   campaign remain required; no capacity increase is authorized by the
-  diagnostic ablations.
+  diagnostic ablations. The fresh campaign exactly reproduces the protected
+  initial selector and passes its first complete 64-update dynamics audit, but
+  matched physical deltas are neutral/slightly adverse and no trained fixed
+  selector exists yet. The scale gate therefore remains closed.
