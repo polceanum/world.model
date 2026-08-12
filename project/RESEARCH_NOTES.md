@@ -17,6 +17,28 @@ checkpoint, split/seeds, device, commands, metrics, and failure cases.
 
 ### Typed-attention stability and scaling decision
 
+The drift-regularized constant-rate successor has now failed its first trained
+fixed selector despite encouraging late matched training windows.  At step 512
+its score is `0.3332533` versus protected `0.3213162`, with 105 guardrail
+failures; `reference_pairs` current x is `0.732948 m` versus `0.242694 m`, and
+all x horizons regress.  Complete support and a strict finite scope audit rule
+out missing data, dead capacity, inherited drift, optimizer corruption, and
+protected-checkpoint mutation.  This is direct evidence that heterogeneous
+training-window improvement was not fixed-manifest generalization.
+
+The 12 August source review does not rescue this candidate by suggesting a
+larger Transformer.  The original architecture coupled attention capacity with
+residual normalization, scheduled long training, and large balanced batches;
+compute-optimal work scales examples with parameters; Llama 3 used proxy scale
+experiments, curated data, warmup/cosine training, and a deliberately stable
+dense architecture; V-JEPA 2 separately measured gains from curation, model
+size, duration, resolution, and cooldown; and SlotFormer supports attention
+over object abstractions rather than opaque pixels.  Orpheus already has the
+applicable short-token dense mechanisms.  Test the isolated 384-step
+warmup/8,192-step cosine schedule from the graph control next.  Depth, width,
+history, and CUDA scale remain downstream hypotheses, not a response to this
+rejection.
+
 The specification-1.36 residual-parsimony trajectory reached its authoritative
 step-1024 selector without numerical, support, optimizer, or resource collapse,
 but failed 111 deployment guardrails.  Its nearly flat scalar score conceals a

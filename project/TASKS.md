@@ -7,10 +7,15 @@
   causal update index and an explicit decay duration so convergence extensions
   cannot reshape the schedule; prove legacy constant compatibility, semantic
   resume rejection, and a real `0.0002 -> 0.00011` checkpoint-resume smoke.
-- [ ] Evaluate the active constant-rate drift candidate at fixed selector 512.
-  Only if it rejects, launch a separately versioned same-capacity warmup/cosine
-  control from the protected graph checkpoint; do not scale or initialize from
-  rejected learned attention weights.
+- [x] Evaluate the constant-rate drift candidate at fixed selector 512. Reject
+  score `0.3332533` versus protected `0.3213162` with 105 broad guardrail
+  failures, dominated by `reference_pairs` x at every horizon; strictly audit
+  its intact finite scope and stop both one-shot jobs at the durable boundary.
+- [ ] Launch and qualify a separately versioned same-capacity warmup/cosine
+  control from the protected graph checkpoint, never the rejected learned
+  attention weights. Use 384 absolute warmup updates, 8,192 fixed cosine-decay
+  updates, a 0.1 floor, unchanged objectives/data/selectors, and keep all
+  depth/width/history scaling gated on broad fixed-manifest convergence.
 - [x] Strictly audit the active candidate at durable step 256 and measure its
   emitted residual on a deterministic causal draw. Verify `48/48` attention
   tensors and complete Adam state changed, all 177 inherited tensors and both

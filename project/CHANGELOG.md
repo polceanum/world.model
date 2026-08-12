@@ -4,6 +4,21 @@
 
 ### 2026-08-12 functional node-drift prior and selector-512 diagnosis
 
+- Completed the drift successor's authoritative 32-episode step-512 selector
+  and rejected it at score `0.3332533` versus protected `0.3213162`, with 105
+  broad guardrail failures.  `reference_pairs` current x worsens
+  `0.242694 -> 0.732948 m` and every x horizon regresses, disproving the
+  favorable interpretation of late heterogeneous training windows.
+- Strictly audited and preserved the rejected step-512 artifact: all 48
+  attention tensors changed, all 177 inherited tensors and both protected
+  artifacts remain exact, complete attention-only Adam state is at step 512,
+  and all serialized values are finite.  Stopped both one-shot launchd jobs at
+  the durable selector boundary.
+- Recorded ADR-112 and kept capacity scaling gated.  Authorized the already
+  implemented same-capacity schedule control from the untouched graph
+  checkpoint with 384 warmup updates, 8,192 fixed cosine-decay updates, and a
+  0.1 floor; rejected attention weights may not seed it.
+
 - Added an opt-in, state-free `warmup_cosine` closed-loop learning-rate
   protocol while preserving exact historical `constant` behavior. Warmup and
   cosine durations use absolute causal update indices and never depend on the

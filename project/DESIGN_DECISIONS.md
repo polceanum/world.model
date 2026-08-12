@@ -1,5 +1,39 @@
 # Design decisions
 
+## ADR-112 — Reject constant-rate drift before any capacity growth
+
+- **Date:** 2026-08-12
+- **Status:** accepted; rejected run stopped, same-capacity schedule control authorized
+- **Context:** Late matched training windows for the drift-regularized
+  width-128/four-block residual improved many pooled mature horizons, but the
+  first authoritative trained selector disagrees.  At step 512, score worsens
+  `0.3213162 -> 0.3332533` with 105 guardrail failures.  Familiar
+  `reference_pairs` current x rises `0.242694 -> 0.732948 m` and every x
+  horizon regresses.  Current/short pooled position, coverage, precision, and
+  identity also worsen.  A strict artifact audit proves complete finite
+  attention-only optimization and exact inherited/protected state, so this is
+  generalization failure rather than corrupt state, missing support, or a dead
+  module.
+- **Decision:** Stop the constant-rate trajectory at its durable selector and
+  never promote, resume, or grow from its learned attention weights.  Keep the
+  scale gate closed.  Run the pre-authorized same-capacity schedule control
+  weights-only from the untouched graph checkpoint with the same peak rate,
+  objectives, data, and selectors; use 384 absolute warmup updates, 8,192
+  fixed cosine-decay updates, and minimum scale 0.1.  Preserve the rejected
+  run as evidence and require the same plateau/generalization gates before
+  depth-six is eligible.
+- **Alternatives considered:** scale depth or width immediately; continue the
+  rejected constant-rate weights; relax guardrails because long horizons and
+  collision F1 improved; add GQA/MLA/MoE/FlashAttention; initialize the
+  schedule run from step 512; infer success from heterogeneous training
+  windows.
+- **Consequences:** The next comparison changes only optimization schedule and
+  reduces early cumulative update magnitude without changing model capacity or
+  physical contracts.  A 384-update warmup is about 4.7% of the 8,192-update
+  minimum and reaches peak rate before selector 512.  If it also fails, the
+  evidence points to objective/representation context rather than insufficient
+  parameter count; scaling remains scientifically unjustified.
+
 ## ADR-111 — Diagnose functional-prior conflict before changing its weight
 
 - **Date:** 2026-08-12

@@ -6,7 +6,53 @@ specification 1.39
 
 ## Latest verified state — 2026-08-12
 
-The clean specification-1.39 successor is active at
+The specification-1.39 constant-rate drift candidate has now been stopped at
+its durable step-512 selector boundary.  The full 32-episode RGB-only selector
+rejects it: primary score worsens from the protected `0.3213162196` to
+`0.3332532750` with `105` broad guardrail failures.  Pooled current position
+worsens `0.235574 -> 0.253207 m`, current velocity
+`1.051687 -> 1.053425 m/s`, target coverage `0.442852 -> 0.430156`, precision
+`0.334068 -> 0.323761`, trusted identity switches `21 -> 27`, and the
+0.10/0.25-second position horizons worsen
+`0.249561/0.262173 -> 0.265588/0.271238 m`.  The 0.50/0.75/1.00-second
+horizons improve slightly, collision F1 improves `0.118077 -> 0.131335`, and
+coverage90 is effectively flat, but those gains cannot promote a broadly
+regressed candidate.  The dominant familiar-physics failure is
+`reference_pairs` current x `0.242694 -> 0.732948 m`, with every x horizon
+worse.  The apparently favorable late training windows therefore did not
+generalize to the fixed manifest.
+
+The rejection is behavioral rather than structural.  The strict step-512
+audit passes with all `48/48` attention tensors changed, all 177 inherited
+tensors bitwise exact, exactly 48 complete attention-only Adam owners at step
+512, all serialized state finite, and both protected step-zero artifacts
+unchanged.  The rejected checkpoint SHA-256 is
+`e2101a839076f2bd230545aaedf0a0cf408fcc482d32765463f2a024144087fe`, its
+model-state hash is
+`79e384408b7f13e4bfb3b4f23b8e7146a5141ea0e51c8849c6af8e821d9115b5`, and
+the report is
+`runs/20260812-102557-attention-node-drift-008-stage-a/attention_checkpoint_audit_step_000512.json`.
+Both one-shot launchd jobs are unloaded; the stale `training_state.json`
+remains `running` only because external termination does not rewrite immutable
+run evidence.
+
+This result keeps the capacity gate closed.  A refreshed primary-source review
+of the original Transformer, compute-optimal scaling, Llama 3, maximal-update
+parameterization, SlotFormer, and V-JEPA 2 confirms that Orpheus already uses
+the relevant short-token dense core: scaled multi-head attention, residual
+branches, pre-RMSNorm, SwiGLU, balanced data, and typed object/relation tokens.
+GQA, MLA, FlashAttention, and MoE target long-context memory or activated
+compute rather than this at-most-22-token generalization failure.  The next
+controlled experiment is therefore the already implemented same-capacity
+`warmup_cosine` successor, initialized weights-only from the untouched graph
+checkpoint—not from rejected attention weights—with 384 warmup updates,
+8,192 fixed cosine-decay updates, and a 0.1 floor.  The 384-step warmup is
+about 4.7% of the declared minimum, consistent with the measured long-run
+warmup lesson while still reaching peak rate before selector 512.  Only a
+guardrail-clean learning curve and declared plateau can reopen the fixed
+3.53M depth-six, 4.34M width-192, bounded-history, and 8.31M CUDA ladder.
+
+Historical live-run record follows.  The clean specification-1.39 successor was active at
 `runs/20260812-102557-attention-node-drift-008-stage-a/` from pushed clean
 commit `176796ff94d89eb79304c58b46e88f9a1ecb9cad`.  Its resolved config differs
 from the rejected specification-1.36 campaign by exactly the added
