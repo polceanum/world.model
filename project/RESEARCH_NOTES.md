@@ -105,6 +105,17 @@ drift still dominates, and a weak negative total/drift gradient cosine on this
 draw reproduces stochastic task conflict. Continue to the fixed selector; do
 not infer convergence or capacity need from this diagnostic.
 
+By complete updates 264--320, the schedule has nearly recovered the constant
+control's matched position without its full early bias. Current and the first
+three position horizons differ by only
+`+0.001458/+0.001174/+0.002190/+0.001426 m`; current and short velocity,
+identity, collision F1 and coverage90 improve. The remaining 0.75/1.00-second
+position deficit is `+0.004711/+0.008812 m`, with mixed axes, lifecycle and
+NLL. Update 280 retains `0.908539` at the complete interaction stage despite
+local event caps, so the old optimizer failure is not recurring. This is the
+first promising matched recovery window, but the fixed selector remains the
+only valid generalization test.
+
 The 12 August primary-source refresh reinforces this choice.  The original
 Transformer's relevant contribution here is content-dependent multi-head
 interaction, short dependency paths, residual layers, normalization, balanced

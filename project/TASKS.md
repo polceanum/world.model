@@ -37,6 +37,10 @@
   narrows materially, though x/every horizon remain adverse. Deterministic
   emitted y bias is `0.128556 m/s²`, down from constant-rate `0.195037`, but
   remains drift-dominated; preserve selector 512 as the decision boundary.
+  Complete 264--320 then nearly matches constant position while improving
+  current/short velocity, identity, event F1 and coverage90; long position,
+  y/long-axis, lifecycle and NLL deficits remain. Continue through warmup 384
+  and selector 512 without promotion or mutation.
 - [x] Strictly audit the active candidate at durable step 256 and measure its
   emitted residual on a deterministic causal draw. Verify `48/48` attention
   tensors and complete Adam state changed, all 177 inherited tensors and both

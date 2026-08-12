@@ -174,6 +174,23 @@ same draw has configured-total/drift cosine `-0.014628` over all attention and
 `-0.167769` in the node decoder, reproducing weak stochastic task/prior
 conflict rather than a fixed sign defect.  Continue unchanged to selector 512.
 
+Complete scheduled updates 264--320 provide the first near-neutral exact
+position comparison as warmup approaches peak.  The audit passes with exact
+eight-way balance, 2,198 trajectories, minimum objective support eight, zero
+skips/failures, `0.281649` minimum complete interaction retention, and flat
+memory.  Versus constant rate on identical draws, current position differs by
+only `+0.001458 m` and x by `+0.001346 m`; 0.10/0.25/0.50-second position is
+within `+0.001174/+0.002190/+0.001426 m`.  Current and 0.10/0.25/0.50-second
+velocity improve, trusted switches improve `4 -> 3`, collision F1 improves
+`0.167939 -> 0.244275`, and coverage90 improves slightly.  Remaining deficits
+are concentrated at 0.75/1.00 seconds `+0.004711/+0.008812 m`, y current/short,
+long x/z, lifecycle, and median uncertainty NLL.  The historically dangerous
+update 280 is contained with complete shared retention `0.908539` despite
+local event caps.  Drift reaches about `0.0099` while contextual variation is
+nonzero and intermittently rising.  This is promising matched recovery, not
+promotion; warmup completion at 384 and the fixed selector at 512 remain the
+next evidence gates.
+
 Historical live-run record follows.  The clean specification-1.39 successor was active at
 `runs/20260812-102557-attention-node-drift-008-stage-a/` from pushed clean
 commit `176796ff94d89eb79304c58b46e88f9a1ecb9cad`.  Its resolved config differs

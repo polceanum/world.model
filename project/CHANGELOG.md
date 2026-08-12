@@ -54,6 +54,11 @@
   remain adverse. Deterministic emitted y bias falls from the constant-rate
   step-256 `0.195037` to `0.128556 m/s²`, while drift still dominates context
   variation. Preserve the immutable run to selector 512.
+- Audited complete scheduled updates 264--320. Exact current/short position is
+  now nearly tied with constant rate while current/short velocity, identity,
+  collision F1 and coverage90 improve; long position, selected axes, lifecycle
+  and median NLL remain adverse. The prior hazardous update 280 is safely
+  contained. Continue through warmup completion and selector 512.
 
 - Added an opt-in, state-free `warmup_cosine` closed-loop learning-rate
   protocol while preserving exact historical `constant` behavior. Warmup and

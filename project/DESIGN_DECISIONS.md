@@ -55,6 +55,11 @@
   horizon remain adverse and emitted variation remains small.  Structural
   audit passes completely.  This is evidence that the schedule changes the
   intended failure mode, but not that it has generalized; continue unchanged.
+  Updates 264--320 subsequently narrow exact current/short position to a near
+  tie and improve velocity, identity, event F1 and coverage90, while long
+  position and several calibration/lifecycle slices remain adverse. This is
+  the expected evidence pattern for continuing the predeclared schedule to its
+  fixed selector, not for early promotion or capacity growth.
 
 ## ADR-111 — Diagnose functional-prior conflict before changing its weight
 
