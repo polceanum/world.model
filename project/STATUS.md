@@ -1,10 +1,37 @@
 # Project status
 
 **Date:** 2026-08-12
-**Specification:** `PROJECT_SPEC.md` 1.39; the latest stopped immutable
-training run used specification 1.36 and its 1.39 successor is pending launch
+**Specification:** `PROJECT_SPEC.md` 1.39; the active immutable successor uses
+specification 1.39
 
 ## Latest verified state — 2026-08-12
+
+The clean specification-1.39 successor is active at
+`runs/20260812-102557-attention-node-drift-008-stage-a/` from pushed clean
+commit `176796ff94d89eb79304c58b46e88f9a1ecb9cad`.  Its resolved config differs
+from the rejected specification-1.36 campaign by exactly the added
+`attention_node_drift: 0.08`; `attention_node_complexity: 1.0`, data, model,
+optimizer, selector, and convergence settings are unchanged.  Metadata records
+PyTorch `2.10.0`, MPS built and available in the host launch context, RGB
+measurement on MPS, closed-loop belief/dynamics on CPU, float32, no oracle,
+and a clean source fingerprint.  The trainer label is
+`com.polceanum.orpheus.attention-drift-20260812-102513`; the supervisor label
+is `com.polceanum.orpheus.attention-drift-convergence-20260812-102513`.  Both
+are one-shot Standard/default launchd jobs with `KeepAlive=false` under
+`caffeinate`; the supervisor runs from an exact detached source worktree at
+the same commit.  Both stderr files are empty.
+
+The mandatory 32-episode step-zero selector completed in `991.16 s` and
+exactly reproduces the protected graph control: score `0.3213162196`, current
+position `0.2514599 m`, velocity `1.0931909 m/s`, selected horizons
+`0.265184/0.277452/0.309911/0.335387/0.357837 m`, target coverage `0.37625`,
+precision `0.357312`, collision F1 `0.195489`, trusted identity-switch rate
+`1.3592%`, and coverage90 `93.3861%`, with zero guardrail or support failures.
+The imported runtime is durably preserved as `validation_step_000000.pt`,
+`best_rollout.pt`, and `reference_rollout.pt`.  The active convergence policy
+requires 8,192 updates, uses 4,096-update extensions, four exact consecutive
+512-step candidates plus less than 1% raw improvement for plateau, and has a
+24,576 hard limit.  No trained accuracy or convergence result exists yet.
 
 The immutable specification-1.36 residual-parsimony campaign has been stopped
 at its durable step-1024 selector boundary.  The checkpoint is structurally

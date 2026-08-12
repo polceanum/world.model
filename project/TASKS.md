@@ -564,6 +564,13 @@
   non-regression, and plateau before scaling capacity. Preserve the same
   8,192-update minimum, 4,096-update extensions, and 24,576 hard limit unless
   a separately versioned fixed-manifest result justifies a protocol change.
+  The clean run is active at
+  `runs/20260812-102557-attention-node-drift-008-stage-a/` from pushed commit
+  `176796f`; its one-shot trainer and immutable-source supervisor have empty
+  stderr. The 32-episode step-zero selector completes in `991.16 s` and exactly
+  reproduces the protected control at score `0.3213162196`, with zero
+  guardrail/support failures. Initial causal updates, trained selectors, and
+  convergence remain pending.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

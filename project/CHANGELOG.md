@@ -26,6 +26,17 @@
   experiment is the repaired small-rung learning curve; GQA/MLA/MoE/local
   attention solve absent long-context or cluster bottlenecks and do not
   justify bypassing the fixed physical-generalization gate.
+- Committed and pushed the step-1024 rejection as `176796f`, then launched the
+  clean specification-1.39 successor at
+  `runs/20260812-102557-attention-node-drift-008-stage-a/`.  Its one-shot MPS
+  trainer and exact-source convergence supervisor use Standard launchd
+  scheduling, `KeepAlive=false`, and the unchanged 8,192/24,576 convergence
+  budget.  Both stderr files are empty.
+- Completed the successor's mandatory 32-episode step-zero selector in
+  `991.16 s`.  It exactly reproduces the protected score `0.3213162196` and
+  all recorded current/horizon, axis, coverage, precision, event, identity,
+  and calibration evidence with zero guardrail/support failures.  This clears
+  initialization integrity; it is not trained accuracy or convergence.
 
 - Strictly audited the live specification-1.36 step-512 checkpoint. All 48
   attention tensors changed, all 177 inherited tensors remain exact, exactly
