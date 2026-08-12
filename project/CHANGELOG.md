@@ -25,6 +25,14 @@
   contribute exactly zero. Focused tests pass (`4 passed`); the full suite
   passes (`718 passed, 6 skipped in 212.36 s`). The immutable 1.36 run remains
   live and unchanged toward selector 1024; no capacity promotion is claimed.
+- Audited the complete matched steps 520--640 window. All 16 balanced blocks
+  apply with `4,678` causal trajectories, no terminal/resource failure, and
+  minimum interaction retention `0.198063`. Relative to the unregularized
+  predecessor, current and 0.10-second position improve `9.62/7.52 mm`, while
+  later horizons are neutral/slightly adverse by at most `1.06 mm`; most
+  velocity horizons, collision, identity, and lifecycle improve slightly, but
+  current velocity regresses `0.0189 m/s`. Continue to selector 1024 without
+  treating this heterogeneous training window as promotion evidence.
 
 ### 2026-08-11 accumulated node-gradient repair and scale gate
 

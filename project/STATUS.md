@@ -39,6 +39,18 @@ Focused tests pass (`4 passed`); the complete CPU-visible suite passes
 regularizers succeeds. Capacity scaling remains blocked pending selector 1024
 and, if needed, a clean protected-control 1.38 successor.
 
+A schedule-matched 16-block audit over steps 520--640 passes with all scenarios
+drawn 16 times, `4,678` causal trajectories, every update applied, no terminal
+failure, minimum complete-interaction retention `0.198063`, and flat RSS.
+Against the unregularized predecessor on the same draws, current position
+improves `9.62 mm` and 0.10-second position improves `7.52 mm`; every current
+axis and four of five velocity horizons improve. The later position horizons
+remain nearly neutral/slightly adverse (`+0.22` to `+1.06 mm`), current
+velocity regresses `0.0189 m/s`, collision F1 improves `0.0032`, identity rate
+improves `0.017` percentage points, and lifecycle precision/coverage improve
+about `0.3` percentage points. This is encouraging causal-window evidence, not
+a fixed-selector promotion or proof of convergence.
+
 Commands verified in the `orpheus` environment for this change:
 
 ```bash
@@ -47,6 +59,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/integration/test_checkpoint_roundtrip.py tests/unit/test_hybrid_dynamics.py tests/unit/test_training_schedule.py -k 'specification_version or attention_node_activity or attention_node_complexity'
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check world_model/dynamics/attention.py world_model/training/loop.py tests/unit/test_hybrid_dynamics.py tests/unit/test_training_schedule.py world_model/utils/version.py
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check world_model/dynamics/attention.py world_model/training/loop.py tests/unit/test_hybrid_dynamics.py tests/unit/test_training_schedule.py world_model/utils/version.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260811-234157-attention-node-parsimony-stage-a --after-step 520 --trend-window-blocks 16 --reference-run runs/20260811-170842-attention-aggregate-isolated-stage-a
 ```
 
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
