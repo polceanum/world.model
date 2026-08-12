@@ -1333,6 +1333,26 @@ def test_attention_node_complexity_is_absent_without_attention() -> None:
     assert _attention_node_complexity_details(model) == {}
 
 
+def test_attention_node_activity_is_an_exact_opt_in_term() -> None:
+    details = {
+        "state_position": torch.tensor(2.0),
+        "attention_node_activity": torch.tensor(0.25),
+    }
+    terms = _group_closed_loop_terms(details, torch.zeros(()))
+
+    torch.testing.assert_close(
+        _weighted_closed_loop_total(terms, {"state_position": 1.0}),
+        torch.tensor(2.0),
+    )
+    torch.testing.assert_close(
+        _weighted_closed_loop_total(
+            terms,
+            {"state_position": 1.0, "attention_node_activity": 4.0},
+        ),
+        torch.tensor(3.0),
+    )
+
+
 def test_measurement_weights_keep_metric_position_primary() -> None:
     losses = {
         "rgb_world_position": torch.tensor(0.2),

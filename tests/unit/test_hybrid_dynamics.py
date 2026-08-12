@@ -203,6 +203,34 @@ def test_typed_attention_scene_context_is_live_when_global_code_is_zero() -> Non
     assert torch.count_nonzero(gradient) > 0
 
 
+def test_typed_attention_node_activity_tracks_emitted_active_acceleration() -> None:
+    belief, objects = _two_objects()
+    objects.active[0, 1] = False
+    attention = _attention_residual(objects, belief)
+    attention.train()
+    attention.reset_output_gradient_diagnostics()
+    target_fraction = torch.tensor([0.2, -0.4, 0.6])
+    with torch.no_grad():
+        attention.node_decoder.weight.zero_()
+        attention.node_decoder.bias.copy_(torch.atanh(target_fraction))
+
+    graph = InteractionGraph(4, 3, hidden_dim=16, interaction_radius=1.0)
+    attention(objects, belief, graph(objects, belief.global_code))
+    details = attention.node_activity_details()
+
+    expected_axes = (attention.max_node_acceleration * target_fraction).square()
+    torch.testing.assert_close(details["attention_node_activity_x"], expected_axes[0])
+    torch.testing.assert_close(details["attention_node_activity_y"], expected_axes[1])
+    torch.testing.assert_close(details["attention_node_activity_z"], expected_axes[2])
+    torch.testing.assert_close(details["attention_node_activity"], expected_axes.mean())
+    details["attention_node_activity"].backward()
+    assert attention.node_decoder.bias.grad is not None
+    assert torch.count_nonzero(attention.node_decoder.bias.grad) == 3
+
+    attention.reset_output_gradient_diagnostics()
+    assert attention.node_activity_details() == {}
+
+
 def test_typed_attention_bounds_mixed_unit_scene_input_before_projection() -> None:
     belief, objects = _two_objects()
     attention = _attention_residual(objects, belief)

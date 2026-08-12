@@ -523,6 +523,22 @@
   record protected count, return `null` when none were checked, and provide a
   required-protection gate that fails an empty set. Rerun step 256 with both
   protected artifacts and preserve their file/model hashes.
+- [x] Audit the immutable residual-parsimony step-512 selector and run
+  same-manifest functional ablations. Reject the full candidate despite its
+  improved scalar score because 109 broad guardrails fail; preserve the
+  relation/force branch as useful and localize the dominant regression to
+  emitted node acceleration.
+- [x] Implement specification-1.38 `attention_node_activity` as an opt-in,
+  axis-neutral, active-object-normalized functional prior over bounded node
+  acceleration across the causal rollout. Verify exact legacy opt-out,
+  differentiability, padding support, reset semantics, and full regression
+  (`718 passed, 6 skipped`).
+- [ ] Continue the immutable specification-1.36 campaign unchanged through
+  fixed selector 1024. If broad guardrails remain rejected, launch a clean
+  specification-1.38 successor from the protected graph control with both
+  decoder-complexity and functional-activity weights recorded; do not seed it
+  from the rejected step-512 weights. Require repeated fixed selectors,
+  validation/test/OOD non-regression, and plateau before scaling capacity.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

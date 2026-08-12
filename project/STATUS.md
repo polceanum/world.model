@@ -1,8 +1,54 @@
 # Project status
 
 **Date:** 2026-08-12
-**Specification:** `PROJECT_SPEC.md` 1.37; the active immutable training run
+**Specification:** `PROJECT_SPEC.md` 1.38; the active immutable training run
 remains specification 1.36
+
+## Latest verified state — 2026-08-12
+
+The immutable residual-parsimony campaign remains operationally healthy and
+unchanged at
+`runs/20260811-234157-attention-node-parsimony-stage-a/`. At the latest health
+check its trainer and convergence supervisor had each launched once, both
+stderr files were empty, sampled RSS remained `2,911,186,944` bytes, and the
+trainer had reached update 640 after completing selector 512. The protected
+incumbent remains step zero.
+
+Step 512 is a valid but rejected learned candidate. Its exact audit passes all
+tensor, inherited-state, Adam ownership/step, finiteness, protected-checkpoint,
+hash, and protocol gates. Pooled selector score improves
+`0.3213162196 -> 0.3177418187`, but current position worsens
+`0.251460 -> 0.283202 m`, target coverage falls `0.37625 -> 0.35575`, precision
+falls `0.35731 -> 0.33768`, and 109 strict guardrails fail. Its pooled forecast
+horizons are `0.289063/0.288099/0.301042/0.328230/0.344516 m` versus protected
+`0.265184/0.277452/0.309911/0.335387/0.357837 m`: the two shortest regress and
+0.5--1.0 seconds improve. `reference_pairs` current position is the largest
+failure (`0.212965 -> 0.429954 m`).
+
+Same-manifest ablations prove that global residual shrinkage and deleting
+relation force rows are harmful. Zero-y improves every horizon but remains
+rejected with 97 failures. Zeroing the complete node decoder is strongest at
+score `0.297330` and improves every horizon to
+`0.263736/0.262437/0.280491/0.307728/0.328537 m`, but still fails 72 broad
+guards. Specification 1.38 therefore adds the opt-in, axis-neutral
+`attention_node_activity` functional prior while retaining all node capacity.
+It measures bounded acceleration actually emitted for active objects across
+the causal rollout and changes neither inference nor historical configs.
+Focused tests pass (`4 passed`); the complete CPU-visible suite passes
+`718 passed, 6 skipped in 212.36 s`. An `orpheus` dry-run with both exact
+regularizers succeeds. Capacity scaling remains blocked pending selector 1024
+and, if needed, a clean protected-control 1.38 successor.
+
+Commands verified in the `orpheus` environment for this change:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_hybrid_dynamics.py tests/unit/test_training_schedule.py -k 'attention_node_activity or attention_node_complexity'
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/integration/test_checkpoint_roundtrip.py tests/unit/test_hybrid_dynamics.py tests/unit/test_training_schedule.py -k 'specification_version or attention_node_activity or attention_node_complexity'
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check world_model/dynamics/attention.py world_model/training/loop.py tests/unit/test_hybrid_dynamics.py tests/unit/test_training_schedule.py world_model/utils/version.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check world_model/dynamics/attention.py world_model/training/loop.py tests/unit/test_hybrid_dynamics.py tests/unit/test_training_schedule.py world_model/utils/version.py
+```
+
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,

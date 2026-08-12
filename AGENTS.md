@@ -227,6 +227,10 @@ Working rules:
   regression and has completed a fixed-manifest plateau check. Scale data with
   parameters and require disjoint RGB-only generalization plus broad
   non-regression against the accepted smaller control.
+- Prefer an axis-neutral functional prior over an axis-specific rule when a
+  learned residual rewrites predictable motion without held-out evidence.
+  Measure emitted bounded acceleration only on active objects across the
+  causal rollout; keep the objective opt-in and inference behavior unchanged.
 - Never report protected checkpoints as verified when the audit received no
   protected paths. Required qualification audits must fail an empty protected
   set and retain whole-file plus model-state hashes for every supplied path.

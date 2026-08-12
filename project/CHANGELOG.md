@@ -2,6 +2,30 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-12 functional node-activity prior and selector-512 diagnosis
+
+- Strictly audited the live specification-1.36 step-512 checkpoint. All 48
+  attention tensors changed, all 177 inherited tensors remain exact, exactly
+  48 finite Adam states are at step 512, protected checkpoints remain initial,
+  and hashes/protocol agree. The candidate score improves
+  `0.3213162 -> 0.3177418`, but it is rejected by 109 guardrails: current
+  position/velocity and short horizons regress, with a severe
+  `reference_pairs` failure. This is learned behavior, not corruption or
+  optimizer collapse.
+- Ran fixed-manifest typed ablations. Halving both decoders and removing force
+  rows are harmful. Zero-y improves all five horizons but still fails 97
+  guardrails. Zeroing the complete node decoder is strongest at score
+  `0.297330`, improves all five horizons, and reduces failures to 72 while
+  remaining non-promotable. The relation branch is useful; functional node
+  acceleration is the main localized error.
+- Advanced the contract to specification 1.38 and added opt-in
+  `attention_node_activity`: active-object-weighted mean squared bounded node
+  acceleration accumulated over the causal rollout, with equal x/y/z
+  diagnostics and no persistent/inference state. Omitted historical weights
+  contribute exactly zero. Focused tests pass (`4 passed`); the full suite
+  passes (`718 passed, 6 skipped in 212.36 s`). The immutable 1.36 run remains
+  live and unchanged toward selector 1024; no capacity promotion is claimed.
+
 ### 2026-08-11 accumulated node-gradient repair and scale gate
 
 - Advanced the training contract to specification 1.36 after the latest

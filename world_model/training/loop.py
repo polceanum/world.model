@@ -2735,6 +2735,7 @@ def _group_closed_loop_terms(
         "rollout_position_z",
         "rollout_velocity",
         "attention_node_complexity",
+        "attention_node_activity",
     ):
         if name in details:
             terms[name] = details[name]
@@ -2830,6 +2831,7 @@ def _weighted_closed_loop_total(
     optional_exact_weight_terms = {
         "rollout_nll",
         "attention_node_complexity",
+        "attention_node_activity",
     }
     selected: dict[str, Tensor] = {
         name: value
@@ -2884,6 +2886,15 @@ def _attention_node_complexity_details(model: OnlineWorldModel) -> dict[str, Ten
     for axis_index, axis_name in enumerate(("x", "y", "z")):
         details[f"attention_node_complexity_{axis_name}"] = row_energy[axis_index]
     return details
+
+
+def _attention_node_activity_details(model: OnlineWorldModel) -> dict[str, Tensor]:
+    """Return the optional causal-rollout node acceleration activity prior."""
+
+    attention = model.dynamics.attention_interactions
+    if attention is None:
+        return {}
+    return attention.node_activity_details()
 
 
 def select_closed_loop_window(
@@ -3695,6 +3706,7 @@ def run_closed_loop_batch(
         details["measurement_fast"] = fast_measurement
     details = _globally_weight_horizon_details(details, config, reference)
     details.update(_attention_node_complexity_details(model))
+    details.update(_attention_node_activity_details(model))
     terms = _group_closed_loop_terms(details, reference)
     total = _weighted_closed_loop_total(terms, config.training.loss_weights)
     metrics = {name: float(value.detach().cpu()) for name, value in details.items()}

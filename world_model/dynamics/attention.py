@@ -207,6 +207,11 @@ class TypedAttentionInteractionResidual(nn.Module):
             "force": 0,
             "impulse": 0,
         }
+        # Per-draw differentiable statistics for the optional functional
+        # node-activity prior. These are deliberately transient rather than
+        # buffers: they describe the current causal rollout graph and must
+        # never become persistent model state or checkpoint provenance.
+        self._node_activity_records: list[tuple[Tensor, Tensor]] = []
 
     def configure_output_gradient_clipping(
         self,
@@ -241,7 +246,7 @@ class TypedAttentionInteractionResidual(nn.Module):
         }
 
     def reset_output_gradient_diagnostics(self) -> None:
-        """Clear transient records before one optimizer data draw."""
+        """Clear transient training records before one optimizer data draw."""
 
         self._output_gradient_records = {
             "node": [],
@@ -255,6 +260,31 @@ class TypedAttentionInteractionResidual(nn.Module):
             "force": 0,
             "impulse": 0,
         }
+        self._node_activity_records = []
+
+    def node_activity_details(self) -> dict[str, Tensor]:
+        """Return active-object mean squared node acceleration by axis.
+
+        The statistic measures the bounded acceleration actually emitted into
+        the causal rollout, rather than decoder parameter magnitude. It is
+        accumulated over every attention invocation in the current optimizer
+        data draw and weighted by the number of active objects, so padding and
+        variable-length object sets cannot distort the prior.
+        """
+
+        if not self._node_activity_records:
+            return {}
+        squared_sum = torch.stack(
+            [record_sum for record_sum, _ in self._node_activity_records]
+        ).sum(dim=0)
+        active_count = torch.stack(
+            [record_count for _, record_count in self._node_activity_records]
+        ).sum()
+        axis_activity = squared_sum / active_count.clamp_min(1.0)
+        details = {"attention_node_activity": axis_activity.mean()}
+        for axis_index, axis_name in enumerate(("x", "y", "z")):
+            details[f"attention_node_activity_{axis_name}"] = axis_activity[axis_index]
+        return details
 
     def _aggregate_output_gradient_limit(self, name: str, maximum: float) -> float:
         """Return one invocation's share of a per-draw semantic L2 budget."""
@@ -522,6 +552,11 @@ class TypedAttentionInteractionResidual(nn.Module):
         )
         node_residual = self.max_node_acceleration * torch.tanh(node_values)
         node_residual = node_residual * objects.active.unsqueeze(-1)
+        if self.training and torch.is_grad_enabled():
+            active_count = objects.active.sum().to(dtype=node_residual.dtype)
+            self._node_activity_records.append(
+                (node_residual.square().sum(dim=(0, 1)), active_count)
+            )
         relation_values = self.relation_decoder(tokens[:, layout.relation_start :])
         self._register_output_gradient_hooks(node_values, relation_values)
         relation_values = relation_values * relation_valid.unsqueeze(-1)

@@ -1,5 +1,44 @@
 # Design decisions
 
+## ADR-107 — Regularize emitted node activity before increasing capacity
+
+- **Date:** 2026-08-12
+- **Status:** accepted and implemented; successor qualification pending
+- **Context:** The immutable specification-1.36 residual-parsimony campaign's
+  complete step-512 checkpoint is finite, scope-clean, and causally trained,
+  yet its fixed 32-episode selector is rejected. Score improves slightly
+  (`0.3213162 -> 0.3177418`) and 0.5--1.0-second pooled horizons improve, but
+  current position, velocity, target coverage, precision, and the two shortest
+  horizons regress. `reference_pairs` current position doubles
+  (`0.212965 -> 0.429954 m`). Exact same-manifest ablations show that halving
+  both output decoders is harmful, removing relation force rows is decisively
+  harmful, restoring only node-y to zero improves every forecast horizon but
+  still fails 97 guardrails, and restoring the complete node decoder to zero
+  is strongest at score `0.297330` but still fails 72 guardrails. Relation
+  outputs therefore contain useful interaction learning; functional node
+  acceleration is the localized broad error, and decoder parameter energy is
+  an insufficient proxy for it.
+- **Decision:** Add an opt-in `attention_node_activity` objective equal to the
+  active-object-weighted mean squared bounded node acceleration emitted across
+  every attention invocation in the current causal data draw. Pool numerator
+  and support before deriving x/y/z diagnostics and their equal mean. Store the
+  differentiable records only transiently; they are not buffers, checkpoint
+  state, or runtime belief. Require the exact loss-weight key, so legacy and
+  omitted configurations contribute zero and inference remains unchanged.
+- **Alternatives considered:** hard-zero or freeze the node decoder; penalize
+  only y; remove the useful relation/force branch; globally shrink all typed
+  residuals; scale depth/width despite a known small-rung regression; relax
+  selector guardrails.
+- **Consequences:** The architecture retains general acceleration capacity on
+  every axis and can pay the soft cost when held-out evidence supports
+  non-inertial motion. Focused tests verify active-mask normalization, exact
+  per-axis values, differentiability, reset behavior, and opt-in weighting;
+  the complete suite passes (`718 passed, 6 skipped`). This implementation is
+  not an accuracy promotion. The immutable 1.36 campaign continues unchanged
+  toward selector 1024; a 1.38 successor is justified only if that selector
+  does not repair broad guardrails, and it must start from the protected graph
+  control rather than the rejected step-512 candidate.
+
 ## ADR-106 — Require non-vacuous protected-checkpoint evidence
 
 - **Date:** 2026-08-12
