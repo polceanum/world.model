@@ -44,6 +44,34 @@ def _gradient_norm(gradients: tuple[Tensor | None, ...]) -> float:
     )
 
 
+def _gradient_dot(
+    left: tuple[Tensor | None, ...],
+    right: tuple[Tensor | None, ...],
+) -> float:
+    """Return the dot product of two aligned, possibly sparse gradients."""
+
+    if len(left) != len(right):
+        raise ValueError("gradient tuples must have equal length")
+    return sum(
+        float(left_gradient.detach().mul(right_gradient.detach()).sum())
+        for left_gradient, right_gradient in zip(left, right, strict=True)
+        if left_gradient is not None and right_gradient is not None
+    )
+
+
+def _gradient_cosine(
+    left: tuple[Tensor | None, ...],
+    right: tuple[Tensor | None, ...],
+) -> float | None:
+    """Return gradient cosine, or ``None`` when either gradient is zero."""
+
+    left_norm = _gradient_norm(left)
+    right_norm = _gradient_norm(right)
+    if left_norm == 0.0 or right_norm == 0.0:
+        return None
+    return _gradient_dot(left, right) / (left_norm * right_norm)
+
+
 def _gradient_enabled_active_residual(
     output: Tensor,
     active: Tensor,
@@ -202,6 +230,28 @@ def measure_activity(
         )
 
     parameters = tuple(parameter for parameter in attention.parameters() if parameter.requires_grad)
+    task_loss = result.total_loss
+    for prior_name in (
+        "attention_node_activity",
+        "attention_node_drift",
+        "attention_node_complexity",
+    ):
+        weight = config.training.loss_weights.get(prior_name)
+        prior = result.loss_terms.get(prior_name)
+        if weight is not None and prior is not None:
+            task_loss = task_loss - float(weight) * prior
+    total_gradients = torch.autograd.grad(
+        result.total_loss,
+        parameters,
+        allow_unused=True,
+        retain_graph=True,
+    )
+    task_gradients = torch.autograd.grad(
+        task_loss,
+        parameters,
+        allow_unused=True,
+        retain_graph=True,
+    )
     complexity_gradients = torch.autograd.grad(
         complexity,
         parameters,
@@ -222,7 +272,21 @@ def measure_activity(
     complexity_gradient_norm = _gradient_norm(complexity_gradients)
     drift_gradient_norm = _gradient_norm(drift_gradients)
     activity_gradient_norm = _gradient_norm(activity_gradients)
+    task_gradient_norm = _gradient_norm(task_gradients)
+    total_gradient_norm = _gradient_norm(total_gradients)
     node_parameter_ids = {id(parameter) for parameter in attention.node_decoder.parameters()}
+    total_node_gradients = tuple(
+        gradient if id(parameter) in node_parameter_ids else None
+        for parameter, gradient in zip(parameters, total_gradients, strict=True)
+    )
+    task_node_gradients = tuple(
+        gradient if id(parameter) in node_parameter_ids else None
+        for parameter, gradient in zip(parameters, task_gradients, strict=True)
+    )
+    drift_node_gradients = tuple(
+        gradient if id(parameter) in node_parameter_ids else None
+        for parameter, gradient in zip(parameters, drift_gradients, strict=True)
+    )
     activity_node_gradient_norm = _gradient_norm(
         tuple(
             gradient if id(parameter) in node_parameter_ids else None
@@ -262,6 +326,38 @@ def measure_activity(
         "attention_node_activity_node_decoder_gradient_norm": (activity_node_gradient_norm),
         "attention_node_drift": float(drift.detach()),
         "attention_node_drift_gradient_norm": drift_gradient_norm,
+        "attention_node_task_gradient_norm": task_gradient_norm,
+        "attention_node_total_gradient_norm": total_gradient_norm,
+        "attention_node_total_node_decoder_gradient_norm": _gradient_norm(
+            total_node_gradients,
+        ),
+        "attention_node_task_node_decoder_gradient_norm": _gradient_norm(
+            task_node_gradients,
+        ),
+        "attention_node_task_drift_gradient_dot": _gradient_dot(
+            task_gradients,
+            drift_gradients,
+        ),
+        "attention_node_task_drift_gradient_cosine": _gradient_cosine(
+            task_gradients,
+            drift_gradients,
+        ),
+        "attention_node_task_drift_node_decoder_gradient_cosine": _gradient_cosine(
+            task_node_gradients,
+            drift_node_gradients,
+        ),
+        "attention_node_total_drift_gradient_cosine": _gradient_cosine(
+            total_gradients,
+            drift_gradients,
+        ),
+        "attention_node_total_drift_node_decoder_gradient_cosine": _gradient_cosine(
+            total_node_gradients,
+            drift_node_gradients,
+        ),
+        "attention_node_configured_drift_gradient_norm": (
+            float(config.training.loss_weights.get("attention_node_drift") or 0.0)
+            * drift_gradient_norm
+        ),
         "attention_node_emitted_acceleration_invocation_count": invocation_count,
         "attention_node_emitted_acceleration_active_object_count": emitted_count,
         "attention_node_emitted_acceleration_trace_scope": (

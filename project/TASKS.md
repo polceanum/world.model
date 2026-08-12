@@ -16,6 +16,11 @@
   tensors and complete Adam state changed, all 177 inherited tensors and both
   protected incumbents remain exact, and record the remaining drift-dominated
   y acceleration alongside the complete 184--240 axis/horizon trade-off.
+- [x] Add read-only exact task/prior/configured-total gradient-alignment
+  diagnostics over the full attention module and node decoder. On two balanced
+  step-256 draws, prove alignment alternates from jointly restoring to directly
+  conflicting; retain warmup/cosine as the gated same-capacity experiment and
+  do not mutate the current run or add gradient surgery.
 
 - [x] Diagnose protocol-17 step-2,048 per-axis/per-scenario regression with
   exact learned-corrector scale and updater/dynamics checkpoint ablations.

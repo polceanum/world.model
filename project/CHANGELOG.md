@@ -33,6 +33,23 @@
   to small regressions and four of five velocity horizons remain worse. This
   is explicit wobble evidence; the immutable run continues to its fixed
   selector rather than being promoted, stopped, or retuned from training rows.
+- Added deterministic functional-prior gradient alignment for the raw physical
+  task, unit drift prior, and configured total objective, including full-module
+  and node-decoder norms/cosines with correct unused/zero-gradient semantics.
+  Two exact step-256 draws alternate between restoring and conflicting
+  directions, ruling out a fixed sign bug and localizing the remaining wobble
+  to stochastic task/prior conflict under the constant rate. The focused tests
+  pass (`4 passed`) and the complete suite passes (`734 passed, 6 skipped`),
+  with Ruff, format, compileall, and diff checks clean.
+- Audited complete updates 264--320. Operational health remains clean and the
+  candidate improves materially against its own preceding window, but the
+  matched predecessor comparison still splits at 0.25/0.50 seconds and every
+  velocity horizon regresses. Selector 512 remains authoritative.
+- Audited complete updates 296--352. The operational gates still pass and the
+  candidate now improves predecessor-matched 0.50--1.00-second position,
+  current/through-0.75-second velocity, collision F1, and identity. Small
+  current/0.10-second position, 1.00-second velocity, and lifecycle regressions
+  remain, so this is a promising horizon shift rather than promotion evidence.
 
 - Reached and strictly audited the specification-1.36 step-1024 checkpoint.
   All 48 attention tensors changed, all 177 inherited tensors remain exact,

@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.40
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, and exact absolute-index learning-rate schedule amendments 12 August 2026
+**Version:** 1.41
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, and residual-prior gradient-alignment amendments 12 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6647,6 +6647,36 @@ weights, optimizer behavior, runtime inference, selection metrics, or the
 protocol of an already-running immutable campaign. A historical report created
 without explicit protected paths is unchecked on that dimension and must be
 rerun; it is not evidence of corruption by itself.
+
+## 204. Functional priors require objective-gradient alignment evidence
+
+A functional residual may grow despite an explicit restoring prior because
+the physical task objective sometimes rewards that residual on the sampled
+causal draw. Scalar prior loss, parameter energy, total gradient norm, and
+emitted acceleration cannot distinguish an inverted implementation from an
+underweighted prior, a genuinely conflicting task gradient, or optimizer
+momentum across alternating draws.
+
+The deterministic residual-calibration utility must therefore be able to
+separate the unregularized task objective from every configured node prior and
+measure gradients of the task, the unit drift prior, and the actual configured
+total objective on the same graph. It reports norms and task-versus-drift and
+total-versus-drift cosine alignment over both the complete attention module and
+the typed node decoder. Missing parameter gradients contribute no fabricated
+value; a zero gradient yields an undefined cosine rather than an arbitrary
+zero. A positive cosine means gradient descent locally reduces the task and
+drift objectives together, while a negative cosine exposes direct conflict.
+
+Alignment is a read-only diagnostic, not a training-time gradient surgery
+rule. It must use deterministic balanced RGB-only causal draws and preserve the
+exact differentiable-call population used by the functional prior. One draw
+cannot justify a weight or schedule change: inspect multiple draws and retain
+fixed-selector behavior as authoritative. If task/prior alignment alternates
+while the configured total objective still increases drift on some draws, a
+lower or decaying learning rate is a cleaner same-capacity experiment than
+silently increasing the prior, hard-projecting gradients, or scaling model
+capacity. Such a successor remains a new weights-only protocol and may start
+only after the immutable fixed selector rejects the current candidate.
 
 ---
 

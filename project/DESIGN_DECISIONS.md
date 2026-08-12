@@ -1,5 +1,32 @@
 # Design decisions
 
+## ADR-111 — Diagnose functional-prior conflict before changing its weight
+
+- **Date:** 2026-08-12
+- **Status:** accepted and implemented as read-only evidence
+- **Context:** The drift-prior successor remains finite and scope-clean, but y
+  residual drift and long-horizon/velocity behavior wobble across complete
+  matched windows. A growing residual under a positive penalty could mean a
+  sign bug, insufficient weight, physical-task conflict, or optimizer momentum;
+  scalar losses and total norms cannot distinguish them.
+- **Decision:** On one deterministic causal graph, reconstruct the raw physical
+  task by subtracting configured node priors, differentiate task, unit drift,
+  and configured total objectives, and report norms plus task/total-versus-
+  drift cosine over the full attention module and typed node decoder. Treat
+  missing gradients as unused and zero-norm cosine as undefined. Sample more
+  than one balanced draw and keep fixed selectors authoritative.
+- **Alternatives considered:** assume the loss sign is wrong; increase drift
+  weight mid-run; project conflicting task gradients; inspect decoder weights
+  only; infer conflict from emitted acceleration; scale capacity.
+- **Consequences:** Exact step-256 draws 254 and 255 show opposite directions.
+  Node-decoder task/drift cosine is `-0.877315` then `+0.219746`; after all
+  configured priors, total/drift cosine is `-0.666858` then `+0.413340`.
+  There is no fixed sign defect: some physical draws reward residual drift and
+  others restore it. This supports a decaying-rate same-capacity successor if
+  selector 512 rejects, but does not authorize changing the immutable live run.
+  Focused tests pass (`4 passed`) and the complete repository suite passes
+  (`734 passed, 6 skipped`).
+
 ## ADR-110 — Make schedule repair exact and evidence-gated before scaling
 
 - **Date:** 2026-08-12

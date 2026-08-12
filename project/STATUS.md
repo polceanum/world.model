@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-12
-**Specification:** `PROJECT_SPEC.md` 1.40; the active immutable successor uses
+**Specification:** `PROJECT_SPEC.md` 1.41; the active immutable successor uses
 specification 1.39
 
 ## Latest verified state — 2026-08-12
@@ -100,7 +100,7 @@ window alone.  If that selector rejects the candidate, test warmup plus decay
 as a separately versioned protected-control successor before adding depth or
 width.
 
-The live run has subsequently reached update 256 with empty stderr; trainer
+The live run has subsequently reached update 352 with empty stderr; trainer
 and supervisor remain alive and the MPS trainer was using `520%` CPU at the
 2026-08-12 health check. The complete schedule-matched 136--192 window passes
 with every scenario eight
@@ -174,6 +174,51 @@ to `0.014272 (m/s²)²` at 264 while variation rises from `0.00001149` to
 `0.00009277 (m/s²)²`, proving the learned residual is becoming less constant
 but not yet behaviorally convergent. Do not infer a plateau or intervene from
 this heterogeneous training window; retain selector 512 as the fixed gate.
+
+The next exact balanced window, updates 264--320, passes again with `2,198`
+trajectories, all objectives, equal scenario support, no skips/failures, flat
+RSS, and minimum complete-interaction retention `0.279453`. Against the
+predecessor it improves current and 0.10/0.25-second position by
+`0.003082/0.001778/0.001540 m`, but regresses 0.50/0.75/1.00-second position
+by `0.003408/0.003267/0.003395 m` and every velocity horizon by
+`0.002305--0.017385 m/s`. Against the preceding complete candidate window,
+however, current position improves `0.026530 m` and four position horizons
+improve `0.016933--0.039513 m`; 0.75 seconds is effectively flat
+(`+0.001378 m`). Uncertainty NLL and identity improve, while 0.25-second
+velocity worsens. This is genuine local learning plus an unresolved
+position/velocity and short/long-horizon trade-off, not a monotone broad
+convergence curve.
+
+Specification 1.41 adds read-only task/prior gradient-alignment evidence. Two
+deterministic balanced draws at the exact step-256 checkpoint prove there is no
+fixed sign bug and expose stochastic conflict instead. Draw 255 has task/
+drift node-decoder cosine `+0.219746` and configured-total/drift cosine
+`+0.413340`, so both local descent directions reduce drift. Draw 254 has
+`-0.877315/-0.666858`, so the physical task and even the configured total
+objective locally favor increased drift. On draw 254 the configured drift
+gradient norm is `0.053814` versus task node-decoder norm `0.178992`; on draw
+255 they are `0.051983/0.339891`. This alternating conflict explains why the
+soft prior can reduce average bias yet still wobble under a constant rate. It
+supports the already-gated warmup/cosine same-capacity successor if selector
+512 rejects; it does not authorize a live weight change or gradient surgery.
+The gradient-alignment change passes its focused `4 passed` suite and the
+complete repository suite (`734 passed, 6 skipped in 231.52 s`), plus Ruff,
+format, compileall, and diff checks. The six skips are the expected restricted-
+process MPS availability cases; the independent host trainer remains on MPS.
+
+The newest complete matched updates 296--352 window remains operationally
+clean with `2,449` causal trajectories, all 13 objectives, eight draws from
+every scenario, no skips/failures, flat RSS, and `0.279453` minimum complete-
+interaction retention. It is the first recent window to shift the mature
+horizon favorably against the predecessor: 0.50/0.75/1.00-second position
+improves `0.003456/0.008174/0.014185 m`, current velocity improves
+`0.024917 m/s`, velocity through 0.75 seconds improves
+`0.005691--0.095032 m/s`, collision F1 improves `0.037921`, and identity has
+one fewer switch. It still regresses current and 0.10-second position by
+`0.001715/0.002855 m`, 1.00-second velocity by `0.039951 m/s`, and lifecycle
+precision/coverage by `0.001861/0.003261`; 0.25-second position is effectively
+equal (`+0.000117 m`). This is encouraging long-horizon learning but remains
+mixed cadence evidence before the fixed selector.
 
 The immutable specification-1.36 residual-parsimony campaign has been stopped
 at its durable step-1024 selector boundary.  The checkpoint is structurally
