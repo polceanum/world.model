@@ -35,6 +35,13 @@
   run is mixed and nearly neutral: current position, lifecycle, and identity
   improve slightly while velocity and four longer position horizons worsen
   slightly. The run remains immutable and unpromoted through selector 512.
+- Strictly audited the schedule successor at durable step 128. All 48 attention
+  tensors changed, all 177 inherited tensors remain exact, only the 48
+  attention parameters own complete finite Adam state, and protected artifacts
+  remain intact. The complete matched 72--128 window is operationally healthy
+  but worse on current/every position horizon, mainly x, with mixed velocity/y
+  behavior and adverse lifecycle/event/identity slices. Continue unchanged to
+  the authoritative selector; this is neither promotion nor a scale trigger.
 
 - Added an opt-in, state-free `warmup_cosine` closed-loop learning-rate
   protocol while preserving exact historical `constant` behavior. Warmup and

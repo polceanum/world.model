@@ -23,7 +23,12 @@
   exposure, 2,462 trajectory targets, zero skips/failures, minimum complete
   interaction retention `0.497461`, and stable peak RSS. The exact matched
   constant-rate comparison is a near-tie with mixed axes/horizons, so continue
-  unchanged to the durable step-128 audit and fixed selector 512.
+  unchanged to the durable step-128 audit and fixed selector 512. The strict
+  step-128 artifact audit now passes with `48/48` attention tensors live,
+  all 177 inherited tensors exact, complete attention-only Adam state, finite
+  serialization, and intact protected incumbents. The exact matched 72--128
+  window is position/x/collision/lifecycle adverse despite mixed velocity/y
+  gains; retain it as a watch item and keep selector 512 authoritative.
 - [x] Strictly audit the active candidate at durable step 256 and measure its
   emitted residual on a deterministic causal draw. Verify `48/48` attention
   tensors and complete Adam state changed, all 177 inherited tensors and both

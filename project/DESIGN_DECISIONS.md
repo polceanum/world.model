@@ -38,7 +38,13 @@
   current position/lifecycle/identity improve slightly while current velocity
   and four longer position horizons worsen slightly.  This confirms schedule
   isolation without supplying trained-selector evidence, so the decision gate
-  remains unchanged.
+  remains unchanged.  At durable step 128, exact tensor/optimizer/protected-
+  state audit passes, while matched updates 72--128 are worse on current and
+  every pooled position horizon, mainly x, with mixed velocity/y behavior and
+  adverse lifecycle/event/identity slices.  Because this early warmup boundary
+  has deliberately accumulated much less update magnitude than the constant
+  control, continue to the predeclared selector rather than rejecting, retuning,
+  or scaling from the training window.
 
 ## ADR-111 — Diagnose functional-prior conflict before changing its weight
 

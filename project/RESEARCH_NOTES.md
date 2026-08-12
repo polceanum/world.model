@@ -68,6 +68,18 @@ velocity worsens `0.011510 m/s` and 0.25--1.00-second position differs by
 slightly. Treat this as a healthy low-rate warmup near-tie, not evidence of
 convergence, collapse, promotion, or capacity limitation.
 
+At the next complete boundary, structural and behavioral evidence separate
+cleanly. The step-128 checkpoint audit proves all 48 attention tensors and only
+their complete Adam states moved, all 177 inherited tensors and protected
+incumbents stayed exact, and serialization is finite. Yet the exact matched
+72--128 window is `0.014107 m` worse on current position and
+`0.013738/0.013842/0.017214/0.007199/0.012912 m` worse across the five position
+horizons, led by current x `+0.037286 m`; current velocity improves `0.008492
+m/s`, with mixed velocity/y and adverse collision/lifecycle/identity evidence.
+This rules out corruption but does not establish generalization. The scheduled
+run remains immutable to selector 512, where a fixed manifest—not cumulative
+training-window movement—will decide rejection or continuation.
+
 The 12 August primary-source refresh reinforces this choice.  The original
 Transformer's relevant contribution here is content-dependent multi-head
 interaction, short dependency paths, residual layers, normalization, balanced

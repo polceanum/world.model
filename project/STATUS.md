@@ -101,6 +101,32 @@ position horizons worsen `0.000856/0.004015/0.005783/0.002280 m`.  This near-tie
 is expected during low-rate warmup and is neither promotion nor regression
 evidence; the fixed step-512 selector remains authoritative.
 
+The durable scheduled step-128 checkpoint independently passes the strict
+scope/integrity audit.  All `48/48` attention tensors changed, all 177 inherited
+tensors remain bitwise exact, exactly the 48 attention parameters own complete
+finite Adam state at step 128, both protected incumbents remain exact, and all
+architecture/source/protocol/model hashes agree.  The checkpoint SHA-256 is
+`eda6aa68b016ce2c7bb0ba2f5b5e78656582a168bc776b9f2078b05d16408225`,
+the model-state hash is
+`c78b16769fedc6f41cdac61022cfdcc528bd90ed61598e93f06a43928c0b7d4b`,
+and the report is
+`runs/20260812-155706-attention-node-drift-warmup-cosine-stage-a/attention_checkpoint_audit_step_000128.json`.
+
+Complete updates 72--128 also pass the dynamics auditor with exact eight-way
+scenario balance, all 13 mature objectives, 2,594 trajectories, zero skips or
+failed updates, minimum complete interaction retention `0.362529`, and flat
+`3,019,993,088`-byte peak RSS.  Local collision/event hooks sometimes retain
+less than 10%, but contain those rare signals before the shared stage; no
+complete update is starved.  Against the constant-rate run on exactly the same
+steps/data, current position is `0.014107 m` worse, dominated by x
+`+0.037286 m`; every pooled position horizon is
+`+0.013738/+0.013842/+0.017214/+0.007199/+0.012912 m` worse.  Current velocity
+improves `0.008492 m/s`; velocity horizons and y are mixed, while lifecycle,
+identity, collision F1, and median uncertainty NLL are slightly adverse.  The
+warmup trajectory has accumulated substantially less update magnitude at this
+early boundary, so this is a real watch item but not fixed-manifest rejection.
+Continue unchanged to selector 512; do not scale or promote from this window.
+
 Historical live-run record follows.  The clean specification-1.39 successor was active at
 `runs/20260812-102557-attention-node-drift-008-stage-a/` from pushed clean
 commit `176796ff94d89eb79304c58b46e88f9a1ecb9cad`.  Its resolved config differs
