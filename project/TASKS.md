@@ -32,7 +32,11 @@
   next balanced 136--192 window is still position-adverse against the exact
   constant-rate draws, but improves velocity, identity, uncertainty and
   gradient conditioning; with only 25.13% of constant cumulative LR exposure
-  at this boundary, continue without mutation rather than infer collapse.
+  at this boundary, continue without mutation rather than infer collapse. At
+  durable step 256 the strict audit passes again and the matched position gap
+  narrows materially, though x/every horizon remain adverse. Deterministic
+  emitted y bias is `0.128556 m/s²`, down from constant-rate `0.195037`, but
+  remains drift-dominated; preserve selector 512 as the decision boundary.
 - [x] Strictly audit the active candidate at durable step 256 and measure its
   emitted residual on a deterministic causal draw. Verify `48/48` attention
   tensors and complete Adam state changed, all 177 inherited tensors and both

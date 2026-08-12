@@ -49,7 +49,12 @@
   identity, uncertainty and gradient conditioning improve.  Linear warmup has
   accumulated only 25.13% of the constant schedule's scalar rate through step
   192, so neither matched lag nor heterogeneous adjacent-window movement is a
-  substitute for selector 512.
+  substitute for selector 512.  By step 256 the matched current-position gap
+  narrows to `+0.005475 m` and deterministic emitted y bias falls to
+  `0.128556 m/s²` versus constant-rate `0.195037`, while x and every position
+  horizon remain adverse and emitted variation remains small.  Structural
+  audit passes completely.  This is evidence that the schedule changes the
+  intended failure mode, but not that it has generalized; continue unchanged.
 
 ## ADR-111 — Diagnose functional-prior conflict before changing its weight
 

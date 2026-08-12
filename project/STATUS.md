@@ -146,6 +146,34 @@ accumulated only `25.13%` of the constant run's scalar learning-rate exposure,
 so this is mixed slow-learning evidence rather than fixed-manifest rejection.
 The immutable run continues to selector 512.
 
+The durable scheduled step-256 checkpoint also passes strict independent
+audit: all 48 attention tensors changed, all 177 inherited tensors remain
+bitwise exact, exactly 48 complete finite Adam owners are at step 256, and both
+protected incumbents remain exact.  Checkpoint SHA-256 is
+`79908412c80271451a32541829004a03eb1353621217c18f8bb37d7e5dfd1d1b`,
+model-state hash is
+`b924aa47abe2b55a4348653d7169057af952d9313d37c16e557ac65ec4427a80`,
+and the audit is
+`runs/20260812-155706-attention-node-drift-warmup-cosine-stage-a/attention_checkpoint_audit_step_000256.json`.
+
+Complete matched updates 200--256 narrow the earlier physical gap while
+remaining non-promotable.  Exact eight-way balance, 2,829 trajectories, all
+updates, minimum objective support eight, zero skips/failures, `0.559496`
+minimum complete interaction retention, and flat memory pass.  Versus constant
+rate on identical draws, current position is now only `+0.005475 m` worse;
+y/z current are effectively equal/slightly better and lifecycle/collision F1
+improve, while x remains `+0.014387 m` worse and every pooled position horizon
+is `+0.007494/+0.011221/+0.015484/+0.015140/+0.014774 m` worse.  Velocity and
+identity remain mixed/adverse.  A deterministic functional measurement at the
+checkpoint reports emitted RMS acceleration `0.078721 m/s²`, mean
+`[-0.043612, 0.128556, -0.012016] m/s²`, and standard deviation
+`[0.000884, 0.004134, 0.000481]` over 4,224 active-object evaluations.  This is
+materially smaller y bias than the failed constant-rate step-256 mean
+`[-0.052641, 0.195037, -0.021283]`, but drift still dominates variation.  The
+same draw has configured-total/drift cosine `-0.014628` over all attention and
+`-0.167769` in the node decoder, reproducing weak stochastic task/prior
+conflict rather than a fixed sign defect.  Continue unchanged to selector 512.
+
 Historical live-run record follows.  The clean specification-1.39 successor was active at
 `runs/20260812-102557-attention-node-drift-008-stage-a/` from pushed clean
 commit `176796ff94d89eb79304c58b46e88f9a1ecb9cad`.  Its resolved config differs

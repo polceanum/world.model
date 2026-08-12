@@ -92,6 +92,19 @@ step 192 the linear warmup has accumulated only 25.13% of constant scalar LR
 exposure, so the lag cannot authorize either rejection or scale. Preserve the
 fixed selector.
 
+At durable step 256, optimizer control is causally visible without yet proving
+accuracy. Exact artifact audit passes with all attention tensors live, inherited
+and protected state exact, complete attention-only Adam ownership, and finite
+serialization. The matched 200--256 current-position deficit shrinks to
+`0.005475 m`; y/z current and lifecycle/event slices are neutral-to-better, but
+x remains `0.014387 m` worse and every position horizon remains adverse. On the
+deterministic causal draw, scheduled emitted mean acceleration is
+`[-0.043612, 0.128556, -0.012016] m/s²`, materially below the failed constant
+step-256 `[-0.052641, 0.195037, -0.021283]`. Its tiny standard deviation shows
+drift still dominates, and a weak negative total/drift gradient cosine on this
+draw reproduces stochastic task conflict. Continue to the fixed selector; do
+not infer convergence or capacity need from this diagnostic.
+
 The 12 August primary-source refresh reinforces this choice.  The original
 Transformer's relevant contribution here is content-dependent multi-head
 interaction, short dependency paths, residual layers, normalization, balanced

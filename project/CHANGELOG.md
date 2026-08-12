@@ -48,6 +48,12 @@
   while velocity, identity and uncertainty improve; the run has only 25.13%
   of constant cumulative LR exposure at this warmup boundary and continues
   unchanged to fixed selector 512.
+- Strictly qualified the scheduled step-256 checkpoint and complete matched
+  200--256 window. Tensor/Adam/protected-state integrity passes; the current
+  position gap narrows to `+0.005475 m`, but x and every position horizon
+  remain adverse. Deterministic emitted y bias falls from the constant-rate
+  step-256 `0.195037` to `0.128556 m/s²`, while drift still dominates context
+  variation. Preserve the immutable run to selector 512.
 
 - Added an opt-in, state-free `warmup_cosine` closed-loop learning-rate
   protocol while preserving exact historical `constant` behavior. Warmup and
