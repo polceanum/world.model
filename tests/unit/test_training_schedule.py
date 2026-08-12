@@ -1337,6 +1337,7 @@ def test_attention_node_activity_is_an_exact_opt_in_term() -> None:
     details = {
         "state_position": torch.tensor(2.0),
         "attention_node_activity": torch.tensor(0.25),
+        "attention_node_drift": torch.tensor(0.125),
     }
     terms = _group_closed_loop_terms(details, torch.zeros(()))
 
@@ -1348,6 +1349,13 @@ def test_attention_node_activity_is_an_exact_opt_in_term() -> None:
         _weighted_closed_loop_total(
             terms,
             {"state_position": 1.0, "attention_node_activity": 4.0},
+        ),
+        torch.tensor(3.0),
+    )
+    torch.testing.assert_close(
+        _weighted_closed_loop_total(
+            terms,
+            {"state_position": 1.0, "attention_node_drift": 8.0},
         ),
         torch.tensor(3.0),
     )

@@ -230,7 +230,9 @@ Working rules:
 - Prefer an axis-neutral functional prior over an axis-specific rule when a
   learned residual rewrites predictable motion without held-out evidence.
   Measure emitted bounded acceleration only on active objects across the
-  causal rollout; keep the objective opt-in and inference behavior unchanged.
+  causal rollout; distinguish squared mean drift from context-sensitive
+  variation, and prefer the narrower drift prior when the measured failure is
+  scene-wide. Keep the objective opt-in and inference behavior unchanged.
 - Never report protected checkpoints as verified when the audit received no
   protected paths. Required qualification audits must fail an empty protected
   set and retain whole-file plus model-state hashes for every supplied path.

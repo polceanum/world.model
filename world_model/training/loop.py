@@ -2736,6 +2736,7 @@ def _group_closed_loop_terms(
         "rollout_velocity",
         "attention_node_complexity",
         "attention_node_activity",
+        "attention_node_drift",
     ):
         if name in details:
             terms[name] = details[name]
@@ -2832,6 +2833,7 @@ def _weighted_closed_loop_total(
         "rollout_nll",
         "attention_node_complexity",
         "attention_node_activity",
+        "attention_node_drift",
     }
     selected: dict[str, Tensor] = {
         name: value

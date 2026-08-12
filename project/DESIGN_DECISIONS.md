@@ -1,9 +1,42 @@
 # Design decisions
 
+## ADR-108 — Penalize context-invariant node drift, not useful variation
+
+- **Date:** 2026-08-12
+- **Status:** accepted and implemented; fresh qualification pending
+- **Context:** ADR-107 correctly measured a large functional node residual, but
+  total mean-squared activity does not distinguish a harmful scene-wide bias
+  from useful object-, relation-, or event-conditioned variation. Four
+  deterministic balanced draws at the rejected step-512 checkpoint give
+  tightly stable activity `0.042484--0.042695 (m/s²)²` and equal-gradient
+  weights `0.078292--0.078442`. A richer trace over `10,182` active-object
+  invocations finds mean acceleration
+  `[-0.024866, 0.356690, 0.006175] m/s²` but standard deviation only
+  `[0.000736, 0.001865, 0.000746]`. Squared mean drift is `0.04266783` versus
+  total activity `0.04266899`: more than 99.997% is context-invariant drift.
+- **Decision:** Decompose emitted node activity per axis into squared mean
+  drift and residual variation, pooled from sums, squared sums, and active
+  support over the complete causal draw. Expose all three diagnostics. Add
+  opt-in `attention_node_drift` as a distinct exact-weight objective and use
+  `0.08` for the prospective successor, matching the unit decoder-complexity
+  restoring-gradient scale. Retain total activity as a diagnostic/optional
+  objective but do not configure it for this failure.
+- **Alternatives considered:** penalize all activity at `0.08`; use unit
+  activity weight; freeze/zero node outputs; penalize y specifically; treat
+  the nearly constant output as useful learned physics; scale the model.
+- **Consequences:** Balanced positive/negative residual variation can remain
+  unpenalized while a scene-wide learned force pays a soft cost. All axes are
+  treated identically, and a genuine unmodelled constant force can still be
+  learned when held-out evidence outweighs the prior. Historical configs omit
+  the exact drift key and remain unchanged. Focused drift/version tests pass
+  (`8 passed`), the full suite passes (`719 passed, 6 skipped`), Ruff passes,
+  and the 8,192-update `drift=0.08` dry-run resolves correctly. No accuracy or
+  convergence promotion is claimed before a fresh protected-control campaign.
+
 ## ADR-107 — Regularize emitted node activity before increasing capacity
 
 - **Date:** 2026-08-12
-- **Status:** accepted and implemented; successor qualification pending
+- **Status:** accepted as diagnostic infrastructure; objective refined by ADR-108
 - **Context:** The immutable specification-1.36 residual-parsimony campaign's
   complete step-512 checkpoint is finite, scope-clean, and causally trained,
   yet its fixed 32-episode selector is rejected. Score improves slightly
@@ -42,9 +75,10 @@
   node activity `0.042669 (m/s²)²`, split x/y/z as
   `0.000618/0.127347/0.000042`, and RMS acceleration `0.206565 m/s²`. Unit
   activity and complexity restoring-gradient norms are `0.673351/0.052798`,
-  so the successor uses a recorded activity weight `0.08`, approximately the
-  `0.078411` equal-gradient value. Unit weight is rejected as an unjustified
-  12.75-fold increase over the existing prior's gradient scale.
+  giving the `0.078411` equal-gradient value. Unit weight is rejected as an
+  unjustified 12.75-fold increase over the existing prior's gradient scale.
+  ADR-108 subsequently proves that nearly all activity is squared mean drift
+  and selects the more context-preserving drift objective at weight `0.08`.
 
 ## ADR-106 — Require non-vacuous protected-checkpoint evidence
 

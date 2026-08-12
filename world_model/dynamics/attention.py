@@ -211,7 +211,7 @@ class TypedAttentionInteractionResidual(nn.Module):
         # node-activity prior. These are deliberately transient rather than
         # buffers: they describe the current causal rollout graph and must
         # never become persistent model state or checkpoint provenance.
-        self._node_activity_records: list[tuple[Tensor, Tensor]] = []
+        self._node_activity_records: list[tuple[Tensor, Tensor, Tensor]] = []
 
     def configure_output_gradient_clipping(
         self,
@@ -263,27 +263,41 @@ class TypedAttentionInteractionResidual(nn.Module):
         self._node_activity_records = []
 
     def node_activity_details(self) -> dict[str, Tensor]:
-        """Return active-object mean squared node acceleration by axis.
+        """Return active-object node activity, drift, and variation by axis.
 
         The statistic measures the bounded acceleration actually emitted into
         the causal rollout, rather than decoder parameter magnitude. It is
         accumulated over every attention invocation in the current optimizer
         data draw and weighted by the number of active objects, so padding and
-        variable-length object sets cannot distort the prior.
+        variable-length object sets cannot distort the prior. Squared mean
+        drift is separated from residual variation so training can discourage
+        a scene-wide bias without suppressing balanced contextual dynamics.
         """
 
         if not self._node_activity_records:
             return {}
+        emitted_sum = torch.stack(
+            [record_sum for record_sum, _, _ in self._node_activity_records]
+        ).sum(dim=0)
         squared_sum = torch.stack(
-            [record_sum for record_sum, _ in self._node_activity_records]
+            [record_squared_sum for _, record_squared_sum, _ in self._node_activity_records]
         ).sum(dim=0)
         active_count = torch.stack(
-            [record_count for _, record_count in self._node_activity_records]
+            [record_count for _, _, record_count in self._node_activity_records]
         ).sum()
         axis_activity = squared_sum / active_count.clamp_min(1.0)
-        details = {"attention_node_activity": axis_activity.mean()}
+        axis_mean = emitted_sum / active_count.clamp_min(1.0)
+        axis_drift = axis_mean.square()
+        axis_variation = (axis_activity - axis_drift).clamp_min(0.0)
+        details = {
+            "attention_node_activity": axis_activity.mean(),
+            "attention_node_drift": axis_drift.mean(),
+            "attention_node_variation": axis_variation.mean(),
+        }
         for axis_index, axis_name in enumerate(("x", "y", "z")):
             details[f"attention_node_activity_{axis_name}"] = axis_activity[axis_index]
+            details[f"attention_node_drift_{axis_name}"] = axis_drift[axis_index]
+            details[f"attention_node_variation_{axis_name}"] = axis_variation[axis_index]
         return details
 
     def _aggregate_output_gradient_limit(self, name: str, maximum: float) -> float:
@@ -555,7 +569,11 @@ class TypedAttentionInteractionResidual(nn.Module):
         if self.training and torch.is_grad_enabled():
             active_count = objects.active.sum().to(dtype=node_residual.dtype)
             self._node_activity_records.append(
-                (node_residual.square().sum(dim=(0, 1)), active_count)
+                (
+                    node_residual.sum(dim=(0, 1)),
+                    node_residual.square().sum(dim=(0, 1)),
+                    active_count,
+                )
             )
         relation_values = self.relation_decoder(tokens[:, layout.relation_start :])
         self._register_output_gradient_hooks(node_values, relation_values)

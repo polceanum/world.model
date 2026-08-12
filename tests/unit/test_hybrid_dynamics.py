@@ -223,12 +223,38 @@ def test_typed_attention_node_activity_tracks_emitted_active_acceleration() -> N
     torch.testing.assert_close(details["attention_node_activity_y"], expected_axes[1])
     torch.testing.assert_close(details["attention_node_activity_z"], expected_axes[2])
     torch.testing.assert_close(details["attention_node_activity"], expected_axes.mean())
+    torch.testing.assert_close(details["attention_node_drift"], expected_axes.mean())
+    torch.testing.assert_close(details["attention_node_variation"], torch.tensor(0.0))
     details["attention_node_activity"].backward()
     assert attention.node_decoder.bias.grad is not None
     assert torch.count_nonzero(attention.node_decoder.bias.grad) == 3
 
     attention.reset_output_gradient_diagnostics()
     assert attention.node_activity_details() == {}
+
+
+def test_typed_attention_node_drift_does_not_penalize_balanced_variation() -> None:
+    belief, objects = _two_objects()
+    attention = _attention_residual(objects, belief)
+    attention.train()
+    attention.reset_output_gradient_diagnostics()
+    graph = InteractionGraph(4, 3, hidden_dim=16, interaction_radius=1.0)
+    target_fraction = torch.tensor([0.2, -0.4, 0.6])
+    with torch.no_grad():
+        attention.node_decoder.weight.zero_()
+        attention.node_decoder.bias.copy_(torch.atanh(target_fraction))
+    attention(objects, belief, graph(objects, belief.global_code))
+    with torch.no_grad():
+        attention.node_decoder.bias.copy_(torch.atanh(-target_fraction))
+    attention(objects, belief, graph(objects, belief.global_code))
+
+    details = attention.node_activity_details()
+    expected_activity = (attention.max_node_acceleration * target_fraction).square().mean()
+    torch.testing.assert_close(details["attention_node_activity"], expected_activity)
+    torch.testing.assert_close(
+        details["attention_node_drift"], torch.tensor(0.0), atol=1e-8, rtol=0
+    )
+    torch.testing.assert_close(details["attention_node_variation"], expected_activity)
 
 
 def test_typed_attention_bounds_mixed_unit_scene_input_before_projection() -> None:

@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-12
-**Specification:** `PROJECT_SPEC.md` 1.38; the active immutable training run
+**Specification:** `PROJECT_SPEC.md` 1.39; the active immutable training run
 remains specification 1.36
 
 ## Latest verified state — 2026-08-12
@@ -30,14 +30,15 @@ relation force rows are harmful. Zero-y improves every horizon but remains
 rejected with 97 failures. Zeroing the complete node decoder is strongest at
 score `0.297330` and improves every horizon to
 `0.263736/0.262437/0.280491/0.307728/0.328537 m`, but still fails 72 broad
-guards. Specification 1.38 therefore adds the opt-in, axis-neutral
+guards. Specification 1.38 therefore added the opt-in, axis-neutral
 `attention_node_activity` functional prior while retaining all node capacity.
 It measures bounded acceleration actually emitted for active objects across
 the causal rollout and changes neither inference nor historical configs.
 Focused tests pass (`4 passed`); the complete CPU-visible suite passes
 `718 passed, 6 skipped in 212.36 s`. An `orpheus` dry-run with both exact
-regularizers succeeds. Capacity scaling remains blocked pending selector 1024
-and, if needed, a clean protected-control 1.38 successor.
+regularizers succeeds. Specification 1.39 further separates squared mean drift
+from useful residual variation. Capacity scaling remains blocked pending
+selector 1024 and, if needed, a clean protected-control 1.39 successor.
 
 A schedule-matched 16-block audit over steps 520--640 passes with all scenarios
 drawn 16 times, `4,678` causal trajectories, every update applied, no terminal
@@ -59,8 +60,13 @@ and measures activity `0.042669 (m/s²)²`, x/y/z
 `0.000618/0.127347/0.000042`, and RMS emitted acceleration
 `0.206565 m/s²` on one balanced eight-scenario causal draw. Unit activity has
 gradient norm `0.673351` versus `0.052798` for unit decoder complexity; their
-equal-gradient weight ratio is `0.078411`. A prospective specification-1.38
-successor therefore records `attention_node_activity=0.08`, not `1.0`.
+equal-gradient weight ratio is `0.078411`. Four draws bound this ratio within
+`0.078292--0.078442`. Across `10,182` active-object invocations, emitted mean
+is `[-0.024866, 0.356690, 0.006175] m/s²` and standard deviation is only
+`[0.000736, 0.001865, 0.000746]`; squared drift `0.04266783` accounts for more
+than 99.997% of activity `0.04266899`. A prospective specification-1.39
+successor therefore records `attention_node_drift=0.08`, preserving balanced
+context-sensitive variation rather than penalizing all activity.
 
 Commands verified in the `orpheus` environment for this change:
 
@@ -72,7 +78,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check world_mod
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check world_model/dynamics/attention.py world_model/training/loop.py tests/unit/test_hybrid_dynamics.py tests/unit/test_training_schedule.py world_model/utils/version.py
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260811-234157-attention-node-parsimony-stage-a --after-step 520 --trend-window-blocks 16 --reference-run runs/20260811-170842-attention-aggregate-isolated-stage-a
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/measure_attention_node_activity.py --config runs/20260811-234157-attention-node-parsimony-stage-a/config.resolved.yaml --checkpoint runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/validation_step_000512.pt --step-index 511 --device cpu --output runs/20260811-234157-attention-node-parsimony-stage-a/attention_node_activity_calibration_step_000512.json
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --run-name attention-node-activity-008-dry-run --device mps --initialize-from runs/20260810-042627-protocol20-y-only-recovery/checkpoints/validation_step_000064.pt --set training.loss_weights.attention_node_complexity=1.0 --set training.loss_weights.attention_node_activity=0.08 --dry-run
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --run-name attention-node-drift-008-dry-run --device mps --initialize-from runs/20260810-042627-protocol20-y-only-recovery/checkpoints/validation_step_000064.pt --set training.loss_weights.attention_node_complexity=1.0 --set training.loss_weights.attention_node_drift=0.08 --dry-run
 ```
 
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate

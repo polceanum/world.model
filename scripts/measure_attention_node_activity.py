@@ -87,6 +87,43 @@ def measure_activity(
     if attention is None:
         raise ValueError("configured model has no typed attention residual")
     attention.reset_output_gradient_diagnostics()
+    current_active: Tensor | None = None
+    emitted_sum = torch.zeros(3, dtype=torch.float64)
+    emitted_squared_sum = torch.zeros(3, dtype=torch.float64)
+    emitted_minimum = torch.full((3,), math.inf, dtype=torch.float64)
+    emitted_maximum = torch.full((3,), -math.inf, dtype=torch.float64)
+    emitted_count = 0
+    invocation_count = 0
+
+    def capture_active(_module: torch.nn.Module, inputs: tuple[object, ...]) -> None:
+        nonlocal current_active
+        objects = inputs[0]
+        active = getattr(objects, "active", None)
+        if not isinstance(active, Tensor):
+            raise TypeError("attention input does not expose a tensor active mask")
+        current_active = active
+
+    def capture_node_values(
+        _module: torch.nn.Module,
+        _inputs: tuple[object, ...],
+        output: Tensor,
+    ) -> None:
+        nonlocal emitted_count, invocation_count
+        if current_active is None:
+            raise RuntimeError("node decoder ran without an attention active mask")
+        residual = attention.max_node_acceleration * torch.tanh(output)
+        selected = residual[current_active].detach().to(device="cpu", dtype=torch.float64)
+        invocation_count += 1
+        if selected.numel() == 0:
+            return
+        emitted_count += int(selected.shape[0])
+        emitted_sum.add_(selected.sum(dim=0))
+        emitted_squared_sum.add_(selected.square().sum(dim=0))
+        emitted_minimum.copy_(torch.minimum(emitted_minimum, selected.amin(dim=0)))
+        emitted_maximum.copy_(torch.maximum(emitted_maximum, selected.amax(dim=0)))
+
+    attention_handle = attention.register_forward_pre_hook(capture_active)
+    decoder_handle = attention.node_decoder.register_forward_hook(capture_node_values)
     total_frames = int(batch["rgb"].shape[1])
     window_steps = min(total_frames, config.training.tbptt_steps)
     frame_offsets = [
@@ -104,24 +141,35 @@ def measure_activity(
             config.training.joint_collision_long_horizon_sampling
         ),
     )
-    result = run_closed_loop_batch(
-        model,
-        batch,
-        config,
-        window_start=window_start,
-        window_steps=window_steps,
-        apply_perturbations=True,
-        include_measurement_supervision=True,
-        rollout_anchors_per_window=config.training.rollout_anchors_per_window,
-    )
+    try:
+        result = run_closed_loop_batch(
+            model,
+            batch,
+            config,
+            window_start=window_start,
+            window_steps=window_steps,
+            apply_perturbations=True,
+            include_measurement_supervision=True,
+            rollout_anchors_per_window=config.training.rollout_anchors_per_window,
+        )
+    finally:
+        decoder_handle.remove()
+        attention_handle.remove()
     activity = result.loss_terms.get("attention_node_activity")
+    drift = result.loss_terms.get("attention_node_drift")
     complexity = result.loss_terms.get("attention_node_complexity")
-    if activity is None or complexity is None:
+    if activity is None or drift is None or complexity is None:
         raise RuntimeError("closed-loop result omitted attention node diagnostics")
 
     parameters = tuple(parameter for parameter in attention.parameters() if parameter.requires_grad)
     complexity_gradients = torch.autograd.grad(
         complexity,
+        parameters,
+        allow_unused=True,
+        retain_graph=True,
+    )
+    drift_gradients = torch.autograd.grad(
+        drift,
         parameters,
         allow_unused=True,
         retain_graph=True,
@@ -132,6 +180,7 @@ def measure_activity(
         allow_unused=True,
     )
     complexity_gradient_norm = _gradient_norm(complexity_gradients)
+    drift_gradient_norm = _gradient_norm(drift_gradients)
     activity_gradient_norm = _gradient_norm(activity_gradients)
     node_parameter_ids = {id(parameter) for parameter in attention.node_decoder.parameters()}
     activity_node_gradient_norm = _gradient_norm(
@@ -143,6 +192,13 @@ def measure_activity(
     equal_gradient_weight = (
         complexity_gradient_norm / activity_gradient_norm if activity_gradient_norm > 0.0 else None
     )
+    equal_drift_gradient_weight = (
+        complexity_gradient_norm / drift_gradient_norm if drift_gradient_norm > 0.0 else None
+    )
+    if emitted_count <= 0:
+        raise RuntimeError("causal draw emitted no active-object node residuals")
+    emitted_mean = emitted_sum / emitted_count
+    emitted_variance = (emitted_squared_sum / emitted_count - emitted_mean.square()).clamp_min(0.0)
 
     scenario_names = batch["metadata"]["scenario"]
     return {
@@ -164,11 +220,23 @@ def measure_activity(
         "attention_node_activity_rms_acceleration": math.sqrt(float(activity.detach())),
         "attention_node_activity_gradient_norm": activity_gradient_norm,
         "attention_node_activity_node_decoder_gradient_norm": (activity_node_gradient_norm),
+        "attention_node_drift": float(drift.detach()),
+        "attention_node_drift_gradient_norm": drift_gradient_norm,
+        "attention_node_emitted_acceleration_invocation_count": invocation_count,
+        "attention_node_emitted_acceleration_active_object_count": emitted_count,
+        "attention_node_emitted_acceleration_mean": emitted_mean.tolist(),
+        "attention_node_emitted_acceleration_std": emitted_variance.sqrt().tolist(),
+        "attention_node_emitted_acceleration_minimum": emitted_minimum.tolist(),
+        "attention_node_emitted_acceleration_maximum": emitted_maximum.tolist(),
         "attention_node_complexity": float(complexity.detach()),
         "attention_node_complexity_gradient_norm": complexity_gradient_norm,
         "activity_weight_matching_unit_complexity_gradient": equal_gradient_weight,
+        "drift_weight_matching_unit_complexity_gradient": equal_drift_gradient_weight,
         "configured_attention_node_activity_weight": (
             config.training.loss_weights.get("attention_node_activity")
+        ),
+        "configured_attention_node_drift_weight": (
+            config.training.loss_weights.get("attention_node_drift")
         ),
         "configured_attention_node_complexity_weight": (
             config.training.loss_weights.get("attention_node_complexity")

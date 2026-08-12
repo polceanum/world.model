@@ -2,7 +2,7 @@
 
 ## Unreleased — 2026-07-28
 
-### 2026-08-12 functional node-activity prior and selector-512 diagnosis
+### 2026-08-12 functional node-drift prior and selector-512 diagnosis
 
 - Strictly audited the live specification-1.36 step-512 checkpoint. All 48
   attention tensors changed, all 177 inherited tensors remain exact, exactly
@@ -41,6 +41,20 @@
   derived equal-gradient weight is `0.078411`; record `0.08` for a successor
   rather than guessing `1.0`. Ruff, format, compile, real execution, and the
   exact 8,192-update dry-run pass.
+- Repeated calibration on four balanced draws spanning step indices
+  127/255/383/511. Activity stays within `0.042484--0.042695` and the
+  equal-gradient weight within `0.078292--0.078442`, ruling out single-window
+  tuning. Extended tracing over `10,182` active-object invocations shows mean
+  acceleration `[-0.024866, 0.356690, 0.006175] m/s²` with only
+  `[0.000736, 0.001865, 0.000746]` standard deviation. More than 99.997% of
+  total activity is squared mean drift.
+- Advanced the contract to specification 1.39 and separated
+  `attention_node_drift` from total activity and residual variation. The
+  successor will use axis-neutral drift weight `0.08`, allowing balanced
+  contextual/event variation while discouraging the observed scene-wide
+  force. Focused tests pass (`8`), full regression passes
+  (`719 passed, 6 skipped in 203.45 s`), Ruff passes, and the exact drift dry
+  run resolves. The live immutable 1.36 run is unchanged.
 
 ### 2026-08-11 accumulated node-gradient repair and scale gate
 

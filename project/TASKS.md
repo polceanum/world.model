@@ -532,15 +532,21 @@
   axis-neutral, active-object-normalized functional prior over bounded node
   acceleration across the causal rollout. Verify exact legacy opt-out,
   differentiability, padding support, reset semantics, and full regression
-  (`718 passed, 6 skipped`).
-- [x] Calibrate functional activity on a deterministic balanced causal draw at
-  the rejected step-512 checkpoint. Persist the checkpoint hash, axis values,
-  RMS acceleration, and functional/complexity gradient norms; derive the
-  successor's `attention_node_activity=0.08` rather than using unit weight.
+  (`718 passed, 6 skipped`). Retain it as diagnostic infrastructure after the
+  more precise drift decomposition below.
+- [x] Calibrate functional activity on four deterministic balanced causal
+  draws at the rejected step-512 checkpoint. Persist the checkpoint hash,
+  axis values, RMS acceleration, functional/complexity gradient norms, emitted
+  mean/std/range, invocation count, and active support. Prove more than 99.997%
+  is context-invariant drift rather than useful variation.
+- [x] Implement specification-1.39 `attention_node_drift` as the squared mean
+  emitted acceleration, separate from residual variation. Verify balanced
+  positive/negative activity has zero drift cost, exact legacy opt-out, full
+  regression (`719 passed, 6 skipped`), and a `drift=0.08` dry run.
 - [ ] Continue the immutable specification-1.36 campaign unchanged through
   fixed selector 1024. If broad guardrails remain rejected, launch a clean
-  specification-1.38 successor from the protected graph control with both
-  `attention_node_complexity=1.0` and `attention_node_activity=0.08` recorded;
+  specification-1.39 successor from the protected graph control with both
+  `attention_node_complexity=1.0` and `attention_node_drift=0.08` recorded;
   do not seed it from the rejected step-512 weights. Require repeated fixed selectors,
   validation/test/OOD non-regression, and plateau before scaling capacity.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
