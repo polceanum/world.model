@@ -33,6 +33,14 @@
   velocity horizons, collision, identity, and lifecycle improve slightly, but
   current velocity regresses `0.0189 m/s`. Continue to selector 1024 without
   treating this heterogeneous training window as promotion evidence.
+- Added `scripts/measure_attention_node_activity.py`, a deterministic,
+  checkpoint-hashed one-balanced-draw calibration of emitted acceleration and
+  functional/parameter-prior gradients. On the rejected step-512 candidate it
+  reproduces activity `0.042669`, RMS acceleration `0.206565 m/s²`, and a
+  `0.673351` functional gradient versus `0.052798` for unit complexity. The
+  derived equal-gradient weight is `0.078411`; record `0.08` for a successor
+  rather than guessing `1.0`. Ruff, format, compile, real execution, and the
+  exact 8,192-update dry-run pass.
 
 ### 2026-08-11 accumulated node-gradient repair and scale gate
 

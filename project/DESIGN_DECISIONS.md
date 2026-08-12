@@ -37,7 +37,14 @@
   not an accuracy promotion. The immutable 1.36 campaign continues unchanged
   toward selector 1024; a 1.38 successor is justified only if that selector
   does not repair broad guardrails, and it must start from the protected graph
-  control rather than the rejected step-512 candidate.
+  control rather than the rejected step-512 candidate. A deterministic
+  balanced causal-draw diagnostic at the rejected step-512 checkpoint measures
+  node activity `0.042669 (m/s²)²`, split x/y/z as
+  `0.000618/0.127347/0.000042`, and RMS acceleration `0.206565 m/s²`. Unit
+  activity and complexity restoring-gradient norms are `0.673351/0.052798`,
+  so the successor uses a recorded activity weight `0.08`, approximately the
+  `0.078411` equal-gradient value. Unit weight is rejected as an unjustified
+  12.75-fold increase over the existing prior's gradient scale.
 
 ## ADR-106 — Require non-vacuous protected-checkpoint evidence
 

@@ -10,8 +10,8 @@ The immutable residual-parsimony campaign remains operationally healthy and
 unchanged at
 `runs/20260811-234157-attention-node-parsimony-stage-a/`. At the latest health
 check its trainer and convergence supervisor had each launched once, both
-stderr files were empty, sampled RSS remained `2,911,186,944` bytes, and the
-trainer had reached update 640 after completing selector 512. The protected
+stderr files were empty, sampled RSS remained near `2.91 GB`, and the trainer
+had reached update 648 after completing selector 512. The protected
 incumbent remains step zero.
 
 Step 512 is a valid but rejected learned candidate. Its exact audit passes all
@@ -51,6 +51,17 @@ improves `0.017` percentage points, and lifecycle precision/coverage improve
 about `0.3` percentage points. This is encouraging causal-window evidence, not
 a fixed-selector promotion or proof of convergence.
 
+The reproducible activity calibration report is
+`runs/20260811-234157-attention-node-parsimony-stage-a/attention_node_activity_calibration_step_000512.json`.
+It hashes the candidate as
+`9dec4da06af3a991374e1df0e87668b9557bc5b65fd7446c9c97395d891ad17f`
+and measures activity `0.042669 (m/s²)²`, x/y/z
+`0.000618/0.127347/0.000042`, and RMS emitted acceleration
+`0.206565 m/s²` on one balanced eight-scenario causal draw. Unit activity has
+gradient norm `0.673351` versus `0.052798` for unit decoder complexity; their
+equal-gradient weight ratio is `0.078411`. A prospective specification-1.38
+successor therefore records `attention_node_activity=0.08`, not `1.0`.
+
 Commands verified in the `orpheus` environment for this change:
 
 ```bash
@@ -60,6 +71,8 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/inte
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check world_model/dynamics/attention.py world_model/training/loop.py tests/unit/test_hybrid_dynamics.py tests/unit/test_training_schedule.py world_model/utils/version.py
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check world_model/dynamics/attention.py world_model/training/loop.py tests/unit/test_hybrid_dynamics.py tests/unit/test_training_schedule.py world_model/utils/version.py
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260811-234157-attention-node-parsimony-stage-a --after-step 520 --trend-window-blocks 16 --reference-run runs/20260811-170842-attention-aggregate-isolated-stage-a
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/measure_attention_node_activity.py --config runs/20260811-234157-attention-node-parsimony-stage-a/config.resolved.yaml --checkpoint runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/validation_step_000512.pt --step-index 511 --device cpu --output runs/20260811-234157-attention-node-parsimony-stage-a/attention_node_activity_calibration_step_000512.json
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --run-name attention-node-activity-008-dry-run --device mps --initialize-from runs/20260810-042627-protocol20-y-only-recovery/checkpoints/validation_step_000064.pt --set training.loss_weights.attention_node_complexity=1.0 --set training.loss_weights.attention_node_activity=0.08 --dry-run
 ```
 
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate

@@ -533,11 +533,15 @@
   acceleration across the causal rollout. Verify exact legacy opt-out,
   differentiability, padding support, reset semantics, and full regression
   (`718 passed, 6 skipped`).
+- [x] Calibrate functional activity on a deterministic balanced causal draw at
+  the rejected step-512 checkpoint. Persist the checkpoint hash, axis values,
+  RMS acceleration, and functional/complexity gradient norms; derive the
+  successor's `attention_node_activity=0.08` rather than using unit weight.
 - [ ] Continue the immutable specification-1.36 campaign unchanged through
   fixed selector 1024. If broad guardrails remain rejected, launch a clean
   specification-1.38 successor from the protected graph control with both
-  decoder-complexity and functional-activity weights recorded; do not seed it
-  from the rejected step-512 weights. Require repeated fixed selectors,
+  `attention_node_complexity=1.0` and `attention_node_activity=0.08` recorded;
+  do not seed it from the rejected step-512 weights. Require repeated fixed selectors,
   validation/test/OOD non-regression, and plateau before scaling capacity.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
