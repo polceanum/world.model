@@ -21,6 +21,11 @@
   step-256 draws, prove alignment alternates from jointly restoring to directly
   conflicting; retain warmup/cosine as the gated same-capacity experiment and
   do not mutate the current run or add gradient surgery.
+- [x] Qualify durable step 384 and the complete 328--384 matched window. Prove
+  exact inherited/protected state and complete Adam ownership, reproduce
+  alternating task/prior alignment, and record the first broad mature-horizon,
+  velocity, collision, and identity gains without promoting before selector
+  512.
 
 - [x] Diagnose protocol-17 step-2,048 per-axis/per-scenario regression with
   exact learned-corrector scale and updater/dynamics checkpoint ablations.

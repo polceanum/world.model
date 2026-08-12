@@ -26,6 +26,10 @@
   selector 512 rejects, but does not authorize changing the immutable live run.
   Focused tests pass (`4 passed`) and the complete repository suite passes
   (`734 passed, 6 skipped`).
+  The same test at step 384 reproduces configured-total/drift node-decoder
+  cosine `-0.292264/+0.945411` on adjacent balanced draws 382/383. The
+  diagnosis is persistent across checkpoint age rather than a step-256
+  coincidence; the fixed selector still governs any schedule decision.
 
 ## ADR-110 — Make schedule repair exact and evidence-gated before scaling
 

@@ -220,6 +220,34 @@ precision/coverage by `0.001861/0.003261`; 0.25-second position is effectively
 equal (`+0.000117 m`). This is encouraging long-horizon learning but remains
 mixed cadence evidence before the fixed selector.
 
+The durable step-384 checkpoint passes the strict audit with all `48/48`
+attention tensors changed, all 177 inherited tensors bitwise exact, exactly 48
+complete finite Adam owners at step 384, both protected incumbents unchanged,
+and matching stored/recomputed model hashes. Its SHA-256 is
+`04adbc454761e802f5ff2ff6654b86ddd3b07f2f95c4fd6d9ec64130b72ccbde` and
+model-state hash is
+`a97fcea36d746e371cc8b49f109956fc3c90268daccee3ff84be1a6e332fd948`;
+the report is
+`runs/20260812-102557-attention-node-drift-008-stage-a/attention_checkpoint_audit_step_000384.json`.
+Same-checkpoint draws 382/383 again alternate configured-total/drift node-
+decoder cosine `-0.292264/+0.945411`, so the conflict diagnosis reproduces.
+Mean y acceleration remains high at `0.217825/0.217058 m/s²`, while mean x
+has contracted to about `-0.017 m/s²` and contextual variation is larger. The
+model is learning useful context/relation behavior without yet eliminating
+the global y component.
+
+The complete matched updates 328--384 window is the broadest favorable
+training window so far. It passes with `2,682` trajectories, all objectives,
+equal scenario support, no skips/failures, flat RSS, and `0.565708` minimum
+complete-interaction retention. Versus the predecessor it improves current
+position `0.001088 m`, 0.50/0.75/1.00-second position
+`0.003460/0.010106/0.014922 m`, current velocity `0.020690 m/s`, four velocity
+horizons `0.009813--0.073908 m/s`, collision F1 at every horizon, identity by
+four switches, and lifecycle precision slightly with equal coverage. It still
+regresses 0.10/0.25-second position `0.002340/0.002509 m`, 0.10-second
+velocity `0.008552 m/s`, current y/z, and median uncertainty NLL. This is
+promising but remains non-promotable before selector 512.
+
 The immutable specification-1.36 residual-parsimony campaign has been stopped
 at its durable step-1024 selector boundary.  The checkpoint is structurally
 valid, not collapsed: its strict audit passes with all 48 attention tensors

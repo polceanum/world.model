@@ -50,6 +50,13 @@
   current/through-0.75-second velocity, collision F1, and identity. Small
   current/0.10-second position, 1.00-second velocity, and lifecycle regressions
   remain, so this is a promising horizon shift rather than promotion evidence.
+- Strictly qualified the durable step-384 checkpoint and complete updates
+  328--384. Integrity, optimizer ownership, support, and resources remain
+  clean. The newest window improves current/mature position, current and most
+  velocity horizons, every collision horizon, identity, and lifecycle
+  precision; short position, 0.10-second velocity, y/z current axes, and median
+  uncertainty NLL remain mixed. Adjacent gradient-alignment draws reproduce
+  the alternating conflict while x residual bias shrinks and y bias persists.
 
 - Reached and strictly audited the specification-1.36 step-1024 checkpoint.
   All 48 attention tensors changed, all 177 inherited tensors remain exact,
