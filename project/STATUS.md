@@ -127,6 +127,25 @@ warmup trajectory has accumulated substantially less update magnitude at this
 early boundary, so this is a real watch item but not fixed-manifest rejection.
 Continue unchanged to selector 512; do not scale or promote from this window.
 
+The next complete scheduled updates 136--192 window remains operationally
+healthy as warmup reaches half of peak rate.  All eight scenarios contribute
+exactly eight draws, all 13 mature objectives are supported, 2,368 trajectory
+targets contribute, no update is skipped or failed, minimum complete
+interaction retention rises to `0.804336`, and peak RSS remains exactly
+`3,019,993,088` bytes.  Against the constant-rate run on identical draws, the
+scheduled candidate improves current velocity `0.013391 m/s`, trusted switches
+`4 -> 3`, median uncertainty NLL `0.015114`, and selected event/y slices, but
+current position is `0.032704 m` worse and every pooled position horizon is
+`0.032574/0.029765/0.009940/0.004508/0.003085 m` worse.  Current x/y/z differ
+by `+0.045208/+0.010432/+0.038140 m`; lifecycle precision/coverage and pooled
+collision F1 are also slightly adverse.  Relative to its own preceding
+72--128 window on different draws, velocity, x, lifecycle, identity, collision
+F1, uncertainty, and gradient retention improve while pooled current position,
+y/z, most horizons, and coverage worsen.  At step 192 linear warmup has
+accumulated only `25.13%` of the constant run's scalar learning-rate exposure,
+so this is mixed slow-learning evidence rather than fixed-manifest rejection.
+The immutable run continues to selector 512.
+
 Historical live-run record follows.  The clean specification-1.39 successor was active at
 `runs/20260812-102557-attention-node-drift-008-stage-a/` from pushed clean
 commit `176796ff94d89eb79304c58b46e88f9a1ecb9cad`.  Its resolved config differs

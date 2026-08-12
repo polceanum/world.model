@@ -80,6 +80,18 @@ This rules out corruption but does not establish generalization. The scheduled
 run remains immutable to selector 512, where a fixed manifest—not cumulative
 training-window movement—will decide rejection or continuation.
 
+Complete scheduled updates 136--192 reinforce the distinction between stable
+optimization and proven accuracy. Exact eight-way balance, all 13 objectives,
+2,368 trajectories, zero skips, `0.804336` minimum shared retention and flat
+memory show a healthier optimizer path than the constant control. On identical
+draws, current velocity improves `0.013391 m/s`, identity improves by one
+switch, and median uncertainty NLL improves `0.015114`; current/every position
+horizon still regress, led by current x/z `+0.045208/+0.038140 m`. Adjacent
+scheduled windows are mixed rather than monotonically collapsing. Through
+step 192 the linear warmup has accumulated only 25.13% of constant scalar LR
+exposure, so the lag cannot authorize either rejection or scale. Preserve the
+fixed selector.
+
 The 12 August primary-source refresh reinforces this choice.  The original
 Transformer's relevant contribution here is content-dependent multi-head
 interaction, short dependency paths, residual layers, normalization, balanced

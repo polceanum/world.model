@@ -42,6 +42,12 @@
   but worse on current/every position horizon, mainly x, with mixed velocity/y
   behavior and adverse lifecycle/event/identity slices. Continue unchanged to
   the authoritative selector; this is neither promotion nor a scale trigger.
+- Audited complete scheduled updates 136--192. Support, balance, optimizer,
+  uncertainty, semantic gradient containment and memory remain healthy, with
+  minimum shared retention `0.804336`. Exact matched position remains adverse
+  while velocity, identity and uncertainty improve; the run has only 25.13%
+  of constant cumulative LR exposure at this warmup boundary and continues
+  unchanged to fixed selector 512.
 
 - Added an opt-in, state-free `warmup_cosine` closed-loop learning-rate
   protocol while preserving exact historical `constant` behavior. Warmup and

@@ -28,7 +28,11 @@
   all 177 inherited tensors exact, complete attention-only Adam state, finite
   serialization, and intact protected incumbents. The exact matched 72--128
   window is position/x/collision/lifecycle adverse despite mixed velocity/y
-  gains; retain it as a watch item and keep selector 512 authoritative.
+  gains; retain it as a watch item and keep selector 512 authoritative. The
+  next balanced 136--192 window is still position-adverse against the exact
+  constant-rate draws, but improves velocity, identity, uncertainty and
+  gradient conditioning; with only 25.13% of constant cumulative LR exposure
+  at this boundary, continue without mutation rather than infer collapse.
 - [x] Strictly audit the active candidate at durable step 256 and measure its
   emitted residual on a deterministic causal draw. Verify `48/48` attention
   tensors and complete Adam state changed, all 177 inherited tensors and both

@@ -44,7 +44,12 @@
   adverse lifecycle/event/identity slices.  Because this early warmup boundary
   has deliberately accumulated much less update magnitude than the constant
   control, continue to the predeclared selector rather than rejecting, retuning,
-  or scaling from the training window.
+  or scaling from the training window.  Updates 136--192 preserve that
+  conclusion: position remains adverse on identical draws, while velocity,
+  identity, uncertainty and gradient conditioning improve.  Linear warmup has
+  accumulated only 25.13% of the constant schedule's scalar rate through step
+  192, so neither matched lag nor heterogeneous adjacent-window movement is a
+  substitute for selector 512.
 
 ## ADR-111 — Diagnose functional-prior conflict before changing its weight
 
