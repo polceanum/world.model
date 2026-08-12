@@ -362,6 +362,37 @@ durable report is
 This is healthy optimization evidence, not an accuracy promotion; fixed
 selector 512 remains the first authoritative trained comparison.
 
+The live trajectory has now reached durable checkpoint step 384. The strict
+specification-1.37 offline audit, applied read-only to the immutable 1.36
+checkpoint, passes with both protected artifacts required: all 48 attention
+tensors changed; all 177 inherited tensors remain bitwise exact; exactly 48
+complete finite Adam states belong to the attention module at step 384; every
+serialized tensor is finite; and model/source/config/protocol hashes agree.
+Both protected selector checkpoints still exactly equal the initializer. The
+checkpoint SHA-256 is
+`90b7997b61f2bcf91f232cefc167f7f69e4727b5cb35a34f0dc85a8af8233885`
+and its model-state hash is
+`d1544b10782df96f6f9c36f1de6c6aaf013020ebfb8719ca192769e3c5dece21`.
+
+The exact matched 328--384 dynamics window passes operational gates but is an
+accuracy regression. All updates apply, all eight scenarios and every horizon
+remain supported, minimum complete-interaction retention is `0.429332`, no
+draw is skipped, no terminal artifact exists, and RSS stays exactly
+`2,911,186,944` bytes. Current position is `0.005024 m` worse and every pooled
+position horizon is `0.001668--0.006286 m` worse. The regression is localized
+to x, which is `0.008052--0.021339 m` worse at every horizon; y and z improve
+at every horizon. Current velocity improves `0.003291 m/s`, collision F1 and
+lifecycle support improve slightly, but one excess identity switch and worse
+uncertainty NLL remain. The node/y decoder energy declined over steps 328--368
+before a small rebound by step 384, so the penalty is active but has not yet
+produced broad accuracy. A source audit found no axis-indexing, aggregation,
+or selector-contract defect: the penalty treats all decoder rows identically,
+and y acceleration can change contact timing and x impulses through the
+structured dynamics. Scaling remains blocked pending fixed selector 512.
+Durable evidence is in `attention_checkpoint_audit_step_000384.json` and
+`training_dynamics_audit_after_step_000328_through_000384.json` in the run
+directory.
+
 Implementation verification on Python `3.10.20` / PyTorch `2.10.0`:
 
 ```bash

@@ -103,6 +103,13 @@
   position, current velocity, most y horizons, aggregate collision F1, and
   median uncertainty regress. The result is recorded as healthy but mixed;
   fixed selector 512 remains the promotion and scaling gate.
+- Reached and strictly audited durable residual-parsimony checkpoint step 384.
+  Attention-only tensor and Adam scope, finiteness, provenance, and both
+  protected initializer checkpoints all pass. The matched 328--384 window is
+  operationally healthy but regresses current/every-horizon position through
+  x while y/z, velocity, collision, and lifecycle improve. No axis-indexing or
+  selector implementation defect was found; scaling remains blocked through
+  fixed selector 512.
 
 - Stopped the specification-1.31 campaign after the trainer safely rejected
   attempted optimizer step 988 before Adam. Complete interaction retention was

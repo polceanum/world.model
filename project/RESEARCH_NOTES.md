@@ -408,6 +408,38 @@ capacity authorization.
 The deterministic CPU vertical slice and reduced MPS compatibility paths have
 run. Exact long-form commands and artifacts are recorded in `project/STATUS.md`.
 
+### Residual-parsimony attention qualification
+
+The specification-1.36 attention-node parsimony campaign at
+`runs/20260811-234157-attention-node-parsimony-stage-a/` exactly reproduces
+the protected graph control at step zero and remains scope-clean through its
+durable step-384 checkpoint. All 48 attention tensors are live, all 177
+inherited tensors remain exact, exactly the attention tensors own complete
+finite Adam state at step 384, and both protected selector artifacts still
+equal the initializer. The immutable run therefore remains a clean test of
+the opt-in decoder-row-energy prior rather than a resume or freezing accident.
+
+Its sampled learning evidence is heterogeneous. The exact matched 256--312
+window improves current and longer-horizon position plus x at every horizon,
+but regresses short horizons, current velocity, most y horizons, collision,
+and median uncertainty. The later exact 328--384 window reverses the position
+direction: current and every pooled horizon regress, entirely through x
+(`+0.008052` to `+0.021339 m`), while y and z improve at every horizon.
+Velocity, collision F1, and lifecycle improve slightly; identity and
+uncertainty remain adverse. All 384 updates nevertheless apply with complete
+balanced support, bounded memory, no skip or terminal failure, and minimum
+complete-interaction retention above the declared floor.
+
+The implementation is axis-neutral: it averages the squared L2 energy of the
+three world-axis node-decoder rows and maps those rows directly to bounded
+world-axis acceleration. No axis-order, aggregation, or selector-contract bug
+was found. The cross-axis behavior is expected from structured contacts: a y
+residual changes contact timing and can therefore redirect pair impulses in x.
+Decoder energy is a proxy for functional residual complexity, not a guarantee
+of held-out accuracy. The first trained fixed selector at step 512 remains the
+decision boundary; neither the favourable nor adverse sampled window supports
+promotion, hyperparameter mutation, or model scaling.
+
 ### Accuracy-v4 closed-loop promotion
 
 The promoted step-648 checkpoint is

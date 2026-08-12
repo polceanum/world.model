@@ -513,6 +513,12 @@
   regresses short-horizon position, current velocity, most y horizons,
   aggregate collision F1, and median uncertainty error. Continue unchanged to
   fixed selector 512; do not promote or scale from this mixed training window.
+  Durable step 384 passes strict tensor/optimizer/finiteness/provenance and
+  required-protection audits. Its exact 328--384 matched window regresses
+  current and every pooled position horizon, entirely through x while y/z
+  improve; velocity, collision, and lifecycle improve slightly, but identity
+  and uncertainty remain adverse. A source audit finds no axis-order or
+  selector bug. Keep the scale gate closed through selector 512.
 - [x] Make protected-checkpoint audits non-vacuous under specification 1.37:
   record protected count, return `null` when none were checked, and provide a
   required-protection gate that fails an empty set. Rerun step 256 with both
