@@ -61,6 +61,14 @@
   pooled position horizon improve versus the predecessor, but identity rises
   from `4/699` to `9/703`, 0.25/0.50-second velocity regresses, and collision
   F1 is slightly lower. Continue to fixed selector 512 without promotion.
+- Cleared the matched post-checkpoint step-152 stress boundary with all 13
+  objectives, 343 causal trajectories, `0/50` trusted identity switches, and
+  an entirely unclipped finite update. Across steps 128--152, every position
+  axis at every horizon improves and lifecycle support is slightly better;
+  current and 0.10-second velocity plus aggregate collision F1 regress while
+  one-second velocity improves. The step-128 identity spike does not persist
+  in later matched blocks. Keep the run unchanged and selector 512
+  authoritative.
 
 - Stopped the specification-1.31 campaign after the trainer safely rejected
   attempted optimizer step 988 before Adam. Complete interaction retention was

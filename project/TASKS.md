@@ -492,7 +492,13 @@
   position horizon with complete balanced support and stable memory, but
   trusted identity is `9/703` versus `4/699` and 0.25/0.50-second velocity plus
   collision F1 regress slightly. Continue unchanged to selector 512 while
-  treating identity as an explicit guardrail warning, not a promotion.
+  treating identity as an explicit guardrail warning, not a promotion. The
+  post-checkpoint trajectory clears the historical step-152 stress position:
+  all updates through 152 apply with complete support, minimum stage retention
+  `1.0`, stable memory, and no new identity excess after the step-128 block.
+  Every axis/horizon position slice improves versus the matched predecessor,
+  but current/0.10-second velocity and aggregate collision F1 regress. Preserve
+  both sides of the tradeoff and continue unchanged to selector 512.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

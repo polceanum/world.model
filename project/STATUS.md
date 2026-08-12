@@ -254,6 +254,24 @@ The checkpoint node x/y/z energies are
 `0.000159/0.001337/0.00000994`; the regularizer is active but y remains
 dominant, so its efficacy is not yet established.
 
+The first post-checkpoint stress segment through step 152 also passes. The
+historical event-heavy step-152 draw has the exact matched seeds, `343` causal
+trajectories, all 13 objective terms, `0/50` trusted identity switches, finite
+uncertainty, and a completely unclipped `0.702822` interaction update. Across
+matched steps 128--152, all four balanced blocks apply with 1,482 causal
+trajectories, full short/mid-horizon support, minimum complete retention `1.0`,
+and unchanged sampled peak RSS. Relative to the predecessor, current x/y/z
+improve `0.003282/0.004502/0.002316 m`, and every axis at every position
+horizon improves; pooled improvements grow from `0.004031 m` at 0.10 seconds
+to `0.014209 m` at one second. Lifecycle precision/coverage and coverage90
+improve slightly. The remaining tradeoff is explicit: current velocity is
+`0.030249 m/s` worse, 0.10-second velocity is `0.054660 m/s` worse, and pooled
+collision F1 is `0.011124` lower, while one-second velocity improves
+`0.030357 m/s`. The four extra identity switches in this window are entirely
+the already-recorded step-128 spike; steps 136 and 152 exactly match the
+predecessor switch counts. Continue unchanged to the fixed selector rather
+than tuning from this heterogeneous event window.
+
 Implementation verification on Python `3.10.20` / PyTorch `2.10.0`:
 
 ```bash
