@@ -84,6 +84,23 @@ confirms the absolute schedule: learning rate is
 scenarios contribute 349 trajectory targets, skips are zero, peak RSS is
 `2,954,977,280` bytes, and both stderr files remain empty.
 
+The first complete scheduled updates 8--64 window also passes the dynamics
+auditor.  All 64 optimizer updates apply, all eight scenarios contribute
+exactly eight draws, all mature objectives are supported, and 2,462 causal
+trajectory targets are present with zero skips, terminal failures, or
+uncontained interaction clips.  Minimum complete interaction retention is
+`0.497461`; trusted identity switches are `3/387`; lifecycle precision/target
+coverage are `0.384694/0.397679`; current coverage90 is `0.968880`; and peak
+RSS stabilizes at `3,019,993,088` bytes.  Pooled current x/y/z RMSE is
+`0.281739/0.219617/0.292220 m`; 0.10/0.25/0.50/0.75/1.00-second position RMSE
+is `0.262096/0.303683/0.369725/0.427292/0.446976 m`.  Against the rejected
+constant-rate run on the exact same eight steps, seeds, scenarios, frames, and
+support, current position improves `0.000547 m`, lifecycle and identity improve
+slightly, but current velocity worsens `0.011510 m/s` and the 0.25--1.00-second
+position horizons worsen `0.000856/0.004015/0.005783/0.002280 m`.  This near-tie
+is expected during low-rate warmup and is neither promotion nor regression
+evidence; the fixed step-512 selector remains authoritative.
+
 Historical live-run record follows.  The clean specification-1.39 successor was active at
 `runs/20260812-102557-attention-node-drift-008-stage-a/` from pushed clean
 commit `176796ff94d89eb79304c58b46e88f9a1ecb9cad`.  Its resolved config differs

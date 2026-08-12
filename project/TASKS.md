@@ -18,7 +18,12 @@
   model/metric reproduction under clean one-shot trainer/supervisor jobs.
 - [ ] Qualify the active warmup/cosine control through fixed selectors and the
   declared plateau. Keep all depth/width/history scaling gated on broad
-  fixed-manifest convergence and disjoint RGB-only generalization.
+  fixed-manifest convergence and disjoint RGB-only generalization. Its first
+  complete updates 8--64 audit passes with all 64 updates, balanced eight-way
+  exposure, 2,462 trajectory targets, zero skips/failures, minimum complete
+  interaction retention `0.497461`, and stable peak RSS. The exact matched
+  constant-rate comparison is a near-tie with mixed axes/horizons, so continue
+  unchanged to the durable step-128 audit and fixed selector 512.
 - [x] Strictly audit the active candidate at durable step 256 and measure its
   emitted residual on a deterministic causal draw. Verify `48/48` attention
   tensors and complete Adam state changed, all 177 inherited tensors and both

@@ -32,7 +32,13 @@
   physical contracts.  A 384-update warmup is about 4.7% of the 8,192-update
   minimum and reaches peak rate before selector 512.  If it also fails, the
   evidence points to objective/representation context rather than insufficient
-  parameter count; scaling remains scientifically unjustified.
+  parameter count; scaling remains scientifically unjustified.  The successor's
+  complete updates 8--64 audit is operationally clean and exactly balanced.
+  On identical draws it is effectively tied with the constant-rate predecessor:
+  current position/lifecycle/identity improve slightly while current velocity
+  and four longer position horizons worsen slightly.  This confirms schedule
+  isolation without supplying trained-selector evidence, so the decision gate
+  remains unchanged.
 
 ## ADR-111 — Diagnose functional-prior conflict before changing its weight
 

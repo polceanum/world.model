@@ -28,6 +28,13 @@
   wholly unclipped applied update, all eight scenarios, 349 trajectory targets,
   and zero skips.  This qualifies initialization/schedule execution only, not
   learned accuracy.
+- Audited the schedule successor's complete updates 8--64 window. All 64
+  updates apply with balanced eight-way exposure, 2,462 trajectory targets,
+  zero skips/failures, minimum complete interaction retention `0.497461`, and
+  stable memory. An exact same-draw comparison with the rejected constant-rate
+  run is mixed and nearly neutral: current position, lifecycle, and identity
+  improve slightly while velocity and four longer position horizons worsen
+  slightly. The run remains immutable and unpromoted through selector 512.
 
 - Added an opt-in, state-free `warmup_cosine` closed-loop learning-rate
   protocol while preserving exact historical `constant` behavior. Warmup and

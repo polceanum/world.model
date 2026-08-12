@@ -58,6 +58,16 @@ misgeneralizing, nearly context-invariant node acceleration.  Continue with the
 already smoke-qualified context-drift objective from the untouched control,
 not with more steps or more parameters on the rejected trajectory.
 
+The schedule successor's first complete updates 8--64 window supplies the
+intended controlled early-learning comparison. All 64 updates apply with exact
+eight-way scenario balance, 2,462 causal trajectory targets, zero skips or
+uncontained failures, and stable memory. Against the constant-rate run on the
+same steps and data, current position improves only `0.000547 m`, while current
+velocity worsens `0.011510 m/s` and 0.25--1.00-second position differs by
+`+0.000856/+0.004015/+0.005783/+0.002280 m`; lifecycle and identity improve
+slightly. Treat this as a healthy low-rate warmup near-tie, not evidence of
+convergence, collapse, promotion, or capacity limitation.
+
 The 12 August primary-source refresh reinforces this choice.  The original
 Transformer's relevant contribution here is content-dependent multi-head
 interaction, short dependency paths, residual layers, normalization, balanced
