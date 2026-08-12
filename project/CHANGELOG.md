@@ -27,6 +27,12 @@
   finite but still drift-dominated mean node acceleration of
   `[-0.052641, 0.195037, -0.021283] m/s²`; this is non-promotable limitation
   evidence pending selector 512, not collapse.
+- Audited the first complete post-checkpoint window at updates 208--264. It
+  remains operationally clean, and node drift decreases while context
+  variation increases, but matched current/every-horizon position has returned
+  to small regressions and four of five velocity horizons remain worse. This
+  is explicit wobble evidence; the immutable run continues to its fixed
+  selector rather than being promoted, stopped, or retuned from training rows.
 
 - Reached and strictly audited the specification-1.36 step-1024 checkpoint.
   All 48 attention tensors changed, all 177 inherited tensors remain exact,

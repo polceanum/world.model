@@ -160,6 +160,21 @@ variation are `0.0138644/0.0137544/0.000109986 (m/s²)²`. This is a coherent
 short-position versus velocity/long-horizon limitation, not corruption or
 collapse; selector 512 remains authoritative.
 
+The first complete post-checkpoint window, updates 208--264, also passes all
+operational gates with `2,803` trajectories, equal eight-scenario support, all
+13 objectives, no failed update, flat RSS, and the same `0.359573` minimum
+complete-interaction retention. Its matched behavior wobbles rather than
+extending the earlier position gain: current position is now `0.003874 m`
+worse than the rejected predecessor and aggregate position at
+0.10/0.25/0.50/0.75/1.00 seconds is worse by
+`0.005148/0.006213/0.000402/0.003941/0.003922 m`. Current velocity improves
+`0.005984 m/s`, but four of five velocity horizons remain worse, including
+`0.081391 m/s` at 0.75 seconds. Node drift falls from `0.016990` at update 208
+to `0.014272 (m/s²)²` at 264 while variation rises from `0.00001149` to
+`0.00009277 (m/s²)²`, proving the learned residual is becoming less constant
+but not yet behaviorally convergent. Do not infer a plateau or intervene from
+this heterogeneous training window; retain selector 512 as the fixed gate.
+
 The immutable specification-1.36 residual-parsimony campaign has been stopped
 at its durable step-1024 selector boundary.  The checkpoint is structurally
 valid, not collapsed: its strict audit passes with all 48 attention tensors
