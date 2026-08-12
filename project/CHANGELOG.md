@@ -77,10 +77,20 @@
 - Measured the step-128 residual on the same balanced draw used for the
   predecessor calibration. RMS emitted node acceleration falls to
   `0.106243 m/s^2` from `0.206605 m/s^2`, and mean y acceleration falls to
-  `0.171489` from `0.356690 m/s^2`, proving the drift prior operates. More
+  `0.171365` from `0.356690 m/s^2`, proving the drift prior operates. More
   than 99.95% of the remaining activity is still context-invariant. Continue
   the immutable constant-rate campaign to selector 512; if it rejects, test a
   separately versioned warmup/decay successor before increasing capacity.
+- Corrected the emitted-acceleration calibration population: its forward hook
+  had included prepared no-gradient attention calls that the differentiable
+  activity/drift records intentionally exclude. It now traces exactly 144
+  gradient-enabled causal calls and 5,184 active-object evaluations on the
+  step-128 draw, asserts agreement with the loss records, and records the trace
+  scope explicitly. The activity, drift, complexity, and RMS results are
+  unchanged; the corrected mean is
+  `[-0.065046, 0.171365, -0.015823] m/s^2`. Focused diagnostics pass 42 tests;
+  the full suite passes 721 tests with 6 expected MPS-unavailable skips in the
+  command environment. Ruff, compileall, and diff checks pass.
 
 - Strictly audited the live specification-1.36 step-512 checkpoint. All 48
   attention tensors changed, all 177 inherited tensors remain exact, exactly

@@ -85,8 +85,11 @@ fixed-manifest rejection or promotion evidence.
 The same-draw functional report at step 128 measures activity/drift/variation
 `0.0112875/0.0112825/0.00000506 (m/s^2)^2`, RMS emitted acceleration
 `0.106243 m/s^2`, and mean emitted acceleration
-`[-0.065087, 0.171489, -0.015986] m/s^2` over `10,656` active-object
-invocations.  Compared with the rejected predecessor at step 512, RMS activity
+`[-0.065046, 0.171365, -0.015823] m/s^2` over `5,184` active-object
+evaluations in 144 gradient-enabled causal attention calls.  The calibration
+utility now explicitly excludes no-gradient prepared-rollout calls so its
+emitted-value population exactly matches the differentiable activity/drift
+population.  Compared with the rejected predecessor at step 512, RMS activity
 is about half (`0.1062` versus `0.2066 m/s^2`) and mean y acceleration is less
 than half (`0.1715` versus `0.3567 m/s^2`), proving the configured prior acts
 on its intended target.  More than `99.95%` of remaining activity is still

@@ -583,8 +583,11 @@
   `8.28--15.94 mm` across horizons versus the rejected predecessor. Same-draw
   functional calibration proves the prior reduces RMS node activity to
   `0.1062 m/s^2` from the predecessor's `0.2066 m/s^2`, while more than 99.95%
-  of the smaller residual remains drift. Preserve the immutable run to fixed
-  selector 512; do not promote or scale from training-window evidence.
+  of the smaller residual remains drift. The emitted-value diagnostic now
+  verifies its 144 gradient-enabled calls and 5,184 active-object evaluations
+  exactly match the differentiable loss population. Preserve the immutable
+  run to fixed selector 512; do not promote or scale from training-window
+  evidence.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

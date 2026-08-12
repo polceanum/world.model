@@ -44,6 +44,28 @@ def _gradient_norm(gradients: tuple[Tensor | None, ...]) -> float:
     )
 
 
+def _gradient_enabled_active_residual(
+    output: Tensor,
+    active: Tensor,
+    *,
+    maximum: float,
+) -> Tensor | None:
+    """Select exactly the calls included by ``node_activity_details``.
+
+    Prepared propagation and other runtime bookkeeping may invoke the
+    attention residual under ``torch.no_grad()`` during a causal batch.  The
+    differentiable activity/drift objective deliberately excludes those
+    calls, so the emitted-value trace must exclude them as well.
+    """
+
+    if not torch.is_grad_enabled():
+        return None
+    if output.ndim != 3 or active.shape != output.shape[:2]:
+        raise ValueError("node output/active mask shapes are incompatible")
+    residual = float(maximum) * torch.tanh(output)
+    return residual[active].detach().to(device="cpu", dtype=torch.float64)
+
+
 def measure_activity(
     *,
     config_path: Path,
@@ -111,8 +133,13 @@ def measure_activity(
         nonlocal emitted_count, invocation_count
         if current_active is None:
             raise RuntimeError("node decoder ran without an attention active mask")
-        residual = attention.max_node_acceleration * torch.tanh(output)
-        selected = residual[current_active].detach().to(device="cpu", dtype=torch.float64)
+        selected = _gradient_enabled_active_residual(
+            output,
+            current_active,
+            maximum=attention.max_node_acceleration,
+        )
+        if selected is None:
+            return
         invocation_count += 1
         if selected.numel() == 0:
             return
@@ -160,6 +187,19 @@ def measure_activity(
     complexity = result.loss_terms.get("attention_node_complexity")
     if activity is None or drift is None or complexity is None:
         raise RuntimeError("closed-loop result omitted attention node diagnostics")
+    differentiable_records = attention._node_activity_records
+    recorded_active_count = int(
+        torch.stack([record_count for _, _, record_count in differentiable_records])
+        .sum()
+        .detach()
+        .cpu()
+    )
+    if invocation_count != len(differentiable_records) or emitted_count != recorded_active_count:
+        raise RuntimeError(
+            "emitted node trace does not match differentiable activity population "
+            f"(calls {invocation_count} != {len(differentiable_records)}, "
+            f"objects {emitted_count} != {recorded_active_count})"
+        )
 
     parameters = tuple(parameter for parameter in attention.parameters() if parameter.requires_grad)
     complexity_gradients = torch.autograd.grad(
@@ -224,6 +264,9 @@ def measure_activity(
         "attention_node_drift_gradient_norm": drift_gradient_norm,
         "attention_node_emitted_acceleration_invocation_count": invocation_count,
         "attention_node_emitted_acceleration_active_object_count": emitted_count,
+        "attention_node_emitted_acceleration_trace_scope": (
+            "gradient_enabled_causal_attention_calls"
+        ),
         "attention_node_emitted_acceleration_mean": emitted_mean.tolist(),
         "attention_node_emitted_acceleration_std": emitted_variance.sqrt().tolist(),
         "attention_node_emitted_acceleration_minimum": emitted_minimum.tolist(),
