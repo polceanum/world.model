@@ -17,6 +17,26 @@ checkpoint, split/seeds, device, commands, metrics, and failure cases.
 
 ### Typed-attention stability and scaling decision
 
+The warmup/cosine hypothesis is now falsified at the same authoritative
+step-512 manifest.  Score worsens `0.3213162 -> 0.3475480`, with 116 broad
+guardrail failures plus failed improvement and no support failure.  Current
+position, coverage, precision, collision F1, identity, and every pooled
+position horizon regress.  `reference_pairs` current x reaches `0.720231 m`
+and every x horizon is worse.  The strict artifact audit passes completely,
+so neither optimizer corruption nor insufficient model/data wiring explains
+the result.  This is worse overall than constant rate despite a slightly
+smaller familiar current-x failure; schedule alone delayed the shortcut but
+did not make it contextual.
+
+The strongest existing causal clue is the prior exact zero-node ablation: it
+improved the complexity-only rejected checkpoint to score `0.297330`, while
+relation/event residuals remained active.  Specification 1.42 therefore adds
+an `attention_relation` scope that freezes the protected zero node decoder and
+trains the other 46 typed-attention tensors.  This tests relation abstraction
+before adding a learned evidence gate for single-object acceleration.  It is
+not a permanent hardcoded constant-velocity rule, and it does not authorize
+scale; fixed ablation and sustained selector evidence remain pending.
+
 The drift-regularized constant-rate successor has now failed its first trained
 fixed selector despite encouraging late matched training windows.  At step 512
 its score is `0.3332533` versus protected `0.3213162`, with 105 guardrail

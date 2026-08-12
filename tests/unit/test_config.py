@@ -297,6 +297,12 @@ def test_closed_loop_trainable_scope_is_explicit() -> None:
     )
     assert config.training.closed_loop_trainable_scope == "updater_mean_y"
 
+    relation_config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=["training.closed_loop_trainable_scope=attention_relation"],
+    )
+    assert relation_config.training.closed_loop_trainable_scope == "attention_relation"
+
 
 @pytest.mark.parametrize(
     "overrides",

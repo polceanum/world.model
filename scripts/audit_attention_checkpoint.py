@@ -107,6 +107,7 @@ def audit_checkpoint(
     config_path: Path,
     protected_paths: Sequence[Path] = (),
     attention_prefix: str = "dynamics.attention_interactions.",
+    frozen_attention_prefixes: Sequence[str] = (),
     require_all_attention_changed: bool = False,
     require_complete_attention_optimizer_state: bool = False,
     require_protected_checkpoints: bool = False,
@@ -152,6 +153,26 @@ def audit_checkpoint(
     attention_parameter_names = {
         name for name in parameter_names if name.startswith(attention_prefix)
     }
+    invalid_frozen_prefixes = sorted(
+        prefix for prefix in frozen_attention_prefixes if not prefix.startswith(attention_prefix)
+    )
+    unmatched_frozen_prefixes = sorted(
+        prefix
+        for prefix in frozen_attention_prefixes
+        if not any(name.startswith(prefix) for name in attention_names)
+    )
+    frozen_attention_names = {
+        name
+        for name in attention_names
+        if any(name.startswith(prefix) for prefix in frozen_attention_prefixes)
+    }
+    frozen_attention_parameter_names = {
+        name
+        for name in attention_parameter_names
+        if any(name.startswith(prefix) for prefix in frozen_attention_prefixes)
+    }
+    expected_trainable_attention_names = set(attention_names) - frozen_attention_names
+    expected_optimizer_owner_names = attention_parameter_names - frozen_attention_parameter_names
     optimizer_owner_set = set(optimizer_owners)
 
     checkpoint_hash = _model_state_hash(checkpoint_state)
@@ -182,13 +203,23 @@ def audit_checkpoint(
         failures.append("inherited tensors changed")
     if not optimizer_owner_set.issubset(attention_parameter_names):
         failures.append("optimizer state is not attention-only")
-    if require_all_attention_changed and set(changed_attention) != set(attention_names):
-        failures.append("not every attention tensor changed")
+    changed_frozen_attention = sorted(set(changed_attention) & frozen_attention_names)
+    if invalid_frozen_prefixes:
+        failures.append("a frozen attention prefix is outside the attention module")
+    if unmatched_frozen_prefixes:
+        failures.append("a frozen attention prefix matches no attention tensor")
+    if changed_frozen_attention:
+        failures.append("a frozen attention tensor changed")
+    if (
+        require_all_attention_changed
+        and set(changed_attention) != expected_trainable_attention_names
+    ):
+        failures.append("not every expected trainable attention tensor changed")
     if (
         require_complete_attention_optimizer_state
-        and optimizer_owner_set != attention_parameter_names
+        and optimizer_owner_set != expected_optimizer_owner_names
     ):
-        failures.append("optimizer state does not cover every attention parameter")
+        failures.append("optimizer state does not exactly cover expected attention parameters")
     if not _all_finite(checkpoint):
         failures.append("checkpoint contains nonfinite serialized state")
     if protected_paths and not protected_exact:
@@ -218,6 +249,10 @@ def audit_checkpoint(
         "initial_model_state_hash": initial_hash,
         "model_tensor_count": len(checkpoint_state),
         "attention_tensor_count": len(attention_names),
+        "expected_trainable_attention_tensor_count": len(expected_trainable_attention_names),
+        "frozen_attention_tensor_count": len(frozen_attention_names),
+        "frozen_attention_prefixes": list(frozen_attention_prefixes),
+        "changed_frozen_attention_tensors": changed_frozen_attention,
         "changed_attention_tensor_count": len(changed_attention),
         "changed_attention_tensors": changed_attention,
         "inherited_tensor_count": len(inherited_names),
@@ -229,7 +264,9 @@ def audit_checkpoint(
         "all_serialized_state_finite": _all_finite(checkpoint),
         "optimizer_state_owner_count": len(optimizer_owners),
         "optimizer_state_attention_only": optimizer_owner_set.issubset(attention_parameter_names),
-        "optimizer_state_complete_for_attention": optimizer_owner_set == attention_parameter_names,
+        "optimizer_state_complete_for_attention": (
+            optimizer_owner_set == expected_optimizer_owner_names
+        ),
         "optimizer_state_owners": optimizer_owners,
         "optimizer_steps": optimizer_steps,
         "protected_checkpoint_count": len(protected_paths),
@@ -252,6 +289,15 @@ def parse_args() -> argparse.Namespace:
         "--attention-prefix",
         default="dynamics.attention_interactions.",
     )
+    parser.add_argument(
+        "--frozen-attention-prefix",
+        action="append",
+        default=[],
+        help=(
+            "attention state-dict prefix that must remain bitwise equal to the initializer "
+            "and own no optimizer state; may be repeated"
+        ),
+    )
     parser.add_argument("--require-all-attention-changed", action="store_true")
     parser.add_argument(
         "--require-complete-attention-optimizer-state",
@@ -273,6 +319,7 @@ def main() -> int:
         config_path=args.config,
         protected_paths=args.protected,
         attention_prefix=args.attention_prefix,
+        frozen_attention_prefixes=args.frozen_attention_prefix,
         require_all_attention_changed=args.require_all_attention_changed,
         require_complete_attention_optimizer_state=(
             args.require_complete_attention_optimizer_state

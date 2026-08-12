@@ -266,6 +266,33 @@ def test_attention_scope_isolates_new_typed_residual() -> None:
     assert len(trainable) == len(list(model.dynamics.attention_interactions.parameters()))
 
 
+def test_attention_relation_scope_freezes_only_node_decoder() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    model = OnlineWorldModel.from_config(config)
+
+    set_closed_loop_trainable_scope(model, scope="attention_relation")
+
+    trainable = {name for name, parameter in model.named_parameters() if parameter.requires_grad}
+    attention_prefix = "dynamics.attention_interactions."
+    node_prefix = f"{attention_prefix}node_decoder."
+    assert trainable
+    assert all(name.startswith(attention_prefix) for name in trainable)
+    assert not any(name.startswith(node_prefix) for name in trainable)
+    expected = {
+        f"{attention_prefix}{name}"
+        for name, _ in model.dynamics.attention_interactions.named_parameters()
+        if not name.startswith("node_decoder.")
+    }
+    assert trainable == expected
+    assert all(
+        parameter.requires_grad is (not name.startswith("node_decoder."))
+        for name, parameter in model.dynamics.attention_interactions.named_parameters()
+    )
+
+
 def test_attention_scope_requires_enabled_attention() -> None:
     model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
 

@@ -1,10 +1,70 @@
 # Project status
 
 **Date:** 2026-08-12
-**Specification:** `PROJECT_SPEC.md` 1.41; the active immutable successor also
-uses specification 1.41
+**Specification:** `PROJECT_SPEC.md` 1.42; the rejected immutable schedule
+control uses specification 1.41
 
 ## Latest verified state — 2026-08-12
+
+The specification-1.41 warmup/cosine control is now rejected at its first
+trained fixed selector.  Its 32-episode RGB-only score worsens from protected
+`0.3213162196` to `0.3475479692`, versus `0.3332532750` for the already
+rejected constant-rate control.  There are 116 incumbent/fixed-reference
+guardrail failures plus the failed improvement rule (`117` rejection reasons)
+and zero training-support failures.  Selection current position worsens
+`0.251460 -> 0.304462 m`, target coverage `0.376250 -> 0.358500`, prediction
+precision `0.357312 -> 0.339972`, collision F1
+`0.195489 -> 0.179310`, and trusted identity-switch rate
+`1.3592% -> 2.0984%`.  Every pooled position horizon regresses:
+`0.265184/0.277452/0.309911/0.335387/0.357837 ->`
+`0.316393/0.317028/0.333434/0.357789/0.374069 m`.  The dominant familiar-
+physics failure remains `reference_pairs`: current x
+`0.242694 -> 0.720231 m`, with x at 0.10/0.25/0.50/0.75/1.00 seconds
+`0.776552/0.760688/0.835178/0.919359/1.000081 m`.  Warmup slightly reduces
+that current-x failure relative to constant rate (`0.732948 m`) but broadens
+regression elsewhere; schedule repair has therefore failed and no capacity
+growth is authorized.
+
+The durable step-512 artifact is structurally exact.  All 48 attention tensors
+changed, all 177 inherited tensors are bitwise unchanged, exactly 48 complete
+finite Adam owners are at step 512, both protected checkpoints remain exact,
+and all serialized state is finite.  Checkpoint SHA-256 is
+`bd9bd0eb658a75059b97e1397726d726c29869468ce6ba65996640bcf707b9da`,
+model-state hash is
+`953a1cac1dc2edeebacbea07e266f6da5d234f4477b6a4e70f8aafa338f8e288`,
+and the report is
+`runs/20260812-155706-attention-node-drift-warmup-cosine-stage-a/attention_checkpoint_audit_step_000512.json`.
+An attempted launchd unload was denied by the managed environment after its
+approval quota was exhausted; at the last check the rejected trainer had
+continued to step 544 with empty stderr.  Its durable step-512 result remains
+the decision boundary, and the trainer/supervisor must be unloaded externally
+before another compute-heavy run starts.
+
+Specification 1.42 records the narrower evidence-backed repair.  A new
+`attention_relation` scope trains the 46 shared typed-token/relation tensors
+while keeping both node-decoder tensors frozen exactly at the protected zero
+initializer.  The checkpoint auditor now accepts explicit frozen-attention
+prefixes and can require exact 46/2 tensor and optimizer ownership.  Focused
+config/scope/auditor tests pass, and the complete suite passes
+`736 passed, 6 skipped in 211.71 s`; the skips are restricted-process MPS
+availability cases. Ruff and format checks pass. This
+is qualification infrastructure, not accuracy evidence.  The next experiment
+must begin weights-only from the untouched graph control, validate a zero-node
+relation-only ablation first, and retain every existing selector/test/OOD
+guardrail.  Only a qualified relation-first model may add an observation-
+derived, zero-default evidence gate for node acceleration; width/depth/history
+remain downstream.
+
+Verification commands for this change were:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/integration/test_checkpoint_roundtrip.py::test_checkpoint_specification_version_matches_authoritative_contract tests/unit/test_config.py tests/unit/test_training_schedule.py tests/unit/test_audit_attention_checkpoint.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check world_model/utils/config.py world_model/utils/version.py world_model/training/trainer.py scripts/audit_attention_checkpoint.py tests/unit/test_config.py tests/unit/test_training_schedule.py tests/unit/test_audit_attention_checkpoint.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check world_model/utils/config.py world_model/utils/version.py world_model/training/trainer.py scripts/audit_attention_checkpoint.py tests/unit/test_config.py tests/unit/test_training_schedule.py tests/unit/test_audit_attention_checkpoint.py
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-pycache PYTHONPATH=. conda run -n orpheus python -m compileall -q world_model scripts tests
+git diff --check
+```
 
 The specification-1.39 constant-rate drift candidate has now been stopped at
 its durable step-512 selector boundary.  The full 32-episode RGB-only selector

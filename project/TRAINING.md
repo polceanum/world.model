@@ -500,6 +500,19 @@ protected checkpoints to remain exact, validates checkpoint shapes/dtypes
 against the resolved architecture, and maps serialized Adam state back to
 named parameters and step counters. It exits nonzero on failure. The output is
 scope/integrity evidence, not a substitute for fixed-selector accuracy.
+For the specification-1.42 relation-first scope, add:
+
+```bash
+  --frozen-attention-prefix dynamics.attention_interactions.node_decoder.
+```
+
+With both existing `--require-*` flags, the auditor then requires all 46
+permitted attention tensors and exactly their 46 Adam states while proving the
+two node-decoder tensors remain bitwise equal to the protected initializer and
+own no optimizer state. The run itself must use
+`training.closed_loop_trainable_scope=attention_relation` and initialize from
+the untouched zero-output graph control; the scope does not erase a nonzero
+node decoder inherited from an invalid donor.
 Training workers start only on the first actual draw. Post-step and checkpoint
 finite-state checks terminate before corrupt parameters/moments can become a
 resumable artifact. See `project/STATUS.md` for the exact failures, smokes, and

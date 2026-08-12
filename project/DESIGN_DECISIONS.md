@@ -1,5 +1,40 @@
 # Design decisions
 
+## ADR-113 — Reject schedule-only repair and qualify relations before nodes
+
+- **Date:** 2026-08-12
+- **Status:** accepted and implemented; ablation/training pending
+- **Context:** The protected-control warmup/cosine experiment is finite,
+  balanced, scope-exact, and support-complete, but its first trained fixed
+  selector worsens score `0.3213162 -> 0.3475480` with 116 broad guardrail
+  failures plus failed improvement. Current position, coverage, precision,
+  event F1, identity, and every position horizon regress. Familiar
+  `reference_pairs` current x reaches `0.720231 m`. This is worse overall than
+  the rejected constant-rate score `0.3332533`, so insufficient warmup is not
+  the remaining explanation. Earlier same-manifest ablation of a related
+  rejected checkpoint improved score to `0.297330` when the complete node
+  decoder was zeroed, retaining learned relation/event outputs.
+- **Decision:** Keep depth, width, history, and CUDA scale closed. Add an
+  `attention_relation` scope that freezes the protected zero node decoder and
+  trains the remaining typed projections, set-attention/SwiGLU blocks, output
+  norm, and relation decoder. Extend the strict auditor with declared frozen
+  attention prefixes so qualification requires 46 changed tensors with exactly
+  46 Adam owners, two exact frozen node tensors, exact inherited/protected
+  state, and complete finiteness. First run a fixed-manifest zero-node ablation
+  of the latest rejected checkpoint; only matching evidence can authorize a
+  fresh relation-first run from the untouched graph control.
+- **Alternatives considered:** scale a model whose smaller control still
+  regresses; continue the rejected schedule to 8,192; increase the drift prior;
+  permanently delete node residuals; freeze one axis; relax guardrails; use
+  GQA, MLA, MoE, or longer token history to hide a short-token shortcut.
+- **Consequences:** Relation-first training is a diagnostic stage, not a claim
+  that all motion is constant velocity. If it qualifies, a later same-capacity
+  experiment may restore node acceleration only behind a causal, zero-default,
+  observation-derived evidence gate. A real unmodelled force remains
+  representable when evidence opens that gate. Focused implementation tests
+  pass, and the complete suite passes (`736 passed, 6 skipped`); no new
+  accuracy result exists yet.
+
 ## ADR-112 — Reject constant-rate drift before any capacity growth
 
 - **Date:** 2026-08-12

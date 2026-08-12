@@ -128,3 +128,63 @@ def test_attention_checkpoint_audit_proves_growth_isolation(tmp_path: Path) -> N
         "no attention tensors found under the configured prefix"
         in missing_prefix_report["failures"]
     )
+
+
+def test_attention_checkpoint_audit_supports_exact_frozen_node_scope(tmp_path: Path) -> None:
+    config_path = Path("configs/attention_pilot_mps.yaml")
+    config = load_config(config_path)
+    initial_model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
+    trained_model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
+    trained_model.load_state_dict(initial_model.state_dict())
+    attention_prefix = "dynamics.attention_interactions."
+    node_prefix = f"{attention_prefix}node_decoder."
+    with torch.no_grad():
+        for name, parameter in trained_model.named_parameters():
+            if name.startswith(attention_prefix) and not name.startswith(node_prefix):
+                parameter.add_(0.01)
+
+    optimizer = torch.optim.AdamW(trained_model.parameters(), lr=1.0e-4)
+    for name, parameter in trained_model.named_parameters():
+        if name.startswith(attention_prefix) and not name.startswith(node_prefix):
+            optimizer.state[parameter] = {
+                "step": torch.tensor(64.0),
+                "exp_avg": torch.zeros_like(parameter),
+                "exp_avg_sq": torch.zeros_like(parameter),
+            }
+
+    initial_state = initial_model.state_dict()
+    trained_state = trained_model.state_dict()
+    initial_path = tmp_path / "initial.pt"
+    checkpoint_path = tmp_path / "step64.pt"
+    protected_path = tmp_path / "protected.pt"
+    torch.save({"model_state": initial_state}, initial_path)
+    torch.save({"model_state": initial_state}, protected_path)
+    torch.save(
+        {
+            "step": 64,
+            "specification_version": "test",
+            "model_state": trained_state,
+            "optimizer_state": optimizer.state_dict(),
+            "metrics": {"checkpoint_model_state_hash": _model_state_hash(trained_state)},
+        },
+        checkpoint_path,
+    )
+
+    report = audit_checkpoint(
+        checkpoint_path=checkpoint_path,
+        initial_checkpoint_path=initial_path,
+        config_path=config_path,
+        protected_paths=[protected_path],
+        frozen_attention_prefixes=[node_prefix],
+        require_all_attention_changed=True,
+        require_complete_attention_optimizer_state=True,
+        require_protected_checkpoints=True,
+    )
+
+    assert report["status"] == "pass"
+    assert report["frozen_attention_tensor_count"] == 2
+    assert report["changed_frozen_attention_tensors"] == []
+    assert report["expected_trainable_attention_tensor_count"] == 46
+    assert report["changed_attention_tensor_count"] == 46
+    assert report["optimizer_state_owner_count"] == 46
+    assert report["optimizer_state_complete_for_attention"]

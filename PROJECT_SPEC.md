@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.41
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, and residual-prior gradient-alignment amendments 12 August 2026
+**Version:** 1.42
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6677,6 +6677,45 @@ lower or decaying learning rate is a cleaner same-capacity experiment than
 silently increasing the prior, hard-projecting gradients, or scaling model
 capacity. Such a successor remains a new weights-only protocol and may start
 only after the immutable fixed selector rejects the current candidate.
+
+## 205. Qualify relation/event residuals before evidence-gated node acceleration
+
+Warmup and cosine decay do not repair an unconditional typed node residual that
+learns a broadly misgeneralizing acceleration shortcut. The specification-1.41
+width-128/four-block schedule control is structurally healthy at update 512,
+but its fixed RGB-only selection score worsens from `0.3213162` to `0.3475480`
+with 116 broad incumbent guardrail failures and one failed improvement rule.
+The familiar `reference_pairs` current x error rises from `0.242694` to
+`0.720231 m`, and every x horizon regresses. This is worse overall than the
+already rejected constant-rate control and closes the schedule-only repair.
+It does not authorize depth, width, history, or compute growth.
+
+The next small-rung experiment separates typed interaction learning from
+single-object acceleration. An `attention_relation` training scope keeps the
+node decoder bitwise equal to the protected zero-output initializer while
+training the scene/entity/relation projections, type embeddings, dense
+attention/SwiGLU blocks, output normalization, and relation decoder. This is a
+qualification stage, not a permanent claim that unmodelled node forces cannot
+exist. It tests the already observed ablation signal that relation/event
+residuals can improve pooled prediction while the unconditional node output is
+the dominant source of free-flight regression.
+
+The scope must initialize weights-only from the untouched graph control, never
+from rejected attention weights. Its checkpoint audit must prove all 46
+permitted attention tensors and exactly their 46 Adam states changed, both node
+decoder tensors remained bitwise exact and own no optimizer state, all 177
+inherited tensors remained exact, protected checkpoints remained exact, and
+all serialized state is finite. Fixed validation, test, OOD, scenario, axis,
+horizon, lifecycle, identity, event, and uncertainty rules remain unchanged.
+
+Only after relation-first training qualifies may node acceleration return
+behind an explicit observation-derived evidence gate. The gate must default to
+zero residual at initialization, remain axis-neutral, consume causal belief,
+innovation, uncertainty, contact/event, and timestamped context rather than
+oracle labels, and pay a sparsity/calibration cost. It may open for genuinely
+unmodelled forces, but cannot become a constant scene-wide correction merely
+because the rest of the model is frozen. Qualify that gate as a separate
+same-capacity experiment before reopening the capacity ladder.
 
 ---
 

@@ -4,6 +4,25 @@
 
 ### 2026-08-12 functional node-drift prior and selector-512 diagnosis
 
+- Rejected the warmup/cosine control at its complete 32-episode step-512
+  selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail
+  failures plus failed improvement, zero support failures, and regression at
+  every pooled position horizon. Familiar `reference_pairs` current x reaches
+  `0.720231 m`. A strict audit proves all 48 attention tensors/Adam states live,
+  all 177 inherited tensors and both protected checkpoints exact, and all
+  serialized state finite.
+- Added specification-1.42 relation-first qualification. The new
+  `attention_relation` scope trains shared typed tokens/blocks and relation
+  outputs while freezing the two node-decoder tensors. The attention auditor
+  now supports explicit frozen prefixes and exact expected tensor/optimizer
+  coverage. Focused tests pass (`270 passed in 20.18 s`), the complete suite
+  passes (`736 passed, 6 skipped in 211.71 s`), and Ruff/format checks are
+  clean.
+- Kept every capacity rung closed. The managed environment denied launchd
+  unload after exhausting its approval quota, so the externally running
+  rejected job must be stopped before a zero-node ablation or relation-first
+  campaign consumes compute.
+
 - Completed the drift successor's authoritative 32-episode step-512 selector
   and rejected it at score `0.3332533` versus protected `0.3213162`, with 105
   broad guardrail failures.  `reference_pairs` current x worsens

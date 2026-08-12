@@ -16,7 +16,27 @@
   weights. Use 384 absolute warmup updates, 8,192 fixed cosine-decay updates,
   a 0.1 floor, unchanged objectives/data/selectors, and prove exact step-zero
   model/metric reproduction under clean one-shot trainer/supervisor jobs.
-- [ ] Qualify the active warmup/cosine control through fixed selectors and the
+- [x] Qualify the warmup/cosine control through its first trained fixed
+  selector. Reject score `0.3475480` versus protected `0.3213162`, with 116
+  broad guardrail failures plus failed improvement and zero support failures.
+  Every pooled position horizon regresses and `reference_pairs` current x is
+  `0.720231 m`; strict 48-tensor/Adam/inherited/protected/finiteness audit
+  passes, proving behavioral generalization failure rather than corruption.
+- [ ] Unload the rejected schedule trainer and supervisor. The managed
+  environment denied the attempted launchd bootout after its approval quota
+  was exhausted; at last check the trainer had continued beyond the durable
+  step-512 decision boundary to step 544. Do not start competing training.
+- [x] Implement specification-1.42 `attention_relation` training scope and a
+  generic frozen-attention-prefix checkpoint audit. Freeze exactly the two
+  node-decoder tensors while training the other 46 attention tensors; prove
+  configuration, requires-grad partition, tensor equality, and exact optimizer
+  ownership (`736 passed, 6 skipped`; Ruff/format clean).
+- [ ] Run the exact fixed-manifest zero-node modular ablation of the rejected
+  step-512 schedule checkpoint, then launch relation-first training only if it
+  reproduces the earlier beneficial zero-node evidence. Initialize from the
+  untouched graph control, never rejected attention weights; keep all
+  depth/width/history scaling gated.
+- [x] Qualify the active warmup/cosine control through fixed selectors and the
   declared plateau. Keep all depth/width/history scaling gated on broad
   fixed-manifest convergence and disjoint RGB-only generalization. Its first
   complete updates 8--64 audit passes with all 64 updates, balanced eight-way
@@ -49,7 +69,9 @@
   while exact-draw identity/lifecycle/event improve but current position,
   velocity, coverage90, and nearly every position horizon remain slightly
   adverse. This is neither collapse nor broad convergence; keep the selector-
-  512 and scale gates unchanged.
+  512 and scale gates unchanged. The completed selector subsequently rejects
+  the schedule more broadly than constant rate, closing this task as a failed
+  same-capacity control rather than convergence.
 - [x] Strictly audit the active candidate at durable step 256 and measure its
   emitted residual on a deterministic causal draw. Verify `48/48` attention
   tensors and complete Adam state changed, all 177 inherited tensors and both

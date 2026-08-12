@@ -3128,10 +3128,18 @@ def set_closed_loop_trainable_scope(
         _freeze_disconnected_training_heads(model)
         return
     model.requires_grad_(False)
-    if scope == "attention":
+    if scope in {"attention", "attention_relation"}:
         if model.dynamics.attention_interactions is None:
             raise ValueError("attention scope requires typed attention dynamics")
-        model.dynamics.attention_interactions.requires_grad_(True)
+        attention = model.dynamics.attention_interactions
+        attention.requires_grad_(True)
+        if scope == "attention_relation":
+            # Stage relation/event learning without letting an unconditional
+            # node acceleration shortcut rewrite otherwise predictable free
+            # flight. A protected zero-output initializer therefore keeps the
+            # node residual exactly zero while the shared typed token stack and
+            # relation decoder remain fully trainable.
+            attention.node_decoder.requires_grad_(False)
         return
     if scope == "dynamics":
         model.dynamics.requires_grad_(True)
@@ -3174,7 +3182,8 @@ def set_closed_loop_trainable_scope(
         _freeze_disconnected_training_heads(model)
         return
     raise ValueError(
-        "closed-loop trainable scope must be 'all', 'attention', 'dynamics', 'updater', "
+        "closed-loop trainable scope must be 'all', 'attention', "
+        "'attention_relation', 'dynamics', 'updater', "
         "'updater_mean', 'updater_mean_y', 'fast_roi', 'state_dynamics', "
         "'state_dynamics_fast_roi', or "
         "'state_dynamics_roi'"
@@ -5705,6 +5714,9 @@ def train_from_config(
                 )
                 result.metrics["closed_loop_scope_attention_only"] = float(
                     active_closed_loop_scope == "attention"
+                )
+                result.metrics["closed_loop_scope_attention_relation_only"] = float(
+                    active_closed_loop_scope == "attention_relation"
                 )
                 result.metrics["closed_loop_scope_state_dynamics_only"] = float(
                     active_closed_loop_scope == "state_dynamics"
