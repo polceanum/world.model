@@ -2963,4 +2963,8 @@
   diagnostic ablations. The fresh campaign exactly reproduces the protected
   initial selector and passes its first complete 64-update dynamics audit, but
   matched physical deltas are neutral/slightly adverse and no trained fixed
-  selector exists yet. The scale gate therefore remains closed.
+  selector exists yet. The durable step-128 checkpoint subsequently passes
+  exact scope/optimizer/finiteness/provenance audit and its matched training
+  window improves every pooled position horizon, but trusted identity switches
+  rise from `4/699` to `9/703` and selected velocity/event slices regress. The
+  scale gate therefore remains closed through fixed selector 512.

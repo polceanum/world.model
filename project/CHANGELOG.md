@@ -51,6 +51,16 @@
   every position horizon changes by less than `0.0008 m`, and trusted identity
   has one extra switch. This is recorded as an early trend warning; fixed
   selector 512, not the sampled window, remains the accuracy and scale gate.
+- Persisted and passed the step-128 attention checkpoint audit. Every one of
+  48 attention tensors changed, all 177 inherited tensors remain exact,
+  complete finite Adam state belongs to exactly the 48 attention parameters at
+  step 128, protected checkpoints remain exact, and all recorded hashes agree.
+  The matched 128-update dynamics audit also passes with equal scenario draws,
+  `5,047` causal trajectories, full horizon support, minimum interaction
+  retention `0.373366`, and stable `2.911 GB` sampled RSS. Current and every
+  pooled position horizon improve versus the predecessor, but identity rises
+  from `4/699` to `9/703`, 0.25/0.50-second velocity regresses, and collision
+  F1 is slightly lower. Continue to fixed selector 512 without promotion.
 
 - Stopped the specification-1.31 campaign after the trainer safely rejected
   attempted optimizer step 988 before Adam. Complete interaction retention was

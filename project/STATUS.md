@@ -230,6 +230,30 @@ early training-window warning, not a fixed-manifest rejection: checkpoint 128
 and the first trained selector at step 512 remain the next integrity and
 accuracy authorities. No depth or width increase is authorized yet.
 
+The durable step-128 checkpoint independently passes the complete attention
+integrity audit. All `48/48` attention tensors changed; all `177/177`
+inherited tensors remain bitwise exact; exactly 48 complete finite Adam states
+belong to the attention parameters at optimizer step 128; protected rollout
+checkpoints remain exact; and architecture, source, configuration, protocol,
+manifest, and stored model hashes agree. The audit is persisted at
+`runs/20260811-234157-attention-node-parsimony-stage-a/attention_checkpoint_audit_step_000128.json`.
+Across the exact matched 16-block schedule, all 128 updates apply with 16 draws
+from every scenario, `5,047` causal trajectories, support at every horizon,
+minimum complete-interaction retention `0.373366`, and stable sampled RSS
+`2,911,186,944` bytes. Relative to the unregularized predecessor, current
+position improves `0.004581 m`; x/y improve `0.012395/0.001112 m` while z is
+`0.001082 m` worse. All pooled position horizons improve by
+`0.004981/0.004607/0.003291/0.001164/0.003709 m`; current and one-second
+velocity improve, while 0.25 and 0.50 seconds regress by
+`0.003955/0.015837 m/s`. Collision F1 is effectively flat but slightly worse
+by `0.000519`; lifecycle precision/coverage improve slightly and uncertainty
+median NLL improves. The open warning is trusted identity: `9/703` switches
+versus `4/699` on the matched predecessor, with four of the five extra switches
+concentrated in the step-128 block. Fixed selector 512 remains authoritative.
+The checkpoint node x/y/z energies are
+`0.000159/0.001337/0.00000994`; the regularizer is active but y remains
+dominant, so its efficacy is not yet established.
+
 Implementation verification on Python `3.10.20` / PyTorch `2.10.0`:
 
 ```bash

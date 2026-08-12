@@ -485,7 +485,14 @@
   five position horizons (`+0.000262` to `+0.000758 m`), and one trusted
   identity switch. Treat this as an early warning, not selector evidence.
   Continue to checkpoint 128 and fixed selector 512 without a promotion or
-  capacity claim.
+  capacity claim. The step-128 checkpoint now passes exact integrity audit:
+  all 48 attention tensors are live, all 177 inherited tensors remain exact,
+  exactly 48 complete finite Adam states are at step 128, and protected/hash
+  provenance is intact. The full matched window improves current and every
+  position horizon with complete balanced support and stable memory, but
+  trusted identity is `9/703` versus `4/699` and 0.25/0.50-second velocity plus
+  collision F1 regress slightly. Continue unchanged to selector 512 while
+  treating identity as an explicit guardrail warning, not a promotion.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam
