@@ -100,11 +100,10 @@ window alone.  If that selector rejects the candidate, test warmup plus decay
 as a separately versioned protected-control successor before adding depth or
 width.
 
-The live run has subsequently reached update 232 with empty stderr; trainer
+The live run has subsequently reached update 256 with empty stderr; trainer
 and supervisor remain alive and the MPS trainer was using `520%` CPU at the
-2026-08-12 health check. The latest complete audited boundary remains update
-192. The
-complete schedule-matched 136--192 window passes with every scenario eight
+2026-08-12 health check. The complete schedule-matched 136--192 window passes
+with every scenario eight
 times, all 13 objectives, no failed/uncontained update, and flat RSS. Relative
 to the rejected complexity-only predecessor it improves current position by
 `0.017231 m`, x/z by `0.025865/0.023192 m`, and the 0.10/0.25-second horizons
@@ -128,6 +127,38 @@ is authorized unless the active fixed selector rejects. The complete repository
 suite passes with `732 passed, 6 skipped in 244.57 s`; all six skips are the
 expected MPS-unavailable cases in the restricted test process, while the host
 launch context independently proves MPS available and active.
+
+The durable step-256 checkpoint independently passes the strict attention
+audit. All `48/48` attention tensors changed, all 177 inherited tensors remain
+bitwise exact, exactly 48 complete finite Adam owners are at step 256, both
+protected incumbent checkpoints remain model-state-equal to step zero, and
+architecture, source, protocol, stored-state, and recomputed model hashes
+agree. The checkpoint SHA-256 is
+`e9c94bb2e5facd6a2aa833d0c7d8f4f5cb8b8bbd76dc031ee2fbcc6bea70d788`;
+its model-state hash is
+`e086c2528af79370477013911427c2e5343b871f6e611f39f9c6a248eda40dce`.
+The qualified report is
+`runs/20260812-102557-attention-node-drift-008-stage-a/attention_checkpoint_audit_step_000256.json`.
+An earlier invocation that incorrectly compared the learned attention module
+against the graph-only source checkpoint is transparently retained with an
+`_invalid_graph_initializer` suffix and is not qualification evidence.
+
+The complete schedule-matched updates 184--240 window also passes operational
+health: all eight scenarios occur eight times, all 13 objectives are present,
+`2,549` causal trajectories contribute, no update fails, minimum complete
+interaction retention is `0.359573`, and RSS is flat. Versus the rejected
+complexity-only predecessor, current position improves `0.011870 m`, x/z
+improve `0.019308/0.018524 m`, and 0.10/0.25-second position improves
+`0.009625/0.004403 m`. The candidate remains worse at 0.50/0.75/1.00 seconds
+by `0.002679/0.005120/0.007016 m`, at current velocity by `0.031758 m/s`, and
+at every velocity horizon by `0.005850--0.106037 m/s`; y, collision F1,
+lifecycle precision/coverage, coverage90, and median uncertainty NLL are also
+worse. The step-256 same-draw functional calibration is finite but still
+drift-dominated: RMS emitted node acceleration is `0.117747 m/s²`, mean
+acceleration is `[-0.052641, 0.195037, -0.021283] m/s²`, and activity/drift/
+variation are `0.0138644/0.0137544/0.000109986 (m/s²)²`. This is a coherent
+short-position versus velocity/long-horizon limitation, not corruption or
+collapse; selector 512 remains authoritative.
 
 The immutable specification-1.36 residual-parsimony campaign has been stopped
 at its durable step-1024 selector boundary.  The checkpoint is structurally

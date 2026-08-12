@@ -18,6 +18,15 @@
   operationally healthy and now improves current and 0.10/0.25-second position
   versus the predecessor, but still regresses velocity and 0.50--1.00-second
   position. Preserve the run to selector 512 without promotion or mutation.
+- Repeated the operational and integrity audit at the durable step-256
+  boundary. All 48 attention tensors and exactly their 48 complete Adam owners
+  changed, all 177 inherited tensors and both protected incumbents remain
+  exact, and every serialized value is finite. The complete matched 184--240
+  window again improves current/short position while regressing every velocity
+  horizon and 0.50--1.00-second position. Same-draw calibration measures a
+  finite but still drift-dominated mean node acceleration of
+  `[-0.052641, 0.195037, -0.021283] m/s²`; this is non-promotable limitation
+  evidence pending selector 512, not collapse.
 
 - Reached and strictly audited the specification-1.36 step-1024 checkpoint.
   All 48 attention tensors changed, all 177 inherited tensors remain exact,

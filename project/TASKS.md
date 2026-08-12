@@ -11,6 +11,11 @@
   Only if it rejects, launch a separately versioned same-capacity warmup/cosine
   control from the protected graph checkpoint; do not scale or initialize from
   rejected learned attention weights.
+- [x] Strictly audit the active candidate at durable step 256 and measure its
+  emitted residual on a deterministic causal draw. Verify `48/48` attention
+  tensors and complete Adam state changed, all 177 inherited tensors and both
+  protected incumbents remain exact, and record the remaining drift-dominated
+  y acceleration alongside the complete 184--240 axis/horizon trade-off.
 
 - [x] Diagnose protocol-17 step-2,048 per-axis/per-scenario regression with
   exact learned-corrector scale and updater/dynamics checkpoint ablations.
