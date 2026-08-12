@@ -2,6 +2,16 @@
 
 ## Active convergence target — typed attention scaling from corrected control
 
+- [x] Implement a backward-compatible, exact-resumable constant or linear-
+  warmup/cosine closed-loop learning-rate protocol. Derive it from absolute
+  causal update index and an explicit decay duration so convergence extensions
+  cannot reshape the schedule; prove legacy constant compatibility, semantic
+  resume rejection, and a real `0.0002 -> 0.00011` checkpoint-resume smoke.
+- [ ] Evaluate the active constant-rate drift candidate at fixed selector 512.
+  Only if it rejects, launch a separately versioned same-capacity warmup/cosine
+  control from the protected graph checkpoint; do not scale or initialize from
+  rejected learned attention weights.
+
 - [x] Diagnose protocol-17 step-2,048 per-axis/per-scenario regression with
   exact learned-corrector scale and updater/dynamics checkpoint ablations.
 - [x] Implement deterministic, exact-resumable batches with equal support from

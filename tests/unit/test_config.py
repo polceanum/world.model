@@ -215,6 +215,45 @@ def test_closed_loop_learning_rate_scale_is_bounded(scale: float) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "overrides,pattern",
+    [
+        (["training.closed_loop_learning_rate_schedule=unknown"], "schedule"),
+        (["training.closed_loop_learning_rate_warmup_steps=-1"], "warmup_steps"),
+        (["training.closed_loop_learning_rate_minimum_scale=-0.1"], "minimum_scale"),
+        (["training.closed_loop_learning_rate_minimum_scale=1.1"], "minimum_scale"),
+        (
+            [
+                "training.closed_loop_learning_rate_schedule=constant",
+                "training.closed_loop_learning_rate_warmup_steps=1",
+            ],
+            "constant",
+        ),
+        (
+            [
+                "training.closed_loop_learning_rate_schedule=warmup_cosine",
+                "training.closed_loop_learning_rate_cosine_decay_steps=4",
+            ],
+            "warmup steps",
+        ),
+        (
+            [
+                "training.closed_loop_learning_rate_schedule=warmup_cosine",
+                "training.closed_loop_learning_rate_warmup_steps=4",
+                "training.closed_loop_learning_rate_cosine_decay_steps=0",
+            ],
+            "decay steps",
+        ),
+    ],
+)
+def test_closed_loop_learning_rate_schedule_is_validated(
+    overrides: list[str],
+    pattern: str,
+) -> None:
+    with pytest.raises(ValueError, match=pattern):
+        load_config(CONFIG_DIR / "tiny_overfit.yaml", overrides=overrides)
+
+
 def test_closed_loop_device_preference_is_explicit() -> None:
     with pytest.raises(ValueError, match="closed-loop device preference"):
         load_config(

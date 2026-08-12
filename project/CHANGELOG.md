@@ -4,6 +4,21 @@
 
 ### 2026-08-12 functional node-drift prior and selector-512 diagnosis
 
+- Added an opt-in, state-free `warmup_cosine` closed-loop learning-rate
+  protocol while preserving exact historical `constant` behavior. Warmup and
+  cosine durations use absolute causal update indices and never depend on the
+  extensible total-step budget; schedule changes are exact-resume
+  incompatibilities. A real CPU smoke and exact resume logged the expected
+  `0.0002` second warmup rate and `0.0001100000` first cosine rate at
+  `runs/20260812-123215-lr-schedule-smoke/`. This is implementation evidence,
+  not accuracy qualification, and it does not alter the active pinned run.
+  The complete repository suite passes with `732 passed, 6 skipped`; the skips
+  are the expected MPS-unavailable device cases in the restricted test process.
+- Audited the active drift campaign's complete steps 136--192 window. It is
+  operationally healthy and now improves current and 0.10/0.25-second position
+  versus the predecessor, but still regresses velocity and 0.50--1.00-second
+  position. Preserve the run to selector 512 without promotion or mutation.
+
 - Reached and strictly audited the specification-1.36 step-1024 checkpoint.
   All 48 attention tensors changed, all 177 inherited tensors remain exact,
   exactly 48 finite Adam owners are at step 1024, both protected artifacts are

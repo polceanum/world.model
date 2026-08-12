@@ -1669,6 +1669,48 @@ def _has_effective_gradient(
     return gradient_norm > config.training.minimum_effective_gradient_norm
 
 
+def closed_loop_learning_rate_at_update(
+    config: OrpheusConfig,
+    *,
+    causal_update_index: int,
+) -> float:
+    """Return the exact causal-update learning rate for this protocol.
+
+    ``causal_update_index`` is zero based and independent of measurement
+    pretraining.  Using an explicit decay horizon keeps exact resume and later
+    convergence extensions invariant: changing ``training.steps`` cannot
+    retroactively reshape the schedule.
+    """
+
+    if (
+        isinstance(causal_update_index, bool)
+        or not isinstance(causal_update_index, int)
+        or causal_update_index < 0
+    ):
+        raise ValueError("causal_update_index must be a nonnegative integer")
+    training = config.training
+    maximum = training.learning_rate * training.closed_loop_learning_rate_scale
+    if training.closed_loop_learning_rate_schedule == "constant":
+        return maximum
+    if training.closed_loop_learning_rate_schedule != "warmup_cosine":
+        raise ValueError("unsupported closed-loop learning-rate schedule")
+    warmup = training.closed_loop_learning_rate_warmup_steps
+    decay = training.closed_loop_learning_rate_cosine_decay_steps
+    if warmup <= 0:
+        raise ValueError("warmup_cosine schedule requires positive warmup steps")
+    if decay is None or decay <= 0:
+        raise ValueError("warmup_cosine schedule requires positive decay steps")
+    if causal_update_index < warmup:
+        return maximum * float(causal_update_index + 1) / float(warmup)
+    decay_progress = min(
+        1.0,
+        float(causal_update_index + 1 - warmup) / float(decay),
+    )
+    cosine_scale = 0.5 * (1.0 + math.cos(math.pi * decay_progress))
+    minimum_scale = training.closed_loop_learning_rate_minimum_scale
+    return maximum * (minimum_scale + (1.0 - minimum_scale) * cosine_scale)
+
+
 def _assert_interaction_gradient_retention(
     diagnostics: Mapping[str, float],
     config: OrpheusConfig,
@@ -5615,8 +5657,9 @@ def train_from_config(
                     frame_index=frame_index,
                 )
             else:
-                target_learning_rate = (
-                    config.training.learning_rate * config.training.closed_loop_learning_rate_scale
+                target_learning_rate = closed_loop_learning_rate_at_update(
+                    config,
+                    causal_update_index=step - config.training.rgb_pretrain_steps,
                 )
                 total_frames = int(batch["rgb"].shape[1])
                 window_steps = min(total_frames, config.training.tbptt_steps)
@@ -6223,6 +6266,16 @@ def train_from_config(
         "scenario_balanced_batches": config.training.scenario_balanced_batches,
         "rgb_pretrain_steps": min(config.training.steps, config.training.rgb_pretrain_steps),
         "closed_loop_steps": max(0, config.training.steps - config.training.rgb_pretrain_steps),
+        "closed_loop_learning_rate_schedule": (config.training.closed_loop_learning_rate_schedule),
+        "closed_loop_learning_rate_warmup_steps": (
+            config.training.closed_loop_learning_rate_warmup_steps
+        ),
+        "closed_loop_learning_rate_cosine_decay_steps": (
+            config.training.closed_loop_learning_rate_cosine_decay_steps
+        ),
+        "closed_loop_learning_rate_minimum_scale": (
+            config.training.closed_loop_learning_rate_minimum_scale
+        ),
         "device": (
             str(resume_config_payload.get("device", device))
             if no_op_exact_resume and resume_config_payload is not None

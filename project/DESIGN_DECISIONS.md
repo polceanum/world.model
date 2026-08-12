@@ -1,5 +1,35 @@
 # Design decisions
 
+## ADR-110 — Make schedule repair exact and evidence-gated before scaling
+
+- **Date:** 2026-08-12
+- **Status:** implemented as opt-in infrastructure; successor not authorized
+- **Context:** The active drift-prior campaign is finite and supported, but its
+  early matched windows trade short-axis improvements against longer-horizon
+  regressions while nearly constant y residual activity persists. Modern dense
+  training practice commonly uses warmup and cosine decay, but changing the
+  live constant rate would destroy the controlled trajectory. Tying cosine to
+  mutable `training.steps` would also rewrite the future schedule whenever the
+  convergence supervisor extends a run.
+- **Decision:** Support only explicit `constant` and `warmup_cosine` causal
+  schedules. Compute rate from zero-based causal optimizer update index,
+  excluding measurement pretraining. Configure fixed warmup and cosine-decay
+  durations plus a minimum scale; hold the floor after decay. Treat these as
+  exact-resume semantics, normalize missing historical fields to `constant`,
+  and require weights-only initialization for any change. Preserve the active
+  specification-1.39 process unchanged until fixed selector 512.
+- **Alternatives considered:** mutate the live rate; infer decay from total
+  steps; use a stateful opaque scheduler; scale depth/width now; reject from
+  sampled training rows; treat the schedule smoke as accuracy evidence.
+- **Consequences:** A convergence extension cannot retroactively reshape the
+  learning-rate curve, and no scheduler state can drift from the absolute
+  optimizer step. Unit/config/checkpoint tests pass, and a real two-update CPU
+  smoke plus exact one-update resume logs the analytically expected
+  `0.0002 -> 0.00011` transition. The smoke is `last_unvalidated`; only a new
+  complete fixed-manifest campaign can establish an accuracy benefit. The
+  complete repository suite passes with `732 passed, 6 skipped`; the skips are
+  restricted-process MPS availability checks, not training failures.
+
 ## ADR-109 — Reject complexity-only step 1024 before scaling
 
 - **Date:** 2026-08-12

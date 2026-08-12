@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-12
-**Specification:** `PROJECT_SPEC.md` 1.39; the active immutable successor uses
+**Specification:** `PROJECT_SPEC.md` 1.40; the active immutable successor uses
 specification 1.39
 
 ## Latest verified state — 2026-08-12
@@ -99,6 +99,35 @@ do not scale capacity or alter its constant learning rate from this diagnostic
 window alone.  If that selector rejects the candidate, test warmup plus decay
 as a separately versioned protected-control successor before adding depth or
 width.
+
+The live run has subsequently reached update 232 with empty stderr; trainer
+and supervisor remain alive and the MPS trainer was using `520%` CPU at the
+2026-08-12 health check. The latest complete audited boundary remains update
+192. The
+complete schedule-matched 136--192 window passes with every scenario eight
+times, all 13 objectives, no failed/uncontained update, and flat RSS. Relative
+to the rejected complexity-only predecessor it improves current position by
+`0.017231 m`, x/z by `0.025865/0.023192 m`, and the 0.10/0.25-second horizons
+by `0.014988/0.005339 m`. It remains worse at 0.50/0.75/1.00 seconds by
+`0.013869/0.015243/0.012813 m`, velocity by `0.007944 m/s`, y by
+`0.000982 m`, and coverage90 by `0.004990`; identity and lifecycle are also
+mixed. This is the first training window to recover current and short-horizon
+position, but it remains non-promotable evidence before selector 512.
+
+Specification 1.40 adds a backward-compatible, opt-in `warmup_cosine`
+closed-loop learning-rate protocol without changing the live pinned process.
+Its rate is a pure function of absolute causal update index, explicit warmup
+and decay durations, and a minimum scale, so extending `training.steps` cannot
+reshape the schedule. Historical configs normalize to exact `constant`
+behavior and a schedule change is rejected by exact resume. The real CPU smoke
+at `runs/20260812-123215-lr-schedule-smoke/` completed two updates and an exact
+third-update resume; it logged the expected `0.0002` second warmup rate and
+`0.0001100000` first cosine rate. Its two-episode validation is explicitly
+`last_unvalidated` and is implementation evidence only. No scheduled successor
+is authorized unless the active fixed selector rejects. The complete repository
+suite passes with `732 passed, 6 skipped in 244.57 s`; all six skips are the
+expected MPS-unavailable cases in the restricted test process, while the host
+launch context independently proves MPS available and active.
 
 The immutable specification-1.36 residual-parsimony campaign has been stopped
 at its durable step-1024 selector boundary.  The checkpoint is structurally

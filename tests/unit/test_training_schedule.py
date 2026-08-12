@@ -50,11 +50,58 @@ from world_model.training.trainer import (
     _validation_loader_result,
     _validation_protocol_checkpoint_metrics,
     _validation_step,
+    closed_loop_learning_rate_at_update,
     measurement_pretrain_frame_index,
     set_closed_loop_trainable_scope,
     set_global_perception_trainable,
 )
 from world_model.utils.config import load_config
+
+
+def test_constant_closed_loop_learning_rate_is_exactly_backward_compatible() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    expected = config.training.learning_rate * config.training.closed_loop_learning_rate_scale
+
+    assert closed_loop_learning_rate_at_update(config, causal_update_index=0) == expected
+    assert closed_loop_learning_rate_at_update(config, causal_update_index=100_000) == expected
+
+
+def test_warmup_cosine_schedule_uses_absolute_causal_update_index() -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            learning_rate=1.0,
+            closed_loop_learning_rate_scale=0.5,
+            closed_loop_learning_rate_schedule="warmup_cosine",
+            closed_loop_learning_rate_warmup_steps=2,
+            closed_loop_learning_rate_cosine_decay_steps=4,
+            closed_loop_learning_rate_minimum_scale=0.2,
+        ),
+    )
+    config.validate()
+
+    observed = [
+        closed_loop_learning_rate_at_update(config, causal_update_index=index) for index in range(8)
+    ]
+    assert observed[0] == pytest.approx(0.25)
+    assert observed[1] == pytest.approx(0.5)
+    assert observed[2] == pytest.approx(0.5 * (0.2 + 0.8 * 0.5 * (1.0 + math.cos(math.pi / 4))))
+    assert observed[5] == pytest.approx(0.1)
+    assert observed[6:] == pytest.approx([0.1, 0.1])
+
+    extended = replace(config, training=replace(config.training, steps=100_000))
+    assert [
+        closed_loop_learning_rate_at_update(extended, causal_update_index=index)
+        for index in range(8)
+    ] == pytest.approx(observed)
+
+
+def test_closed_loop_learning_rate_rejects_negative_update_index() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    with pytest.raises(ValueError, match="causal_update_index"):
+        closed_loop_learning_rate_at_update(config, causal_update_index=-1)
 
 
 def test_worker_loader_bounds_prefetch_and_does_not_persist_workers() -> None:

@@ -659,6 +659,10 @@ def test_training_resume_normalizes_explicit_legacy_defaults() -> None:
         "attention_impulse_grad_clip_norm",
         "attention_impulse_output_grad_clip_norm",
         "minimum_interaction_gradient_retention",
+        "closed_loop_learning_rate_schedule",
+        "closed_loop_learning_rate_warmup_steps",
+        "closed_loop_learning_rate_cosine_decay_steps",
+        "closed_loop_learning_rate_minimum_scale",
     ):
         checkpoint_config["training"].pop(field_name)
     checkpoint_config["device"].pop("closed_loop_preference")
@@ -692,6 +696,18 @@ def test_training_resume_normalizes_explicit_legacy_defaults() -> None:
                 ),
             ),
             "training.batch_size",
+        ),
+        (
+            lambda config: replace(
+                config,
+                training=replace(
+                    config.training,
+                    closed_loop_learning_rate_schedule="warmup_cosine",
+                    closed_loop_learning_rate_warmup_steps=4,
+                    closed_loop_learning_rate_cosine_decay_steps=16,
+                ),
+            ),
+            "training.closed_loop_learning_rate_cosine_decay_steps",
         ),
         (
             lambda config: replace(

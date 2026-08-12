@@ -291,6 +291,16 @@ class TrainingConfig:
     steps: int = 1000
     learning_rate: float = 3e-4
     closed_loop_learning_rate_scale: float = 0.1
+    # Keep the historical constant-rate trajectory unless a new protocol opts
+    # into a deterministic causal-update schedule.  The cosine horizon is an
+    # absolute update count rather than ``training.steps`` so a convergence
+    # extension cannot silently reshape an already-running schedule.
+    closed_loop_learning_rate_schedule: str = "constant"
+    closed_loop_learning_rate_warmup_steps: int = 0
+    # Number of cosine-decay updates after warmup, not an endpoint inferred
+    # from the mutable overall training budget.
+    closed_loop_learning_rate_cosine_decay_steps: int | None = None
+    closed_loop_learning_rate_minimum_scale: float = 0.1
     closed_loop_global_trainable_steps: int = 50
     closed_loop_trainable_scope: str = "all"
     # Optional causal-update boundary for a declared two-scope curriculum.
@@ -1048,6 +1058,43 @@ class OrpheusConfig:
                 )
         if not 0 < self.training.closed_loop_learning_rate_scale <= 1:
             raise ValueError("training.closed_loop_learning_rate_scale must lie in (0, 1]")
+        schedule = self.training.closed_loop_learning_rate_schedule
+        if schedule not in {"constant", "warmup_cosine"}:
+            raise ValueError(
+                "training.closed_loop_learning_rate_schedule must be 'constant' or 'warmup_cosine'"
+            )
+        warmup_steps = self.training.closed_loop_learning_rate_warmup_steps
+        decay_steps = self.training.closed_loop_learning_rate_cosine_decay_steps
+        minimum_scale = self.training.closed_loop_learning_rate_minimum_scale
+        if isinstance(warmup_steps, bool) or not isinstance(warmup_steps, int) or warmup_steps < 0:
+            raise ValueError(
+                "training.closed_loop_learning_rate_warmup_steps must be a nonnegative integer"
+            )
+        if (
+            isinstance(minimum_scale, bool)
+            or not isinstance(minimum_scale, (int, float))
+            or not 0.0 <= minimum_scale <= 1.0
+        ):
+            raise ValueError("training.closed_loop_learning_rate_minimum_scale must lie in [0, 1]")
+        if schedule == "constant":
+            if warmup_steps != 0 or decay_steps is not None:
+                raise ValueError(
+                    "constant closed-loop learning rate requires zero warmup and "
+                    "null cosine decay steps"
+                )
+        else:
+            if warmup_steps <= 0:
+                raise ValueError(
+                    "warmup_cosine closed-loop learning rate requires positive warmup steps"
+                )
+            if (
+                isinstance(decay_steps, bool)
+                or not isinstance(decay_steps, int)
+                or decay_steps <= 0
+            ):
+                raise ValueError(
+                    "warmup_cosine closed-loop learning rate requires positive cosine decay steps"
+                )
         if self.training.closed_loop_global_trainable_steps < 0:
             raise ValueError("training.closed_loop_global_trainable_steps must be nonnegative")
         valid_closed_loop_scopes = {
