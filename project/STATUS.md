@@ -1,7 +1,8 @@
 # Project status
 
 **Date:** 2026-08-12
-**Specification:** `PROJECT_SPEC.md` 1.36
+**Specification:** `PROJECT_SPEC.md` 1.37; the active immutable training run
+remains specification 1.36
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
 selection/confirmation/test manifests, horizon-balanced recursive training,
@@ -307,6 +308,39 @@ control; preserve its full data-only curve; then compare the exact-identity
 timestamped history, with parameter-proportional balanced data and disjoint
 RGB-only validation/test/OOD gates. The planned 8.31M width-256/depth-six rung
 remains the first single-CUDA candidate. No larger run has been launched.
+
+The live specification-1.36 trajectory has now reached durable checkpoint
+step 256 without interrupting the original one-shot process. The independent
+checkpoint audit passes: all 48 attention tensors changed, all 177 inherited
+tensors remain bitwise exact, complete finite Adam state belongs to exactly
+the 48 attention parameters at step 256, all serialized state is finite, and
+source/config/protocol/model hashes agree. Both protected `best_rollout.pt`
+and `reference_rollout.pt` model states exactly equal the initializer. The
+checkpoint hash is `ee34540134882277142bf0397cfbf364426570f8b3c85c1a8fb22b81ab104cc4`;
+its model-state hash is
+`f152b1e0014ce8a1bd8fba3be5ade59a3645e3d44263e55b196e3a8dcf2a72e9`.
+
+Matched training evidence from steps 128--256 is mixed and remains
+non-promotable. Current position is `0.008560 m` worse, driven by x/z
+regressions of `0.015784/0.009884 m` while y improves `0.002188 m`; current
+velocity improves `0.013364 m/s`. Position at 0.10/0.25 seconds regresses
+`0.009078/0.005336 m`, while 0.50/0.75/1.00 seconds improves
+`0.003742/0.005007/0.006838 m`. Four excess identity switches remain, but
+collision F1, lifecycle precision/coverage, most velocity horizons,
+uncertainty NLL, and memory improve. A contained step-240 force spike retains
+`0.215624` at the complete interaction stage and is followed by a fully
+unclipped step-248 block that improves every sampled position horizon. The
+dynamics auditor returns `pass`, with all 256 updates applied, zero skips, no
+terminal artifact, full scenario/horizon support, and stable `2.911 GB` peak
+RSS. Fixed selector 512 remains authoritative.
+
+The first step-256 audit invocation accidentally omitted protected paths and
+returned a vacuous `protected_checkpoints_exactly_initial: true`. Rerunning
+with both paths proved the artifacts intact. Specification 1.37 repairs the
+offline tool: reports now include `protected_checkpoint_count`, return `null`
+for an unchecked empty set, and can require a nonempty protected set. Focused
+tests report `3 passed`; Ruff check passes after formatting. This does not
+change the live 1.36 trainer, its tensors, or its protocol.
 
 Implementation verification on Python `3.10.20` / PyTorch `2.10.0`:
 

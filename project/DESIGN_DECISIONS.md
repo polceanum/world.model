@@ -1,5 +1,26 @@
 # Design decisions
 
+## ADR-106 — Require non-vacuous protected-checkpoint evidence
+
+- **Date:** 2026-08-12
+- **Status:** accepted and implemented; live training semantics unchanged
+- **Context:** The first step-256 attention audit omitted `--protected`
+  arguments and reported `protected_checkpoints_exactly_initial: true` because
+  every member of an empty set passed. The model/optimizer checks were valid,
+  but the protection claim was unchecked and could be mistaken for evidence.
+- **Decision:** Record protected-checkpoint count, represent an empty check as
+  `null`, and expose a qualification gate that fails when no protected paths
+  were supplied. Retain file and model-state hashes for every supplied path.
+- **Alternatives considered:** rely on command discipline; auto-discover
+  sibling filenames; keep vacuous truth and infer it from empty hash maps.
+- **Consequences:** Qualification commands are explicit and fail closed,
+  while exploratory audits may omit protection without making a false claim.
+  This changes only the offline auditor and specification version; the active
+  immutable 1.36 trainer and checkpoint format are unchanged.
+- **Evidence:** Focused tests cover both a required nonempty protected set and
+  required empty-set failure. The corrected step-256 audit checks two paths;
+  both model states equal the initializer and their hashes match step 128.
+
 ## ADR-105 — Budget recursive typed-output gradients across the optimizer draw
 
 - **Date:** 2026-08-11

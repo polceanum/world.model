@@ -83,6 +83,19 @@
   evidence-gated data/depth/width/history ladder remain the appropriate path;
   long-context or cluster-efficiency mechanisms are deferred until a measured
   bottleneck requires them. No live protocol or model tensor was changed.
+- Reached durable live checkpoint step 256. Its independent audit proves all
+  48 attention tensors changed, all 177 inherited tensors remain exact,
+  exactly 48 finite Adam states are at step 256, both protected checkpoints
+  equal the initializer, and every provenance/hash check passes. Matched
+  128--256 training evidence improves long horizons and several guardrails but
+  regresses current x/z, short horizons, and identity, so selector 512 remains
+  authoritative and no larger rung is launched.
+- Advanced the offline evidence contract to specification 1.37 after an audit
+  invocation with no protected arguments exposed a vacuous `true` protection
+  result. The auditor now records protected count, emits `null` when protection
+  was unchecked, and can fail an omitted protected set. The corrected step-256
+  audit requires and verifies both protected artifacts; focused tests and Ruff
+  pass. The immutable live trainer remains truthfully specification 1.36.
 
 - Stopped the specification-1.31 campaign after the trainer safely rejected
   attempted optimizer step 988 before Adam. Complete interaction retention was

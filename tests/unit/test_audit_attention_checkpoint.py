@@ -92,6 +92,7 @@ def test_attention_checkpoint_audit_proves_growth_isolation(tmp_path: Path) -> N
         protected_paths=[protected_path],
         require_all_attention_changed=True,
         require_complete_attention_optimizer_state=True,
+        require_protected_checkpoints=True,
     )
 
     assert report["status"] == "pass"
@@ -101,8 +102,20 @@ def test_attention_checkpoint_audit_proves_growth_isolation(tmp_path: Path) -> N
     assert report["optimizer_state_attention_only"]
     assert report["optimizer_state_complete_for_attention"]
     assert report["optimizer_steps"] == [128]
+    assert report["protected_checkpoint_count"] == 1
     assert report["protected_checkpoints_exactly_initial"]
     assert report["all_serialized_state_finite"]
+
+    unchecked_protection_report = audit_checkpoint(
+        checkpoint_path=checkpoint_path,
+        initial_checkpoint_path=initial_path,
+        config_path=config_path,
+        require_protected_checkpoints=True,
+    )
+    assert unchecked_protection_report["status"] == "fail"
+    assert unchecked_protection_report["protected_checkpoint_count"] == 0
+    assert unchecked_protection_report["protected_checkpoints_exactly_initial"] is None
+    assert "no protected checkpoints were provided" in unchecked_protection_report["failures"]
 
     missing_prefix_report = audit_checkpoint(
         checkpoint_path=checkpoint_path,

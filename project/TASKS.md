@@ -504,7 +504,15 @@
   current state and every pooled position horizon; adding step 208 produces a
   small 0.50-second/collision/lifecycle tradeoff but no support, identity,
   optimizer, numerical, or resource collapse. Keep selector 512 authoritative
-  and do not launch a larger rung from cadence-sampled evidence.
+  and do not launch a larger rung from cadence-sampled evidence. Durable step
+  256 now passes exact tensor/optimizer/protected-checkpoint audit. The matched
+  128--256 window improves long position horizons, velocity, collision,
+  lifecycle, uncertainty, and memory but regresses current x/z, short position,
+  and identity. Continue unchanged to fixed selector 512.
+- [x] Make protected-checkpoint audits non-vacuous under specification 1.37:
+  record protected count, return `null` when none were checked, and provide a
+  required-protection gate that fails an empty set. Rerun step 256 with both
+  protected artifacts and preserve their file/model hashes.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

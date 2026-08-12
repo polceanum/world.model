@@ -109,6 +109,7 @@ def audit_checkpoint(
     attention_prefix: str = "dynamics.attention_interactions.",
     require_all_attention_changed: bool = False,
     require_complete_attention_optimizer_state: bool = False,
+    require_protected_checkpoints: bool = False,
 ) -> dict[str, Any]:
     checkpoint = _load_checkpoint(checkpoint_path)
     initial = _load_checkpoint(initial_checkpoint_path)
@@ -192,6 +193,8 @@ def audit_checkpoint(
         failures.append("checkpoint contains nonfinite serialized state")
     if protected_paths and not protected_exact:
         failures.append("a protected checkpoint differs from the initializer")
+    if require_protected_checkpoints and not protected_paths:
+        failures.append("no protected checkpoints were provided")
     stored_hash = metrics.get("checkpoint_model_state_hash")
     if stored_hash is not None and stored_hash != checkpoint_hash:
         failures.append("stored checkpoint model hash does not match tensors")
@@ -229,9 +232,10 @@ def audit_checkpoint(
         "optimizer_state_complete_for_attention": optimizer_owner_set == attention_parameter_names,
         "optimizer_state_owners": optimizer_owners,
         "optimizer_steps": optimizer_steps,
+        "protected_checkpoint_count": len(protected_paths),
         "protected_model_state_hashes": protected_hashes,
         "protected_checkpoint_file_sha256": protected_file_hashes,
-        "protected_checkpoints_exactly_initial": protected_exact,
+        "protected_checkpoints_exactly_initial": (protected_exact if protected_paths else None),
         "rollout_validation_protocol_hash": metrics.get("rollout_validation_protocol_hash"),
         "validation_seed_manifest_hash": metrics.get("validation_seed_manifest_hash"),
     }
@@ -253,6 +257,11 @@ def parse_args() -> argparse.Namespace:
         "--require-complete-attention-optimizer-state",
         action="store_true",
     )
+    parser.add_argument(
+        "--require-protected-checkpoints",
+        action="store_true",
+        help="fail instead of treating an omitted protected set as an unchecked condition",
+    )
     return parser.parse_args()
 
 
@@ -268,6 +277,7 @@ def main() -> int:
         require_complete_attention_optimizer_state=(
             args.require_complete_attention_optimizer_state
         ),
+        require_protected_checkpoints=args.require_protected_checkpoints,
     )
     rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.output is not None:
