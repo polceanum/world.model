@@ -191,6 +191,29 @@ nonzero and intermittently rising.  This is promising matched recovery, not
 promotion; warmup completion at 384 and the fixed selector at 512 remain the
 next evidence gates.
 
+Linear warmup completes exactly at durable step 384 with peak LR `5e-5` and a
+clean strict checkpoint audit.  All 48 attention tensors changed, all 177
+inherited tensors remain exact, exactly 48 complete finite Adam owners are at
+step 384, and protected incumbents remain exact.  Checkpoint SHA-256 is
+`4157b8123b203db86c5b2140c988f1d6d7039e3b6702c5dee093d18fd6023181`,
+model-state hash is
+`1c5ba4be5443f4351c526c68c24717d743a577986940c1ec58395842d2e80769`,
+and the audit is
+`runs/20260812-155706-attention-node-drift-warmup-cosine-stage-a/attention_checkpoint_audit_step_000384.json`.
+
+The exact matched 328--384 window improves current position `0.002751 m`,
+current y/z, 0.10-second position `0.003219 m`, lifecycle precision/coverage,
+and retains neutral identity versus constant rate.  Remaining position deficits
+move to 0.25/0.50/0.75/1.00 seconds at
+`+0.002567/+0.007591/+0.011478/+0.006106 m`, mainly long x/z.  Current and most
+velocity horizons, selected collision horizons, coverage90, and uncertainty
+are mixed/adverse.  Exact eight-way balance, all 13 objectives, 2,666
+trajectories, zero failures/skips, `0.763731` minimum complete interaction
+retention versus constant `0.565708`, and flat memory pass.  Drift remains
+bounded near `0.01` with nonzero variation instead of the rejected trajectory's
+earlier rapid bias growth.  This is current/short recovery with unresolved
+mature-horizon generalization; selector 512 remains authoritative.
+
 Historical live-run record follows.  The clean specification-1.39 successor was active at
 `runs/20260812-102557-attention-node-drift-008-stage-a/` from pushed clean
 commit `176796ff94d89eb79304c58b46e88f9a1ecb9cad`.  Its resolved config differs

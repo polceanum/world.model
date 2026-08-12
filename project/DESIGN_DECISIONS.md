@@ -60,6 +60,10 @@
   position and several calibration/lifecycle slices remain adverse. This is
   the expected evidence pattern for continuing the predeclared schedule to its
   fixed selector, not for early promotion or capacity growth.
+  Warmup completion at step 384 then improves matched current/0.10-second
+  position and lifecycle with clean checkpoint scope, while mature position
+  horizons remain adverse. This confirms optimization recovery is real but
+  incomplete and leaves the selector decision unchanged.
 
 ## ADR-111 — Diagnose functional-prior conflict before changing its weight
 

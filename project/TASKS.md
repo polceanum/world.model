@@ -40,7 +40,11 @@
   Complete 264--320 then nearly matches constant position while improving
   current/short velocity, identity, event F1 and coverage90; long position,
   y/long-axis, lifecycle and NLL deficits remain. Continue through warmup 384
-  and selector 512 without promotion or mutation.
+  and selector 512 without promotion or mutation. Warmup now completes cleanly
+  at durable step 384: strict integrity passes and current/0.10-second position
+  plus lifecycle improve versus constant, but 0.25--1.00-second position and
+  several velocity/event/calibration slices remain adverse. Preserve the
+  selector-512 gate.
 - [x] Strictly audit the active candidate at durable step 256 and measure its
   emitted residual on a deterministic causal draw. Verify `48/48` attention
   tensors and complete Adam state changed, all 177 inherited tensors and both

@@ -116,6 +116,15 @@ local event caps, so the old optimizer failure is not recurring. This is the
 first promising matched recovery window, but the fixed selector remains the
 only valid generalization test.
 
+Warmup completes at step 384 without optimizer, support, memory or integrity
+failure. The exact matched window now improves current position, current y/z,
+0.10-second position and lifecycle, but the deficit shifts to 0.25--1.00-second
+position, mainly long x/z, with mixed velocity/event/calibration. This is the
+first clean evidence that reduced early cumulative movement can preserve the
+current/short inertial prior while approaching the constant control, but it
+has not yet produced broad horizon non-regression. Selector 512 must decide
+whether the smaller residual generalizes on the fixed manifest.
+
 The 12 August primary-source refresh reinforces this choice.  The original
 Transformer's relevant contribution here is content-dependent multi-head
 interaction, short dependency paths, residual layers, normalization, balanced

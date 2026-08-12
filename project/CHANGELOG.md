@@ -59,6 +59,11 @@
   collision F1 and coverage90 improve; long position, selected axes, lifecycle
   and median NLL remain adverse. The prior hazardous update 280 is safely
   contained. Continue through warmup completion and selector 512.
+- Completed linear warmup at durable step 384 and passed strict tensor/Adam/
+  protected-state audit. Exact current and 0.10-second position plus lifecycle
+  improve versus constant rate, while 0.25--1.00-second position and mixed
+  velocity/event/calibration slices remain adverse. Continue unchanged to the
+  fixed selector.
 
 - Added an opt-in, state-free `warmup_cosine` closed-loop learning-rate
   protocol while preserving exact historical `constant` behavior. Warmup and
