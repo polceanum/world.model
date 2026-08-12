@@ -37,6 +37,12 @@
   all recorded current/horizon, axis, coverage, precision, event, identity,
   and calibration evidence with zero guardrail/support failures.  This clears
   initialization integrity; it is not trained accuracy or convergence.
+- Audited the first 16 balanced updates against the complexity-only
+  predecessor on identical seeds.  All updates apply with 511 causal
+  trajectories, no skip/failure, every scenario twice, nonzero drift loss, all
+  13 mature terms by update 16, and minimum complete interaction retention
+  `0.615309`.  Early physical differences are millimetric and mixed, so fixed
+  selector 512 remains the first accuracy authority.
 
 - Strictly audited the live specification-1.36 step-512 checkpoint. All 48
   attention tensors changed, all 177 inherited tensors remain exact, exactly

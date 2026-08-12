@@ -33,6 +33,21 @@ requires 8,192 updates, uses 4,096-update extensions, four exact consecutive
 512-step candidates plus less than 1% raw improvement for plateau, and has a
 24,576 hard limit.  No trained accuracy or convergence result exists yet.
 
+The first two logged balanced blocks through update 16 also pass the dynamics
+audit.  All 16 updates apply, every scenario contributes twice, there are no
+skipped draws or terminal/uncontained interaction failures, and the two blocks
+provide `511` causal trajectories.  Update eight records genuinely nonzero
+activity/drift/variation
+`8.10495e-5/8.09151e-5/1.34405e-7`; update 16 restores all 13 mature causal
+terms and records `1.85598e-4/1.85040e-4/5.58236e-7`.  The event-heavy update
+16 global norm is safely clipped `1.62520 -> 1.00000`, with complete
+interaction retention `0.615309`, above the `0.1` rejection floor.  The
+schedule-matched comparison against the complexity-only predecessor uses the
+same seeds and has no support mismatch.  Current position differs by only
+`-0.000024 m`; horizons differ by
+`-0.000065/-0.000030/+0.000236/+0.000916/+0.001165 m`.  This is healthy early
+wiring/optimization evidence, not an accuracy trend or scale result.
+
 The immutable specification-1.36 residual-parsimony campaign has been stopped
 at its durable step-1024 selector boundary.  The checkpoint is structurally
 valid, not collapsed: its strict audit passes with all 48 attention tensors
