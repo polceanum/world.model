@@ -69,6 +69,20 @@
   one-second velocity improves. The step-128 identity spike does not persist
   in later matched blocks. Keep the run unchanged and selector 512
   authoritative.
+- Audited the live trajectory through sampled step 208. The apparent step-184
+  position spike is a short-only batch with a changed ungated matched-frame
+  set, not fixed-manifest evidence. The following matched 192/200 blocks
+  improve current position and all five position horizons with equal identity
+  switches and much healthier interaction retention. Adding step 208 leaves a
+  small 0.50-second/collision/lifecycle tradeoff, while the auditor still
+  passes with complete support, applied updates, stable memory, and empty
+  stderr. No capacity promotion is claimed before selector 512.
+- Refreshed the primary-source architecture review against the original
+  Transformer, compute-optimal scaling, Qwen3, Gemma 3, DeepSeek-V3, and
+  V-JEPA 2. The existing dense pre-RMSNorm/SwiGLU typed-set attention and
+  evidence-gated data/depth/width/history ladder remain the appropriate path;
+  long-context or cluster-efficiency mechanisms are deferred until a measured
+  bottleneck requires them. No live protocol or model tensor was changed.
 
 - Stopped the specification-1.31 campaign after the trainer safely rejected
   attempted optimizer step 988 before Adam. Complete interaction retention was

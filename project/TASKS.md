@@ -498,7 +498,13 @@
   `1.0`, stable memory, and no new identity excess after the step-128 block.
   Every axis/horizon position slice improves versus the matched predecessor,
   but current/0.10-second velocity and aggregate collision F1 regress. Preserve
-  both sides of the tradeoff and continue unchanged to selector 512.
+  both sides of the tradeoff and continue unchanged to selector 512. Through
+  sampled step 208, the isolated step-184 short-only association-set change is
+  followed by healthy complete-support blocks. Matched steps 192/200 improve
+  current state and every pooled position horizon; adding step 208 produces a
+  small 0.50-second/collision/lifecycle tradeoff but no support, identity,
+  optimizer, numerical, or resource collapse. Keep selector 512 authoritative
+  and do not launch a larger rung from cadence-sampled evidence.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

@@ -1,6 +1,6 @@
 # Project status
 
-**Date:** 2026-08-11
+**Date:** 2026-08-12
 **Specification:** `PROJECT_SPEC.md` 1.36
 **Current state:** runnable RGB-only Milestone 1 vertical slice with accurate
 synthetic-disc localization, ROI-local online correction, explicit
@@ -271,6 +271,42 @@ collision F1 is `0.011124` lower, while one-second velocity improves
 the already-recorded step-128 spike; steps 136 and 152 exactly match the
 predecessor switch counts. Continue unchanged to the fixed selector rather
 than tuning from this heterogeneous event window.
+
+The subsequent causal trajectory remains healthy through sampled step 208,
+but it also demonstrates why cadence samples cannot authorize scaling. Step
+184 is a short-only 0.10/0.25-second batch whose ungated association set
+changes from 84 matched frames in the predecessor to 95 in the candidate; its
+`0.457138 m` versus `0.358063 m` current RMSE therefore pools a different and
+harder match set rather than proving a fixed-manifest collapse. The next
+complete matched blocks at steps 192 and 200 recover: current position improves
+`0.005257 m`, every pooled position horizon improves by
+`0.007728/0.003066/0.001863/0.005322/0.004511 m`, current velocity improves
+`0.003713 m/s`, identity switches are equal, and complete-interaction
+retention rises from `0.460052` to `0.749123`. Including step 208 leaves a
+small mixed diagnostic: current improves `0.003060 m`, four of five position
+horizons improve by `0.001024--0.007022 m`, while 0.50 seconds regresses
+`0.003930 m`, collision F1 falls `0.02439`, and lifecycle precision/coverage
+fall `0.01160/0.00602`. The auditor still returns `pass`, all updates apply,
+all scenarios and horizons retain support, no new identity switch appears,
+RSS remains lower than the predecessor, and both launch stderr files remain
+empty. This is neither collapse nor scale qualification; fixed selector 512
+remains the first accuracy authority. The complete read-only report is
+`runs/20260811-234157-attention-node-parsimony-stage-a/training_dynamics_audit_after_step_000185_through_000208.json`.
+
+A refreshed primary-source review of the original Transformer, compute-optimal
+scaling, Qwen3, Gemma 3, DeepSeek-V3, and V-JEPA 2 does not justify changing
+the active small-token architecture. Orpheus already uses the applicable
+modern dense ingredients: scaled multi-head attention, pre-RMSNorm, SwiGLU,
+typed permutation-equivariant set tokens, zero-output residual growth, and
+explicit bounded typed decoders. GQA, local/global attention, MLA, MoE, and
+Flash-style kernels primarily address long-context KV memory, large-batch
+throughput, or cluster economics and are not expected accuracy fixes for at
+most 22 tokens. The useful scaling lesson is procedural: qualify the 3.00M
+control; preserve its full data-only curve; then compare the exact-identity
+3.53M depth-six rung, the 4.34M width-192 rung, and only afterward bounded
+timestamped history, with parameter-proportional balanced data and disjoint
+RGB-only validation/test/OOD gates. The planned 8.31M width-256/depth-six rung
+remains the first single-CUDA candidate. No larger run has been launched.
 
 Implementation verification on Python `3.10.20` / PyTorch `2.10.0`:
 
