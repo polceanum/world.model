@@ -18,6 +18,13 @@
   implemented same-capacity schedule control from the untouched graph
   checkpoint with 384 warmup updates, 8,192 fixed cosine-decay updates, and a
   0.1 floor; rejected attention weights may not seed it.
+- Committed and pushed the rejection as `1926547`, then launched the clean
+  same-capacity successor at
+  `runs/20260812-155706-attention-node-drift-warmup-cosine-stage-a/` with an
+  MPS trainer and exact-source supervisor.  Its 32-episode step-zero selector
+  exactly reproduces score `0.3213162196` with zero guardrail/support failures;
+  a cross-run audit proves all 225 tensors equal and both stderr files remain
+  empty.  This qualifies initialization only, not learned accuracy.
 
 - Added an opt-in, state-free `warmup_cosine` closed-loop learning-rate
   protocol while preserving exact historical `constant` behavior. Warmup and

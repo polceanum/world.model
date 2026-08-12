@@ -1,8 +1,8 @@
 # Project status
 
 **Date:** 2026-08-12
-**Specification:** `PROJECT_SPEC.md` 1.41; the active immutable successor uses
-specification 1.39
+**Specification:** `PROJECT_SPEC.md` 1.41; the active immutable successor also
+uses specification 1.41
 
 ## Latest verified state — 2026-08-12
 
@@ -51,6 +51,33 @@ about 4.7% of the declared minimum, consistent with the measured long-run
 warmup lesson while still reaching peak rate before selector 512.  Only a
 guardrail-clean learning curve and declared plateau can reopen the fixed
 3.53M depth-six, 4.34M width-192, bounded-history, and 8.31M CUDA ladder.
+
+That schedule control is now active at
+`runs/20260812-155706-attention-node-drift-warmup-cosine-stage-a/` from clean
+pushed commit `1926547bce2c6c91d3031605b8b5e43b0b2886ab`.  Trainer launchd label
+`com.polceanum.orpheus.attention-drift-cosine-20260812-155341` runs as PID
+`32510`; exact detached-source supervisor label
+`com.polceanum.orpheus.attention-drift-cosine-convergence-20260812-155341`
+runs as PID `32750`.  Both are one-shot Standard/default jobs under
+`caffeinate`, use `KeepAlive=false`, and have zero-byte stderr.  Metadata
+records PyTorch `2.10.0`, MPS built/available, RGB measurement on MPS,
+closed-loop execution on CPU, float32, RGB-only runtime, no oracle, and clean
+source fingerprint
+`c4775f783c0cd6e87c1dcf1b23e4984ee54cbee6576fec9fdede619502b7c8f9`.
+The supervisor retains the unchanged 8,192 minimum, 4,096 extensions,
+four-selector/1% plateau rule, and 24,576 hard limit.
+
+The successor's mandatory step-zero selector completed in `981.48 s` and
+exactly reproduces protected score `0.3213162196`, with zero guardrail or
+support failures and exact current, every-horizon, coverage, precision, event,
+identity, and calibration metrics.  A cross-run tensor audit passes with all
+225 model tensors equal, including all 48 attention and 177 inherited tensors;
+all state is finite and both local protected artifacts have the same model
+hash `1354bdfca1cef965c0cd907ea8c157c0fd82169e64f24da656eb42dd1a96df91`.
+The report is
+`runs/20260812-155706-attention-node-drift-warmup-cosine-stage-a/attention_checkpoint_audit_step_000000.json`.
+This proves a valid isolated handoff only; it is not trained accuracy or
+convergence evidence.
 
 Historical live-run record follows.  The clean specification-1.39 successor was active at
 `runs/20260812-102557-attention-node-drift-008-stage-a/` from pushed clean

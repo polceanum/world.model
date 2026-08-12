@@ -39,6 +39,14 @@ warmup/8,192-step cosine schedule from the graph control next.  Depth, width,
 history, and CUDA scale remain downstream hypotheses, not a response to this
 rejection.
 
+The isolated schedule experiment is now live at
+`runs/20260812-155706-attention-node-drift-warmup-cosine-stage-a/`.  Its
+step-zero selector and all 225 model tensors exactly reproduce the protected
+control, while run provenance binds the intended schedule and clean commit.
+This removes initialization and protocol drift as alternative explanations;
+only trained selectors can determine whether reduced early cumulative update
+magnitude repairs generalization.
+
 The specification-1.36 residual-parsimony trajectory reached its authoritative
 step-1024 selector without numerical, support, optimizer, or resource collapse,
 but failed 111 deployment guardrails.  Its nearly flat scalar score conceals a

@@ -11,11 +11,14 @@
   score `0.3332533` versus protected `0.3213162` with 105 broad guardrail
   failures, dominated by `reference_pairs` x at every horizon; strictly audit
   its intact finite scope and stop both one-shot jobs at the durable boundary.
-- [ ] Launch and qualify a separately versioned same-capacity warmup/cosine
-  control from the protected graph checkpoint, never the rejected learned
-  attention weights. Use 384 absolute warmup updates, 8,192 fixed cosine-decay
-  updates, a 0.1 floor, unchanged objectives/data/selectors, and keep all
-  depth/width/history scaling gated on broad fixed-manifest convergence.
+- [x] Launch a separately versioned same-capacity warmup/cosine control from
+  the protected graph checkpoint, never the rejected learned attention
+  weights. Use 384 absolute warmup updates, 8,192 fixed cosine-decay updates,
+  a 0.1 floor, unchanged objectives/data/selectors, and prove exact step-zero
+  model/metric reproduction under clean one-shot trainer/supervisor jobs.
+- [ ] Qualify the active warmup/cosine control through fixed selectors and the
+  declared plateau. Keep all depth/width/history scaling gated on broad
+  fixed-manifest convergence and disjoint RGB-only generalization.
 - [x] Strictly audit the active candidate at durable step 256 and measure its
   emitted residual on a deterministic causal draw. Verify `48/48` attention
   tensors and complete Adam state changed, all 177 inherited tensors and both
