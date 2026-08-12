@@ -508,7 +508,11 @@
   256 now passes exact tensor/optimizer/protected-checkpoint audit. The matched
   128--256 window improves long position horizons, velocity, collision,
   lifecycle, uncertainty, and memory but regresses current x/z, short position,
-  and identity. Continue unchanged to fixed selector 512.
+  and identity. The complete matched 256--312 window remains optimizer-healthy
+  and improves current/long-horizon position plus x at every horizon, but
+  regresses short-horizon position, current velocity, most y horizons,
+  aggregate collision F1, and median uncertainty error. Continue unchanged to
+  fixed selector 512; do not promote or scale from this mixed training window.
 - [x] Make protected-checkpoint audits non-vacuous under specification 1.37:
   record protected count, return `null` when none were checked, and provide a
   required-protection gate that fails an empty set. Rerun step 256 with both

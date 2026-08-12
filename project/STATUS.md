@@ -342,6 +342,26 @@ for an unchecked empty set, and can require a nonempty protected set. Focused
 tests report `3 passed`; Ruff check passes after formatting. This does not
 change the live 1.36 trainer, its tensors, or its protocol.
 
+The first complete post-checkpoint window, exact matched steps 256--312, also
+passes the training-dynamics auditor and remains mixed rather than converged.
+All 312 optimizer updates apply, every eight-step block has complete balanced
+scenario and horizon support, minimum complete-interaction retention is
+`0.335188`, there is no terminal artifact, and sampled RSS remains flat at
+`2,911,186,944` bytes. Relative to the unregularized predecessor, current
+position improves `0.001599 m`; x improves at all five rollout horizons and
+the pooled 0.50/0.75/1.00-second position errors improve
+`0.001106/0.000509/0.003974 m`. The counter-evidence is equally important:
+current velocity regresses `0.037677 m/s`, pooled 0.10/0.25-second position
+regresses `0.001859/0.002192 m`, y regresses at four horizons, aggregate
+collision F1 falls `0.011657`, and uncertainty median error rises `0.001063`.
+Trusted identity improves by one switch. The historical step-280 force stress
+is contained with complete-stage retention `0.335188`; steps 288--312 remain
+finite and applied, and step 312 needs no local attention-node clipping. The
+durable report is
+`runs/20260811-234157-attention-node-parsimony-stage-a/training_dynamics_audit_after_step_000256_through_000312.json`.
+This is healthy optimization evidence, not an accuracy promotion; fixed
+selector 512 remains the first authoritative trained comparison.
+
 Implementation verification on Python `3.10.20` / PyTorch `2.10.0`:
 
 ```bash

@@ -96,6 +96,13 @@
   was unchecked, and can fail an omitted protected set. The corrected step-256
   audit requires and verifies both protected artifacts; focused tests and Ruff
   pass. The immutable live trainer remains truthfully specification 1.36.
+- Audited the first complete post-step-256 matched window through step 312.
+  Every update applies with balanced support, finite gradients, stable memory,
+  no terminal artifact, and contained interaction clipping. Current and long-
+  horizon position plus x at every horizon improve, while short-horizon
+  position, current velocity, most y horizons, aggregate collision F1, and
+  median uncertainty regress. The result is recorded as healthy but mixed;
+  fixed selector 512 remains the promotion and scaling gate.
 
 - Stopped the specification-1.31 campaign after the trainer safely rejected
   attempted optimizer step 988 before Adam. Complete interaction retention was
