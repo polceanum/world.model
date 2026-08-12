@@ -1,18 +1,69 @@
 # Project status
 
 **Date:** 2026-08-12
-**Specification:** `PROJECT_SPEC.md` 1.39; the active immutable training run
-remains specification 1.36
+**Specification:** `PROJECT_SPEC.md` 1.39; the latest stopped immutable
+training run used specification 1.36 and its 1.39 successor is pending launch
 
 ## Latest verified state — 2026-08-12
 
-The immutable residual-parsimony campaign remains operationally healthy and
-unchanged at
-`runs/20260811-234157-attention-node-parsimony-stage-a/`. At the latest health
-check its trainer and convergence supervisor had each launched once, both
-stderr files were empty, sampled RSS remained near `2.92 GB`, and the trainer
-had reached durable update 768 after completing selector 512. The protected
-incumbent remains step zero.
+The immutable specification-1.36 residual-parsimony campaign has been stopped
+at its durable step-1024 selector boundary.  The checkpoint is structurally
+valid, not collapsed: its strict audit passes with all 48 attention tensors
+changed, all 177 inherited tensors bitwise exact, exactly 48 finite Adam owners
+at step 1024, both protected artifacts unchanged, and matching source,
+configuration, protocol, and model hashes.  The checkpoint SHA-256 is
+`36a196165e95675275efd8949b657853264600bb8032d9dfaffa8383a42b8081` and
+its model-state hash is
+`a62808c8de646f54d31e9a827e791bbe78ad0e11750c222dae8b98564bba9b6c`.
+The audit is persisted at
+`runs/20260811-234157-attention-node-parsimony-stage-a/attention_checkpoint_audit_step_001024.json`.
+
+The authoritative fixed selector rejects the learned candidate by 111 broad
+guardrails.  Its scalar score is microscopically better
+(`0.3213162196 -> 0.3212919367`), but selected current position worsens
+`0.251460 -> 0.274762 m`, x worsens `0.281775 -> 0.342313 m`, target coverage
+falls `0.37625 -> 0.36775`, precision falls `0.35731 -> 0.34808`, and the two
+shortest mature horizons worsen from `0.265184/0.277452` to
+`0.282590/0.290155 m`.  The familiar `reference_pairs` regime is the clearest
+failure: current position worsens `0.212965 -> 0.383810 m`, current x
+`0.242694 -> 0.573947 m`, and x at 0.10--1.00 seconds worsens from
+`0.296812/0.383256/0.562842/0.687318/0.791271` to
+`0.603153/0.625942/0.708155/0.804530/0.891246 m`.  Camera parallax and
+glancing impacts add further x/z, coverage, calibration, and identity
+failures.  This is behavioral overfit, not corruption, support loss, resource
+growth, or numerical failure.
+
+The complete steps 904--960 training window independently remains healthy:
+2,939 trajectories, all 13 objectives, minimum complete-interaction retention
+`0.514307`, identity `5/419`, lifecycle precision/coverage
+`0.40661/0.44093`, coverage90 `0.96953`, and position horizons
+`0.28076/0.32357/0.38991/0.42468/0.42918 m`, with flat RSS and no rejected
+update.  Healthy optimizer dynamics therefore did not repair fixed-manifest
+generalization.  Continuing the same objective beyond step 1024 is not
+justified.  Both one-shot jobs were booted out after validation completed; no
+post-1024 update was written.  The run's stale `training_state.json` still says
+`running` because external launchd termination does not rewrite immutable run
+artifacts; external process state is stopped.
+
+The next campaign is the already implemented specification-1.39 successor,
+initialized weights-only from the untouched protected graph control, with
+`attention_node_complexity=1.0` and axis-neutral
+`attention_node_drift=0.08`.  It must reproduce the step-zero selector and
+then pass repeated fixed validation, disjoint test/OOD, scenario, axis,
+identity, event, support, and calibration guardrails before any depth or width
+increase.  The literature review does not justify an LLM-shaped rewrite:
+scaled multi-head attention, residual paths, pre-normalization, and SwiGLU are
+already present, while GQA/MLA/MoE/local attention primarily address long
+contexts or cluster economics absent from the at-most-22-token Mac rung.
+Compute and data will scale together only after this smaller rung demonstrates
+a real generalization curve and plateau.
+
+Before its deliberate step-1024 stop, the immutable residual-parsimony campaign
+at `runs/20260811-234157-attention-node-parsimony-stage-a/` remained
+operationally healthy. Its trainer and convergence supervisor each launched
+once, both stderr files were empty, sampled RSS remained near `2.92 GB`, and
+the protected incumbent remained step zero. The following step-640--768
+evidence records earlier checks on that now-stopped trajectory.
 
 The durable specification-1.36 step-640 `last.pt` also passes the strict
 checkpoint audit: all 48 attention tensors changed, all 177 inherited tensors

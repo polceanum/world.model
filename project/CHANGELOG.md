@@ -4,6 +4,29 @@
 
 ### 2026-08-12 functional node-drift prior and selector-512 diagnosis
 
+- Reached and strictly audited the specification-1.36 step-1024 checkpoint.
+  All 48 attention tensors changed, all 177 inherited tensors remain exact,
+  exactly 48 finite Adam owners are at step 1024, both protected artifacts are
+  unchanged, and all source/configuration/protocol/model hashes pass.
+- Rejected the step-1024 selector by 111 broad guardrails.  The scalar score is
+  effectively flat (`0.3213162 -> 0.3212919`), but current position, x,
+  coverage, precision, and the two shortest horizons regress.  The familiar
+  `reference_pairs` current x error more than doubles
+  (`0.242694 -> 0.573947 m`) and all its x horizons worsen.
+- Audited the complete 904--960 training window: all updates/objectives remain
+  supported, minimum interaction retention is `0.514307`, RSS is flat, and no
+  numerical or optimizer failure exists.  Classified the selector failure as
+  behavioral overfit and stopped both one-shot jobs at the durable boundary.
+- Recorded ADR-109: do not resume or scale from the rejected weights.  Launch
+  the already smoke-qualified specification-1.39 drift successor from the
+  untouched protected control with `complexity=1.0`, `drift=0.08`, unchanged
+  broad selectors, and the full convergence budget.
+- Refreshed the scaling review against the original Transformer,
+  compute-optimal scaling, Qwen3, DeepSeek-V3, and V-JEPA 2.  The next useful
+  experiment is the repaired small-rung learning curve; GQA/MLA/MoE/local
+  attention solve absent long-context or cluster bottlenecks and do not
+  justify bypassing the fixed physical-generalization gate.
+
 - Strictly audited the live specification-1.36 step-512 checkpoint. All 48
   attention tensors changed, all 177 inherited tensors remain exact, exactly
   48 finite Adam states are at step 512, protected checkpoints remain initial,

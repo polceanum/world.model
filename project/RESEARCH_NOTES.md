@@ -17,6 +17,32 @@ checkpoint, split/seeds, device, commands, metrics, and failure cases.
 
 ### Typed-attention stability and scaling decision
 
+The specification-1.36 residual-parsimony trajectory reached its authoritative
+step-1024 selector without numerical, support, optimizer, or resource collapse,
+but failed 111 deployment guardrails.  Its nearly flat scalar score conceals a
+large familiar-physics regression: `reference_pairs` current x rises from
+`0.242694` to `0.573947 m`, and every 0.10--1.00-second x horizon worsens.  The
+fixed selector therefore resolves the prior ambiguity: the small model is not
+yet capacity-limited in a way that authorizes scaling; it learned a broadly
+misgeneralizing, nearly context-invariant node acceleration.  Continue with the
+already smoke-qualified context-drift objective from the untouched control,
+not with more steps or more parameters on the rejected trajectory.
+
+The 12 August primary-source refresh reinforces this choice.  The original
+Transformer's relevant contribution here is content-dependent multi-head
+interaction, short dependency paths, residual layers, normalization, balanced
+batches, and a deliberately scheduled long optimization run.  Compute-optimal
+scaling evidence says data exposure must rise with parameter count rather than
+enlarging an undertrained model.  Qwen3 and DeepSeek-V3 show that modern dense
+or sparse LLMs still build on the same residual Transformer core; their
+GQA/MLA/MoE mechanisms chiefly reduce long-context KV or activated-compute
+costs.  V-JEPA 2 supports a later self-supervised video encoder and latent
+prediction stage, but not replacing explicit object state or using a larger
+pixel latent to hide a failed physical selector.  For Orpheus's at-most-22
+typed tokens, the evidence-backed order remains: qualify drift-regularized
+width-128/depth-four, retain its full data curve, then compare exact-identity
+depth growth, width growth, and bounded timestamped history one axis at a time.
+
 Specification 1.34 replaces ad hoc training-window calculations with pooled
 auditor output. The live step-712--768 complete window has current x/y/z RMSE
 `0.182561/0.170300/0.199884 m`, position-horizon RMSE

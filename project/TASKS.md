@@ -549,15 +549,21 @@
   and Adam ownership, exact inherited/protected state, and finite serialization.
   Keep the deliberately tiny smoke `last_unvalidated`; it is not an accuracy
   or generalization promotion.
-- [ ] Continue the immutable specification-1.36 campaign unchanged through
-  fixed selector 1024. If broad guardrails remain rejected, launch a clean
+- [x] Continue the immutable specification-1.36 campaign unchanged through
+  fixed selector 1024. The strict step-1024 checkpoint audit passes, but the
+  fixed selector rejects it by 111 broad guardrails despite a microscopically
+  better scalar score. The familiar `reference_pairs` current/x trajectory,
+  short horizons, coverage, precision, and several camera/contact slices
+  regress. Stop the one-shot jobs at the durable boundary; classify this as
+  behavioral overfit rather than numerical or optimizer collapse.
+- [ ] Launch and qualify a clean
   specification-1.39 successor from the protected graph control with both
   `attention_node_complexity=1.0` and `attention_node_drift=0.08` recorded;
-  do not seed it from the rejected step-512 weights. Require repeated fixed selectors,
-  validation/test/OOD non-regression, and plateau before scaling capacity.
-  Through durable step 768, the complete 704--760 training window and strict
-  tensor/optimizer/protected-state audit pass without collapse; selector 1024
-  remains pending and authoritative.
+  do not seed it from rejected specification-1.36 weights. Require exact
+  step-zero reproduction, repeated fixed selectors, validation/test/OOD
+  non-regression, and plateau before scaling capacity. Preserve the same
+  8,192-update minimum, 4,096-update extensions, and 24,576 hard limit unless
+  a separately versioned fixed-manifest result justifies a protocol change.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

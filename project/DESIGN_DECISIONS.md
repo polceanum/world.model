@@ -1,5 +1,39 @@
 # Design decisions
 
+## ADR-109 — Reject complexity-only step 1024 before scaling
+
+- **Date:** 2026-08-12
+- **Status:** accepted; rejected campaign stopped, drift successor authorized
+- **Context:** The specification-1.36 complexity-only attention campaign
+  reached a durable, strictly audited step-1024 checkpoint with healthy
+  optimizer, support, finite-state, provenance, and resource evidence.  Its
+  selector score changes only `0.3213162196 -> 0.3212919367`, but 111 broad
+  guardrails fail.  Selected current position, x, coverage, precision, and the
+  two shortest horizons regress.  `reference_pairs` current position rises
+  `0.212965 -> 0.383810 m`, current x `0.242694 -> 0.573947 m`, and every x
+  forecast horizon worsens.  Complete training windows remain operationally
+  healthy, so more of the same optimization would extend behavioral overfit
+  rather than repair an infrastructure failure.
+- **Decision:** Stop the immutable specification-1.36 trainer and supervisor
+  at step 1024.  Do not promote, resume, or use its learned weights for growth.
+  Launch the specification-1.39 successor weights-only from the untouched
+  protected graph control with `attention_node_complexity=1.0` and
+  `attention_node_drift=0.08`.  Preserve the declared convergence budget and
+  broad selectors.  Keep the capacity gate closed until the successor passes
+  repeated fixed validation plus disjoint test/OOD non-regression.
+- **Alternatives considered:** continue complexity-only to 8,192 because it is
+  numerically healthy; accept the microscopically improved scalar score;
+  relax scenario guardrails; initialize the drift run from step 1024; add
+  depth, width, history, MLA, GQA, or MoE immediately.
+- **Consequences:** This separates healthy optimization from useful
+  generalization.  The next run tests the narrow measured defect—scene-wide
+  emitted acceleration—without discarding useful context-sensitive residual
+  capacity.  Modern Transformer efficiency mechanisms remain future compute
+  options, not accuracy repairs for the short typed-token set.  Any later
+  capacity rung must preserve exact smaller-model function where supported,
+  increase balanced data exposure with parameters, and beat the accepted
+  smaller control on fixed RGB-only validation/test/OOD evidence.
+
 ## ADR-108 — Penalize context-invariant node drift, not useful variation
 
 - **Date:** 2026-08-12
