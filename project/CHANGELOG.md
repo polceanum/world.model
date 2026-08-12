@@ -61,6 +61,26 @@
   `0.001 m`; squared y drift nevertheless reaches `0.011169`.  Durable step
   128 is therefore a strict functional-drift checkpoint, not an automatic
   continuation claim, and selector 512 remains the accuracy authority.
+- Strictly audited the successor's durable step-128 checkpoint. All 48
+  attention tensors changed, all 177 inherited tensors remain bitwise exact,
+  exactly 48 finite Adam owners are at step 128, both explicitly supplied
+  protected checkpoints remain initial, and source/config/protocol/model/file
+  hashes pass. The report is
+  `attention_checkpoint_audit_step_000128.json` beside the run.
+- Closed the exact schedule-matched updates 72--128 window with 2,586 causal
+  trajectories, eight draws from every scenario, all 13 objectives, no skips
+  or failed updates, minimum interaction retention `0.391475`, and flat RSS.
+  The window regresses current position `12.76 mm` and every horizon
+  `8.28--15.94 mm` versus the already rejected predecessor, while collision F1
+  and identity improve. This is adverse training evidence, not fixed-selector
+  rejection.
+- Measured the step-128 residual on the same balanced draw used for the
+  predecessor calibration. RMS emitted node acceleration falls to
+  `0.106243 m/s^2` from `0.206605 m/s^2`, and mean y acceleration falls to
+  `0.171489` from `0.356690 m/s^2`, proving the drift prior operates. More
+  than 99.95% of the remaining activity is still context-invariant. Continue
+  the immutable constant-rate campaign to selector 512; if it rejects, test a
+  separately versioned warmup/decay successor before increasing capacity.
 
 - Strictly audited the live specification-1.36 step-512 checkpoint. All 48
   attention tensors changed, all 177 inherited tensors remain exact, exactly

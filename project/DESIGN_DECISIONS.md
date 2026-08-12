@@ -72,6 +72,16 @@
   ownership, inherited/protected equality, and finite checkpoint state. Its
   deliberately reduced eight-episode validation is `last_unvalidated`; this
   closes the implementation/wiring risk but not the sustained accuracy gate.
+  The sustained successor's strict step-128 audit later passes with all 48
+  attention tensors changed, all inherited/protected state exact, and complete
+  finite Adam state.  On the same deterministic draw, RMS emitted node
+  acceleration is `0.106243 m/s^2` and mean y acceleration is
+  `0.171489 m/s^2`, versus `0.206605/0.356690 m/s^2` at the rejected
+  predecessor's step 512.  The prior therefore controls its target, but the
+  complete matched updates 72--128 position window is broadly worse and more
+  than 99.95% of the smaller activity remains drift.  This mixed evidence
+  requires fixed selector 512; it does not authorize a mid-run schedule
+  change, capacity increase, acceptance, or rejection.
 
 ## ADR-107 — Regularize emitted node activity before increasing capacity
 

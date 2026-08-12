@@ -54,8 +54,48 @@ improves by `0.034592 m/s`.  Collision F1 is `0.0470` lower on this small
 discrete training pool; identity retains the same four switches on 384 versus
 385 associations, lifecycle precision/coverage improve slightly, and current
 coverage90 differs by `-0.001313`.  These are watch items, not selector-level
-evidence.  Continue to durable step 128 for a strict checkpoint and same-draw
-functional drift audit; fixed selector 512 remains the accuracy authority.
+evidence.
+
+The durable step-128 boundary is now independently qualified.  Its strict
+checkpoint audit passes: all 48 attention tensors changed, all 177 inherited
+tensors remain bitwise exact, exactly 48 complete finite Adam owners are at
+step 128, both explicitly supplied protected checkpoints remain equal to the
+initializer, and architecture, source, protocol, model-state, and whole-file
+hashes agree.  The checkpoint SHA-256 is
+`759e1c5fc72cbf43f9bed80a06878bd363e9ea9ac36e0779dad517e47e8f6f54`,
+the model-state hash is
+`c46f8701623c3c49d7310844d946239e247b354d341d286cb63ed42eb878a636`,
+and the report is
+`runs/20260812-102557-attention-node-drift-008-stage-a/attention_checkpoint_audit_step_000128.json`.
+
+The complete schedule-matched updates 72--128 window also passes operational
+health with all eight scenarios represented eight times, `2,586` causal
+trajectories, all 13 objectives, zero skips or failed updates, flat
+`2,978,533,376`-byte peak RSS, and minimum complete-interaction retention
+`0.391475`.  It does not show an accuracy gain over the already rejected
+complexity-only predecessor: current position is `0.012756 m` worse, x/y/z
+are `0.020090/0.012332/0.004464 m` worse, velocity is `0.017016 m/s` worse,
+and position at 0.10/0.25/0.50/0.75/1.00 seconds is
+`0.012087/0.011816/0.010595/0.008278/0.015943 m` worse.  Collision F1 improves
+`0.020695` and identity improves from five to two switches, while lifecycle
+rates are equal, coverage90 is `0.002799` lower, and median uncertainty NLL is
+`0.025968` worse.  These are heterogeneous training-window diagnostics, not
+fixed-manifest rejection or promotion evidence.
+
+The same-draw functional report at step 128 measures activity/drift/variation
+`0.0112875/0.0112825/0.00000506 (m/s^2)^2`, RMS emitted acceleration
+`0.106243 m/s^2`, and mean emitted acceleration
+`[-0.065087, 0.171489, -0.015986] m/s^2` over `10,656` active-object
+invocations.  Compared with the rejected predecessor at step 512, RMS activity
+is about half (`0.1062` versus `0.2066 m/s^2`) and mean y acceleration is less
+than half (`0.1715` versus `0.3567 m/s^2`), proving the configured prior acts
+on its intended target.  More than `99.95%` of remaining activity is still
+context-invariant drift, however, and the matched position window is broadly
+adverse.  Continue the immutable run to the authoritative fixed selector 512;
+do not scale capacity or alter its constant learning rate from this diagnostic
+window alone.  If that selector rejects the candidate, test warmup plus decay
+as a separately versioned protected-control successor before adding depth or
+width.
 
 The immutable specification-1.36 residual-parsimony campaign has been stopped
 at its durable step-1024 selector boundary.  The checkpoint is structurally

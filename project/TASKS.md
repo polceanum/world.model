@@ -575,9 +575,16 @@
   trajectories, no skips/failures, and minimum complete interaction retention
   `0.615309`. Pooled current and short-horizon position improve slightly, while
   0.50--1.00-second aggregate differences are sub-millimetric regressions.
-  Squared y drift reaches `0.011169`, so preserve the run to durable step 128
-  for strict checkpoint/same-draw qualification; do not promote before fixed
-  selector 512.
+  The strict durable step-128 checkpoint audit passes with all 48 attention
+  tensors changed, 177 inherited tensors exact, 48 complete Adam owners at
+  step 128, finite state, and both protected checkpoints unchanged. The
+  complete matched 72--128 window has 2,586 trajectories and healthy support,
+  gradients, identity/lifecycle, and resources, but position regresses
+  `8.28--15.94 mm` across horizons versus the rejected predecessor. Same-draw
+  functional calibration proves the prior reduces RMS node activity to
+  `0.1062 m/s^2` from the predecessor's `0.2066 m/s^2`, while more than 99.95%
+  of the smaller residual remains drift. Preserve the immutable run to fixed
+  selector 512; do not promote or scale from training-window evidence.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam
