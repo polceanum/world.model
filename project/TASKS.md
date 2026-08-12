@@ -570,12 +570,13 @@
   stderr. The 32-episode step-zero selector completes in `991.16 s` and exactly
   reproduces the protected control at score `0.3213162196`, with zero
   guardrail/support failures. Initial causal updates, trained selectors, and
-  convergence remain pending. The first 24 updates pass the matched dynamics
-  audit with all scenarios balanced three times, 907 trajectories, no
+  convergence remain pending. The first 32 updates pass the matched dynamics
+  audit with all scenarios balanced four times, 1,175 trajectories, no
   skips/failures, and minimum complete interaction retention `0.615309`; drift
-  is genuinely nonzero and all 13 mature terms return by update 16. Treat
-  millimetric mixed training-window deltas as non-promotable until fixed
-  selector 512.
+  is genuinely nonzero and all 13 mature terms return by update 16. Pooled
+  current and short-horizon position improve slightly, long horizons are
+  effectively unchanged, and sparse training-window collision F1 is a watch
+  item. Treat all of these as non-promotable until fixed selector 512.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

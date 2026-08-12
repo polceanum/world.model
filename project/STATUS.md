@@ -33,22 +33,25 @@ requires 8,192 updates, uses 4,096-update extensions, four exact consecutive
 512-step candidates plus less than 1% raw improvement for plateau, and has a
 24,576 hard limit.  No trained accuracy or convergence result exists yet.
 
-The first three logged balanced blocks through update 24 also pass the dynamics
-audit.  All 24 updates apply, every scenario contributes three times, there are
-no skipped draws or terminal/uncontained interaction failures, and the three
-blocks provide `907` causal trajectories.  Update eight records genuinely
+The first four logged balanced blocks through update 32 also pass the dynamics
+audit.  All 32 updates apply, every scenario contributes four times, there are
+no skipped draws or terminal/uncontained interaction failures, and the four
+blocks provide `1,175` causal trajectories.  Update eight records genuinely
 nonzero activity/drift/variation
 `8.10495e-5/8.09151e-5/1.34405e-7`; update 16 restores all 13 mature causal
-terms; update 24 reaches
-`2.63908e-4/2.63483e-4/4.25157e-7`.  The event-heavy update 16 global norm is
+terms; update 32 reaches
+`5.91482e-4/5.90934e-4/5.47609e-7`.  The event-heavy update 16 global norm is
 safely clipped `1.62520 -> 1.00000`, with minimum complete interaction
 retention `0.615309`, above the `0.1` rejection floor.  The schedule-matched
 comparison against the complexity-only predecessor uses the same seeds and
-has no support mismatch.  Pooled current position differs by only
-`+0.000111 m`; horizons differ by
-`+0.000201/+0.000167/-0.000046/+0.000142/+0.000167 m`, while current velocity
-improves by `0.073057 m/s`.  This is healthy early wiring/optimization evidence,
-not an accuracy trend or scale result.
+has one additional causal trajectory.  Pooled current position improves by
+`0.001262 m`; horizons differ by
+`-0.002895/-0.001958/-0.000046/+0.000142/+0.000167 m`, while current velocity
+improves by `0.059401 m/s`.  Collision F1 is `0.0754` lower on this small
+discrete training pool; identity retains the same three switches on 202 versus
+204 associations.  These are watch items, not selector-level evidence.  This
+remains healthy early wiring/optimization evidence, not an accuracy trend or
+scale result.
 
 The immutable specification-1.36 residual-parsimony campaign has been stopped
 at its durable step-1024 selector boundary.  The checkpoint is structurally

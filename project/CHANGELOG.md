@@ -48,6 +48,12 @@
   uncontained gradient failure, and only millimetric mixed position changes.
   The rising heterogeneous per-block scalar is therefore not classified as
   collapse; fixed selector 512 remains the first generalization authority.
+- Extended the matched audit through update 32: all eight scenarios contribute
+  four times, 1,175 causal trajectories are present, current and short-horizon
+  position improve slightly, and long horizons remain within `0.000167 m` of
+  the predecessor.  Sparse collision F1 is lower and remains a watch item;
+  neither that discrete training sample nor the raw scalar can supersede the
+  fixed selector.
 
 - Strictly audited the live specification-1.36 step-512 checkpoint. All 48
   attention tensors changed, all 177 inherited tensors remain exact, exactly
