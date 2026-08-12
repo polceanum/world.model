@@ -54,6 +54,13 @@
   the predecessor.  Sparse collision F1 is lower and remains a watch item;
   neither that discrete training sample nor the raw scalar can supersede the
   fixed selector.
+- Completed the first eight-block dynamics window through update 64.  All
+  updates apply with 2,462 causal trajectories, balanced scenarios, healthy
+  complete-gradient retention, and no failure.  Current/short-horizon error is
+  slightly better while 0.50--1.00-second aggregate regressions remain below
+  `0.001 m`; squared y drift nevertheless reaches `0.011169`.  Durable step
+  128 is therefore a strict functional-drift checkpoint, not an automatic
+  continuation claim, and selector 512 remains the accuracy authority.
 
 - Strictly audited the live specification-1.36 step-512 checkpoint. All 48
   attention tensors changed, all 177 inherited tensors remain exact, exactly

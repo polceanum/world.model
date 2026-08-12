@@ -33,25 +33,29 @@ requires 8,192 updates, uses 4,096-update extensions, four exact consecutive
 512-step candidates plus less than 1% raw improvement for plateau, and has a
 24,576 hard limit.  No trained accuracy or convergence result exists yet.
 
-The first four logged balanced blocks through update 32 also pass the dynamics
-audit.  All 32 updates apply, every scenario contributes four times, there are
-no skipped draws or terminal/uncontained interaction failures, and the four
-blocks provide `1,175` causal trajectories.  Update eight records genuinely
+The first complete eight-block window through update 64 passes the dynamics
+audit.  All 64 updates apply, every scenario contributes eight times, there are
+no skipped draws or terminal/uncontained interaction failures, and the window
+provides `2,462` causal trajectories.  Update eight records genuinely
 nonzero activity/drift/variation
 `8.10495e-5/8.09151e-5/1.34405e-7`; update 16 restores all 13 mature causal
-terms; update 32 reaches
-`5.91482e-4/5.90934e-4/5.47609e-7`.  The event-heavy update 16 global norm is
-safely clipped `1.62520 -> 1.00000`, with minimum complete interaction
-retention `0.615309`, above the `0.1` rejection floor.  The schedule-matched
-comparison against the complexity-only predecessor uses the same seeds and
-has one additional causal trajectory.  Pooled current position improves by
-`0.001262 m`; horizons differ by
-`-0.002895/-0.001958/-0.000046/+0.000142/+0.000167 m`, while current velocity
-improves by `0.059401 m/s`.  Collision F1 is `0.0754` lower on this small
-discrete training pool; identity retains the same three switches on 202 versus
-204 associations.  These are watch items, not selector-level evidence.  This
-remains healthy early wiring/optimization evidence, not an accuracy trend or
-scale result.
+terms; update 64 reaches
+`4.11472e-3/4.11290e-3/1.82318e-6`.  Its squared x/y/z mean drift is
+`0.001170/0.011169/0.00000048`, so y drift is an explicit early-risk signal and
+is about `8.8%` of the rejected step-512 y activity.  The event-heavy update
+16 global norm is safely clipped `1.62520 -> 1.00000`, with minimum complete
+interaction retention `0.615309`, above the `0.1` rejection floor.  The
+schedule-matched comparison against the complexity-only predecessor uses the
+same seeds and has one additional causal trajectory.  Pooled current position
+improves by
+`0.000422 m`; horizons differ by
+`-0.001568/-0.000612/+0.000954/+0.000168/+0.000738 m`, while current velocity
+improves by `0.034592 m/s`.  Collision F1 is `0.0470` lower on this small
+discrete training pool; identity retains the same four switches on 384 versus
+385 associations, lifecycle precision/coverage improve slightly, and current
+coverage90 differs by `-0.001313`.  These are watch items, not selector-level
+evidence.  Continue to durable step 128 for a strict checkpoint and same-draw
+functional drift audit; fixed selector 512 remains the accuracy authority.
 
 The immutable specification-1.36 residual-parsimony campaign has been stopped
 at its durable step-1024 selector boundary.  The checkpoint is structurally
