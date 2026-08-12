@@ -24,7 +24,10 @@
   MPS trainer and exact-source supervisor.  Its 32-episode step-zero selector
   exactly reproduces score `0.3213162196` with zero guardrail/support failures;
   a cross-run audit proves all 225 tensors equal and both stderr files remain
-  empty.  This qualifies initialization only, not learned accuracy.
+  empty.  Step 8 then logs the exact warmup rate `1.0416667e-6`, a finite
+  wholly unclipped applied update, all eight scenarios, 349 trajectory targets,
+  and zero skips.  This qualifies initialization/schedule execution only, not
+  learned accuracy.
 
 - Added an opt-in, state-free `warmup_cosine` closed-loop learning-rate
   protocol while preserving exact historical `constant` behavior. Warmup and

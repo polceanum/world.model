@@ -77,7 +77,12 @@ hash `1354bdfca1cef965c0cd907ea8c157c0fd82169e64f24da656eb42dd1a96df91`.
 The report is
 `runs/20260812-155706-attention-node-drift-warmup-cosine-stage-a/attention_checkpoint_audit_step_000000.json`.
 This proves a valid isolated handoff only; it is not trained accuracy or
-convergence evidence.
+convergence evidence.  The first logged causal block at step 8 independently
+confirms the absolute schedule: learning rate is
+`1.0416667e-6 = 8/384 * 5e-5`; loss/gradient are
+`0.489044/0.244324`, the update is wholly unclipped and applied, all eight
+scenarios contribute 349 trajectory targets, skips are zero, peak RSS is
+`2,954,977,280` bytes, and both stderr files remain empty.
 
 Historical live-run record follows.  The clean specification-1.39 successor was active at
 `runs/20260812-102557-attention-node-drift-008-stage-a/` from pushed clean
