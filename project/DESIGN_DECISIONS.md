@@ -64,6 +64,12 @@
   position and lifecycle with clean checkpoint scope, while mature position
   horizons remain adverse. This confirms optimization recovery is real but
   incomplete and leaves the selector decision unchanged.
+  The first complete cosine-phase 392--448 window remains finite and balanced,
+  contains one `0.126551`-retention hard-event spike without recurrence, and
+  improves matched identity/lifecycle/event slices. Current position, velocity,
+  coverage90, and nearly every position horizon are still slightly adverse,
+  so stable optimization is not being conflated with broad convergence and the
+  selector/capacity gates remain unchanged.
 
 ## ADR-111 — Diagnose functional-prior conflict before changing its weight
 

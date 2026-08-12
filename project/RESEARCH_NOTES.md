@@ -125,6 +125,19 @@ current/short inertial prior while approaching the constant control, but it
 has not yet produced broad horizon non-regression. Selector 512 must decide
 whether the smaller residual generalizes on the fixed manifest.
 
+The first full post-warmup window at updates 392--448 further separates
+optimizer convergence from behavioral generalization.  Exact eight-way
+support, 1,874 trajectory targets, flat memory, and complete finite updates
+pass.  Step 424 is a real but contained hard-event spike: the raw norm is
+`7.901921` and complete retention `0.126551`, followed by fully retained
+updates.  Compared on identical draws with the failed constant-rate path,
+identity, lifecycle, and event F1 improve slightly, while current position is
+`0.003879 m` worse, current velocity `0.070337 m/s` worse, coverage90 is
+`0.003031` lower, and position horizons are tied to `0.002356 m` worse.  The
+schedule is trainable and avoids runaway failure, but has not yet established
+a positive accuracy slope.  Preserve the fixed selector and do not interpret
+this as evidence for either early termination or larger capacity.
+
 The 12 August primary-source refresh reinforces this choice.  The original
 Transformer's relevant contribution here is content-dependent multi-head
 interaction, short dependency paths, residual layers, normalization, balanced

@@ -44,7 +44,12 @@
   at durable step 384: strict integrity passes and current/0.10-second position
   plus lifecycle improve versus constant, but 0.25--1.00-second position and
   several velocity/event/calibration slices remain adverse. Preserve the
-  selector-512 gate.
+  selector-512 gate. The first complete cosine-phase 392--448 window is also
+  operationally healthy and contains one step-424 spike above the 10% floor,
+  while exact-draw identity/lifecycle/event improve but current position,
+  velocity, coverage90, and nearly every position horizon remain slightly
+  adverse. This is neither collapse nor broad convergence; keep the selector-
+  512 and scale gates unchanged.
 - [x] Strictly audit the active candidate at durable step 256 and measure its
   emitted residual on a deterministic causal draw. Verify `48/48` attention
   tensors and complete Adam state changed, all 177 inherited tensors and both

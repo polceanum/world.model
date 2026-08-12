@@ -64,6 +64,12 @@
   improve versus constant rate, while 0.25--1.00-second position and mixed
   velocity/event/calibration slices remain adverse. Continue unchanged to the
   fixed selector.
+- Audited the first complete cosine-phase updates 392--448 window. All support,
+  update, memory, and finiteness checks pass; a step-424 raw-gradient spike is
+  contained at `0.126551` shared retention and does not recur. Exact-draw
+  identity/lifecycle/event metrics improve slightly, but current position,
+  velocity, coverage90, and nearly all position horizons remain adverse. Keep
+  selector 512 and every capacity rung gated.
 
 - Added an opt-in, state-free `warmup_cosine` closed-loop learning-rate
   protocol while preserving exact historical `constant` behavior. Warmup and

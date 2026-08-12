@@ -214,6 +214,25 @@ bounded near `0.01` with nonzero variation instead of the rejected trajectory's
 earlier rapid bias growth.  This is current/short recovery with unresolved
 mature-horizon generalization; selector 512 remains authoritative.
 
+The first complete cosine-phase window, updates 392--448, remains structurally
+healthy but is not a broad accuracy win.  All eight scenarios contribute
+exactly eight draws, all 64 updates apply, 1,874 trajectory targets and every
+required objective are present, memory remains flat, and there are no skipped,
+terminal, or uncontained updates.  One difficult event draw at step 424 raises
+the raw gradient to `7.901921`; the typed-output, decoder-row, and shared caps
+contain it with `0.126551` complete-interaction retention, above the declared
+`0.1` rejection floor.  The following logged updates return to fully retained
+gradients, so this is an isolated contained spike rather than collapse.
+Against the failed constant-rate run on the exact same draws, trusted identity
+improves `2 -> 1` switches and lifecycle precision/coverage plus pooled event
+F1 improve slightly.  Current position is nevertheless `+0.003879 m` worse,
+current velocity `+0.070337 m/s` worse, coverage90 `-0.003031`, and the five
+position horizons differ by
+`+0.000926/+0.002356/+0.000443/+0.000000/+0.001569 m`; axes and velocity
+horizons remain mixed.  This confirms stable schedule execution, not fixed-
+manifest convergence or a capacity limit.  Continue unchanged to selector
+512 and keep every scale rung closed.
+
 Historical live-run record follows.  The clean specification-1.39 successor was active at
 `runs/20260812-102557-attention-node-drift-008-stage-a/` from pushed clean
 commit `176796ff94d89eb79304c58b46e88f9a1ecb9cad`.  Its resolved config differs
