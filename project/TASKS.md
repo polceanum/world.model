@@ -474,7 +474,11 @@
   non-regression before scaling depth or width. The fresh run is active at
   `runs/20260811-234157-attention-node-parsimony-stage-a/` from clean commit
   `bbdb3ad`; its one-shot trainer and immutable-source supervisor each run
-  once with empty stderr, and initial protected-control validation is active.
+  once with empty stderr. Initial validation exactly matches all 225 control
+  tensors and 2,844 common non-resource metrics. The first eight balanced
+  updates apply with matched support, no skip, finite gradient, and a passing
+  dynamics audit. Continue to checkpoint 128 and fixed selector 512 without a
+  promotion claim.
 - [x] Add a reusable read-only attention-checkpoint auditor that records whole-
   file/model hashes, recursive finiteness, configured shape/dtype agreement,
   inherited/protected tensor equality, named optimizer ownership, and Adam

@@ -34,8 +34,15 @@
   immutable-commit convergence supervisor are running once with empty stderr.
   Metadata confirms clean source, MPS RGB measurement, CPU closed loop, no
   oracle, and the exact `attention_node_complexity=1.0` override. Initial
-  32-episode protected-control validation is active; no trained accuracy or
-  convergence claim exists yet.
+  32-episode protected-control validation completed in `1,034.57 s`: all
+  `225/225` tensors and `2,844/2,844` common non-resource metrics exactly match
+  the protected control at score `0.3213162196`.
+- Audited the first eight regularized updates. Exact predecessor seeds,
+  scenarios, and 349-trajectory support match; all updates apply with no skip,
+  zero trusted identity switches, complete interaction retention `1.0`, and
+  applied gradient `0.254750` versus predecessor `0.283628`. The whole-run
+  auditor passes. This qualifies launch/objective wiring only; no trained
+  selector or convergence result exists yet.
 
 - Stopped the specification-1.31 campaign after the trainer safely rejected
   attempted optimizer step 988 before Adam. Complete interaction retention was

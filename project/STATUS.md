@@ -191,8 +191,28 @@ input, and oracle disabled. The resolved config records
 episode draws, 32-episode selectors every 512 updates, and checkpoints every
 128. The immutable supervisor enforces 4,096-update extensions, four-selector
 1% plateau evidence, and a 24,576 hard limit. Initial protected-control
-validation is advancing normally; it must complete exact step-zero equality
-before the first optimizer update.
+validation completed all 32 episodes in `1,034.57 s`. The resulting score and
+public metrics exactly reproduce the protected control, including score
+`0.3213162196`, current position `0.251460 m`, velocity `1.093191 m/s`, target
+coverage `0.37625`, precision `0.357312`, collision F1 `0.195489`, trusted
+identity-switch rate `1.3592%`, and coverage90 `93.3861%`. Independent exact
+comparison proves all `225/225` model tensors and all `2,844/2,844` common
+non-resource metrics are bitwise/equally identical; only the expected
+specification metadata changes from 1.35 to 1.36.
+
+The first balanced eight-update block is also complete. It uses the exact same
+seeds/scenario order and `349` causal trajectories as the unregularized
+predecessor, applies all eight updates, skips none, retains the complete
+interaction gradient at `1.0`, records zero trusted identity switches over 61
+associations, and lowers applied gradient norm `0.283628 -> 0.254750` at
+essentially unchanged total loss (`0.489052 -> 0.489055`). The new x/y/z node
+complexity energies are
+`1.816e-6/1.376e-6/9.331e-6` (`4.174e-6` mean). The complete dynamics auditor
+returns `pass`; its severe warning is the declared localized typed-output
+budget, while the complete interaction/global update is not clipped. Peak
+sampled RSS is `2,891,116,544` bytes versus predecessor
+`2,936,651,776`. This is launch/objective integrity evidence, not accuracy,
+plateau, or convergence.
 
 Implementation verification on Python `3.10.20` / PyTorch `2.10.0`:
 
