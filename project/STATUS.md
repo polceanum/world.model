@@ -6,6 +6,53 @@ campaign uses specification 1.42 and the rejected schedule control uses 1.41
 
 ## Latest verified state — 2026-08-13
 
+The relation-only step-768 structural boundary is preserved and passes the
+strict checkpoint audit. `last.pt` first passed at embedded/expected/Adam
+steps `768/768/[768]`; its verified bytes were then copied to
+`checkpoints/checkpoint_step_000768.pt` and independently re-audited. Both
+files have SHA-256
+`d2e1d85553949e9d3c32fed10383ad10e82818105740cceec1262d3cbde1e3e0`;
+the model-state hash is
+`43b6b1a69cd004184d00f4b32390f98097e24d9881ec64641a85a1a0299969d3`.
+All 46 permitted attention tensors and exactly 46 Adam owners are live, both
+frozen node tensors and all 177 inherited tensors remain exact, both protected
+incumbents remain exact, and serialized finiteness/source/protocol checks pass.
+The durable audit is `attention_checkpoint_audit_step_000768.json` in the
+active run.
+
+The complete non-overlapping 712--768 window also passes operationally: all
+64 updates apply, all eight scenarios appear exactly eight times, 2,081 causal
+trajectories are sampled, every cadence block has all 13 contributing causal
+terms, no draw is skipped, no clipping is uncontained, and RSS remains flat at
+`2,924,761,088` bytes. Minimum complete interaction-gradient retention is
+`0.395006` at step 744. Repeated strong local collision-output isolation is
+contained before shared backpropagation and does not cause rollback, missing
+support, nonfinite state, or resource growth.
+
+Absolute current position/velocity RMSE is
+`0.187047 m / 1.169836 m/s`, current x/y/z is
+`0.188838/0.172034/0.199259 m`, and 0.10/0.25/0.50/0.75/1.00-second position
+is `0.184881/0.212071/0.268854/0.326310/0.357634 m`. Against the preceding
+different-draw 648--704 window, current position/velocity improve
+`0.184067 m / 0.317872 m/s`, all current axes improve, and every position
+horizon improves by `0.183748/0.174085/0.081119/0.017418/0.030332 m`.
+Collision F1, trusted switch rate, lifecycle precision/coverage, coverage90,
+and median NLL also improve by `0.059748`, `0.015499`,
+`0.034621/0.005361`, `0.029725`, and `0.146744`. The remaining diagnostic
+watch items are velocity at 0.25/0.50/1.00 seconds, adverse by
+`0.644878/0.121007/0.026917 m/s`, and target coverage at 0.25--1.00 seconds,
+lower by `1.57--3.75` percentage points. These draws differ, so this is
+encouraging trend evidence rather than promotion; continue unchanged to fixed
+selector 1024.
+
+Commands run for this boundary were:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/checkpoint_step_000768.pt --initial-checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000000.pt --config runs/20260813-073710-attention-relation-constant-stage-a/config.resolved.yaml --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/best_rollout.pt --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/reference_rollout.pt --output runs/20260813-073710-attention-relation-constant-stage-a/attention_checkpoint_audit_step_000768.json --expected-step 768 --frozen-attention-prefix dynamics.attention_interactions.node_decoder. --require-all-attention-changed --require-complete-attention-optimizer-state --require-protected-checkpoints
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 704 --trend-window-blocks 8
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 640 --trend-window-blocks 8
+```
+
 The complete non-overlapping relation-only updates 648--704 window passes the
 operational audit. All 64 optimizer updates apply, every one of the eight
 scenario families appears exactly eight times, 2,130 causal trajectories are

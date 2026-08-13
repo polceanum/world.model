@@ -121,6 +121,13 @@
   different-draw window, while current/short position, velocity, identity,
   x, and especially z worsen. Preserve this mixed evidence unchanged to the
   fixed step-1024 selector.
+- [x] Preserve and strictly audit the relation-only step-768 checkpoint and
+  complete updates 712--768. Exact step/Adam/scope/inherited/protected/
+  finiteness evidence passes; 64 updates, eight-way balance, 2,081
+  trajectories, all causal terms, clipping containment, and flat memory pass.
+  Every position slice improves versus the preceding different-draw window;
+  0.25/0.50/1.00-second velocity and later target coverage remain watch items.
+  Continue unchanged to selector 1024.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

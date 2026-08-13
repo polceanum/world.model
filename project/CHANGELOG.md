@@ -114,6 +114,12 @@
   uncontained clipping, and flat memory. Different-draw trends improve mature
   position/event/lifecycle/calibration but regress current/short state,
   velocity, identity, x, and z, so selector 1024 remains authoritative.
+- Preserved and strictly audited relation-only checkpoint 768 with exact
+  payload/Adam/scope/inherited/protected/provenance integrity. Complete
+  712--768 dynamics are operationally healthy and improve every position
+  slice versus the preceding different-draw window; selected velocity horizons
+  and mature target coverage remain diagnostic limitations before selector
+  1024.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail
