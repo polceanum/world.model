@@ -30,6 +30,10 @@ The next experiment must connect this selector to a fixed small candidate pool
 and compare it against the incumbent on the full 32-episode, every-axis,
 every-horizon protocol before any training campaign is resumed.
 
+The selector now also exposes a structural `rollout_dynamics` adapter for any
+candidate object with `predict_step`, verified with two independent
+`DynamicsModel` instances. No long run has been relaunched yet.
+
 The immutable relation-only campaign has completed and rejected its fixed
 step-1024 selector. The 32 RGB-only validation episodes completed in
 `1,236.713 s` with four balanced repeats of every scenario and zero mutable or

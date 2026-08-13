@@ -2,8 +2,9 @@
 
 ## Paper-guided next target — short-step hypothesis selection
 
-- [x] Add a functional, non-mutating multi-hypothesis rollout wrapper that
-  reuses `WorldBelief` and the existing `RolloutStep` contract.
+- [x] Add a functional, non-mutating multi-hypothesis rollout wrapper and a
+  structural `predict_step` adapter that reuse `WorldBelief` and the existing
+  `RolloutStep` contract.
 - [x] Add masked, uncertainty-aware per-batch trajectory scoring and
   deterministic selection with posterior weights; cover empty inputs, masks,
   occluded frames, and uncertainty behavior with focused tests.

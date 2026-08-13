@@ -8,6 +8,9 @@
   short-step candidate rollouts, masked uncertainty-aware error scoring, and
   deterministic per-batch model selection. The implementation is functional
   but has not yet been connected to a promoted training run.
+- Added a structural adapter for any dynamics candidate exposing
+  `predict_step`, with a regression test using two real `DynamicsModel`
+  instances.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 
