@@ -98,6 +98,12 @@
   aggregate event, identity, coverage90, and uncertainty improve; mature x
   increasingly regresses, producing a `+0.013616 m` 1-second pooled deficit
   and adverse 1-second collision F1. Continue unchanged to selector 1024.
+- Preserved and strictly audited relation-only checkpoint 640. Embedded,
+  expected, and Adam steps agree; exact trainable/frozen/inherited/protected
+  scope and finiteness pass. Complete matched updates 584--640 improve current
+  state/velocity, every pooled position horizon, and every x horizon. A raw
+  step-616 force spike is safely isolated before shared backprop; collision F1
+  and mature velocity remain the accuracy watch items.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail

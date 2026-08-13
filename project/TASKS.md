@@ -105,6 +105,11 @@
   position improve, but mature x increasingly regresses and drives a
   `+0.013616 m` 1-second pooled deficit; preserve this limitation unchanged to
   fixed selector 1024 rather than retune on training draws.
+- [x] Preserve/audit relation-only checkpoint 640 and complete updates
+  584--640. Strengthened payload/expected/Adam, scope, inherited, protected,
+  finiteness, support, balance, and resource gates pass. Every pooled position
+  horizon and x horizon improve on matched draws; collision F1 and mature
+  velocity remain adverse. Continue unchanged to selector 1024.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

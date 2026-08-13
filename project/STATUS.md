@@ -324,6 +324,43 @@ better. This is a clean long-horizon accuracy warning, not collapse or
 promotion evidence. Continue the unchanged trajectory to selector 1024 so the
 fixed manifest can determine whether the x/event trade-off persists.
 
+The next complete updates 584--640 window reverses the mature-x warning while
+remaining operationally exact: all 64 updates apply, every scenario appears
+eight times, 2,060 causal trajectories are sampled, no draw is skipped,
+minimum complete-interaction retention is `0.852413`, and peak RSS remains
+flat. Step 616 has a real learned force-sensitivity spike: raw aggregate force
+output gradient `363.837` is isolated to `0.071543` before decoder/shared
+backpropagation (minimum local coefficient `0.00003493`). The downstream force
+decoder norm is only `0.286615`, every shared block/projection norm is below
+`0.023`, the complete gradient is wholly retained at `0.310713`, and the
+finite supported update applies. It does not recur at steps 624, 632, or 640;
+there is no uncontained clipping or stderr.
+
+Matched current position and velocity improve `0.009648 m` and
+`0.015793 m/s`; x/y/z current position all improve. Every pooled position
+horizon improves by `0.012180/0.003781/0.008340/0.012343/0.013490 m`, and x
+improves by `0.027351/0.017329/0.023485/0.029444/0.028516 m` at
+0.10/0.25/0.50/0.75/1.00 seconds. Trusted identity, coverage90, and
+uncertainty improve; lifecycle precision is `0.001144` adverse and target
+coverage `0.001142` better. The remaining adverse slices are aggregate
+collision F1 (`-0.057959`), collision F1 at every supported horizon, and
+0.75/1.00-second velocity (`+0.039511/+0.093056 m/s`). This is the first
+complete post-selector window with every pooled position horizon improved,
+but it remains sampled evidence rather than promotion.
+
+The preserved step-640 checkpoint passes the specification-1.43-strengthened
+audit with embedded/expected/Adam steps `640/640/[640]`. SHA-256 is
+`b3b8f41cfb0bea14943068097be141b91ec37a6dc0808ba8d46ffd0e5521f439`;
+model-state hash is
+`7b55f4696d9a5f821801bf0a40059ddd528c97cde349faf72f073f14add1b12d`.
+All 46 permitted tensors and exactly 46 Adam owners are live, both frozen node
+tensors and all 177 inherited tensors remain exact, both protected artifacts
+remain exact, and finiteness/source/protocol hashes pass. The artifacts are
+`checkpoints/checkpoint_step_000640.pt` and
+`attention_checkpoint_audit_step_000640.json` in the active run. Continue
+unchanged to fixed selector 1024; do not infer convergence from one favorable
+training window.
+
 Commands run for this decision were:
 
 ```bash
@@ -343,6 +380,8 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check scripts/audit_attention_checkpoint.py tests/unit/test_audit_attention_checkpoint.py
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check scripts/audit_attention_checkpoint.py tests/unit/test_audit_attention_checkpoint.py
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 513 --trend-window-blocks 8 --reference-run runs/20260811-170842-attention-aggregate-isolated-stage-a
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 577 --trend-window-blocks 8 --reference-run runs/20260811-170842-attention-aggregate-isolated-stage-a
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/checkpoint_step_000640.pt --initial-checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000000.pt --config runs/20260813-073710-attention-relation-constant-stage-a/config.resolved.yaml --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/best_rollout.pt --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/reference_rollout.pt --output runs/20260813-073710-attention-relation-constant-stage-a/attention_checkpoint_audit_step_000640.json --expected-step 640 --frozen-attention-prefix dynamics.attention_interactions.node_decoder. --require-all-attention-changed --require-complete-attention-optimizer-state --require-protected-checkpoints
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000512.pt --initial-checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000000.pt --config runs/20260813-073710-attention-relation-constant-stage-a/config.resolved.yaml --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/best_rollout.pt --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/reference_rollout.pt --output /tmp/orpheus-attention-relation-audit-step512-optimizer-boundary.json --expected-step 512 --frozen-attention-prefix dynamics.attention_interactions.node_decoder. --require-all-attention-changed --require-complete-attention-optimizer-state --require-protected-checkpoints
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_audit_attention_checkpoint.py tests/integration/test_checkpoint_roundtrip.py::test_checkpoint_specification_version_matches_authoritative_contract
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check scripts/audit_attention_checkpoint.py tests/unit/test_audit_attention_checkpoint.py world_model/utils/version.py

@@ -139,6 +139,15 @@
   preserve the same trajectory through fixed selector 1024, where identical
   held-out episodes can distinguish a persistent relation shortcut from
   heterogeneous sampled behavior.
+  The subsequent complete 584--640 window reverses that mature-x deficit:
+  current state/velocity, every pooled position horizon, and every x horizon
+  improve on exact draws, with identity and uncertainty also favorable.
+  Collision F1 at every supported horizon and 0.75/1.00-second velocity remain
+  adverse. A step-616 raw force sensitivity of `363.837` is reduced to
+  `0.071543` by the declared aggregate semantic cap before shared gradients;
+  the finite complete update is wholly retained and the spike does not recur
+  through 640. Strict step-640 integrity passes. Preserve the immutable run to
+  selector 1024 rather than promote from this favorable sampled reversal.
 
 ## ADR-113 — Reject schedule-only repair and qualify relations before nodes
 
