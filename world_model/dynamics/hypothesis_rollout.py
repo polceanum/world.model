@@ -72,7 +72,7 @@ class ConstantVelocityDynamics:
                 -self.damping * delta_time[:, None, None]
             )
         objects.fast_log_variance = (
-            objects.fast_log_variance + delta_time[:, None, None, None] * 1.0e-3
+            objects.fast_log_variance + delta_time[:, None, None] * 1.0e-3
         ).clamp(-20.0, 10.0)
         endpoint = belief.replace(
             timestamp=belief.timestamp + delta_time,

@@ -25,6 +25,13 @@
 - Added a non-mutating `ConstantVelocityDynamics` baseline with optional
   exponential damping and uncertainty propagation for heterogeneous
   candidate-pool tests.
+- Fixed its variance propagation broadcast so RGB rollouts retain the required
+  `[B,T,N,D]` trajectory shape; the validator caught this in the first live
+  RGB smoke before any metric was recorded.
+- Corrected the regression test to exercise the structural `predict_step`
+  adapter, then completed a real toy RGB smoke: learned candidate score
+  `2.126778` versus damped constant-velocity `8.872571`, with candidate `0`
+  selected. This remains a plumbing check, not broad validation.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

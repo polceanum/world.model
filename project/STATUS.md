@@ -67,6 +67,18 @@ supports optional exponential damping, propagates uncertainty, and leaves the
 source belief unchanged. It is a baseline hypothesis, not a hard-coded rule
 for promotion.
 
+The first real RGB pool smoke caught and fixed an uncertainty-shape broadcast
+bug in that baseline (`[B,N,D]` variance was accidentally expanded to
+`[B,1,N,D]`). The trajectory validator caught it before any result was
+recorded; the corrected implementation is covered by the focused tests below.
+
+After the fix, a one-frame `configs/toy_smoke.yaml` RGB smoke (seed `100000`,
+CPU, two 0.05/0.10-second queries) completed end to end. Against simulator
+future state used only for evaluation, the learned dynamics candidate scored
+`2.126778` and the damped constant-velocity candidate `8.872571`; posterior
+weights were `0.998826/0.001174` and candidate `0` was selected. This is a
+plumbing sanity check, not a multi-episode accuracy result.
+
 The immutable relation-only campaign has completed and rejected its fixed
 step-1024 selector. The 32 RGB-only validation episodes completed in
 `1,236.713 s` with four balanced repeats of every scenario and zero mutable or
