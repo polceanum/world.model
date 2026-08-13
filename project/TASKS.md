@@ -65,6 +65,11 @@
   velocity/lifecycle/identity/event slices. Preserve the warning and continue
   unchanged to the predeclared fixed selector rather than promote or retune on
   heterogeneous training samples.
+- [x] Preserve and strictly audit relation-only checkpoint 256 and complete
+  updates 200--256. Scope/Adam/protected/finiteness evidence passes. Current,
+  velocity, lifecycle, event, and short-horizon position recover versus the
+  matched control, while x at every horizon, pooled 0.50--1.00 seconds,
+  identity switching, and median NLL remain adverse. Continue to selector 512.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

@@ -54,6 +54,12 @@
   current and every pooled position horizon regress mainly on x/z, with most
   secondary slices adverse. Recorded this as real accuracy warning without
   conflating it with collapse or changing the fixed-selector protocol.
+- Preserved and strictly audited the relation-only step-256 checkpoint with
+  exact 46-trainable/2-frozen attention scope, complete Adam state, unchanged
+  inherited/protected state, and finite provenance. The matched 200--256
+  window repairs current/velocity/lifecycle/event and short-horizon position,
+  but x and pooled 0.50--1.00-second position remain adverse; fixed validation
+  remains authoritative.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail

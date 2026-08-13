@@ -53,6 +53,12 @@
   windows are heterogeneous and have already changed sign. Continue unchanged
   to selector 512, where identical fixed episodes and scenario guardrails can
   distinguish generalization from training-window wobble.
+  Updates 200--256 then reverse much of that sampled regression while passing
+  a second strict checkpoint audit: current/velocity, lifecycle, event F1 and
+  short position improve, but x remains adverse at every horizon and pooled
+  0.50--1.00-second position still regresses. This observed sign reversal is
+  direct evidence that neither adjacent window is a valid promotion/rejection
+  substitute for the fixed selector; keep the protocol immutable through 512.
 
 ## ADR-113 — Reject schedule-only repair and qualify relations before nodes
 

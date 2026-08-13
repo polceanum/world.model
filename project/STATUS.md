@@ -181,6 +181,27 @@ optimizer collapse. Adjacent matched windows have changed sign, so the
 predeclared fixed selector remains the first valid behavioral decision point;
 continue without promotion or mid-protocol retuning.
 
+The preserved step-256 checkpoint also passes the strict structural audit.
+Its SHA-256 is
+`13ebe30362ea03fdc9dd998c98c681e730a422eb95f24868eaba757cd3c840fa`;
+all 46 permitted tensors and exactly 46 Adam owners are live at step 256,
+both frozen node tensors and all 177 inherited tensors remain exact, both
+protected checkpoints remain exact, and finiteness/provenance/protocol hashes
+pass. The durable artifact is `checkpoints/checkpoint_step_000256.pt`; the
+report is `attention_checkpoint_audit_step_000256.json` in the active run.
+
+Complete updates 200--256 partially repair the preceding matched regression
+while remaining operationally exact: eight draws per scenario, 2,859 sampled
+causal trajectories, all required objective support, zero skips/uncontained
+clipping, minimum complete-gradient retention `0.594210`, and flat peak RSS.
+Versus the control, current position/velocity improve `0.000545 m` and
+`0.077125 m/s`; lifecycle precision/coverage and collision F1 at every horizon
+improve, as do pooled 0.10/0.25-second position by `0.000477/0.002903 m`.
+The remaining error is localized but meaningful: x regresses at every horizon,
+driving pooled 0.50/0.75/1.00-second regressions of
+`0.001042/0.011037/0.012596 m`; trusted identity switching and median NLL are
+also adverse. Continue to the fixed selector without promotion or retuning.
+
 Commands run for this decision were:
 
 ```bash
