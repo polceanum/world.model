@@ -49,8 +49,11 @@
   lifecycle, identity, uncertainty, events, every axis/horizon, test, and OOD
   evidence; keep every scale gate closed until broad convergence is proved.
   Step-zero is bitwise exact across 225 tensors and 2,584 metrics. The first
-  16 balanced updates pass with exact node isolation, no skips/failures, stable
-  memory, and mixed near-control axis/horizon movement; continue unchanged.
+  56 balanced updates pass with exact node isolation, no skips/failures,
+  stable memory, and mixed near-control axis/horizon movement. The complete
+  sampled 8--48 window remains finite with at least `0.812481` complete
+  interaction-gradient retention; continue unchanged to the step-128
+  structural audit and step-512 fixed selector.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

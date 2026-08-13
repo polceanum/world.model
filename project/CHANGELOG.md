@@ -32,6 +32,13 @@
   node path cannot create a false severe-clip warning. Real relation-output
   clipping remains reported. Added a regression test; focused tests, Ruff,
   formatting, and diff checks pass.
+- Continued the immutable relation-only campaign through step 56. All updates
+  apply with exact seven-way repeats of the eight-scenario balanced batch,
+  zero skips/failures, 2,308 cadence-recorded causal trajectories, exact zero
+  node behavior, stable memory, and at least `0.812481` complete interaction-
+  gradient retention. Early matched axes/horizons remain mixed and collision
+  F1 remains adverse, so no retuning or promotion precedes fixed validation.
+  Focused supervisor/auditor tests pass `39 passed`; Ruff is clean.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail

@@ -34,6 +34,12 @@
   support-complete, node-exact, and behaviorally near the matched full-attention
   control with mixed axes/horizons. Continue unchanged; neither early sampled
   movement nor contained semantic-output clipping changes the selector gate.
+  This remains true through step 56: all updates and balanced scenario draws
+  complete without skips, node behavior remains exactly zero, complete
+  interaction-gradient retention stays at or above `0.812481`, and the mixed
+  axis/horizon plus adverse sparse collision samples provide no evidence for
+  an early protocol mutation. The step-128 structural and step-512 selector
+  gates remain authoritative.
 
 ## ADR-113 — Reject schedule-only repair and qualify relations before nodes
 

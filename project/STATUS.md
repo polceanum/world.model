@@ -123,6 +123,23 @@ clipped at `0.052808`); decoder-row and complete-interaction coefficients are
 is deferred until a natural training validation/checkpoint pause to avoid
 competing with the CPU-heavy sustained trainer.
 
+The unchanged relation-only campaign has now reached optimizer step 56. All
+56 updates applied with zero skipped draws, exactly seven draws from each of
+the eight scenarios, 2,308 cadence-recorded causal trajectories, all 13
+objective groups whenever supported, exact zero node gradient/activity/drift/
+complexity, and no stderr or terminal failure. The dynamics audit passes;
+minimum complete-interaction gradient retention is `0.812481`, while rare
+local typed-output coefficients below 10% remain visible warnings rather than
+uncontained failures. Peak recorded RSS is `2,916,241,408` bytes and the live
+trainer was independently observed using about 480% CPU, so it is progressing
+rather than stalled. The complete sampled steps 8--48 window has pooled
+position RMSE `0.258848/0.301847/0.371995/0.421242/0.443553 m` at
+0.10/0.25/0.50/0.75/1.00 seconds. Exact matched-control movement remains
+small and mixed, with collision F1 still the clearest early adverse signal;
+these heterogeneous cadence samples are not selector evidence. Continue the
+immutable run to the step-128 structural audit and the authoritative step-512
+fixed selector without retuning.
+
 Commands run for this decision were:
 
 ```bash
@@ -133,6 +150,9 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --co
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --device cpu --resume runs/20260813-072457-attention-relation-constant-cpu-smoke/checkpoints/last.pt --set training.closed_loop_trainable_scope=attention_relation --set training.steps=2 --set training.train_episodes=8 --set training.validation_episodes=8 --set training.num_workers=0 --set training.eval_every=1 --set training.checkpoint_every=1 --set training.validation_minimum_predictable_target_count_per_scenario_horizon=1 --set training.validation_minimum_matched_target_count_per_scenario_horizon=1 --set training.validation_minimum_supported_episodes_per_scenario=1
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --checkpoint runs/20260813-072457-attention-relation-constant-cpu-smoke/checkpoints/validation_step_000002.pt --initial-checkpoint runs/20260813-072457-attention-relation-constant-cpu-smoke/checkpoints/validation_step_000000.pt --config runs/20260813-072457-attention-relation-constant-cpu-smoke/config.resolved.yaml --protected runs/20260813-072457-attention-relation-constant-cpu-smoke/checkpoints/reference_rollout.pt --output runs/20260813-072457-attention-relation-constant-cpu-smoke/attention_checkpoint_audit_step_000002.json --frozen-attention-prefix dynamics.attention_interactions.node_decoder. --require-all-attention-changed --require-complete-attention-optimizer-state --require-protected-checkpoints
 git diff --check
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_audit_training_dynamics.py tests/unit/test_convergence_supervisor.py
+conda run -n orpheus python -m ruff check scripts/supervise_convergence.py scripts/audit_training_dynamics.py tests/unit/test_audit_training_dynamics.py tests/unit/test_convergence_supervisor.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 0 --trend-window-blocks 6 --reference-run runs/20260811-170842-attention-aggregate-isolated-stage-a
 ```
 
 The specification-1.41 warmup/cosine control is now rejected at its first
