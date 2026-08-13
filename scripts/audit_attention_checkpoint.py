@@ -192,6 +192,7 @@ def audit_checkpoint(
         protected_exact = protected_exact and protected_hash == initial_hash
 
     checkpoint_step = int(checkpoint.get("step", -1))
+    optimizer_steps_match_checkpoint = not optimizer_steps or optimizer_steps == [checkpoint_step]
     failures: list[str] = []
     if expected_step is not None and checkpoint_step != expected_step:
         failures.append(
@@ -209,6 +210,10 @@ def audit_checkpoint(
         failures.append("inherited tensors changed")
     if not optimizer_owner_set.issubset(attention_parameter_names):
         failures.append("optimizer state is not attention-only")
+    if not optimizer_steps_match_checkpoint:
+        failures.append(
+            f"optimizer steps {optimizer_steps} do not match checkpoint step {checkpoint_step}"
+        )
     changed_frozen_attention = sorted(set(changed_attention) & frozen_attention_names)
     if invalid_frozen_prefixes:
         failures.append("a frozen attention prefix is outside the attention module")
@@ -276,6 +281,7 @@ def audit_checkpoint(
         ),
         "optimizer_state_owners": optimizer_owners,
         "optimizer_steps": optimizer_steps,
+        "optimizer_steps_match_checkpoint": optimizer_steps_match_checkpoint,
         "protected_checkpoint_count": len(protected_paths),
         "protected_model_state_hashes": protected_hashes,
         "protected_checkpoint_file_sha256": protected_file_hashes,

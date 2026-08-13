@@ -88,6 +88,10 @@
   The true selector artifact passes `512/512`; the prematurely copied artifact
   now fails explicitly as embedded step 384 rather than allowing a misleading
   step-512 report. Focused tests pass (`4 passed`) and Ruff is clean.
+- Published specification 1.43 and hardened attention audits against stale or
+  mixed Adam boundaries. Non-empty optimizer steps must now exactly equal the
+  embedded checkpoint step. A synthetic 128/127 artifact fails and the real
+  relation-only selector passes payload/expected/Adam `512/512/[512]`.
 - Audited complete relation-only updates 520--576 after the rejected selector.
   All operational gates pass with 2,650 trajectories and at least `0.673214`
   complete-gradient retention. Matched current state/velocity, short position,

@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.42
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026
+**Version:** 1.43
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint and optimizer-step audit-integrity amendment 13 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6716,6 +6716,31 @@ oracle labels, and pay a sparsity/calibration cost. It may open for genuinely
 unmodelled forces, but cannot become a constant scene-wide correction merely
 because the rest of the model is frozen. Qualify that gate as a separate
 same-capacity experiment before reopening the capacity ladder.
+
+## 206. Fixed-boundary audits must bind payload and optimizer steps
+
+A checkpoint filename, external report name, or training heartbeat is not
+authoritative evidence of the optimizer boundary contained in a serialized
+artifact. Fixed validation may begin after an update heartbeat and publish its
+checkpoint only after a long evaluation. During that interval, `last.pt` can
+truthfully remain the preceding durable artifact. Copying it under the pending
+selector's name must not create a passing but mislabelled audit.
+
+Every fixed-boundary qualification audit must therefore receive the expected
+optimizer step explicitly and fail unless it equals the checkpoint payload's
+embedded step. It must also parse every serialized per-parameter optimizer
+step and fail unless the non-empty unique set is exactly the embedded
+checkpoint step. Mixed Adam steps, stale Adam state under a newer payload
+step, and a stale payload under a newer requested boundary are distinct hard
+failures. Reports record the expected step, embedded step, unique optimizer
+steps, and their agreement.
+
+The expected-step requirement is an operational qualification rule, not a
+filename inference rule. General historical/ad-hoc audits may omit it to
+preserve reproducibility, but they still fail an internal payload-versus-Adam
+mismatch. A step-zero checkpoint may legitimately have no optimizer owners.
+This contract changes audit evidence only; it does not alter training,
+checkpoint serialization, selector ordering, inference, or model weights.
 
 ---
 

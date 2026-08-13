@@ -96,6 +96,9 @@
   `last.pt` while validation is still publishing the requested checkpoint.
   `--expected-step` now records and enforces the embedded step; the true 512
   artifact passes and the quarantined step-384 artifact fails as intended.
+- [x] Require non-empty serialized Adam steps to equal the checkpoint payload
+  step. Record the agreement, reject stale/mixed optimizer boundaries, and
+  prove both a synthetic 128/127 failure and the real 512/512 pass.
 - [x] Audit the complete relation-only post-selector updates 520--576 window.
   Operational integrity, balance, support, clipping containment, identity,
   uncertainty, and memory pass. Current state/velocity and 0.10-second

@@ -1,5 +1,25 @@
 # Design decisions
 
+## ADR-116 — Reject payload/Adam boundary mismatches
+
+- **Date:** 2026-08-13
+- **Status:** accepted and implemented in specification 1.43
+- **Context:** ADR-115 binds an externally requested selector boundary to the
+  payload step, but the auditor previously only displayed each parameter's
+  Adam step. A checkpoint labelled internally as step 640 could therefore pass
+  basic integrity while carrying stale step-512 or mixed optimizer state.
+- **Decision:** Require the non-empty unique serialized optimizer-step set to
+  equal the embedded checkpoint step, record the Boolean agreement, and fail
+  independently of the optional external expected-step gate. Preserve empty
+  optimizer state for legitimate step-zero or non-optimizer artifacts.
+- **Alternatives considered:** rely on parameter ownership alone; inspect Adam
+  steps manually; require only that all owners share some step; make the rule
+  conditional on the external expected step.
+- **Consequences:** A synthetic payload/Adam 128/127 mismatch fails, while the
+  active selector passes payload/expected/Adam `512/512/[512]`. This changes
+  qualification evidence only and leaves the immutable specification-1.42
+  training process and serialized artifacts untouched.
+
 ## ADR-115 — Bind fixed-boundary audits to the embedded checkpoint step
 
 - **Date:** 2026-08-13

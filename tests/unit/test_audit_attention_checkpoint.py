@@ -103,6 +103,7 @@ def test_attention_checkpoint_audit_proves_growth_isolation(tmp_path: Path) -> N
     assert report["optimizer_state_attention_only"]
     assert report["optimizer_state_complete_for_attention"]
     assert report["optimizer_steps"] == [128]
+    assert report["optimizer_steps_match_checkpoint"]
     assert report["expected_step"] == 128
     assert report["protected_checkpoint_count"] == 1
     assert report["protected_checkpoints_exactly_initial"]
@@ -143,6 +144,24 @@ def test_attention_checkpoint_audit_proves_growth_isolation(tmp_path: Path) -> N
     assert (
         "checkpoint step 128 does not match expected step 512"
         in stale_checkpoint_report["failures"]
+    )
+
+    stale_optimizer = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    for state in stale_optimizer["optimizer_state"]["state"].values():
+        state["step"] = torch.tensor(127.0)
+    stale_optimizer_path = tmp_path / "step128-with-step127-optimizer.pt"
+    torch.save(stale_optimizer, stale_optimizer_path)
+    stale_optimizer_report = audit_checkpoint(
+        checkpoint_path=stale_optimizer_path,
+        initial_checkpoint_path=initial_path,
+        config_path=config_path,
+    )
+    assert stale_optimizer_report["status"] == "fail"
+    assert stale_optimizer_report["optimizer_steps"] == [127]
+    assert not stale_optimizer_report["optimizer_steps_match_checkpoint"]
+    assert (
+        "optimizer steps [127] do not match checkpoint step 128"
+        in stale_optimizer_report["failures"]
     )
 
 
