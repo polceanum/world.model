@@ -32,6 +32,10 @@
   adapter, then completed a real toy RGB smoke: learned candidate score
   `2.126778` versus damped constant-velocity `8.872571`, with candidate `0`
   selected. This remains a plumbing check, not broad validation.
+- Added `scripts/evaluate_hypothesis_pool.py`, which evaluates learned versus
+  constant-velocity hypotheses on RGB episodes with persistent-ID alignment.
+  The two-episode toy report is retained under the timestamped `runs/` path;
+  it is not a promotion or convergence result.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

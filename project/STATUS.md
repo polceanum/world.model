@@ -79,6 +79,16 @@ future state used only for evaluation, the learned dynamics candidate scored
 weights were `0.998826/0.001174` and candidate `0` was selected. This is a
 plumbing sanity check, not a multi-episode accuracy result.
 
+The reusable evaluation harness is `scripts/evaluate_hypothesis_pool.py`. Its
+two-episode aligned toy report is
+`runs/20260813-215846-hypothesis-pool-toy-2/report.json`. It uses RGB for
+runtime state and aligns simulator supervision by persistent object ID. The
+learned candidate was selected on all 118 scored frame/horizon queries in this
+small run. Selected x/y/z RMSE was `0.3393/0.3236/1.1076 m` and
+`0.4225/0.3143/1.1265 m` at 0.10 s for the two episodes; at 1.00 s it was
+`0.4141/0.2943/0.9345 m` and `0.4991/0.0523/0.8509 m`. These numbers are
+random-initialization toy evidence only, not an incumbent qualification.
+
 The immutable relation-only campaign has completed and rejected its fixed
 step-1024 selector. The 32 RGB-only validation episodes completed in
 `1,236.713 s` with four balanced repeats of every scenario and zero mutable or

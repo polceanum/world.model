@@ -19,6 +19,8 @@
   baseline; keep it selectable but never force it over learned dynamics.
 - [ ] Connect the selector to a small analytic/learned candidate pool and run
   the complete incumbent comparison protocol before changing model weights.
+- [x] Add an evaluation-only RGB harness with persistent-ID target alignment;
+  run a two-episode toy smoke and retain its timestamped report.
 - [ ] Only if the selector passes broad guardrails, train or adapt candidate
   models and audit support, optimizer, lifecycle, identity, uncertainty,
   events, every axis, and every horizon.
