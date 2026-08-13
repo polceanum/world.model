@@ -2,6 +2,15 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-13 paper-guided hypothesis selector
+
+- Added `HypothesisRolloutEngine` and `HypothesisSelection` for parallel
+  short-step candidate rollouts, masked uncertainty-aware error scoring, and
+  deterministic per-batch model selection. The implementation is functional
+  but has not yet been connected to a promoted training run.
+- Added three focused regression tests; all pass. The stopped relation-only
+  campaign remains protected and unchanged.
+
 ### 2026-08-12 functional node-drift prior and selector-512 diagnosis
 
 - Completed exact zero-node evaluations for both drift-regularized step-512

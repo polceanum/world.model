@@ -12,6 +12,7 @@ from world_model.dynamics.contacts import (
 )
 from world_model.dynamics.events import EventModel, EventOutput
 from world_model.dynamics.graph import InteractionGraph, InteractionOutput
+from world_model.dynamics.hypothesis_rollout import HypothesisRolloutEngine, HypothesisSelection
 from world_model.dynamics.modal import ModalDynamics, ModalOutput
 from world_model.dynamics.model import DynamicsConfig, DynamicsModel
 from world_model.dynamics.quaternion import (
@@ -41,6 +42,8 @@ __all__ = [
     "EventOutput",
     "InteractionGraph",
     "InteractionOutput",
+    "HypothesisRolloutEngine",
+    "HypothesisSelection",
     "ModalDynamics",
     "ModalOutput",
     "RolloutEngine",

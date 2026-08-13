@@ -6,6 +6,30 @@ campaign uses specification 1.42 and the rejected schedule control uses 1.41
 
 ## Latest verified state — 2026-08-13
 
+### New paper-guided iteration — selector seam implemented
+
+The prior sustained relation-only campaign was stopped on user request; its
+checkpoints and evidence remain immutable. A new implementation slice is now
+available in `world_model/dynamics/hypothesis_rollout.py`. It runs any set of
+existing `RolloutStep` predictors from the same cloned `WorldBelief`, scores
+their short-step trajectories against asynchronous/occluded target frames with
+masked position NLL, and returns per-batch posterior weights plus a deterministic
+selected hypothesis. This is an executable model-pool/selection contract, not
+yet a promoted accuracy result or a replacement for the protected incumbent.
+
+Focused verification:
+
+```bash
+PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_hypothesis_rollout.py
+# 3 passed
+conda run -n orpheus python -m compileall -q world_model/dynamics/hypothesis_rollout.py tests/unit/test_hypothesis_rollout.py
+git diff --check
+```
+
+The next experiment must connect this selector to a fixed small candidate pool
+and compare it against the incumbent on the full 32-episode, every-axis,
+every-horizon protocol before any training campaign is resumed.
+
 The immutable relation-only campaign has completed and rejected its fixed
 step-1024 selector. The 32 RGB-only validation episodes completed in
 `1,236.713 s` with four balanced repeats of every scenario and zero mutable or
