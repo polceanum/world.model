@@ -1202,6 +1202,54 @@ class OnlineWorldModel(nn.Module):
             raise ValueError("query_times must be finite nonnegative offsets")
         return self.dynamics.rollout(self.state.belief, times)
 
+    def predict_hypotheses(
+        self,
+        hypothesis_pool: object,
+        query_times: Sequence[float] | Tensor,
+    ) -> list[BeliefTrajectory]:
+        """Run a candidate pool from the current persistent belief.
+
+        The pool is intentionally injected rather than stored as runtime
+        truth: model hypotheses are replaceable, while ``self.state.belief``
+        remains the sole source of truth for future cycles.
+        """
+
+        if self.state.belief is None:
+            raise RuntimeError("OnlineWorldModel must ingest an observation first")
+        rollout = getattr(hypothesis_pool, "rollout", None)
+        if not callable(rollout):
+            raise TypeError("hypothesis_pool must expose rollout(belief, query_times)")
+        trajectories = rollout(self.state.belief, query_times)
+        if not isinstance(trajectories, list) or not all(
+            isinstance(item, BeliefTrajectory) for item in trajectories
+        ):
+            raise TypeError("hypothesis_pool.rollout must return list[BeliefTrajectory]")
+        return trajectories
+
+    def assimilate_hypotheses(
+        self,
+        hypothesis_pool: object,
+        target_positions: Tensor,
+        target_mask: Tensor,
+        trajectories: Sequence[BeliefTrajectory],
+        *,
+        uncertainty_aware: bool = True,
+    ) -> object:
+        """Assimilate delayed rollout evidence without mutating the belief."""
+
+        if self.state.belief is None:
+            raise RuntimeError("OnlineWorldModel must ingest an observation first")
+        assimilate = getattr(hypothesis_pool, "assimilate", None)
+        if not callable(assimilate):
+            raise TypeError("hypothesis_pool must expose assimilate(...)")
+        return assimilate(
+            self.state.belief,
+            target_positions,
+            target_mask,
+            trajectories=trajectories,
+            uncertainty_aware=uncertainty_aware,
+        )
+
     def step(
         self,
         packet: ObservationPacket,

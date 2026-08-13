@@ -11,6 +11,8 @@
 - [x] Add a persistent candidate pool that carries evidence weights across
   cycles, supports late observation assimilation, and preserves the source
   belief; verify it with fixed synthetic candidates and real dynamics adapters.
+- [x] Expose candidate prediction and delayed evidence assimilation through
+  `OnlineWorldModel` without storing hypotheses as alternate world truth.
 - [ ] Connect the selector to a small analytic/learned candidate pool and run
   the complete incumbent comparison protocol before changing model weights.
 - [ ] Only if the selector passes broad guardrails, train or adapt candidate

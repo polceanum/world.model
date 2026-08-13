@@ -14,6 +14,9 @@
 - Added `HypothesisDynamicsPool`, which carries normalized candidate weights
   across receding-horizon cycles and assimilates delayed masked observations;
   fixed-candidate selection and source-belief immutability are tested.
+- Exposed the pool through `OnlineWorldModel.predict_hypotheses` and
+  `assimilate_hypotheses`, preserving injected candidate ownership and the
+  persistent-belief source-of-truth contract.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

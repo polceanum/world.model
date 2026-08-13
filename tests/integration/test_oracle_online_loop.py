@@ -5,6 +5,7 @@ from dataclasses import replace
 import torch
 
 from world_model.belief import TentativeBirthState
+from world_model.dynamics import HypothesisDynamicsPool, RolloutStep
 from world_model.observations import ObservationPacket
 from world_model.runtime import OnlineWorldModel
 from world_model.utils.config import OrpheusConfig
@@ -60,6 +61,23 @@ def _pair_packet(
     )
 
 
+class _FixedDynamics:
+    def __init__(self, position: float) -> None:
+        self.position = position
+
+    def predict_step(self, belief, delta_time):
+        objects = belief.objects.clone()
+        objects.position[..., 0] = self.position
+        return RolloutStep(
+            belief=belief.replace(
+                timestamp=belief.timestamp + delta_time,
+                objects=objects,
+            ),
+            event_logits=torch.zeros(belief.batch_size, objects.max_objects, 2),
+            auxiliary={},
+        )
+
+
 def test_oracle_debug_loop_corrects_perturbation_and_keeps_persistent_id() -> None:
     model = OnlineWorldModel.from_config(_oracle_config(), device="cpu")
     initial = model.ingest(_packet(0.0, 0.0))
@@ -85,6 +103,26 @@ def test_oracle_debug_loop_corrects_perturbation_and_keeps_persistent_id() -> No
     assert model.diagnostics.oracle_used
     trajectory = model.predict([0.1, 0.2])
     assert trajectory.positions.shape[:2] == (1, 2)
+
+
+def test_runtime_exposes_persistent_hypothesis_pool_without_replacing_belief() -> None:
+    model = OnlineWorldModel.from_config(_oracle_config(), device="cpu")
+    belief = model.ingest(_packet(0.0, 0.0))
+    pool = HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)])
+    trajectories = model.predict_hypotheses(pool, [0.1, 0.2])
+    target_positions = torch.zeros_like(trajectories[0].positions)
+    target_mask = torch.zeros_like(trajectories[0].active_mask)
+    target_mask[:, :, 0] = True
+    selection = model.assimilate_hypotheses(
+        pool,
+        target_positions,
+        target_mask,
+        trajectories,
+        uncertainty_aware=False,
+    )
+    assert selection.selected_index.tolist() == [1]
+    assert model.belief is not None
+    torch.testing.assert_close(model.belief.objects.position, belief.objects.position)
 
 
 def test_runtime_assigns_permanent_id_only_after_configured_birth_confirmations() -> None:

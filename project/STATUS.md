@@ -41,6 +41,11 @@ leaving the source belief untouched. A fixed-candidate synthetic test selects
 the correct model after delayed evidence; this is selector functionality, not
 an accuracy claim for RGB scenarios.
 
+`OnlineWorldModel.predict_hypotheses` and `assimilate_hypotheses` now expose the
+pool through the live runtime while keeping the pool injected and the belief
+authoritative. This is ready for a protected evaluation experiment; no
+candidate has been promoted and no training has restarted.
+
 The immutable relation-only campaign has completed and rejected its fixed
 step-1024 selector. The 32 RGB-only validation episodes completed in
 `1,236.713 s` with four balanced repeats of every scenario and zero mutable or
