@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from world_model.belief import BeliefTrajectory
-from world_model.dynamics import HypothesisRolloutEngine
+from world_model.belief import BeliefFactory, BeliefTrajectory
+from world_model.dynamics import DynamicsModel, HypothesisRolloutEngine
 
 
 def _trajectory(position: float, *, variance: float = 1.0) -> BeliefTrajectory:
@@ -52,3 +52,15 @@ def test_selector_rejects_empty_or_bad_mask() -> None:
         HypothesisRolloutEngine.score([], target, mask)
     with pytest.raises(TypeError, match="torch.bool"):
         HypothesisRolloutEngine.score([_trajectory(0.0)], target, mask.to(torch.float32))
+
+
+def test_dynamics_adapter_uses_predict_step_contract() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    first = DynamicsModel.from_belief(belief, max_substep=0.05)
+    second = DynamicsModel.from_belief(belief, max_substep=0.05)
+    engine = HypothesisRolloutEngine()
+    trajectories = engine.rollout_dynamics([first, second], belief, [0.05, 0.1])
+    assert len(trajectories) == 2
+    assert trajectories[0].positions.shape == (1, 2, 1, 3)
+    with pytest.raises(TypeError, match="predict_step"):
+        engine.rollout_dynamics([object()], belief, [0.1])

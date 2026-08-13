@@ -79,6 +79,27 @@ class HypothesisRolloutEngine:
             for predictor in predictors
         ]
 
+    def rollout_dynamics(
+        self,
+        dynamics_models: Sequence[object],
+        belief: WorldBelief,
+        query_times: Tensor | Sequence[float],
+    ) -> list[BeliefTrajectory]:
+        """Roll out models exposing the standard ``predict_step`` method.
+
+        Keeping this adapter structural avoids coupling the selector to one
+        neural architecture and permits analytic, learned, or physics-engine
+        backed candidates to coexist in the same pool.
+        """
+
+        predictors: list[Callable[[WorldBelief, Tensor], RolloutStep]] = []
+        for model in dynamics_models:
+            predict_step = getattr(model, "predict_step", None)
+            if not callable(predict_step):
+                raise TypeError("every dynamics hypothesis must expose predict_step")
+            predictors.append(predict_step)
+        return self.rollout(predictors, belief, query_times)
+
     @staticmethod
     def score(
         trajectories: Sequence[BeliefTrajectory],
@@ -132,4 +153,3 @@ class HypothesisRolloutEngine:
         posterior_weights = torch.softmax(-scores / scale, dim=-1)
         selected_index = scores.argmin(dim=-1).to(torch.int64)
         return HypothesisSelection(scores, selected_index, posterior_weights).validate()
-
