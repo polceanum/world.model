@@ -17,6 +17,8 @@
 - Exposed the pool through `OnlineWorldModel.predict_hypotheses` and
   `assimilate_hypotheses`, preserving injected candidate ownership and the
   persistent-belief source-of-truth contract.
+- Full suite after integration: `744 passed, 6 skipped`; skips are expected
+  MPS-availability gates.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

@@ -46,6 +46,16 @@ pool through the live runtime while keeping the pool injected and the belief
 authoritative. This is ready for a protected evaluation experiment; no
 candidate has been promoted and no training has restarted.
 
+Full regression verification after the runtime integration:
+
+```bash
+PYTHONPATH=. conda run -n orpheus pytest -q
+# 744 passed, 6 skipped in 483.36s
+```
+
+The six skips are expected tests gated on unavailable MPS hardware in the test
+process; no failures occurred.
+
 The immutable relation-only campaign has completed and rejected its fixed
 step-1024 selector. The 32 RGB-only validation episodes completed in
 `1,236.713 s` with four balanced repeats of every scenario and zero mutable or
