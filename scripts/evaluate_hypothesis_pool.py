@@ -17,6 +17,7 @@ from typing import Any
 
 import torch
 
+from world_model.belief import MotionMode
 from world_model.dynamics import ConstantVelocityDynamics, HypothesisDynamicsPool
 from world_model.observations import ObservationPacket
 from world_model.runtime import OnlineWorldModel
@@ -44,8 +45,9 @@ def _packet(episode: dict[str, Any], index: int, image_size: tuple[int, int]) ->
 def _future_targets_aligned_to_belief(
     model: OnlineWorldModel,
     episode: dict[str, Any],
+    reference_index: int,
     future_index: int,
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Map simulator supervision onto persistent runtime object identities."""
 
     assert model.belief is not None
@@ -53,18 +55,40 @@ def _future_targets_aligned_to_belief(
     positions = episode["objects"]["position"][future_index]
     active = episode["objects"]["active"][future_index]
     ids = episode["objects"]["id"][future_index]
+    collision = episode["events"]["collision"][future_index]
+    reference_positions = episode["objects"]["position"][reference_index]
+    reference_active = episode["objects"]["active"][reference_index]
+    belief_positions = objects.position[0].detach().cpu()
+    belief_active = objects.active[0].detach().cpu()
+    active_sources = torch.where(reference_active)[0].tolist()
+    active_slots = torch.where(belief_active)[0].tolist()
+    source_to_slot: dict[int, int] = {}
+    remaining_slots = set(active_slots)
+    for source in active_sources:
+        if not remaining_slots:
+            break
+        candidates = sorted(
+            remaining_slots,
+            key=lambda slot: float(
+                torch.linalg.vector_norm(
+                    belief_positions[slot].cpu() - reference_positions[source].cpu()
+                )
+            ),
+        )
+        slot = candidates[0]
+        source_to_slot[int(episode["objects"]["id"][reference_index, source].item())] = slot
+        remaining_slots.remove(slot)
     target = objects.position.new_zeros(1, 1, objects.max_objects, 3)
     mask = torch.zeros(1, 1, objects.max_objects, dtype=torch.bool, device=objects.active.device)
-    for slot, object_id in enumerate(objects.object_id[0].detach().cpu().tolist()):
-        if object_id < 0:
+    collision_target = torch.zeros_like(mask)
+    for source, object_id in enumerate(ids.detach().cpu().tolist()):
+        slot = source_to_slot.get(int(object_id))
+        if slot is None:
             continue
-        matches = torch.where(ids == object_id)[0]
-        if matches.numel() != 1:
-            continue
-        source = int(matches[0])
         target[0, 0, slot] = positions[source].to(device=target.device, dtype=target.dtype)
         mask[0, 0, slot] = bool(active[source])
-    return target, mask
+        collision_target[0, 0, slot] = bool(collision[source])
+    return target, mask, collision_target
 
 
 def _rmse(sum_of_squares: list[float], count: list[int]) -> list[float | None]:
@@ -88,6 +112,15 @@ def evaluate_episode(
     selected_squares = [[0.0, 0.0, 0.0] for _ in horizons]
     candidate_counts = [[[0, 0, 0] for _ in range(2)] for _ in horizons]
     selected_counts = [[0, 0, 0] for _ in horizons]
+    lifecycle_mismatch = [[0, 0] for _ in horizons]
+    identity_covered = [[0, 0] for _ in horizons]
+    selected_lifecycle_mismatch = [0 for _ in horizons]
+    selected_identity_covered = [0 for _ in horizons]
+    event_counts = [
+        [{"tp": 0, "fp": 0, "fn": 0} for _ in range(2)] for _ in horizons
+    ]
+    selected_event_counts = [{"tp": 0, "fp": 0, "fn": 0} for _ in horizons]
+    uncertainty_sum = [[0.0, 0] for _ in horizons]
     choice_counts = [0, 0]
     timestamps = episode["timestamps"]
     with torch.no_grad():
@@ -106,7 +139,9 @@ def evaluate_episode(
                     continue
                 offset = float(timestamps[future_index] - timestamp)
                 trajectories = model.predict_hypotheses(pool, [offset])
-                target, mask = _future_targets_aligned_to_belief(model, episode, future_index)
+                target, mask, collision_target = _future_targets_aligned_to_belief(
+                    model, episode, frame_index, future_index
+                )
                 selection = model.assimilate_hypotheses(
                     pool,
                     target,
@@ -124,11 +159,68 @@ def evaluate_episode(
                             values.square().sum().cpu()
                         )
                         candidate_counts[horizon_index][candidate_index][axis] += int(values.numel())
+                    active_prediction = trajectory.active_mask[:, 0]
+                    lifecycle_mismatch[horizon_index][candidate_index] += int(
+                        (active_prediction != mask[:, 0]).sum().cpu()
+                    )
+                    identity_covered[horizon_index][candidate_index] += int(
+                        (active_prediction & mask[:, 0]).sum().cpu()
+                    )
+                    event_prediction = (
+                        trajectory.event_logits[:, 0, :, MotionMode.COLLISION].sigmoid() >= 0.5
+                    )
+                    truth = collision_target[:, 0]
+                    event_counts[horizon_index][candidate_index]["tp"] += int(
+                        (event_prediction & truth).sum().cpu()
+                    )
+                    event_counts[horizon_index][candidate_index]["fp"] += int(
+                        (event_prediction & ~truth).sum().cpu()
+                    )
+                    event_counts[horizon_index][candidate_index]["fn"] += int(
+                        ((~event_prediction) & truth).sum().cpu()
+                    )
                 residual = trajectories[selected].positions[:, 0] - target
                 for axis in range(3):
                     values = residual[..., axis].masked_select(mask)
                     selected_squares[horizon_index][axis] += float(values.square().sum().cpu())
                     selected_counts[horizon_index][axis] += int(values.numel())
+                selected_active = trajectories[selected].active_mask[:, 0]
+                selected_lifecycle_mismatch[horizon_index] += int(
+                    (selected_active != mask[:, 0]).sum().cpu()
+                )
+                selected_identity_covered[horizon_index] += int(
+                    (selected_active & mask[:, 0]).sum().cpu()
+                )
+                selected_event = (
+                    trajectories[selected].event_logits[:, 0, :, MotionMode.COLLISION].sigmoid()
+                    >= 0.5
+                )
+                truth = collision_target[:, 0]
+                selected_event_counts[horizon_index]["tp"] += int((selected_event & truth).sum().cpu())
+                selected_event_counts[horizon_index]["fp"] += int((selected_event & ~truth).sum().cpu())
+                selected_event_counts[horizon_index]["fn"] += int(
+                    ((~selected_event) & truth).sum().cpu()
+                )
+                selected_variance = trajectories[selected].fast_log_variance[:, 0, ..., :3].exp()
+                active_variance = selected_variance.masked_select(mask[:, 0].unsqueeze(-1))
+                if active_variance.numel():
+                    uncertainty_sum[horizon_index][0] += float(active_variance.mean().sqrt().cpu())
+                    uncertainty_sum[horizon_index][1] += 1
+
+    def event_metrics(counts: dict[str, int]) -> dict[str, float]:
+        tp, fp, fn = counts["tp"], counts["fp"], counts["fn"]
+        precision = tp / (tp + fp) if tp + fp else 0.0
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        return {
+            "collision_precision": precision,
+            "collision_recall": recall,
+            "collision_f1": (2 * precision * recall / (precision + recall))
+            if precision + recall
+            else 0.0,
+            "collision_true_positive": float(tp),
+            "collision_false_positive": float(fp),
+            "collision_false_negative": float(fn),
+        }
     return {
         "candidate_rmse_m": {
             str(horizon): [
@@ -142,6 +234,32 @@ def evaluate_episode(
             for index, horizon in enumerate(horizons)
         },
         "selection_counts": choice_counts,
+        "candidate_lifecycle_mismatch": {
+            str(horizon): lifecycle_mismatch[index] for index, horizon in enumerate(horizons)
+        },
+        "candidate_identity_coverage": {
+            str(horizon): identity_covered[index] for index, horizon in enumerate(horizons)
+        },
+        "selected_lifecycle_mismatch": {
+            str(horizon): selected_lifecycle_mismatch[index]
+            for index, horizon in enumerate(horizons)
+        },
+        "selected_identity_coverage": {
+            str(horizon): selected_identity_covered[index]
+            for index, horizon in enumerate(horizons)
+        },
+        "candidate_event_metrics": {
+            str(horizon): [event_metrics(item) for item in event_counts[index]]
+            for index, horizon in enumerate(horizons)
+        },
+        "selected_event_metrics": {
+            str(horizon): event_metrics(selected_event_counts[index])
+            for index, horizon in enumerate(horizons)
+        },
+        "selected_mean_position_std_m": {
+            str(horizon): (total / count if count else None)
+            for horizon, (total, count) in zip(horizons, uncertainty_sum, strict=True)
+        },
     }
 
 

@@ -80,8 +80,13 @@ class ConstantVelocityDynamics:
         )
         return RolloutStep(
             belief=endpoint,
-            event_logits=belief.timestamp.new_zeros(
-                belief.batch_size, objects.max_objects, 2
+            event_logits=belief.timestamp.new_full(
+                (
+                    belief.batch_size,
+                    objects.max_objects,
+                    objects.motion_mode_logits.shape[-1],
+                ),
+                -4.0,
             ),
             auxiliary={},
         )

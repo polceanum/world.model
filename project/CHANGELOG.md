@@ -50,6 +50,10 @@
   increased local switching `5 -> 27` and slightly improved long-horizon mean
   RMSE without broad regression; it remains unpromoted pending full protocol
   evidence.
+- Extended the hypothesis evaluation harness with lifecycle mismatch, identity
+  coverage, collision precision/recall/F1, and selected uncertainty. Fixed a
+  real RGB supervision bug by bootstrapping simulator-to-runtime IDs from
+  nearest current world positions before carrying them forward.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

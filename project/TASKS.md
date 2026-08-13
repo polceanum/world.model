@@ -29,6 +29,8 @@
   selecting a production default or restarting training.
 - [x] Run a four-episode protected decay-1.0 versus decay-0.1 matrix; retain
   both reports and defer promotion because the gain is small.
+- [x] Extend the evaluation harness with aligned lifecycle, identity,
+  collision-event, and uncertainty metrics; repair RGB ID bootstrap alignment.
 - [ ] Only if the selector passes broad guardrails, train or adapt candidate
   models and audit support, optimizer, lifecycle, identity, uncertainty,
   events, every axis, and every horizon.

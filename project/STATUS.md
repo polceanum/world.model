@@ -7933,6 +7933,13 @@ This is a small protected comparison, not a full incumbent selector. Decay
 0.1 improves adaptation and has no broad regression here, but the effect is too
 small to justify changing the deployed default or restarting training alone.
 
+The evaluation harness now also reports persistent-ID-aligned lifecycle
+mismatch, identity coverage, collision precision/recall/F1, and selected
+position uncertainty. A toy smoke exposed an ID mismatch in the first version;
+the corrected nearest-current-position bootstrap now yields non-empty aligned
+metrics. This matters because RGB runtime IDs are not required to equal
+simulator slot IDs.
+
 The regenerated RGB-only demo is
 `demo_outputs/20260727-162848-accuracy-v6-blended-velocity/online_correction.gif`,
 with
