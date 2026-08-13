@@ -7962,6 +7962,13 @@ weights or incumbent artifacts are writable by this evaluation. An attempted
 MPS smoke was rejected by the runtime availability check (`compiled=True,
 available=False` in the subprocess), so this run is truthfully CPU-only.
 
+The first process ended at the session boundary before producing output. The
+harness has since been optimized to compute all requested horizons in one
+rollout per frame (then assimilate evidence per horizon), preserving the
+selection protocol while reducing redundant dynamics work. A batched attention
+smoke now completes one episode in `103.78 s` CPU versus the previous roughly
+two-minute path; the full 32-episode run is being relaunched with this code.
+
 The regenerated RGB-only demo is
 `demo_outputs/20260727-162848-accuracy-v6-blended-velocity/online_correction.gif`,
 with

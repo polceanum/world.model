@@ -29,6 +29,8 @@
   selecting a production default or restarting training.
 - [ ] Complete the running 32-episode decay-0.1 protected comparison and audit
   all per-axis/per-horizon/lifecycle/identity/event/uncertainty outputs.
+- [x] Batch all requested horizons into one rollout per frame in the evaluation
+  harness; verify equivalent toy/attention smoke execution before relaunch.
 - [x] Run a four-episode protected decay-1.0 versus decay-0.1 matrix; retain
   both reports and defer promotion because the gain is small.
 - [x] Run an eight-episode protected decay-0.1 evaluation with lifecycle,

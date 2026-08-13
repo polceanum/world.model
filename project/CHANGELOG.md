@@ -63,6 +63,9 @@
   `runs/20260813-230000-hypothesis-pool-protected-32ep/` from the immutable
   reference checkpoint. MPS was tested but unavailable in the subprocess;
   the run is CPU-only and does not alter training artifacts.
+- Batched multi-horizon evaluation to avoid recomputing the same learned
+  rollout per horizon. A one-episode attention smoke completes in `103.78 s`
+  CPU; the full protected run is being relaunched with the optimized harness.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

@@ -133,12 +133,39 @@ def evaluate_episode(
                     [model.dynamics, ConstantVelocityDynamics(damping=0.05)],
                     evidence_decay=evidence_decay,
                 )
+            valid_queries: list[tuple[int, int]] = []
+            query_offsets: list[float] = []
             for horizon_index, horizon in enumerate(horizons):
                 future_index = frame_index + round(horizon * frame_rate)
-                if future_index >= len(timestamps):
-                    continue
-                offset = float(timestamps[future_index] - timestamp)
-                trajectories = model.predict_hypotheses(pool, [offset])
+                if future_index < len(timestamps):
+                    valid_queries.append((horizon_index, future_index))
+                    query_offsets.append(float(timestamps[future_index] - timestamp))
+            if not valid_queries:
+                continue
+            trajectories = model.predict_hypotheses(pool, query_offsets)
+            for query_index, (horizon_index, future_index) in enumerate(valid_queries):
+                single_step_trajectories = []
+                for trajectory in trajectories:
+                    single_step_trajectories.append(
+                        trajectory.__class__(
+                            timestamps=trajectory.timestamps[:, query_index : query_index + 1],
+                            positions=trajectory.positions[:, query_index : query_index + 1],
+                            velocities=trajectory.velocities[:, query_index : query_index + 1],
+                            orientations=trajectory.orientations[:, query_index : query_index + 1],
+                            motion_mode_logits=trajectory.motion_mode_logits[:, query_index : query_index + 1],
+                            fast_log_variance=trajectory.fast_log_variance[:, query_index : query_index + 1],
+                            active_mask=trajectory.active_mask[:, query_index : query_index + 1],
+                            event_logits=(
+                                trajectory.event_logits[:, query_index : query_index + 1]
+                                if trajectory.event_logits is not None
+                                else None
+                            ),
+                            auxiliary={
+                                name: value[:, query_index : query_index + 1]
+                                for name, value in trajectory.auxiliary.items()
+                            },
+                        )
+                    )
                 target, mask, collision_target = _future_targets_aligned_to_belief(
                     model, episode, frame_index, future_index
                 )
@@ -146,12 +173,12 @@ def evaluate_episode(
                     pool,
                     target,
                     mask,
-                    trajectories,
+                    single_step_trajectories,
                     uncertainty_aware=False,
                 )
                 selected = int(selection.selected_index[0])
                 choice_counts[selected] += 1
-                for candidate_index, trajectory in enumerate(trajectories):
+                for candidate_index, trajectory in enumerate(single_step_trajectories):
                     residual = trajectory.positions[:, 0] - target
                     for axis in range(3):
                         values = residual[..., axis].masked_select(mask)
@@ -179,7 +206,7 @@ def evaluate_episode(
                     event_counts[horizon_index][candidate_index]["fn"] += int(
                         ((~event_prediction) & truth).sum().cpu()
                     )
-                residual = trajectories[selected].positions[:, 0] - target
+                residual = single_step_trajectories[selected].positions[:, 0] - target
                 for axis in range(3):
                     values = residual[..., axis].masked_select(mask)
                     selected_squares[horizon_index][axis] += float(values.square().sum().cpu())
@@ -192,7 +219,7 @@ def evaluate_episode(
                     (selected_active & mask[:, 0]).sum().cpu()
                 )
                 selected_event = (
-                    trajectories[selected].event_logits[:, 0, :, MotionMode.COLLISION].sigmoid()
+                    single_step_trajectories[selected].event_logits[:, 0, :, MotionMode.COLLISION].sigmoid()
                     >= 0.5
                 )
                 truth = collision_target[:, 0]
@@ -201,7 +228,7 @@ def evaluate_episode(
                 selected_event_counts[horizon_index]["fn"] += int(
                     ((~selected_event) & truth).sum().cpu()
                 )
-                selected_variance = trajectories[selected].fast_log_variance[:, 0, ..., :3].exp()
+                selected_variance = single_step_trajectories[selected].fast_log_variance[:, 0, ..., :3].exp()
                 active_variance = selected_variance.masked_select(mask[:, 0].unsqueeze(-1))
                 if active_variance.numel():
                     uncertainty_sum[horizon_index][0] += float(active_variance.mean().sqrt().cpu())
