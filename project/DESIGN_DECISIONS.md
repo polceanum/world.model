@@ -1,5 +1,25 @@
 # Design decisions
 
+## ADR-117 — Make adjacent trend windows non-overlapping
+
+- **Date:** 2026-08-13
+- **Status:** accepted and implemented in specification 1.44
+- **Context:** The dynamics auditor named its filter `after_step` and computed
+  `after_step + 1` as the first expected step, but selected records using
+  `step >= after_step`. Consecutive audits therefore shared one boundary row,
+  biasing pooled physical sufficient statistics and confusing post-checkpoint
+  windows. Candidate, validation, and reference filters all had the same bug.
+- **Decision:** Define the boundary strictly as `step > after_step` in all
+  three paths and regression-test exact-boundary exclusion plus matched-step
+  alignment.
+- **Alternatives considered:** rename the option to `at-or-after-step`; keep
+  overlapping windows and document them; compensate by choosing boundary+1 at
+  every call site; deduplicate only during report comparison.
+- **Consequences:** `--after-step 640` now begins at the first persisted row
+  above 640 (currently 648), without including 640. Historical JSONL remains
+  unchanged. The old matched control ends at 640, so later matched comparison
+  correctly fails rather than silently degrading to unmatched evidence.
+
 ## ADR-116 — Reject payload/Adam boundary mismatches
 
 - **Date:** 2026-08-13

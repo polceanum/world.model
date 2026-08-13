@@ -344,7 +344,7 @@ def _matched_reference_comparison(
         for record in reference_canonical
         if record.get("split") == "train"
         and record.get("phase") == "closed_loop_rgb"
-        and int(record["step"]) >= after_step
+        and int(record["step"]) > after_step
     }
     candidate_by_step = {int(record["step"]): record for record in candidate}
     missing_reference_steps = sorted(set(candidate_by_step) - set(reference_training))
@@ -484,12 +484,12 @@ def audit_run(
         for record in canonical
         if record.get("split") == "train"
         and record.get("phase") == "closed_loop_rgb"
-        and int(record["step"]) >= after_step
+        and int(record["step"]) > after_step
     ]
     validations = [
         record
         for record in canonical
-        if record.get("split") == "validation" and int(record["step"]) >= after_step
+        if record.get("split") == "validation" and int(record["step"]) > after_step
     ]
     failures: list[str] = []
     warnings: list[str] = []

@@ -107,6 +107,29 @@ def test_audit_canonicalizes_replayed_tail_without_double_counting(tmp_path) -> 
     }
 
 
+def test_after_step_is_exclusive_for_candidate_reference_and_validation(tmp_path) -> None:
+    run = tmp_path / "run"
+    reference = tmp_path / "reference"
+    candidate_records = [
+        _record(8),
+        {"step": 8, "split": "validation", "phase": "closed_loop_rgb"},
+        _record(16),
+        {"step": 16, "split": "validation", "phase": "closed_loop_rgb"},
+    ]
+    _write_metrics(run, candidate_records)
+    _write_metrics(reference, [_record(8), _record(16)])
+
+    report = audit_run(run, after_step=8, reference_run_directory=reference)
+
+    assert report["status"] == "pass"
+    assert report["first_training_step"] == 16
+    assert report["last_training_step"] == 16
+    assert report["unique_training_blocks"] == 1
+    assert [validation["step"] for validation in report["validations"]] == [16]
+    assert report["matched_reference_comparison"]["matched_steps"] == [16]
+    assert report["matched_reference_comparison"]["missing_reference_steps"] == []
+
+
 def test_audit_reports_numerical_support_and_scope_failures(tmp_path) -> None:
     run = tmp_path / "run"
     _write_metrics(

@@ -110,6 +110,10 @@
   finiteness, support, balance, and resource gates pass. Every pooled position
   horizon and x horizon improve on matched draws; collision F1 and mature
   velocity remain adverse. Continue unchanged to selector 1024.
+- [x] Make `audit_training_dynamics.py --after-step N` strictly exclude step N
+  for candidate, validation, and matched-reference rows. Regression tests pass;
+  corrected post-640 evidence begins at 648 without overlapping the prior
+  window. Do not fabricate matched deltas after the control ends at 640.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

@@ -1,7 +1,7 @@
 # Project status
 
 **Date:** 2026-08-13
-**Specification:** `PROJECT_SPEC.md` 1.43; the active immutable relation-only
+**Specification:** `PROJECT_SPEC.md` 1.44; the active immutable relation-only
 campaign uses specification 1.42 and the rejected schedule control uses 1.41
 
 ## Latest verified state — 2026-08-13
@@ -361,6 +361,20 @@ remain exact, and finiteness/source/protocol hashes pass. The artifacts are
 unchanged to fixed selector 1024; do not infer convergence from one favorable
 training window.
 
+Specification 1.44 fixes an audit-window boundary bug discovered immediately
+after step 640. `--after-step N` filtered training, validation, and reference
+rows with `step >= N` even though its cadence expectation was already `N+1`.
+Adjacent summaries could therefore double-count their boundary row. All three
+filters now use strict `step > N`; a regression test covers candidate,
+validation, and matched-reference exclusion. The corrected live command
+`--after-step 640` reports first/last steps `648/656` and exactly two blocks,
+where the old implementation reported `640/656` and three. Focused tests pass
+`17 passed in 0.26 s`; Ruff format/check pass. The historical matched control
+ends at 640, so exact-draw comparisons beyond it correctly fail for missing
+reference steps and will not be fabricated; absolute cadence health continues
+while fixed selectors remain authoritative for behavior. The authoritative
+auditor plus specification-version suite passes `18 passed in 1.58 s`.
+
 Commands run for this decision were:
 
 ```bash
@@ -382,6 +396,10 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check scripts/a
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 513 --trend-window-blocks 8 --reference-run runs/20260811-170842-attention-aggregate-isolated-stage-a
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 577 --trend-window-blocks 8 --reference-run runs/20260811-170842-attention-aggregate-isolated-stage-a
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/checkpoint_step_000640.pt --initial-checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000000.pt --config runs/20260813-073710-attention-relation-constant-stage-a/config.resolved.yaml --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/best_rollout.pt --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/reference_rollout.pt --output runs/20260813-073710-attention-relation-constant-stage-a/attention_checkpoint_audit_step_000640.json --expected-step 640 --frozen-attention-prefix dynamics.attention_interactions.node_decoder. --require-all-attention-changed --require-complete-attention-optimizer-state --require-protected-checkpoints
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_audit_training_dynamics.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check scripts/audit_training_dynamics.py tests/unit/test_audit_training_dynamics.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check scripts/audit_training_dynamics.py tests/unit/test_audit_training_dynamics.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 640 --trend-window-blocks 8
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000512.pt --initial-checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000000.pt --config runs/20260813-073710-attention-relation-constant-stage-a/config.resolved.yaml --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/best_rollout.pt --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/reference_rollout.pt --output /tmp/orpheus-attention-relation-audit-step512-optimizer-boundary.json --expected-step 512 --frozen-attention-prefix dynamics.attention_interactions.node_decoder. --require-all-attention-changed --require-complete-attention-optimizer-state --require-protected-checkpoints
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_audit_attention_checkpoint.py tests/integration/test_checkpoint_roundtrip.py::test_checkpoint_specification_version_matches_authoritative_contract
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check scripts/audit_attention_checkpoint.py tests/unit/test_audit_attention_checkpoint.py world_model/utils/version.py

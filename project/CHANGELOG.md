@@ -104,6 +104,11 @@
   state/velocity, every pooled position horizon, and every x horizon. A raw
   step-616 force spike is safely isolated before shared backprop; collision F1
   and mature velocity remain the accuracy watch items.
+- Published specification 1.44 and fixed `--after-step` to be strictly
+  exclusive for training, validation, and reference rows. This prevents
+  adjacent windows from double-counting their boundary. The auditor plus
+  specification-version suite passes (`18 passed`); corrected post-640
+  monitoring begins at step 648.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail
