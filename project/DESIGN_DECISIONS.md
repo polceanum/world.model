@@ -59,6 +59,11 @@
   0.50--1.00-second position still regresses. This observed sign reversal is
   direct evidence that neither adjacent window is a valid promotion/rejection
   substitute for the fixed selector; keep the protocol immutable through 512.
+  Updates 264--320 reinforce that conclusion: mature x and pooled 1.00-second
+  position repair, but the adverse residual migrates to z and grows with
+  horizon. The model is learning nontrivial relation behavior rather than
+  monotonically collapsing along one axis, yet sampled generalization remains
+  unproved. Do not chase the moving axis with a mid-run rule or loss change.
 
 ## ADR-113 — Reject schedule-only repair and qualify relations before nodes
 

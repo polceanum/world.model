@@ -202,6 +202,20 @@ driving pooled 0.50/0.75/1.00-second regressions of
 `0.001042/0.011037/0.012596 m`; trusted identity switching and median NLL are
 also adverse. Continue to the fixed selector without promotion or retuning.
 
+Complete updates 264--320 again pass every operational invariant with eight
+draws per scenario, 2,198 sampled causal trajectories, no skips/uncontained
+clipping, minimum complete-gradient retention `0.591258`, and flat peak RSS.
+The prior x/long-horizon failure largely repairs on exact matched draws: x
+improves by `0.001650/0.004794/0.011681 m` at 0.50/0.75/1.00 seconds and
+pooled 1.00-second position improves `0.001286 m`. Current and pooled
+0.10--0.75-second position are near-ties but remain adverse by
+`0.000175--0.002002 m`; the remaining axis limitation has shifted to z, whose
+regression grows from `0.003267 m` at 0.10 seconds to `0.012620 m` at 1.00
+second. Trusted identity switching and median NLL improve, while lifecycle,
+velocity, and collision slices remain mixed. This migrating axis behavior is
+further evidence that heterogeneous training windows cannot replace fixed
+validation; continue unchanged to selector 512.
+
 Commands run for this decision were:
 
 ```bash

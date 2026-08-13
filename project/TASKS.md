@@ -70,6 +70,11 @@
   velocity, lifecycle, event, and short-horizon position recover versus the
   matched control, while x at every horizon, pooled 0.50--1.00 seconds,
   identity switching, and median NLL remain adverse. Continue to selector 512.
+- [x] Audit complete updates 264--320. All operational gates pass. The earlier
+  x/long-horizon regression largely repairs and pooled 1.00-second position
+  improves, but z now regresses increasingly with horizon while current and
+  0.10--0.75-second pooled position remain near-tie adverse. Preserve the
+  migrating-axis evidence and keep selector 512 authoritative.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

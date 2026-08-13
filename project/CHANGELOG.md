@@ -60,6 +60,11 @@
   window repairs current/velocity/lifecycle/event and short-horizon position,
   but x and pooled 0.50--1.00-second position remain adverse; fixed validation
   remains authoritative.
+- Audited complete relation-only updates 264--320. The run remains balanced,
+  finite, support-complete, and safely clipped. Matched x repairs at mature
+  horizons and pooled 1.00-second position improves, while an increasing z
+  regression becomes the remaining axis limitation. Identity/NLL improve and
+  lifecycle/event/velocity remain mixed; continue to fixed validation.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail
