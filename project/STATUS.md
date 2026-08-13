@@ -9103,3 +9103,8 @@ git diff --check
 Compileall, the unchanged 48,000-draw/eight-scenario scaled dry run, and
 `git diff --check` passed. Feature collection and paired evaluations ran on
 MPS; cached logistic/MLP fitting ran on CPU.
+### 2026-08-13 paper-guided accuracy review
+
+The active `attention-relation-constant-stage-a` campaign is still running with finite metrics, nonzero causal support, and no skipped batches; it is not yet an accepted convergence result. Its latest observed row (step 1272) has loss `4.36610`, gradient norm `4.01200`, clip coefficient `0.24925`, trajectory support `297`, objective-term support `13`, and zero skipped batches. This is a heavy-clipping warning, not evidence of collapse by itself.
+
+Review of the [AAAI ORPHEUS paper](https://cdn.aaai.org/ocs/10371/10371-46146-1-PB.pdf) and [ToM-inspired simulation framework](https://arxiv.org/pdf/1405.5048) led to ADR-118. The next accuracy experiment should use a compact hypothesis bank with ordered short-step rollouts and innovation/error-based selection or calibrated blending. This is deliberately scheduled after the unchanged campaign so its executable fingerprint and selector evidence remain valid.

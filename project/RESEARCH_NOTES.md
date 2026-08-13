@@ -806,3 +806,6 @@ to `11.84%`. The checkpoint is retained as a truthful negative result at
   are implemented and tested, but no result establishes the recommended
   collision F1, full occlusion recovery, parameter convergence, or the full
   3,000-step MPS schedule.
+### 13 August 2026 — Paper review: change the accuracy strategy, not the abstraction
+
+The two source papers do not support adding a larger unconstrained predictor. They support a compact explicit world state, ordered small simulation steps, multiple nearby hypotheses, and continual comparison of simulated versus observed outcomes. The current Orpheus runtime already has the compact persistent state and analytic substeps; the missing accuracy mechanism is explicit hypothesis diversity/model selection. The attention-only run remains active and is not yet a failure (no skipped batches or support collapse), but step 1272 shows a new heavy-clipping spike. After this run, test a receding-horizon hypothesis bank with short-step transition loss and innovation-weighted selection before considering more capacity.

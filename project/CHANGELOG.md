@@ -2595,3 +2595,4 @@ further gravity-axis threshold tuning.
   failures and score `0.338432` under updater-wide training; all pooled x
   metrics improved while small y/z and velocity regressions remained, mainly
   in `reference_pairs`. Continued the declared run toward step 128.
+- 2026-08-13: Reviewed the original AAAI ORPHEUS and ToM simulation papers. Recorded ADR-118: preserve the persistent point/trajectory abstraction but add short-step, error-selected hypothesis rollouts as the next accuracy experiment; no active run was modified.

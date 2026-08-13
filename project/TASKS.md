@@ -1535,3 +1535,4 @@
   event-head gradients and broad recursive improvement before enabling it.
 - [ ] Add an observable latent-space calibration objective for slow
   restitution/drag uncertainty before unfreezing the identifier variance head.
+- [ ] Implement and benchmark the paper-inspired receding-horizon hypothesis bank: short-step transition loss, nearby residual/contact hypotheses, and innovation/uncertainty-based selection with unchanged broad guardrails.
