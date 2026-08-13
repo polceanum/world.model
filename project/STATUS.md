@@ -6,6 +6,38 @@ campaign uses specification 1.42 and the rejected schedule control uses 1.41
 
 ## Latest verified state — 2026-08-13
 
+The complete relation-only updates 904--960 window passes operationally. All
+64 updates apply, every scenario appears exactly eight times, all 13 causal
+terms contribute in every cadence block, 2,943 causal trajectories are
+sampled, no draw is skipped, no clipping is uncontained, and RSS remains flat
+at `2,924,761,088` bytes. Minimum complete interaction retention is
+`0.370484` at the high-support step 960, whose raw `2.699174` norm is
+force-dominated and safely bounded. No failure, rollback, or persistent
+resource/gradient anomaly follows.
+
+Absolute current position/velocity RMSE is
+`0.292962 m / 1.640873 m/s`; x/y/z is
+`0.322173/0.246964/0.304457 m`. Position RMSE at
+0.10/0.25/0.50/0.75/1.00 seconds is
+`0.294236/0.334889/0.395318/0.432672/0.440859 m`, with target coverage
+`100.00/100.00/97.66/97.66/95.33%`. Against the preceding different-draw
+840--896 window, current position/velocity and all current axes worsen, and
+0.10/0.25-second position worsens `0.036690/0.011233 m`. Conversely,
+0.50/0.75/1.00-second position improves
+`0.020446/0.025633/0.044971 m`, velocity at 0.25--1.00 seconds improves
+`0.015321--0.263036 m/s`, collision F1 improves `0.028803`, and lifecycle
+precision/coverage improve `0.055613/0.087440`. Identity, coverage90, and
+median NLL remain adverse. This horizon-dependent, draw-confounded reversal is
+not convergence or collapse; continue unchanged through the final predeclared
+step-1024 selector.
+
+Commands run for this window were:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 896 --trend-window-blocks 8
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 832 --trend-window-blocks 8
+```
+
 The relation-only step-896 structural boundary is preserved and passes the
 strict audit. `last.pt` first passed at embedded/expected/Adam steps
 `896/896/[896]`; those verified bytes were copied to

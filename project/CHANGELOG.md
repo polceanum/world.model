@@ -130,6 +130,10 @@
   hard-contact force sensitivities are contained. The final pre-selector
   different-draw trend improves velocity/identity/calibration but regresses x,
   every position horizon, events, and mature lifecycle support.
+- Recorded complete relation-only updates 904--960: operational integrity
+  passes with 2,943 trajectories and all causal terms. Different-draw evidence
+  is horizon-dependent, improving mature forecasts/events/lifecycle while
+  regressing current/short state, identity, coverage90, and calibration.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail

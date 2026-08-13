@@ -140,6 +140,11 @@
   and nonpersistent. Different-draw current velocity, y/z, identity, and NLL
   improve, while x, every position horizon, event F1, and mature lifecycle
   support are adverse. Keep the fixed step-1024 selector authoritative.
+- [x] Audit complete updates 904--960. All operational gates, exact balance,
+  all 13 causal terms, 2,943 trajectories, clipping containment, and flat
+  memory pass. Different-draw current/short state, identity, coverage90, and
+  NLL are adverse, while mature position/velocity, event F1, and lifecycle
+  improve. Continue unchanged through the fixed step-1024 selector.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real
