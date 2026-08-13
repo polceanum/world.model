@@ -145,6 +145,27 @@ cadence samples are not selector evidence. Continue the
 immutable run to the step-128 structural audit and the authoritative step-512
 fixed selector without retuning.
 
+The preserved step-128 checkpoint now passes its strict structural audit. Its
+SHA-256 is `2ad3d36a481879a9bdef72681a84888f521a30b2e68ca2bb95c605247ccb9607`;
+all 46 permitted shared/relation tensors changed, both frozen node tensors and
+all 177 inherited tensors remain exact, exactly 46 finite Adam owners are at
+step 128, both protected checkpoints remain exact, and source, seed-manifest,
+rollout-protocol, stored-state, and recomputed-state hashes agree. The durable
+artifact is `checkpoints/checkpoint_step_000128.pt` and the self-contained
+report is `attention_checkpoint_audit_step_000128.json` in the active run.
+
+The complete matched updates 72--128 dynamics window also passes with eight
+draws from every scenario, 2,582 cadence-recorded causal trajectories, all 13
+objective groups, no skips or uncontained clipping, minimum complete-gradient
+retention `0.461247`, and stable peak RSS `2,924,761,088` bytes. Versus the
+full-attention control on the exact same draws, current position and velocity
+improve `0.001327 m` and `0.013272 m/s`, x improves through 0.50 seconds, and
+collision F1 improves at every horizon. Pooled position improves `0.004786 m`
+at 0.10 seconds but regresses `0.002252/0.013123/0.012234/0.019868 m` at
+0.25/0.50/0.75/1.00 seconds, mainly from z and mid-horizon y. This is clean,
+mixed training evidence rather than convergence or collapse; continue without
+promotion or protocol mutation to the fixed step-512 selector.
+
 Commands run for this decision were:
 
 ```bash

@@ -41,6 +41,13 @@
   horizon position, x, and collision F1 remain adverse. No retuning or
   promotion precedes fixed validation.
   Focused supervisor/auditor tests pass `39 passed`; Ruff is clean.
+- Preserved and strictly audited the active relation-only step-128 checkpoint.
+  All 46 permitted tensors and Adam owners are live, both node tensors and all
+  177 inherited tensors remain exact, protected checkpoints remain intact,
+  and serialization/provenance hashes pass. The complete matched 72--128
+  window is finite and balanced, improves current/short x and collision F1,
+  but regresses pooled 0.25--1.00-second position; selector 512 remains the
+  first promotion gate.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail

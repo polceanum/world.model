@@ -40,6 +40,12 @@
   axis/horizon plus adverse sparse collision samples provide no evidence for
   an early protocol mutation. The step-128 structural and step-512 selector
   gates remain authoritative.
+  Step 128 subsequently passes the strict 46-trainable/2-frozen tensor and
+  optimizer audit with exact inherited/protected state and complete finiteness.
+  Its matched 72--128 window improves current state, short-horizon x, and
+  collision F1 but regresses pooled 0.25--1.00-second position, especially z.
+  Because optimization integrity is proved while accuracy remains mixed, this
+  strengthens—not relaxes—the decision to wait for the fixed selector.
 
 ## ADR-113 — Reject schedule-only repair and qualify relations before nodes
 

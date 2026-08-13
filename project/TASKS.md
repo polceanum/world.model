@@ -54,6 +54,11 @@
   sampled 8--64 window remains finite with at least `0.812481` complete
   interaction-gradient retention; continue unchanged to the step-128
   structural audit and step-512 fixed selector.
+- [x] Strictly audit and preserve the relation-only step-128 checkpoint. Exact
+  46-trainable/2-frozen attention scope, 177 inherited tensors, 46 Adam owners,
+  protected checkpoints, source/protocol hashes, and finiteness all pass. The
+  matched 72--128 window improves current/short x and collision behavior but
+  regresses pooled 0.25--1.00-second position; continue to selector 512.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real
