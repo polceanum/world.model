@@ -237,10 +237,11 @@ class HypothesisDynamicsPool:
             posterior_log_weights, dim=-1, keepdim=True
         )
         posterior = torch.softmax(posterior_log_weights, dim=-1)
+        posterior_selected_index = posterior.argmax(dim=-1).to(torch.int64)
         self.log_weights = posterior_log_weights.detach()
         self.last_selection = HypothesisSelection(
             selection.scores,
-            selection.selected_index,
+            posterior_selected_index,
             posterior,
         ).validate()
         return self.last_selection

@@ -102,3 +102,25 @@ def test_pool_assimilates_late_evidence_and_updates_selected_model() -> None:
     assert pool.selected_index(belief).tolist() == [1]
     assert pool.last_selection is not None
     assert belief.timestamp.item() == pytest.approx(0.0)
+
+
+def test_pool_selection_respects_accumulated_prior() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    pool = HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)], temperature=1.0)
+    trajectories = pool.rollout(belief, [0.1])
+    target = torch.zeros_like(trajectories[0].positions)
+    mask = torch.zeros_like(trajectories[0].active_mask)
+    mask[:, :, 0] = True
+    first = pool.assimilate(
+        belief, target, mask, trajectories=trajectories, uncertainty_aware=False
+    )
+    assert first.selected_index.item() == 1
+    # A second observation supports model 0, but not enough to erase the
+    # posterior accumulated for model 1; the reported choice must follow the
+    # posterior rather than the instantaneous raw score.
+    target[..., 0] = 0.75
+    second = pool.assimilate(
+        belief, target, mask, trajectories=trajectories, uncertainty_aware=False
+    )
+    assert second.posterior_weights[0, 1] > second.posterior_weights[0, 0]
+    assert second.selected_index.item() == 1

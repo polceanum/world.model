@@ -56,6 +56,11 @@ PYTHONPATH=. conda run -n orpheus pytest -q
 The six skips are expected tests gated on unavailable MPS hardware in the test
 process; no failures occurred.
 
+The selector audit also fixed posterior/instantaneous-choice divergence:
+`HypothesisDynamicsPool` now reports the posterior argmax after accumulated
+evidence, with a regression test proving that a single later observation cannot
+erase a stronger prior without sufficient evidence.
+
 The immutable relation-only campaign has completed and rejected its fixed
 step-1024 selector. The 32 RGB-only validation episodes completed in
 `1,236.713 s` with four balanced repeats of every scenario and zero mutable or

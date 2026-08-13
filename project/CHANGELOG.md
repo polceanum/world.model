@@ -19,6 +19,9 @@
   persistent-belief source-of-truth contract.
 - Full suite after integration: `744 passed, 6 skipped`; skips are expected
   MPS-availability gates.
+- Fixed candidate reporting to use the accumulated posterior argmax rather
+  than the instantaneous error argmin; added a regression test for sequential
+  evidence.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

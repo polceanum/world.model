@@ -13,6 +13,8 @@
   belief; verify it with fixed synthetic candidates and real dynamics adapters.
 - [x] Expose candidate prediction and delayed evidence assimilation through
   `OnlineWorldModel` without storing hypotheses as alternate world truth.
+- [x] Ensure reported selection follows accumulated posterior weights rather
+  than instantaneous error alone; add a prior/evidence regression test.
 - [ ] Connect the selector to a small analytic/learned candidate pool and run
   the complete incumbent comparison protocol before changing model weights.
 - [ ] Only if the selector passes broad guardrails, train or adapt candidate
