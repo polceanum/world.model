@@ -7940,6 +7940,21 @@ the corrected nearest-current-position bootstrap now yields non-empty aligned
 metrics. This matters because RGB runtime IDs are not required to equal
 simulator slot IDs.
 
+The eight-episode protected run with decay `0.1` is retained at
+`runs/20260813-223000-hypothesis-pool-protected-8ep/report.json` (1,184 scored
+queries). Learned/baseline selection counts are `1,149/35`. Mean selected
+x/y/z RMSE at 0.10/0.25/0.50/0.75/1.00 seconds is
+`0.6112/0.3227/0.6614`, `0.6214/0.2894/0.6673`,
+`0.6482/0.2189/0.6827`, `0.6645/0.2097/0.6972`, and
+`0.6959/0.2219/0.7127 m`. Candidate learned-only RMSE is slightly worse at
+every horizon, so selection provides a small improvement without changing the
+incumbent. Mean selected collision F1 is `0.2044/0.1891/0.1861/0.1950/0.1834`;
+the constant-velocity candidate has zero collision F1 and is materially worse
+at mature horizons. Lifecycle mismatch totals are `274/244/194/150/115` and
+mean selected position standard deviation is `0.636/0.644/0.660/0.679/0.704 m`.
+This is stronger evidence for guarded fallback, but it is still an 8-episode
+qualification rather than the required 32-episode promotion protocol.
+
 The regenerated RGB-only demo is
 `demo_outputs/20260727-162848-accuracy-v6-blended-velocity/online_correction.gif`,
 with

@@ -54,6 +54,11 @@
   coverage, collision precision/recall/F1, and selected uncertainty. Fixed a
   real RGB supervision bug by bootstrapping simulator-to-runtime IDs from
   nearest current world positions before carrying them forward.
+- Completed an eight-episode protected decay-0.1 run (1,184 queries). The
+  learned candidate remained dominant (`1,149/35` learned/baseline selections),
+  selected RMSE improved slightly over learned-only at every horizon, and the
+  baseline's collision F1 was zero. This supports guarded fallback, not model
+  promotion or convergence.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 
