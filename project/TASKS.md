@@ -114,6 +114,13 @@
   for candidate, validation, and matched-reference rows. Regression tests pass;
   corrected post-640 evidence begins at 648 without overlapping the prior
   window. Do not fabricate matched deltas after the control ends at 640.
+- [x] Audit the complete non-overlapping updates 648--704 window. All 64
+  updates, eight-way balance, 2,130 trajectories, support, clipping
+  containment, finiteness, and flat memory pass. Later position horizons,
+  event/lifecycle, coverage, and NLL improve versus the preceding
+  different-draw window, while current/short position, velocity, identity,
+  x, and especially z worsen. Preserve this mixed evidence unchanged to the
+  fixed step-1024 selector.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

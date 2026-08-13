@@ -109,6 +109,11 @@
   adjacent windows from double-counting their boundary. The auditor plus
   specification-version suite passes (`18 passed`); corrected post-640
   monitoring begins at step 648.
+- Recorded the complete relation-only 648--704 dynamics audit: 64 applied
+  updates, exact eight-way balance, 2,130 causal trajectories, no skips or
+  uncontained clipping, and flat memory. Different-draw trends improve mature
+  position/event/lifecycle/calibration but regress current/short state,
+  velocity, identity, x, and z, so selector 1024 remains authoritative.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail

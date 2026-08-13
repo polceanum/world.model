@@ -6,6 +6,49 @@ campaign uses specification 1.42 and the rejected schedule control uses 1.41
 
 ## Latest verified state — 2026-08-13
 
+The complete non-overlapping relation-only updates 648--704 window passes the
+operational audit. All 64 optimizer updates apply, every one of the eight
+scenario families appears exactly eight times, 2,130 causal trajectories are
+sampled, no draw is skipped, no interaction clip is uncontained, and process
+RSS remains flat at `2,924,761,088` bytes. The minimum complete interaction
+gradient retention is `0.368333` at step 648; subsequent locally severe
+collision-output isolation at steps 664/680/688/696/704 remains contained
+before shared backpropagation, with complete-update retention
+`1.0/0.704155/1.0/1.0/1.0`. The step-672 minimum of eight contributing causal
+objective terms is supported rather than dropout: it has 269 causal
+trajectories, finite applied gradients, and forecast targets at every horizon,
+and the preceding healthy window has the same minimum under relation-only
+scope.
+
+The window's absolute pooled current position/velocity RMSE is
+`0.371113 m / 1.487709 m/s`; x/y/z current position is
+`0.369088/0.199405/0.487019 m`. Position RMSE at
+0.10/0.25/0.50/0.75/1.00 seconds is
+`0.368629/0.386156/0.349974/0.343729/0.387966 m`, target coverage is
+`97.73/97.73/97.33/96.91/96.91%`, collision F1 is `0.166667`, trusted
+identity switching is `6/322`, lifecycle precision/coverage is
+`0.338727/0.356818`, current coverage90 is `0.963145`, and median uncertainty
+NLL is `-0.773368`.
+
+A different-draw within-candidate comparison against 584--640 is diagnostic
+only. It improves 0.50/0.75/1.00-second position by
+`0.044099/0.108650/0.114204 m`, collision F1 by `0.064626`, lifecycle
+precision/coverage by `0.052528/0.068005`, coverage90 by `0.004050`, and median
+NLL by `0.132954`. It worsens current position/velocity by
+`0.063320 m / 0.416573 m/s`, 0.10/0.25-second position by
+`0.065659/0.038789 m`, trusted switch rate by `0.010912`, and current x/z by
+`0.048677/0.151647 m` while y improves `0.063414 m`. This heterogeneous,
+draw-confounded movement is neither collapse nor convergence and does not
+authorize promotion or retuning. Continue the immutable trajectory to the
+fixed step-1024 selector.
+
+Commands run for this boundary were:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 640 --trend-window-blocks 8
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 577 --trend-window-blocks 8
+```
+
 The rejected warmup/cosine trainer and supervisor are no longer loaded after
 the host pause.  The trainer log ends at step 592, and step 512 remains its
 latest durable selector checkpoint; there is no competing training process.
