@@ -134,6 +134,12 @@
   coverage and selected velocity horizons improve, while current state, every
   axis/position horizon, identity, event, coverage90, and NLL are adverse.
   Preserve the reversal as a watch signal and keep selector 1024 authoritative.
+- [x] Preserve/audit relation-only checkpoint 896 and complete updates
+  840--896. Exact step/Adam/scope/inherited/protected/finiteness evidence and
+  all operational gates pass. Hard-contact force sensitivities are contained
+  and nonpersistent. Different-draw current velocity, y/z, identity, and NLL
+  improve, while x, every position horizon, event F1, and mature lifecycle
+  support are adverse. Keep the fixed step-1024 selector authoritative.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

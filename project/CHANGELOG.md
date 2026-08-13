@@ -125,6 +125,11 @@
   support improves, while most accuracy/calibration slices reverse on
   different draws. No promotion or protocol mutation is authorized before the
   fixed step-1024 selector.
+- Preserved and strictly audited relation-only checkpoint 896 and complete
+  840--896 dynamics. Structural and operational integrity pass; isolated
+  hard-contact force sensitivities are contained. The final pre-selector
+  different-draw trend improves velocity/identity/calibration but regresses x,
+  every position horizon, events, and mature lifecycle support.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail

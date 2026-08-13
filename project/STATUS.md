@@ -6,6 +6,54 @@ campaign uses specification 1.42 and the rejected schedule control uses 1.41
 
 ## Latest verified state — 2026-08-13
 
+The relation-only step-896 structural boundary is preserved and passes the
+strict audit. `last.pt` first passed at embedded/expected/Adam steps
+`896/896/[896]`; those verified bytes were copied to
+`checkpoints/checkpoint_step_000896.pt` and independently re-audited. Both
+files have SHA-256
+`2aaf6dd75fb733b833e230ace224d9834816a2dcfcad2166afdf757cd2e2050c`;
+the model-state hash is
+`1667b8a5bb35c72a56e88119f6c8a78b085d24e86a820feac7010a83ce62a54e`.
+All 46 permitted attention tensors and exactly 46 Adam owners are live, both
+frozen node tensors and all 177 inherited tensors remain exact, both protected
+incumbents remain exact, and finiteness/source/protocol checks pass. The
+durable audit is `attention_checkpoint_audit_step_000896.json` in the active
+run.
+
+The complete 840--896 window passes operationally: 64 applied updates, exact
+eight-way balance, 2,163 causal trajectories, no skipped draws, no uncontained
+clipping, and flat RSS at `2,924,761,088` bytes. Minimum complete interaction
+retention is `0.208007` at the hard-contact step 848. Its raw norm `4.807532`
+is force-dominated (`4.517561`), locally capped before the complete bounded
+update, and does not recur at 856/864. Step 872 has a raw force-output
+sensitivity of `2.884494` reduced to `0.044487` before parameter backprop;
+the resulting complete norm is only `0.517666` and wholly retained. Both
+draws contain substantial collision support and remain finite/applied rather
+than indicating optimizer collapse.
+
+Absolute current position/velocity RMSE is
+`0.244778 m / 1.245206 m/s`; current x/y/z is
+`0.278787/0.197755/0.250839 m`. Position RMSE at
+0.10/0.25/0.50/0.75/1.00 seconds is
+`0.257545/0.323656/0.415764/0.458305/0.485830 m`. Against the preceding
+different-draw 776--832 window, current velocity improves `0.164184 m/s`, y/z
+improve `0.023453/0.033980 m`, trusted switch rate improves `0.009617`, and
+median NLL improves `0.023452`. The pre-selector limitation is increasingly
+mature position: x worsens `0.058509 m`, and pooled position worsens
+`0.014035/0.043259/0.074097/0.080967/0.090517 m` across 0.10--1.00 seconds.
+Collision F1 falls `0.076792`, lifecycle precision/coverage fall
+`0.017474/0.036342`, and one-second target coverage falls `0.041234`.
+Different draws prevent rejection, but this is the explicit long-horizon/event
+watch signal the fixed step-1024 manifest must adjudicate. Continue unchanged.
+
+Commands run for this boundary were:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/checkpoint_step_000896.pt --initial-checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000000.pt --config runs/20260813-073710-attention-relation-constant-stage-a/config.resolved.yaml --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/best_rollout.pt --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/reference_rollout.pt --output runs/20260813-073710-attention-relation-constant-stage-a/attention_checkpoint_audit_step_000896.json --expected-step 896 --frozen-attention-prefix dynamics.attention_interactions.node_decoder. --require-all-attention-changed --require-complete-attention-optimizer-state --require-protected-checkpoints
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 832 --trend-window-blocks 8
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 768 --trend-window-blocks 8
+```
+
 The complete non-overlapping relation-only updates 776--832 window passes all
 operational gates. All 64 optimizer updates apply, every scenario appears
 exactly eight times, 2,578 causal trajectories are sampled, no draw is
