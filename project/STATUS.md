@@ -7914,6 +7914,25 @@ Continuous strong temporal updates, an eight-step adapted continuation, raw
 two-frame RGB slopes, and raw three-frame slopes all failed the wider physical
 gate.
 
+The predeclared four-episode protected matrix is now complete under
+`runs/20260813-221000-hypothesis-pool-protected-decay-matrix/`. Across 592
+queries, decay `1.0` selected learned/baseline `587/5` times; decay `0.1`
+selected `565/27`. Mean selected x/y/z RMSE at horizons 0.10/0.25/0.50/0.75/1.00
+seconds was respectively:
+
+```text
+decay 1.0: 0.4940/0.3384/0.6390, 0.5171/0.3135/0.6477,
+          0.5577/0.2239/0.6622, 0.5959/0.1650/0.6747,
+          0.6190/0.2084/0.6628 m
+decay 0.1: 0.4937/0.3385/0.6391, 0.5170/0.3099/0.6480,
+          0.5575/0.2195/0.6622, 0.5959/0.1647/0.6747,
+          0.6168/0.2052/0.6628 m
+```
+
+This is a small protected comparison, not a full incumbent selector. Decay
+0.1 improves adaptation and has no broad regression here, but the effect is too
+small to justify changing the deployed default or restarting training alone.
+
 The regenerated RGB-only demo is
 `demo_outputs/20260727-162848-accuracy-v6-blended-velocity/online_correction.gif`,
 with

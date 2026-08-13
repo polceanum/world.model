@@ -46,6 +46,10 @@
 - Added `--evidence-decay` to the evaluation harness and retained a protected
   attention-scale decay-0.1 smoke. It switched to the baseline 4/148 times;
   this is adaptation evidence, not a broad accuracy qualification.
+- Completed the four-episode protected decay matrix (592 queries). Decay 0.1
+  increased local switching `5 -> 27` and slightly improved long-horizon mean
+  RMSE without broad regression; it remains unpromoted pending full protocol
+  evidence.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

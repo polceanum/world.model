@@ -27,6 +27,8 @@
   preserve accumulation by default and test local switching under decay.
 - [ ] Compare fixed decay values on the complete protected RGB protocol before
   selecting a production default or restarting training.
+- [x] Run a four-episode protected decay-1.0 versus decay-0.1 matrix; retain
+  both reports and defer promotion because the gain is small.
 - [ ] Only if the selector passes broad guardrails, train or adapt candidate
   models and audit support, optimizer, lifecycle, identity, uncertainty,
   events, every axis, and every horizon.
