@@ -21,6 +21,8 @@
   the complete incumbent comparison protocol before changing model weights.
 - [x] Add an evaluation-only RGB harness with persistent-ID target alignment;
   run a two-episode toy smoke and retain its timestamped report.
+- [x] Exercise the same harness at attention-pilot model dimensions on one RGB
+  episode; retain the fresh-weight result as an execution check only.
 - [ ] Only if the selector passes broad guardrails, train or adapt candidate
   models and audit support, optimizer, lifecycle, identity, uncertainty,
   events, every axis, and every horizon.

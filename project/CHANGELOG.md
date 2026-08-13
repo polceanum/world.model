@@ -36,6 +36,10 @@
   constant-velocity hypotheses on RGB episodes with persistent-ID alignment.
   The two-episode toy report is retained under the timestamped `runs/` path;
   it is not a promotion or convergence result.
+- The same harness completed a one-episode attention-scale RGB smoke (148
+  queries) under `runs/20260813-220000-hypothesis-pool-attention-smoke/`; all
+  queries selected the learned candidate. Fresh-random-weight RMSE is recorded
+  as an execution check only.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

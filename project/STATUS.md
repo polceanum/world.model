@@ -89,6 +89,13 @@ small run. Selected x/y/z RMSE was `0.3393/0.3236/1.1076 m` and
 `0.4141/0.2943/0.9345 m` and `0.4991/0.0523/0.8509 m`. These numbers are
 random-initialization toy evidence only, not an incumbent qualification.
 
+The same harness completed a one-episode attention-scale RGB smoke at
+`runs/20260813-220000-hypothesis-pool-attention-smoke/report.json` on CPU
+(148 scored queries). The learned candidate was selected throughout; selected
+position RMSE x/y/z was `0.7964/0.5686/1.1904 m` at 0.10 s and
+`1.2472/0.3351/1.1508 m` at 1.00 s. This used fresh random weights and is only
+an architectural execution check, not evidence of convergence.
+
 The immutable relation-only campaign has completed and rejected its fixed
 step-1024 selector. The 32 RGB-only validation episodes completed in
 `1,236.713 s` with four balanced repeats of every scenario and zero mutable or
