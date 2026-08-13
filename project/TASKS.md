@@ -25,9 +25,9 @@
   episode; retain the fresh-weight result as an execution check only.
 - [x] Add explicit evidence decay to prevent indefinite posterior lock-in;
   preserve accumulation by default and test local switching under decay.
-- [ ] Compare fixed decay values on the complete protected RGB protocol before
+- [x] Compare fixed decay values on the complete protected RGB protocol before
   selecting a production default or restarting training.
-- [ ] Complete the running 32-episode decay-0.1 protected comparison and audit
+- [x] Complete the 32-episode decay-0.1 protected comparison and audit
   all per-axis/per-horizon/lifecycle/identity/event/uncertainty outputs.
 - [x] Batch all requested horizons into one rollout per frame in the evaluation
   harness; verify equivalent toy/attention smoke execution before relaunch.

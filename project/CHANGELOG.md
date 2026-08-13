@@ -66,6 +66,10 @@
 - Batched multi-horizon evaluation to avoid recomputing the same learned
   rollout per horizon. A one-episode attention smoke completes in `103.78 s`
   CPU; the full protected run is being relaunched with the optimized harness.
+- Completed the full 32-episode protected decay-0.1 comparison (4,736 queries).
+  Selection improved every pooled position horizon slightly without broad
+  event/lifecycle/uncertainty regression, but gains are too small for promotion
+  or training restart. The immutable learned incumbent remains deployed.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

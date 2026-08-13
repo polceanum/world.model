@@ -7955,19 +7955,34 @@ mean selected position standard deviation is `0.636/0.644/0.660/0.679/0.704 m`.
 This is stronger evidence for guarded fallback, but it is still an 8-episode
 qualification rather than the required 32-episode promotion protocol.
 
-The required 32-episode decay-0.1 protected comparison is now running in the
-foreground session from the immutable reference checkpoint, targeting
-`runs/20260813-230000-hypothesis-pool-protected-32ep/report.json`. No model
-weights or incumbent artifacts are writable by this evaluation. An attempted
-MPS smoke was rejected by the runtime availability check (`compiled=True,
-available=False` in the subprocess), so this run is truthfully CPU-only.
+The required 32-episode decay-0.1 protected comparison completed from the
+immutable reference checkpoint at
+`runs/20260813-230000-hypothesis-pool-protected-32ep/report.json`. It contains
+4,736 scored frame/horizon queries, with learned/baseline selections
+`4,599/137`. Relative to learned-only, posterior selection slightly improves
+every pooled position horizon: selected mean x/y/z RMSE is
+`0.7114/0.4940/0.8543`, `0.7206/0.4555/0.8644`,
+`0.7484/0.3588/0.8831`, `0.7748/0.3318/0.9059`, and
+`0.8129/0.3190/0.9286 m` at 0.10/0.25/0.50/0.75/1.00 seconds. Learned-only
+values are respectively `0.7115/0.4940/0.8543`,
+`0.7211/0.4564/0.8644`, `0.7506/0.3611/0.8829`,
+`0.7812/0.3408/0.9056`, and `0.8193/0.3205/0.9283 m`.
+Selected collision F1 is `0.1469/0.1722/0.1682/0.1598/0.1491`; learned-only is
+`0.1483/0.1697/0.1669/0.1618/0.1515`, while the constant-velocity candidate
+has zero event F1. Lifecycle mismatch totals are `720/636/503/383/280`,
+identity coverage totals are `3249/2967/2499/2037/1583`, and selected mean
+position standard deviation is `0.749/0.764/0.795/0.836/0.882 m`.
+This passes the guarded selector comparison without broad regression, but the
+gain is small and does not justify promoting a new checkpoint or restarting
+training. An attempted MPS smoke was rejected by the runtime availability
+check (`compiled=True, available=False`), so this protocol is truthfully
+CPU-only.
 
 The first process ended at the session boundary before producing output. The
-harness has since been optimized to compute all requested horizons in one
-rollout per frame (then assimilate evidence per horizon), preserving the
-selection protocol while reducing redundant dynamics work. A batched attention
-smoke now completes one episode in `103.78 s` CPU versus the previous roughly
-two-minute path; the full 32-episode run is being relaunched with this code.
+harness was then optimized to compute all requested horizons in one rollout per
+frame (then assimilate evidence per horizon), preserving the selection protocol
+while reducing redundant dynamics work. A batched attention smoke completes
+one episode in `103.78 s` CPU.
 
 The regenerated RGB-only demo is
 `demo_outputs/20260727-162848-accuracy-v6-blended-velocity/online_correction.gif`,
