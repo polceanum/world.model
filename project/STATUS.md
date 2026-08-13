@@ -282,6 +282,14 @@ misnamed artifacts were quarantined with
 Training resumed normally and reached step 520 with both first-launch jobs
 still running and both stderr logs empty.
 
+The checkpoint auditor now closes that diagnostics race with an optional
+`--expected-step` contract. It records the requested boundary and fails when
+the checkpoint's embedded step differs. The real selector passes with
+embedded/expected step `512/512`; replaying the quarantined artifact fails
+exactly with `checkpoint step 384 does not match expected step 512`. This does
+not change the pinned trainer, checkpoint serialization, selector, model, or
+optimizer. Focused tests pass `4 passed in 5.93 s`; Ruff format/check pass.
+
 Commands run for this decision were:
 
 ```bash
@@ -295,7 +303,11 @@ git diff --check
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_audit_training_dynamics.py tests/unit/test_convergence_supervisor.py
 conda run -n orpheus python -m ruff check scripts/supervise_convergence.py scripts/audit_training_dynamics.py tests/unit/test_audit_training_dynamics.py tests/unit/test_convergence_supervisor.py
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 0 --trend-window-blocks 6 --reference-run runs/20260811-170842-attention-aggregate-isolated-stage-a
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000512.pt --initial-checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000000.pt --config runs/20260813-073710-attention-relation-constant-stage-a/config.resolved.yaml --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/best_rollout.pt --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/reference_rollout.pt --output /tmp/orpheus-attention-relation-audit-step512-recheck.json --frozen-attention-prefix dynamics.attention_interactions.node_decoder. --require-all-attention-changed --require-complete-attention-optimizer-state --require-protected-checkpoints
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000512.pt --initial-checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000000.pt --config runs/20260813-073710-attention-relation-constant-stage-a/config.resolved.yaml --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/best_rollout.pt --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/reference_rollout.pt --output /tmp/orpheus-attention-relation-audit-step512-expected.json --expected-step 512 --frozen-attention-prefix dynamics.attention_interactions.node_decoder. --require-all-attention-changed --require-complete-attention-optimizer-state --require-protected-checkpoints
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/checkpoint_step_000512-premature-stale-step384.pt --initial-checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000000.pt --config runs/20260813-073710-attention-relation-constant-stage-a/config.resolved.yaml --output /tmp/orpheus-attention-relation-audit-stale-expected512.json --expected-step 512 --frozen-attention-prefix dynamics.attention_interactions.node_decoder. --require-all-attention-changed --require-complete-attention-optimizer-state
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_audit_attention_checkpoint.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check scripts/audit_attention_checkpoint.py tests/unit/test_audit_attention_checkpoint.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check scripts/audit_attention_checkpoint.py tests/unit/test_audit_attention_checkpoint.py
 ```
 
 The specification-1.41 warmup/cosine control is now rejected at its first

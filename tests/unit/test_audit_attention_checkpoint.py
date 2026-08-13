@@ -93,6 +93,7 @@ def test_attention_checkpoint_audit_proves_growth_isolation(tmp_path: Path) -> N
         require_all_attention_changed=True,
         require_complete_attention_optimizer_state=True,
         require_protected_checkpoints=True,
+        expected_step=128,
     )
 
     assert report["status"] == "pass"
@@ -102,6 +103,7 @@ def test_attention_checkpoint_audit_proves_growth_isolation(tmp_path: Path) -> N
     assert report["optimizer_state_attention_only"]
     assert report["optimizer_state_complete_for_attention"]
     assert report["optimizer_steps"] == [128]
+    assert report["expected_step"] == 128
     assert report["protected_checkpoint_count"] == 1
     assert report["protected_checkpoints_exactly_initial"]
     assert report["all_serialized_state_finite"]
@@ -127,6 +129,20 @@ def test_attention_checkpoint_audit_proves_growth_isolation(tmp_path: Path) -> N
     assert (
         "no attention tensors found under the configured prefix"
         in missing_prefix_report["failures"]
+    )
+
+    stale_checkpoint_report = audit_checkpoint(
+        checkpoint_path=checkpoint_path,
+        initial_checkpoint_path=initial_path,
+        config_path=config_path,
+        expected_step=512,
+    )
+    assert stale_checkpoint_report["status"] == "fail"
+    assert stale_checkpoint_report["step"] == 128
+    assert stale_checkpoint_report["expected_step"] == 512
+    assert (
+        "checkpoint step 128 does not match expected step 512"
+        in stale_checkpoint_report["failures"]
     )
 
 

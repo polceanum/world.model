@@ -111,6 +111,7 @@ def audit_checkpoint(
     require_all_attention_changed: bool = False,
     require_complete_attention_optimizer_state: bool = False,
     require_protected_checkpoints: bool = False,
+    expected_step: int | None = None,
 ) -> dict[str, Any]:
     checkpoint = _load_checkpoint(checkpoint_path)
     initial = _load_checkpoint(initial_checkpoint_path)
@@ -190,7 +191,12 @@ def audit_checkpoint(
         protected_file_hashes[resolved] = _file_sha256(path)
         protected_exact = protected_exact and protected_hash == initial_hash
 
+    checkpoint_step = int(checkpoint.get("step", -1))
     failures: list[str] = []
+    if expected_step is not None and checkpoint_step != expected_step:
+        failures.append(
+            f"checkpoint step {checkpoint_step} does not match expected step {expected_step}"
+        )
     if not attention_names:
         failures.append("no attention tensors found under the configured prefix")
     if missing_model_keys or extra_model_keys:
@@ -240,7 +246,8 @@ def audit_checkpoint(
         "initial_checkpoint_path": str(initial_checkpoint_path.resolve()),
         "initial_checkpoint_file_sha256": _file_sha256(initial_checkpoint_path),
         "config_path": str(config_path.resolve()),
-        "step": int(checkpoint.get("step", -1)),
+        "step": checkpoint_step,
+        "expected_step": expected_step,
         "specification_version": checkpoint.get("specification_version"),
         "checkpoint_git_commit": git.get("commit"),
         "checkpoint_runtime_source_fingerprint": git.get("runtime_source_fingerprint"),
@@ -286,6 +293,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--protected", type=Path, action="append", default=[])
     parser.add_argument("--output", type=Path)
     parser.add_argument(
+        "--expected-step",
+        type=int,
+        help=(
+            "fail when the checkpoint's embedded step differs; use this when auditing "
+            "a fixed selector boundary so a still-current last.pt cannot be mislabelled"
+        ),
+    )
+    parser.add_argument(
         "--attention-prefix",
         default="dynamics.attention_interactions.",
     )
@@ -325,6 +340,7 @@ def main() -> int:
             args.require_complete_attention_optimizer_state
         ),
         require_protected_checkpoints=args.require_protected_checkpoints,
+        expected_step=args.expected_step,
     )
     rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.output is not None:

@@ -1,5 +1,29 @@
 # Design decisions
 
+## ADR-115 — Bind fixed-boundary audits to the embedded checkpoint step
+
+- **Date:** 2026-08-13
+- **Status:** accepted and implemented
+- **Context:** The step-512 training heartbeat is emitted before the expensive
+  fixed validation and its atomic checkpoint publication complete. An external
+  command that immediately copied `last.pt` therefore received the valid but
+  older step-384 artifact and could have named its report as step 512. Manual
+  inspection caught the mismatch through the embedded step and model hash, but
+  the auditor did not make the requested boundary part of pass/fail semantics.
+- **Decision:** Add optional `--expected-step`/`expected_step` input, persist it
+  in the report, and fail whenever it differs from the checkpoint's embedded
+  step. Fixed-boundary operational audits must provide it. Preserve historical
+  behavior when the option is absent so old reports and general ad hoc audits
+  remain reproducible.
+- **Alternatives considered:** publish a pre-validation checkpoint; change the
+  pinned trainer's heartbeat ordering; infer the step from the filename;
+  require operators to inspect hashes manually; treat the stale copy as model
+  corruption.
+- **Consequences:** The real step-512 artifact passes, while the quarantined
+  copy fails with the exact 384-versus-512 mismatch. The change is read-only
+  audit hardening: it does not modify training, serialization, selection,
+  optimizer state, runtime behavior, or the active immutable campaign.
+
 ## ADR-114 — Train relations from protected weights, not contaminated donors
 
 - **Date:** 2026-08-13

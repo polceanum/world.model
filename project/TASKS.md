@@ -92,6 +92,10 @@
   baseline regimes. Strict checkpoint scope/Adam/protected/provenance audit
   passes; the protected incumbent remains step zero and training continues to
   the required 8,192-update evidence horizon.
+- [x] Prevent a fixed-boundary attention audit from silently labelling an old
+  `last.pt` while validation is still publishing the requested checkpoint.
+  `--expected-step` now records and enforces the embedded step; the true 512
+  artifact passes and the quarantined step-384 artifact fails as intended.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

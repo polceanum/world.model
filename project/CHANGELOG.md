@@ -84,6 +84,10 @@
   premature copy of step-384 `last.pt` was detected by embedded step/hash and
   quarantined; it is not selector evidence. The mutable run continues while
   the protected deployment incumbent remains step zero.
+- Added an opt-in expected-step assertion to the attention-checkpoint auditor.
+  The true selector artifact passes `512/512`; the prematurely copied artifact
+  now fails explicitly as embedded step 384 rather than allowing a misleading
+  step-512 report. Focused tests pass (`4 passed`) and Ruff is clean.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail
