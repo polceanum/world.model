@@ -13,6 +13,7 @@ from world_model.dynamics.contacts import (
 from world_model.dynamics.events import EventModel, EventOutput
 from world_model.dynamics.graph import InteractionGraph, InteractionOutput
 from world_model.dynamics.hypothesis_rollout import (
+    ConstantVelocityDynamics,
     HypothesisDynamicsPool,
     HypothesisRolloutEngine,
     HypothesisSelection,
@@ -49,6 +50,7 @@ __all__ = [
     "HypothesisRolloutEngine",
     "HypothesisSelection",
     "HypothesisDynamicsPool",
+    "ConstantVelocityDynamics",
     "ModalDynamics",
     "ModalOutput",
     "RolloutEngine",

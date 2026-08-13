@@ -53,6 +53,38 @@ class HypothesisSelection:
         return self
 
 
+class ConstantVelocityDynamics:
+    """Transparent short-horizon baseline used as a selectable hypothesis."""
+
+    def __init__(self, damping: float = 0.0) -> None:
+        if damping < 0 or damping > 1 or not torch.isfinite(torch.as_tensor(damping)):
+            raise ValueError("damping must lie in [0,1]")
+        self.damping = float(damping)
+
+    def predict_step(self, belief: WorldBelief, delta_time: Tensor) -> RolloutStep:
+        if delta_time.shape != belief.timestamp.shape:
+            raise ValueError("delta_time must have shape [B]")
+        objects = belief.objects.clone()
+        active = objects.active.unsqueeze(-1)
+        objects.position = objects.position + objects.velocity * delta_time[:, None, None] * active
+        if self.damping:
+            objects.velocity = objects.velocity * (1.0 - self.damping * delta_time[:, None, None])
+        objects.fast_log_variance = (
+            objects.fast_log_variance + delta_time[:, None, None, None] * 1.0e-3
+        ).clamp(-20.0, 10.0)
+        endpoint = belief.replace(
+            timestamp=belief.timestamp + delta_time,
+            objects=objects,
+        )
+        return RolloutStep(
+            belief=endpoint,
+            event_logits=belief.timestamp.new_zeros(
+                belief.batch_size, objects.max_objects, 2
+            ),
+            auxiliary={},
+        )
+
+
 class HypothesisRolloutEngine:
     """Run short-step candidate rollouts and score them against observations.
 

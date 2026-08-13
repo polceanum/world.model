@@ -5,6 +5,7 @@ import torch
 
 from world_model.belief import BeliefFactory, BeliefTrajectory
 from world_model.dynamics import (
+    ConstantVelocityDynamics,
     DynamicsModel,
     HypothesisDynamicsPool,
     HypothesisRolloutEngine,
@@ -124,3 +125,18 @@ def test_pool_selection_respects_accumulated_prior() -> None:
     )
     assert second.posterior_weights[0, 1] > second.posterior_weights[0, 0]
     assert second.selected_index.item() == 1
+
+
+def test_constant_velocity_hypothesis_is_transparent_and_non_mutating() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.position[0, 0] = torch.tensor([1.0, 2.0, 3.0])
+    objects.velocity[0, 0] = torch.tensor([2.0, -1.0, 0.5])
+    source = belief.replace(objects=objects)
+    result = ConstantVelocityDynamics().predict_step(source, torch.tensor([0.25]))
+    torch.testing.assert_close(
+        result.belief.objects.position[0, 0],
+        torch.tensor([1.5, 1.75, 3.125]),
+    )
+    torch.testing.assert_close(source.objects.position[0, 0], torch.tensor([1.0, 2.0, 3.0]))

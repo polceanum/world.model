@@ -15,6 +15,8 @@
   `OnlineWorldModel` without storing hypotheses as alternate world truth.
 - [x] Ensure reported selection follows accumulated posterior weights rather
   than instantaneous error alone; add a prior/evidence regression test.
+- [x] Add a transparent constant-velocity/damped hypothesis as a heterogeneous
+  baseline; keep it selectable but never force it over learned dynamics.
 - [ ] Connect the selector to a small analytic/learned candidate pool and run
   the complete incumbent comparison protocol before changing model weights.
 - [ ] Only if the selector passes broad guardrails, train or adapt candidate
