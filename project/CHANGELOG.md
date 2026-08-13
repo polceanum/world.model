@@ -43,6 +43,9 @@
 - Added configurable `HypothesisDynamicsPool.evidence_decay` to support
   context adaptation without silently changing the persistent default; a
   regression test covers local model switching.
+- Added `--evidence-decay` to the evaluation harness and retained a protected
+  attention-scale decay-0.1 smoke. It switched to the baseline 4/148 times;
+  this is adaptation evidence, not a broad accuracy qualification.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

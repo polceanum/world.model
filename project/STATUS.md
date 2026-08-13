@@ -104,6 +104,15 @@ lower x error at some horizons. `HypothesisDynamicsPool` now exposes explicit
 switching while `1.0` preserves persistent accumulation. The default remains
 `1.0` until a fixed-decay comparison is run.
 
+An attention-scale protected-checkpoint smoke with `evidence_decay=0.1` is
+retained at
+`runs/20260813-220845-hypothesis-pool-protected-decay01/report.json`. It
+selected the learned candidate 144/148 times and the constant-velocity
+candidate 4/148 times. Selected x/y/z RMSE was
+`0.8146/0.5221/0.6365 m` at 0.10 s and `1.0867/0.3322/0.6683 m` at 1.00 s,
+versus 148/148 learned selections with decay 1.0. This demonstrates adaptive
+selection behavior, but it is a one-episode smoke and not a promotion gate.
+
 The immutable relation-only campaign has completed and rejected its fixed
 step-1024 selector. The 32 RGB-only validation episodes completed in
 `1,236.713 s` with four balanced repeats of every scenario and zero mutable or

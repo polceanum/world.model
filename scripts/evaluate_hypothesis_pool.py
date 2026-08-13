@@ -80,6 +80,7 @@ def evaluate_episode(
     horizons: tuple[float, ...],
     frame_rate: int,
     image_size: tuple[int, int],
+    evidence_decay: float,
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
@@ -96,7 +97,8 @@ def evaluate_episode(
                 continue
             if pool is None:
                 pool = HypothesisDynamicsPool(
-                    [model.dynamics, ConstantVelocityDynamics(damping=0.05)]
+                    [model.dynamics, ConstantVelocityDynamics(damping=0.05)],
+                    evidence_decay=evidence_decay,
                 )
             for horizon_index, horizon in enumerate(horizons):
                 future_index = frame_index + round(horizon * frame_rate)
@@ -151,9 +153,12 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=100000)
     parser.add_argument("--device", choices=("auto", "cpu", "mps", "cuda"), default="cpu")
     parser.add_argument("--output", required=True)
+    parser.add_argument("--evidence-decay", type=float, default=1.0)
     args = parser.parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
+    if not 0.0 < args.evidence_decay <= 1.0:
+        raise ValueError("--evidence-decay must lie in (0,1]")
     config = load_config(args.config, overrides=[f"device.preference={args.device}"])
     device = select_device(config.device.preference).device
     model = OnlineWorldModel.from_config(config, device=device).eval()
@@ -168,6 +173,7 @@ def main() -> int:
             horizons,
             config.simulator.frame_rate,
             tuple(config.simulator.image_size),
+            args.evidence_decay,
         )
         for index in range(args.episodes)
     ]
@@ -181,6 +187,7 @@ def main() -> int:
                 "device": str(device),
                 "episodes": args.episodes,
                 "seed_start": args.seed,
+                "evidence_decay": args.evidence_decay,
                 "horizons_seconds": horizons,
                 "episode_results": episodes,
             },
