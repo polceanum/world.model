@@ -290,6 +290,31 @@ exactly with `checkpoint step 384 does not match expected step 512`. This does
 not change the pinned trainer, checkpoint serialization, selector, model, or
 optimizer. Focused tests pass `4 passed in 5.93 s`; Ruff format/check pass.
 
+The first complete post-selector updates 520--576 window also passes the
+operational audit: all 64 updates apply, eight cadence blocks each contain all
+eight scenarios, 2,650 causal trajectories are sampled, no draw is skipped,
+minimum complete-interaction gradient retention is `0.673214`, and recorded
+peak RSS remains flat at `2,924,761,088` bytes. A rare step-568 force-output
+gradient is locally contained at coefficient `0.005344` before shared
+backpropagation; the resulting complete update retains `0.673214`, remains
+finite, and applies. There is no uncontained clip or stderr.
+
+Against the exact same-draw full-attention control, relation-only current
+position improves `0.002802 m`, current velocity improves `0.045913 m/s`, y
+improves `0.014045 m`, aggregate collision F1 improves `0.010526`, trusted
+identity switch rate improves `0.003038`, coverage90 improves `0.003243`, and
+median uncertainty NLL improves `0.003909`. The 0.10-second position horizon
+improves `0.003834 m`. The remaining limitation is mature x drift: x worsens
+`0.002358/0.007322/0.012089/0.018035/0.024884 m` over
+0.10/0.25/0.50/0.75/1.00 seconds, while z is only mildly adverse and y is
+strongly better at short horizons. Pooled 0.25/0.50/0.75/1.00-second position
+therefore worsens `0.000939/0.006302/0.010493/0.013616 m`; 1.00-second
+collision F1 also worsens `0.153846` despite the aggregate event gain.
+Lifecycle precision is `0.001952` adverse and target coverage `0.001092`
+better. This is a clean long-horizon accuracy warning, not collapse or
+promotion evidence. Continue the unchanged trajectory to selector 1024 so the
+fixed manifest can determine whether the x/event trade-off persists.
+
 Commands run for this decision were:
 
 ```bash
@@ -308,6 +333,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_audit_attention_checkpoint.py
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check scripts/audit_attention_checkpoint.py tests/unit/test_audit_attention_checkpoint.py
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check scripts/audit_attention_checkpoint.py tests/unit/test_audit_attention_checkpoint.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 513 --trend-window-blocks 8 --reference-run runs/20260811-170842-attention-aggregate-isolated-stage-a
 ```
 
 The specification-1.41 warmup/cosine control is now rejected at its first

@@ -110,6 +110,15 @@
   collapse or corruption. Keep the step-zero incumbent protected, continue the
   separate mutable trajectory to the declared 8,192-update minimum, and do not
   scale capacity or weaken guardrails.
+  The complete post-selector 520--576 window remains operationally exact and
+  improves current state, velocity, 0.10-second position, aggregate collision,
+  identity, coverage90, and uncertainty on matched draws. However, x error
+  grows monotonically relative to the control across forecast horizons and
+  drives a `+0.013616 m` pooled 1-second deficit; 1-second collision F1 is also
+  adverse. This localizes the next watch item without changing the decision:
+  preserve the same trajectory through fixed selector 1024, where identical
+  held-out episodes can distinguish a persistent relation shortcut from
+  heterogeneous sampled behavior.
 
 ## ADR-113 — Reject schedule-only repair and qualify relations before nodes
 

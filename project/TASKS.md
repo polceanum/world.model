@@ -96,6 +96,12 @@
   `last.pt` while validation is still publishing the requested checkpoint.
   `--expected-step` now records and enforces the embedded step; the true 512
   artifact passes and the quarantined step-384 artifact fails as intended.
+- [x] Audit the complete relation-only post-selector updates 520--576 window.
+  Operational integrity, balance, support, clipping containment, identity,
+  uncertainty, and memory pass. Current state/velocity and 0.10-second
+  position improve, but mature x increasingly regresses and drives a
+  `+0.013616 m` 1-second pooled deficit; preserve this limitation unchanged to
+  fixed selector 1024 rather than retune on training draws.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

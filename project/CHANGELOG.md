@@ -88,6 +88,12 @@
   The true selector artifact passes `512/512`; the prematurely copied artifact
   now fails explicitly as embedded step 384 rather than allowing a misleading
   step-512 report. Focused tests pass (`4 passed`) and Ruff is clean.
+- Audited complete relation-only updates 520--576 after the rejected selector.
+  All operational gates pass with 2,650 trajectories and at least `0.673214`
+  complete-gradient retention. Matched current state/velocity, short position,
+  aggregate event, identity, coverage90, and uncertainty improve; mature x
+  increasingly regresses, producing a `+0.013616 m` 1-second pooled deficit
+  and adverse 1-second collision F1. Continue unchanged to selector 1024.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail
