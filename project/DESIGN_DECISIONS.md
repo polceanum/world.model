@@ -1,9 +1,39 @@
 # Design decisions
 
+## ADR-114 — Train relations from protected weights, not contaminated donors
+
+- **Date:** 2026-08-13
+- **Status:** accepted; two-update qualification passed, sustained run pending
+- **Context:** Exact zero-node compositions of the warmup/cosine and constant-
+  rate drift checkpoints remain harmful: scores `0.342289` and `0.329317`
+  versus protected `0.321316`, with 100 and 98 broad guardrail failures and no
+  support failures. Both improve y/velocity but strongly regress x. In
+  contrast, the earlier complexity-only zero-node composition scored
+  `0.297330` and improved every pooled horizon, although it still failed 72
+  guardrails. The drift donors' shared relation stacks were trained through a
+  nonzero node decoder, so deleting node output after training cannot remove
+  node task/prior gradients already written into shared features.
+- **Decision:** Reject both learned donors and initialize a constant-rate
+  `attention_relation` campaign weights-only from the untouched graph control.
+  Freeze the zero node decoder from update zero, leaving node activity, drift,
+  complexity, gradients, and optimizer ownership exactly zero. Keep the
+  declared 8,192-update/65,536-example minimum and every fixed selector,
+  support, lifecycle, identity, uncertainty, event, axis, horizon, test, and
+  OOD gate. Do not scale depth, width, history, or device budget.
+- **Alternatives considered:** reuse either rejected donor; infer relation-only
+  behavior from post-hoc deletion; restore the harmful node branch; add a new
+  gate or regularizer before testing the already implemented isolation; scale
+  the Transformer; relax fixed guardrails.
+- **Consequences:** A two-update CPU smoke passes exact resume and strict
+  46-trainable/2-frozen tensor and Adam ownership with complete finiteness and
+  causal support. This validates execution only. A complete fixed selector is
+  required for accuracy evidence, and only repeated accepted selectors plus
+  disjoint test/OOD evidence can qualify convergence or capacity growth.
+
 ## ADR-113 — Reject schedule-only repair and qualify relations before nodes
 
 - **Date:** 2026-08-12
-- **Status:** accepted and implemented; ablation/training pending
+- **Status:** accepted and implemented; ablations complete, superseded by ADR-114
 - **Context:** The protected-control warmup/cosine experiment is finite,
   balanced, scope-exact, and support-complete, but its first trained fixed
   selector worsens score `0.3213162 -> 0.3475480` with 116 broad guardrail

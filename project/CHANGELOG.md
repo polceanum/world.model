@@ -4,6 +4,20 @@
 
 ### 2026-08-12 functional node-drift prior and selector-512 diagnosis
 
+- Completed exact zero-node evaluations for both drift-regularized step-512
+  donors. The cosine/constant relation paths score `0.342289`/`0.329317`
+  against protected `0.321316`, fail 100/98 broad guardrails, and remain
+  unsupported for promotion despite mixed y/velocity gains. Preserved the
+  first stalled two-worker evaluator attempt and reran the identical protocol
+  successfully with its default `num_workers=0` path.
+- Qualified fresh constant-rate relation-only optimization with a real
+  two-update exact-resume CPU smoke. The strict audit proves 46 changed
+  permitted attention tensors and 46 complete Adam owners, two exact frozen
+  node tensors with no optimizer state, 177 exact inherited tensors, exact
+  protected state, and complete finiteness. This authorizes a sustained
+  relation-first experiment from protected weights, not an accuracy claim or
+  scale increase.
+
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail
   failures plus failed improvement, zero support failures, and regression at

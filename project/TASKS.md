@@ -22,20 +22,26 @@
   Every pooled position horizon regresses and `reference_pairs` current x is
   `0.720231 m`; strict 48-tensor/Adam/inherited/protected/finiteness audit
   passes, proving behavioral generalization failure rather than corruption.
-- [ ] Unload the rejected schedule trainer and supervisor. The managed
-  environment denied the attempted launchd bootout after its approval quota
-  was exhausted; at last check the trainer had continued beyond the durable
-  step-512 decision boundary to step 544. Do not start competing training.
+- [x] Verify the rejected schedule trainer and supervisor are absent after the
+  host pause. Their logs stop at step 592 and no checkpoint newer than the
+  rejected durable step-512 selector exists; do not resume either trajectory.
 - [x] Implement specification-1.42 `attention_relation` training scope and a
   generic frozen-attention-prefix checkpoint audit. Freeze exactly the two
   node-decoder tensors while training the other 46 attention tensors; prove
   configuration, requires-grad partition, tensor equality, and exact optimizer
   ownership (`736 passed, 6 skipped`; Ruff/format clean).
-- [ ] Run the exact fixed-manifest zero-node modular ablation of the rejected
-  step-512 schedule checkpoint, then launch relation-first training only if it
-  reproduces the earlier beneficial zero-node evidence. Initialize from the
-  untouched graph control, never rejected attention weights; keep all
-  depth/width/history scaling gated.
+- [x] Run exact fixed-manifest zero-node modular ablations of both drift-
+  regularized step-512 checkpoints. The cosine and constant donors score
+  `0.342289`/`0.329317` versus protected `0.321316`, with 100/98 guardrail
+  failures and zero support failures; neither donor is promotable. Combined
+  with the earlier no-drift zero-node score `0.297330`, this localizes the
+  remaining experiment to fresh relation-only gradients rather than reuse of
+  any rejected learned state.
+- [ ] Launch and monitor the full constant-rate `attention_relation` campaign
+  weights-only from the untouched graph control. The exact two-update CPU
+  smoke passes 46-trainable/2-frozen tensor and optimizer ownership, complete
+  finiteness, causal support, and resume; retain the 8,192-update minimum,
+  65,536 balanced examples, fixed selectors, and every scale gate.
 - [x] Qualify the active warmup/cosine control through fixed selectors and the
   declared plateau. Keep all depth/width/history scaling gated on broad
   fixed-manifest convergence and disjoint RGB-only generalization. Its first

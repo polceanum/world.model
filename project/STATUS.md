@@ -1,10 +1,72 @@
 # Project status
 
-**Date:** 2026-08-12
+**Date:** 2026-08-13
 **Specification:** `PROJECT_SPEC.md` 1.42; the rejected immutable schedule
 control uses specification 1.41
 
-## Latest verified state — 2026-08-12
+## Latest verified state — 2026-08-13
+
+The rejected warmup/cosine trainer and supervisor are no longer loaded after
+the host pause.  The trainer log ends at step 592, and step 512 remains its
+latest durable selector checkpoint; there is no competing training process.
+
+Two new exact 32-episode RGB-only modular evaluations close the post-hoc
+zero-node question.  Importing the 46 learned shared/relation tensors from the
+warmup/cosine step-512 donor while preserving the protected zero node decoder
+scores `0.3422885013` versus protected `0.3213162196`, fails 100 broad
+guardrails, and has zero support failures. Current x worsens
+`0.281775 -> 0.361844 m`, z `0.263691 -> 0.290008 m`, and every pooled
+position horizon regresses, although y and velocity improve. The exact
+constant-rate drift donor behaves similarly: score `0.3293166386`, 98 broad
+guardrail failures, zero support failures, current x
+`0.281775 -> 0.371597 m`, improved y/velocity, and only the 1.00-second pooled
+horizon improves. Reports are
+`runs/20260813-070400-attention-cosine-step512-zero-node-ablation/report.json`
+and
+`runs/20260813-071355-attention-constant-step512-zero-node-ablation/report.json`.
+The first multiprocessing evaluator attempt made no progress with two sleeping
+workers and was preserved with a `-stalled` suffix; the identical default
+`num_workers=0` path completed normally in 538.91 seconds.
+
+These results do not qualify either learned donor. They also show why a
+post-hoc zero-node composition is not the same experiment as relation-first
+training: both donors' shared stack was optimized through a nonzero node
+decoder and node-drift/task gradients. The earlier no-drift complexity
+checkpoint remains the only learned relation path with beneficial post-hoc
+evidence (score `0.2973304139` and all pooled horizons improved, though 72
+guardrails still failed). The next controlled run therefore uses constant-rate
+`attention_relation` directly from the untouched graph control, so the node
+decoder and its entire gradient path remain exactly zero from update zero.
+
+That exact protocol now passes a real two-update CPU qualification at
+`runs/20260813-072457-attention-relation-constant-cpu-smoke/`. Both balanced
+updates have 343 causal trajectories, all 13 causal objective groups, no
+skipped/no-gradient draw, finite applied gradients, and exact resume. Update 1
+correctly changes only the zero-initialized relation decoder; update 2 sends
+nonzero gradients through every shared relation component while node gradient,
+activity, drift, and complexity remain exactly zero. The strict step-2 audit
+passes with 46 changed permitted tensors, exactly 46 complete finite Adam
+owners at step 2, two exact frozen node tensors with no optimizer state, all
+177 inherited tensors exact, the protected reference exact, and all serialized
+state finite. Checkpoint SHA-256 is
+`c701ebd5efac6a143a8a7b8fa278674bfff5c571ca2cb9c6cac6f00bc306c18e`;
+the audit is
+`runs/20260813-072457-attention-relation-constant-cpu-smoke/attention_checkpoint_audit_step_000002.json`.
+The eight-episode smoke selector is intentionally support-incomplete and is not
+accuracy evidence. A full immutable 8,192-update/65,536-example campaign is
+the next action; depth, width, history, and CUDA scaling remain closed.
+
+Commands run for this decision were:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/evaluate_modular_candidate.py --config runs/20260812-155706-attention-node-drift-warmup-cosine-stage-a/config.resolved.yaml --base runs/20260812-155706-attention-node-drift-warmup-cosine-stage-a/checkpoints/validation_step_000000.pt --donor runs/20260812-155706-attention-node-drift-warmup-cosine-stage-a/checkpoints/validation_step_000512.pt --module dynamics.attention_interactions.scene_projection --module dynamics.attention_interactions.entity_projection --module dynamics.attention_interactions.relation_projection --module dynamics.attention_interactions.type_embedding --module dynamics.attention_interactions.blocks --module dynamics.attention_interactions.output_norm --module dynamics.attention_interactions.relation_decoder --output runs/20260813-070400-attention-cosine-step512-zero-node-ablation --device cpu --num-workers 0
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/evaluate_modular_candidate.py --config runs/20260812-102557-attention-node-drift-008-stage-a/config.resolved.yaml --base runs/20260812-102557-attention-node-drift-008-stage-a/checkpoints/validation_step_000000.pt --donor runs/20260812-102557-attention-node-drift-008-stage-a/checkpoints/validation_step_000512.pt --module dynamics.attention_interactions.scene_projection --module dynamics.attention_interactions.entity_projection --module dynamics.attention_interactions.relation_projection --module dynamics.attention_interactions.type_embedding --module dynamics.attention_interactions.blocks --module dynamics.attention_interactions.output_norm --module dynamics.attention_interactions.relation_decoder --output runs/20260813-071355-attention-constant-step512-zero-node-ablation --device cpu --num-workers 0
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --run-name attention-relation-constant-dry-run --device cpu --initialize-from runs/20260810-042627-protocol20-y-only-recovery/checkpoints/validation_step_000064.pt --set training.closed_loop_trainable_scope=attention_relation --dry-run
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --run-name attention-relation-constant-cpu-smoke --device cpu --initialize-from runs/20260810-042627-protocol20-y-only-recovery/checkpoints/validation_step_000064.pt --set training.closed_loop_trainable_scope=attention_relation --set training.steps=1 --set training.train_episodes=8 --set training.validation_episodes=8 --set training.num_workers=0 --set training.eval_every=1 --set training.checkpoint_every=1 --set training.validation_minimum_predictable_target_count_per_scenario_horizon=1 --set training.validation_minimum_matched_target_count_per_scenario_horizon=1 --set training.validation_minimum_supported_episodes_per_scenario=1
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --device cpu --resume runs/20260813-072457-attention-relation-constant-cpu-smoke/checkpoints/last.pt --set training.closed_loop_trainable_scope=attention_relation --set training.steps=2 --set training.train_episodes=8 --set training.validation_episodes=8 --set training.num_workers=0 --set training.eval_every=1 --set training.checkpoint_every=1 --set training.validation_minimum_predictable_target_count_per_scenario_horizon=1 --set training.validation_minimum_matched_target_count_per_scenario_horizon=1 --set training.validation_minimum_supported_episodes_per_scenario=1
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --checkpoint runs/20260813-072457-attention-relation-constant-cpu-smoke/checkpoints/validation_step_000002.pt --initial-checkpoint runs/20260813-072457-attention-relation-constant-cpu-smoke/checkpoints/validation_step_000000.pt --config runs/20260813-072457-attention-relation-constant-cpu-smoke/config.resolved.yaml --protected runs/20260813-072457-attention-relation-constant-cpu-smoke/checkpoints/reference_rollout.pt --output runs/20260813-072457-attention-relation-constant-cpu-smoke/attention_checkpoint_audit_step_000002.json --frozen-attention-prefix dynamics.attention_interactions.node_decoder. --require-all-attention-changed --require-complete-attention-optimizer-state --require-protected-checkpoints
+git diff --check
+```
 
 The specification-1.41 warmup/cosine control is now rejected at its first
 trained fixed selector.  Its 32-episode RGB-only score worsens from protected
@@ -34,11 +96,10 @@ model-state hash is
 `953a1cac1dc2edeebacbea07e266f6da5d234f4477b6a4e70f8aafa338f8e288`,
 and the report is
 `runs/20260812-155706-attention-node-drift-warmup-cosine-stage-a/attention_checkpoint_audit_step_000512.json`.
-An attempted launchd unload was denied by the managed environment after its
-approval quota was exhausted; at the last check the rejected trainer had
-continued to step 544 with empty stderr.  Its durable step-512 result remains
-the decision boundary, and the trainer/supervisor must be unloaded externally
-before another compute-heavy run starts.
+An earlier launchd unload attempt was denied after the managed approval quota
+was exhausted. The subsequent host pause removed both one-shot services; the
+trainer log later ends at step 592 with empty stderr and no durable validation
+checkpoint beyond step 512.
 
 Specification 1.42 records the narrower evidence-backed repair.  A new
 `attention_relation` scope trains the 46 shared typed-token/relation tensors
@@ -710,8 +771,8 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check 
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260811-234157-attention-node-parsimony-stage-a --after-step 520 --trend-window-blocks 16 --reference-run runs/20260811-170842-attention-aggregate-isolated-stage-a
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/measure_attention_node_activity.py --config runs/20260811-234157-attention-node-parsimony-stage-a/config.resolved.yaml --checkpoint runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/validation_step_000512.pt --step-index 511 --device cpu --output runs/20260811-234157-attention-node-parsimony-stage-a/attention_node_activity_calibration_step_000512.json
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --run-name attention-node-drift-008-dry-run --device mps --initialize-from runs/20260810-042627-protocol20-y-only-recovery/checkpoints/validation_step_000064.pt --set training.loss_weights.attention_node_complexity=1.0 --set training.loss_weights.attention_node_drift=0.08 --dry-run
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --run-name attention-node-drift-008-cpu-smoke --device cpu --initialize-from runs/20260810-042627-protocol20-y-only-recovery/checkpoints/validation_step_000064.pt --set training.steps=1 --set training.train_episodes=8 --set training.validation_episodes=8 --set training.num_workers=0 --set training.eval_every=1 --set training.checkpoint_every=1 --set training.validation.minimum_predictable_targets_per_horizon=1 --set training.validation.minimum_matched_object_frames=1 --set training.validation.minimum_supported_scenarios=1 --set training.loss_weights.attention_node_complexity=1.0 --set training.loss_weights.attention_node_drift=0.08
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --run-name attention-node-drift-008-cpu-smoke --device cpu --resume runs/20260812-065434-attention-node-drift-008-cpu-smoke/checkpoints/last.pt --set training.steps=2 --set training.train_episodes=8 --set training.validation_episodes=8 --set training.num_workers=0 --set training.eval_every=1 --set training.checkpoint_every=1 --set training.validation.minimum_predictable_targets_per_horizon=1 --set training.validation.minimum_matched_object_frames=1 --set training.validation.minimum_supported_scenarios=1 --set training.loss_weights.attention_node_complexity=1.0 --set training.loss_weights.attention_node_drift=0.08
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --run-name attention-node-drift-008-cpu-smoke --device cpu --initialize-from runs/20260810-042627-protocol20-y-only-recovery/checkpoints/validation_step_000064.pt --set training.steps=1 --set training.train_episodes=8 --set training.validation_episodes=8 --set training.num_workers=0 --set training.eval_every=1 --set training.checkpoint_every=1 --set training.validation_minimum_predictable_target_count_per_scenario_horizon=1 --set training.validation_minimum_matched_target_count_per_scenario_horizon=1 --set training.validation_minimum_supported_episodes_per_scenario=1 --set training.loss_weights.attention_node_complexity=1.0 --set training.loss_weights.attention_node_drift=0.08
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml --device cpu --resume runs/20260812-065434-attention-node-drift-008-cpu-smoke/checkpoints/last.pt --set training.steps=2 --set training.train_episodes=8 --set training.validation_episodes=8 --set training.num_workers=0 --set training.eval_every=1 --set training.checkpoint_every=1 --set training.validation_minimum_predictable_target_count_per_scenario_horizon=1 --set training.validation_minimum_matched_target_count_per_scenario_horizon=1 --set training.validation_minimum_supported_episodes_per_scenario=1 --set training.loss_weights.attention_node_complexity=1.0 --set training.loss_weights.attention_node_drift=0.08
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --config runs/20260812-065434-attention-node-drift-008-cpu-smoke/config.resolved.yaml --checkpoint runs/20260812-065434-attention-node-drift-008-cpu-smoke/checkpoints/last.pt --initial-checkpoint runs/20260812-065434-attention-node-drift-008-cpu-smoke/checkpoints/validation_step_000000.pt --protected runs/20260812-065434-attention-node-drift-008-cpu-smoke/checkpoints/reference_rollout.pt --require-protected-checkpoints --require-all-attention-changed --require-complete-attention-optimizer-state --output runs/20260812-065434-attention-node-drift-008-cpu-smoke/attention_checkpoint_audit_step_000002.json
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --config runs/20260811-234157-attention-node-parsimony-stage-a/config.resolved.yaml --checkpoint runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/last.pt --initial-checkpoint runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/validation_step_000000.pt --protected runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/best_rollout.pt --protected runs/20260811-234157-attention-node-parsimony-stage-a/checkpoints/reference_rollout.pt --require-protected-checkpoints --require-all-attention-changed --require-complete-attention-optimizer-state --output runs/20260811-234157-attention-node-parsimony-stage-a/attention_checkpoint_audit_step_000768.json
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260811-234157-attention-node-parsimony-stage-a --after-step 640 --trend-window-blocks 8

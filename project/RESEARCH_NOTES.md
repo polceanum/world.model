@@ -28,14 +28,29 @@ the result.  This is worse overall than constant rate despite a slightly
 smaller familiar current-x failure; schedule alone delayed the shortcut but
 did not make it contextual.
 
-The strongest existing causal clue is the prior exact zero-node ablation: it
+The strongest initial causal clue was the prior exact zero-node ablation: it
 improved the complexity-only rejected checkpoint to score `0.297330`, while
 relation/event residuals remained active.  Specification 1.42 therefore adds
 an `attention_relation` scope that freezes the protected zero node decoder and
 trains the other 46 typed-attention tensors.  This tests relation abstraction
 before adding a learned evidence gate for single-object acceleration.  It is
 not a permanent hardcoded constant-velocity rule, and it does not authorize
-scale; fixed ablation and sustained selector evidence remain pending.
+scale.
+
+The latest exact ablations refine that hypothesis. Preserving the protected
+zero node decoder while importing all 46 shared/relation tensors from the
+cosine-drift and constant-drift step-512 donors yields scores
+`0.342289`/`0.329317`, with 100/98 broad guardrail failures and no support
+failures. Both improve y and velocity but damage x strongly; neither learned
+donor is useful. This does not test relation-first optimization, because both
+shared stacks received task and drift gradients through a nonzero node decoder
+during training. The contrast with the earlier no-drift zero-node result makes
+a fresh constant-rate relation-only run the narrow next test. Its two-update
+CPU smoke proves the intended isolation: 46 changed permitted tensors and
+exactly 46 Adam owners, two bitwise-exact frozen node tensors without optimizer
+state, exact inherited/protected state, complete finiteness, real balanced
+causal support, and exact resume. It supplies execution evidence only; the
+32-episode selectors remain authoritative for accuracy.
 
 The drift-regularized constant-rate successor has now failed its first trained
 fixed selector despite encouraging late matched training windows.  At step 512
