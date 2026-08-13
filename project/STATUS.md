@@ -6,6 +6,45 @@ campaign uses specification 1.42 and the rejected schedule control uses 1.41
 
 ## Latest verified state — 2026-08-13
 
+The complete non-overlapping relation-only updates 776--832 window passes all
+operational gates. All 64 optimizer updates apply, every scenario appears
+exactly eight times, 2,578 causal trajectories are sampled, no draw is
+skipped, no interaction clipping is uncontained, and RSS remains flat at
+`2,924,761,088` bytes. Minimum complete interaction-gradient retention is
+`0.801737` at step 816. Strong local collision-output isolation at steps
+792/808/816/832 remains contained before shared backpropagation. Step 800 has
+eight contributing relation-scope causal terms with 233 trajectory supports,
+a finite applied update, full gradient retention, and targets rather than a
+causal dropout.
+
+Absolute current position/velocity RMSE is
+`0.243979 m / 1.409390 m/s`; current x/y/z is
+`0.220279/0.221208/0.284819 m`. Position RMSE at
+0.10/0.25/0.50/0.75/1.00 seconds is
+`0.243510/0.280397/0.341667/0.377338/0.395313 m`, with target coverage
+`100.00/98.31/98.31/98.31/98.08%`. Collision F1 is `0.217143`, trusted
+identity switching is `7/355`, lifecycle precision/coverage is
+`0.366899/0.389831`, current coverage90 is `0.979842`, and median uncertainty
+NLL is `-0.761216`.
+
+Against the preceding different-draw 712--768 window, current position and
+velocity worsen `0.056932 m / 0.239553 m/s`; x/y/z and every position horizon
+worsen, by `0.058629/0.068326/0.072813/0.051028/0.037679 m` pooled over
+0.10--1.00 seconds. Trusted switch rate, collision F1, coverage90, lifecycle
+precision, and median NLL are also adverse. Conversely, 0.25/1.00-second
+velocity improve `0.746478/0.119993 m/s`, lifecycle target coverage improves
+`0.027651`, and forecast target coverage improves by `2.14--4.91` percentage
+points at every horizon. This heterogeneous draw-confounded reversal is a
+watch signal, not fixed-manifest regression evidence. Keep the immutable run
+unchanged through checkpoint 896 and selector 1024.
+
+Commands run for this window were:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 768 --trend-window-blocks 8
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 704 --trend-window-blocks 8
+```
+
 The relation-only step-768 structural boundary is preserved and passes the
 strict checkpoint audit. `last.pt` first passed at embedded/expected/Adam
 steps `768/768/[768]`; its verified bytes were then copied to

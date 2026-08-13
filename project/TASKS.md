@@ -128,6 +128,12 @@
   Every position slice improves versus the preceding different-draw window;
   0.25/0.50/1.00-second velocity and later target coverage remain watch items.
   Continue unchanged to selector 1024.
+- [x] Audit complete relation-only updates 776--832. All operational gates,
+  eight-way balance, 2,578 trajectories, support, clipping containment, and
+  flat memory pass. Versus the preceding different-draw window, target
+  coverage and selected velocity horizons improve, while current state, every
+  axis/position horizon, identity, event, coverage90, and NLL are adverse.
+  Preserve the reversal as a watch signal and keep selector 1024 authoritative.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

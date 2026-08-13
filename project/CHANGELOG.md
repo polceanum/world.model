@@ -120,6 +120,11 @@
   slice versus the preceding different-draw window; selected velocity horizons
   and mature target coverage remain diagnostic limitations before selector
   1024.
+- Recorded the complete 776--832 relation-only dynamics window. Operational
+  integrity passes with 2,578 causal trajectories and flat memory; forecast
+  support improves, while most accuracy/calibration slices reverse on
+  different draws. No promotion or protocol mutation is authorized before the
+  fixed step-1024 selector.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail
