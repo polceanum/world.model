@@ -59,6 +59,10 @@
   selected RMSE improved slightly over learned-only at every horizon, and the
   baseline's collision F1 was zero. This supports guarded fallback, not model
   promotion or convergence.
+- Started the required 32-episode protected decay-0.1 comparison at
+  `runs/20260813-230000-hypothesis-pool-protected-32ep/` from the immutable
+  reference checkpoint. MPS was tested but unavailable in the subprocess;
+  the run is CPU-only and does not alter training artifacts.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

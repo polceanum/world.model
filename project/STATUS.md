@@ -7955,6 +7955,13 @@ mean selected position standard deviation is `0.636/0.644/0.660/0.679/0.704 m`.
 This is stronger evidence for guarded fallback, but it is still an 8-episode
 qualification rather than the required 32-episode promotion protocol.
 
+The required 32-episode decay-0.1 protected comparison is now running in the
+foreground session from the immutable reference checkpoint, targeting
+`runs/20260813-230000-hypothesis-pool-protected-32ep/report.json`. No model
+weights or incumbent artifacts are writable by this evaluation. An attempted
+MPS smoke was rejected by the runtime availability check (`compiled=True,
+available=False` in the subprocess), so this run is truthfully CPU-only.
+
 The regenerated RGB-only demo is
 `demo_outputs/20260727-162848-accuracy-v6-blended-velocity/online_correction.gif`,
 with
