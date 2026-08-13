@@ -145,6 +145,18 @@
   memory pass. Different-draw current/short state, identity, coverage90, and
   NLL are adverse, while mature position/velocity, event F1, and lifecycle
   improve. Continue unchanged through the fixed step-1024 selector.
+- [x] Complete and reject the relation-only step-1024 selector. Exact fixed
+  validation scores `0.3409900` versus protected `0.3213162` with 116 broad
+  guardrail failures and zero support failures. Current/short position,
+  coverage, precision, and identity regress, dominated by `reference_pairs`
+  x, while velocity and collision F1 improve. Strict step/Adam/scope/
+  inherited/protected/finiteness audit passes, so this is behavioral
+  non-convergence rather than checkpoint corruption; no candidate is promoted.
+- [x] Audit complete non-overlapping updates 968--1024. All 64 updates,
+  eight-way balance, all 13 objectives, 2,352 trajectories, clipping
+  containment, and flat memory pass. Hard-contact force spikes remain bounded
+  and nonpersistent. Preserve the fixed-selector regression and continue the
+  immutable trajectory toward 8,192 updates without weakening selection.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

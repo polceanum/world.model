@@ -6,6 +6,58 @@ campaign uses specification 1.42 and the rejected schedule control uses 1.41
 
 ## Latest verified state — 2026-08-13
 
+The immutable relation-only campaign has completed and rejected its fixed
+step-1024 selector. The 32 RGB-only validation episodes completed in
+`1,236.713 s` with four balanced repeats of every scenario and zero mutable or
+protected training-support failures. Candidate score is `0.3409900` versus
+the protected step-zero incumbent's `0.3213162`; 116 incumbent/reference
+guardrails fail, so `selection_accepted=0` and both protected checkpoints
+remain bitwise at step zero. Current position worsens
+`0.251460 -> 0.313353 m`; x is the dominant regression
+(`0.281775 -> 0.402440 m`), z also worsens
+(`0.263691 -> 0.303771 m`), while y is essentially flat/slightly better
+(`0.201906 -> 0.200839 m`) and velocity improves
+`1.093191 -> 1.048411 m/s`. Pooled 0.10/0.25/0.50/0.75/1.00-second position
+worsens by `0.057141/0.042869/0.019589/0.013925/0.000434 m`; the nearly flat
+one-second result is insufficient because current and short-horizon behavior
+regress broadly. Target coverage and prediction precision fall by
+`0.017000/0.017033`, identity switching rises
+`0.013592 -> 0.021456`, while collision F1 and coverage90 improve slightly.
+The worst slice is `reference_pairs`: current x reaches `0.853208 m` versus
+`0.242694 m`, and every x horizon fails. This is clear non-convergence at the
+selector boundary, not a promotable long-horizon tradeoff.
+
+The candidate itself passes the strict structural audit at embedded,
+expected, and Adam step `1024`. All 46 permitted relation-path tensors changed
+and own complete optimizer state; both frozen node tensors, all 177 inherited
+tensors, and both protected checkpoints remain exact; provenance, protocol,
+architecture, and serialized finiteness pass. Candidate SHA-256 is
+`10384a797922ec71a19cf1fa12c44718e235cb2c1660ceed2af91c7ea5b618b6`
+and model-state hash is
+`a0a4f2cf867696ef471a1a794c269380d8f4a17ed5c487501d86f3967bdc4136`.
+The durable artifact is `checkpoints/validation_step_001024.pt`; its audit is
+`attention_checkpoint_audit_step_001024.json` in the active run.
+
+The complete non-overlapping updates 968--1024 window also passes all
+operational gates: 64 applied updates, exact eight-way scenario balance, all
+13 causal terms in every logged block, 2,352 trajectories, zero skipped draws,
+no uncontained interaction clipping, and flat RSS at `2,924,761,088` bytes.
+Minimum complete interaction-gradient retention is `0.150987` at the
+force-dominated hard-contact step 992. Similar force sensitivities at
+984/1000 are locally and globally bounded, then recover to a fully retained
+`0.325660` norm at step 1024; there is no numerical collapse or resource leak.
+The fixed selector nevertheless proves that the learned trajectory has not
+generalized. Keep the protected incumbent deployed and continue the declared
+mutable 8,192-step evidence campaign unchanged so later fixed selectors can
+distinguish delayed convergence from persistent relation-objective drift.
+
+Commands run for this boundary were:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 960 --trend-window-blocks 8
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_001024.pt --initial-checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000000.pt --config runs/20260813-073710-attention-relation-constant-stage-a/config.resolved.yaml --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/best_rollout.pt --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/reference_rollout.pt --output runs/20260813-073710-attention-relation-constant-stage-a/attention_checkpoint_audit_step_001024.json --expected-step 1024 --frozen-attention-prefix dynamics.attention_interactions.node_decoder. --require-all-attention-changed --require-complete-attention-optimizer-state --require-protected-checkpoints
+```
+
 The complete relation-only updates 904--960 window passes operationally. All
 64 updates apply, every scenario appears exactly eight times, all 13 causal
 terms contribute in every cadence block, 2,943 causal trajectories are

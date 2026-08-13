@@ -134,6 +134,18 @@
   passes with 2,943 trajectories and all causal terms. Different-draw evidence
   is horizon-dependent, improving mature forecasts/events/lifecycle while
   regressing current/short state, identity, coverage90, and calibration.
+- Completed and rejected the relation-only step-1024 fixed selector. Candidate
+  score is `0.3409900` versus protected `0.3213162`, with 116 guardrail
+  failures and no support failures. The regression is concentrated in current
+  and short-horizon x, especially `reference_pairs`; velocity and collision F1
+  improve but do not offset broad state/lifecycle/identity failures. The
+  protected step-zero incumbent remains exact and unmodified.
+- Strictly audited `validation_step_001024.pt`: payload/expected/Adam step,
+  46-trainable/2-frozen scope, 177 inherited tensors, protected checkpoints,
+  provenance, protocol, architecture, and finiteness all pass. Complete
+  updates 968--1024 also pass balance, support, clipping, optimizer, and memory
+  gates. This rules out corruption while preserving behavioral
+  non-convergence evidence; the declared mutable 8,192-step run continues.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail
