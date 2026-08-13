@@ -3,7 +3,7 @@
 ## ADR-114 — Train relations from protected weights, not contaminated donors
 
 - **Date:** 2026-08-13
-- **Status:** accepted; two-update qualification passed, sustained run pending
+- **Status:** accepted; two-update qualification passed, sustained run active
 - **Context:** Exact zero-node compositions of the warmup/cosine and constant-
   rate drift checkpoints remain harmful: scores `0.342289` and `0.329317`
   versus protected `0.321316`, with 100 and 98 broad guardrail failures and no

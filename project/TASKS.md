@@ -37,11 +37,17 @@
   with the earlier no-drift zero-node score `0.297330`, this localizes the
   remaining experiment to fresh relation-only gradients rather than reuse of
   any rejected learned state.
-- [ ] Launch and monitor the full constant-rate `attention_relation` campaign
+- [x] Launch the full constant-rate `attention_relation` campaign
   weights-only from the untouched graph control. The exact two-update CPU
   smoke passes 46-trainable/2-frozen tensor and optimizer ownership, complete
-  finiteness, causal support, and resume; retain the 8,192-update minimum,
-  65,536 balanced examples, fixed selectors, and every scale gate.
+  finiteness, causal support, and resume. The active clean-commit trainer uses
+  MPS measurement/CPU closed loop, and its corrected supervisor runs from a
+  detached Git worktree whose provenance exactly matches the trainer.
+- [ ] Monitor the relation-first campaign through its 8,192-update minimum,
+  65,536 balanced examples, fixed selectors, and declared plateau. Audit all
+  46 permitted tensors, both frozen node tensors, optimizer state, support,
+  lifecycle, identity, uncertainty, events, every axis/horizon, test, and OOD
+  evidence; keep every scale gate closed until broad convergence is proved.
 - [x] Qualify the active warmup/cosine control through fixed selectors and the
   declared plateau. Keep all depth/width/history scaling gated on broad
   fixed-manifest convergence and disjoint RGB-only generalization. Its first

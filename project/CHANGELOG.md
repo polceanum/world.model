@@ -17,6 +17,13 @@
   protected state, and complete finiteness. This authorizes a sustained
   relation-first experiment from protected weights, not an accuracy claim or
   scale increase.
+- Committed and pushed the relation-only decision as `c3fe110`, then launched
+  the full 8,192-update/65,536-example campaign at
+  `runs/20260813-073710-attention-relation-constant-stage-a/`. Replaced an
+  initially provenance-incomplete supervisor source archive with a real
+  detached Git worktree before any resume; exact commit, dirty state, runtime
+  fingerprint, and worktree fingerprint now match the trainer. Both one-shot
+  jobs are healthy with empty stderr while step-zero validation runs.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail

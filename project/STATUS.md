@@ -56,6 +56,36 @@ The eight-episode smoke selector is intentionally support-incomplete and is not
 accuracy evidence. A full immutable 8,192-update/65,536-example campaign is
 the next action; depth, width, history, and CUDA scaling remain closed.
 
+That sustained campaign is now active at
+`runs/20260813-073710-attention-relation-constant-stage-a/` from clean pushed
+commit `c3fe110`. Trainer launchd label
+`com.polceanum.orpheus.attention-relation-20260813-073710` runs once under
+Standard/default priority and `caffeinate`; PID at launch audit was `47723`.
+Metadata records Python 3.10.20, PyTorch 2.10.0, MPS built/available, RGB
+measurement on MPS, closed-loop execution on CPU, float32, RGB-only runtime,
+no oracle, and runtime fingerprint
+`1ab6aeb933767dcbfe51aabdfa23075a91066a3d1753f5974823416e31904317`.
+The resolved configuration records `attention_relation`, constant rate, 8,192
+updates, 16,384 training episodes, batch eight, 65,536 nominal balanced draws,
+and 32 fixed validation episodes.
+
+The first supervisor launch exposed and prevented a future exact-resume bug in
+the launch procedure: a plain source archive has no Git metadata, so
+`capture_git_metadata()` would return null provenance and a later extension
+would correctly refuse the checkpoint. The waiting supervisor was stopped
+before it could resume anything, the archive was preserved with
+`-archive-incomplete`, and the runtime path was replaced by a real detached Git
+worktree at `c3fe110`. Its independently recomputed commit, dirty flag,
+runtime-source fingerprint, and worktree fingerprint now exactly match the
+trainer (`c3fe110`, false, `1ab6...4317`, `55a5...6d82`). The supervisor was
+restarted once from that exact worktree under label
+`com.polceanum.orpheus.attention-relation-convergence-20260813-073710`; PID at
+the corrected audit was `48111`. It records the unchanged 8,192 minimum,
+4,096-update extensions, four-selector/1% plateau rule, and 24,576 hard limit.
+Both corrected stderr files are empty. The mandatory step-zero selector is in
+progress; no optimizer update, learned accuracy result, or convergence claim
+exists yet.
+
 Commands run for this decision were:
 
 ```bash
