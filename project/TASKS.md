@@ -59,6 +59,12 @@
   protected checkpoints, source/protocol hashes, and finiteness all pass. The
   matched 72--128 window improves current/short x and collision behavior but
   regresses pooled 0.25--1.00-second position; continue to selector 512.
+- [x] Audit complete relation-only updates 136--192. Operational integrity,
+  balance, support, clipping containment, and memory pass, but exact matched
+  current/every-horizon position regress mainly on x/z, with mostly adverse
+  velocity/lifecycle/identity/event slices. Preserve the warning and continue
+  unchanged to the predeclared fixed selector rather than promote or retune on
+  heterogeneous training samples.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

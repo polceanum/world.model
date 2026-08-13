@@ -166,6 +166,21 @@ at 0.10 seconds but regresses `0.002252/0.013123/0.012234/0.019868 m` at
 mixed training evidence rather than convergence or collapse; continue without
 promotion or protocol mutation to the fixed step-512 selector.
 
+The subsequent complete updates 136--192 window remains operationally clean
+but is accuracy-adverse on the exact matched draws. All 64 updates apply with
+eight draws per scenario, 2,355 cadence-recorded causal trajectories, all 13
+objective groups, zero skips/uncontained clipping, minimum complete-gradient
+retention `0.725199`, and flat peak RSS `2,924,761,088` bytes. Versus the
+full-attention control, current position worsens `0.024467 m`; pooled position
+worsens `0.027327/0.021932/0.010096/0.008613/0.010786 m` across
+0.10/0.25/0.50/0.75/1.00 seconds, mainly x and z. Current velocity worsens
+`0.007516 m/s`; lifecycle, trusted identity, coverage90, and collision F1 are
+also mostly adverse, although y improves slightly at several horizons and
+1.00-second collision F1 improves. This is genuine sampled regression, not
+optimizer collapse. Adjacent matched windows have changed sign, so the
+predeclared fixed selector remains the first valid behavioral decision point;
+continue without promotion or mid-protocol retuning.
+
 Commands run for this decision were:
 
 ```bash

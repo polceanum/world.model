@@ -48,6 +48,12 @@
   window is finite and balanced, improves current/short x and collision F1,
   but regresses pooled 0.25--1.00-second position; selector 512 remains the
   first promotion gate.
+- Audited complete relation-only updates 136--192. All operational invariants
+  pass with balanced support, no skips/uncontained clipping, at least
+  `0.725199` complete-gradient retention, and flat memory. Exact matched
+  current and every pooled position horizon regress mainly on x/z, with most
+  secondary slices adverse. Recorded this as real accuracy warning without
+  conflating it with collapse or changing the fixed-selector protocol.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail

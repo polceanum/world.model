@@ -46,6 +46,13 @@
   collision F1 but regresses pooled 0.25--1.00-second position, especially z.
   Because optimization integrity is proved while accuracy remains mixed, this
   strengthens—not relaxes—the decision to wait for the fixed selector.
+  The next complete 136--192 window is more broadly adverse: current and every
+  pooled position horizon regress on exact draws, mainly x/z, while all
+  operational invariants remain healthy. This rules out a simple monotonic
+  early-win narrative but does not override the fixed-selector design: sampled
+  windows are heterogeneous and have already changed sign. Continue unchanged
+  to selector 512, where identical fixed episodes and scenario guardrails can
+  distinguish generalization from training-window wobble.
 
 ## ADR-113 — Reject schedule-only repair and qualify relations before nodes
 
