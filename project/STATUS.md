@@ -86,6 +86,43 @@ Both corrected stderr files are empty. The mandatory step-zero selector is in
 progress; no optimizer update, learned accuracy result, or convergence claim
 exists yet.
 
+The step-zero selector subsequently completed in `834.99 s` and exactly
+reproduced the protected control: all 225 model tensors and all 2,584
+checkpoint metrics are bitwise equal, including score `0.3213162196`, every
+axis/horizon, lifecycle, identity, event, support, and uncertainty metric. The
+first 16 causal updates are now complete. They contain two draws from each of
+the eight scenarios, 511 trajectory targets, all updates applied, zero skips
+or failures, minimum complete interaction retention `0.917732`, stable peak
+RSS `2,827,161,600` bytes, and exact zero node parameter gradient, activity,
+drift, and complexity. At step 8 the aggregate loss/gradient is
+`0.489130/0.216930`; at step 16 it is `3.902318/1.089642`, with final applied
+gradient `1.0`. The dynamics audit passes.
+
+Against the earlier full-attention control on identical steps 8 and 16, the
+relation-only path is deliberately a near-control rather than an early win:
+current position improves by `0.000045 m`, velocity by `0.005314 m/s`, and x
+by `0.001724 m`; z worsens `0.000639 m`. Pooled 0.10/0.25/0.50-second position
+worsens `0.000092/0.001763/0.004523 m`, while 0.75/1.00-second improves
+`0.000986/0.000797 m`. Lifecycle coverage/precision and identity improve
+slightly, collision F1 falls `0.012821`, and uncertainty NLL changes only
+`-0.000126` at the median. These heterogeneous training draws are not fixed-
+selector evidence and do not justify promotion or mutation; continue to the
+durable checkpoint and selector gates.
+
+The first live audit also exposed a diagnostics-only bug. The collapse auditor
+reported the node output hook's clipping coefficient under `attention_relation`
+even though the frozen zero decoder blocks that backward path and its parameter
+gradient is exactly zero. The auditor now excludes node row/output coefficients
+only when explicit relation-only telemetry is true, while retaining all real
+force/collision/impulse warnings. A new regression test proves this behavior.
+The corrected step-8 audit still reports the real contained force-output
+coefficient `0.098598` (the matched full-attention control was more strongly
+clipped at `0.052808`); decoder-row and complete-interaction coefficients are
+`1.0`, so it remains a watch item rather than collapse. Focused tests pass
+`16 passed`; Ruff format/check and `git diff --check` pass. The complete suite
+is deferred until a natural training validation/checkpoint pause to avoid
+competing with the CPU-heavy sustained trainer.
+
 Commands run for this decision were:
 
 ```bash

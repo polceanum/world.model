@@ -48,6 +48,13 @@
   46 permitted tensors, both frozen node tensors, optimizer state, support,
   lifecycle, identity, uncertainty, events, every axis/horizon, test, and OOD
   evidence; keep every scale gate closed until broad convergence is proved.
+  Step-zero is bitwise exact across 225 tensors and 2,584 metrics. The first
+  16 balanced updates pass with exact node isolation, no skips/failures, stable
+  memory, and mixed near-control axis/horizon movement; continue unchanged.
+- [x] Correct collapse-auditor severe-clip attribution for a deliberately
+  frozen relation-only node path. Ignore node row/output coefficients only
+  under explicit `closed_loop_scope_attention_relation_only=1`; preserve real
+  relation warnings. Regression tests pass (`16 passed`).
 - [x] Qualify the active warmup/cosine control through fixed selectors and the
   declared plateau. Keep all depth/width/history scaling gated on broad
   fixed-manifest convergence and disjoint RGB-only generalization. Its first

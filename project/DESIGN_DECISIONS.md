@@ -29,6 +29,11 @@
   causal support. This validates execution only. A complete fixed selector is
   required for accuracy evidence, and only repeated accepted selectors plus
   disjoint test/OOD evidence can qualify convergence or capacity growth.
+  The sustained run's step-zero control is bitwise exact across all 225 model
+  tensors and 2,584 metrics. Its first 16 balanced updates remain finite,
+  support-complete, node-exact, and behaviorally near the matched full-attention
+  control with mixed axes/horizons. Continue unchanged; neither early sampled
+  movement nor contained semantic-output clipping changes the selector gate.
 
 ## ADR-113 — Reject schedule-only repair and qualify relations before nodes
 

@@ -608,6 +608,15 @@ def audit_run(
                 1.0,
             )
         )
+        node_path_trainable = not bool(
+            float(record.get("closed_loop_scope_attention_relation_only", 0.0))
+        )
+        effective_attention_node_coefficient = (
+            attention_node_coefficient if node_path_trainable else 1.0
+        )
+        effective_attention_node_output_coefficient = (
+            attention_node_output_coefficient if node_path_trainable else 1.0
+        )
         attention_collision_output_coefficient = float(
             record.get(
                 "attention_collision_output_backprop_gradient_minimum_clip_coefficient",
@@ -630,11 +639,11 @@ def audit_run(
             min(
                 total_coefficient,
                 interaction_coefficient,
-                attention_node_coefficient,
+                effective_attention_node_coefficient,
                 attention_collision_coefficient,
                 attention_force_coefficient,
                 attention_impulse_coefficient,
-                attention_node_output_coefficient,
+                effective_attention_node_output_coefficient,
                 attention_collision_output_coefficient,
                 attention_force_output_coefficient,
                 attention_impulse_output_coefficient,
@@ -648,13 +657,16 @@ def audit_run(
             }
             if "attention_collision_gradient_clip_coefficient" in record:
                 details["attention_collision_coefficient"] = attention_collision_coefficient
-            if "attention_node_gradient_clip_coefficient" in record:
+            if node_path_trainable and "attention_node_gradient_clip_coefficient" in record:
                 details["attention_node_coefficient"] = attention_node_coefficient
             if "attention_force_gradient_clip_coefficient" in record:
                 details["attention_force_coefficient"] = attention_force_coefficient
             if "attention_impulse_gradient_clip_coefficient" in record:
                 details["attention_impulse_coefficient"] = attention_impulse_coefficient
-            if "attention_node_output_backprop_gradient_minimum_clip_coefficient" in record:
+            if (
+                node_path_trainable
+                and "attention_node_output_backprop_gradient_minimum_clip_coefficient" in record
+            ):
                 details["attention_node_output_coefficient"] = attention_node_output_coefficient
             if "attention_collision_output_backprop_gradient_minimum_clip_coefficient" in record:
                 details["attention_collision_output_coefficient"] = (

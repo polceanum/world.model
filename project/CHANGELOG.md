@@ -24,6 +24,14 @@
   detached Git worktree before any resume; exact commit, dirty state, runtime
   fingerprint, and worktree fingerprint now match the trainer. Both one-shot
   jobs are healthy with empty stderr while step-zero validation runs.
+- Proved exact step-zero equality for the active relation-only campaign: all
+  225 tensors and 2,584 metrics match the protected control. The first 16
+  balanced updates apply with zero skips/failures, exact frozen-node isolation,
+  and mixed near-control axis/horizon behavior; no accuracy claim is made.
+- Fixed collapse-auditor attribution so an explicitly frozen relation-only
+  node path cannot create a false severe-clip warning. Real relation-output
+  clipping remains reported. Added a regression test; focused tests, Ruff,
+  formatting, and diff checks pass.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail
