@@ -11,6 +11,9 @@
 - Added a structural adapter for any dynamics candidate exposing
   `predict_step`, with a regression test using two real `DynamicsModel`
   instances.
+- Added `HypothesisDynamicsPool`, which carries normalized candidate weights
+  across receding-horizon cycles and assimilates delayed masked observations;
+  fixed-candidate selection and source-belief immutability are tested.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

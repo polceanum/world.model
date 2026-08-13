@@ -4,7 +4,12 @@ import pytest
 import torch
 
 from world_model.belief import BeliefFactory, BeliefTrajectory
-from world_model.dynamics import DynamicsModel, HypothesisRolloutEngine
+from world_model.dynamics import (
+    DynamicsModel,
+    HypothesisDynamicsPool,
+    HypothesisRolloutEngine,
+    RolloutStep,
+)
 
 
 def _trajectory(position: float, *, variance: float = 1.0) -> BeliefTrajectory:
@@ -66,3 +71,34 @@ def test_dynamics_adapter_uses_predict_step_contract() -> None:
     torch.testing.assert_close(belief.objects.position, source_position)
     with pytest.raises(TypeError, match="predict_step"):
         engine.rollout_dynamics([object()], belief, [0.1])
+
+
+class _FixedDynamics:
+    def __init__(self, position: float) -> None:
+        self.position = position
+
+    def predict_step(self, belief, delta_time):
+        objects = belief.objects.clone()
+        objects.position[..., 0] = self.position
+        endpoint = belief.replace(
+            timestamp=belief.timestamp + delta_time,
+            objects=objects,
+        )
+        return RolloutStep(
+            belief=endpoint,
+            event_logits=torch.zeros(belief.batch_size, objects.max_objects, 2),
+            auxiliary={},
+        )
+
+
+def test_pool_assimilates_late_evidence_and_updates_selected_model() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    pool = HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)])
+    trajectories = pool.rollout(belief, [0.1, 0.2])
+    target = torch.zeros(1, 2, 1, 3)
+    mask = torch.ones(1, 2, 1, dtype=torch.bool)
+    selection = pool.assimilate(belief, target, mask, trajectories=trajectories, uncertainty_aware=False)
+    assert selection.selected_index.tolist() == [1]
+    assert pool.selected_index(belief).tolist() == [1]
+    assert pool.last_selection is not None
+    assert belief.timestamp.item() == pytest.approx(0.0)

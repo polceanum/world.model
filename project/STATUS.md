@@ -34,6 +34,13 @@ The selector now also exposes a structural `rollout_dynamics` adapter for any
 candidate object with `predict_step`, verified with two independent
 `DynamicsModel` instances. No long run has been relaunched yet.
 
+The persistent `HypothesisDynamicsPool` is now implemented on top of that
+adapter. It retains normalized evidence weights across cycles, supports late
+assimilation of masked observations, and reports the selected candidate while
+leaving the source belief untouched. A fixed-candidate synthetic test selects
+the correct model after delayed evidence; this is selector functionality, not
+an accuracy claim for RGB scenarios.
+
 The immutable relation-only campaign has completed and rejected its fixed
 step-1024 selector. The 32 RGB-only validation episodes completed in
 `1,236.713 s` with four balanced repeats of every scenario and zero mutable or

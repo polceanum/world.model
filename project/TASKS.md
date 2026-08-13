@@ -8,6 +8,9 @@
 - [x] Add masked, uncertainty-aware per-batch trajectory scoring and
   deterministic selection with posterior weights; cover empty inputs, masks,
   occluded frames, and uncertainty behavior with focused tests.
+- [x] Add a persistent candidate pool that carries evidence weights across
+  cycles, supports late observation assimilation, and preserves the source
+  belief; verify it with fixed synthetic candidates and real dynamics adapters.
 - [ ] Connect the selector to a small analytic/learned candidate pool and run
   the complete incumbent comparison protocol before changing model weights.
 - [ ] Only if the selector passes broad guardrails, train or adapt candidate

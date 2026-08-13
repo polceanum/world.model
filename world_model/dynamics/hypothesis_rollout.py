@@ -153,3 +153,98 @@ class HypothesisRolloutEngine:
         posterior_weights = torch.softmax(-scores / scale, dim=-1)
         selected_index = scores.argmin(dim=-1).to(torch.int64)
         return HypothesisSelection(scores, selected_index, posterior_weights).validate()
+
+
+class HypothesisDynamicsPool:
+    """Persistent candidate pool for receding-horizon model selection.
+
+    The pool owns only candidate dynamics and their evidence weights.  The
+    caller continues to own the authoritative ``WorldBelief``.  Evidence can
+    arrive asynchronously: a rollout may be made first and scored later when
+    matching observations become available.
+    """
+
+    def __init__(
+        self,
+        dynamics_models: Sequence[object],
+        *,
+        rollout_engine: HypothesisRolloutEngine | None = None,
+        temperature: float = 1.0,
+    ) -> None:
+        if not dynamics_models:
+            raise ValueError("HypothesisDynamicsPool requires at least one model")
+        if temperature <= 0 or not torch.isfinite(torch.as_tensor(temperature)):
+            raise ValueError("temperature must be finite and positive")
+        for model in dynamics_models:
+            if not callable(getattr(model, "predict_step", None)):
+                raise TypeError("every hypothesis model must expose predict_step")
+        self.dynamics_models = tuple(dynamics_models)
+        self.rollout_engine = rollout_engine or HypothesisRolloutEngine()
+        self.temperature = float(temperature)
+        self.log_weights: Tensor | None = None
+        self.last_selection: HypothesisSelection | None = None
+
+    def reset(self, batch_size: int, *, device: torch.device, dtype: torch.dtype) -> None:
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        self.log_weights = torch.zeros(
+            batch_size,
+            len(self.dynamics_models),
+            device=device,
+            dtype=dtype,
+        )
+        self.last_selection = None
+
+    def _ensure_weights(self, belief: WorldBelief) -> Tensor:
+        if self.log_weights is None:
+            self.reset(belief.batch_size, device=belief.device, dtype=belief.dtype)
+        assert self.log_weights is not None
+        if self.log_weights.shape[0] != belief.batch_size:
+            raise ValueError("belief batch size changed; reset the hypothesis pool")
+        if self.log_weights.device != belief.device or self.log_weights.dtype != belief.dtype:
+            raise ValueError("hypothesis weights must share belief device and dtype")
+        return self.log_weights
+
+    def rollout(
+        self,
+        belief: WorldBelief,
+        query_times: Tensor | Sequence[float],
+    ) -> list[BeliefTrajectory]:
+        self._ensure_weights(belief)
+        return self.rollout_engine.rollout_dynamics(self.dynamics_models, belief, query_times)
+
+    def assimilate(
+        self,
+        belief: WorldBelief,
+        target_positions: Tensor,
+        target_mask: Tensor,
+        *,
+        trajectories: Sequence[BeliefTrajectory] | None = None,
+        uncertainty_aware: bool = True,
+    ) -> HypothesisSelection:
+        prior = self._ensure_weights(belief)
+        if trajectories is None:
+            raise ValueError("assimilate requires trajectories for explicit asynchronous evidence")
+        selection = self.rollout_engine.score(
+            trajectories,
+            target_positions,
+            target_mask,
+            uncertainty_aware=uncertainty_aware,
+            temperature=self.temperature,
+        )
+        posterior_log_weights = prior - selection.scores / self.temperature
+        posterior_log_weights = posterior_log_weights - torch.logsumexp(
+            posterior_log_weights, dim=-1, keepdim=True
+        )
+        posterior = torch.softmax(posterior_log_weights, dim=-1)
+        self.log_weights = posterior_log_weights.detach()
+        self.last_selection = HypothesisSelection(
+            selection.scores,
+            selection.selected_index,
+            posterior,
+        ).validate()
+        return self.last_selection
+
+    def selected_index(self, belief: WorldBelief) -> Tensor:
+        weights = self._ensure_weights(belief)
+        return weights.argmax(dim=-1).to(torch.int64)
