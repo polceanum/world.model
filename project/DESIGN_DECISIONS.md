@@ -76,6 +76,16 @@
   reversal validates continuing the experiment but does not erase prior
   wobble or authorize promotion; only the fixed selector can establish whether
   the learned relation behavior generalizes beyond the sampled draws.
+  The fixed step-512 selector answers that question negatively for promotion
+  but not for continued optimization. Aggregate score improves to `0.305413`
+  and mature pooled/x forecasts improve, yet 109 pooled and scenario-specific
+  guardrails fail, led by familiar reference, impulse, elastic, and baseline
+  regimes; current and short-horizon z, lifecycle, event, and identity are
+  adverse. Zero support failures and a strict tensor/Adam/protected/provenance
+  audit prove this is a genuine mixed generalization result rather than
+  collapse or corruption. Keep the step-zero incumbent protected, continue the
+  separate mutable trajectory to the declared 8,192-update minimum, and do not
+  scale capacity or weaken guardrails.
 
 ## ADR-113 — Reject schedule-only repair and qualify relations before nodes
 

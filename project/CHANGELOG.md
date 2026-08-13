@@ -75,6 +75,15 @@
   pooled horizon and current velocity improve, and complete interaction
   retention stays `1.0`. Event F1/lifecycle remain adverse, so the result is
   not promoted ahead of the fixed step-512 selector.
+- Rejected the relation-only step-512 candidate despite its better aggregate
+  score (`0.305413` versus protected `0.321316`). Mature pooled horizons and
+  all x horizons improve, but current/short-z accuracy, lifecycle coverage and
+  precision, collision F1, identity, and 109 broad guardrails regress. The
+  strict step-512 audit passes exact 46-trainable/2-frozen scope, 177 inherited
+  tensors, 46 Adam owners, protected state, provenance, and finiteness. A
+  premature copy of step-384 `last.pt` was detected by embedded step/hash and
+  quarantined; it is not selector evidence. The mutable run continues while
+  the protected deployment incumbent remains step zero.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail

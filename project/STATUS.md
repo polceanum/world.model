@@ -248,6 +248,40 @@ precision/coverage remain slightly adverse; 1.00-second x is effectively tied
 but `0.000145 m` worse. This is encouraging training evidence, not fixed-
 manifest promotion evidence. Continue unchanged into the step-512 selector.
 
+The authoritative 32-episode step-512 selector has now completed in
+`1148.202 s` and correctly rejects the learned candidate. Its aggregate
+selection score improves from protected `0.3213162196` to `0.3054133022`, and
+the 0.25/0.50/0.75/1.00-second pooled position horizons improve by
+`0.002185/0.024047/0.019757/0.024179 m`. All five x horizons improve and y is
+mostly better after 0.10 seconds. This apparent aggregate win is not broad:
+current position worsens `0.251460 -> 0.271726 m`, current z worsens
+`0.263691 -> 0.315527 m`, 0.10-second pooled position worsens
+`0.265184 -> 0.279456 m`, and 0.10/0.25-second z worsen to
+`0.318801/0.293951 m`. Target coverage, prediction precision, collision F1,
+and trusted identity also regress. The selector reports 109 guardrail
+failures—13 pooled and 96 scenario-specific—concentrated in
+`reference_pairs` (23), `impulse_perturbation` (23), `elastic_pairs` (18),
+and `baseline` (14), with zero protected or mutable training-support
+failures. The protected deployment incumbent and reference therefore remain
+unchanged at step zero while the explicitly separate mutable trajectory
+continues toward the predeclared 8,192-update minimum.
+
+The true durable selector checkpoint is
+`checkpoints/validation_step_000512.pt`, SHA-256
+`ad645233d833c869f0493cb091231fc3fcb4353d5253fdd44133d3eb015ae979`.
+Its strict audit passes: 46 permitted tensors changed, two node tensors and all
+177 inherited tensors remain exact, exactly 46 complete finite Adam owners are
+at step 512, both protected checkpoints remain exact, and source commit
+`c3fe110`, runtime fingerprint, protocol hashes, and serialized finiteness all
+match. The report is `attention_checkpoint_audit_step_000512.json` in the run.
+An audit command started immediately after the training heartbeat but before
+validation atomically saved its checkpoint initially copied the still-current
+step-384 `last.pt`. Embedded step and model hash exposed the timing error; both
+misnamed artifacts were quarantined with
+`premature-stale-step384` suffixes and are explicitly not step-512 evidence.
+Training resumed normally and reached step 520 with both first-launch jobs
+still running and both stderr logs empty.
+
 Commands run for this decision were:
 
 ```bash
@@ -261,6 +295,7 @@ git diff --check
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_audit_training_dynamics.py tests/unit/test_convergence_supervisor.py
 conda run -n orpheus python -m ruff check scripts/supervise_convergence.py scripts/audit_training_dynamics.py tests/unit/test_audit_training_dynamics.py tests/unit/test_convergence_supervisor.py
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_training_dynamics.py --run runs/20260813-073710-attention-relation-constant-stage-a --after-step 0 --trend-window-blocks 6 --reference-run runs/20260811-170842-attention-aggregate-isolated-stage-a
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus python scripts/audit_attention_checkpoint.py --checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000512.pt --initial-checkpoint runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/validation_step_000000.pt --config runs/20260813-073710-attention-relation-constant-stage-a/config.resolved.yaml --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/best_rollout.pt --protected runs/20260813-073710-attention-relation-constant-stage-a/checkpoints/reference_rollout.pt --output /tmp/orpheus-attention-relation-audit-step512-recheck.json --frozen-attention-prefix dynamics.attention_interactions.node_decoder. --require-all-attention-changed --require-complete-attention-optimizer-state --require-protected-checkpoints
 ```
 
 The specification-1.41 warmup/cosine control is now rejected at its first

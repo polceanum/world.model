@@ -85,6 +85,13 @@
   current velocity and every pooled horizon improve, and identity/coverage/NLL
   improve; event F1 and lifecycle remain adverse. Treat this as encouraging
   sampled evidence only and continue directly to fixed selector 512.
+- [x] Complete and reject the relation-only step-512 selector without losing
+  the mutable trajectory. Aggregate score and mature pooled/x horizons improve,
+  but current/short-z, coverage, precision, event, identity, and 109 pooled/
+  per-scenario guardrails fail, especially on reference, impulse, elastic, and
+  baseline regimes. Strict checkpoint scope/Adam/protected/provenance audit
+  passes; the protected incumbent remains step zero and training continues to
+  the required 8,192-update evidence horizon.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real
