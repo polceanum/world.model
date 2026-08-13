@@ -236,6 +236,18 @@ worsen. The prior increasing-z pattern does not persist and the dominant error
 migrates back to x. This is wobble without collapse, not fixed-selector
 generalization; continue unchanged through step 512.
 
+Complete updates 392--448 are the strongest matched training window so far
+while remaining operationally exact: eight draws per scenario, 1,883 sampled
+causal trajectories, zero skips/uncontained clipping, complete interaction
+retention `1.0` throughout, and flat peak RSS. Current position improves
+`0.017153 m` across x/y/z and current velocity improves `0.030032 m/s` versus
+the control. Every pooled position horizon improves by
+`0.011712/0.011493/0.001840/0.001445/0.003534 m`; trusted identity, coverage90,
+and uncertainty NLL also improve. Collision F1 worsens `0.084184` and lifecycle
+precision/coverage remain slightly adverse; 1.00-second x is effectively tied
+but `0.000145 m` worse. This is encouraging training evidence, not fixed-
+manifest promotion evidence. Continue unchanged into the step-512 selector.
+
 Commands run for this decision were:
 
 ```bash

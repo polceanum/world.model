@@ -80,6 +80,11 @@
   mainly on x, while velocity/event/lifecycle/identity improve and uncertainty
   is mixed. The earlier z trend does not persist, confirming axis migration
   without proving generalization; continue unchanged to selector 512.
+- [x] Audit complete updates 392--448. Operational integrity is exact with no
+  complete interaction clipping. Current position improves across every axis,
+  current velocity and every pooled horizon improve, and identity/coverage/NLL
+  improve; event F1 and lifecycle remain adverse. Treat this as encouraging
+  sampled evidence only and continue directly to fixed selector 512.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

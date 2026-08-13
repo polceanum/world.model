@@ -70,6 +70,11 @@
   matched 328--384 window regresses current and every pooled position horizon,
   mainly x, despite improved velocity, aggregate event, lifecycle, identity,
   and coverage. Recorded the renewed axis migration as wobble, not collapse.
+- Audited complete relation-only updates 392--448. This is the strongest
+  sampled window so far: current position improves across all axes, every
+  pooled horizon and current velocity improve, and complete interaction
+  retention stays `1.0`. Event F1/lifecycle remain adverse, so the result is
+  not promoted ahead of the fixed step-512 selector.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail

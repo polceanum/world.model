@@ -70,6 +70,12 @@
   calibration and long-event losses. This is precisely the unstable evidence
   pattern for which the fixed selector was declared, so retain the immutable
   run through 512 rather than fitting another adjacent window.
+  Updates 392--448 subsequently improve current position across all axes,
+  current velocity, and every pooled horizon with no complete interaction
+  clipping, while collision F1 and lifecycle remain adverse. This favorable
+  reversal validates continuing the experiment but does not erase prior
+  wobble or authorize promotion; only the fixed selector can establish whether
+  the learned relation behavior generalizes beyond the sampled draws.
 
 ## ADR-113 — Reject schedule-only repair and qualify relations before nodes
 
