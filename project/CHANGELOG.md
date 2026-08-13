@@ -40,6 +40,9 @@
   queries) under `runs/20260813-220000-hypothesis-pool-attention-smoke/`; all
   queries selected the learned candidate. Fresh-random-weight RMSE is recorded
   as an execution check only.
+- Added configurable `HypothesisDynamicsPool.evidence_decay` to support
+  context adaptation without silently changing the persistent default; a
+  regression test covers local model switching.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

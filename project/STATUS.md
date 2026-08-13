@@ -96,6 +96,14 @@ position RMSE x/y/z was `0.7964/0.5686/1.1904 m` at 0.10 s and
 `1.2472/0.3351/1.1508 m` at 1.00 s. This used fresh random weights and is only
 an architectural execution check, not evidence of convergence.
 
+The protected-checkpoint comparison also identified a real selection limitation:
+with the default evidence decay of `1.0`, the learned candidate stayed selected
+for all 148 queries even though the constant-velocity candidate had slightly
+lower x error at some horizons. `HypothesisDynamicsPool` now exposes explicit
+`evidence_decay` in `(0,1]`; a focused test proves that decay permits local model
+switching while `1.0` preserves persistent accumulation. The default remains
+`1.0` until a fixed-decay comparison is run.
+
 The immutable relation-only campaign has completed and rejected its fixed
 step-1024 selector. The 32 RGB-only validation episodes completed in
 `1,236.713 s` with four balanced repeats of every scenario and zero mutable or

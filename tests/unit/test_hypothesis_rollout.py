@@ -127,6 +127,31 @@ def test_pool_selection_respects_accumulated_prior() -> None:
     assert second.selected_index.item() == 1
 
 
+def test_pool_evidence_decay_allows_local_model_switch() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    pool = HypothesisDynamicsPool(
+        [_FixedDynamics(1.0), _FixedDynamics(0.0)], evidence_decay=0.1
+    )
+    trajectories = pool.rollout(belief, [0.1])
+    mask = torch.ones_like(trajectories[0].active_mask)
+    first = pool.assimilate(
+        belief,
+        torch.zeros_like(trajectories[0].positions),
+        mask,
+        trajectories=trajectories,
+        uncertainty_aware=False,
+    )
+    assert first.selected_index.item() == 1
+    second = pool.assimilate(
+        belief,
+        torch.ones_like(trajectories[0].positions),
+        mask,
+        trajectories=trajectories,
+        uncertainty_aware=False,
+    )
+    assert second.selected_index.item() == 0
+
+
 def test_constant_velocity_hypothesis_is_transparent_and_non_mutating() -> None:
     belief = BeliefFactory(max_objects=1).create()
     objects = belief.objects.clone()

@@ -204,17 +204,23 @@ class HypothesisDynamicsPool:
         *,
         rollout_engine: HypothesisRolloutEngine | None = None,
         temperature: float = 1.0,
+        evidence_decay: float = 1.0,
     ) -> None:
         if not dynamics_models:
             raise ValueError("HypothesisDynamicsPool requires at least one model")
         if temperature <= 0 or not torch.isfinite(torch.as_tensor(temperature)):
             raise ValueError("temperature must be finite and positive")
+        if evidence_decay <= 0 or evidence_decay > 1 or not torch.isfinite(
+            torch.as_tensor(evidence_decay)
+        ):
+            raise ValueError("evidence_decay must lie in (0,1]")
         for model in dynamics_models:
             if not callable(getattr(model, "predict_step", None)):
                 raise TypeError("every hypothesis model must expose predict_step")
         self.dynamics_models = tuple(dynamics_models)
         self.rollout_engine = rollout_engine or HypothesisRolloutEngine()
         self.temperature = float(temperature)
+        self.evidence_decay = float(evidence_decay)
         self.log_weights: Tensor | None = None
         self.last_selection: HypothesisSelection | None = None
 
@@ -266,7 +272,9 @@ class HypothesisDynamicsPool:
             uncertainty_aware=uncertainty_aware,
             temperature=self.temperature,
         )
-        posterior_log_weights = prior - selection.scores / self.temperature
+        posterior_log_weights = (
+            self.evidence_decay * prior - selection.scores / self.temperature
+        )
         posterior_log_weights = posterior_log_weights - torch.logsumexp(
             posterior_log_weights, dim=-1, keepdim=True
         )

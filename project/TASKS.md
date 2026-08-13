@@ -23,6 +23,10 @@
   run a two-episode toy smoke and retain its timestamped report.
 - [x] Exercise the same harness at attention-pilot model dimensions on one RGB
   episode; retain the fresh-weight result as an execution check only.
+- [x] Add explicit evidence decay to prevent indefinite posterior lock-in;
+  preserve accumulation by default and test local switching under decay.
+- [ ] Compare fixed decay values on the complete protected RGB protocol before
+  selecting a production default or restarting training.
 - [ ] Only if the selector passes broad guardrails, train or adapt candidate
   models and audit support, optimizer, lifecycle, identity, uncertainty,
   events, every axis, and every horizon.
