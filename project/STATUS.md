@@ -63,8 +63,9 @@ erase a stronger prior without sufficient evidence.
 
 The pool now includes a transparent `ConstantVelocityDynamics` candidate for
 heterogeneous model comparisons. It advances active positions from velocity,
-supports optional damping, propagates uncertainty, and leaves the source belief
-unchanged. It is a baseline hypothesis, not a hard-coded rule for promotion.
+supports optional exponential damping, propagates uncertainty, and leaves the
+source belief unchanged. It is a baseline hypothesis, not a hard-coded rule
+for promotion.
 
 The immutable relation-only campaign has completed and rejected its fixed
 step-1024 selector. The 32 RGB-only validation episodes completed in

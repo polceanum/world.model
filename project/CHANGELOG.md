@@ -23,7 +23,8 @@
   than the instantaneous error argmin; added a regression test for sequential
   evidence.
 - Added a non-mutating `ConstantVelocityDynamics` baseline with optional
-  damping and uncertainty propagation for heterogeneous candidate-pool tests.
+  exponential damping and uncertainty propagation for heterogeneous
+  candidate-pool tests.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

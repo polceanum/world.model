@@ -140,3 +140,5 @@ def test_constant_velocity_hypothesis_is_transparent_and_non_mutating() -> None:
         torch.tensor([1.5, 1.75, 3.125]),
     )
     torch.testing.assert_close(source.objects.position[0, 0], torch.tensor([1.0, 2.0, 3.0]))
+    damped = ConstantVelocityDynamics(damping=2.0).predict_step(source, torch.tensor([2.0]))
+    assert damped.belief.objects.velocity[0, 0, 0].item() == pytest.approx(2.0 * torch.exp(torch.tensor(-4.0)).item())
