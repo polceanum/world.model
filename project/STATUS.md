@@ -123,20 +123,25 @@ clipped at `0.052808`); decoder-row and complete-interaction coefficients are
 is deferred until a natural training validation/checkpoint pause to avoid
 competing with the CPU-heavy sustained trainer.
 
-The unchanged relation-only campaign has now reached optimizer step 56. All
-56 updates applied with zero skipped draws, exactly seven draws from each of
-the eight scenarios, 2,308 cadence-recorded causal trajectories, all 13
+The unchanged relation-only campaign has now reached optimizer step 64. All
+64 updates applied with zero skipped draws, exactly eight draws from each of
+the eight scenarios, 2,462 cadence-recorded causal trajectories, all 13
 objective groups whenever supported, exact zero node gradient/activity/drift/
 complexity, and no stderr or terminal failure. The dynamics audit passes;
 minimum complete-interaction gradient retention is `0.812481`, while rare
 local typed-output coefficients below 10% remain visible warnings rather than
 uncontained failures. Peak recorded RSS is `2,916,241,408` bytes and the live
 trainer was independently observed using about 480% CPU, so it is progressing
-rather than stalled. The complete sampled steps 8--48 window has pooled
-position RMSE `0.258848/0.301847/0.371995/0.421242/0.443553 m` at
-0.10/0.25/0.50/0.75/1.00 seconds. Exact matched-control movement remains
-small and mixed, with collision F1 still the clearest early adverse signal;
-these heterogeneous cadence samples are not selector evidence. Continue the
+rather than stalled. The complete sampled steps 8--64 window has pooled
+position RMSE `0.263631/0.304886/0.368387/0.423629/0.442650 m` at
+0.10/0.25/0.50/0.75/1.00 seconds. Against the exact matched full-attention
+control, current velocity improves `0.028277 m/s`, current y improves
+`0.002108 m`, and pooled 0.10/1.00-second position improves
+`0.000658/0.000549 m`; current position is `0.001390 m` worse and the
+0.25/0.50/0.75-second horizons are `0.001724/0.004035/0.003019 m` worse.
+The candidate x axis remains adverse while z improves at every horizon;
+collision F1 remains the clearest early adverse signal. These heterogeneous
+cadence samples are not selector evidence. Continue the
 immutable run to the step-128 structural audit and the authoritative step-512
 fixed selector without retuning.
 
