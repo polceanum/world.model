@@ -65,6 +65,11 @@
   horizons and pooled 1.00-second position improves, while an increasing z
   regression becomes the remaining axis limitation. Identity/NLL improve and
   lifecycle/event/velocity remain mixed; continue to fixed validation.
+- Preserved and strictly audited relation-only checkpoint 384 with exact
+  trainable/frozen/Adam/inherited/protected scope and finite provenance. The
+  matched 328--384 window regresses current and every pooled position horizon,
+  mainly x, despite improved velocity, aggregate event, lifecycle, identity,
+  and coverage. Recorded the renewed axis migration as wobble, not collapse.
 
 - Rejected the warmup/cosine control at its complete 32-episode step-512
   selector: score `0.3475480` versus protected `0.3213162`, 116 broad guardrail

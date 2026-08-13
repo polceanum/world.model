@@ -64,6 +64,12 @@
   horizon. The model is learning nontrivial relation behavior rather than
   monotonically collapsing along one axis, yet sampled generalization remains
   unproved. Do not chase the moving axis with a mid-run rule or loss change.
+  Checkpoint 384 then passes strict integrity while its matched window returns
+  to an x-dominant all-horizon position regression; the prior z trend does not
+  persist. Secondary velocity/event/lifecycle/identity gains coexist with
+  calibration and long-event losses. This is precisely the unstable evidence
+  pattern for which the fixed selector was declared, so retain the immutable
+  run through 512 rather than fitting another adjacent window.
 
 ## ADR-113 — Reject schedule-only repair and qualify relations before nodes
 

@@ -75,6 +75,11 @@
   improves, but z now regresses increasingly with horizon while current and
   0.10--0.75-second pooled position remain near-tie adverse. Preserve the
   migrating-axis evidence and keep selector 512 authoritative.
+- [x] Preserve/audit checkpoint 384 and complete updates 328--384. Structural
+  integrity passes exactly. Current and every pooled position horizon regress
+  mainly on x, while velocity/event/lifecycle/identity improve and uncertainty
+  is mixed. The earlier z trend does not persist, confirming axis migration
+  without proving generalization; continue unchanged to selector 512.
 - [x] Correct collapse-auditor severe-clip attribution for a deliberately
   frozen relation-only node path. Ignore node row/output coefficients only
   under explicit `closed_loop_scope_attention_relation_only=1`; preserve real

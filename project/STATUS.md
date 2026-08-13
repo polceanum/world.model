@@ -216,6 +216,26 @@ velocity, and collision slices remain mixed. This migrating axis behavior is
 further evidence that heterogeneous training windows cannot replace fixed
 validation; continue unchanged to selector 512.
 
+The preserved step-384 checkpoint passes the same strict audit. SHA-256 is
+`8f69158746b78cfbca3a719758875136828a32d95d38dc6d764f4bce47f27045`;
+all 46 permitted tensors and Adam owners are live at step 384, both node
+tensors and all 177 inherited tensors remain exact, protected artifacts remain
+exact, and all serialized/provenance state is finite. The durable artifact and
+report are `checkpoints/checkpoint_step_000384.pt` and
+`attention_checkpoint_audit_step_000384.json` in the active run.
+
+Complete updates 328--384 remain balanced and operationally healthy with
+2,642 sampled causal trajectories, all 13 objective groups, no skips or
+uncontained clipping, minimum complete-gradient retention `0.585676`, and
+flat peak RSS. Accuracy is adverse again on exact matched draws: current
+position worsens `0.007449 m` and pooled position worsens
+`0.002423/0.005036/0.010147/0.011660/0.007834 m` at every horizon, mainly x.
+Current velocity, aggregate collision F1, lifecycle, trusted identity, and
+coverage90 improve; long-horizon collision F1 and upper-tail uncertainty NLL
+worsen. The prior increasing-z pattern does not persist and the dominant error
+migrates back to x. This is wobble without collapse, not fixed-selector
+generalization; continue unchanged through step 512.
+
 Commands run for this decision were:
 
 ```bash
