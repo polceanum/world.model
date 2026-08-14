@@ -2784,3 +2784,6 @@ further gravity-axis threshold tuning.
 - Qualified axis-prior strength `0.001` across eight episodes and enabled it
   in the attention pilot config; x/y improved while z/lifecycle/identity/event
   metrics remained non-regressive.
+- Revalidated the promoted prior on independent seeds 200--201; x/y gains
+  persisted with unchanged z/event/lifecycle/identity metrics, and added a
+  `--no-axis-independent` baseline override.

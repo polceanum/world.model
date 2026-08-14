@@ -1667,9 +1667,11 @@
   MPS availability and the complete result.
 - [x] Test injecting the joint persistent prior into axis posteriors; reject it
   after fresh-draw x/y gains collapsed to baseline.
-- [ ] Calibrate a separate per-axis prior/evidence decay without regressing
-  the qualified x/y gains.
+- [x] Calibrate a separate per-axis prior/evidence decay without regressing
+  the qualified x/y gains; strength `0.001` is the accepted point.
 - [x] Add an opt-in axis-prior-strength control and reject strength `0.05`
   after fresh-draw gains collapsed to baseline.
 - [x] Qualify strength `0.001` on eight episodes and promote it only in the
   attention pilot config; retain zero in all other profiles.
+- [x] Validate promoted strength `0.001` on independent seeds 200--201 and
+  add an explicit joint-baseline override.

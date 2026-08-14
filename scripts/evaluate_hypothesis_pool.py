@@ -474,11 +474,18 @@ def main() -> int:
     parser.add_argument("--uncertainty-aware", action="store_true")
     parser.add_argument("--horizon-decay-scale", type=float, default=0.0)
     parser.add_argument("--independent-horizons", action="store_true")
-    parser.add_argument(
+    axis_group = parser.add_mutually_exclusive_group()
+    axis_group.add_argument(
         "--axis-independent",
         action="store_true",
         default=None,
         help="select delayed-evidence hypotheses independently for x/y/z",
+    )
+    axis_group.add_argument(
+        "--no-axis-independent",
+        dest="axis_independent",
+        action="store_false",
+        help="override config and keep joint hypothesis selection",
     )
     parser.add_argument(
         "--axis-independent-axes",

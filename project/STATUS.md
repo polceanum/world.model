@@ -9663,3 +9663,11 @@ The dry run resolved eight scenario families, 8,192 training steps, and the
 axis-composition config without starting training. A source audit shows the
 axis pool is consumed through explicit evaluator/runtime accessors; there is no
 hidden simulator-state path or replacement of `WorldBelief`.
+
+Generalization on independent seeds 200--201 also passed. Promoted config
+artifact: `runs/20260815-112000-hypothesis-pool-axis-prior001-newdraw2ep`;
+matched joint baseline: `runs/20260815-112500-hypothesis-pool-joint-newdraw2ep`.
+At 1.00 s, mean x/y RMSE improved `1.0357/0.4030` to `0.8787/0.3736`; z
+stayed exactly `0.9204`, event F1 stayed `0.1811`, and lifecycle/identity
+counts matched. The evaluator now accepts `--no-axis-independent` for explicit
+joint-baseline reproduction.
