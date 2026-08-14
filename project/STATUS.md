@@ -9890,3 +9890,10 @@ precision `0.3573124`, identity-switch rate `0.0135922`, collision F1
 `selection_accepted=1` at step zero solely because this is the frozen imported
 incumbent; it is not evidence that the new z-only update is accepted. Training
 now proceeds from that explicitly verified control.
+
+The apparent pause immediately after the selector is not a deadlock. A
+five-second read-only sample of the active trainer found the main thread in
+PyTorch CPU `linear`/batched-matrix multiplication below the closed-loop
+attention path, with process state `R` and sustained CPU use. The progress
+file is written after a completed optimizer update, so it remains at the
+completed initial selector while the first expensive batch is evaluated.
