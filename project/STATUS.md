@@ -9514,3 +9514,11 @@ hypothesis NLL. The fresh four-candidate pilot at
 selected `[259, 3, 0, 34]`; it suppressed undamped velocity, but increased
 ballistic long-horizon wins and regressed z and collision F1 at 0.75–1.00 s.
 It is rejected for this checkpoint and remains opt-in.
+
+Added opt-in `--horizon-decay-scale` to discount accumulated hypothesis
+evidence more aggressively for longer forecasts. The pilot at scale `1.0`
+completed at
+`runs/20260815-010000-hypothesis-pool-horizondecay1-velocity4-disjoint2/report.json`.
+It selected `[212, 14, 8, 62]`, increased ballistic long-horizon wins, and
+regressed long-horizon y and collision F1 despite x gains. It is rejected; the
+default persistent evidence update is unchanged.

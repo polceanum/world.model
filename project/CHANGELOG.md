@@ -2738,3 +2738,5 @@ further gravity-axis threshold tuning.
   than hard-coding candidate exclusions.
 - Exposed opt-in uncertainty-aware hypothesis scoring; the pilot suppressed
   undamped velocity but regressed long-horizon z/event metrics and was rejected.
+- Added opt-in horizon-conditioned evidence decay; scale `1.0` over-selected
+  ballistic at long horizons and regressed y/event metrics, so it was rejected.

@@ -1633,3 +1633,5 @@
   hard-coding ballistic exclusion.
 - [x] Test predictive-uncertainty-aware scoring as a generic conditioned prior;
   reject it for long-horizon z/event regressions.
+- [x] Test horizon-conditioned evidence decay; reject scale `1.0` for
+  long-horizon y/event regressions and ballistic over-selection.
