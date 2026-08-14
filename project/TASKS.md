@@ -1659,5 +1659,7 @@
   all-axis form for z regressions and accept the x/y-only form as opt-in.
 - [x] Qualify x/y-only selection on a fresh scenario draw; it remains
   non-regressive for z/lifecycle/identity/events.
-- [ ] Define and test a runtime/config contract for composing per-axis
-  posterior corrections before changing the default behavior.
+- [x] Define and test the runtime per-axis posterior accessor while preserving
+  joint selection as the default.
+- [ ] Add a config-controlled per-axis posterior composition path and qualify
+  it before changing the default behavior.

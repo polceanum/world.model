@@ -2768,3 +2768,6 @@ further gravity-axis threshold tuning.
   every horizon, z was exactly unchanged, and lifecycle/identity/event metrics
   were unchanged. Runtime default promotion remains pending an explicit
   per-axis posterior contract.
+- Exposed validated per-axis posterior weights/indices through
+  `HypothesisSelection`, `HypothesisDynamicsPool`, and `OnlineWorldModel`, with
+  an oracle integration test proving `WorldBelief` remains unchanged.

@@ -121,6 +121,9 @@ def test_runtime_exposes_persistent_hypothesis_pool_without_replacing_belief() -
         uncertainty_aware=False,
     )
     assert selection.selected_index.tolist() == [1]
+    axis_selection = model.selected_hypothesis_axes(pool)
+    assert axis_selection.shape == (1, 3)
+    assert axis_selection.tolist() == [[1, 0, 0]]
     assert model.belief is not None
     torch.testing.assert_close(model.belief.objects.position, belief.objects.position)
 

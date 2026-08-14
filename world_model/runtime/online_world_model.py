@@ -1268,6 +1268,22 @@ class OnlineWorldModel(nn.Module):
             evidence_decay_override=evidence_decay_override,
         )
 
+    def selected_hypothesis_axes(self, hypothesis_pool: object) -> Tensor:
+        """Read per-axis hypothesis choices without replacing ``WorldBelief``.
+
+        Axis choices are derived only from delayed evidence already assimilated
+        by the persistent pool.  This accessor makes coordinate-wise posterior
+        correction an explicit runtime contract while leaving joint selection
+        as the default behavior.
+        """
+
+        if self.state.belief is None:
+            raise RuntimeError("OnlineWorldModel must ingest an observation first")
+        selected = getattr(hypothesis_pool, "selected_axis_index", None)
+        if not callable(selected):
+            raise TypeError("hypothesis_pool must expose selected_axis_index(...)" )
+        return selected(self.state.belief)
+
     def step(
         self,
         packet: ObservationPacket,

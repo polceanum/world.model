@@ -29,6 +29,29 @@ class HypothesisSelection:
     posterior_weights: Tensor
     axis_scores: Tensor | None = None
 
+    def axis_posterior_weights(self, *, temperature: float = 1.0) -> Tensor:
+        """Return per-axis hypothesis weights from delayed position evidence.
+
+        The result has shape ``[B,D,H]``.  It is separate from the joint
+        posterior because a downstream runtime may compose coordinates from
+        different hypotheses while keeping the joint choice for lifecycle and
+        event state.  No simulator state is involved in this operation.
+        """
+
+        if self.axis_scores is None:
+            raise RuntimeError("axis scores are unavailable for this selection")
+        if temperature <= 0 or not torch.isfinite(torch.as_tensor(temperature)):
+            raise ValueError("temperature must be finite and positive")
+        return torch.softmax(-self.axis_scores / temperature, dim=-1)
+
+    @property
+    def axis_selected_index(self) -> Tensor | None:
+        """Return the minimum delayed position-loss hypothesis per axis."""
+
+        if self.axis_scores is None:
+            return None
+        return self.axis_scores.argmin(dim=-1).to(torch.int64)
+
     def validate(self) -> HypothesisSelection:
         if self.scores.ndim != 2:
             raise ValueError("hypothesis scores must have shape [B,H]")
@@ -522,3 +545,11 @@ class HypothesisDynamicsPool:
     def selected_index(self, belief: WorldBelief) -> Tensor:
         weights = self._ensure_weights(belief)
         return weights.argmax(dim=-1).to(torch.int64)
+
+    def selected_axis_index(self, belief: WorldBelief) -> Tensor:
+        """Return per-axis choices from the latest asynchronous evidence."""
+
+        self._ensure_weights(belief)
+        if self.last_selection is None or self.last_selection.axis_selected_index is None:
+            raise RuntimeError("axis selection is unavailable before assimilation")
+        return self.last_selection.axis_selected_index

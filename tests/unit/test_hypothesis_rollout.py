@@ -41,6 +41,10 @@ def test_selector_chooses_best_candidate_per_batch() -> None:
     assert selection.axis_scores is not None
     assert selection.axis_scores.shape == (1, 3, 2)
     assert selection.axis_scores[0, :, 1].lt(selection.axis_scores[0, :, 0]).all()
+    assert selection.axis_selected_index.tolist() == [[1, 1, 1]]
+    axis_weights = selection.axis_posterior_weights()
+    assert axis_weights.shape == (1, 3, 2)
+    assert torch.allclose(axis_weights.sum(dim=-1), torch.ones(1, 3))
 
 
 def test_selector_can_use_collision_evidence() -> None:

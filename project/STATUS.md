@@ -9616,3 +9616,11 @@ from `0.36497/0.38407` to `0.36189/0.38193` (x/y) at 0.10 s and from
 all horizons. Lifecycle mismatch, identity coverage, and event F1 were equal
 for every horizon. The improvement is therefore qualified as robust opt-in
 evidence, but not yet the default runtime path.
+
+The per-axis posterior contract is now explicit in `HypothesisSelection`:
+`axis_scores`, `axis_posterior_weights(temperature=...)`, and
+`axis_selected_index` are validated tensors derived from delayed position
+evidence. `HypothesisDynamicsPool.selected_axis_index(...)` and
+`OnlineWorldModel.selected_hypothesis_axes(...)` expose the persistent-pool
+choice without replacing `WorldBelief`; joint selection remains the default.
+The runtime contract is covered by the oracle integration test.
