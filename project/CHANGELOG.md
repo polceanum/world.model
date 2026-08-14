@@ -2878,3 +2878,7 @@ further gravity-axis threshold tuning.
   immutable and require an explicit MPS guarded replay before promotion; the
   unchanged bounded source-config regression passed in active Aqua (`1 passed
   in 51.06 s`).
+- Added `scripts/replay_promotion_mps.py`, an immutable active-Aqua MPS replay
+  gate for legacy CPU-fallback candidates. It replays reference and candidate
+  checkpoints over the exact trainer manifest and persists the existing
+  broad-guardrail decision; no candidate result is claimed yet.

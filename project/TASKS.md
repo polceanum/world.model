@@ -1727,3 +1727,10 @@
   `attention_pilot_mps` candidates now that the complete bounded graph is
   qualified. Existing CPU-fallback runs preserve their resolved provenance and
   need an explicit MPS replay before any promotion.
+- [x] Add an immutable full-manifest active-Aqua MPS promotion replay for
+  legacy CPU-fallback candidates. It replays the candidate and protected
+  reference independently on MPS and applies the trainer's existing broad
+  selector/support guards without mutating either checkpoint.
+- [ ] After the z-only recovery produces its first fixed-manifest candidate,
+  run `scripts/replay_promotion_mps.py` against its protected reference before
+  any promotion. Retain the report whether accepted or rejected.

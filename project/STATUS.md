@@ -9973,3 +9973,12 @@ CPU closed-loop configuration for provenance and must receive a separate MPS
 guarded replay before any promotion; it is not silently reconfigured in place.
 The unchanged bounded integration regression passed again from this source
 configuration in active Aqua (`1 passed in 51.06 s`).
+
+To close the legacy CPU-fallback promotion gap without changing its
+provenance, `scripts/replay_promotion_mps.py` now reruns both an immutable
+reference and a candidate checkpoint on the exact trainer validation manifest
+using active-Aqua MPS. It writes each run's raw additive evidence and applies
+the same selector, per-axis/per-horizon, lifecycle, identity, collision,
+calibration, and causal-support guardrails before returning eligibility. This
+gate is implemented and syntax-checked; it has not yet been run on a complete
+candidate/reference pair, so it establishes no accuracy result.

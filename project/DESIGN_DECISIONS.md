@@ -3596,3 +3596,21 @@
   `WorldBelief`, or comparator thresholds. CPU remains available through an
   explicit configuration override for diagnosis, never as an implicit
   promotion substitute.
+
+## ADR-126 — Replay legacy candidates on MPS before promotion
+
+- **Date:** 2026-08-14
+- **Status:** accepted
+- **Context:** The active z-only recovery was correctly launched with an
+  immutable CPU closed-loop resolved configuration before MPS qualification.
+  Rewriting its live configuration would corrupt experiment provenance, while
+  accepting its CPU selector alone would violate the MPS promotion contract.
+- **Decision:** Add `scripts/replay_promotion_mps.py`. It loads reference and
+  candidate weights into independent MPS runtimes, replays the trainer's
+  deterministic validation manifest for both, persists raw metric evidence,
+  and uses the identical selector and support guardrails. It exits successfully
+  only for an MPS-eligible improvement.
+- **Consequences:** Historical CPU-fallback trials remain useful diagnosis
+  evidence but cannot silently become an incumbent. The additional replay cost
+  is deliberately paid only at a fixed candidate milestone, not during normal
+  training polling.
