@@ -9775,3 +9775,26 @@ step and its eight-scenario final validation. It used torch
 the final validation rollout RMSE at 1.00 s was `0.338335` versus the
 initial-incumbent `0.327330`, so this finite execution smoke is not a model
 promotion.
+
+The first intended 128-step attention continuation was interrupted after its
+step-zero, 32-episode incumbent validation (the machine/session restart left
+`runs/20260814-082711-attention-robust-transition-128` with no optimizer
+update). Its durable validation selector score is `0.3213161872`, position
+RMSE `0.2514598 m` (x/y/z `0.2817742/0.2019070/0.2636911`), and velocity RMSE
+`1.0931900 m/s`. This is a valid frozen control, not evidence of training
+progress. The trainer correctly disallows an in-place resume from numbered
+checkpoints, so the selector checkpoint is preserved and a timestamped
+continuation is now running at
+`runs/20260814-083918-attention-robust-transition-128-continuation` through
+the active Aqua launch agent `com.orpheus.attention.robust.transition128.continuation`.
+It uses the supplied torch `2.9.0a0+gitcbe1a35`, MPS measurement path and CPU
+closed-loop dynamics, with 128 updates, validation every 64, checkpoint every
+32, and durable stdout/stderr logs in `/private/tmp`. No trained checkpoint is
+yet available or promoted.
+
+While the continuation initializes, the directly relevant regression suite was
+rerun in the required environment:
+`conda run --no-capture-output -n orpheus pytest tests/unit/test_hypothesis_rollout.py tests/integration/test_oracle_online_loop.py tests/unit/test_train_entrypoint.py`.
+It passed `32 passed in 2.09s` on Python 3.10.20. This verifies the ensemble,
+`WorldBelief` preservation, and resume-state contracts; it does not substitute
+for the pending active-Aqua RGB validation.

@@ -1698,4 +1698,5 @@
   that can change genuine regimes without replacing `WorldBelief`.
 - [ ] Run the long attention training campaign on this active Aqua/MPS session;
   require finite loss and the existing all-axis/per-horizon comparator before
-  promotion.
+  promotion. (The interrupted pre-update run is preserved; its timestamped
+  selector-checkpoint continuation is active.)

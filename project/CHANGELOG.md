@@ -2820,3 +2820,7 @@ further gravity-axis threshold tuning.
 - Ran and rejected the first matched robust three-world MPS probe: it retained
   the learned candidate for every decision and regressed x/y RMSE at guarded
   horizons, despite unchanged lifecycle/identity/event/calibration metrics.
+- Preserved an interrupted 128-step attention campaign's step-zero selector
+  checkpoint and launched its required timestamped Aqua/MPS continuation from
+  that durable checkpoint. The trainer's numbered-checkpoint resume contract
+  was respected; no incomplete run was overwritten or promoted.

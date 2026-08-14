@@ -3473,3 +3473,24 @@
 - **Rationale:** Expected error favours candidates that work across plausible imagined worlds; the optional dispersion term rejects a candidate whose apparent win depends on a brittle perturbation. The current persistent posterior remains the slow memory of model evidence, while real RGB-derived delayed targets remain the sole source of correction.
 - **Guardrails:** This capability is opt-in and is not yet promoted in an RGB report. Candidate order must match across samples; all samples must have finite scores; lifecycle, event, uncertainty, identity, and all-axis/per-horizon regression checks remain mandatory. The runtime wrapper explicitly leaves belief state unchanged.
 - **Evidence:** The AAAI paper assigns models from simulation-vs-reality error and interleaves effects in small steps ([paper](https://cdn.aaai.org/ocs/10371/10371-46146-1-PB.pdf)); the ToM paper recommends evaluating a range of minimally different simulations to prune isolated false success ([paper](https://arxiv.org/pdf/1405.5048)).
+
+## ADR-120 — Preserve interrupted selector evidence and restart numbered checkpoints as new runs
+
+- **Date:** 2026-08-14
+- **Status:** accepted and active
+- **Context:** The first 128-step attention campaign completed the expensive,
+  deterministic 32-episode step-zero validation before a machine/session
+  restart interrupted the process. It left a valid
+  `validation_step_000000.pt`, but no exact `last.pt`. The trainer deliberately
+  rejects in-place resumption from a selector or numbered checkpoint because
+  that would blur provenance and optimizer-history semantics.
+- **Decision:** Preserve the interrupted directory and all its selector
+  artifacts unchanged. Resume its numbered checkpoint only into a new,
+  timestamped run using `--run-name`, while retaining the exact source path in
+  run state and durable Aqua launch-agent logs. Treat the source validation as
+  a frozen control and the continuation as a fresh candidate; neither may be
+  promoted without complete fixed-manifest guardrails.
+- **Consequences:** Restart recovery is auditable and does not overwrite an
+  incomplete experiment. A session interruption cannot be misreported as
+  numerical failure, convergence, or a missing validation. The extra initial
+  validation cost is accepted in exchange for explicit provenance.
