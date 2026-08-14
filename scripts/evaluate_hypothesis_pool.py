@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from pathlib import Path
 from typing import Any
 
 import torch
@@ -27,6 +26,7 @@ from world_model.observations import ObservationPacket
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
 from world_model.training.checkpointing import load_checkpoint
+from world_model.utils.artifacts import timestamped_artifact_path
 from world_model.utils.config import load_config
 from world_model.utils.device import select_device
 
@@ -677,7 +677,7 @@ def main() -> int:
         )
         for index in range(args.episodes)
     ]
-    output = Path(args.output)
+    output = timestamped_artifact_path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
         json.dumps(

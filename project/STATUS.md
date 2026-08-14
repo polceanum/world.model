@@ -10002,3 +10002,16 @@ They retain target-conditioned posterior choice counts only as an explicitly
 labelled delayed-evidence diagnostic. The correction makes future
 multi-horizon selector reports stricter and truthful; historical pool reports
 remain diagnostic artifacts rather than directly comparable promoted metrics.
+
+The corrected evaluator completed one active-Aqua MPS RGB smoke from the
+protected incumbent at
+`runs/20260814-130651-causal-hypothesis-pool-mps-smoke` (one `reference_pairs`
+episode, seed `100000`, 148 frame/horizon decisions, no oracle input). It is
+an execution/report-contract check only. The causal joint policy selected the
+learned candidate for all 148 decisions, and its target-conditioned posterior
+did likewise; thus there is still no joint-candidate diversity improvement.
+The pre-observation x-axis policy did select constant-velocity or ballistic
+alternatives at some horizons, while y/z remained predominantly learned. This
+is useful evidence for the next targeted diversity/transition repair, not a
+multi-episode metric or promotion. The artifact was renamed with its UTC
+timestamp and the evaluator now applies that naming automatically.

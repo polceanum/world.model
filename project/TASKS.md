@@ -1695,7 +1695,10 @@
   diversity.
 - [ ] Audit why the learned candidate dominates all delayed-evidence choices;
   add only evidence-backed candidate diversity or learned-transition repairs
-  that can change genuine regimes without replacing `WorldBelief`.
+  that can change genuine regimes without replacing `WorldBelief`. The first
+  causal active-Aqua MPS smoke confirms 148/148 joint learned choices while
+  x-axis prior selection can diversify; diagnose the joint scoring/transition
+  gap on a fixed multi-episode manifest before changing defaults.
 - [x] Run the long attention training campaign on this active Aqua/MPS session;
   require finite loss and the existing all-axis/per-horizon comparator before
   promotion. The timestamped 128-step continuation completed without collapse

@@ -2893,3 +2893,8 @@ further gravity-axis threshold tuning.
   pre-observation posterior/axis/blend and report target-conditioned choices
   separately as delayed-evidence diagnostics. Historical hindsight-conditioned
   pool reports remain diagnostic only.
+- Ran the corrected one-episode active-Aqua MPS hypothesis-pool smoke at
+  `runs/20260814-130651-causal-hypothesis-pool-mps-smoke`: joint choice remains
+  learned on all 148 decisions, while x-axis prior selection sometimes chooses
+  analytic alternatives. It is a diagnostic, not a promotion. The evaluator
+  now applies UTC timestamp prefixes to its output artifacts.
