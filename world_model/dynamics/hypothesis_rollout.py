@@ -133,6 +133,25 @@ class BallisticContactDynamics:
             & (after_distance <= contact_distance)
         )
         collision = ground_event | pair_event.any(dim=-1)
+        # Keep the analytic event hypothesis physically coherent: a detected
+        # ground crossing produces an explicit restitution jump and clamps the
+        # contact point to the surface. Pair-contact events remain observable
+        # but are not resolved here because their normals require a full
+        # collision solver.
+        contact_position = after.position.clone()
+        contact_position[..., 1] = torch.where(
+            ground_event,
+            torch.as_tensor(self.ground_height, device=after.position.device, dtype=after.position.dtype)
+            + radius[..., 0],
+            contact_position[..., 1],
+        )
+        contact_velocity = after.velocity.clone()
+        contact_velocity[..., 1] = torch.where(
+            ground_event,
+            after.velocity[..., 1].abs() * before.restitution[..., 0],
+            contact_velocity[..., 1],
+        )
+        after = after.replace(position=contact_position, velocity=contact_velocity)
         event_logits = torch.full_like(before.motion_mode_logits, -4.0)
         event_logits[..., MotionMode.COLLISION] = torch.where(
             collision,

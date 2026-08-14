@@ -1619,3 +1619,5 @@
   opt-in pending larger validation.
 - [x] Complete the eight-episode threshold-0.8 matrix and reject it for
   long-horizon y/z and collision-F1 regressions.
+- [x] Correct ballistic ground-contact response so event logits and velocity
+  jumps are physically consistent; verify focused tests and RGB smoke.

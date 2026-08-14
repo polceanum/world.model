@@ -2720,3 +2720,5 @@ further gravity-axis threshold tuning.
   slightly improved event F1, but remains opt-in pending larger evidence.
 - Completed the larger threshold-0.8 matrix; long-horizon y/z and event F1
   regressed, so the default threshold remains 0.5.
+- Corrected ballistic contact dynamics to clamp ground crossings and apply
+  restitution velocity jumps; added regression coverage and an RGB smoke.

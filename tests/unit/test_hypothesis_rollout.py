@@ -268,6 +268,7 @@ def test_ballistic_contact_hypothesis_predicts_gravity_and_ground_event() -> Non
     objects.geometry[0, 0, 0] = 0.1
     source = belief.replace(objects=objects, gravity=torch.tensor([[0.0, -9.81, 0.0]]))
     step = BallisticContactDynamics().predict_step(source, torch.tensor([0.1]))
-    assert step.belief.objects.position[0, 0, 1] < 0.2
+    assert step.belief.objects.position[0, 0, 1] == pytest.approx(0.1)
+    assert step.belief.objects.velocity[0, 0, 1] > 0
     assert step.event_logits[0, 0, 3] > 0
     torch.testing.assert_close(source.objects.position[0, 0], torch.tensor([0.0, 0.2, 0.0]))

@@ -9455,6 +9455,14 @@ It selected `[1114, 53, 17]`. Long-horizon x improved, but y/z regressed at
 threshold gain was therefore sampling noise; `0.8` is rejected and the default
 event threshold remains `0.5`.
 
+Corrected `BallisticContactDynamics`: detected ground crossings now apply an
+explicit restitution velocity jump and clamp the contact point to the ground
+surface. Previously this hypothesis emitted collision events while leaving the
+post-contact velocity underground/downward, making its event and state
+predictions physically inconsistent. Focused tests now require positive
+post-bounce velocity and a real RGB smoke completed at
+`runs/20260814-190000-hypothesis-pool-ballistic-contact-smoke/report.json`.
+
 To isolate event coupling, a position-only sharp blend (`event_weight=0.0`,
 `temperature=0.25`) was evaluated on fresh seeds at
 `runs/20260814-160000-hypothesis-pool-blend-temp025-positiononly-disjoint2/report.json`.
