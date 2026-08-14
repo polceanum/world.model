@@ -1663,3 +1663,5 @@
   joint selection as the default.
 - [x] Add the config-controlled path and qualify it for the attention pilot
   config; retain the joint selector in all other configs.
+- [x] Run the full test suite and attention dry run after promotion; record
+  MPS availability and the complete result.

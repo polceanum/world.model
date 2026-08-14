@@ -9631,3 +9631,11 @@ enables x/y composition with `hypothesis_axis_independent: true` and axes
 `runs/20260815-101500-hypothesis-pool-axis-independent-config-smoke` recorded
 the resolved setting and completed successfully. This promotes the qualified
 behavior only for the attention pilot config, not globally.
+
+Broader verification passed the attention profile dry run and the full
+repository suite: `755 passed, 6 skipped in 225.32 s`; all skips were
+MPS-conditional because this environment reports MPS built but unavailable.
+The dry run resolved eight scenario families, 8,192 training steps, and the
+axis-composition config without starting training. A source audit shows the
+axis pool is consumed through explicit evaluator/runtime accessors; there is no
+hidden simulator-state path or replacement of `WorldBelief`.

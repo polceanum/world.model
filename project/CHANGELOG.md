@@ -2774,3 +2774,5 @@ further gravity-axis threshold tuning.
 - Added typed evaluation config controls for axis composition. The attention
   pilot config now enables qualified x/y-only composition; other configs keep
   the joint default, and a no-CLI-flag smoke verified the resolved setting.
+- Re-ran the attention dry run and full suite after promotion: `755 passed,
+  6 skipped`; skips are MPS-conditional because MPS is unavailable here.

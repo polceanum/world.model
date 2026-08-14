@@ -55,6 +55,14 @@ def test_dotted_override_is_typed(tmp_path: Path) -> None:
     assert config.simulator.image_size == (32, 40)
 
 
+def test_axis_composition_is_configured_only_for_attention_pilot() -> None:
+    default = load_config(CONFIG_DIR / "toy_smoke.yaml")
+    attention = load_config(CONFIG_DIR / "attention_pilot_mps.yaml")
+    assert not default.evaluation.hypothesis_axis_independent
+    assert attention.evaluation.hypothesis_axis_independent
+    assert attention.evaluation.hypothesis_axis_independent_axes == (0, 1)
+
+
 def test_simulator_scenario_mixture_is_typed_and_validated() -> None:
     config = load_config(
         CONFIG_DIR / "toy_smoke.yaml",
