@@ -473,6 +473,7 @@ def main() -> int:
     parser.add_argument(
         "--axis-independent",
         action="store_true",
+        default=None,
         help="select delayed-evidence hypotheses independently for x/y/z",
     )
     parser.add_argument(
@@ -505,9 +506,19 @@ def main() -> int:
         weight > 0 for weight in args.axis_weights
     ):
         raise ValueError("--axis-weights must contain finite nonnegative values and one positive value")
-    if args.axis_independent_axes and not args.axis_independent:
-        raise ValueError("--axis-independent-axes requires --axis-independent")
     config = load_config(args.config, overrides=[f"device.preference={args.device}"])
+    axis_independent = (
+        config.evaluation.hypothesis_axis_independent
+        if args.axis_independent is None
+        else args.axis_independent
+    )
+    axis_independent_axes = (
+        tuple(config.evaluation.hypothesis_axis_independent_axes)
+        if args.axis_independent_axes is None
+        else tuple(args.axis_independent_axes)
+    )
+    if args.axis_independent_axes and not axis_independent:
+        raise ValueError("--axis-independent-axes requires axis-independent selection")
     device = select_device(config.device.preference).device
     model = OnlineWorldModel.from_config(config, device=device).eval()
     if args.checkpoint:
@@ -534,8 +545,8 @@ def main() -> int:
             args.uncertainty_aware,
             args.horizon_decay_scale,
             args.independent_horizons,
-            args.axis_independent,
-            None if args.axis_independent_axes is None else tuple(args.axis_independent_axes),
+            axis_independent,
+            axis_independent_axes if axis_independent else None,
         )
         for index in range(args.episodes)
     ]
@@ -562,8 +573,8 @@ def main() -> int:
                 "uncertainty_aware": args.uncertainty_aware,
                 "horizon_decay_scale": args.horizon_decay_scale,
                 "independent_horizons": args.independent_horizons,
-                "axis_independent": args.axis_independent,
-                "axis_independent_axes": args.axis_independent_axes,
+                "axis_independent": axis_independent,
+                "axis_independent_axes": list(axis_independent_axes) if axis_independent else None,
                 "candidate_names": [
                     "learned",
                     "constant_velocity_damped_0.0",

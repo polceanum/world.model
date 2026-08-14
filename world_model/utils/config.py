@@ -442,6 +442,10 @@ class EvaluationConfig:
     perturbation_velocity_std: float = 0.25
     confidence_level: float = 0.90
     benchmark_warmup: int = 2
+    # Optional coordinate-wise hypothesis composition. Joint selection remains
+    # the safe default; coordinates listed here use delayed per-axis evidence.
+    hypothesis_axis_independent: bool = False
+    hypothesis_axis_independent_axes: tuple[int, ...] = (0, 1)
 
 
 @dataclass(frozen=True)
@@ -469,6 +473,14 @@ class OrpheusConfig:
 
         simulator = self.simulator
         model = self.model
+        if any(
+            axis not in (0, 1, 2) for axis in self.evaluation.hypothesis_axis_independent_axes
+        ) or len(set(self.evaluation.hypothesis_axis_independent_axes)) != len(
+            self.evaluation.hypothesis_axis_independent_axes
+        ):
+            raise ValueError("evaluation.hypothesis_axis_independent_axes must contain unique axes 0, 1, or 2")
+        if self.evaluation.hypothesis_axis_independent and not self.evaluation.hypothesis_axis_independent_axes:
+            raise ValueError("axis-independent evaluation requires at least one axis")
         if simulator.type != "sphere_world":
             raise ValueError(f"Unsupported simulator type {simulator.type!r}")
         if len(simulator.image_size) != 2 or any(size <= 0 for size in simulator.image_size):

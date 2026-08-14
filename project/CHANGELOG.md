@@ -2771,3 +2771,6 @@ further gravity-axis threshold tuning.
 - Exposed validated per-axis posterior weights/indices through
   `HypothesisSelection`, `HypothesisDynamicsPool`, and `OnlineWorldModel`, with
   an oracle integration test proving `WorldBelief` remains unchanged.
+- Added typed evaluation config controls for axis composition. The attention
+  pilot config now enables qualified x/y-only composition; other configs keep
+  the joint default, and a no-CLI-flag smoke verified the resolved setting.

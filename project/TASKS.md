@@ -1661,5 +1661,5 @@
   non-regressive for z/lifecycle/identity/events.
 - [x] Define and test the runtime per-axis posterior accessor while preserving
   joint selection as the default.
-- [ ] Add a config-controlled per-axis posterior composition path and qualify
-  it before changing the default behavior.
+- [x] Add the config-controlled path and qualify it for the attention pilot
+  config; retain the joint selector in all other configs.

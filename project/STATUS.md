@@ -9624,3 +9624,10 @@ evidence. `HypothesisDynamicsPool.selected_axis_index(...)` and
 `OnlineWorldModel.selected_hypothesis_axes(...)` expose the persistent-pool
 choice without replacing `WorldBelief`; joint selection remains the default.
 The runtime contract is covered by the oracle integration test.
+
+The setting is now config-controlled: `configs/attention_pilot_mps.yaml`
+enables x/y composition with `hypothesis_axis_independent: true` and axes
+`[0, 1]`; all other configs retain the joint default. A no-CLI-flag smoke at
+`runs/20260815-101500-hypothesis-pool-axis-independent-config-smoke` recorded
+the resolved setting and completed successfully. This promotes the qualified
+behavior only for the attention pilot config, not globally.
