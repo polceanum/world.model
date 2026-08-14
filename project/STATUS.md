@@ -9483,3 +9483,8 @@ The two-episode comparison at
 selected `[251, 7, 38]`; y and several event-F1 horizons improved, but small z
 regressions remained at 0.25/0.50/1.00 s. The contact-response implementation
 is retained and tested, while selector promotion remains rejected.
+
+Full regression verification after the contact-response changes:
+`PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q` →
+`753 passed, 6 skipped in 177.21 s`. All skips are expected MPS-conditional
+tests because this environment reported MPS unavailable for the run.

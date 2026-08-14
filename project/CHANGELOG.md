@@ -2727,3 +2727,5 @@ further gravity-axis threshold tuning.
 - Added vectorized approaching-pair elastic impulses to the ballistic candidate;
   fresh evidence improved y/events but retained small z regressions, so no
   selector promotion was made.
+- Full regression suite after contact changes: `753 passed, 6 skipped`; skips
+  are expected MPS-conditional tests.
