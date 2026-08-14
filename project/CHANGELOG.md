@@ -2834,3 +2834,8 @@ further gravity-axis threshold tuning.
   selector score and aggregate/per-axis rollout RMSE regressed against the
   protected incumbent, alongside coverage, precision, and identity guardrail
   failures. The checkpoint is retained only as diagnosis evidence.
+- Completed the 128-update active-Aqua MPS campaign and rejected its final
+  checkpoint despite a better global selector score (`0.3097148` versus
+  `0.3213162`): z/lifecycle/identity guardrails still regressed. Recorded the
+  clean optimizer audit (finite, 128 applied updates, balanced scenarios, no
+  collapse) and preserved the incumbent checkpoint.

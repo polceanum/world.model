@@ -9841,3 +9841,20 @@ reference-pair x-axis errors. The checkpoint
 is retained for diagnosis but is not promoted. Training remains active through
 the planned final step so the final scheduled validation can distinguish a
 late recovery from an early failed trajectory.
+
+The continuation completed all 128 optimizer updates and its final 32-episode
+active-Aqua RGB validation in `1361.57 s`. The optimizer/convergence audit
+found no collapse: all 128 updates applied, no skipped draws, finite gradients,
+balanced exposure to all eight scenario families, no audit failures, and no
+uncontained interaction clipping. The final selector score improved from the
+incumbent `0.3213162` to `0.3097148`; x/y RMSE improved to
+`0.2788598/0.2004440 m` (from `0.2817742/0.2019070 m`) and collision F1
+improved to `0.2114537`. It is nevertheless **rejected**: aggregate RMSE is
+`0.2570056 m` versus `0.2514598`, z RMSE regressed to `0.2832226 m` from
+`0.2636911`, target coverage/precision fell to `0.36625/0.34815`, and identity
+switch rate rose to `0.02092` from `0.01359`. The fixed incumbent comparison
+reported 112 failures, mainly scenario-level z/lifecycle/identity guardrails.
+`validation_step_000128.pt` is diagnosis evidence only; `best_rollout.pt`
+continues to protect the incumbent. The next repair must preserve the learned
+x/y and collision gain while explicitly anchoring z/lifecycle/identity, not
+relaxing the comparator.

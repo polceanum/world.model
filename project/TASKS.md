@@ -1696,10 +1696,15 @@
 - [ ] Audit why the learned candidate dominates all delayed-evidence choices;
   add only evidence-backed candidate diversity or learned-transition repairs
   that can change genuine regimes without replacing `WorldBelief`.
-- [ ] Run the long attention training campaign on this active Aqua/MPS session;
+- [x] Run the long attention training campaign on this active Aqua/MPS session;
   require finite loss and the existing all-axis/per-horizon comparator before
-  promotion. (The timestamped continuation's complete step-64 validation is
-  finite but rejected: selector `0.3379235` versus incumbent `0.3213162`, 138
-  incumbent guardrail failures, and no promotion. Retain the step-128 result
-  for a final late-recovery check, then diagnose the learned-transition x-axis
-  regression rather than relaxing any guardrail.)
+  promotion. The timestamped 128-step continuation completed without collapse
+  but was rejected: selector `0.3097148` beat the frozen incumbent's
+  `0.3213162`, while position RMSE, z rollout accuracy, lifecycle
+  coverage/precision, and identity stability regressed. The protected
+  incumbent remains the production baseline.
+- [ ] Implement an opt-in incumbent-anchored recovery training path targeted at
+  z rollout accuracy, lifecycle coverage/precision, and identity stability.
+  The completed 128-step campaign improved global selector/x/y/collision
+  metrics but remains rejected by 112 strict guardrail failures, dominated by
+  z/lifecycle/identity rather than optimizer collapse.
