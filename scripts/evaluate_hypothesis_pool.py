@@ -112,6 +112,7 @@ def evaluate_episode(
     event_weight: float,
     lifecycle_weight: float,
     position_gate_ratio: float,
+    axis_weights: tuple[float, float, float],
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
@@ -193,6 +194,7 @@ def evaluate_episode(
                     event_weight=event_weight,
                     lifecycle_weight=lifecycle_weight,
                     position_gate_ratio=position_gate_ratio,
+                    axis_weights=axis_weights,
                     uncertainty_aware=False,
                 )
                 selected = int(selection.selected_index[0])
@@ -321,6 +323,7 @@ def main() -> int:
     parser.add_argument("--event-weight", type=float, default=0.0)
     parser.add_argument("--lifecycle-weight", type=float, default=0.0)
     parser.add_argument("--position-gate-ratio", type=float, default=0.0)
+    parser.add_argument("--axis-weights", type=float, nargs=3, default=(1.0, 1.0, 1.0))
     args = parser.parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
@@ -328,6 +331,10 @@ def main() -> int:
         raise ValueError("--evidence-decay must lie in (0,1]")
     if args.event_weight < 0 or args.lifecycle_weight < 0 or args.position_gate_ratio < 0:
         raise ValueError("score weights must be nonnegative")
+    if any((weight < 0 or not math.isfinite(weight)) for weight in args.axis_weights) or not any(
+        weight > 0 for weight in args.axis_weights
+    ):
+        raise ValueError("--axis-weights must contain finite nonnegative values and one positive value")
     config = load_config(args.config, overrides=[f"device.preference={args.device}"])
     device = select_device(config.device.preference).device
     model = OnlineWorldModel.from_config(config, device=device).eval()
@@ -346,6 +353,7 @@ def main() -> int:
             args.event_weight,
             args.lifecycle_weight,
             args.position_gate_ratio,
+            tuple(args.axis_weights),
         )
         for index in range(args.episodes)
     ]
@@ -363,6 +371,7 @@ def main() -> int:
                 "event_weight": args.event_weight,
                 "lifecycle_weight": args.lifecycle_weight,
                 "position_gate_ratio": args.position_gate_ratio,
+                "axis_weights": list(args.axis_weights),
                 "horizons_seconds": horizons,
                 "episode_results": episodes,
             },

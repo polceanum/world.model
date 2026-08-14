@@ -79,6 +79,29 @@ def test_position_gate_blocks_event_candidate_with_large_position_regression() -
     assert selection.selected_index.tolist() == [0]
 
 
+def test_axis_weights_can_prefer_lower_error_on_critical_axis() -> None:
+    target = torch.zeros(1, 2, 1, 3)
+    mask = torch.ones(1, 2, 1, dtype=torch.bool)
+    x_better = _trajectory(0.0)
+    y_better = _trajectory(0.0)
+    x_better.positions[..., 0] = 0.2
+    x_better.positions[..., 1] = 1.0
+    y_better.positions[..., 0] = 1.0
+    y_better.positions[..., 1] = 0.2
+    unweighted = HypothesisRolloutEngine.score(
+        [x_better, y_better], target, mask, uncertainty_aware=False
+    )
+    y_weighted = HypothesisRolloutEngine.score(
+        [x_better, y_better],
+        target,
+        mask,
+        axis_weights=(1.0, 4.0, 1.0),
+        uncertainty_aware=False,
+    )
+    assert unweighted.selected_index.tolist() == [0]
+    assert y_weighted.selected_index.tolist() == [1]
+
+
 def test_selector_ignores_occluded_frames_and_scores_uncertainty() -> None:
     target = torch.zeros(1, 2, 1, 3)
     mask = torch.tensor([[[True], [False]]])

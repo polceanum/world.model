@@ -209,6 +209,7 @@ class HypothesisRolloutEngine:
         lifecycle_weight: float = 0.0,
         event_weight: float = 0.0,
         position_gate_ratio: float = 0.0,
+        axis_weights: Sequence[float] | Tensor | None = None,
         uncertainty_aware: bool = True,
         temperature: float = 1.0,
     ) -> HypothesisSelection:
@@ -243,6 +244,18 @@ class HypothesisRolloutEngine:
             raise ValueError("at least one hypothesis score weight must be positive")
         if position_gate_ratio and position_weight <= 0:
             raise ValueError("position_gate_ratio requires a positive position_weight")
+        if axis_weights is None:
+            resolved_axis_weights = target_positions.new_ones((target_positions.shape[-1],))
+        else:
+            resolved_axis_weights = torch.as_tensor(
+                axis_weights, device=target_positions.device, dtype=target_positions.dtype
+            )
+            if resolved_axis_weights.shape != (target_positions.shape[-1],):
+                raise ValueError("axis_weights must have one finite nonnegative value per axis")
+            if not torch.isfinite(resolved_axis_weights).all() or torch.any(resolved_axis_weights < 0):
+                raise ValueError("axis_weights must have finite nonnegative values")
+            if not torch.any(resolved_axis_weights > 0):
+                raise ValueError("axis_weights must contain at least one positive value")
         if not torch.isfinite(target_positions).all():
             raise ValueError("target_positions contains NaN or Inf")
         if target_collision is not None:
@@ -267,6 +280,7 @@ class HypothesisRolloutEngine:
                 point_loss = residual.square() / variance + log_variance
             else:
                 point_loss = residual.square()
+            point_loss = point_loss * resolved_axis_weights.view(1, 1, 1, -1)
             position_score = (point_loss * mask).sum(dim=(1, 2, 3)) / valid_count
             position_scores.append(position_score)
             score = position_weight * position_score
@@ -381,6 +395,7 @@ class HypothesisDynamicsPool:
         lifecycle_weight: float = 0.0,
         event_weight: float = 0.0,
         position_gate_ratio: float = 0.0,
+        axis_weights: Sequence[float] | Tensor | None = None,
         uncertainty_aware: bool = True,
     ) -> HypothesisSelection:
         prior = self._ensure_weights(belief)
@@ -395,6 +410,7 @@ class HypothesisDynamicsPool:
             lifecycle_weight=lifecycle_weight,
             event_weight=event_weight,
             position_gate_ratio=position_gate_ratio,
+            axis_weights=axis_weights,
             uncertainty_aware=uncertainty_aware,
             temperature=self.temperature,
         )
