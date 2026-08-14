@@ -1635,3 +1635,5 @@
   reject it for long-horizon z/event regressions.
 - [x] Test horizon-conditioned evidence decay; reject scale `1.0` for
   long-horizon y/event regressions and ballistic over-selection.
+- [x] Test prior-preserving signed decay (`-0.5`); reject it for cross-horizon
+  z and short-horizon event regressions.

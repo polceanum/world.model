@@ -2740,3 +2740,5 @@ further gravity-axis threshold tuning.
   undamped velocity but regressed long-horizon z/event metrics and was rejected.
 - Added opt-in horizon-conditioned evidence decay; scale `1.0` over-selected
   ballistic at long horizons and regressed y/event metrics, so it was rejected.
+- Tested signed prior-preserving decay (`-0.5`); it improved long-horizon x/y
+  but regressed z and short-horizon event F1, so it was rejected.

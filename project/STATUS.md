@@ -9522,3 +9522,10 @@ completed at
 It selected `[212, 14, 8, 62]`, increased ballistic long-horizon wins, and
 regressed long-horizon y and collision F1 despite x gains. It is rejected; the
 default persistent evidence update is unchanged.
+
+The opposite, prior-preserving direction is also available via signed
+`--horizon-decay-scale`. Scale `-0.5` completed at
+`runs/20260815-020000-hypothesis-pool-horizondecay-neg05-velocity4-disjoint2/report.json`.
+It selected `[230, 13, 9, 44]`; long-horizon x/y and some event F1 improved,
+but z regressed across horizons and 0.10 s event F1 fell. Both decay directions
+are rejected for this checkpoint; default evidence persistence remains intact.
