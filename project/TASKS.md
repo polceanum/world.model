@@ -1609,3 +1609,5 @@
   unpromoted pending a larger disjoint evaluation.
 - [x] Complete the larger eight-episode per-axis-gated matrix; reject default
   promotion for small z/event regressions despite improved long-horizon y.
+- [x] Add and evaluate opt-in posterior position blending; reject the pilot for
+  all-horizon z and mid-horizon y regressions.

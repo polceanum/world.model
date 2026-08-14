@@ -9416,3 +9416,12 @@ and collision F1 were:
 Lifecycle mismatch and identity coverage were identical to learned-only. The
 small z regressions at 0.50–1.00 s and F1 regression at 0.10/0.50 s fail the
 strict promotion gate, so the axis-gated selector remains opt-in.
+
+The evaluator also supports opt-in posterior position blending via
+`--blend-positions`: candidate positions are averaged with selector posterior
+weights while lifecycle/event metrics remain tied to the selected hypothesis.
+The two-episode pilot at
+`runs/20260814-130000-hypothesis-pool-blend-disjoint2/report.json` selected
+`[281, 9, 6]`. Blending improved x and some event F1, but z worsened at every
+horizon and y worsened at 0.50/0.75 s. It is rejected for promotion and remains
+an evaluation-only seam for future calibrated blending.

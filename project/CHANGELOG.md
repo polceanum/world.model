@@ -2706,3 +2706,6 @@ further gravity-axis threshold tuning.
 - Completed the larger eight-episode per-axis-gated matrix. It improved x/y at
   long horizons and preserved lifecycle/identity metrics, but small z and
   collision-F1 regressions remain; default promotion was rejected.
+- Added opt-in posterior position blending for evaluator experiments. The
+  fresh pilot improved x but regressed z across horizons and y mid-horizon, so
+  it was rejected under the all-axis guardrails.
