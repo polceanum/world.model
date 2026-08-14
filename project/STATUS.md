@@ -9708,3 +9708,12 @@ suite passed: `191 passed in 5.33s` covering hypothesis rollout, comparator,
 oracle online-loop, and config contracts. The next convergence run remains
 blocked on an Apple-Silicon/MPS-capable host (or an explicitly approved
 long-running CPU campaign); no checkpoint was promoted from this audit.
+
+The `orpheus` environment was then explicitly overlaid with the local wheel
+`/Users/mike/Work/pytorch/dist/torch-2.9.0a0+gitcbe1a35-cp310-cp310-macosx_26_0_x86_64.whl`.
+Import verification reports `torch 2.9.0a0+gitcbe1a35` from the environment,
+with MPS built but unavailable. A real tensor smoke on `device='mps'` raises
+the backend's macOS-version availability error; the focused contracts suite
+still passes `191 passed in 4.51s`. The stale 2.10 metadata was moved to a
+recoverable `/private/tmp/orpheus-torch-metadata.*` directory, and no project
+source or checkpoint was changed by the environment repair.

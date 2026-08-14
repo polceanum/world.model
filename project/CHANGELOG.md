@@ -2797,3 +2797,7 @@ further gravity-axis threshold tuning.
 - Rechecked the restarted `orpheus` environment: PyTorch 2.10.0 is MPS-built
   but MPS remains unavailable because this runtime is x86_64; added the exact
   hardware/device result and focused audit result (`191 passed`) to status.
+- Installed the locally built PyTorch wheel from `~/Work/pytorch` into
+  `orpheus` (`2.9.0a0+gitcbe1a35`) with dependencies untouched. MPS remains
+  unavailable on this x86_64 runtime; the real MPS tensor smoke failed with
+  the backend availability error, while the focused suite remained green.
