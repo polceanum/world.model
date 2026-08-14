@@ -9939,3 +9939,16 @@ balanced window includes 22 ground-contact objects and four pair-collision
 intervals, so it is useful numerical-health evidence but not a selector,
 accuracy metric, or promotion. The first candidate comparison remains the
 complete fixed-manifest validation at step 128.
+
+The remaining full-loop MPS failure was then localized to training-only
+identity bookkeeping: `_target_observed_runtime_ids` pooled integer candidates
+with a reduction `amax`, which invokes the affected MPS reduction kernel even
+though identity labels do not require gradients. On MPS it now performs the
+exact same maximum as sequential elementwise maxima across the small
+belief-slot axis; CPU/CUDA retain the original reduction. Focused CPU tests
+passed (`136 passed, 2 MPS-only skipped`), the active-Aqua MPS identity test
+passed (`1 passed, 11 deselected`), and the bounded full RGB
+predict–observe–associate–correct–rollout backward smoke now passes with loss
+`0.3474486` and a finite z-decoder gradient. This establishes a finite
+end-to-end *tiny* MPS path; the full attention-pilot configuration still needs
+its own active-Aqua qualification before any MPS campaign or accuracy claim.

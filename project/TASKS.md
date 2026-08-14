@@ -1718,8 +1718,7 @@
   same lifecycle/identity guardrails, and reject the run unless it improves
   the full held-out comparator rather than only z.
 - [ ] Re-qualify full closed-loop MPS execution with the user-provided torch
-  build after the active-Aqua Metal XPC/pipeline interruption. Do not change
-  the CPU causal fallback or report an MPS acceleration until a finite RGB
-  forward/backward smoke completes. The zero-tangent contact NaN and the
-  typed-attention dynamics-only backward are now fixed/finite; isolate the
-  remaining complete-RGB reduction pipeline path before retrying.
+  build on the full attention-pilot configuration. The zero-tangent contact
+  NaN and training-only ID reduction are fixed, and a bounded complete RGB
+  MPS forward/backward smoke is finite; do not claim pilot-scale speed or
+  accuracy until the same active-Aqua full-pilot path is finite and guarded.

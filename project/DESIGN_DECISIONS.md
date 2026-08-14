@@ -3538,3 +3538,23 @@
   MPS zero-tangent regression is finite. This removes one backend-specific
   numerical defect but does not qualify the complete RGB/MPS backward path or
   alter the CPU fallback / accuracy promotion guardrails.
+
+## ADR-123 — Keep training-only identity pooling exact while avoiding MPS reduction failure
+
+- **Date:** 2026-08-14
+- **Status:** accepted for MPS compatibility
+- **Context:** After the contact normalization repair, the ordinary MPS
+  predict–observe correction was finite, but the full training loop still
+  failed while converting accepted observations into persistent target IDs.
+  The helper used an integer `amax` across the small belief-slot dimension;
+  the affected MPS build attempted to compile its NaN-propagating reduction
+  companion despite this bookkeeping path being non-differentiable.
+- **Decision:** On MPS only, compute the same candidate-ID maximum as a
+  sequential series of elementwise `maximum` operations. CPU and CUDA retain
+  the direct `amax`. This preserves the sentinel `-1` and duplicate-candidate
+  semantics exactly, while keeping `WorldBelief`, association, identity, and
+  parameter-observability contracts unchanged.
+- **Consequences:** The active-Aqua MPS identity test and a bounded complete
+  RGB closed-loop forward/backward smoke are finite. This is a numerical
+  backend compatibility route, not a model or accuracy change; the full
+  attention-pilot MPS run and all promotion guardrails remain required.

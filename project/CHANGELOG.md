@@ -2864,3 +2864,7 @@ further gravity-axis threshold tuning.
   prior subnormal denominator could flush to zero on MPS and produce a NaN
   before a false collision mask; CPU contact/parity tests and an active-Aqua
   MPS regression test pass. Full RGB MPS qualification remains pending.
+- Replaced the training-only MPS integer-ID `amax` with an exact sequential
+  elementwise maximum over belief slots. This removes the remaining MPS
+  reduction pipeline failure in the bounded full RGB causal smoke; CPU/CUDA
+  retain the original reduction and full-pilot qualification remains pending.

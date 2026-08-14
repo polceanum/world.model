@@ -2114,6 +2114,16 @@ def _target_observed_runtime_ids(
         runtime_object_ids.unsqueeze(-1),
         torch.full_like(runtime_object_ids.unsqueeze(-1), -1),
     )
+    if candidate_ids.device.type == "mps":
+        # MPS cannot reliably compile the NaN-propagating backward companion
+        # of this integer ``amax`` while the complete differentiable training
+        # loop is present.  Target counts are deliberately small; a sequential
+        # elementwise maximum is exactly the same reduction (including the
+        # duplicate-candidate case) without invoking that reduction kernel.
+        pooled = torch.full_like(candidate_ids[:, 0], -1)
+        for belief_slot in range(candidate_ids.shape[1]):
+            pooled = torch.maximum(pooled, candidate_ids[:, belief_slot])
+        return pooled
     return candidate_ids.amax(dim=1)
 
 

@@ -110,6 +110,27 @@ def test_runtime_identity_change_resets_parameter_temporal_baseline() -> None:
     torch.testing.assert_close(reset, torch.tensor([[True, False]]))
 
 
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(),
+    reason="requires an active Aqua MPS device",
+)
+def test_mps_runtime_identity_pool_matches_integer_amax() -> None:
+    """The MPS sequential pool preserves duplicate-candidate max semantics."""
+
+    observed_ids = _target_observed_runtime_ids(
+        torch.tensor([[0, 1, 0]], device="mps"),
+        torch.tensor([[True, True, True]], device="mps"),
+        torch.tensor([[True, True, True]], device="mps"),
+        torch.tensor([[4, 7, 9]], dtype=torch.int64, device="mps"),
+        target_count=2,
+    )
+
+    torch.testing.assert_close(
+        observed_ids.cpu(),
+        torch.tensor([[9, 7]], dtype=torch.int64),
+    )
+
+
 def test_burn_in_parameter_history_uses_distance_gated_matches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
