@@ -2801,3 +2801,6 @@ further gravity-axis threshold tuning.
   `orpheus` (`2.9.0a0+gitcbe1a35`) with dependencies untouched. MPS remains
   unavailable on this x86_64 runtime; the real MPS tensor smoke failed with
   the backend availability error, while the focused suite remained green.
+- Added a permanent agent rule: never choose or install a different PyTorch
+  build independently; preserve the user-provided build and change it only
+  when the user explicitly supplies or names the replacement.

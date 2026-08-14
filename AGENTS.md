@@ -17,7 +17,11 @@ identification.
 Working rules:
 
 - Use the existing `orpheus` conda environment for every Python command.
-- Do not reinstall or replace PyTorch. Model execution remains local.
+- Never select, reinstall, downgrade, upgrade, or replace PyTorch with a
+  different build on my initiative. Preserve the exact PyTorch build currently
+  provided by the user; only install a replacement when the user explicitly
+  supplies or names that replacement (for example a local wheel under
+  `~/Work/pytorch`). Model execution remains local.
 - Keep `train.py`, `evaluate.py`, and `demo.py` as the simple public workflow.
 - Add or update focused tests with every behavioural change.
 - Keep project memory and relevant architecture documents synchronized.
