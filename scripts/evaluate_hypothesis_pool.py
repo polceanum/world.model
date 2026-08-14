@@ -116,6 +116,7 @@ def evaluate_episode(
     axis_weights: tuple[float, float, float],
     blend_positions: bool,
     temperature: float,
+    event_threshold: float,
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
@@ -238,7 +239,7 @@ def evaluate_episode(
                         (active_prediction & mask[:, 0]).sum().cpu()
                     )
                     event_prediction = (
-                        trajectory.event_logits[:, 0, :, MotionMode.COLLISION].sigmoid() >= 0.5
+                        trajectory.event_logits[:, 0, :, MotionMode.COLLISION].sigmoid() >= event_threshold
                     )
                     truth = collision_target[:, 0]
                     event_counts[horizon_index][candidate_index]["tp"] += int(
@@ -264,7 +265,7 @@ def evaluate_episode(
                 )
                 selected_event = (
                     single_step_trajectories[selected].event_logits[:, 0, :, MotionMode.COLLISION].sigmoid()
-                    >= 0.5
+                    >= event_threshold
                 )
                 truth = collision_target[:, 0]
                 selected_event_counts[horizon_index]["tp"] += int((selected_event & truth).sum().cpu())
@@ -349,6 +350,7 @@ def main() -> int:
     parser.add_argument("--axis-weights", type=float, nargs=3, default=(1.0, 1.0, 1.0))
     parser.add_argument("--blend-positions", action="store_true")
     parser.add_argument("--temperature", type=float, default=1.0)
+    parser.add_argument("--event-threshold", type=float, default=0.5)
     args = parser.parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
@@ -356,6 +358,8 @@ def main() -> int:
         raise ValueError("--evidence-decay must lie in (0,1]")
     if args.temperature <= 0 or not math.isfinite(args.temperature):
         raise ValueError("--temperature must be finite and positive")
+    if not 0.0 <= args.event_threshold <= 1.0 or not math.isfinite(args.event_threshold):
+        raise ValueError("--event-threshold must lie in [0,1]")
     if (
         args.event_weight < 0
         or args.lifecycle_weight < 0
@@ -389,6 +393,7 @@ def main() -> int:
             tuple(args.axis_weights),
             args.blend_positions,
             args.temperature,
+            args.event_threshold,
         )
         for index in range(args.episodes)
     ]
@@ -410,6 +415,7 @@ def main() -> int:
                 "axis_weights": list(args.axis_weights),
                 "blend_positions": args.blend_positions,
                 "temperature": args.temperature,
+                "event_threshold": args.event_threshold,
                 "horizons_seconds": horizons,
                 "episode_results": episodes,
             },
