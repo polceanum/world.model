@@ -2764,3 +2764,7 @@ further gravity-axis threshold tuning.
   regressed z; the x/y-only form improved both axes at all horizons while
   preserving z, lifecycle, identity, and event metrics in an eight-episode
   guardrail, so it remains opt-in pending fresh-draw qualification.
+- Qualified the x/y-only selector on fresh seeds 100--103: x/y improved at
+  every horizon, z was exactly unchanged, and lifecycle/identity/event metrics
+  were unchanged. Runtime default promotion remains pending an explicit
+  per-axis posterior contract.

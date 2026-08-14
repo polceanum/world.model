@@ -9605,3 +9605,14 @@ improved at every horizon (`1.0132/0.4696` to `1.0111/0.4677` at 0.10 s and
 lifecycle, identity, and event metrics were unchanged. This is accepted as
 an opt-in positional improvement; the default selector remains joint until a
 config-level rollout is explicitly qualified.
+
+Fresh-draw qualification used seeds 100--103 with identical reference
+checkpoint/config pairs. The x/y-only selector artifact is
+`runs/20260815-100000-hypothesis-pool-axis-independent-xy-fresh4ep`, compared
+with joint baseline
+`runs/20260815-100500-hypothesis-pool-baseline-fresh4ep`. Mean RMSE improved
+from `0.36497/0.38407` to `0.36189/0.38193` (x/y) at 0.10 s and from
+`0.69364/0.26446` to `0.45663/0.24965` at 1.00 s; z remained exactly equal at
+all horizons. Lifecycle mismatch, identity coverage, and event F1 were equal
+for every horizon. The improvement is therefore qualified as robust opt-in
+evidence, but not yet the default runtime path.

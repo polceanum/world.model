@@ -1657,5 +1657,7 @@
   all horizons, so reject ballistic/event-prior promotion.
 - [x] Add and validate axis-independent delayed-evidence selection; reject the
   all-axis form for z regressions and accept the x/y-only form as opt-in.
-- [ ] Qualify x/y-only selection in the default evaluation config and on a
-  fresh scenario draw before changing the default runtime behavior.
+- [x] Qualify x/y-only selection on a fresh scenario draw; it remains
+  non-regressive for z/lifecycle/identity/events.
+- [ ] Define and test a runtime/config contract for composing per-axis
+  posterior corrections before changing the default behavior.
