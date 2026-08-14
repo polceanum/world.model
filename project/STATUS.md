@@ -9592,3 +9592,16 @@ the earlier two-episode draw. The best supported threshold is approximately
 `0.10` (0.25 s is degenerate at this histogram resolution). Since this only
 changes event reporting and does not improve position selection, the runtime
 default remains unchanged.
+
+Added an opt-in axis-independent delayed-evidence selector. The unrestricted
+three-axis pilot at
+`runs/20260815-091000-hypothesis-pool-axis-independent-8ep` improved x/y but
+introduced small z regressions, so it was rejected. Restricting independent
+selection to x/y with `--axis-independent --axis-independent-axes 0 1` passed
+the full eight-episode guardrail at
+`runs/20260815-093000-hypothesis-pool-axis-independent-xy-8ep`: mean x/y RMSE
+improved at every horizon (`1.0132/0.4696` to `1.0111/0.4677` at 0.10 s and
+`1.2850/0.2646` to `1.1804/0.2425` at 1.00 s), z was exactly unchanged, and
+lifecycle, identity, and event metrics were unchanged. This is accepted as
+an opt-in positional improvement; the default selector remains joint until a
+config-level rollout is explicitly qualified.

@@ -1655,3 +1655,7 @@
   before changing event thresholds or horizon priors.
 - [x] Complete the eight-episode calibration; learned event probabilities win
   all horizons, so reject ballistic/event-prior promotion.
+- [x] Add and validate axis-independent delayed-evidence selection; reject the
+  all-axis form for z regressions and accept the x/y-only form as opt-in.
+- [ ] Qualify x/y-only selection in the default evaluation config and on a
+  fresh scenario draw before changing the default runtime behavior.

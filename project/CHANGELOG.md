@@ -2760,3 +2760,7 @@ further gravity-axis threshold tuning.
   horizon-specific threshold or candidate was promoted.
 - Completed an eight-episode compatible calibration; learned event prediction
   wins every horizon and the earlier ballistic signal does not replicate.
+- Added axis-independent delayed-evidence selection. The unrestricted form
+  regressed z; the x/y-only form improved both axes at all horizons while
+  preserving z, lifecycle, identity, and event metrics in an eight-episode
+  guardrail, so it remains opt-in pending fresh-draw qualification.

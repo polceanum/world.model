@@ -121,6 +121,8 @@ def evaluate_episode(
     uncertainty_aware: bool,
     horizon_decay_scale: float,
     independent_horizons: bool,
+    axis_independent: bool,
+    axis_independent_axes: tuple[int, ...] | None,
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
@@ -150,6 +152,9 @@ def evaluate_episode(
     uncertainty_sum = [[0.0, 0] for _ in horizons]
     choice_counts = [0 for _ in range(candidate_count)]
     horizon_choice_counts = [[0 for _ in range(candidate_count)] for _ in horizons]
+    axis_choice_counts = [
+        [[0 for _ in range(candidate_count)] for _ in range(3)] for _ in horizons
+    ]
     timestamps = episode["timestamps"]
     # Evaluation never backpropagates or mutates tensors through autograd.
     # Inference mode also disables version-counter bookkeeping, which matters
@@ -242,6 +247,19 @@ def evaluate_episode(
                 selected = int(selection.selected_index[0])
                 choice_counts[selected] += 1
                 horizon_choice_counts[horizon_index][selected] += 1
+                axis_selected = None
+                if axis_independent:
+                    if selection.axis_scores is None:
+                        raise RuntimeError("axis-independent selection requires axis scores")
+                    axis_selected = selection.selected_index[0].repeat(3)
+                    independent_axes = (
+                        tuple(range(3)) if axis_independent_axes is None else axis_independent_axes
+                    )
+                    axis_scores = selection.axis_scores[0].argmin(dim=-1)
+                    for axis in independent_axes:
+                        axis_selected[axis] = axis_scores[axis]
+                    for axis, candidate in enumerate(axis_selected.tolist()):
+                        axis_choice_counts[horizon_index][axis][candidate] += 1
                 if blend_positions:
                     posterior = selection.posterior_weights[0]
                     predicted_positions = torch.stack(
@@ -256,6 +274,21 @@ def evaluate_episode(
                         posterior,
                         predicted_variances
                         + (predicted_positions - blended_position.unsqueeze(0)).square(),
+                    )
+                elif axis_selected is not None:
+                    predicted_positions = torch.stack(
+                        [trajectory.positions[0, 0] for trajectory in single_step_trajectories]
+                    )
+                    predicted_variances = torch.stack(
+                        [trajectory.fast_log_variance[0, 0, ..., :3].exp() for trajectory in single_step_trajectories]
+                    )
+                    blended_position = torch.stack(
+                        [predicted_positions[int(axis_selected[axis]), :, axis] for axis in range(3)],
+                        dim=-1,
+                    )
+                    blended_variance = torch.stack(
+                        [predicted_variances[int(axis_selected[axis]), :, axis] for axis in range(3)],
+                        dim=-1,
                     )
                 else:
                     blended_position = single_step_trajectories[selected].positions[0, 0]
@@ -368,6 +401,9 @@ def evaluate_episode(
         "selection_counts_by_horizon": {
             str(horizon): counts for horizon, counts in zip(horizons, horizon_choice_counts, strict=True)
         },
+        "axis_selection_counts_by_horizon": {
+            str(horizon): counts for horizon, counts in zip(horizons, axis_choice_counts, strict=True)
+        },
         "candidate_lifecycle_mismatch": {
             str(horizon): lifecycle_mismatch[index] for index, horizon in enumerate(horizons)
         },
@@ -434,6 +470,18 @@ def main() -> int:
     parser.add_argument("--uncertainty-aware", action="store_true")
     parser.add_argument("--horizon-decay-scale", type=float, default=0.0)
     parser.add_argument("--independent-horizons", action="store_true")
+    parser.add_argument(
+        "--axis-independent",
+        action="store_true",
+        help="select delayed-evidence hypotheses independently for x/y/z",
+    )
+    parser.add_argument(
+        "--axis-independent-axes",
+        type=int,
+        nargs="+",
+        choices=(0, 1, 2),
+        help="subset of coordinates for --axis-independent (default: all)",
+    )
     args = parser.parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
@@ -457,6 +505,8 @@ def main() -> int:
         weight > 0 for weight in args.axis_weights
     ):
         raise ValueError("--axis-weights must contain finite nonnegative values and one positive value")
+    if args.axis_independent_axes and not args.axis_independent:
+        raise ValueError("--axis-independent-axes requires --axis-independent")
     config = load_config(args.config, overrides=[f"device.preference={args.device}"])
     device = select_device(config.device.preference).device
     model = OnlineWorldModel.from_config(config, device=device).eval()
@@ -484,6 +534,8 @@ def main() -> int:
             args.uncertainty_aware,
             args.horizon_decay_scale,
             args.independent_horizons,
+            args.axis_independent,
+            None if args.axis_independent_axes is None else tuple(args.axis_independent_axes),
         )
         for index in range(args.episodes)
     ]
@@ -510,6 +562,8 @@ def main() -> int:
                 "uncertainty_aware": args.uncertainty_aware,
                 "horizon_decay_scale": args.horizon_decay_scale,
                 "independent_horizons": args.independent_horizons,
+                "axis_independent": args.axis_independent,
+                "axis_independent_axes": args.axis_independent_axes,
                 "candidate_names": [
                     "learned",
                     "constant_velocity_damped_0.0",

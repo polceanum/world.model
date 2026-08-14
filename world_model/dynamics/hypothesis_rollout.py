@@ -27,6 +27,7 @@ class HypothesisSelection:
     scores: Tensor
     selected_index: Tensor
     posterior_weights: Tensor
+    axis_scores: Tensor | None = None
 
     def validate(self) -> HypothesisSelection:
         if self.scores.ndim != 2:
@@ -35,6 +36,12 @@ class HypothesisSelection:
             raise ValueError("selected_index must have shape [B]")
         if self.posterior_weights.shape != self.scores.shape:
             raise ValueError("posterior_weights must match scores")
+        if self.axis_scores is not None and (
+            self.axis_scores.ndim != 3
+            or self.axis_scores.shape[0] != self.scores.shape[0]
+            or self.axis_scores.shape[2] != self.scores.shape[1]
+        ):
+            raise ValueError("axis_scores must have shape [B,D,H]")
         if self.selected_index.dtype != torch.int64:
             raise TypeError("selected_index must use torch.int64")
         if not torch.isfinite(self.scores).all() or not torch.isfinite(
@@ -384,7 +391,12 @@ class HypothesisRolloutEngine:
         scale = torch.as_tensor(temperature, device=scores.device, dtype=scores.dtype)
         posterior_weights = torch.softmax(-scores / scale, dim=-1)
         selected_index = scores.argmin(dim=-1).to(torch.int64)
-        return HypothesisSelection(scores, selected_index, posterior_weights).validate()
+        return HypothesisSelection(
+            scores,
+            selected_index,
+            posterior_weights,
+            axis_scores=torch.stack(axis_position_scores, dim=-1),
+        ).validate()
 
 
 class HypothesisDynamicsPool:
@@ -503,6 +515,7 @@ class HypothesisDynamicsPool:
             selection.scores,
             posterior_selected_index,
             posterior,
+            axis_scores=selection.axis_scores,
         ).validate()
         return self.last_selection
 
