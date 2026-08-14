@@ -1675,3 +1675,5 @@
   attention pilot config; retain zero in all other profiles.
 - [x] Validate promoted strength `0.001` on independent seeds 200--201 and
   add an explicit joint-baseline override.
+- [x] Add a reusable report comparator enforcing per-axis/per-horizon
+  non-regression guardrails.

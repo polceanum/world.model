@@ -2787,3 +2787,5 @@ further gravity-axis threshold tuning.
 - Revalidated the promoted prior on independent seeds 200--201; x/y gains
   persisted with unchanged z/event/lifecycle/identity metrics, and added a
   `--no-axis-independent` baseline override.
+- Added `scripts/compare_hypothesis_reports.py` to mechanize per-axis,
+  lifecycle, identity, event, and uncertainty regression checks.

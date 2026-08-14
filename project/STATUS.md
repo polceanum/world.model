@@ -9671,3 +9671,9 @@ At 1.00 s, mean x/y RMSE improved `1.0357/0.4030` to `0.8787/0.3736`; z
 stayed exactly `0.9204`, event F1 stayed `0.1811`, and lifecycle/identity
 counts matched. The evaluator now accepts `--no-axis-independent` for explicit
 joint-baseline reproduction.
+
+Added `scripts/compare_hypothesis_reports.py` as a reusable guardrail checker.
+It aggregates per-horizon x/y/z RMSE, lifecycle mismatch, identity coverage,
+event F1, and uncertainty, and returns a nonzero exit status on regressions.
+The independent-draw comparison passed with the predeclared `1e-4` uncertainty
+tolerance; exact deltas are saved in `/tmp/newdraw-guardrail.json`.
