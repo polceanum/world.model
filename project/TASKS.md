@@ -29,6 +29,10 @@
   selecting a production default or restarting training.
 - [x] Complete the 32-episode decay-0.1 protected comparison and audit
   all per-axis/per-horizon/lifecycle/identity/event/uncertainty outputs.
+- [x] Add an analytic gravity/drag plus contact-event hypothesis and generalize
+  the evaluation harness to three candidates; verify it without promotion.
+- [ ] Run the three-candidate pool on the protected multi-episode protocol and
+  require event/lifecycle/uncertainty guardrails before any default change.
 - [x] Batch all requested horizons into one rollout per frame in the evaluation
   harness; verify equivalent toy/attention smoke execution before relaunch.
 - [x] Run a four-episode protected decay-1.0 versus decay-0.1 matrix; retain

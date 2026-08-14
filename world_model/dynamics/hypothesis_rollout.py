@@ -15,7 +15,8 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor
 
-from world_model.belief import BeliefTrajectory, WorldBelief
+from world_model.belief import BeliefTrajectory, MotionMode, WorldBelief
+from world_model.dynamics.analytic import AnalyticKinematics
 from world_model.dynamics.rollout import RolloutEngine, RolloutStep
 
 
@@ -89,6 +90,64 @@ class ConstantVelocityDynamics:
                 -4.0,
             ),
             auxiliary={},
+        )
+
+
+class BallisticContactDynamics:
+    """Analytic gravity/drag hypothesis with explicit contact-event logits.
+
+    This candidate deliberately contains no learned interaction weights. It is
+    useful as a heterogeneous alternative for locally ballistic motion while
+    still exposing conservative ground and sphere-contact event evidence.
+    """
+
+    def __init__(self, *, ground_height: float = 0.0, event_logit: float = 5.0) -> None:
+        if not torch.isfinite(torch.as_tensor(ground_height)):
+            raise ValueError("ground_height must be finite")
+        if event_logit <= 0 or not torch.isfinite(torch.as_tensor(event_logit)):
+            raise ValueError("event_logit must be finite and positive")
+        self.ground_height = float(ground_height)
+        self.event_logit = float(event_logit)
+        self.analytic = AnalyticKinematics()
+
+    def predict_step(self, belief: WorldBelief, delta_time: Tensor) -> RolloutStep:
+        if delta_time.shape != belief.timestamp.shape:
+            raise ValueError("delta_time must have shape [B]")
+        before = belief.objects
+        after = self.analytic(before, belief.gravity, delta_time)
+        radius = before.geometry[..., :1].clamp_min(1.0e-5)
+        before_ground = before.position[..., 1] - radius[..., 0]
+        after_ground = after.position[..., 1] - radius[..., 0]
+        ground_event = before.active & after.active & (before_ground > self.ground_height) & (
+            after_ground <= self.ground_height
+        ) & (before.velocity[..., 1] < 0)
+        before_delta = before.position[:, :, None, :] - before.position[:, None, :, :]
+        after_delta = after.position[:, :, None, :] - after.position[:, None, :, :]
+        before_distance = torch.linalg.vector_norm(before_delta, dim=-1)
+        after_distance = torch.linalg.vector_norm(after_delta, dim=-1)
+        contact_distance = radius[:, :, None, 0] + radius[:, None, :, 0]
+        pair_event = (
+            before.active[:, :, None]
+            & before.active[:, None, :]
+            & (before_distance > contact_distance)
+            & (after_distance <= contact_distance)
+        )
+        collision = ground_event | pair_event.any(dim=-1)
+        event_logits = torch.full_like(before.motion_mode_logits, -4.0)
+        event_logits[..., MotionMode.COLLISION] = torch.where(
+            collision,
+            event_logits.new_full((), self.event_logit),
+            event_logits[..., 3],
+        )
+        after = after.replace(
+            fast_log_variance=(after.fast_log_variance + delta_time[:, None, None] * 1.0e-3).clamp(
+                -20.0, 10.0
+            )
+        )
+        return RolloutStep(
+            belief=belief.replace(timestamp=belief.timestamp + delta_time, objects=after),
+            event_logits=event_logits,
+            auxiliary={"collision_event": collision},
         )
 
 

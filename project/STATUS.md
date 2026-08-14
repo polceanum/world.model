@@ -7955,6 +7955,15 @@ mean selected position standard deviation is `0.636/0.644/0.660/0.679/0.704 m`.
 This is stronger evidence for guarded fallback, but it is still an 8-episode
 qualification rather than the required 32-episode promotion protocol.
 
+The candidate pool now also supports `BallisticContactDynamics`, an analytic
+gravity/drag hypothesis with conservative ground and sphere-contact event
+logits. The evaluation harness accepts three candidates (learned,
+constant-velocity, ballistic) and all nine focused selector tests pass. A fresh
+toy RGB smoke selected the learned candidate on all 59 queries; the ballistic
+candidate was not selected, so no accuracy gain is claimed yet. This negative
+result is retained as evidence that event-aware candidate construction still
+needs protected multi-episode qualification.
+
 The required 32-episode decay-0.1 protected comparison completed from the
 immutable reference checkpoint at
 `runs/20260813-230000-hypothesis-pool-protected-32ep/report.json`. It contains

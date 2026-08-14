@@ -18,7 +18,11 @@ from typing import Any
 import torch
 
 from world_model.belief import MotionMode
-from world_model.dynamics import ConstantVelocityDynamics, HypothesisDynamicsPool
+from world_model.dynamics import (
+    BallisticContactDynamics,
+    ConstantVelocityDynamics,
+    HypothesisDynamicsPool,
+)
 from world_model.observations import ObservationPacket
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
@@ -108,20 +112,21 @@ def evaluate_episode(
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
-    candidate_squares = [[[0.0, 0.0, 0.0] for _ in range(2)] for _ in horizons]
+    candidate_count = 3
+    candidate_squares = [[[0.0, 0.0, 0.0] for _ in range(candidate_count)] for _ in horizons]
     selected_squares = [[0.0, 0.0, 0.0] for _ in horizons]
-    candidate_counts = [[[0, 0, 0] for _ in range(2)] for _ in horizons]
+    candidate_counts = [[[0, 0, 0] for _ in range(candidate_count)] for _ in horizons]
     selected_counts = [[0, 0, 0] for _ in horizons]
-    lifecycle_mismatch = [[0, 0] for _ in horizons]
-    identity_covered = [[0, 0] for _ in horizons]
+    lifecycle_mismatch = [[0 for _ in range(candidate_count)] for _ in horizons]
+    identity_covered = [[0 for _ in range(candidate_count)] for _ in horizons]
     selected_lifecycle_mismatch = [0 for _ in horizons]
     selected_identity_covered = [0 for _ in horizons]
     event_counts = [
-        [{"tp": 0, "fp": 0, "fn": 0} for _ in range(2)] for _ in horizons
+        [{"tp": 0, "fp": 0, "fn": 0} for _ in range(candidate_count)] for _ in horizons
     ]
     selected_event_counts = [{"tp": 0, "fp": 0, "fn": 0} for _ in horizons]
     uncertainty_sum = [[0.0, 0] for _ in horizons]
-    choice_counts = [0, 0]
+    choice_counts = [0 for _ in range(candidate_count)]
     timestamps = episode["timestamps"]
     with torch.no_grad():
         for frame_index, timestamp in enumerate(timestamps.tolist()):
@@ -130,7 +135,11 @@ def evaluate_episode(
                 continue
             if pool is None:
                 pool = HypothesisDynamicsPool(
-                    [model.dynamics, ConstantVelocityDynamics(damping=0.05)],
+                    [
+                        model.dynamics,
+                        ConstantVelocityDynamics(damping=0.05),
+                        BallisticContactDynamics(),
+                    ],
                     evidence_decay=evidence_decay,
                 )
             valid_queries: list[tuple[int, int]] = []
@@ -252,7 +261,7 @@ def evaluate_episode(
         "candidate_rmse_m": {
             str(horizon): [
                 _rmse(candidate_squares[index][candidate], candidate_counts[index][candidate])
-                for candidate in range(2)
+                for candidate in range(candidate_count)
             ]
             for index, horizon in enumerate(horizons)
         },

@@ -70,6 +70,10 @@
   Selection improved every pooled position horizon slightly without broad
   event/lifecycle/uncertainty regression, but gains are too small for promotion
   or training restart. The immutable learned incumbent remains deployed.
+- Added `BallisticContactDynamics`, an analytic gravity/drag candidate with
+  conservative contact-event logits, and generalized the evaluation harness to
+  three candidates. Nine focused tests pass; a fresh toy smoke selected the
+  learned candidate on all 59 queries, so no gain is claimed.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

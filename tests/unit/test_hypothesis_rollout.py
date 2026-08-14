@@ -5,6 +5,7 @@ import torch
 
 from world_model.belief import BeliefFactory, BeliefTrajectory
 from world_model.dynamics import (
+    BallisticContactDynamics,
     ConstantVelocityDynamics,
     DynamicsModel,
     HypothesisDynamicsPool,
@@ -171,3 +172,17 @@ def test_constant_velocity_hypothesis_is_transparent_and_non_mutating() -> None:
         [ConstantVelocityDynamics()], source, [0.25, 0.5]
     )[0]
     assert trajectory.fast_log_variance.shape[:3] == (1, 2, 1)
+
+
+def test_ballistic_contact_hypothesis_predicts_gravity_and_ground_event() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.position[0, 0] = torch.tensor([0.0, 0.2, 0.0])
+    objects.velocity[0, 0, 1] = -1.0
+    objects.geometry[0, 0, 0] = 0.1
+    source = belief.replace(objects=objects, gravity=torch.tensor([[0.0, -9.81, 0.0]]))
+    step = BallisticContactDynamics().predict_step(source, torch.tensor([0.1]))
+    assert step.belief.objects.position[0, 0, 1] < 0.2
+    assert step.event_logits[0, 0, 3] > 0
+    torch.testing.assert_close(source.objects.position[0, 0], torch.tensor([0.0, 0.2, 0.0]))
