@@ -1596,3 +1596,5 @@
   eight protected RGB episodes without promoting it as the default runtime.
 - [ ] Repeat the gated selector on a larger disjoint protected matrix before
   considering default integration or checkpoint promotion.
+- [x] Run a bounded disjoint pilot and reject it as insufficient/mixed evidence;
+  do not tune the selector against the two-episode result.

@@ -2689,3 +2689,6 @@ further gravity-axis threshold tuning.
 - Completed an eight-episode protected RGB comparison. The gated selector was
   non-regressive in all pooled position axes/horizons and slightly improved
   collision F1, but remains opt-in pending a larger disjoint evaluation.
+- Completed a disjoint two-episode pilot (`seed=200000`) as a guardrail check;
+  it had mixed long-horizon y/event results and was rejected as promotion
+  evidence. The gate remains opt-in.

@@ -9347,3 +9347,11 @@ at 0.75 s (unchanged at 1.00 s). This remains evaluation-only and opt-in;
 the default runtime and protected checkpoint are unchanged.
 
 Artifact: `runs/20260814-050000-hypothesis-pool-gated-eventweight01-8ep/report.json`.
+
+A disjoint follow-up pilot on seeds `200000–200001` completed in
+`runs/20260814-080000-hypothesis-pool-gated-eventweight01-disjoint2/report.json`.
+It selected `[285, 11, 0]` hypotheses. Mean selected versus learned RMSE was
+non-regressive at 0.10/0.25/0.75/1.00 s for x and z, but y regressed at 1.00 s
+(`0.3949` vs `0.3659` m) and collision F1 fell at 1.00 s (`0.0000` vs
+`0.0556`). Because this is only two episodes and has a mixed tail result, it
+is rejected as promotion evidence. A larger disjoint matrix remains required.
