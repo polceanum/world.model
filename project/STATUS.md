@@ -9488,3 +9488,10 @@ Full regression verification after the contact-response changes:
 `PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q` →
 `753 passed, 6 skipped in 177.21 s`. All skips are expected MPS-conditional
 tests because this environment reported MPS unavailable for the run.
+
+Expanded the evaluator bank with an undamped constant-velocity candidate and
+named all four candidates in reports. The two-episode comparison at
+`runs/20260814-220000-hypothesis-pool-velocity4-disjoint2/report.json` selected
+`[208, 6, 5, 77]` (learned, undamped velocity, damped velocity, ballistic).
+Undamped velocity improved x/y through 0.75 s, but z regressed substantially at
+0.75/1.00 s. The expanded bank is retained for research, not promoted.

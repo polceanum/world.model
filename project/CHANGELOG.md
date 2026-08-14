@@ -2729,3 +2729,5 @@ further gravity-axis threshold tuning.
   selector promotion was made.
 - Full regression suite after contact changes: `753 passed, 6 skipped`; skips
   are expected MPS-conditional tests.
+- Expanded the evaluator with a named undamped constant-velocity hypothesis;
+  it improved x/y but regressed long-horizon z and was not promoted.

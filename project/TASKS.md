@@ -1625,3 +1625,5 @@
   promotion for long-horizon z/event regressions while retaining the fix.
 - [x] Add and test approaching-pair elastic impulses; reject promotion after a
   fresh comparison with residual z regressions.
+- [x] Add an undamped constant-velocity nearby hypothesis and reject the first
+  four-candidate comparison for long-horizon z regressions.
