@@ -2856,3 +2856,7 @@ further gravity-axis threshold tuning.
 - Recorded the z-only recovery's first durable step-16 training health record:
   finite loss/gradients, one applied update, and nonzero causal support under
   the protected z-only scope. It is not an accuracy result or promotion.
+- Isolated the full-MPS qualification failure: basic active-Aqua reductions
+  remain finite, while typed-attention causal propagation reaches non-finite
+  uncertainty before loss construction and the complete backward reproduces
+  the Metal pipeline/XPC error. Retained CPU as the safe causal backend.

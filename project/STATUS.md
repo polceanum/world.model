@@ -9908,6 +9908,16 @@ claim that MPS is unavailable. The existing CPU closed-loop recovery remains
 the only active run; do not switch the production causal configuration to MPS
 until this exact finite smoke passes in an active Aqua session.
 
+Follow-up isolation makes the qualification status more precise: an
+active-Aqua MPS scalar multi-axis reduction/backward smoke is finite, but the
+same tiny RGB runtime with typed attention fails reproducibly. The complete
+closed-loop backward reaches the Metal interrupted-XPC reduction pipeline
+failure; a smaller dynamics-only typed-attention propagation instead reaches
+the project's finite-state guard with non-finite predicted log variance before
+loss construction. Thus the issue is in the present full MPS causal path, not
+generic MPS availability. CPU remains the documented safe closed-loop backend
+while MPS is investigated separately; no MPS accuracy result is claimed.
+
 The controlled z-only recovery has now reached optimizer step 16/512. Its
 first durable training record is finite (`loss=3.944058`,
 pre-clip/applied gradient norm `0.214675/0.214675`), applied an optimizer

@@ -1720,4 +1720,5 @@
 - [ ] Re-qualify full closed-loop MPS execution with the user-provided torch
   build after the active-Aqua Metal XPC/pipeline interruption. Do not change
   the CPU causal fallback or report an MPS acceleration until a finite RGB
-  forward/backward smoke completes.
+  forward/backward smoke completes. Isolated scalar reductions pass; localize
+  the typed-attention non-finite uncertainty propagation before retrying.
