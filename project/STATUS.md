@@ -9441,6 +9441,13 @@ It selected `[285, 10, 1]`; x/y RMSE improved from 0.50 s onward and z was
 stable, but collision F1 regressed at 0.50 s (`0.1494 → 0.1172`). It is
 therefore rejected under the event guardrail and remains opt-in.
 
+Event decoding now has an explicit `--event-threshold` (default `0.5`). A
+stricter threshold pilot at `0.8` completed at
+`runs/20260814-170000-hypothesis-pool-eventthreshold08-disjoint2/report.json`.
+It selected `[285, 7, 4]`; all pooled position axes were non-regressive and
+collision F1 improved slightly at 0.10/0.50/1.00 s. This is encouraging but
+only two episodes, so the threshold remains opt-in pending a larger matrix.
+
 To isolate event coupling, a position-only sharp blend (`event_weight=0.0`,
 `temperature=0.25`) was evaluated on fresh seeds at
 `runs/20260814-160000-hypothesis-pool-blend-temp025-positiononly-disjoint2/report.json`.

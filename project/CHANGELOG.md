@@ -2716,3 +2716,5 @@ further gravity-axis threshold tuning.
   was rejected.
 - Ran a position-only sharp blend to isolate event coupling; it still had a
   0.10 s collision-F1 regression and mixed axes, so it was rejected.
+- Exposed `--event-threshold`; a two-episode `0.8` pilot was non-regressive and
+  slightly improved event F1, but remains opt-in pending larger evidence.

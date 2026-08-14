@@ -1615,3 +1615,5 @@
   pilot for a 0.50 s collision-F1 regression.
 - [x] Test position-only sharp blending to isolate event coupling; reject it for
   a 0.10 s collision-F1 regression and mixed axes.
+- [x] Expose event decision threshold and run a promising `0.8` pilot; keep it
+  opt-in pending larger validation.
