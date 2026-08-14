@@ -2927,3 +2927,9 @@ further gravity-axis threshold tuning.
   evaluator. This is observability only: candidate rollout, causal selection,
   scores, report schema, and artifact semantics are unchanged. Focused tests
   and Ruff pass.
+- Completed the protected eight-episode active-Aqua MPS causal heterogeneous
+  pool comparison. Joint selection remains learned on 1,179/1,184 decisions,
+  while causal x-axis selection diversifies at long horizons. Retained this as
+  diagnostic evidence of a joint scoring/transition limitation; no default or
+  checkpoint is promoted. An accidentally duplicated deterministic report is
+  explicitly recorded as non-independent.

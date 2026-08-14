@@ -31,8 +31,12 @@
   all per-axis/per-horizon/lifecycle/identity/event/uncertainty outputs.
 - [x] Add an analytic gravity/drag plus contact-event hypothesis and generalize
   the evaluation harness to three candidates; verify it without promotion.
-- [ ] Run the three-candidate pool on the protected multi-episode protocol and
+- [x] Run the three-candidate pool on the protected multi-episode protocol and
   require event/lifecycle/uncertainty guardrails before any default change.
+  The eight-episode MPS causal four-candidate extension retains the learned
+  joint choice 1,179/1,184 times despite x-axis analytic diversity; no selector
+  default changes and the next repair must address joint transition/scoring
+  diversity before another weight campaign.
 - [x] Complete the three-candidate eight-episode protected comparison; retain
   ballistic as diagnostic only because it is rarely selected and regresses
   mature event/position behavior.

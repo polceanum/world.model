@@ -10094,3 +10094,22 @@ semantics; it makes a multi-hour fixed RGB/MPS comparison observable without
 high-frequency external polling. Focused evaluator tests (`3 passed`) and Ruff
 pass. The currently running eight-episode protected MPS comparison predates
 this source change and retains its original immutable behavior.
+
+That eight-episode active-Aqua MPS RGB-only causal pool comparison completed
+from the protected incumbent. Its canonical report is
+`runs/20260814-205111-protected-causal-hypothesis-pool-8` (SHA-256
+`38f63bb55160deccddfe2698d11730cbdac0b928802595ad5f0ab4037287de27`). It
+uses eight seeds `100000`--`100007`, five 0.10--1.00 s horizons, four
+short-step candidates (learned, constant velocity, damped constant velocity,
+and ballistic contact), `evidence_decay=1.0`, and no oracle runtime input.
+Joint causal selection chose learned `1179/1184` times; constant velocity was
+chosen twice, damped constant velocity three times, and ballistic never. This
+does not justify a joint default change. The causal per-axis diagnostic is
+meaningfully different: x selected an analytic candidate increasingly at long
+horizons (42/304 at 0.10 s, 27/200 at 0.75 s, and 29/160 at 1.00 s), while z
+remained learned almost entirely. The report therefore confirms a joint
+scoring/transition-diversity limitation rather than evidence that analytic
+candidates should replace the learned model. A second accidentally concurrent
+run at `runs/20260814-220422-protected-causal-hypothesis-pool-8` is byte-for-byte
+identical and is retained only as a duplicate execution record; it is not an
+independent sample or metric.

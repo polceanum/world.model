@@ -3649,3 +3649,23 @@
   hard-coding simulator parameters or altering the persistent belief, learned
   dynamics, filter, selector, or live experiment. Any measured gain still
   requires the normal causal full-mixture and MPS promotion gates.
+
+## ADR-129 — Diagnose joint pool lock-in separately from causal axis diversity
+
+- **Date:** 2026-08-14
+- **Status:** accepted for diagnosis; no runtime-default change
+- **Context:** The protected RGB-only eight-episode active-Aqua MPS pool
+  comparison used four short-step candidates and causal pre-observation
+  selection. The joint selector chose learned 1,179 of 1,184 decisions, but
+  its causal axis diagnostic chose analytic alternatives for x, especially at
+  longer horizons. Thus a lack of useful joint switching is not evidence that
+  all candidate dynamics are indistinguishable.
+- **Decision:** Keep the persistent `WorldBelief`, learned joint default, and
+  existing calibration/event/lifecycle guardrails unchanged. Treat joint pool
+  lock-in as a scored transition-diversity problem: the next pool change must
+  establish, on a fixed multi-episode causal protocol, whether joint evidence
+  aggregation obscures localized axis/event advantages. It may not promote an
+  axis splice or hardcode a constant-velocity override from this diagnostic.
+- **Consequences:** Candidate evidence remains delayed RGB-derived
+  measurement evidence, not simulator state; all future selection variants
+  require the same full fixed-manifest guardrails and MPS promotion evidence.
