@@ -2703,3 +2703,6 @@ further gravity-axis threshold tuning.
 - Added opt-in `--axis-gate-ratio` scoring, which blocks candidates with a
   materially worse error on any axis. The two-episode pilot was conservative
   but had a small 0.25 s y regression, so it remains unpromoted.
+- Completed the larger eight-episode per-axis-gated matrix. It improved x/y at
+  long horizons and preserved lifecycle/identity metrics, but small z and
+  collision-F1 regressions remain; default promotion was rejected.

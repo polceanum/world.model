@@ -9399,3 +9399,20 @@ selected `[293, 1, 2]` hypotheses. Mean selected versus learned RMSE was nearly
 identical, with small x/z improvements at 0.10 s and collision F1 `0.2614 →
 0.2649`, but y regressed at 0.25 s (`0.3352 → 0.3370` m). This underpowered
 result is not promoted; a larger disjoint matrix is required.
+
+The larger eight-episode per-axis-gated matrix completed at
+`runs/20260814-120000-hypothesis-pool-axisgate-disjoint8/report.json` with
+selection counts `[1141, 40, 3]`. Selected versus learned mean RMSE (x/y/z m)
+and collision F1 were:
+
+| horizon | learned | axis-gated selected | collision F1 |
+|---|---|---|---|
+| 0.10 s | 1.2151 / 0.5794 / 0.9925 | 1.2151 / 0.5783 / 0.9926 | 0.1185 → 0.1151 |
+| 0.25 s | 1.2239 / 0.5219 / 0.9917 | 1.2235 / 0.5209 / 0.9918 | 0.1421 → 0.1442 |
+| 0.50 s | 1.2271 / 0.3906 / 0.9917 | 1.2269 / 0.3895 / 0.9914 | 0.1434 → 0.1419 |
+| 0.75 s | 1.2179 / 0.3821 / 1.0006 | 1.2138 / 0.3658 / 1.0011 | 0.1447 → 0.1450 |
+| 1.00 s | 1.2208 / 0.3548 / 1.0237 | 1.2131 / 0.3473 / 1.0250 | 0.2238 → 0.2253 |
+
+Lifecycle mismatch and identity coverage were identical to learned-only. The
+small z regressions at 0.50–1.00 s and F1 regression at 0.10/0.50 s fail the
+strict promotion gate, so the axis-gated selector remains opt-in.
