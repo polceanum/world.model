@@ -2907,3 +2907,9 @@ further gravity-axis threshold tuning.
   incumbent's `0.3213162`, with 37 broad guardrail failures; the incumbent
   remains intact and no MPS promotion replay was run for this ineligible
   candidate.
+- Completed and rejected the z-only recovery's second fixed-manifest candidate
+  at step 256. It reduced the first candidate's aggregate RMSE and improved
+  collision F1, but selector score `0.3224730` still missed the protected
+  `0.3213162` baseline and 20 broad guardrails failed, principally y/z horizon
+  and reference-pair dynamics. The incumbent remains intact and the
+  ineligible candidate correctly bypassed MPS promotion replay.

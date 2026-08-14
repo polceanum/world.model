@@ -1721,7 +1721,10 @@
   regressed (`0.3229766` versus `0.3213162`) and 37 reference guardrails
   failed, especially collision, y, camera-parallax, damped-contact, and
   reference-pair metrics. Preserve the incumbent and use this as evidence
-  against a z-only decoder adjustment as the next promotion path.
+  against a z-only decoder adjustment as the next promotion path. Its second
+  256-step candidate was also rejected (selector `0.3224730`, 20 guardrail
+  failures); it modestly improved on the 128-step candidate but still regressed
+  from the incumbent on selection, y/z horizons, and reference-pair dynamics.
 - [x] Re-qualify full closed-loop MPS execution with the user-provided torch
   build on the full attention-pilot configuration. The zero-tangent contact
   NaN and training-only ID reduction are fixed, and a bounded complete RGB

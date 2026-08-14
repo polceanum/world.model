@@ -10044,3 +10044,17 @@ already ineligible, the active-Aqua MPS replay gate was correctly not run:
 it is a promotion confirmation, not a way to rescue a failed candidate. The
 numbered candidate checkpoint is preserved at
 `runs/20260814-101500-attention-node-z-recovery-512/checkpoints/validation_step_000128.pt`.
+
+The same bounded legacy-CPU recovery run completed its second immutable
+32-episode validation at step 256. It was also rejected: selector score
+`0.3224730378` remained above the protected incumbent's `0.3213161872`;
+aggregate position RMSE was `0.2521169956` (x `0.2815544454`, y
+`0.2046092205`, z `0.2637254238`), collision F1 `0.1985111663`, target
+coverage `0.37775`, precision `0.3587369421`, and coverage-90
+`0.9336208962`. Although collision F1 and aggregate RMSE improved over the
+step-128 candidate, 20 strict guardrails failed. The selection-score minimum
+improvement requirement failed, together with y short/mid-horizon RMSE, z
+long-horizon RMSE, and several reference-pair y/z and velocity metrics. The
+incumbent remains protected; this ineligible checkpoint does not receive an
+MPS promotion replay. It is preserved at
+`runs/20260814-101500-attention-node-z-recovery-512/checkpoints/validation_step_000256.pt`.
