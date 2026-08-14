@@ -9752,6 +9752,21 @@ active-Aqua MPS RGB baseline is currently running at
 `runs/20260814-ensemble-baseline-1ep.json`; no ensemble result is claimed or
 promoted until the paired run and report comparison complete.
 
+The matched active-Aqua MPS robust-ensemble probe completed and is rejected.
+Control: `runs/20260814-ensemble-baseline-1ep.json`; candidate:
+`runs/20260814-ensemble-robust025-1ep.json`. Both use the protected reference,
+seed 100000, one RGB episode, and MPS measurement path. The candidate used
+three belief samples, position/velocity scales `0.1`, and risk penalty `0.25`.
+It selected the learned candidate on all 148 decisions, exactly as the
+control, so the robust evidence did not create a useful regime switch. The
+guardrail comparison at tolerance `1e-4` failed: x/y RMSE regressed at 0.25 s
+by `0.002572/0.004424`, x at 0.50 s by `0.004549`, and x at 1.00 s by
+`0.000237`; lifecycle, identity, event F1, and uncertainty were unchanged or
+non-regressive. Exact deltas are in `/private/tmp/ensemble-robust025-guardrail.json`.
+Do not promote this setting or spend a full manifest on it. The next accuracy
+target is candidate diversity/learned-transition accuracy, since a robust
+selector cannot help while one candidate dominates every observed regime.
+
 The active-Aqua MPS smoke at
 `runs/20260814-074043-orpheus-attention-pilot-mps` completed one optimizer
 step and its eight-scenario final validation. It used torch

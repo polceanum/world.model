@@ -2817,3 +2817,6 @@ further gravity-axis threshold tuning.
 - Added deterministic, uncertainty-scaled nearby-belief rollout sampling and
   RGB evaluator switches for a matched robust-ensemble experiment. The default
   evaluator behaviour remains unchanged.
+- Ran and rejected the first matched robust three-world MPS probe: it retained
+  the learned candidate for every decision and regressed x/y RMSE at guarded
+  horizons, despite unchanged lifecycle/identity/event/calibration metrics.

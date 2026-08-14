@@ -1690,6 +1690,12 @@
   hypothesis evaluator and compare zero-risk, expected-error, and robust-risk
   settings on the same explicit seed manifest. (Belief perturbation support is
   implemented; the first matched MPS probe is running.)
+- [x] Run a matched three-sample robust nearby-belief RGB/MPS probe and reject
+  it after the all-axis comparator found x/y regressions with no model-choice
+  diversity.
+- [ ] Audit why the learned candidate dominates all delayed-evidence choices;
+  add only evidence-backed candidate diversity or learned-transition repairs
+  that can change genuine regimes without replacing `WorldBelief`.
 - [ ] Run the long attention training campaign on this active Aqua/MPS session;
   require finite loss and the existing all-axis/per-horizon comparator before
   promotion.
