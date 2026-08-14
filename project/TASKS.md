@@ -1603,3 +1603,5 @@
   guardrails still regress.
 - [ ] Evaluate an axis-balanced or calibrated blend selector on fresh seeds,
   with the same pooled long-horizon guardrails.
+- [x] Add validated per-axis weighting as an opt-in selector/evaluator seam and
+  reject the first y-emphasized pilot for mixed z/event evidence.

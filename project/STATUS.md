@@ -9380,3 +9380,13 @@ alternatives shared the learned active masks. The 1.00-second y and event
 regressions reject promotion despite x/z gains. The next selector experiment
 should use axis-balanced or calibrated blending evidence rather than increasing
 event weight; no default or checkpoint was changed.
+
+An opt-in per-axis position weighting seam is now implemented across the
+selector, pool, runtime, and evaluator (`--axis-weights X Y Z`), with default
+`1 1 1` preserving prior behavior. A fresh two-episode y-emphasized pilot
+(`1 2 1`) is recorded at
+`runs/20260814-100000-hypothesis-pool-axis-y2-disjoint2/report.json`.
+It improved 0.50–1.00 s y RMSE (`0.6291 → 0.6206` and `0.4682 → 0.4460` m)
+and x, but z regressed slightly and collision F1 fell at 0.50 s
+(`0.4763 → 0.3896`). This underpowered mixed result is rejected; no weighting
+is enabled by default.

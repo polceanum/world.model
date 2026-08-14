@@ -2697,3 +2697,6 @@ further gravity-axis threshold tuning.
 - Completed the first optimized eight-episode disjoint gated-selector matrix;
   x/z improved at some long horizons, but y and collision F1 regressed at the
   tail, so promotion was rejected and the learned default was preserved.
+- Added validated opt-in `--axis-weights X Y Z` scoring through the selector,
+  pool, runtime, and evaluator. A two-episode `1 2 1` pilot improved long-
+  horizon y but regressed z/event metrics and was rejected.
