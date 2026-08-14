@@ -9819,3 +9819,10 @@ behaviour, not an optimizer-rejection/collapse: it exceeds the configured
 minimum interaction retention `0.1`, all eight scenario families were
 present, and the process continued. It is not a validation result or model
 promotion.
+
+At step 32/128, the continuation returned to a less event-dominated balanced
+batch and remained numerically healthy: total loss `2.236768`, state loss
+`0.164260`, collision-event loss `2.254404`, and applied gradient norm
+`0.449005`. This recovery after the step-16/24 collision stress confirms that
+the finite optimizer is still making normal updates; it is not evidence of
+cross-scenario accuracy until the fixed 32-episode validation at step 64.

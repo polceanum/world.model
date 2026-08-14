@@ -2827,3 +2827,6 @@ further gravity-axis threshold tuning.
 - Recorded the continuation's first normal and collision-heavy optimizer
   batches. The step-16 event spike remained finite and passed the pre-Adam
   interaction-retention gate; no numerical safeguard was relaxed.
+- Recorded the step-32 post-stress training-health sample: finite state/event
+  losses and unclipped gradient, with validation intentionally deferred to the
+  configured step-64 full-mixture checkpoint.
