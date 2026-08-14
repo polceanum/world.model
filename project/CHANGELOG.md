@@ -2753,3 +2753,5 @@ further gravity-axis threshold tuning.
   a real smoke verified histogram totals.
 - Made event histograms label-aware (positive/negative) and verified exact
   conservation, enabling truthful offline threshold calibration.
+- Added `scripts/sweep_event_histograms.py` to aggregate label-aware bins and
+  estimate precision/recall/F1 at conservative bin-aligned thresholds.

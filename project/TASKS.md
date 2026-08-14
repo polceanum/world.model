@@ -1647,3 +1647,5 @@
   offline calibration without repeated rollouts.
 - [x] Split event histograms by positive/negative target labels and validate
   exact count conservation for offline precision/recall sweeps.
+- [x] Add and smoke-test a bin-aligned offline event-threshold sweep utility;
+  keep estimates diagnostic until multi-episode calibration is available.

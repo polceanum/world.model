@@ -9566,3 +9566,10 @@ smoke at
 `runs/20260815-070000-hypothesis-pool-labeled-event-histogram-smoke/report.json`
 validated `all = positive + negative` for every horizon and candidate, enabling
 truthful offline threshold sweeps.
+
+Added `scripts/sweep_event_histograms.py`, which aggregates these bins across
+episodes and reports conservative bin-aligned precision/recall/F1 estimates
+without rerunning rollouts. On the labeled smoke it reproduced the recorded
+ballistic-contact event counts (0.50 s F1 `0.154` at the best available
+threshold). This remains a calibration diagnostic; no threshold or candidate
+has been promoted.
