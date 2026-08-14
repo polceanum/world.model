@@ -9798,3 +9798,12 @@ rerun in the required environment:
 It passed `32 passed in 2.09s` on Python 3.10.20. This verifies the ensemble,
 `WorldBelief` preservation, and resume-state contracts; it does not substitute
 for the pending active-Aqua RGB validation.
+
+The Aqua continuation reached optimizer step 8/128 without a failure or
+support exhaustion. Its first durable training record has finite total loss
+`0.4890455`, pre-clip/applied gradient norm `0.2124018/0.2124018`, and an
+effective causal trajectory-support count of `349`; no global, node, force,
+collision, or impulse parameter gradient clip engaged. Typed output-local
+clips were active as designed (node and force backpropagation), not a global
+collapse. This is a health observation only: it is one stochastic training
+batch, not a validation result or promotion.
