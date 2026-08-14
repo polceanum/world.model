@@ -1598,3 +1598,8 @@
   considering default integration or checkpoint promotion.
 - [x] Run a bounded disjoint pilot and reject it as insufficient/mixed evidence;
   do not tune the selector against the two-episode result.
+- [x] Complete the first full eight-episode disjoint matrix after evaluator
+  optimization; reject the gated selector because long-horizon y/event
+  guardrails still regress.
+- [ ] Evaluate an axis-balanced or calibrated blend selector on fresh seeds,
+  with the same pooled long-horizon guardrails.

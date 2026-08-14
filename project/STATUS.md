@@ -9361,3 +9361,22 @@ semantics-preserving (no gradients or parameter updates are possible) and
 removes autograd version-counter overhead from repeated learned rollouts. A
 one-episode CPU smoke completed successfully after the change:
 `runs/20260814-083000-hypothesis-pool-inference-smoke/report.json`.
+
+The first full disjoint eight-episode matrix after that optimization completed
+at `runs/20260814-090000-hypothesis-pool-gated-eventweight01-disjoint8/report.json`.
+Choices were `[1157, 27, 0]` (learned, constant-velocity, ballistic). Selected
+versus learned mean RMSE (x/y/z, metres) was:
+
+| horizon | learned | gated selected | collision F1 |
+|---|---|---|---|
+| 0.10 s | 0.7740 / 0.4704 / 0.8181 | 0.7740 / 0.4712 / 0.8181 | 0.1399 → 0.1411 |
+| 0.25 s | 0.8043 / 0.4151 / 0.8275 | 0.8043 / 0.4149 / 0.8275 | 0.1434 → 0.1434 |
+| 0.50 s | 0.8417 / 0.3010 / 0.8304 | 0.8409 / 0.3031 / 0.8295 | 0.1550 → 0.1578 |
+| 0.75 s | 0.8742 / 0.2923 / 0.8140 | 0.8711 / 0.2951 / 0.8104 | 0.1718 → 0.1692 |
+| 1.00 s | 0.9011 / 0.2759 / 0.8379 | 0.8880 / 0.2897 / 0.8397 | 0.1279 → 0.1065 |
+
+Lifecycle mismatch and identity coverage were unchanged because the selected
+alternatives shared the learned active masks. The 1.00-second y and event
+regressions reject promotion despite x/z gains. The next selector experiment
+should use axis-balanced or calibrated blending evidence rather than increasing
+event weight; no default or checkpoint was changed.

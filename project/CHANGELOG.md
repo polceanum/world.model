@@ -2694,3 +2694,6 @@ further gravity-axis threshold tuning.
   evidence. The gate remains opt-in.
 - Switched evaluation-only rollout execution from `torch.no_grad()` to
   `torch.inference_mode()` and verified a one-episode RGB smoke report.
+- Completed the first optimized eight-episode disjoint gated-selector matrix;
+  x/z improved at some long horizons, but y and collision F1 regressed at the
+  tail, so promotion was rejected and the learned default was preserved.
