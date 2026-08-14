@@ -2731,3 +2731,5 @@ further gravity-axis threshold tuning.
   are expected MPS-conditional tests.
 - Expanded the evaluator with a named undamped constant-velocity hypothesis;
   it improved x/y but regressed long-horizon z and was not promoted.
+- Added per-horizon hypothesis selection counts to reports and verified the
+  variable-candidate accounting with a real smoke evaluation.

@@ -135,6 +135,7 @@ def evaluate_episode(
     selected_event_counts = [{"tp": 0, "fp": 0, "fn": 0} for _ in horizons]
     uncertainty_sum = [[0.0, 0] for _ in horizons]
     choice_counts = [0 for _ in range(candidate_count)]
+    horizon_choice_counts = [[0 for _ in range(candidate_count)] for _ in horizons]
     timestamps = episode["timestamps"]
     # Evaluation never backpropagates or mutates tensors through autograd.
     # Inference mode also disables version-counter bookkeeping, which matters
@@ -206,6 +207,7 @@ def evaluate_episode(
                 )
                 selected = int(selection.selected_index[0])
                 choice_counts[selected] += 1
+                horizon_choice_counts[horizon_index][selected] += 1
                 if blend_positions:
                     posterior = selection.posterior_weights[0]
                     predicted_positions = torch.stack(
@@ -306,6 +308,9 @@ def evaluate_episode(
             for index, horizon in enumerate(horizons)
         },
         "selection_counts": choice_counts,
+        "selection_counts_by_horizon": {
+            str(horizon): counts for horizon, counts in zip(horizons, horizon_choice_counts, strict=True)
+        },
         "candidate_lifecycle_mismatch": {
             str(horizon): lifecycle_mismatch[index] for index, horizon in enumerate(horizons)
         },

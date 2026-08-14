@@ -9495,3 +9495,8 @@ named all four candidates in reports. The two-episode comparison at
 `[208, 6, 5, 77]` (learned, undamped velocity, damped velocity, ballistic).
 Undamped velocity improved x/y through 0.75 s, but z regressed substantially at
 0.75/1.00 s. The expanded bank is retained for research, not promoted.
+
+Reports now include `selection_counts_by_horizon`, keyed by forecast horizon,
+alongside global counts. A one-episode smoke verified variable-candidate shape
+and horizon accounting at
+`runs/20260814-230000-hypothesis-pool-horizon-count-smoke/report.json`.
