@@ -1643,3 +1643,5 @@
   and y/z regressions.
 - [x] Test precision-oriented event threshold `0.95`; reject it for long-horizon
   y regressions despite improved event F1.
+- [x] Add event-probability histograms to reports and verify counts, enabling
+  offline calibration without repeated rollouts.

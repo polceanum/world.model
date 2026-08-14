@@ -137,6 +137,9 @@ def evaluate_episode(
     event_counts = [
         [{"tp": 0, "fp": 0, "fn": 0} for _ in range(candidate_count)] for _ in horizons
     ]
+    event_probability_histograms = [
+        [[0 for _ in range(10)] for _ in range(candidate_count)] for _ in horizons
+    ]
     selected_event_counts = [{"tp": 0, "fp": 0, "fn": 0} for _ in horizons]
     uncertainty_sum = [[0.0, 0] for _ in horizons]
     choice_counts = [0 for _ in range(candidate_count)]
@@ -269,6 +272,15 @@ def evaluate_episode(
                     event_prediction = (
                         trajectory.event_logits[:, 0, :, MotionMode.COLLISION].sigmoid() >= event_threshold
                     )
+                    event_probability = trajectory.event_logits[:, 0, :, MotionMode.COLLISION].sigmoid()
+                    bins = (event_probability.clamp(0.0, 1.0 - 1.0e-7) * 10).to(torch.int64)
+                    histogram = torch.bincount(bins.flatten(), minlength=10).tolist()
+                    event_probability_histograms[horizon_index][candidate_index] = [
+                        previous + current
+                        for previous, current in zip(
+                            event_probability_histograms[horizon_index][candidate_index], histogram, strict=True
+                        )
+                    ]
                     truth = collision_target[:, 0]
                     event_counts[horizon_index][candidate_index]["tp"] += int(
                         (event_prediction & truth).sum().cpu()
@@ -361,6 +373,10 @@ def evaluate_episode(
         "selected_mean_position_std_m": {
             str(horizon): (total / count if count else None)
             for horizon, (total, count) in zip(horizons, uncertainty_sum, strict=True)
+        },
+        "event_probability_histograms": {
+            str(horizon): histograms
+            for horizon, histograms in zip(horizons, event_probability_histograms, strict=True)
         },
     }
 

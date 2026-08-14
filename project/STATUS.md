@@ -9553,3 +9553,9 @@ completed at
 It raised event precision/F1 (0.50 s F1 `0.262`) and improved z, but y
 regressed at 0.75/1.00 s. It is rejected under all-axis guardrails; event
 calibration cannot be solved safely by threshold alone.
+
+Evaluator reports now include per-horizon, per-candidate
+`event_probability_histograms` (ten bins over [0,1]). This permits offline
+precision/recall threshold sweeps from one expensive rollout. A real smoke
+verified finite histograms whose bin totals match observed object counts at
+`runs/20260815-060000-hypothesis-pool-event-histogram-smoke/report.json`.

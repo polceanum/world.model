@@ -2749,3 +2749,5 @@ further gravity-axis threshold tuning.
   collapsed tail event performance and worsened y/z, so it was rejected.
 - Tested event threshold `0.95`; event precision/F1 improved, but long-horizon y
   regressed and the threshold was rejected.
+- Added per-horizon event-probability histograms for offline threshold sweeps;
+  a real smoke verified histogram totals.
