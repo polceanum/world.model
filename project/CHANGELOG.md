@@ -2718,3 +2718,5 @@ further gravity-axis threshold tuning.
   0.10 s collision-F1 regression and mixed axes, so it was rejected.
 - Exposed `--event-threshold`; a two-episode `0.8` pilot was non-regressive and
   slightly improved event F1, but remains opt-in pending larger evidence.
+- Completed the larger threshold-0.8 matrix; long-horizon y/z and event F1
+  regressed, so the default threshold remains 0.5.

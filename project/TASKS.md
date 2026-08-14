@@ -1617,3 +1617,5 @@
   a 0.10 s collision-F1 regression and mixed axes.
 - [x] Expose event decision threshold and run a promising `0.8` pilot; keep it
   opt-in pending larger validation.
+- [x] Complete the eight-episode threshold-0.8 matrix and reject it for
+  long-horizon y/z and collision-F1 regressions.

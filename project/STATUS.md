@@ -9448,6 +9448,13 @@ It selected `[285, 7, 4]`; all pooled position axes were non-regressive and
 collision F1 improved slightly at 0.10/0.50/1.00 s. This is encouraging but
 only two episodes, so the threshold remains opt-in pending a larger matrix.
 
+The required eight-episode threshold matrix completed at
+`runs/20260814-180000-hypothesis-pool-eventthreshold08-disjoint8/report.json`.
+It selected `[1114, 53, 17]`. Long-horizon x improved, but y/z regressed at
+0.50–1.00 s and collision F1 fell at 0.10, 0.50, and 1.00 s. The two-episode
+threshold gain was therefore sampling noise; `0.8` is rejected and the default
+event threshold remains `0.5`.
+
 To isolate event coupling, a position-only sharp blend (`event_weight=0.0`,
 `temperature=0.25`) was evaluated on fresh seeds at
 `runs/20260814-160000-hypothesis-pool-blend-temp025-positiononly-disjoint2/report.json`.
