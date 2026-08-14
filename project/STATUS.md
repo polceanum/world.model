@@ -9826,3 +9826,18 @@ batch and remained numerically healthy: total loss `2.236768`, state loss
 `0.449005`. This recovery after the step-16/24 collision stress confirms that
 the finite optimizer is still making normal updates; it is not evidence of
 cross-scenario accuracy until the fixed 32-episode validation at step 64.
+
+The fixed 32-episode active-Aqua RGB validation at optimizer step 64 completed
+in `1023.24 s` and rejects this checkpoint. Its selector score was
+`0.3379235`, worse than the protected step-zero incumbent `0.3213162`.
+Aggregate position RMSE regressed from `0.2514598` to `0.3017406 m`; per-axis
+x/y/z RMSE regressed from `0.2817742/0.2019070/0.2636911` to
+`0.3638257/0.2154209/0.3071918 m`. Target coverage fell from `0.37625` to
+`0.355`, precision from `0.35731` to `0.33737`, and identity-switch rate rose
+from `0.01359` to `0.02001`. The machine-generated incumbent guardrail record
+contains 138 failures (117 scenario-specific), with especially large
+reference-pair x-axis errors. The checkpoint
+`runs/20260814-083918-attention-robust-transition-128-continuation/checkpoints/validation_step_000064.pt`
+is retained for diagnosis but is not promoted. Training remains active through
+the planned final step so the final scheduled validation can distinguish a
+late recovery from an early failed trajectory.

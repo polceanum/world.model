@@ -1698,5 +1698,8 @@
   that can change genuine regimes without replacing `WorldBelief`.
 - [ ] Run the long attention training campaign on this active Aqua/MPS session;
   require finite loss and the existing all-axis/per-horizon comparator before
-  promotion. (The interrupted pre-update run is preserved; its timestamped
-  selector-checkpoint continuation is active.)
+  promotion. (The timestamped continuation's complete step-64 validation is
+  finite but rejected: selector `0.3379235` versus incumbent `0.3213162`, 138
+  incumbent guardrail failures, and no promotion. Retain the step-128 result
+  for a final late-recovery check, then diagnose the learned-transition x-axis
+  regression rather than relaxing any guardrail.)

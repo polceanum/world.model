@@ -2830,3 +2830,7 @@ further gravity-axis threshold tuning.
 - Recorded the step-32 post-stress training-health sample: finite state/event
   losses and unclipped gradient, with validation intentionally deferred to the
   configured step-64 full-mixture checkpoint.
+- Completed and rejected the step-64 active-Aqua RGB full-mixture validation:
+  selector score and aggregate/per-axis rollout RMSE regressed against the
+  protected incumbent, alongside coverage, precision, and identity guardrail
+  failures. The checkpoint is retained only as diagnosis evidence.
