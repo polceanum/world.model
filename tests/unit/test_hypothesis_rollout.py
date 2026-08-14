@@ -122,6 +122,26 @@ def test_axis_gate_blocks_candidate_with_single_axis_regression() -> None:
     assert selection.selected_index.tolist() == [0]
 
 
+def test_event_gate_blocks_candidate_with_event_regression() -> None:
+    target = torch.zeros(1, 2, 1, 3)
+    mask = torch.ones(1, 2, 1, dtype=torch.bool)
+    collision = torch.ones(1, 2, 1, dtype=torch.bool)
+    event_good = _trajectory(0.0)
+    event_bad = _trajectory(0.0)
+    event_good.event_logits[..., 3] = 4.0
+    event_bad.event_logits[..., 3] = -4.0
+    selection = HypothesisRolloutEngine.score(
+        [event_good, event_bad],
+        target,
+        mask,
+        target_collision=collision,
+        event_weight=1.0,
+        event_gate_ratio=0.05,
+        uncertainty_aware=False,
+    )
+    assert selection.selected_index.tolist() == [0]
+
+
 def test_selector_ignores_occluded_frames_and_scores_uncertainty() -> None:
     target = torch.zeros(1, 2, 1, 3)
     mask = torch.tensor([[[True], [False]]])

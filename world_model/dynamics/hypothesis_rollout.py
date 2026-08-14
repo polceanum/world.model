@@ -243,6 +243,7 @@ class HypothesisRolloutEngine:
         event_weight: float = 0.0,
         position_gate_ratio: float = 0.0,
         axis_gate_ratio: float = 0.0,
+        event_gate_ratio: float = 0.0,
         axis_weights: Sequence[float] | Tensor | None = None,
         uncertainty_aware: bool = True,
         temperature: float = 1.0,
@@ -272,6 +273,7 @@ class HypothesisRolloutEngine:
             ("event_weight", event_weight),
             ("position_gate_ratio", position_gate_ratio),
             ("axis_gate_ratio", axis_gate_ratio),
+            ("event_gate_ratio", event_gate_ratio),
         ):
             if value < 0 or not torch.isfinite(torch.as_tensor(value)):
                 raise ValueError(f"{name} must be finite and nonnegative")
@@ -281,6 +283,8 @@ class HypothesisRolloutEngine:
             raise ValueError("position_gate_ratio requires a positive position_weight")
         if axis_gate_ratio and position_weight <= 0:
             raise ValueError("axis_gate_ratio requires a positive position_weight")
+        if event_gate_ratio and event_weight <= 0:
+            raise ValueError("event_gate_ratio requires a positive event_weight")
         if axis_weights is None:
             resolved_axis_weights = target_positions.new_ones((target_positions.shape[-1],))
         else:
@@ -307,6 +311,7 @@ class HypothesisRolloutEngine:
         candidate_scores: list[Tensor] = []
         position_scores: list[Tensor] = []
         axis_position_scores: list[Tensor] = []
+        event_scores: list[Tensor] = []
         for trajectory in trajectories:
             if trajectory.positions.shape != target_positions.shape:
                 raise ValueError("all trajectories must share target position shape")
@@ -342,6 +347,7 @@ class HypothesisRolloutEngine:
                     target_collision.to(event_logits.dtype),
                     reduction="none",
                 ).mean(dim=(1, 2))
+                event_scores.append(event_loss)
                 score = score + event_weight * event_loss
             candidate_scores.append(score)
 
@@ -361,6 +367,17 @@ class HypothesisRolloutEngine:
             axis_allowed = axis_matrix <= best_axis * (1.0 + axis_gate_ratio) + 1.0e-8
             scores = scores + torch.where(
                 axis_allowed.all(dim=1),
+                torch.zeros_like(scores),
+                scores.new_full((), 1.0e6),
+            )
+        if event_gate_ratio:
+            if not event_scores:
+                raise ValueError("event_gate_ratio requires event scoring")
+            event_matrix = torch.stack(event_scores, dim=-1)
+            best_event = event_matrix.amin(dim=-1, keepdim=True)
+            event_allowed = event_matrix <= best_event * (1.0 + event_gate_ratio) + 1.0e-8
+            scores = scores + torch.where(
+                event_allowed,
                 torch.zeros_like(scores),
                 scores.new_full((), 1.0e6),
             )
@@ -447,6 +464,7 @@ class HypothesisDynamicsPool:
         event_weight: float = 0.0,
         position_gate_ratio: float = 0.0,
         axis_gate_ratio: float = 0.0,
+        event_gate_ratio: float = 0.0,
         axis_weights: Sequence[float] | Tensor | None = None,
         uncertainty_aware: bool = True,
         evidence_decay_override: float | None = None,
@@ -464,6 +482,7 @@ class HypothesisDynamicsPool:
             event_weight=event_weight,
             position_gate_ratio=position_gate_ratio,
             axis_gate_ratio=axis_gate_ratio,
+            event_gate_ratio=event_gate_ratio,
             axis_weights=axis_weights,
             uncertainty_aware=uncertainty_aware,
             temperature=self.temperature,

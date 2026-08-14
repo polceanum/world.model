@@ -113,6 +113,7 @@ def evaluate_episode(
     lifecycle_weight: float,
     position_gate_ratio: float,
     axis_gate_ratio: float,
+    event_gate_ratio: float,
     axis_weights: tuple[float, float, float],
     blend_positions: bool,
     temperature: float,
@@ -220,6 +221,7 @@ def evaluate_episode(
                     lifecycle_weight=lifecycle_weight,
                     position_gate_ratio=position_gate_ratio,
                     axis_gate_ratio=axis_gate_ratio,
+                    event_gate_ratio=event_gate_ratio,
                     axis_weights=axis_weights,
                     uncertainty_aware=uncertainty_aware,
                     evidence_decay_override=(
@@ -376,6 +378,7 @@ def main() -> int:
     parser.add_argument("--lifecycle-weight", type=float, default=0.0)
     parser.add_argument("--position-gate-ratio", type=float, default=0.0)
     parser.add_argument("--axis-gate-ratio", type=float, default=0.0)
+    parser.add_argument("--event-gate-ratio", type=float, default=0.0)
     parser.add_argument("--axis-weights", type=float, nargs=3, default=(1.0, 1.0, 1.0))
     parser.add_argument("--blend-positions", action="store_true")
     parser.add_argument("--temperature", type=float, default=1.0)
@@ -399,6 +402,7 @@ def main() -> int:
         or args.lifecycle_weight < 0
         or args.position_gate_ratio < 0
         or args.axis_gate_ratio < 0
+        or args.event_gate_ratio < 0
     ):
         raise ValueError("score weights must be nonnegative")
     if any((weight < 0 or not math.isfinite(weight)) for weight in args.axis_weights) or not any(
@@ -424,6 +428,7 @@ def main() -> int:
             args.lifecycle_weight,
             args.position_gate_ratio,
             args.axis_gate_ratio,
+            args.event_gate_ratio,
             tuple(args.axis_weights),
             args.blend_positions,
             args.temperature,
@@ -449,6 +454,7 @@ def main() -> int:
                 "lifecycle_weight": args.lifecycle_weight,
                 "position_gate_ratio": args.position_gate_ratio,
                 "axis_gate_ratio": args.axis_gate_ratio,
+                "event_gate_ratio": args.event_gate_ratio,
                 "axis_weights": list(args.axis_weights),
                 "blend_positions": args.blend_positions,
                 "temperature": args.temperature,
