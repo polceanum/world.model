@@ -120,7 +120,7 @@ def evaluate_episode(
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
-    candidate_count = 3
+    candidate_count = 4
     candidate_squares = [[[0.0, 0.0, 0.0] for _ in range(candidate_count)] for _ in horizons]
     selected_squares = [[0.0, 0.0, 0.0] for _ in horizons]
     candidate_counts = [[[0, 0, 0] for _ in range(candidate_count)] for _ in horizons]
@@ -148,6 +148,7 @@ def evaluate_episode(
                 pool = HypothesisDynamicsPool(
                     [
                         model.dynamics,
+                        ConstantVelocityDynamics(damping=0.0),
                         ConstantVelocityDynamics(damping=0.05),
                         BallisticContactDynamics(),
                     ],
@@ -416,6 +417,12 @@ def main() -> int:
                 "blend_positions": args.blend_positions,
                 "temperature": args.temperature,
                 "event_threshold": args.event_threshold,
+                "candidate_names": [
+                    "learned",
+                    "constant_velocity_damped_0.0",
+                    "constant_velocity_damped_0.05",
+                    "ballistic_contact",
+                ],
                 "horizons_seconds": horizons,
                 "episode_results": episodes,
             },
