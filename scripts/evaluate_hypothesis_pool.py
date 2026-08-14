@@ -140,6 +140,12 @@ def evaluate_episode(
     event_probability_histograms = [
         [[0 for _ in range(10)] for _ in range(candidate_count)] for _ in horizons
     ]
+    event_probability_positive_histograms = [
+        [[0 for _ in range(10)] for _ in range(candidate_count)] for _ in horizons
+    ]
+    event_probability_negative_histograms = [
+        [[0 for _ in range(10)] for _ in range(candidate_count)] for _ in horizons
+    ]
     selected_event_counts = [{"tp": 0, "fp": 0, "fn": 0} for _ in horizons]
     uncertainty_sum = [[0.0, 0] for _ in horizons]
     choice_counts = [0 for _ in range(candidate_count)]
@@ -254,6 +260,7 @@ def evaluate_episode(
                 else:
                     blended_position = single_step_trajectories[selected].positions[0, 0]
                     blended_variance = single_step_trajectories[selected].fast_log_variance[0, 0, ..., :3].exp()
+                truth = collision_target[:, 0]
                 for candidate_index, trajectory in enumerate(single_step_trajectories):
                     residual = trajectory.positions[:, 0] - target
                     for axis in range(3):
@@ -281,7 +288,20 @@ def evaluate_episode(
                             event_probability_histograms[horizon_index][candidate_index], histogram, strict=True
                         )
                     ]
-                    truth = collision_target[:, 0]
+                    for destination, selector in (
+                        (event_probability_positive_histograms, truth),
+                        (event_probability_negative_histograms, ~truth),
+                    ):
+                        selected_bins = bins.masked_select(selector)
+                        selected_histogram = torch.bincount(selected_bins, minlength=10).tolist()
+                        destination[horizon_index][candidate_index] = [
+                            previous + current
+                            for previous, current in zip(
+                                destination[horizon_index][candidate_index],
+                                selected_histogram,
+                                strict=True,
+                            )
+                        ]
                     event_counts[horizon_index][candidate_index]["tp"] += int(
                         (event_prediction & truth).sum().cpu()
                     )
@@ -377,6 +397,18 @@ def evaluate_episode(
         "event_probability_histograms": {
             str(horizon): histograms
             for horizon, histograms in zip(horizons, event_probability_histograms, strict=True)
+        },
+        "event_probability_positive_histograms": {
+            str(horizon): histograms
+            for horizon, histograms in zip(
+                horizons, event_probability_positive_histograms, strict=True
+            )
+        },
+        "event_probability_negative_histograms": {
+            str(horizon): histograms
+            for horizon, histograms in zip(
+                horizons, event_probability_negative_histograms, strict=True
+            )
         },
     }
 

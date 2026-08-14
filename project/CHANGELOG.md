@@ -2751,3 +2751,5 @@ further gravity-axis threshold tuning.
   regressed and the threshold was rejected.
 - Added per-horizon event-probability histograms for offline threshold sweeps;
   a real smoke verified histogram totals.
+- Made event histograms label-aware (positive/negative) and verified exact
+  conservation, enabling truthful offline threshold calibration.

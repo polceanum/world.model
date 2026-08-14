@@ -9559,3 +9559,10 @@ Evaluator reports now include per-horizon, per-candidate
 precision/recall threshold sweeps from one expensive rollout. A real smoke
 verified finite histograms whose bin totals match observed object counts at
 `runs/20260815-060000-hypothesis-pool-event-histogram-smoke/report.json`.
+
+Histograms are now label-aware: reports include positive-target and
+negative-target probability bins in addition to all-event bins. The one-episode
+smoke at
+`runs/20260815-070000-hypothesis-pool-labeled-event-histogram-smoke/report.json`
+validated `all = positive + negative` for every horizon and candidate, enabling
+truthful offline threshold sweeps.

@@ -1645,3 +1645,5 @@
   y regressions despite improved event F1.
 - [x] Add event-probability histograms to reports and verify counts, enabling
   offline calibration without repeated rollouts.
+- [x] Split event histograms by positive/negative target labels and validate
+  exact count conservation for offline precision/recall sweeps.
