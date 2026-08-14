@@ -11,6 +11,7 @@ calibration guardrails used during training.  It never mutates a checkpoint.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,7 @@ from world_model.training.trainer import (
     _rollout_selection_guardrail_failures,
     _rollout_selection_improves,
     _rollout_selection_metrics,
+    _rollout_validation_protocol_hash,
     _validate_validation_support_schema,
     _validation_loader_result,
 )
@@ -35,6 +37,16 @@ from world_model.utils.config import load_config
 from world_model.utils.device import select_device
 from world_model.utils.io import atomic_write_text
 from world_model.utils.seeds import seed_everything
+
+
+def _sha256(path: Path) -> str:
+    """Return an immutable content identifier without loading checkpoint state."""
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def parse_args() -> argparse.Namespace:
@@ -164,10 +176,15 @@ def main() -> int:
     report = {
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "promotion_backend": str(device),
+        "pytorch_version": torch.__version__,
+        "precision": device_info.precision,
         "promotion_eligible": bool(accepted),
         "reference_checkpoint": str(reference_path),
+        "reference_checkpoint_sha256": _sha256(reference_path),
         "candidate_checkpoint": str(candidate_path),
+        "candidate_checkpoint_sha256": _sha256(candidate_path),
         "validation_episode_count": config.training.validation_episodes,
+        "validation_protocol_hash": _rollout_validation_protocol_hash(config),
         "scenario_mixture": list(config.simulator.scenario_mixture),
         "reference": reference.validation_metrics(),
         "candidate": candidate.validation_metrics(),

@@ -9982,3 +9982,6 @@ the same selector, per-axis/per-horizon, lifecycle, identity, collision,
 calibration, and causal-support guardrails before returning eligibility. This
 gate is implemented and syntax-checked; it has not yet been run on a complete
 candidate/reference pair, so it establishes no accuracy result.
+Its report also binds the decision to both checkpoint SHA-256 digests, the
+exact rollout-validation protocol hash, PyTorch version, precision, and MPS
+backend identifier.

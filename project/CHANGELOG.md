@@ -2882,3 +2882,5 @@ further gravity-axis threshold tuning.
   gate for legacy CPU-fallback candidates. It replays reference and candidate
   checkpoints over the exact trainer manifest and persists the existing
   broad-guardrail decision; no candidate result is claimed yet.
+- Bound MPS replay reports to both checkpoint SHA-256 digests, the exact
+  validation protocol hash, PyTorch version, precision, and backend.
