@@ -114,6 +114,7 @@ def evaluate_episode(
     position_gate_ratio: float,
     axis_gate_ratio: float,
     axis_weights: tuple[float, float, float],
+    blend_positions: bool,
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
@@ -201,6 +202,14 @@ def evaluate_episode(
                 )
                 selected = int(selection.selected_index[0])
                 choice_counts[selected] += 1
+                if blend_positions:
+                    posterior = selection.posterior_weights[0]
+                    predicted_positions = torch.stack(
+                        [trajectory.positions[0, 0] for trajectory in single_step_trajectories]
+                    )
+                    blended_position = torch.einsum("h,hnd->nd", posterior, predicted_positions)
+                else:
+                    blended_position = single_step_trajectories[selected].positions[0, 0]
                 for candidate_index, trajectory in enumerate(single_step_trajectories):
                     residual = trajectory.positions[:, 0] - target
                     for axis in range(3):
@@ -229,7 +238,7 @@ def evaluate_episode(
                     event_counts[horizon_index][candidate_index]["fn"] += int(
                         ((~event_prediction) & truth).sum().cpu()
                     )
-                residual = single_step_trajectories[selected].positions[:, 0] - target
+                residual = blended_position.unsqueeze(0) - target
                 for axis in range(3):
                     values = residual[..., axis].masked_select(mask)
                     selected_squares[horizon_index][axis] += float(values.square().sum().cpu())
@@ -327,6 +336,7 @@ def main() -> int:
     parser.add_argument("--position-gate-ratio", type=float, default=0.0)
     parser.add_argument("--axis-gate-ratio", type=float, default=0.0)
     parser.add_argument("--axis-weights", type=float, nargs=3, default=(1.0, 1.0, 1.0))
+    parser.add_argument("--blend-positions", action="store_true")
     args = parser.parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
@@ -363,6 +373,7 @@ def main() -> int:
             args.position_gate_ratio,
             args.axis_gate_ratio,
             tuple(args.axis_weights),
+            args.blend_positions,
         )
         for index in range(args.episodes)
     ]
@@ -382,6 +393,7 @@ def main() -> int:
                 "position_gate_ratio": args.position_gate_ratio,
                 "axis_gate_ratio": args.axis_gate_ratio,
                 "axis_weights": list(args.axis_weights),
+                "blend_positions": args.blend_positions,
                 "horizons_seconds": horizons,
                 "episode_results": episodes,
             },
