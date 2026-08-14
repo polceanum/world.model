@@ -9993,3 +9993,12 @@ horizon-specific trajectory slice, with focused report-accounting and existing
 hypothesis tests passing (`21 passed`). This corrects reported lifecycle and
 identity evidence only; it does not alter `WorldBelief`, selection, dynamics,
 or a previously reported accuracy result.
+
+The hypothesis evaluator also had a causal-reporting flaw: it assimilated a
+delayed target and then used that target-conditioned posterior to score the
+same already-issued trajectory. New reports now score the pre-observation
+pool posterior (and, where enabled, its pre-observation axis choices/blend).
+They retain target-conditioned posterior choice counts only as an explicitly
+labelled delayed-evidence diagnostic. The correction makes future
+multi-horizon selector reports stricter and truthful; historical pool reports
+remain diagnostic artifacts rather than directly comparable promoted metrics.

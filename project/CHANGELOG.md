@@ -2889,3 +2889,7 @@ further gravity-axis threshold tuning.
 - Fixed horizon-specific selected lifecycle/identity accounting in the
   heterogeneous-pool evaluator; later-horizon rows no longer reuse the first
   query-time active mask. Focused evaluator and hypothesis tests pass.
+- Made heterogeneous-pool selected metrics causally valid: score the
+  pre-observation posterior/axis/blend and report target-conditioned choices
+  separately as delayed-evidence diagnostics. Historical hindsight-conditioned
+  pool reports remain diagnostic only.

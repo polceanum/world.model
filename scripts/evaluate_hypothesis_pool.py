@@ -174,7 +174,12 @@ def evaluate_episode(
     uncertainty_sum = [[0.0, 0] for _ in horizons]
     choice_counts = [0 for _ in range(candidate_count)]
     horizon_choice_counts = [[0 for _ in range(candidate_count)] for _ in horizons]
+    posterior_choice_counts = [0 for _ in range(candidate_count)]
+    posterior_horizon_choice_counts = [[0 for _ in range(candidate_count)] for _ in horizons]
     axis_choice_counts = [
+        [[0 for _ in range(candidate_count)] for _ in range(3)] for _ in horizons
+    ]
+    posterior_axis_choice_counts = [
         [[0 for _ in range(candidate_count)] for _ in range(3)] for _ in horizons
     ]
     timestamps = episode["timestamps"]
@@ -260,6 +265,29 @@ def evaluate_episode(
                 if decay_exponent <= 0:
                     raise ValueError("horizon decay exponent must remain positive")
                 evidence_pool = horizon_pools[horizon_index] if horizon_pools is not None else pool
+                # This is the forecast-time policy: it may use evidence from
+                # earlier observations, but never the delayed target currently
+                # being scored. Assimilation below can affect only later
+                # receding-horizon predictions.
+                selected = int(evidence_pool.selected_index(model.belief)[0])
+                axis_selected = None
+                if axis_independent:
+                    independent_axes = (
+                        tuple(range(3)) if axis_independent_axes is None else axis_independent_axes
+                    )
+                    axis_selected = torch.full(
+                        (3,),
+                        selected,
+                        device=model.belief.device,
+                        dtype=torch.int64,
+                    )
+                    if evidence_pool.last_selection is None:
+                        pass
+                    else:
+                        previous_axis_selected = evidence_pool.selected_axis_index(model.belief)[0]
+                        for axis in independent_axes:
+                            axis_selected[axis] = previous_axis_selected[axis]
+                prior_posterior = evidence_pool.log_weights[0].exp().clone()
                 common_kwargs = {
                     "target_collision": collision_target,
                     "event_weight": event_weight,
@@ -303,36 +331,35 @@ def evaluate_episode(
                         risk_penalty=ensemble_risk_penalty,
                         **common_kwargs,
                     )
-                selected = int(selection.selected_index[0])
+                posterior_selected = int(selection.selected_index[0])
                 choice_counts[selected] += 1
                 horizon_choice_counts[horizon_index][selected] += 1
-                axis_selected = None
+                posterior_choice_counts[posterior_selected] += 1
+                posterior_horizon_choice_counts[horizon_index][posterior_selected] += 1
                 if axis_independent:
                     if selection.axis_scores is None:
                         raise RuntimeError("axis-independent selection requires axis scores")
-                    axis_selected = selection.selected_index[0].repeat(3)
-                    independent_axes = (
-                        tuple(range(3)) if axis_independent_axes is None else axis_independent_axes
-                    )
-                    axis_scores = selection.axis_selected_index[0]
-                    if axis_scores is None:
+                    posterior_axis_selected = selection.selected_index[0].repeat(3)
+                    posterior_axis_scores = selection.axis_selected_index[0]
+                    if posterior_axis_scores is None:
                         raise RuntimeError("axis-independent selection requires axis indices")
                     for axis in independent_axes:
-                        axis_selected[axis] = axis_scores[axis]
+                        posterior_axis_selected[axis] = posterior_axis_scores[axis]
                     for axis, candidate in enumerate(axis_selected.tolist()):
                         axis_choice_counts[horizon_index][axis][candidate] += 1
+                    for axis, candidate in enumerate(posterior_axis_selected.tolist()):
+                        posterior_axis_choice_counts[horizon_index][axis][candidate] += 1
                 if blend_positions:
-                    posterior = selection.posterior_weights[0]
                     predicted_positions = torch.stack(
                         [trajectory.positions[0, 0] for trajectory in single_step_trajectories]
                     )
-                    blended_position = torch.einsum("h,hnd->nd", posterior, predicted_positions)
+                    blended_position = torch.einsum("h,hnd->nd", prior_posterior, predicted_positions)
                     predicted_variances = torch.stack(
                         [trajectory.fast_log_variance[0, 0, ..., :3].exp() for trajectory in single_step_trajectories]
                     )
                     blended_variance = torch.einsum(
                         "h,hnd->nd",
-                        posterior,
+                        prior_posterior,
                         predicted_variances
                         + (predicted_positions - blended_position.unsqueeze(0)).square(),
                     )
@@ -459,8 +486,17 @@ def evaluate_episode(
         "selection_counts_by_horizon": {
             str(horizon): counts for horizon, counts in zip(horizons, horizon_choice_counts, strict=True)
         },
+        "posterior_selection_counts": posterior_choice_counts,
+        "posterior_selection_counts_by_horizon": {
+            str(horizon): counts
+            for horizon, counts in zip(horizons, posterior_horizon_choice_counts, strict=True)
+        },
         "axis_selection_counts_by_horizon": {
             str(horizon): counts for horizon, counts in zip(horizons, axis_choice_counts, strict=True)
+        },
+        "posterior_axis_selection_counts_by_horizon": {
+            str(horizon): counts
+            for horizon, counts in zip(horizons, posterior_axis_choice_counts, strict=True)
         },
         "candidate_lifecycle_mismatch": {
             str(horizon): lifecycle_mismatch[index] for index, horizon in enumerate(horizons)

@@ -3614,3 +3614,21 @@
   evidence but cannot silently become an incumbent. The additional replay cost
   is deliberately paid only at a fixed candidate milestone, not during normal
   training polling.
+
+## ADR-127 — Score hypothesis selection before assimilating its delayed target
+
+- **Date:** 2026-08-14
+- **Status:** accepted
+- **Context:** The heterogeneous-pool evaluator produced candidate rollouts,
+  used the matching future target to update its posterior, then reported that
+  target-conditioned selection against the very same target. This was useful
+  as delayed-evidence fitting diagnosis but not a causal forecast metric.
+- **Decision:** Evaluate selected positions, lifecycle, identity, events, and
+  blend weights from the pool posterior that existed before current delayed
+  evidence is assimilated. Persist post-assimilation selection counts under
+  explicit `posterior_*` diagnostic names for studying recovery and candidate
+  diversity.
+- **Consequences:** Evaluation now follows predict–observe–correct–then
+  revise-future order. Reported online selection can be worse than historical
+  hindsight-conditioned diagnostic figures, which is expected and must not be
+  hidden by reinterpreting old reports as new accuracy evidence.
