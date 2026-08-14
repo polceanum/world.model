@@ -245,6 +245,7 @@ evaluation:
   rgb_only: true
   hypothesis_axis_independent: true
   hypothesis_axis_independent_axes: [0, 1]
+  hypothesis_axis_prior_strength: 0.001
 demo:
   seed: 200000
   max_frames: 40

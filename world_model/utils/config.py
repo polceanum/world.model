@@ -446,6 +446,7 @@ class EvaluationConfig:
     # the safe default; coordinates listed here use delayed per-axis evidence.
     hypothesis_axis_independent: bool = False
     hypothesis_axis_independent_axes: tuple[int, ...] = (0, 1)
+    hypothesis_axis_prior_strength: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -481,6 +482,10 @@ class OrpheusConfig:
             raise ValueError("evaluation.hypothesis_axis_independent_axes must contain unique axes 0, 1, or 2")
         if self.evaluation.hypothesis_axis_independent and not self.evaluation.hypothesis_axis_independent_axes:
             raise ValueError("axis-independent evaluation requires at least one axis")
+        if not math.isfinite(self.evaluation.hypothesis_axis_prior_strength) or not (
+            0.0 <= self.evaluation.hypothesis_axis_prior_strength <= 1.0
+        ):
+            raise ValueError("evaluation.hypothesis_axis_prior_strength must lie in [0,1]")
         if simulator.type != "sphere_world":
             raise ValueError(f"Unsupported simulator type {simulator.type!r}")
         if len(simulator.image_size) != 2 or any(size <= 0 for size in simulator.image_size):

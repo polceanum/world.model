@@ -2781,3 +2781,6 @@ further gravity-axis threshold tuning.
   persistent joint evidence and coordinate-specific delayed evidence separate.
 - Added an opt-in axis-prior-strength control; a `0.05` fresh-draw pilot also
   collapsed to baseline and was rejected, leaving the default at zero.
+- Qualified axis-prior strength `0.001` across eight episodes and enabled it
+  in the attention pilot config; x/y improved while z/lifecycle/identity/event
+  metrics remained non-regressive.

@@ -9647,6 +9647,15 @@ explicitly. Strength `0.05` at
 the fresh baseline x/y values at every horizon, so it is rejected for now.
 The default remains strength `0.0`, preserving the qualified gains.
 
+The weak prior probe at strength `0.001` passed the full eight-episode
+guardrail at `runs/20260815-110000-hypothesis-pool-axis-prior001-8ep`. Relative
+to the joint eight-episode baseline, mean x/y RMSE improved at every horizon
+(at 1.00 s, `1.2850/0.2646` to `1.1825/0.2456`), while z, lifecycle, identity,
+event F1, and uncertainty remained non-regressive. The attention pilot config
+now sets `hypothesis_axis_prior_strength: 0.001`; a no-CLI-flag config smoke at
+`runs/20260815-111500-hypothesis-pool-axis-prior001-config-smoke` verified the
+resolved value.
+
 Broader verification passed the attention profile dry run and the full
 repository suite: `755 passed, 6 skipped in 225.32 s`; all skips were
 MPS-conditional because this environment reports MPS built but unavailable.

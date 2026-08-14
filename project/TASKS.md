@@ -1671,3 +1671,5 @@
   the qualified x/y gains.
 - [x] Add an opt-in axis-prior-strength control and reject strength `0.05`
   after fresh-draw gains collapsed to baseline.
+- [x] Qualify strength `0.001` on eight episodes and promote it only in the
+  attention pilot config; retain zero in all other profiles.

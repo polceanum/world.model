@@ -487,7 +487,7 @@ def main() -> int:
         choices=(0, 1, 2),
         help="subset of coordinates for --axis-independent (default: all)",
     )
-    parser.add_argument("--axis-prior-strength", type=float, default=0.0)
+    parser.add_argument("--axis-prior-strength", type=float, default=None)
     args = parser.parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
@@ -497,8 +497,6 @@ def main() -> int:
         raise ValueError("--temperature must be finite and positive")
     if not math.isfinite(args.horizon_decay_scale):
         raise ValueError("--horizon-decay-scale must be finite")
-    if not 0.0 <= args.axis_prior_strength <= 1.0 or not math.isfinite(args.axis_prior_strength):
-        raise ValueError("--axis-prior-strength must lie in [0,1]")
     if not 0.0 <= args.event_threshold <= 1.0 or not math.isfinite(args.event_threshold):
         raise ValueError("--event-threshold must lie in [0,1]")
     if (
@@ -524,6 +522,13 @@ def main() -> int:
         if args.axis_independent_axes is None
         else tuple(args.axis_independent_axes)
     )
+    axis_prior_strength = (
+        config.evaluation.hypothesis_axis_prior_strength
+        if args.axis_prior_strength is None
+        else args.axis_prior_strength
+    )
+    if not 0.0 <= axis_prior_strength <= 1.0 or not math.isfinite(axis_prior_strength):
+        raise ValueError("axis prior strength must lie in [0,1]")
     if args.axis_independent_axes and not axis_independent:
         raise ValueError("--axis-independent-axes requires axis-independent selection")
     device = select_device(config.device.preference).device
@@ -554,7 +559,7 @@ def main() -> int:
             args.independent_horizons,
             axis_independent,
             axis_independent_axes if axis_independent else None,
-            args.axis_prior_strength,
+            axis_prior_strength,
         )
         for index in range(args.episodes)
     ]
@@ -583,7 +588,7 @@ def main() -> int:
                 "independent_horizons": args.independent_horizons,
                 "axis_independent": axis_independent,
                 "axis_independent_axes": list(axis_independent_axes) if axis_independent else None,
-                "axis_prior_strength": args.axis_prior_strength,
+                "axis_prior_strength": axis_prior_strength,
                 "candidate_names": [
                     "learned",
                     "constant_velocity_damped_0.0",
