@@ -194,6 +194,9 @@ def evaluate_episode(
                 target, mask, collision_target = _future_targets_aligned_to_belief(
                     model, episode, frame_index, future_index
                 )
+                decay_exponent = 1.0 + horizon_decay_scale * max(query_offsets[query_index], 0.0)
+                if decay_exponent <= 0:
+                    raise ValueError("horizon decay exponent must remain positive")
                 selection = model.assimilate_hypotheses(
                     pool,
                     target,
@@ -207,7 +210,7 @@ def evaluate_episode(
                     axis_weights=axis_weights,
                     uncertainty_aware=uncertainty_aware,
                     evidence_decay_override=(
-                        evidence_decay ** (1.0 + horizon_decay_scale * max(query_offsets[query_index], 0.0))
+                        evidence_decay**decay_exponent
                         if horizon_decay_scale
                         else None
                     ),
@@ -373,8 +376,8 @@ def main() -> int:
         raise ValueError("--evidence-decay must lie in (0,1]")
     if args.temperature <= 0 or not math.isfinite(args.temperature):
         raise ValueError("--temperature must be finite and positive")
-    if args.horizon_decay_scale < 0 or not math.isfinite(args.horizon_decay_scale):
-        raise ValueError("--horizon-decay-scale must be finite and nonnegative")
+    if not math.isfinite(args.horizon_decay_scale):
+        raise ValueError("--horizon-decay-scale must be finite")
     if not 0.0 <= args.event_threshold <= 1.0 or not math.isfinite(args.event_threshold):
         raise ValueError("--event-threshold must lie in [0,1]")
     if (
