@@ -2868,3 +2868,8 @@ further gravity-axis threshold tuning.
   elementwise maximum over belief slots. This removes the remaining MPS
   reduction pipeline failure in the bounded full RGB causal smoke; CPU/CUDA
   retain the original reduction and full-pilot qualification remains pending.
+- Added and passed an active-Aqua MPS integration regression for the bounded
+  complete `attention_pilot_mps` RGB causal graph (`1 passed in 53.64 s`). It
+  verifies finite loss and z-attention gradients through persistent
+  predict–observe–associate–correct–rollout; it is numerical qualification,
+  not an accuracy or throughput promotion.

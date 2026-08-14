@@ -3558,3 +3558,23 @@
   RGB closed-loop forward/backward smoke are finite. This is a numerical
   backend compatibility route, not a model or accuracy change; the full
   attention-pilot MPS run and all promotion guardrails remain required.
+
+## ADR-124 — Qualify MPS causality with the actual bounded attention-pilot graph
+
+- **Date:** 2026-08-14
+- **Status:** accepted
+- **Context:** Individual MPS primitives, contact propagation, and
+  training-time identity pooling were finite after ADR-122 and ADR-123, but
+  those checks could not prove that their composition through the real RGB
+  closed-loop graph was safe.
+- **Decision:** Retain an active-Aqua MPS integration regression that loads
+  `attention_pilot_mps`, forces its closed-loop device to MPS, executes a
+  generated RGB episode through predict–observe–associate–correct–rollout,
+  and requires finite loss plus a finite typed z-decoder gradient. The test
+  uses a one-episode four-step override solely to bound numerical
+  qualification cost.
+- **Consequences:** The measured graph is MPS-finite on the supplied machine
+  (`1 passed in 53.64 s`). This does not change the authoritative
+  `WorldBelief` contract, the CPU fallback, training policy, or the full
+  fixed-manifest accuracy gate. Larger MPS throughput and accuracy campaigns
+  require their own evidence.

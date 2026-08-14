@@ -1717,8 +1717,9 @@
   scenario mixture. Increase only the existing z rollout emphasis, retain the
   same lifecycle/identity guardrails, and reject the run unless it improves
   the full held-out comparator rather than only z.
-- [ ] Re-qualify full closed-loop MPS execution with the user-provided torch
+- [x] Re-qualify full closed-loop MPS execution with the user-provided torch
   build on the full attention-pilot configuration. The zero-tangent contact
   NaN and training-only ID reduction are fixed, and a bounded complete RGB
-  MPS forward/backward smoke is finite; do not claim pilot-scale speed or
-  accuracy until the same active-Aqua full-pilot path is finite and guarded.
+  MPS forward/backward smoke is finite (`1 passed in 53.64 s` in active Aqua).
+  This numerical qualification does not claim pilot-scale speed or accuracy;
+  those remain guarded by separately balanced, fixed-manifest evaluation.

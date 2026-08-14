@@ -9952,3 +9952,15 @@ predict–observe–associate–correct–rollout backward smoke now passes with
 `0.3474486` and a finite z-decoder gradient. This establishes a finite
 end-to-end *tiny* MPS path; the full attention-pilot configuration still needs
 its own active-Aqua qualification before any MPS campaign or accuracy claim.
+
+The bounded full `attention_pilot_mps` RGB graph qualification now passes in
+an active Aqua session using the user-provided `orpheus` PyTorch build. The
+new integration test forces the full training-time configuration onto MPS,
+constructs an RGB episode, runs predict–observe–associate–correct–rollout,
+and backpropagates through the z-only typed-attention scope. It completed
+finite in `53.64 s` (`1 passed`). This supersedes the earlier Metal reduction
+qualification failure. It remains a one-episode numerical smoke with a
+shortened four-step window, not a claim about pilot-scale MPS throughput,
+long-horizon accuracy, or promotion. The running 512-update recovery retains
+the separate CPU closed-loop fallback and its fixed 32-episode comparator
+until a candidate meets every guardrail.
