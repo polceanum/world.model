@@ -9538,3 +9538,11 @@ selected `[216, 15, 3, 62]`. Long-horizon x/y improved strongly and z stayed
 near learned-only, confirming cross-horizon posterior contamination, but event
 F1 regressed at 0.50/1.00 s. It remains opt-in pending event-calibrated
 posteriors.
+
+Added opt-in `--event-gate-ratio` to prevent candidates with materially worse
+collision loss from winning. Combined with independent horizon posteriors, the
+fresh pilot at
+`runs/20260815-040000-hypothesis-pool-independent-eventgate-velocity4-disjoint2/report.json`
+selected `[209, 36, 5, 46]`. It improved short-horizon event F1 but collapsed
+event performance at 0.75–1.00 s and worsened y/z, so it is rejected. Event
+logit calibration/training is required rather than a hard event gate.

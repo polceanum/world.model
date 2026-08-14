@@ -2745,3 +2745,5 @@ further gravity-axis threshold tuning.
 - Added opt-in independent per-horizon posteriors. They improved long-horizon
   x/y and confirmed cross-horizon contamination, but event F1 regressed at
   0.50/1.00 s and promotion was rejected.
+- Added opt-in event-error gating; it improved short-horizon event F1 but
+  collapsed tail event performance and worsened y/z, so it was rejected.

@@ -1639,3 +1639,5 @@
   z and short-horizon event regressions.
 - [x] Add independent per-horizon persistent posteriors; confirm long-horizon
   x/y gains but reject promotion for mid/tail event-F1 regressions.
+- [x] Add and evaluate an event-error gate; reject it for tail event collapse
+  and y/z regressions.
