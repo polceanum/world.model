@@ -2792,3 +2792,5 @@ further gravity-axis threshold tuning.
 - Completed a one-update, eight-scenario attention training smoke on CPU with
   finite loss and validated checkpoints; this remains an entry-point check,
   not a convergence result.
+- Evaluated that one-step checkpoint on RGB and rejected promotion after x
+  regressed on every horizon versus the protected reference.

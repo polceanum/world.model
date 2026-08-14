@@ -9678,6 +9678,12 @@ support `453`, zero skipped batches, and validated best rollout loss `0.386337`
 `runs/20260814-050546-orpheus-attention-pilot-mps/checkpoints/last.pt` and
 `best_rollout.pt`. This is an entry-point smoke, not a convergence claim.
 
+The one-step `last.pt` was checked through the RGB hypothesis evaluator at
+`runs/20260815-113000-hypothesis-pool-one-step-checkpoint-smoke`. It remained
+finite, but on seed 100 its x RMSE worsened at every horizon versus the
+protected reference while y/z improved; it is therefore rejected as a model
+promotion and retained only as a smoke artifact.
+
 Generalization on independent seeds 200--201 also passed. Promoted config
 artifact: `runs/20260815-112000-hypothesis-pool-axis-prior001-newdraw2ep`;
 matched joint baseline: `runs/20260815-112500-hypothesis-pool-joint-newdraw2ep`.
