@@ -2779,3 +2779,5 @@ further gravity-axis threshold tuning.
 - Tested injecting the joint persistent prior into coordinate posteriors; it
   erased the qualified x/y gains and was rejected. The accepted path keeps
   persistent joint evidence and coordinate-specific delayed evidence separate.
+- Added an opt-in axis-prior-strength control; a `0.05` fresh-draw pilot also
+  collapsed to baseline and was rejected, leaving the default at zero.

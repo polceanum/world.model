@@ -1669,3 +1669,5 @@
   after fresh-draw x/y gains collapsed to baseline.
 - [ ] Calibrate a separate per-axis prior/evidence decay without regressing
   the qualified x/y gains.
+- [x] Add an opt-in axis-prior-strength control and reject strength `0.05`
+  after fresh-draw gains collapsed to baseline.

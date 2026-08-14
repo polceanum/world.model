@@ -9641,6 +9641,12 @@ accepted axis path intentionally uses current delayed per-axis position
 evidence while the joint pool retains the persistent prior; a separately
 calibrated per-axis prior is still required before changing that semantics.
 
+An opt-in `--axis-prior-strength` sweep was added to measure that calibration
+explicitly. Strength `0.05` at
+`runs/20260815-104000-hypothesis-pool-axis-prior005-fresh2ep` still returned
+the fresh baseline x/y values at every horizon, so it is rejected for now.
+The default remains strength `0.0`, preserving the qualified gains.
+
 Broader verification passed the attention profile dry run and the full
 repository suite: `755 passed, 6 skipped in 225.32 s`; all skips were
 MPS-conditional because this environment reports MPS built but unavailable.

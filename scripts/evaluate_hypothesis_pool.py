@@ -123,6 +123,7 @@ def evaluate_episode(
     independent_horizons: bool,
     axis_independent: bool,
     axis_independent_axes: tuple[int, ...] | None,
+    axis_prior_strength: float,
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
@@ -238,6 +239,7 @@ def evaluate_episode(
                     event_gate_ratio=event_gate_ratio,
                     axis_weights=axis_weights,
                     uncertainty_aware=uncertainty_aware,
+                    axis_prior_strength=axis_prior_strength,
                     evidence_decay_override=(
                         evidence_decay**decay_exponent
                         if horizon_decay_scale
@@ -485,6 +487,7 @@ def main() -> int:
         choices=(0, 1, 2),
         help="subset of coordinates for --axis-independent (default: all)",
     )
+    parser.add_argument("--axis-prior-strength", type=float, default=0.0)
     args = parser.parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
@@ -494,6 +497,8 @@ def main() -> int:
         raise ValueError("--temperature must be finite and positive")
     if not math.isfinite(args.horizon_decay_scale):
         raise ValueError("--horizon-decay-scale must be finite")
+    if not 0.0 <= args.axis_prior_strength <= 1.0 or not math.isfinite(args.axis_prior_strength):
+        raise ValueError("--axis-prior-strength must lie in [0,1]")
     if not 0.0 <= args.event_threshold <= 1.0 or not math.isfinite(args.event_threshold):
         raise ValueError("--event-threshold must lie in [0,1]")
     if (
@@ -549,6 +554,7 @@ def main() -> int:
             args.independent_horizons,
             axis_independent,
             axis_independent_axes if axis_independent else None,
+            args.axis_prior_strength,
         )
         for index in range(args.episodes)
     ]
@@ -577,6 +583,7 @@ def main() -> int:
                 "independent_horizons": args.independent_horizons,
                 "axis_independent": axis_independent,
                 "axis_independent_axes": list(axis_independent_axes) if axis_independent else None,
+                "axis_prior_strength": args.axis_prior_strength,
                 "candidate_names": [
                     "learned",
                     "constant_velocity_damped_0.0",

@@ -1243,6 +1243,7 @@ class OnlineWorldModel(nn.Module):
         axis_weights: Sequence[float] | Tensor | None = None,
         uncertainty_aware: bool = True,
         evidence_decay_override: float | None = None,
+        axis_prior_strength: float = 0.0,
     ) -> object:
         """Assimilate delayed rollout evidence without mutating the belief."""
 
@@ -1266,6 +1267,7 @@ class OnlineWorldModel(nn.Module):
             axis_weights=axis_weights,
             uncertainty_aware=uncertainty_aware,
             evidence_decay_override=evidence_decay_override,
+            axis_prior_strength=axis_prior_strength,
         )
 
     def selected_hypothesis_axes(self, hypothesis_pool: object) -> Tensor:

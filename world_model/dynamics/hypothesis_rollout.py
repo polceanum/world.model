@@ -28,6 +28,7 @@ class HypothesisSelection:
     selected_index: Tensor
     posterior_weights: Tensor
     axis_scores: Tensor | None = None
+    axis_posterior: Tensor | None = None
 
     def axis_posterior_weights(self, *, temperature: float = 1.0) -> Tensor:
         """Return per-axis hypothesis weights from delayed position evidence.
@@ -38,6 +39,8 @@ class HypothesisSelection:
         event state.  No simulator state is involved in this operation.
         """
 
+        if self.axis_posterior is not None:
+            return self.axis_posterior
         if self.axis_scores is None:
             raise RuntimeError("axis scores are unavailable for this selection")
         if temperature <= 0 or not torch.isfinite(torch.as_tensor(temperature)):
@@ -48,6 +51,8 @@ class HypothesisSelection:
     def axis_selected_index(self) -> Tensor | None:
         """Return the minimum delayed position-loss hypothesis per axis."""
 
+        if self.axis_posterior is not None:
+            return self.axis_posterior.argmax(dim=-1).to(torch.int64)
         if self.axis_scores is None:
             return None
         return self.axis_scores.argmin(dim=-1).to(torch.int64)
@@ -65,12 +70,27 @@ class HypothesisSelection:
             or self.axis_scores.shape[2] != self.scores.shape[1]
         ):
             raise ValueError("axis_scores must have shape [B,D,H]")
+        if self.axis_posterior is not None and (
+            self.axis_posterior.ndim != 3
+            or self.axis_posterior.shape[0] != self.scores.shape[0]
+            or self.axis_posterior.shape[2] != self.scores.shape[1]
+        ):
+            raise ValueError("axis_posterior must have shape [B,D,H]")
         if self.selected_index.dtype != torch.int64:
             raise TypeError("selected_index must use torch.int64")
         if not torch.isfinite(self.scores).all() or not torch.isfinite(
             self.posterior_weights
         ).all():
             raise ValueError("hypothesis selection contains NaN or Inf")
+        if self.axis_posterior is not None:
+            if not torch.isfinite(self.axis_posterior).all():
+                raise ValueError("axis posterior contains NaN or Inf")
+            if not torch.allclose(
+                self.axis_posterior.sum(dim=-1),
+                torch.ones(self.axis_posterior.shape[:2], device=self.axis_posterior.device, dtype=self.axis_posterior.dtype),
+                atol=1e-5,
+            ):
+                raise ValueError("axis posterior weights must sum to one")
         if torch.any(self.selected_index < 0) or torch.any(
             self.selected_index >= self.scores.shape[1]
         ):
@@ -503,6 +523,7 @@ class HypothesisDynamicsPool:
         axis_weights: Sequence[float] | Tensor | None = None,
         uncertainty_aware: bool = True,
         evidence_decay_override: float | None = None,
+        axis_prior_strength: float = 0.0,
     ) -> HypothesisSelection:
         prior = self._ensure_weights(belief)
         if trajectories is None:
@@ -525,6 +546,8 @@ class HypothesisDynamicsPool:
         decay = self.evidence_decay if evidence_decay_override is None else float(evidence_decay_override)
         if not 0.0 < decay <= 1.0 or not torch.isfinite(torch.as_tensor(decay)):
             raise ValueError("evidence_decay_override must lie in (0,1]")
+        if not 0.0 <= axis_prior_strength <= 1.0 or not torch.isfinite(torch.as_tensor(axis_prior_strength)):
+            raise ValueError("axis_prior_strength must lie in [0,1]")
         posterior_log_weights = (
             decay * prior - selection.scores / self.temperature
         )
@@ -533,12 +556,19 @@ class HypothesisDynamicsPool:
         )
         posterior = torch.softmax(posterior_log_weights, dim=-1)
         posterior_selected_index = posterior.argmax(dim=-1).to(torch.int64)
+        axis_posterior = None
+        if selection.axis_scores is not None:
+            axis_logits = -selection.axis_scores / self.temperature
+            if axis_prior_strength:
+                axis_logits = axis_logits + axis_prior_strength * prior.unsqueeze(1)
+            axis_posterior = torch.softmax(axis_logits, dim=-1)
         self.log_weights = posterior_log_weights.detach()
         self.last_selection = HypothesisSelection(
             selection.scores,
             posterior_selected_index,
             posterior,
             axis_scores=selection.axis_scores,
+            axis_posterior=axis_posterior,
         ).validate()
         return self.last_selection
 
