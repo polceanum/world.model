@@ -449,6 +449,7 @@ class HypothesisDynamicsPool:
         axis_gate_ratio: float = 0.0,
         axis_weights: Sequence[float] | Tensor | None = None,
         uncertainty_aware: bool = True,
+        evidence_decay_override: float | None = None,
     ) -> HypothesisSelection:
         prior = self._ensure_weights(belief)
         if trajectories is None:
@@ -467,8 +468,11 @@ class HypothesisDynamicsPool:
             uncertainty_aware=uncertainty_aware,
             temperature=self.temperature,
         )
+        decay = self.evidence_decay if evidence_decay_override is None else float(evidence_decay_override)
+        if not 0.0 < decay <= 1.0 or not torch.isfinite(torch.as_tensor(decay)):
+            raise ValueError("evidence_decay_override must lie in (0,1]")
         posterior_log_weights = (
-            self.evidence_decay * prior - selection.scores / self.temperature
+            decay * prior - selection.scores / self.temperature
         )
         posterior_log_weights = posterior_log_weights - torch.logsumexp(
             posterior_log_weights, dim=-1, keepdim=True

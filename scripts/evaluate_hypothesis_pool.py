@@ -118,6 +118,7 @@ def evaluate_episode(
     temperature: float,
     event_threshold: float,
     uncertainty_aware: bool,
+    horizon_decay_scale: float,
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
@@ -205,6 +206,11 @@ def evaluate_episode(
                     axis_gate_ratio=axis_gate_ratio,
                     axis_weights=axis_weights,
                     uncertainty_aware=uncertainty_aware,
+                    evidence_decay_override=(
+                        evidence_decay ** (1.0 + horizon_decay_scale * max(query_offsets[query_index], 0.0))
+                        if horizon_decay_scale
+                        else None
+                    ),
                 )
                 selected = int(selection.selected_index[0])
                 choice_counts[selected] += 1
@@ -359,6 +365,7 @@ def main() -> int:
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--event-threshold", type=float, default=0.5)
     parser.add_argument("--uncertainty-aware", action="store_true")
+    parser.add_argument("--horizon-decay-scale", type=float, default=0.0)
     args = parser.parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
@@ -366,6 +373,8 @@ def main() -> int:
         raise ValueError("--evidence-decay must lie in (0,1]")
     if args.temperature <= 0 or not math.isfinite(args.temperature):
         raise ValueError("--temperature must be finite and positive")
+    if args.horizon_decay_scale < 0 or not math.isfinite(args.horizon_decay_scale):
+        raise ValueError("--horizon-decay-scale must be finite and nonnegative")
     if not 0.0 <= args.event_threshold <= 1.0 or not math.isfinite(args.event_threshold):
         raise ValueError("--event-threshold must lie in [0,1]")
     if (
@@ -403,6 +412,7 @@ def main() -> int:
             args.temperature,
             args.event_threshold,
             args.uncertainty_aware,
+            args.horizon_decay_scale,
         )
         for index in range(args.episodes)
     ]
@@ -426,6 +436,7 @@ def main() -> int:
                 "temperature": args.temperature,
                 "event_threshold": args.event_threshold,
                 "uncertainty_aware": args.uncertainty_aware,
+                "horizon_decay_scale": args.horizon_decay_scale,
                 "candidate_names": [
                     "learned",
                     "constant_velocity_damped_0.0",

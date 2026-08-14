@@ -1241,6 +1241,7 @@ class OnlineWorldModel(nn.Module):
         axis_gate_ratio: float = 0.0,
         axis_weights: Sequence[float] | Tensor | None = None,
         uncertainty_aware: bool = True,
+        evidence_decay_override: float | None = None,
     ) -> object:
         """Assimilate delayed rollout evidence without mutating the belief."""
 
@@ -1262,6 +1263,7 @@ class OnlineWorldModel(nn.Module):
             axis_gate_ratio=axis_gate_ratio,
             axis_weights=axis_weights,
             uncertainty_aware=uncertainty_aware,
+            evidence_decay_override=evidence_decay_override,
         )
 
     def step(
