@@ -9463,6 +9463,12 @@ predictions physically inconsistent. Focused tests now require positive
 post-bounce velocity and a real RGB smoke completed at
 `runs/20260814-190000-hypothesis-pool-ballistic-contact-smoke/report.json`.
 
+A fresh two-episode comparison with the corrected ballistic candidate completed
+at `runs/20260814-200000-hypothesis-pool-ballistic-contact-disjoint2/report.json`.
+Selection counts were `[219, 26, 51]`; long-horizon x/y improved, but z
+regressed at 0.50–1.00 s and event F1 was mixed. The candidate-quality fix is
+kept, but this selector result is rejected for promotion.
+
 To isolate event coupling, a position-only sharp blend (`event_weight=0.0`,
 `temperature=0.25`) was evaluated on fresh seeds at
 `runs/20260814-160000-hypothesis-pool-blend-temp025-positiononly-disjoint2/report.json`.

@@ -1621,3 +1621,5 @@
   long-horizon y/z and collision-F1 regressions.
 - [x] Correct ballistic ground-contact response so event logits and velocity
   jumps are physically consistent; verify focused tests and RGB smoke.
+- [x] Compare the corrected ballistic candidate on fresh episodes; reject
+  promotion for long-horizon z/event regressions while retaining the fix.

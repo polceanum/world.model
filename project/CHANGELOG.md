@@ -2722,3 +2722,5 @@ further gravity-axis threshold tuning.
   regressed, so the default threshold remains 0.5.
 - Corrected ballistic contact dynamics to clamp ground crossings and apply
   restitution velocity jumps; added regression coverage and an RGB smoke.
+- Evaluated the corrected ballistic candidate; it improved long-horizon x/y but
+  regressed z and had mixed event F1, so promotion was rejected.
