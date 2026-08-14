@@ -9425,3 +9425,10 @@ The two-episode pilot at
 `[281, 9, 6]`. Blending improved x and some event F1, but z worsened at every
 horizon and y worsened at 0.50/0.75 s. It is rejected for promotion and remains
 an evaluation-only seam for future calibrated blending.
+
+The blend uncertainty report is now truthful: mixture variance is propagated as
+the posterior-weighted sum of within-hypothesis variance and between-hypothesis
+mean spread, rather than reusing the selected candidate's variance. A real
+one-episode CPU smoke completed at
+`runs/20260814-140000-hypothesis-pool-blend-uncertainty-smoke/report.json` with
+finite uncertainty values at every horizon.

@@ -208,8 +208,18 @@ def evaluate_episode(
                         [trajectory.positions[0, 0] for trajectory in single_step_trajectories]
                     )
                     blended_position = torch.einsum("h,hnd->nd", posterior, predicted_positions)
+                    predicted_variances = torch.stack(
+                        [trajectory.fast_log_variance[0, 0, ..., :3].exp() for trajectory in single_step_trajectories]
+                    )
+                    blended_variance = torch.einsum(
+                        "h,hnd->nd",
+                        posterior,
+                        predicted_variances
+                        + (predicted_positions - blended_position.unsqueeze(0)).square(),
+                    )
                 else:
                     blended_position = single_step_trajectories[selected].positions[0, 0]
+                    blended_variance = single_step_trajectories[selected].fast_log_variance[0, 0, ..., :3].exp()
                 for candidate_index, trajectory in enumerate(single_step_trajectories):
                     residual = trajectory.positions[:, 0] - target
                     for axis in range(3):
@@ -260,8 +270,7 @@ def evaluate_episode(
                 selected_event_counts[horizon_index]["fn"] += int(
                     ((~selected_event) & truth).sum().cpu()
                 )
-                selected_variance = single_step_trajectories[selected].fast_log_variance[:, 0, ..., :3].exp()
-                active_variance = selected_variance.masked_select(mask[:, 0].unsqueeze(-1))
+                active_variance = blended_variance.masked_select(mask[0, 0].unsqueeze(-1))
                 if active_variance.numel():
                     uncertainty_sum[horizon_index][0] += float(active_variance.mean().sqrt().cpu())
                     uncertainty_sum[horizon_index][1] += 1

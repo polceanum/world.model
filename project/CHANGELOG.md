@@ -2709,3 +2709,5 @@ further gravity-axis threshold tuning.
 - Added opt-in posterior position blending for evaluator experiments. The
   fresh pilot improved x but regressed z across horizons and y mid-horizon, so
   it was rejected under the all-axis guardrails.
+- Corrected blended uncertainty reporting to propagate within- and
+  between-hypothesis mixture variance; verified a real one-episode smoke.
