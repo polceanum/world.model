@@ -3669,3 +3669,21 @@
 - **Consequences:** Candidate evidence remains delayed RGB-derived
   measurement evidence, not simulator state; all future selection variants
   require the same full fixed-manifest guardrails and MPS promotion evidence.
+
+## ADR-130 — Isolate demonstrated x-axis selection benefit before changing defaults
+
+- **Date:** 2026-08-15
+- **Status:** pending fixed MPS ablation
+- **Context:** Exact additive evidence from eight RGB-only MPS episodes shows
+  causal axis-aware selection improves x at 0.50/0.75/1.00 s, but the small
+  number of y switches worsens y over the same horizons. Z stays effectively
+  learned-only. The full joint selector is still locked to learned dynamics.
+- **Decision:** Evaluate one immutable x-only (`axes=[0]`) selection protocol
+  from the protected checkpoint, retaining learned y/z. Do not alter the
+  runtime default, learned weights, belief, candidate set, evidence source, or
+  joint event/lifecycle path first. Promotion remains contingent on the full
+  all-axis/per-horizon/lifecycle/identity/event/calibration report.
+- **Consequences:** This is an evidence-localized selection ablation, not an
+  axis-factorized physics claim. It can fail because even an x-only position
+  splice may affect tracked object availability, event interpretation, or
+  calibrated uncertainty; all such effects remain measured.

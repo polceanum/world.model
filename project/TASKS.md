@@ -37,6 +37,11 @@
   joint choice 1,179/1,184 times despite x-axis analytic diversity; no selector
   default changes and the next repair must address joint transition/scoring
   diversity before another weight campaign.
+- [ ] Run a fixed eight-episode active-Aqua MPS x-only (`axes=[0]`) causal
+  selection ablation from the protected incumbent. Exact additive evidence
+  shows x improves at 0.50--1.00 s while y selection regresses; require the
+  full position/lifecycle/identity/event/uncertainty report before changing
+  the configuration default.
 - [x] Complete the three-candidate eight-episode protected comparison; retain
   ballistic as diagnostic only because it is rarely selected and regresses
   mature event/position behavior.

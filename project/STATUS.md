@@ -10122,3 +10122,16 @@ longer need to average per-episode RMSE values. This is report evidence only,
 not a dynamics or selection change. Focused evaluator/hypothesis tests pass
 (`21 passed`) and Ruff passes. The already completed reports retain their
 original schema and are not retroactively reinterpreted.
+
+The exact-evidence rerun completed on active-Aqua MPS at
+`runs/20260814-232029-protected-causal-hypothesis-pool-8-additive` after all
+eight explicit heartbeats (397--468 s per episode). It confirms the same joint
+lock-in (`1179/1184` learned) but quantifies a useful causal x-only signal:
+axis-aware selected x RMSE improves from learned `0.776877` to `0.766911` m at
+0.50 s, `0.792011` to `0.760859` m at 0.75 s, and `0.829623` to `0.781858` m
+at 1.00 s. Conversely, allowing y selection regresses y at those horizons
+(`0.239429` to `0.254769`, `0.250242` to `0.261915`, and `0.249089` to
+`0.271127` m). Z is effectively learned-only. This is a causal, RGB-only
+diagnostic—not a complete deployment comparator—but it justifies one fixed
+MPS x-only axis-selection ablation (`axes=[0]`) before considering any
+selection default; it does not authorize a y fallback or model-weight update.

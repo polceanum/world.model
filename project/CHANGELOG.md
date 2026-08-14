@@ -2937,3 +2937,6 @@ further gravity-axis threshold tuning.
   reports so full-mixture selected-versus-candidate RMSE is pooled exactly
   across asynchronous visibility masks. Existing reports are retained without
   reinterpretation; focused evaluator/hypothesis tests and Ruff pass.
+- Completed the exact additive-evidence eight-episode MPS pool rerun. Causal
+  axis selection improves x at 0.50--1.00 s but y switching regresses y,
+  motivating a guarded x-only ablation rather than a selector default change.
