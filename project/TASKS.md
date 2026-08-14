@@ -36,6 +36,11 @@
 - [x] Complete the three-candidate eight-episode protected comparison; retain
   ballistic as diagnostic only because it is rarely selected and regresses
   mature event/position behavior.
+- [x] Add composite position/lifecycle/event evidence scoring and reject the
+  high event-weight setting after protected regression; retain a lower-weight
+  screen for eight-episode validation.
+- [ ] Complete the lower-weight eight-episode event-aware comparison before
+  changing selector defaults.
 - [x] Batch all requested horizons into one rollout per frame in the evaluation
   harness; verify equivalent toy/attention smoke execution before relaunch.
 - [x] Run a four-episode protected decay-1.0 versus decay-0.1 matrix; retain

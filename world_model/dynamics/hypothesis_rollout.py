@@ -204,6 +204,10 @@ class HypothesisRolloutEngine:
         target_positions: Tensor,
         target_mask: Tensor,
         *,
+        target_collision: Tensor | None = None,
+        position_weight: float = 1.0,
+        lifecycle_weight: float = 0.0,
+        event_weight: float = 0.0,
         uncertainty_aware: bool = True,
         temperature: float = 1.0,
     ) -> HypothesisSelection:
@@ -226,8 +230,22 @@ class HypothesisRolloutEngine:
             raise TypeError("target_mask must use torch.bool")
         if temperature <= 0 or not torch.isfinite(torch.as_tensor(temperature)):
             raise ValueError("temperature must be finite and positive")
+        for name, value in (
+            ("position_weight", position_weight),
+            ("lifecycle_weight", lifecycle_weight),
+            ("event_weight", event_weight),
+        ):
+            if value < 0 or not torch.isfinite(torch.as_tensor(value)):
+                raise ValueError(f"{name} must be finite and nonnegative")
+        if position_weight + lifecycle_weight + event_weight <= 0:
+            raise ValueError("at least one hypothesis score weight must be positive")
         if not torch.isfinite(target_positions).all():
             raise ValueError("target_positions contains NaN or Inf")
+        if target_collision is not None:
+            if target_collision.shape != reference.active_mask.shape:
+                raise ValueError("target_collision must have shape [B,T,N]")
+            if target_collision.dtype is not torch.bool:
+                raise TypeError("target_collision must use torch.bool")
 
         mask = target_mask.unsqueeze(-1)
         valid_count = mask.sum(dim=(1, 2, 3)).clamp_min(1).to(target_positions.dtype)
@@ -244,7 +262,25 @@ class HypothesisRolloutEngine:
                 point_loss = residual.square() / variance + log_variance
             else:
                 point_loss = residual.square()
-            candidate_scores.append((point_loss * mask).sum(dim=(1, 2, 3)) / valid_count)
+            score = position_weight * (point_loss * mask).sum(dim=(1, 2, 3)) / valid_count
+            if lifecycle_weight:
+                lifecycle_loss = (
+                    trajectory.active_mask != target_mask
+                ).to(target_positions.dtype).mean(dim=(1, 2))
+                score = score + lifecycle_weight * lifecycle_loss
+            if event_weight:
+                if target_collision is None or trajectory.event_logits is None:
+                    raise ValueError(
+                        "event_weight requires target_collision and trajectory event_logits"
+                    )
+                event_logits = trajectory.event_logits[..., 3]
+                event_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                    event_logits,
+                    target_collision.to(event_logits.dtype),
+                    reduction="none",
+                ).mean(dim=(1, 2))
+                score = score + event_weight * event_loss
+            candidate_scores.append(score)
 
         scores = torch.stack(candidate_scores, dim=-1)
         scale = torch.as_tensor(temperature, device=scores.device, dtype=scores.dtype)
@@ -324,6 +360,10 @@ class HypothesisDynamicsPool:
         target_mask: Tensor,
         *,
         trajectories: Sequence[BeliefTrajectory] | None = None,
+        target_collision: Tensor | None = None,
+        position_weight: float = 1.0,
+        lifecycle_weight: float = 0.0,
+        event_weight: float = 0.0,
         uncertainty_aware: bool = True,
     ) -> HypothesisSelection:
         prior = self._ensure_weights(belief)
@@ -333,6 +373,10 @@ class HypothesisDynamicsPool:
             trajectories,
             target_positions,
             target_mask,
+            target_collision=target_collision,
+            position_weight=position_weight,
+            lifecycle_weight=lifecycle_weight,
+            event_weight=event_weight,
             uncertainty_aware=uncertainty_aware,
             temperature=self.temperature,
         )

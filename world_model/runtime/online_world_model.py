@@ -1233,6 +1233,10 @@ class OnlineWorldModel(nn.Module):
         target_mask: Tensor,
         trajectories: Sequence[BeliefTrajectory],
         *,
+        target_collision: Tensor | None = None,
+        position_weight: float = 1.0,
+        lifecycle_weight: float = 0.0,
+        event_weight: float = 0.0,
         uncertainty_aware: bool = True,
     ) -> object:
         """Assimilate delayed rollout evidence without mutating the belief."""
@@ -1247,6 +1251,10 @@ class OnlineWorldModel(nn.Module):
             target_positions,
             target_mask,
             trajectories=trajectories,
+            target_collision=target_collision,
+            position_weight=position_weight,
+            lifecycle_weight=lifecycle_weight,
+            event_weight=event_weight,
             uncertainty_aware=uncertainty_aware,
         )
 

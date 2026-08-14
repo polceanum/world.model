@@ -23,6 +23,7 @@ def _trajectory(position: float, *, variance: float = 1.0) -> BeliefTrajectory:
         motion_mode_logits=torch.zeros(1, 2, 1, 2),
         fast_log_variance=torch.full((1, 2, 1, 13), variance),
         active_mask=torch.ones(1, 2, 1, dtype=torch.bool),
+        event_logits=torch.zeros(1, 2, 1, 11),
     ).validate()
 
 
@@ -37,6 +38,25 @@ def test_selector_chooses_best_candidate_per_batch() -> None:
     assert selection.selected_index.tolist() == [1]
     assert selection.scores[0, 1] < selection.scores[0, 0]
     assert torch.allclose(selection.posterior_weights.sum(-1), torch.ones(1))
+
+
+def test_selector_can_use_collision_evidence() -> None:
+    target = torch.zeros(1, 2, 1, 3)
+    mask = torch.ones(1, 2, 1, dtype=torch.bool)
+    collision = torch.ones(1, 2, 1, dtype=torch.bool)
+    no_event = _trajectory(0.0)
+    event = _trajectory(0.0)
+    no_event.event_logits[..., 3] = -6.0
+    event.event_logits[..., 3] = 6.0
+    selection = HypothesisRolloutEngine.score(
+        [no_event, event],
+        target,
+        mask,
+        target_collision=collision,
+        event_weight=1.0,
+        uncertainty_aware=False,
+    )
+    assert selection.selected_index.tolist() == [1]
 
 
 def test_selector_ignores_occluded_frames_and_scores_uncertainty() -> None:
@@ -88,7 +108,9 @@ class _FixedDynamics:
         )
         return RolloutStep(
             belief=endpoint,
-            event_logits=torch.zeros(belief.batch_size, objects.max_objects, 2),
+            event_logits=torch.zeros(
+                belief.batch_size, objects.max_objects, objects.motion_mode_logits.shape[-1]
+            ),
             auxiliary={},
         )
 

@@ -7974,6 +7974,18 @@ Ballistic candidate mean collision F1 is `0.2097/0.1479/0.1142/0.0931/0.0250`
 across those horizons; it is worse than learned at mature horizons and was
 selected only once. Keep it diagnostic and unpromoted.
 
+Candidate selection now accepts explicit composite evidence weights for
+position, lifecycle, and collision events. A protected eight-episode run with
+`event_weight=0.5`, `lifecycle_weight=0.1` selected learned/constant/ballistic
+`643/517/24`; collision F1 improved strongly, but y position regressed at
+mature horizons, so that setting is rejected. A four-episode lower-weight
+screen at `event_weight=0.1`, `lifecycle_weight=0.05` selected
+`459/128/5` and improved mean collision F1 at 0.10/0.25/0.50 seconds to
+`0.3755/0.2978/0.2846` versus learned-only `0.2168/0.1233/0.1644`, with
+selected x/y/z RMSE `0.5174/0.3173/0.5331`, `0.5433/0.3290/0.5398`, and
+`0.6009/0.2504/0.5544 m` at those horizons. This is a promising screen, not
+yet a full promotion result.
+
 The required 32-episode decay-0.1 protected comparison completed from the
 immutable reference checkpoint at
 `runs/20260813-230000-hypothesis-pool-protected-32ep/report.json`. It contains

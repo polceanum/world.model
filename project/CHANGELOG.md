@@ -77,6 +77,9 @@
 - Completed the three-candidate protected eight-episode comparison (1,184
   queries). Ballistic was selected once and regressed mature event/position
   behavior; it remains diagnostic and unpromoted.
+- Added composite position/lifecycle/collision evidence scoring. Event weight
+  0.5 improved events but regressed mature y position and was rejected; a
+  four-episode event-weight 0.1 screen is promising but remains unpromoted.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 
