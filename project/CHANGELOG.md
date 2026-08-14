@@ -2913,3 +2913,8 @@ further gravity-axis threshold tuning.
   `0.3213162` baseline and 20 broad guardrails failed, principally y/z horizon
   and reference-pair dynamics. The incumbent remains intact and the
   ineligible candidate correctly bypassed MPS promotion replay.
+- Completed and rejected the z-only recovery's third fixed-manifest candidate
+  at step 384. Selector score improved only to `0.3223566`; 23 guardrails
+  still failed, particularly y/z horizons, damped-contact events, and
+  reference-pair dynamics. This records a plateau in the z-only recovery path,
+  not a promotable improvement.

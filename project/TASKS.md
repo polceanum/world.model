@@ -1725,6 +1725,8 @@
   256-step candidate was also rejected (selector `0.3224730`, 20 guardrail
   failures); it modestly improved on the 128-step candidate but still regressed
   from the incumbent on selection, y/z horizons, and reference-pair dynamics.
+  The 384-step candidate (`0.3223566`, 23 guardrail failures) confirms this
+  route is plateauing; retain it only to complete the bounded diagnostic run.
 - [x] Re-qualify full closed-loop MPS execution with the user-provided torch
   build on the full attention-pilot configuration. The zero-tangent contact
   NaN and training-only ID reduction are fixed, and a bounded complete RGB

@@ -10058,3 +10058,16 @@ long-horizon RMSE, and several reference-pair y/z and velocity metrics. The
 incumbent remains protected; this ineligible checkpoint does not receive an
 MPS promotion replay. It is preserved at
 `runs/20260814-101500-attention-node-z-recovery-512/checkpoints/validation_step_000256.pt`.
+
+At step 384, the same fixed-manifest candidate was again rejected. Its
+selector score improved only slightly to `0.3223565648`, still above the
+incumbent's `0.3213161872`; aggregate position RMSE was `0.2519156404` (x
+`0.2812703335`, y `0.2035738534`, z `0.2642520680`), collision F1
+`0.2009803922`, target coverage `0.3775`, precision `0.3584995252`, and
+coverage-90 `0.9336208962`. Twenty-three guardrails failed, including y
+mid-horizon RMSE, z long-horizon RMSE, damped-contact z/event measures, and
+reference-pair dynamics. The small metric movement across steps 128/256/384
+is evidence of a plateau in this z-only recovery direction, not a basis for
+promotion or an MPS replay. The incumbent remains protected; the checkpoint
+is retained at
+`runs/20260814-101500-attention-node-z-recovery-512/checkpoints/validation_step_000384.pt`.
