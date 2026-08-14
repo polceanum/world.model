@@ -115,6 +115,7 @@ def evaluate_episode(
     axis_gate_ratio: float,
     axis_weights: tuple[float, float, float],
     blend_positions: bool,
+    temperature: float,
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
@@ -150,6 +151,7 @@ def evaluate_episode(
                         BallisticContactDynamics(),
                     ],
                     evidence_decay=evidence_decay,
+                    temperature=temperature,
                 )
             valid_queries: list[tuple[int, int]] = []
             query_offsets: list[float] = []
@@ -346,11 +348,14 @@ def main() -> int:
     parser.add_argument("--axis-gate-ratio", type=float, default=0.0)
     parser.add_argument("--axis-weights", type=float, nargs=3, default=(1.0, 1.0, 1.0))
     parser.add_argument("--blend-positions", action="store_true")
+    parser.add_argument("--temperature", type=float, default=1.0)
     args = parser.parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
     if not 0.0 < args.evidence_decay <= 1.0:
         raise ValueError("--evidence-decay must lie in (0,1]")
+    if args.temperature <= 0 or not math.isfinite(args.temperature):
+        raise ValueError("--temperature must be finite and positive")
     if (
         args.event_weight < 0
         or args.lifecycle_weight < 0
@@ -383,6 +388,7 @@ def main() -> int:
             args.axis_gate_ratio,
             tuple(args.axis_weights),
             args.blend_positions,
+            args.temperature,
         )
         for index in range(args.episodes)
     ]
@@ -403,6 +409,7 @@ def main() -> int:
                 "axis_gate_ratio": args.axis_gate_ratio,
                 "axis_weights": list(args.axis_weights),
                 "blend_positions": args.blend_positions,
+                "temperature": args.temperature,
                 "horizons_seconds": horizons,
                 "episode_results": episodes,
             },
