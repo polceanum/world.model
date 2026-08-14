@@ -1613,3 +1613,5 @@
   all-horizon z and mid-horizon y regressions.
 - [x] Expose posterior temperature calibration and reject the first sharp blend
   pilot for a 0.50 s collision-F1 regression.
+- [x] Test position-only sharp blending to isolate event coupling; reject it for
+  a 0.10 s collision-F1 regression and mixed axes.

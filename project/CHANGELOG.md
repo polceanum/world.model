@@ -2714,3 +2714,5 @@ further gravity-axis threshold tuning.
 - Exposed `--temperature` for posterior calibration. A `0.25` blend pilot
   improved long-horizon position error but regressed 0.50 s collision F1 and
   was rejected.
+- Ran a position-only sharp blend to isolate event coupling; it still had a
+  0.10 s collision-F1 regression and mixed axes, so it was rejected.
