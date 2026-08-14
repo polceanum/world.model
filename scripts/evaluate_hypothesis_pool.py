@@ -119,9 +119,11 @@ def evaluate_episode(
     event_threshold: float,
     uncertainty_aware: bool,
     horizon_decay_scale: float,
+    independent_horizons: bool,
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
+    horizon_pools: list[HypothesisDynamicsPool] | None = None
     candidate_count = 4
     candidate_squares = [[[0.0, 0.0, 0.0] for _ in range(candidate_count)] for _ in horizons]
     selected_squares = [[0.0, 0.0, 0.0] for _ in horizons]
@@ -148,16 +150,26 @@ def evaluate_episode(
             if model.belief is None:
                 continue
             if pool is None:
+                candidate_models = [
+                    model.dynamics,
+                    ConstantVelocityDynamics(damping=0.0),
+                    ConstantVelocityDynamics(damping=0.05),
+                    BallisticContactDynamics(),
+                ]
                 pool = HypothesisDynamicsPool(
-                    [
-                        model.dynamics,
-                        ConstantVelocityDynamics(damping=0.0),
-                        ConstantVelocityDynamics(damping=0.05),
-                        BallisticContactDynamics(),
-                    ],
+                    candidate_models,
                     evidence_decay=evidence_decay,
                     temperature=temperature,
                 )
+                if independent_horizons:
+                    horizon_pools = [
+                        HypothesisDynamicsPool(
+                            candidate_models,
+                            evidence_decay=evidence_decay,
+                            temperature=temperature,
+                        )
+                        for _ in horizons
+                    ]
             valid_queries: list[tuple[int, int]] = []
             query_offsets: list[float] = []
             for horizon_index, horizon in enumerate(horizons):
@@ -197,8 +209,9 @@ def evaluate_episode(
                 decay_exponent = 1.0 + horizon_decay_scale * max(query_offsets[query_index], 0.0)
                 if decay_exponent <= 0:
                     raise ValueError("horizon decay exponent must remain positive")
+                evidence_pool = horizon_pools[horizon_index] if horizon_pools is not None else pool
                 selection = model.assimilate_hypotheses(
-                    pool,
+                    evidence_pool,
                     target,
                     mask,
                     single_step_trajectories,
@@ -369,6 +382,7 @@ def main() -> int:
     parser.add_argument("--event-threshold", type=float, default=0.5)
     parser.add_argument("--uncertainty-aware", action="store_true")
     parser.add_argument("--horizon-decay-scale", type=float, default=0.0)
+    parser.add_argument("--independent-horizons", action="store_true")
     args = parser.parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
@@ -416,6 +430,7 @@ def main() -> int:
             args.event_threshold,
             args.uncertainty_aware,
             args.horizon_decay_scale,
+            args.independent_horizons,
         )
         for index in range(args.episodes)
     ]
@@ -440,6 +455,7 @@ def main() -> int:
                 "event_threshold": args.event_threshold,
                 "uncertainty_aware": args.uncertainty_aware,
                 "horizon_decay_scale": args.horizon_decay_scale,
+                "independent_horizons": args.independent_horizons,
                 "candidate_names": [
                     "learned",
                     "constant_velocity_damped_0.0",
