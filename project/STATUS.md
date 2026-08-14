@@ -9897,3 +9897,13 @@ PyTorch CPU `linear`/batched-matrix multiplication below the closed-loop
 attention path, with process state `R` and sustained CPU use. The progress
 file is written after a completed optimizer update, so it remains at the
 completed initial selector while the first expensive batch is evaluated.
+
+An additional active-Aqua full-MPS causal smoke was attempted on 2026-08-14
+with the restored user-provided `orpheus` PyTorch build. The test used a tiny
+RGB-only persistent closed-loop episode, a finite forward loss, and backward
+gradient checks; it failed before those checks when Metal could not compile
+`reduce_multiple_passes_axes_max_propagate_NaN` because its XPC connection was
+interrupted. This is a backend qualification failure, not a model metric or a
+claim that MPS is unavailable. The existing CPU closed-loop recovery remains
+the only active run; do not switch the production causal configuration to MPS
+until this exact finite smoke passes in an active Aqua session.

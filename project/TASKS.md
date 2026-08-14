@@ -1717,3 +1717,7 @@
   scenario mixture. Increase only the existing z rollout emphasis, retain the
   same lifecycle/identity guardrails, and reject the run unless it improves
   the full held-out comparator rather than only z.
+- [ ] Re-qualify full closed-loop MPS execution with the user-provided torch
+  build after the active-Aqua Metal XPC/pipeline interruption. Do not change
+  the CPU causal fallback or report an MPS acceleration until a finite RGB
+  forward/backward smoke completes.

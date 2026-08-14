@@ -2849,3 +2849,7 @@ further gravity-axis threshold tuning.
 - Completed that run's step-zero active-Aqua fixed-manifest selector in
   `1232.20 s`. The imported incumbent was reproduced exactly and passed all
   guardrails before any z-only update; recovery training remains pending.
+- Attempted a full active-Aqua MPS RGB closed-loop forward/backward smoke to
+  qualify replacing the CPU causal fallback. Metal failed before model metrics
+  with an interrupted-XPC pipeline compilation error; no device configuration
+  or model claim was changed.
