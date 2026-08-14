@@ -132,7 +132,11 @@ class BallisticContactDynamics:
             & (before_distance > contact_distance)
             & (after_distance <= contact_distance)
         )
-        collision = ground_event | pair_event.any(dim=-1)
+        normal = before_delta / before_distance.clamp_min(1.0e-6).unsqueeze(-1)
+        relative_velocity = after.velocity[:, :, None, :] - after.velocity[:, None, :, :]
+        approaching = (relative_velocity * normal).sum(dim=-1) < 0
+        pair_contact = pair_event & approaching
+        collision = ground_event | pair_contact.any(dim=-1)
         # Keep the analytic event hypothesis physically coherent: a detected
         # ground crossing produces an explicit restitution jump and clamps the
         # contact point to the surface. Pair-contact events remain observable
@@ -152,6 +156,16 @@ class BallisticContactDynamics:
             contact_velocity[..., 1],
         )
         after = after.replace(position=contact_position, velocity=contact_velocity)
+        # Resolve approaching sphere contacts as a one-step equal-and-opposite
+        # impulse. The symmetric pair matrix makes momentum exchange explicit
+        # while preserving the persistent belief contract.
+        pair_restitution = (before.restitution[..., 0][:, :, None] + before.restitution[..., 0][:, None, :]) * 0.5
+        impulse = -(1.0 + pair_restitution) * (relative_velocity * normal).sum(dim=-1)
+        inverse_mass = before.mass[..., 0].reciprocal()
+        impulse = torch.where(pair_contact, impulse / (inverse_mass[:, :, None] + inverse_mass[:, None, :]).clamp_min(1.0e-6), torch.zeros_like(impulse))
+        impulse_delta = (impulse.unsqueeze(-1) * normal).sum(dim=2)
+        pair_velocity = after.velocity + impulse_delta * inverse_mass.unsqueeze(-1)
+        after = after.replace(velocity=pair_velocity)
         event_logits = torch.full_like(before.motion_mode_logits, -4.0)
         event_logits[..., MotionMode.COLLISION] = torch.where(
             collision,

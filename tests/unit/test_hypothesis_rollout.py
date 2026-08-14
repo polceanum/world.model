@@ -272,3 +272,20 @@ def test_ballistic_contact_hypothesis_predicts_gravity_and_ground_event() -> Non
     assert step.belief.objects.velocity[0, 0, 1] > 0
     assert step.event_logits[0, 0, 3] > 0
     torch.testing.assert_close(source.objects.position[0, 0], torch.tensor([0.0, 0.2, 0.0]))
+
+
+def test_ballistic_contact_hypothesis_resolves_approaching_pair() -> None:
+    belief = BeliefFactory(max_objects=2).create()
+    objects = belief.objects.clone()
+    objects.active[0, :2] = True
+    objects.position[0, 0] = torch.tensor([-0.11, 0.2, 0.0])
+    objects.position[0, 1] = torch.tensor([0.11, 0.2, 0.0])
+    objects.velocity[0, 0, 0] = 1.0
+    objects.velocity[0, 1, 0] = -1.0
+    objects.geometry[0, :2, 0] = 0.1
+    source = belief.replace(objects=objects, gravity=torch.zeros(1, 3))
+    step = BallisticContactDynamics().predict_step(source, torch.tensor([0.1]))
+    assert step.event_logits[0, 0, 3] > 0
+    assert step.event_logits[0, 1, 3] > 0
+    assert step.belief.objects.velocity[0, 0, 0] < 0
+    assert step.belief.objects.velocity[0, 1, 0] > 0
