@@ -179,7 +179,7 @@ Working rules:
 - A configured phase-specific device switch is part of the resolved protocol,
   not a resume override. Exact resume must verify and preserve every linked
   selector artefact; a no-op inspection must not rewrite a durable checkpoint.
-- Preserve the tested PyTorch 2.10 MPS workaround: backbone and ROI tensors
+- Preserve the tested user-provided PyTorch MPS workaround: backbone and ROI tensors
   stay on MPS, but the small global proposal transformer is pinned to CPU
   through differentiable copies when
   `device.global_detector_cpu_on_mps=true`. Do not describe that phase as

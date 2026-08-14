@@ -2804,3 +2804,6 @@ further gravity-axis threshold tuning.
 - Added a permanent agent rule: never choose or install a different PyTorch
   build independently; preserve the user-provided build and change it only
   when the user explicitly supplies or names the replacement.
+- Corrected the environment diagnosis: the restored local PyTorch build works
+  on MPS in the active Aqua session (`mps:0` matrix smoke passed). The earlier
+  unavailable probe ran in the agent sandbox, which cannot access Metal.

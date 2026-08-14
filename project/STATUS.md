@@ -9717,3 +9717,12 @@ the backend's macOS-version availability error; the focused contracts suite
 still passes `191 passed in 4.51s`. The stale 2.10 metadata was moved to a
 recoverable `/private/tmp/orpheus-torch-metadata.*` directory, and no project
 source or checkpoint was changed by the environment repair.
+
+Correction: the preceding unavailable result was an artifact of the isolated
+agent execution context, which has no connection to the Aqua/WindowServer
+Metal service. Running the exact same `orpheus` environment in the active GUI
+session with `launchctl asuser 501` reports `torch 2.9.0a0+gitcbe1a35`,
+`mps_built=True`, and `mps_available=True`; an actual `mps:0` 4-by-4 matrix
+multiplication returned `64.0`. The Mac has both Intel UHD 630 and AMD Radeon
+Pro 5500M Metal devices. Use the active Aqua session for MPS training and
+evaluation; do not infer accelerator availability from the agent sandbox.
