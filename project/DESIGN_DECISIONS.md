@@ -3494,3 +3494,27 @@
   incomplete experiment. A session interruption cannot be misreported as
   numerical failure, convergence, or a missing validation. The extra initial
   validation cost is accepted in exchange for explicit provenance.
+
+## ADR-121 — Repair typed residual axes without cross-axis optimizer drift
+
+- **Date:** 2026-08-14
+- **Status:** accepted for controlled qualification
+- **Context:** The completed 128-update all-mixture attention campaign improved
+  x and y as well as its aggregate selector score, but regressed z rollout
+  accuracy. Its unrestricted `attention` scope updates all three rows of the
+  typed node-acceleration decoder together, so a z recovery could overwrite
+  the coordinates that already improved.
+- **Decision:** Add opt-in `attention_node_x`, `attention_node_y`, and
+  `attention_node_z` closed-loop scopes. Each exposes only the selected typed
+  output row; before each AdamW update, excluded rows and their optimizer
+  moments are cleared, snapshotted, and restored exactly afterwards. The
+  shared transformer and all non-node heads remain frozen.
+- **Rationale:** Coordinate-wise training is a controlled diagnostic, not an
+  assumption that the world is factorized. Analytic integration, structured
+  interactions, and the runtime all remain joint; this simply prevents an
+  evidence-backed repair of one residual component from silently perturbing
+  other qualified outputs through decoupled weight decay or stale moments.
+- **Guardrails:** The scope is training-only and opt-in. Promotion still uses
+  the identical all-axis, all-horizon, lifecycle, identity, event, and
+  calibration comparator; improving z alone is insufficient. Unit tests prove
+  x/y rows remain bitwise unchanged under AdamW while z updates.

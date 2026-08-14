@@ -2839,3 +2839,7 @@ further gravity-axis threshold tuning.
   `0.3213162`): z/lifecycle/identity guardrails still regressed. Recorded the
   clean optimizer audit (finite, 128 applied updates, balanced scenarios, no
   collapse) and preserved the incumbent checkpoint.
+- Added opt-in axis-selective typed-attention recovery scopes. They restrict
+  AdamW updates to exactly one x/y/z node-acceleration row and preserve every
+  excluded row and optimizer moment exactly; focused schedule/config tests
+  pass (`270 passed`).

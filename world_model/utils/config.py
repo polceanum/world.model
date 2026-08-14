@@ -1118,6 +1118,9 @@ class OrpheusConfig:
             "all",
             "attention",
             "attention_relation",
+            "attention_node_x",
+            "attention_node_y",
+            "attention_node_z",
             "dynamics",
             "updater",
             "updater_mean",
@@ -1130,7 +1133,8 @@ class OrpheusConfig:
         if self.training.closed_loop_trainable_scope not in valid_closed_loop_scopes:
             raise ValueError(
                 "training.closed_loop_trainable_scope must be "
-                "'all', 'attention', 'attention_relation', 'dynamics', "
+                "'all', 'attention', 'attention_relation', 'attention_node_x', "
+                "'attention_node_y', 'attention_node_z', 'dynamics', "
                 "'updater', 'updater_mean', "
                 "'updater_mean_y', 'fast_roi', "
                 "'state_dynamics', "

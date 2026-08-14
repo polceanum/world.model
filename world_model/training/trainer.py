@@ -3128,10 +3128,24 @@ def set_closed_loop_trainable_scope(
         _freeze_disconnected_training_heads(model)
         return
     model.requires_grad_(False)
-    if scope in {"attention", "attention_relation"}:
+    if scope in {
+        "attention",
+        "attention_relation",
+        "attention_node_x",
+        "attention_node_y",
+        "attention_node_z",
+    }:
         if model.dynamics.attention_interactions is None:
             raise ValueError("attention scope requires typed attention dynamics")
         attention = model.dynamics.attention_interactions
+        if scope.startswith("attention_node_"):
+            # A recovery rung may need to repair one physical coordinate
+            # without perturbing the other learned accelerations.  Only the
+            # semantically typed output head is exposed here; the shared
+            # transformer remains a frozen feature map and excluded rows are
+            # additionally restored around AdamW below.
+            attention.node_decoder.requires_grad_(True)
+            return
         attention.requires_grad_(True)
         if scope == "attention_relation":
             # Stage relation/event learning without letting an unconditional
@@ -3183,7 +3197,8 @@ def set_closed_loop_trainable_scope(
         return
     raise ValueError(
         "closed-loop trainable scope must be 'all', 'attention', "
-        "'attention_relation', 'dynamics', 'updater', "
+        "'attention_relation', 'attention_node_x', 'attention_node_y', "
+        "'attention_node_z', 'dynamics', 'updater', "
         "'updater_mean', 'updater_mean_y', 'fast_roi', 'state_dynamics', "
         "'state_dynamics_fast_roi', or "
         "'state_dynamics_roi'"
@@ -3215,6 +3230,52 @@ def _prepare_restricted_updater_mean_update(
     for parameter in (corrector.mean_head.weight, corrector.mean_head.bias):
         if parameter.ndim == 0 or selected_row >= parameter.shape[0]:
             raise ValueError(f"{scope} is incompatible with the learned mean-head shape")
+        frozen_rows = torch.as_tensor(
+            [row for row in range(parameter.shape[0]) if row != selected_row],
+            dtype=torch.int64,
+            device=parameter.device,
+        )
+        frozen_values = parameter.detach().index_select(0, frozen_rows).clone()
+        if parameter.grad is not None:
+            parameter.grad.index_fill_(0, frozen_rows, 0)
+        state = optimizer.state.get(parameter, {})
+        for value in state.values():
+            if isinstance(value, Tensor) and value.shape == parameter.shape:
+                value.index_fill_(0, frozen_rows, 0)
+        snapshots.append((parameter, frozen_rows, frozen_values))
+    return snapshots
+
+
+def _prepare_restricted_attention_node_update(
+    model: OnlineWorldModel,
+    optimizer: torch.optim.AdamW,
+    *,
+    scope: str,
+) -> list[tuple[Tensor, Tensor, Tensor]]:
+    """Restrict a typed node-acceleration update to one coordinate.
+
+    The node decoder's rows are explicitly x/y/z acceleration components.
+    Zeroing gradients alone is insufficient under AdamW because decoupled
+    weight decay and retained moments can move excluded rows.  Snapshot and
+    restore them exactly, just as the axis-restricted correction-head scope
+    does.  This is a training-only recovery control: runtime dynamics still
+    consume the complete typed three-axis output.
+    """
+
+    selected_row = {
+        "attention_node_x": 0,
+        "attention_node_y": 1,
+        "attention_node_z": 2,
+    }.get(scope)
+    if selected_row is None:
+        return []
+    attention = model.dynamics.attention_interactions
+    if attention is None:
+        raise ValueError(f"{scope} requires typed attention dynamics")
+    snapshots: list[tuple[Tensor, Tensor, Tensor]] = []
+    for parameter in (attention.node_decoder.weight, attention.node_decoder.bias):
+        if parameter.ndim == 0 or selected_row >= parameter.shape[0]:
+            raise ValueError(f"{scope} is incompatible with node-decoder shape")
         frozen_rows = torch.as_tensor(
             [row for row in range(parameter.shape[0]) if row != selected_row],
             dtype=torch.int64,
@@ -5718,6 +5779,10 @@ def train_from_config(
                 result.metrics["closed_loop_scope_attention_relation_only"] = float(
                     active_closed_loop_scope == "attention_relation"
                 )
+                for axis_name in ("x", "y", "z"):
+                    result.metrics[f"closed_loop_scope_attention_node_{axis_name}_only"] = float(
+                        active_closed_loop_scope == f"attention_node_{axis_name}"
+                    )
                 result.metrics["closed_loop_scope_state_dynamics_only"] = float(
                     active_closed_loop_scope == "state_dynamics"
                 )
@@ -5749,6 +5814,11 @@ def train_from_config(
             if result.total_loss.requires_grad and causal_support_present:
                 result.total_loss.backward()
             restricted_mean_snapshots = _prepare_restricted_updater_mean_update(
+                model,
+                optimizer,
+                scope=active_closed_loop_scope,
+            )
+            restricted_attention_node_snapshots = _prepare_restricted_attention_node_update(
                 model,
                 optimizer,
                 scope=active_closed_loop_scope,
@@ -5811,6 +5881,10 @@ def train_from_config(
                 _restore_restricted_updater_mean_update(
                     optimizer,
                     restricted_mean_snapshots,
+                )
+                _restore_restricted_updater_mean_update(
+                    optimizer,
+                    restricted_attention_node_snapshots,
                 )
                 finite_check_started = time.perf_counter()
                 try:

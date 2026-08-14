@@ -40,6 +40,7 @@ from world_model.training.trainer import (
     _make_loader,
     _mean_batch_results,
     _mutable_causal_training_support_failures,
+    _prepare_restricted_attention_node_update,
     _prepare_restricted_updater_mean_update,
     _restore_restricted_updater_mean_update,
     _rollout_selection_improves,
@@ -291,6 +292,69 @@ def test_attention_relation_scope_freezes_only_node_decoder() -> None:
         parameter.requires_grad is (not name.startswith("node_decoder."))
         for name, parameter in model.dynamics.attention_interactions.named_parameters()
     )
+
+
+def test_attention_node_z_scope_preserves_excluded_rows_through_adamw() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    model = OnlineWorldModel.from_config(config)
+    set_closed_loop_trainable_scope(model, scope="attention_node_z")
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+    trainable = {name for name, parameter in model.named_parameters() if parameter.requires_grad}
+    assert trainable == {
+        "dynamics.attention_interactions.node_decoder.weight",
+        "dynamics.attention_interactions.node_decoder.bias",
+    }
+    with torch.no_grad():
+        attention.node_decoder.weight.copy_(
+            torch.arange(
+                attention.node_decoder.weight.numel(),
+                dtype=attention.node_decoder.weight.dtype,
+            ).reshape_as(attention.node_decoder.weight)
+            / 1000
+        )
+        attention.node_decoder.bias.copy_(
+            torch.arange(
+                attention.node_decoder.bias.numel(),
+                dtype=attention.node_decoder.bias.dtype,
+            )
+            / 1000
+        )
+    before_weight = attention.node_decoder.weight.detach().clone()
+    before_bias = attention.node_decoder.bias.detach().clone()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.1, weight_decay=0.1)
+    attention.node_decoder.weight.grad = torch.ones_like(attention.node_decoder.weight)
+    attention.node_decoder.bias.grad = torch.ones_like(attention.node_decoder.bias)
+
+    snapshots = _prepare_restricted_attention_node_update(
+        model,
+        optimizer,
+        scope="attention_node_z",
+    )
+    assert torch.count_nonzero(attention.node_decoder.weight.grad[:2]) == 0
+    assert torch.count_nonzero(attention.node_decoder.weight.grad[2]) > 0
+    optimizer.step()
+    _restore_restricted_updater_mean_update(optimizer, snapshots)
+
+    torch.testing.assert_close(attention.node_decoder.weight[:2], before_weight[:2])
+    assert not torch.equal(attention.node_decoder.weight[2], before_weight[2])
+    torch.testing.assert_close(attention.node_decoder.bias[:2], before_bias[:2])
+    assert not torch.equal(attention.node_decoder.bias[2], before_bias[2])
+
+
+@pytest.mark.parametrize("scope", ("attention_node_x", "attention_node_y", "attention_node_z"))
+def test_axis_selective_attention_scopes_are_valid_configurations(scope: str) -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=[
+            "model.dynamics.attention_residual_enabled=true",
+            f"training.closed_loop_trainable_scope={scope}",
+        ],
+    )
+    assert config.training.closed_loop_trainable_scope == scope
 
 
 def test_attention_scope_requires_enabled_attention() -> None:

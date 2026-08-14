@@ -1708,3 +1708,12 @@
   The completed 128-step campaign improved global selector/x/y/collision
   metrics but remains rejected by 112 strict guardrail failures, dominated by
   z/lifecycle/identity rather than optimizer collapse.
+- [x] Add an axis-selective typed-attention recovery scope. The new
+  `attention_node_x|y|z` scopes train exactly one node-acceleration decoder
+  row while snapshotting/restoring all excluded rows and AdamW moments; this
+  allows a z repair to preserve qualified x/y behaviour. Focused configuration
+  and exact-optimizer tests pass (`270 passed`).
+- [ ] Qualify `attention_node_z` from the protected incumbent on the complete
+  scenario mixture. Increase only the existing z rollout emphasis, retain the
+  same lifecycle/identity guardrails, and reject the run unless it improves
+  the full held-out comparator rather than only z.

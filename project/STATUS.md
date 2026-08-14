@@ -9858,3 +9858,12 @@ reported 112 failures, mainly scenario-level z/lifecycle/identity guardrails.
 continues to protect the incumbent. The next repair must preserve the learned
 x/y and collision gain while explicitly anchoring z/lifecycle/identity, not
 relaxing the comparator.
+
+The first such repair is now implemented but not yet qualified: opt-in
+`attention_node_x|y|z` scopes isolate a single typed residual-acceleration
+row. They use a snapshot/restore barrier around AdamW so excluded rows and
+their optimizer moments cannot drift through weight decay. This keeps the
+joint runtime unchanged while allowing a z-focused training experiment to
+retain x/y control. Focused schedule/config tests passed (`270 passed in
+17.58 s`) under `conda run -n orpheus`; no accuracy result is claimed until a
+complete active-Aqua fixed-manifest validation is recorded.
