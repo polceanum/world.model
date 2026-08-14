@@ -2755,3 +2755,6 @@ further gravity-axis threshold tuning.
   conservation, enabling truthful offline threshold calibration.
 - Added `scripts/sweep_event_histograms.py` to aggregate label-aware bins and
   estimate precision/recall/F1 at conservative bin-aligned thresholds.
+- Completed a bounded two-episode attention-checkpoint calibration; learned
+  events lead through 0.75 s while ballistic contact leads at 1.00 s, so no
+  horizon-specific threshold or candidate was promoted.

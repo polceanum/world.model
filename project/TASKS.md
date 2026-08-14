@@ -1649,3 +1649,7 @@
   exact count conservation for offline precision/recall sweeps.
 - [x] Add and smoke-test a bin-aligned offline event-threshold sweep utility;
   keep estimates diagnostic until multi-episode calibration is available.
+- [x] Run a bounded attention-checkpoint calibration; record horizon-specific
+  learned/ballistic event evidence without promoting a two-episode result.
+- [ ] Repeat calibration on a practical multi-episode CPU/MPS-capable setup
+  before changing event thresholds or horizon priors.

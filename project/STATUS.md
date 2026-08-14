@@ -9573,3 +9573,12 @@ without rerunning rollouts. On the labeled smoke it reproduced the recorded
 ballistic-contact event counts (0.50 s F1 `0.154` at the best available
 threshold). This remains a calibration diagnostic; no threshold or candidate
 has been promoted.
+
+A bounded two-episode calibration using the attention checkpoint completed at
+`runs/20260815-081500-hypothesis-pool-labeled-calibration-2ep`. Offline sweeps
+favoured the learned event model at 0.10--0.75 s (best F1 `0.316/0.290/0.267/0.235`)
+and ballistic contact at 1.00 s (F1 `0.381`). The best bin-aligned thresholds
+were horizon-dependent (`0.10--0.20`). This is directional evidence only: the
+sample is too small for promotion, and event reporting does not change
+position selection. An earlier eight-episode attempt was stopped after it
+exceeded the practical CPU runtime without producing a partial report.
