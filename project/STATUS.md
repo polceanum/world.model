@@ -9432,3 +9432,11 @@ mean spread, rather than reusing the selected candidate's variance. A real
 one-episode CPU smoke completed at
 `runs/20260814-140000-hypothesis-pool-blend-uncertainty-smoke/report.json` with
 finite uncertainty values at every horizon.
+
+Hypothesis posterior temperature is now configurable via `--temperature` (the
+default remains `1.0`). A sharp-temperature blend pilot at `temperature=0.25`
+completed at
+`runs/20260814-150000-hypothesis-pool-blend-temp025-disjoint2/report.json`.
+It selected `[285, 10, 1]`; x/y RMSE improved from 0.50 s onward and z was
+stable, but collision F1 regressed at 0.50 s (`0.1494 → 0.1172`). It is
+therefore rejected under the event guardrail and remains opt-in.

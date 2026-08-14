@@ -1611,3 +1611,5 @@
   promotion for small z/event regressions despite improved long-horizon y.
 - [x] Add and evaluate opt-in posterior position blending; reject the pilot for
   all-horizon z and mid-horizon y regressions.
+- [x] Expose posterior temperature calibration and reject the first sharp blend
+  pilot for a 0.50 s collision-F1 regression.

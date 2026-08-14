@@ -2711,3 +2711,6 @@ further gravity-axis threshold tuning.
   it was rejected under the all-axis guardrails.
 - Corrected blended uncertainty reporting to propagate within- and
   between-hypothesis mixture variance; verified a real one-episode smoke.
+- Exposed `--temperature` for posterior calibration. A `0.25` blend pilot
+  improved long-horizon position error but regressed 0.50 s collision F1 and
+  was rejected.
