@@ -74,6 +74,9 @@
   conservative contact-event logits, and generalized the evaluation harness to
   three candidates. Nine focused tests pass; a fresh toy smoke selected the
   learned candidate on all 59 queries, so no gain is claimed.
+- Completed the three-candidate protected eight-episode comparison (1,184
+  queries). Ballistic was selected once and regressed mature event/position
+  behavior; it remains diagnostic and unpromoted.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

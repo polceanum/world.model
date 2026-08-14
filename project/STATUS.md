@@ -7964,6 +7964,16 @@ candidate was not selected, so no accuracy gain is claimed yet. This negative
 result is retained as evidence that event-aware candidate construction still
 needs protected multi-episode qualification.
 
+That protected qualification is now complete at
+`runs/20260814-003000-hypothesis-pool-3cand-8ep/report.json` (1,184 queries).
+Selection counts are learned/constant-velocity/ballistic `1148/35/1`. Mean
+selected x/y/z RMSE is `0.6112/0.3227/0.6614 m` at 0.10 s,
+`0.6214/0.2891/0.6673 m` at 0.25 s, `0.6482/0.2194/0.6826 m` at 0.50 s,
+`0.6645/0.2096/0.6972 m` at 0.75 s, and `0.6959/0.2220/0.7127 m` at 1.00 s.
+Ballistic candidate mean collision F1 is `0.2097/0.1479/0.1142/0.0931/0.0250`
+across those horizons; it is worse than learned at mature horizons and was
+selected only once. Keep it diagnostic and unpromoted.
+
 The required 32-episode decay-0.1 protected comparison completed from the
 immutable reference checkpoint at
 `runs/20260813-230000-hypothesis-pool-protected-32ep/report.json`. It contains

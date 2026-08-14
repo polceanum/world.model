@@ -33,6 +33,9 @@
   the evaluation harness to three candidates; verify it without promotion.
 - [ ] Run the three-candidate pool on the protected multi-episode protocol and
   require event/lifecycle/uncertainty guardrails before any default change.
+- [x] Complete the three-candidate eight-episode protected comparison; retain
+  ballistic as diagnostic only because it is rarely selected and regresses
+  mature event/position behavior.
 - [x] Batch all requested horizons into one rollout per frame in the evaluation
   harness; verify equivalent toy/attention smoke execution before relaunch.
 - [x] Run a four-episode protected decay-1.0 versus decay-0.1 matrix; retain
