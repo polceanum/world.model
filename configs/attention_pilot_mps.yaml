@@ -5,7 +5,10 @@ project:
   deterministic: true
 device:
   preference: mps
-  closed_loop_preference: cpu
+  # The bounded complete causal graph is qualified on active-Aqua MPS. New
+  # candidate runs therefore execute their closed-loop selector on MPS; an
+  # already-created CPU-fallback run retains its resolved configuration.
+  closed_loop_preference: mps
   global_detector_cpu_on_mps: true
   cuda_amp: false
   mps_float32: true

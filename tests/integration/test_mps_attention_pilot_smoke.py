@@ -30,11 +30,6 @@ def test_attention_pilot_rgb_closed_loop_z_scope_is_finite_on_mps() -> None:
     source = load_config("configs/attention_pilot_mps.yaml")
     config = replace(
         source,
-        device=replace(
-            source.device,
-            preference="mps",
-            closed_loop_preference="same",
-        ),
         training=replace(
             source.training,
             batch_size=1,

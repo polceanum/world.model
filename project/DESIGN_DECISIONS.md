@@ -3578,3 +3578,21 @@
   `WorldBelief` contract, the CPU fallback, training policy, or the full
   fixed-manifest accuracy gate. Larger MPS throughput and accuracy campaigns
   require their own evidence.
+
+## ADR-125 — Require MPS fixed-manifest validation for new attention-pilot candidates
+
+- **Date:** 2026-08-14
+- **Status:** accepted
+- **Context:** The historical attention-pilot configuration retained a CPU
+  closed-loop fallback while MPS causal defects were being isolated. After
+  ADR-124, leaving that default in place would allow a future candidate to be
+  selected without the requested active-Aqua MPS validation.
+- **Decision:** Set `attention_pilot_mps` closed-loop preference to `mps` for
+  newly created runs. Do not mutate a live run's resolved configuration;
+  historical CPU-fallback candidates require an explicit MPS guarded replay
+  before any promotion.
+- **Consequences:** New selector comparisons run on the qualified MPS graph.
+  This changes execution placement only, not model weights, loss, simulator,
+  `WorldBelief`, or comparator thresholds. CPU remains available through an
+  explicit configuration override for diagnosis, never as an implicit
+  promotion substitute.

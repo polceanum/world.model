@@ -9964,3 +9964,12 @@ shortened four-step window, not a claim about pilot-scale MPS throughput,
 long-horizon accuracy, or promotion. The running 512-update recovery retains
 the separate CPU closed-loop fallback and its fixed 32-episode comparator
 until a candidate meets every guardrail.
+
+Following that qualification, new runs from `configs/attention_pilot_mps.yaml`
+now set `device.closed_loop_preference: mps`, so their fixed-manifest selector
+executes on MPS rather than treating MPS as measurement-only. The active
+`20260814-101500-attention-node-z-recovery-512` run retains its already saved
+CPU closed-loop configuration for provenance and must receive a separate MPS
+guarded replay before any promotion; it is not silently reconfigured in place.
+The unchanged bounded integration regression passed again from this source
+configuration in active Aqua (`1 passed in 51.06 s`).

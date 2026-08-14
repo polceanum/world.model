@@ -1723,3 +1723,7 @@
   MPS forward/backward smoke is finite (`1 passed in 53.64 s` in active Aqua).
   This numerical qualification does not claim pilot-scale speed or accuracy;
   those remain guarded by separately balanced, fixed-manifest evaluation.
+- [x] Make MPS the closed-loop selector backend for future
+  `attention_pilot_mps` candidates now that the complete bounded graph is
+  qualified. Existing CPU-fallback runs preserve their resolved provenance and
+  need an explicit MPS replay before any promotion.

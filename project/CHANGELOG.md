@@ -2873,3 +2873,8 @@ further gravity-axis threshold tuning.
   verifies finite loss and z-attention gradients through persistent
   predict–observe–associate–correct–rollout; it is numerical qualification,
   not an accuracy or throughput promotion.
+- Switched future `attention_pilot_mps` closed-loop selector validation to MPS
+  after that qualification. Existing CPU-fallback run configurations remain
+  immutable and require an explicit MPS guarded replay before promotion; the
+  unchanged bounded source-config regression passed in active Aqua (`1 passed
+  in 51.06 s`).
