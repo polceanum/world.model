@@ -2824,3 +2824,6 @@ further gravity-axis threshold tuning.
   checkpoint and launched its required timestamped Aqua/MPS continuation from
   that durable checkpoint. The trainer's numbered-checkpoint resume contract
   was respected; no incomplete run was overwritten or promoted.
+- Recorded the continuation's first normal and collision-heavy optimizer
+  batches. The step-16 event spike remained finite and passed the pre-Adam
+  interaction-retention gate; no numerical safeguard was relaxed.

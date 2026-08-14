@@ -9807,3 +9807,15 @@ collision, or impulse parameter gradient clip engaged. Typed output-local
 clips were active as designed (node and force backpropagation), not a global
 collapse. This is a health observation only: it is one stochastic training
 batch, not a validation result or promotion.
+
+At step 16/128, the same campaign encountered a collision-heavy balanced
+batch (22 ground-contact objects and four pair-collision intervals). Total
+loss rose to `3.7081065`, primarily collision-event loss `2.2412300`, while
+all values remained finite and causal trajectory support remained `162`.
+The attention interaction hierarchy retained `0.715509` after local force
+conditioning and the global cap applied `0.715509`, yielding a safe applied
+norm of `0.9999991` from pre-clip `1.3976053`. This is expected bounded stress
+behaviour, not an optimizer-rejection/collapse: it exceeds the configured
+minimum interaction retention `0.1`, all eight scenario families were
+present, and the process continued. It is not a validation result or model
+promotion.
