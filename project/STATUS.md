@@ -9546,3 +9546,10 @@ fresh pilot at
 selected `[209, 36, 5, 46]`. It improved short-horizon event F1 but collapsed
 event performance at 0.75–1.00 s and worsened y/z, so it is rejected. Event
 logit calibration/training is required rather than a hard event gate.
+
+An additional precision-oriented threshold pilot at `--event-threshold 0.95`
+completed at
+`runs/20260815-050000-hypothesis-pool-eventthreshold095-disjoint2/report.json`.
+It raised event precision/F1 (0.50 s F1 `0.262`) and improved z, but y
+regressed at 0.75/1.00 s. It is rejected under all-axis guardrails; event
+calibration cannot be solved safely by threshold alone.

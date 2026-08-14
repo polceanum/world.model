@@ -2747,3 +2747,5 @@ further gravity-axis threshold tuning.
   0.50/1.00 s and promotion was rejected.
 - Added opt-in event-error gating; it improved short-horizon event F1 but
   collapsed tail event performance and worsened y/z, so it was rejected.
+- Tested event threshold `0.95`; event precision/F1 improved, but long-horizon y
+  regressed and the threshold was rejected.

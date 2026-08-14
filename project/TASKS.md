@@ -1641,3 +1641,5 @@
   x/y gains but reject promotion for mid/tail event-F1 regressions.
 - [x] Add and evaluate an event-error gate; reject it for tail event collapse
   and y/z regressions.
+- [x] Test precision-oriented event threshold `0.95`; reject it for long-horizon
+  y regressions despite improved event F1.
