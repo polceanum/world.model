@@ -2733,3 +2733,6 @@ further gravity-axis threshold tuning.
   it improved x/y but regressed long-horizon z and was not promoted.
 - Added per-horizon hypothesis selection counts to reports and verified the
   variable-candidate accounting with a real smoke evaluation.
+- Used horizon-resolved counts to identify ballistic short/long wins and
+  undamped-velocity sparsity; scheduled a data-driven conditioned prior rather
+  than hard-coding candidate exclusions.

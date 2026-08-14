@@ -1627,3 +1627,7 @@
   fresh comparison with residual z regressions.
 - [x] Add an undamped constant-velocity nearby hypothesis and reject the first
   four-candidate comparison for long-horizon z regressions.
+- [x] Use horizon-resolved selection counts to identify ballistic short/long
+  wins; leave horizon behavior data-driven and schedule a conditioned prior.
+- [ ] Implement and validate a horizon-conditioned candidate prior without
+  hard-coding ballistic exclusion.

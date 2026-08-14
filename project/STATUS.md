@@ -9500,3 +9500,10 @@ Reports now include `selection_counts_by_horizon`, keyed by forecast horizon,
 alongside global counts. A one-episode smoke verified variable-candidate shape
 and horizon accounting at
 `runs/20260814-230000-hypothesis-pool-horizon-count-smoke/report.json`.
+
+The first horizon-resolved four-candidate comparison completed at
+`runs/20260814-240000-hypothesis-pool-velocity4-horizon2/report.json`.
+Ballistic selections were concentrated at 0.10 s and reappeared at 0.75–1.00
+s, while undamped velocity was selected only five times across both episodes.
+This supports a horizon-conditioned prior or learned interaction trigger as
+the next principled intervention; no horizon exclusion is hard-coded.
