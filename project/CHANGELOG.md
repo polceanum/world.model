@@ -2742,3 +2742,6 @@ further gravity-axis threshold tuning.
   ballistic at long horizons and regressed y/event metrics, so it was rejected.
 - Tested signed prior-preserving decay (`-0.5`); it improved long-horizon x/y
   but regressed z and short-horizon event F1, so it was rejected.
+- Added opt-in independent per-horizon posteriors. They improved long-horizon
+  x/y and confirmed cross-horizon contamination, but event F1 regressed at
+  0.50/1.00 s and promotion was rejected.

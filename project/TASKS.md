@@ -1637,3 +1637,5 @@
   long-horizon y/event regressions and ballistic over-selection.
 - [x] Test prior-preserving signed decay (`-0.5`); reject it for cross-horizon
   z and short-horizon event regressions.
+- [x] Add independent per-horizon persistent posteriors; confirm long-horizon
+  x/y gains but reject promotion for mid/tail event-F1 regressions.

@@ -9529,3 +9529,12 @@ The opposite, prior-preserving direction is also available via signed
 It selected `[230, 13, 9, 44]`; long-horizon x/y and some event F1 improved,
 but z regressed across horizons and 0.10 s event F1 fell. Both decay directions
 are rejected for this checkpoint; default evidence persistence remains intact.
+
+Added opt-in `--independent-horizons`, which keeps separate persistent
+hypothesis posteriors per horizon while reusing the same rollout computation.
+The fresh comparison at
+`runs/20260815-030000-hypothesis-pool-independent-horizons-velocity4-disjoint2/report.json`
+selected `[216, 15, 3, 62]`. Long-horizon x/y improved strongly and z stayed
+near learned-only, confirming cross-horizon posterior contamination, but event
+F1 regressed at 0.50/1.00 s. It remains opt-in pending event-calibrated
+posteriors.
