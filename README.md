@@ -125,7 +125,7 @@ The v1/v2 profiles and runs remain audit controls; neither is a convergence
 result. See `project/ACCURACY_AUDIT.md` and `project/TRAINING.md` for exact
 evidence and the required medium qualification before a sustained launch.
 
-The v3 profile runs the convolutional RGB backbone and ROI path on MPS, pins
+The historical v3 profile runs the convolutional RGB backbone and ROI path on MPS, pins
 the small global proposal transformer to CPU through differentiable copies,
 and switches the full persistent model to CPU at the causal boundary. The
 proposal fallback avoids a reproduced PyTorch 2.10 MPS NaN-gradient kernel on
@@ -134,6 +134,25 @@ online filter/dynamics backward pass substantially faster on CPU on this Mac.
 `--resume` preserves both configured phase devices and the exact absolute
 sample/RNG/source protocol. Use `--initialize-from` for a changed device,
 objective, curriculum, or source implementation.
+
+For an immutable promotion decision for a legacy CPU-fallback candidate, run
+the full trainer manifest once for the protected reference and candidate on an
+active-Aqua MPS session:
+
+```bash
+python scripts/replay_promotion_mps.py \
+  --config configs/attention_pilot_mps.yaml \
+  --reference runs/<run>/checkpoints/best_rollout.pt \
+  --candidate runs/<run>/checkpoints/validation_step_000128.pt \
+  --output runs/$(date -u +%Y%m%d-%H%M%S)-mps-promotion-replay
+```
+
+The command is a gate, not a generic benchmark: it exits successfully only
+when the candidate improves on MPS while passing the existing per-axis,
+per-horizon, lifecycle, identity, collision/event, calibration, and support
+guardrails. Its report records both checkpoint SHA-256s and the validation
+protocol hash. New `attention_pilot_mps` runs already execute their selector
+directly on MPS.
 
 For checkpoint selection without reusing trainer-validation or test seeds:
 
@@ -195,7 +214,8 @@ result is
 These generated artifacts are gitignored. The seven-regime interaction
 curriculum is configured in `configs/tiny_interactions.yaml`.
 
-PyTorch 2.10.0 in the existing environment is MPS-enabled. The corrected
+The user-provided locally built PyTorch in the existing environment is
+MPS-enabled. The corrected
 two-phase smoke at
 `runs/20260801-231521-audit-v2-final-verified-smoke/` exercised one hybrid RGB
 update, two persistent causal updates, selector validation, checkpoint

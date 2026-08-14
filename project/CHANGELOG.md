@@ -2884,3 +2884,5 @@ further gravity-axis threshold tuning.
   broad-guardrail decision; no candidate result is claimed yet.
 - Bound MPS replay reports to both checkpoint SHA-256 digests, the exact
   validation protocol hash, PyTorch version, precision, and backend.
+- Documented the one-shot active-Aqua MPS promotion-replay command and its
+  immutable guardrail/provenance contract in the public workflow.
