@@ -363,6 +363,51 @@ def test_model_and_simulator_share_low_speed_resting_boundary_constraint() -> No
     assert model.objects.velocity[0, 0, 1] == 0
 
 
+def test_zero_tangent_noncollision_boundary_stays_finite() -> None:
+    """A resting boundary has no friction direction but remains a valid state."""
+
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 0
+    objects.position[0, 0] = torch.tensor([0.0, 0.1, 0.0])
+    objects.velocity[0, 0] = torch.tensor([0.0, -0.05, 0.0])
+    objects.geometry[0, 0, 0] = 0.1
+
+    result = SphereContactResolver()(objects)
+
+    assert torch.isfinite(result.objects.position).all()
+    assert torch.isfinite(result.objects.velocity).all()
+    assert result.ground_contact[0, 0]
+    assert not result.ground_collision[0, 0]
+    torch.testing.assert_close(result.objects.velocity[0, 0], torch.zeros(3))
+
+
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(),
+    reason="requires an active Aqua MPS device",
+)
+def test_mps_zero_tangent_noncollision_boundary_stays_finite() -> None:
+    """Keep the MPS zero-tangent contact regression covered when available."""
+
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 0
+    objects.position[0, 0] = torch.tensor([0.0, 0.1, 0.0])
+    objects.velocity[0, 0] = torch.tensor([0.0, -0.05, 0.0])
+    objects.geometry[0, 0, 0] = 0.1
+
+    result = SphereContactResolver().to("mps")(objects.to("mps"))
+
+    assert torch.isfinite(result.objects.position).all()
+    assert torch.isfinite(result.objects.velocity).all()
+    torch.testing.assert_close(
+        result.objects.velocity[0, 0].cpu(),
+        torch.zeros(3),
+    )
+
+
 def test_slow_side_wall_contact_is_not_ground_or_sleep_and_preserves_tangent() -> None:
     belief = BeliefFactory(max_objects=1).create()
     objects = belief.objects.clone()

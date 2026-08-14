@@ -2860,3 +2860,7 @@ further gravity-axis threshold tuning.
   remain finite, while typed-attention causal propagation reaches non-finite
   uncertainty before loss construction and the complete backward reproduces
   the Metal pipeline/XPC error. Retained CPU as the safe causal backend.
+- Fixed zero-tangent contact normalization in the plane and pair solvers. The
+  prior subnormal denominator could flush to zero on MPS and produce a NaN
+  before a false collision mask; CPU contact/parity tests and an active-Aqua
+  MPS regression test pass. Full RGB MPS qualification remains pending.

@@ -3518,3 +3518,23 @@
   the identical all-axis, all-horizon, lifecycle, identity, event, and
   calibration comparator; improving z alone is insufficient. Unit tests prove
   x/y rows remain bitwise unchanged under AdamW while z updates.
+
+## ADR-122 — Treat zero-tangent contact as a finite physical state on MPS
+
+- **Date:** 2026-08-14
+- **Status:** accepted
+- **Context:** An active-Aqua MPS typed-attention propagation exposed a NaN in
+  the contact resolver before uncertainty propagation. At a non-collision
+  plane contact, the solver computed a friction direction by dividing an exact
+  zero tangential vector by `clamp_min(1e-7)`. The later collision multiplier
+  was false, but the affected MPS kernel flushed the subnormal denominator and
+  formed `0/0` first. CPU arithmetic had hidden this defect.
+- **Decision:** Use a shared safe tangent-direction helper in plane and pair
+  solvers. It uses the true speed for physically meaningful directions and a
+  unit denominator for zero/near-zero speed, yielding an exact zero direction
+  at rest. No contact decision, restitution law, friction coefficient, or
+  learned residual is changed.
+- **Consequences:** The CPU solver remains parity-tested and the active-Aqua
+  MPS zero-tangent regression is finite. This removes one backend-specific
+  numerical defect but does not qualify the complete RGB/MPS backward path or
+  alter the CPU fallback / accuracy promotion guardrails.

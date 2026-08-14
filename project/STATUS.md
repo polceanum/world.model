@@ -9918,6 +9918,18 @@ loss construction. Thus the issue is in the present full MPS causal path, not
 generic MPS availability. CPU remains the documented safe closed-loop backend
 while MPS is investigated separately; no MPS accuracy result is claimed.
 
+The first MPS-specific numerical cause is fixed: a zero tangential vector at a
+non-collision plane contact was divided by a subnormal `1e-7` denominator.
+This is harmless in CPU arithmetic but is flushed by the affected MPS contact
+kernel, yielding a NaN before the later false collision mask could remove it.
+Both plane and pair contact paths now use a finite zero-tangent direction.
+CPU contact/parity tests passed (`29 passed, 1 skipped`), and the new exact
+active-Aqua MPS regression passed (`1 passed, 23 deselected` in `2.71 s`). A
+tiny typed-attention MPS dynamics backward also now has a finite z gradient.
+The complete RGB closed-loop MPS smoke still reaches the remaining Metal
+reduction pipeline error, so this repair is not an MPS training qualification
+or an accuracy promotion.
+
 The controlled z-only recovery has now reached optimizer step 16/512. Its
 first durable training record is finite (`loss=3.944058`,
 pre-clip/applied gradient norm `0.214675/0.214675`), applied an optimizer

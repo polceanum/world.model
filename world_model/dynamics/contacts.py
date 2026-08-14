@@ -13,6 +13,30 @@ from world_model.belief import ObjectBeliefTensor
 from world_model.dynamics.graph import InteractionOutput
 
 
+_TANGENT_DIRECTION_EPSILON = 1.0e-7
+
+
+def _safe_tangent_direction(tangential: Tensor, tangent_speed: Tensor) -> Tensor:
+    """Return a finite tangent direction, including an exact rest contact.
+
+    A zero tangential speed has no friction direction.  Dividing by a tiny
+    clamped epsilon is algebraically harmless on CPU, but some MPS kernels
+    flush that subnormal denominator and form ``0 / 0`` before a later
+    collision mask can remove the term.  Selecting a unit denominator for the
+    zero/near-zero branch retains a zero vector there while preserving the
+    ordinary normalized direction everywhere it is physically meaningful.
+    """
+
+    if tangential.shape != tangent_speed.shape + (3,):
+        raise ValueError("tangential vector and speed shapes are inconsistent")
+    denominator = torch.where(
+        tangent_speed > _TANGENT_DIRECTION_EPSILON,
+        tangent_speed,
+        torch.ones_like(tangent_speed),
+    )
+    return tangential / denominator.unsqueeze(-1)
+
+
 @dataclass(frozen=True)
 class ContactPlane:
     """Plane whose valid half-space satisfies ``normal·position >= offset``."""
@@ -322,7 +346,7 @@ class SphereContactResolver(nn.Module):
 
         rel_tangent = rel_velocity - relative_normal_velocity.unsqueeze(-1) * normal
         tangent_speed = torch.linalg.vector_norm(rel_tangent, dim=-1)
-        tangent_direction = rel_tangent / tangent_speed.clamp_min(1e-7).unsqueeze(-1)
+        tangent_direction = _safe_tangent_direction(rel_tangent, tangent_speed)
         friction = torch.sqrt(
             objects.friction.squeeze(-1)[:, :, None].clamp_min(0.0)
             * objects.friction.squeeze(-1)[:, None, :].clamp_min(0.0)
@@ -429,8 +453,7 @@ class SphereContactResolver(nn.Module):
                 objects.friction.squeeze(-1).clamp_min(0.0) * delta_normal_speed,
             )
             velocity = velocity + (
-                -tangential
-                / tangent_speed.clamp_min(1e-7).unsqueeze(-1)
+                -_safe_tangent_direction(tangential, tangent_speed)
                 * reduction.unsqueeze(-1)
                 * collision.unsqueeze(-1)
             )
