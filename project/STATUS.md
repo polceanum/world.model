@@ -9355,3 +9355,9 @@ non-regressive at 0.10/0.25/0.75/1.00 s for x and z, but y regressed at 1.00 s
 (`0.3949` vs `0.3659` m) and collision F1 fell at 1.00 s (`0.0000` vs
 `0.0556`). Because this is only two episodes and has a mixed tail result, it
 is rejected as promotion evidence. A larger disjoint matrix remains required.
+
+The evaluator now uses `torch.inference_mode()` for its RGB-only loop. This is
+semantics-preserving (no gradients or parameter updates are possible) and
+removes autograd version-counter overhead from repeated learned rollouts. A
+one-episode CPU smoke completed successfully after the change:
+`runs/20260814-083000-hypothesis-pool-inference-smoke/report.json`.

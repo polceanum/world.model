@@ -2692,3 +2692,5 @@ further gravity-axis threshold tuning.
 - Completed a disjoint two-episode pilot (`seed=200000`) as a guardrail check;
   it had mixed long-horizon y/event results and was rejected as promotion
   evidence. The gate remains opt-in.
+- Switched evaluation-only rollout execution from `torch.no_grad()` to
+  `torch.inference_mode()` and verified a one-episode RGB smoke report.

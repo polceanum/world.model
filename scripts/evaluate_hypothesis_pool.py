@@ -131,7 +131,10 @@ def evaluate_episode(
     uncertainty_sum = [[0.0, 0] for _ in horizons]
     choice_counts = [0 for _ in range(candidate_count)]
     timestamps = episode["timestamps"]
-    with torch.no_grad():
+    # Evaluation never backpropagates or mutates tensors through autograd.
+    # Inference mode also disables version-counter bookkeeping, which matters
+    # here because every frame runs the learned dynamics for all hypotheses.
+    with torch.inference_mode():
         for frame_index, timestamp in enumerate(timestamps.tolist()):
             model.ingest(_packet(episode, frame_index, image_size))
             if model.belief is None:
