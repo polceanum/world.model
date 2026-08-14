@@ -9664,6 +9664,20 @@ axis-composition config without starting training. A source audit shows the
 axis pool is consumed through explicit evaluator/runtime accessors; there is no
 hidden simulator-state path or replacement of `WorldBelief`.
 
+A bounded attention training smoke also completed on CPU with one optimizer
+update across all eight scenario families. Command:
+`conda run -n orpheus python train.py --config configs/attention_pilot_mps.yaml
+--device cpu --set training.steps=1 --set training.validation_episodes=8
+--set training.train_episodes=8 --set training.num_workers=0
+--set training.validation_minimum_supported_episodes_per_scenario=1
+--set training.validation_minimum_predictable_target_count_per_scenario_horizon=1
+--set training.validation_minimum_matched_target_count_per_scenario_horizon=1`.
+The run completed one update with finite loss `4.048636`, causal trajectory
+support `453`, zero skipped batches, and validated best rollout loss `0.386337`
+(position RMSE `0.400537`). Checkpoints exist at
+`runs/20260814-050546-orpheus-attention-pilot-mps/checkpoints/last.pt` and
+`best_rollout.pt`. This is an entry-point smoke, not a convergence claim.
+
 Generalization on independent seeds 200--201 also passed. Promoted config
 artifact: `runs/20260815-112000-hypothesis-pool-axis-prior001-newdraw2ep`;
 matched joint baseline: `runs/20260815-112500-hypothesis-pool-joint-newdraw2ep`.

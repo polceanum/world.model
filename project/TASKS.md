@@ -1677,3 +1677,5 @@
   add an explicit joint-baseline override.
 - [x] Add a reusable report comparator enforcing per-axis/per-horizon
   non-regression guardrails.
+- [x] Run a bounded one-update attention training smoke across all scenario
+  families with CPU-safe workers and record truthful checkpoint metrics.

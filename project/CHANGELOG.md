@@ -2789,3 +2789,6 @@ further gravity-axis threshold tuning.
   `--no-axis-independent` baseline override.
 - Added `scripts/compare_hypothesis_reports.py` to mechanize per-axis,
   lifecycle, identity, event, and uncertainty regression checks.
+- Completed a one-update, eight-scenario attention training smoke on CPU with
+  finite loss and validated checkpoints; this remains an entry-point check,
+  not a convergence result.
