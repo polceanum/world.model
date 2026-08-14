@@ -2814,3 +2814,6 @@ further gravity-axis threshold tuning.
 - Completed the first full active-Aqua MPS project smoke with the supplied
   local torch build. It is finite but not promoted because the one-step final
   1.00 s validation rollout RMSE regressed versus the initial incumbent.
+- Added deterministic, uncertainty-scaled nearby-belief rollout sampling and
+  RGB evaluator switches for a matched robust-ensemble experiment. The default
+  evaluator behaviour remains unchanged.

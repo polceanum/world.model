@@ -124,6 +124,11 @@ def evaluate_episode(
     axis_independent: bool,
     axis_independent_axes: tuple[int, ...] | None,
     axis_prior_strength: float,
+    ensemble_samples: int,
+    ensemble_position_std_scale: float,
+    ensemble_velocity_std_scale: float,
+    ensemble_risk_penalty: float,
+    ensemble_seed: int,
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
@@ -157,6 +162,7 @@ def evaluate_episode(
         [[0 for _ in range(candidate_count)] for _ in range(3)] for _ in horizons
     ]
     timestamps = episode["timestamps"]
+    ensemble_generator = torch.Generator(device="cpu").manual_seed(ensemble_seed)
     # Evaluation never backpropagates or mutates tensors through autograd.
     # Inference mode also disables version-counter bookkeeping, which matters
     # here because every frame runs the learned dynamics for all hypotheses.
@@ -195,7 +201,19 @@ def evaluate_episode(
                     query_offsets.append(float(timestamps[future_index] - timestamp))
             if not valid_queries:
                 continue
-            trajectories = model.predict_hypotheses(pool, query_offsets)
+            ensemble_trajectories = None
+            if ensemble_samples > 1:
+                ensemble_trajectories = pool.rollout_ensemble(
+                    model.belief,
+                    query_offsets,
+                    sample_count=ensemble_samples,
+                    position_std_scale=ensemble_position_std_scale,
+                    velocity_std_scale=ensemble_velocity_std_scale,
+                    generator=ensemble_generator,
+                )
+                trajectories = ensemble_trajectories[0]
+            else:
+                trajectories = model.predict_hypotheses(pool, query_offsets)
             for query_index, (horizon_index, future_index) in enumerate(valid_queries):
                 single_step_trajectories = []
                 for trajectory in trajectories:
@@ -226,26 +244,49 @@ def evaluate_episode(
                 if decay_exponent <= 0:
                     raise ValueError("horizon decay exponent must remain positive")
                 evidence_pool = horizon_pools[horizon_index] if horizon_pools is not None else pool
-                selection = model.assimilate_hypotheses(
-                    evidence_pool,
-                    target,
-                    mask,
-                    single_step_trajectories,
-                    target_collision=collision_target,
-                    event_weight=event_weight,
-                    lifecycle_weight=lifecycle_weight,
-                    position_gate_ratio=position_gate_ratio,
-                    axis_gate_ratio=axis_gate_ratio,
-                    event_gate_ratio=event_gate_ratio,
-                    axis_weights=axis_weights,
-                    uncertainty_aware=uncertainty_aware,
-                    axis_prior_strength=axis_prior_strength,
-                    evidence_decay_override=(
-                        evidence_decay**decay_exponent
-                        if horizon_decay_scale
-                        else None
+                common_kwargs = {
+                    "target_collision": collision_target,
+                    "event_weight": event_weight,
+                    "lifecycle_weight": lifecycle_weight,
+                    "position_gate_ratio": position_gate_ratio,
+                    "axis_gate_ratio": axis_gate_ratio,
+                    "event_gate_ratio": event_gate_ratio,
+                    "axis_weights": axis_weights,
+                    "uncertainty_aware": uncertainty_aware,
+                    "axis_prior_strength": axis_prior_strength,
+                    "evidence_decay_override": (
+                        evidence_decay**decay_exponent if horizon_decay_scale else None
                     ),
-                )
+                }
+                if ensemble_trajectories is None:
+                    selection = model.assimilate_hypotheses(
+                        evidence_pool, target, mask, single_step_trajectories, **common_kwargs
+                    )
+                else:
+                    single_step_samples = []
+                    for sample_trajectories in ensemble_trajectories:
+                        single_step_samples.append([
+                            trajectory.__class__(
+                                timestamps=trajectory.timestamps[:, query_index : query_index + 1],
+                                positions=trajectory.positions[:, query_index : query_index + 1],
+                                velocities=trajectory.velocities[:, query_index : query_index + 1],
+                                orientations=trajectory.orientations[:, query_index : query_index + 1],
+                                motion_mode_logits=trajectory.motion_mode_logits[:, query_index : query_index + 1],
+                                fast_log_variance=trajectory.fast_log_variance[:, query_index : query_index + 1],
+                                active_mask=trajectory.active_mask[:, query_index : query_index + 1],
+                                event_logits=(trajectory.event_logits[:, query_index : query_index + 1] if trajectory.event_logits is not None else None),
+                                auxiliary={name: value[:, query_index : query_index + 1] for name, value in trajectory.auxiliary.items()},
+                            )
+                            for trajectory in sample_trajectories
+                        ])
+                    selection = model.assimilate_hypothesis_ensemble(
+                        evidence_pool,
+                        target,
+                        mask,
+                        single_step_samples,
+                        risk_penalty=ensemble_risk_penalty,
+                        **common_kwargs,
+                    )
                 selected = int(selection.selected_index[0])
                 choice_counts[selected] += 1
                 horizon_choice_counts[horizon_index][selected] += 1
@@ -495,9 +536,21 @@ def main() -> int:
         help="subset of coordinates for --axis-independent (default: all)",
     )
     parser.add_argument("--axis-prior-strength", type=float, default=None)
+    parser.add_argument("--ensemble-samples", type=int, default=1)
+    parser.add_argument("--ensemble-position-std-scale", type=float, default=0.0)
+    parser.add_argument("--ensemble-velocity-std-scale", type=float, default=0.0)
+    parser.add_argument("--ensemble-risk-penalty", type=float, default=0.0)
     args = parser.parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
+    if args.ensemble_samples <= 0:
+        raise ValueError("--ensemble-samples must be positive")
+    if any(value < 0 or not math.isfinite(value) for value in (
+        args.ensemble_position_std_scale,
+        args.ensemble_velocity_std_scale,
+        args.ensemble_risk_penalty,
+    )):
+        raise ValueError("ensemble scales and risk penalty must be finite and nonnegative")
     if not 0.0 < args.evidence_decay <= 1.0:
         raise ValueError("--evidence-decay must lie in (0,1]")
     if args.temperature <= 0 or not math.isfinite(args.temperature):
@@ -567,6 +620,11 @@ def main() -> int:
             axis_independent,
             axis_independent_axes if axis_independent else None,
             axis_prior_strength,
+            args.ensemble_samples,
+            args.ensemble_position_std_scale,
+            args.ensemble_velocity_std_scale,
+            args.ensemble_risk_penalty,
+            args.seed + index,
         )
         for index in range(args.episodes)
     ]
@@ -596,6 +654,10 @@ def main() -> int:
                 "axis_independent": axis_independent,
                 "axis_independent_axes": list(axis_independent_axes) if axis_independent else None,
                 "axis_prior_strength": axis_prior_strength,
+                "ensemble_samples": args.ensemble_samples,
+                "ensemble_position_std_scale": args.ensemble_position_std_scale,
+                "ensemble_velocity_std_scale": args.ensemble_velocity_std_scale,
+                "ensemble_risk_penalty": args.ensemble_risk_penalty,
                 "candidate_names": [
                     "learned",
                     "constant_velocity_damped_0.0",

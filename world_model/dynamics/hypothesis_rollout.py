@@ -596,6 +596,77 @@ class HypothesisDynamicsPool:
         self._ensure_weights(belief)
         return self.rollout_engine.rollout_dynamics(self.dynamics_models, belief, query_times)
 
+    @staticmethod
+    def _sample_noise(reference: Tensor, generator: torch.Generator | None) -> Tensor:
+        if generator is None:
+            return torch.randn_like(reference)
+        if reference.device.type == "cpu":
+            return torch.randn(
+                reference.shape,
+                device=reference.device,
+                dtype=reference.dtype,
+                generator=generator,
+            )
+        return torch.randn(
+            reference.shape,
+            device="cpu",
+            dtype=reference.dtype,
+            generator=generator,
+        ).to(reference.device)
+
+    def rollout_ensemble(
+        self,
+        belief: WorldBelief,
+        query_times: Tensor | Sequence[float],
+        *,
+        sample_count: int,
+        position_std_scale: float = 0.0,
+        velocity_std_scale: float = 0.0,
+        max_std: float = 1.0,
+        generator: torch.Generator | None = None,
+    ) -> list[list[BeliefTrajectory]]:
+        """Roll out deterministic uncertainty-scaled nearby belief samples.
+
+        Sample zero is always the exact persistent belief.  Later samples are
+        Gaussian local alternatives using only the belief's explicit fast
+        state uncertainty; inactive slots are never perturbed.  The method is
+        evaluation/planning-only and does not mutate the source belief or pool
+        evidence.
+        """
+
+        if sample_count <= 0:
+            raise ValueError("sample_count must be positive")
+        for name, value in (
+            ("position_std_scale", position_std_scale),
+            ("velocity_std_scale", velocity_std_scale),
+            ("max_std", max_std),
+        ):
+            if value < 0 or not torch.isfinite(torch.as_tensor(value)):
+                raise ValueError(f"{name} must be finite and nonnegative")
+        self._ensure_weights(belief)
+        samples: list[list[BeliefTrajectory]] = []
+        active = belief.objects.active.unsqueeze(-1)
+        position_std = belief.objects.fast_log_variance[..., :3].clamp(-20.0, 10.0).mul(0.5).exp()
+        velocity_std = belief.objects.fast_log_variance[..., 3:6].clamp(-20.0, 10.0).mul(0.5).exp()
+        for sample_index in range(sample_count):
+            if sample_index == 0 or (position_std_scale == 0 and velocity_std_scale == 0):
+                sample_belief = belief
+            else:
+                objects = belief.objects.clone()
+                position_delta = self._sample_noise(objects.position, generator) * (
+                    (position_std * float(position_std_scale)).clamp_max(float(max_std))
+                )
+                velocity_delta = self._sample_noise(objects.velocity, generator) * (
+                    (velocity_std * float(velocity_std_scale)).clamp_max(float(max_std))
+                )
+                objects = objects.replace(
+                    position=objects.position + torch.where(active, position_delta, torch.zeros_like(position_delta)),
+                    velocity=objects.velocity + torch.where(active, velocity_delta, torch.zeros_like(velocity_delta)),
+                )
+                sample_belief = belief.replace(objects=objects)
+            samples.append(self.rollout(sample_belief, query_times))
+        return samples
+
     def assimilate(
         self,
         belief: WorldBelief,

@@ -1688,7 +1688,8 @@
   runtime preservation of `WorldBelief` and focused unit/integration tests.
 - [ ] Expose deterministic belief/action perturbation ensembles in the RGB
   hypothesis evaluator and compare zero-risk, expected-error, and robust-risk
-  settings on the same explicit seed manifest.
+  settings on the same explicit seed manifest. (Belief perturbation support is
+  implemented; the first matched MPS probe is running.)
 - [ ] Run the long attention training campaign on this active Aqua/MPS session;
   require finite loss and the existing all-axis/per-horizon comparator before
   promotion.

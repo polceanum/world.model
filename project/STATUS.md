@@ -9740,6 +9740,18 @@ Focused unit/runtime tests passed: `192 passed in 4.20s`. It has not yet been
 promoted for RGB accuracy; evaluator integration and fixed-manifest comparison
 remain the next task.
 
+The evaluator now exposes deterministic uncertainty-scaled nearby-belief
+rollouts through `--ensemble-samples`, `--ensemble-position-std-scale`,
+`--ensemble-velocity-std-scale`, and `--ensemble-risk-penalty`. Sample zero is
+the exact current belief; additional samples are active-slot-only perturbations
+derived from explicit position/velocity uncertainty and a fixed CPU generator.
+The central rollout remains the reported forecast while all samples contribute
+only to delayed model evidence. `tests/unit/test_hypothesis_rollout.py` and
+the oracle runtime integration pass `25 passed in 1.55s`. A matched one-episode
+active-Aqua MPS RGB baseline is currently running at
+`runs/20260814-ensemble-baseline-1ep.json`; no ensemble result is claimed or
+promoted until the paired run and report comparison complete.
+
 The active-Aqua MPS smoke at
 `runs/20260814-074043-orpheus-attention-pilot-mps` completed one optimizer
 step and its eight-scenario final validation. It used torch

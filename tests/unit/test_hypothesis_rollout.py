@@ -215,6 +215,30 @@ def test_pool_assimilates_robust_ensemble_evidence_without_mutating_belief() -> 
     assert belief.timestamp.item() == pytest.approx(0.0)
 
 
+def test_pool_rollout_ensemble_uses_belief_uncertainty_without_mutation() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.position[0, 0] = torch.tensor([1.0, 2.0, 3.0])
+    objects.velocity[0, 0] = torch.tensor([0.5, 0.0, 0.0])
+    objects.fast_log_variance[0, 0, :6] = 0.0
+    source = belief.replace(objects=objects)
+    pool = HypothesisDynamicsPool([ConstantVelocityDynamics()])
+    ensembles = pool.rollout_ensemble(
+        source,
+        [0.1],
+        sample_count=2,
+        position_std_scale=0.1,
+        velocity_std_scale=0.1,
+        generator=torch.Generator().manual_seed(7),
+    )
+    assert len(ensembles) == 2
+    assert len(ensembles[0]) == 1
+    torch.testing.assert_close(ensembles[0][0].positions[0, 0, 0], torch.tensor([1.05, 2.0, 3.0]))
+    assert not torch.equal(ensembles[0][0].positions, ensembles[1][0].positions)
+    torch.testing.assert_close(source.objects.position[0, 0], torch.tensor([1.0, 2.0, 3.0]))
+
+
 def test_dynamics_adapter_uses_predict_step_contract() -> None:
     belief = BeliefFactory(max_objects=1).create()
     source_position = belief.objects.position.clone()
