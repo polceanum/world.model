@@ -2918,3 +2918,8 @@ further gravity-axis threshold tuning.
   still failed, particularly y/z horizons, damped-contact events, and
   reference-pair dynamics. This records a plateau in the z-only recovery path,
   not a promotable improvement.
+- Completed the bounded 512-step z-only recovery diagnostic. Its terminal
+  selector was `0.3223764` against `0.3213162` for the incumbent, with 24
+  strict guardrail failures. Finite, causally supported training throughout
+  establishes a failed parameterization plateau; no further z-only run or MPS
+  promotion replay is warranted.

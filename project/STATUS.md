@@ -10071,3 +10071,18 @@ is evidence of a plateau in this z-only recovery direction, not a basis for
 promotion or an MPS replay. The incumbent remains protected; the checkpoint
 is retained at
 `runs/20260814-101500-attention-node-z-recovery-512/checkpoints/validation_step_000384.pt`.
+
+The declared 512-step `attention_node_z` diagnostic is now complete. Its
+terminal fixed-manifest candidate was rejected with selector
+`0.3223763838` versus protected `0.3213161872`; aggregate position RMSE was
+`0.2520481663` (x `0.2810455282`, y `0.2034539890`, z `0.2649617329`),
+collision F1 `0.1965601966`, target coverage `0.3775`, precision
+`0.3585846592`, and coverage-90 `0.9336208962`. Twenty-four guardrails
+failed, including y mid-horizon and z long-horizon RMSE, damped-contact event
+and z metrics, and reference-pair dynamics. All 512 balanced updates retained
+finite loss/gradients and causal support, so this is convergence evidence for
+an inadequate z-only parameterization, not a numerical failure or an
+undertrained candidate. The protected incumbent remains unchanged; the failed
+legacy-CPU candidate is not eligible for MPS promotion replay. Its terminal
+checkpoint is
+`runs/20260814-101500-attention-node-z-recovery-512/checkpoints/validation_step_000512.pt`.

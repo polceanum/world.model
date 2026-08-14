@@ -1726,7 +1726,9 @@
   failures); it modestly improved on the 128-step candidate but still regressed
   from the incumbent on selection, y/z horizons, and reference-pair dynamics.
   The 384-step candidate (`0.3223566`, 23 guardrail failures) confirms this
-  route is plateauing; retain it only to complete the bounded diagnostic run.
+  route is plateauing. The completed 512-step terminal candidate (`0.3223764`,
+  24 guardrail failures) confirms a stable failed plateau with finite,
+  supported updates; do not extend or relaunch this scope.
 - [x] Re-qualify full closed-loop MPS execution with the user-provided torch
   build on the full attention-pilot configuration. The zero-tangent contact
   NaN and training-only ID reduction are fixed, and a bounded complete RGB
