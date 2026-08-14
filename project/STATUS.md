@@ -9907,3 +9907,13 @@ interrupted. This is a backend qualification failure, not a model metric or a
 claim that MPS is unavailable. The existing CPU closed-loop recovery remains
 the only active run; do not switch the production causal configuration to MPS
 until this exact finite smoke passes in an active Aqua session.
+
+The controlled z-only recovery has now reached optimizer step 16/512. Its
+first durable training record is finite (`loss=3.944058`,
+pre-clip/applied gradient norm `0.214675/0.214675`), applied an optimizer
+update, and had causal trajectory support `162` with no skipped draws. The
+scope marker confirms that only the z node-decoder row is mutable. This
+balanced window includes 22 ground-contact objects and four pair-collision
+intervals, so it is useful numerical-health evidence but not a selector,
+accuracy metric, or promotion. The first candidate comparison remains the
+complete fixed-manifest validation at step 128.

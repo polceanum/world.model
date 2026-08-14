@@ -2853,3 +2853,6 @@ further gravity-axis threshold tuning.
   qualify replacing the CPU causal fallback. Metal failed before model metrics
   with an interrupted-XPC pipeline compilation error; no device configuration
   or model claim was changed.
+- Recorded the z-only recovery's first durable step-16 training health record:
+  finite loss/gradients, one applied update, and nonzero causal support under
+  the protected z-only scope. It is not an accuracy result or promotion.
