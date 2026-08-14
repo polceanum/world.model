@@ -2902,3 +2902,8 @@ further gravity-axis threshold tuning.
   now uses the exact linear-drag integral rather than undamped displacement
   followed by a velocity-only decay. The zero-damping candidate is unchanged;
   focused hypothesis and online-loop tests pass (`25 passed`).
+- Completed and rejected the z-only recovery's first fixed-manifest candidate
+  at step 128. Its selector score worsened to `0.3229766` from the protected
+  incumbent's `0.3213162`, with 37 broad guardrail failures; the incumbent
+  remains intact and no MPS promotion replay was run for this ineligible
+  candidate.

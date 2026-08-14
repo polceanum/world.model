@@ -10027,3 +10027,20 @@ passed (`25 passed in 1.69s`), followed by Ruff on the changed source/test
 (`All checks passed`). This improves only the explicit analytic fallback; it
 does not constitute an accuracy result, change the live training run, or
 justify promotion.
+
+The `attention_node_z` recovery's first candidate completed the immutable
+32-episode fixed-manifest validation at step 128. It was rejected on the
+legacy CPU comparator: selector score `0.3229765719` regressed from the
+protected incumbent's `0.3213161872`; aggregate position RMSE was
+`0.2540851191` (x `0.2814712147`, y `0.2068063791`, z `0.2677364738`),
+collision F1 `0.1795511222`, target coverage `0.373`, precision
+`0.3533033389`, identity-switch rate `0.0124183007`, and coverage-90
+`0.9338605320`. Causal training support remained present, but 37 strict
+reference guardrails failed, including collision F1, aggregate y RMSE,
+camera-parallax trajectory/event metrics, damped-contact coverage/precision/x
+metrics, and reference-pair y/z metrics. The protected `best_rollout.pt` was
+therefore retained unchanged. Since the CPU fixed-manifest candidate was
+already ineligible, the active-Aqua MPS replay gate was correctly not run:
+it is a promotion confirmation, not a way to rescue a failed candidate. The
+numbered candidate checkpoint is preserved at
+`runs/20260814-101500-attention-node-z-recovery-512/checkpoints/validation_step_000128.pt`.

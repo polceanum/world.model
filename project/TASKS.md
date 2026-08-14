@@ -1716,10 +1716,12 @@
   row while snapshotting/restoring all excluded rows and AdamW moments; this
   allows a z repair to preserve qualified x/y behaviour. Focused configuration
   and exact-optimizer tests pass (`270 passed`).
-- [ ] Qualify `attention_node_z` from the protected incumbent on the complete
-  scenario mixture. Increase only the existing z rollout emphasis, retain the
-  same lifecycle/identity guardrails, and reject the run unless it improves
-  the full held-out comparator rather than only z.
+- [x] Qualify `attention_node_z` from the protected incumbent on the complete
+  scenario mixture. Its first 128-step candidate was rejected: selector score
+  regressed (`0.3229766` versus `0.3213162`) and 37 reference guardrails
+  failed, especially collision, y, camera-parallax, damped-contact, and
+  reference-pair metrics. Preserve the incumbent and use this as evidence
+  against a z-only decoder adjustment as the next promotion path.
 - [x] Re-qualify full closed-loop MPS execution with the user-provided torch
   build on the full attention-pilot configuration. The zero-tangent contact
   NaN and training-only ID reduction are fixed, and a bounded complete RGB
@@ -1734,6 +1736,7 @@
   legacy CPU-fallback candidates. It replays the candidate and protected
   reference independently on MPS and applies the trainer's existing broad
   selector/support guards without mutating either checkpoint.
-- [ ] After the z-only recovery produces its first fixed-manifest candidate,
-  run `scripts/replay_promotion_mps.py` against its protected reference before
-  any promotion. Retain the report whether accepted or rejected.
+- [x] Do not run `scripts/replay_promotion_mps.py` for the first z-only
+  recovery candidate: it was rejected by the legacy fixed-manifest comparator
+  before promotion eligibility. The required MPS replay remains mandatory for
+  any future legacy candidate that first passes the immutable CPU comparator.
