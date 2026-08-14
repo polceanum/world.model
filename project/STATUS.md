@@ -9985,3 +9985,11 @@ candidate/reference pair, so it establishes no accuracy result.
 Its report also binds the decision to both checkpoint SHA-256 digests, the
 exact rollout-validation protocol hash, PyTorch version, precision, and MPS
 backend identifier.
+
+The heterogeneous-pool report had one display/accounting defect: selected
+lifecycle mismatch and identity coverage for horizons after the first were
+read from the first query-time active mask. They now use the selected
+horizon-specific trajectory slice, with focused report-accounting and existing
+hypothesis tests passing (`21 passed`). This corrects reported lifecycle and
+identity evidence only; it does not alter `WorldBelief`, selection, dynamics,
+or a previously reported accuracy result.

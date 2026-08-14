@@ -102,6 +102,22 @@ def _rmse(sum_of_squares: list[float], count: list[int]) -> list[float | None]:
     ]
 
 
+def _selected_lifecycle_counts(
+    predicted_active: torch.Tensor,
+    target_active: torch.Tensor,
+) -> tuple[int, int]:
+    """Return selected lifecycle mismatch and identity coverage for one horizon."""
+
+    if predicted_active.shape != target_active.shape:
+        raise ValueError("predicted and target active masks must share shape")
+    if predicted_active.dtype is not torch.bool or target_active.dtype is not torch.bool:
+        raise TypeError("lifecycle masks must use torch.bool")
+    return (
+        int((predicted_active != target_active).sum().cpu()),
+        int((predicted_active & target_active).sum().cpu()),
+    )
+
+
 def evaluate_episode(
     model: OnlineWorldModel,
     episode: dict[str, Any],
@@ -394,13 +410,10 @@ def evaluate_episode(
                     values = residual[..., axis].masked_select(mask)
                     selected_squares[horizon_index][axis] += float(values.square().sum().cpu())
                     selected_counts[horizon_index][axis] += int(values.numel())
-                selected_active = trajectories[selected].active_mask[:, 0]
-                selected_lifecycle_mismatch[horizon_index] += int(
-                    (selected_active != mask[:, 0]).sum().cpu()
-                )
-                selected_identity_covered[horizon_index] += int(
-                    (selected_active & mask[:, 0]).sum().cpu()
-                )
+                selected_active = single_step_trajectories[selected].active_mask[:, 0]
+                mismatch, coverage = _selected_lifecycle_counts(selected_active, mask[:, 0])
+                selected_lifecycle_mismatch[horizon_index] += mismatch
+                selected_identity_covered[horizon_index] += coverage
                 selected_event = (
                     single_step_trajectories[selected].event_logits[:, 0, :, MotionMode.COLLISION].sigmoid()
                     >= event_threshold

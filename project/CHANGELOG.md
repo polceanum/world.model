@@ -2886,3 +2886,6 @@ further gravity-axis threshold tuning.
   validation protocol hash, PyTorch version, precision, and backend.
 - Documented the one-shot active-Aqua MPS promotion-replay command and its
   immutable guardrail/provenance contract in the public workflow.
+- Fixed horizon-specific selected lifecycle/identity accounting in the
+  heterogeneous-pool evaluator; later-horizon rows no longer reuse the first
+  query-time active mask. Focused evaluator and hypothesis tests pass.
