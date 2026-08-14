@@ -2700,3 +2700,6 @@ further gravity-axis threshold tuning.
 - Added validated opt-in `--axis-weights X Y Z` scoring through the selector,
   pool, runtime, and evaluator. A two-episode `1 2 1` pilot improved long-
   horizon y but regressed z/event metrics and was rejected.
+- Added opt-in `--axis-gate-ratio` scoring, which blocks candidates with a
+  materially worse error on any axis. The two-episode pilot was conservative
+  but had a small 0.25 s y regression, so it remains unpromoted.

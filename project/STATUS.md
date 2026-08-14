@@ -9390,3 +9390,12 @@ It improved 0.50–1.00 s y RMSE (`0.6291 → 0.6206` and `0.4682 → 0.4460` m)
 and x, but z regressed slightly and collision F1 fell at 0.50 s
 (`0.4763 → 0.3896`). This underpowered mixed result is rejected; no weighting
 is enabled by default.
+
+An opt-in per-axis guard (`--axis-gate-ratio`) now requires every candidate axis
+error to remain within tolerance of the best candidate on that axis, preventing
+scalar error trade-offs. Focused coverage passes. The fresh two-episode pilot
+at `runs/20260814-110000-hypothesis-pool-axisgate-disjoint2/report.json`
+selected `[293, 1, 2]` hypotheses. Mean selected versus learned RMSE was nearly
+identical, with small x/z improvements at 0.10 s and collision F1 `0.2614 →
+0.2649`, but y regressed at 0.25 s (`0.3352 → 0.3370` m). This underpowered
+result is not promoted; a larger disjoint matrix is required.

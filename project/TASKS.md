@@ -1605,3 +1605,5 @@
   with the same pooled long-horizon guardrails.
 - [x] Add validated per-axis weighting as an opt-in selector/evaluator seam and
   reject the first y-emphasized pilot for mixed z/event evidence.
+- [x] Add an opt-in per-axis error gate with focused tests; retain it as
+  unpromoted pending a larger disjoint evaluation.
