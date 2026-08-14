@@ -472,6 +472,25 @@ def evaluate_episode(
             "collision_false_negative": float(fn),
         }
     return {
+        # Preserve additive position evidence, not just episode-local RMSE.
+        # Visibility and lifecycle vary by episode, so downstream full-manifest
+        # comparisons must pool SSE and coordinate counts before taking a root.
+        "candidate_position_sse_m2": {
+            str(horizon): candidate_squares[index]
+            for index, horizon in enumerate(horizons)
+        },
+        "candidate_position_coordinate_count": {
+            str(horizon): candidate_counts[index]
+            for index, horizon in enumerate(horizons)
+        },
+        "selected_position_sse_m2": {
+            str(horizon): selected_squares[index]
+            for index, horizon in enumerate(horizons)
+        },
+        "selected_position_coordinate_count": {
+            str(horizon): selected_counts[index]
+            for index, horizon in enumerate(horizons)
+        },
         "candidate_rmse_m": {
             str(horizon): [
                 _rmse(candidate_squares[index][candidate], candidate_counts[index][candidate])

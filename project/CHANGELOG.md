@@ -2933,3 +2933,7 @@ further gravity-axis threshold tuning.
   diagnostic evidence of a joint scoring/transition limitation; no default or
   checkpoint is promoted. An accidentally duplicated deterministic report is
   explicitly recorded as non-independent.
+- Added additive SSE and coordinate-count evidence to heterogeneous-pool
+  reports so full-mixture selected-versus-candidate RMSE is pooled exactly
+  across asynchronous visibility masks. Existing reports are retained without
+  reinterpretation; focused evaluator/hypothesis tests and Ruff pass.

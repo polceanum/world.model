@@ -10113,3 +10113,12 @@ candidates should replace the learned model. A second accidentally concurrent
 run at `runs/20260814-220422-protected-causal-hypothesis-pool-8` is byte-for-byte
 identical and is retained only as a duplicate execution record; it is not an
 independent sample or metric.
+
+The pool report now also serializes additive per-candidate and selected
+position SSE (m²) plus coordinate counts for every horizon. Future
+multi-episode comparisons can therefore compute an exact visibility-weighted
+pooled RMSE before deciding whether axis-aware causal selection helps; they no
+longer need to average per-episode RMSE values. This is report evidence only,
+not a dynamics or selection change. Focused evaluator/hypothesis tests pass
+(`21 passed`) and Ruff passes. The already completed reports retain their
+original schema and are not retroactively reinterpreted.
