@@ -2680,3 +2680,12 @@ further gravity-axis threshold tuning.
   metrics improved while small y/z and velocity regressions remained, mainly
   in `reference_pairs`. Continued the declared run toward step 128.
 - 2026-08-13: Reviewed the original AAAI ORPHEUS and ToM simulation papers. Recorded ADR-118: preserve the persistent point/trajectory abstraction but add short-step, error-selected hypothesis rollouts as the next accuracy experiment; no active run was modified.
+## 2026-08-14 — position-gated event-aware selector
+
+- Added an opt-in position gate to hypothesis scoring so event/lifecycle
+  evidence cannot override a materially better position forecast.
+- Standardized collision-event indexing on `MotionMode.COLLISION` and added
+  focused coverage for the gate and synthetic event selection.
+- Completed an eight-episode protected RGB comparison. The gated selector was
+  non-regressive in all pooled position axes/horizons and slightly improved
+  collision F1, but remains opt-in pending a larger disjoint evaluation.

@@ -9329,3 +9329,21 @@ The active `attention-relation-constant-stage-a` campaign is still running with 
 Review of the [AAAI ORPHEUS paper](https://cdn.aaai.org/ocs/10371/10371-46146-1-PB.pdf) and [ToM-inspired simulation framework](https://arxiv.org/pdf/1405.5048) led to ADR-118. The next accuracy experiment should use a compact hypothesis bank with ordered short-step rollouts and innovation/error-based selection or calibrated blending. This is deliberately scheduled after the unchanged campaign so its executable fingerprint and selector evidence remain valid.
 
 At 22:11 BST the same process had advanced to optimizer step 1280. The newest train row is finite (`loss_total=4.05008`, gradient norm `0.47420`, total clip coefficient `1.0`, trajectory support `321`, objective support `13`, skipped batches `0`). The post-1152 dynamics audit remains structurally passing; it reports stable RSS (`2.92 GB`) and complete scenario balance, but warns about sparse cadence and earlier severe typed-output clipping. No validation checkpoint beyond step 1024 exists yet.
+## 2026-08-14 — gated event-aware hypothesis selection
+
+The short-step hypothesis bank now supports an opt-in position gate: event and
+lifecycle evidence may select a nearby candidate only when its position score
+is within a configured ratio of the best position candidate. This prevents the
+event-aware selector from trading a large long-horizon position regression for
+collision F1. Collision indexing uses `MotionMode.COLLISION` throughout.
+
+Protected RGB-only evaluation on eight episodes with `event_weight=0.1`,
+`lifecycle_weight=0.05`, and `position_gate_ratio=0.05` produced choices
+`[1152, 30, 2]` (learned, constant-velocity, ballistic). Compared with the
+learned candidate, selected mean RMSE was non-regressive at every horizon and
+collision F1 improved from `0.2002` to `0.2049` at 0.10 s, `0.1737` to
+`0.1813` at 0.25 s, `0.1763` to `0.1837` at 0.50 s, and `0.1807` to `0.1828`
+at 0.75 s (unchanged at 1.00 s). This remains evaluation-only and opt-in;
+the default runtime and protected checkpoint are unchanged.
+
+Artifact: `runs/20260814-050000-hypothesis-pool-gated-eventweight01-8ep/report.json`.

@@ -59,6 +59,26 @@ def test_selector_can_use_collision_evidence() -> None:
     assert selection.selected_index.tolist() == [1]
 
 
+def test_position_gate_blocks_event_candidate_with_large_position_regression() -> None:
+    target = torch.zeros(1, 2, 1, 3)
+    mask = torch.ones(1, 2, 1, dtype=torch.bool)
+    collision = torch.ones(1, 2, 1, dtype=torch.bool)
+    position_good = _trajectory(0.0)
+    event_bad_position = _trajectory(1.0)
+    position_good.event_logits[..., 3] = -6.0
+    event_bad_position.event_logits[..., 3] = 6.0
+    selection = HypothesisRolloutEngine.score(
+        [position_good, event_bad_position],
+        target,
+        mask,
+        target_collision=collision,
+        event_weight=100.0,
+        position_gate_ratio=0.05,
+        uncertainty_aware=False,
+    )
+    assert selection.selected_index.tolist() == [0]
+
+
 def test_selector_ignores_occluded_frames_and_scores_uncertainty() -> None:
     target = torch.zeros(1, 2, 1, 3)
     mask = torch.tensor([[[True], [False]]])

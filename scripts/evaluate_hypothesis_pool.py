@@ -111,6 +111,7 @@ def evaluate_episode(
     evidence_decay: float,
     event_weight: float,
     lifecycle_weight: float,
+    position_gate_ratio: float,
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
@@ -188,6 +189,7 @@ def evaluate_episode(
                     target_collision=collision_target,
                     event_weight=event_weight,
                     lifecycle_weight=lifecycle_weight,
+                    position_gate_ratio=position_gate_ratio,
                     uncertainty_aware=False,
                 )
                 selected = int(selection.selected_index[0])
@@ -315,12 +317,13 @@ def main() -> int:
     parser.add_argument("--evidence-decay", type=float, default=1.0)
     parser.add_argument("--event-weight", type=float, default=0.0)
     parser.add_argument("--lifecycle-weight", type=float, default=0.0)
+    parser.add_argument("--position-gate-ratio", type=float, default=0.0)
     args = parser.parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
     if not 0.0 < args.evidence_decay <= 1.0:
         raise ValueError("--evidence-decay must lie in (0,1]")
-    if args.event_weight < 0 or args.lifecycle_weight < 0:
+    if args.event_weight < 0 or args.lifecycle_weight < 0 or args.position_gate_ratio < 0:
         raise ValueError("score weights must be nonnegative")
     config = load_config(args.config, overrides=[f"device.preference={args.device}"])
     device = select_device(config.device.preference).device
@@ -339,6 +342,7 @@ def main() -> int:
             args.evidence_decay,
             args.event_weight,
             args.lifecycle_weight,
+            args.position_gate_ratio,
         )
         for index in range(args.episodes)
     ]
@@ -355,6 +359,7 @@ def main() -> int:
                 "evidence_decay": args.evidence_decay,
                 "event_weight": args.event_weight,
                 "lifecycle_weight": args.lifecycle_weight,
+                "position_gate_ratio": args.position_gate_ratio,
                 "horizons_seconds": horizons,
                 "episode_results": episodes,
             },

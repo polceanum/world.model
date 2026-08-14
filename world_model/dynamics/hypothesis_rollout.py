@@ -137,7 +137,7 @@ class BallisticContactDynamics:
         event_logits[..., MotionMode.COLLISION] = torch.where(
             collision,
             event_logits.new_full((), self.event_logit),
-            event_logits[..., 3],
+            event_logits[..., MotionMode.COLLISION],
         )
         after = after.replace(
             fast_log_variance=(after.fast_log_variance + delta_time[:, None, None] * 1.0e-3).clamp(
@@ -208,6 +208,7 @@ class HypothesisRolloutEngine:
         position_weight: float = 1.0,
         lifecycle_weight: float = 0.0,
         event_weight: float = 0.0,
+        position_gate_ratio: float = 0.0,
         uncertainty_aware: bool = True,
         temperature: float = 1.0,
     ) -> HypothesisSelection:
@@ -234,11 +235,14 @@ class HypothesisRolloutEngine:
             ("position_weight", position_weight),
             ("lifecycle_weight", lifecycle_weight),
             ("event_weight", event_weight),
+            ("position_gate_ratio", position_gate_ratio),
         ):
             if value < 0 or not torch.isfinite(torch.as_tensor(value)):
                 raise ValueError(f"{name} must be finite and nonnegative")
         if position_weight + lifecycle_weight + event_weight <= 0:
             raise ValueError("at least one hypothesis score weight must be positive")
+        if position_gate_ratio and position_weight <= 0:
+            raise ValueError("position_gate_ratio requires a positive position_weight")
         if not torch.isfinite(target_positions).all():
             raise ValueError("target_positions contains NaN or Inf")
         if target_collision is not None:
@@ -250,6 +254,7 @@ class HypothesisRolloutEngine:
         mask = target_mask.unsqueeze(-1)
         valid_count = mask.sum(dim=(1, 2, 3)).clamp_min(1).to(target_positions.dtype)
         candidate_scores: list[Tensor] = []
+        position_scores: list[Tensor] = []
         for trajectory in trajectories:
             if trajectory.positions.shape != target_positions.shape:
                 raise ValueError("all trajectories must share target position shape")
@@ -262,7 +267,9 @@ class HypothesisRolloutEngine:
                 point_loss = residual.square() / variance + log_variance
             else:
                 point_loss = residual.square()
-            score = position_weight * (point_loss * mask).sum(dim=(1, 2, 3)) / valid_count
+            position_score = (point_loss * mask).sum(dim=(1, 2, 3)) / valid_count
+            position_scores.append(position_score)
+            score = position_weight * position_score
             if lifecycle_weight:
                 lifecycle_loss = (
                     trajectory.active_mask != target_mask
@@ -273,7 +280,7 @@ class HypothesisRolloutEngine:
                     raise ValueError(
                         "event_weight requires target_collision and trajectory event_logits"
                     )
-                event_logits = trajectory.event_logits[..., 3]
+                event_logits = trajectory.event_logits[..., MotionMode.COLLISION]
                 event_loss = torch.nn.functional.binary_cross_entropy_with_logits(
                     event_logits,
                     target_collision.to(event_logits.dtype),
@@ -283,6 +290,15 @@ class HypothesisRolloutEngine:
             candidate_scores.append(score)
 
         scores = torch.stack(candidate_scores, dim=-1)
+        if position_gate_ratio:
+            position_matrix = torch.stack(position_scores, dim=-1)
+            best_position = position_matrix.amin(dim=-1, keepdim=True)
+            allowed = position_matrix <= best_position * (1.0 + position_gate_ratio) + 1.0e-8
+            scores = scores + torch.where(
+                allowed,
+                torch.zeros_like(scores),
+                scores.new_full((), 1.0e6),
+            )
         scale = torch.as_tensor(temperature, device=scores.device, dtype=scores.dtype)
         posterior_weights = torch.softmax(-scores / scale, dim=-1)
         selected_index = scores.argmin(dim=-1).to(torch.int64)
@@ -364,6 +380,7 @@ class HypothesisDynamicsPool:
         position_weight: float = 1.0,
         lifecycle_weight: float = 0.0,
         event_weight: float = 0.0,
+        position_gate_ratio: float = 0.0,
         uncertainty_aware: bool = True,
     ) -> HypothesisSelection:
         prior = self._ensure_weights(belief)
@@ -377,6 +394,7 @@ class HypothesisDynamicsPool:
             position_weight=position_weight,
             lifecycle_weight=lifecycle_weight,
             event_weight=event_weight,
+            position_gate_ratio=position_gate_ratio,
             uncertainty_aware=uncertainty_aware,
             temperature=self.temperature,
         )

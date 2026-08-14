@@ -1592,3 +1592,7 @@
 - [ ] Add an observable latent-space calibration objective for slow
   restitution/drag uncertainty before unfreezing the identifier variance head.
 - [ ] Implement and benchmark the paper-inspired receding-horizon hypothesis bank: short-step transition loss, nearby residual/contact hypotheses, and innovation/uncertainty-based selection with unchanged broad guardrails.
+- [x] Add an opt-in position-gated event/lifecycle selector and validate it on
+  eight protected RGB episodes without promoting it as the default runtime.
+- [ ] Repeat the gated selector on a larger disjoint protected matrix before
+  considering default integration or checkpoint promotion.

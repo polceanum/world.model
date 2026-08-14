@@ -1237,6 +1237,7 @@ class OnlineWorldModel(nn.Module):
         position_weight: float = 1.0,
         lifecycle_weight: float = 0.0,
         event_weight: float = 0.0,
+        position_gate_ratio: float = 0.0,
         uncertainty_aware: bool = True,
     ) -> object:
         """Assimilate delayed rollout evidence without mutating the belief."""
@@ -1255,6 +1256,7 @@ class OnlineWorldModel(nn.Module):
             position_weight=position_weight,
             lifecycle_weight=lifecycle_weight,
             event_weight=event_weight,
+            position_gate_ratio=position_gate_ratio,
             uncertainty_aware=uncertainty_aware,
         )
 
