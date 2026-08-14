@@ -10015,3 +10015,15 @@ alternatives at some horizons, while y/z remained predominantly learned. This
 is useful evidence for the next targeted diversity/transition repair, not a
 multi-episode metric or promotion. The artifact was renamed with its UTC
 timestamp and the evaluator now applies that naming automatically.
+
+The damped constant-velocity analytic fallback had a small but material
+kinematic defect: it decayed velocity according to linear drag while advancing
+position by the undamped `velocity * dt`. Its selectable damping branch now
+uses the closed-form displacement `velocity * (1 - exp(-damping * dt)) /
+damping`; the zero-damping branch remains the exact constant-velocity model.
+`PYTHONPYCACHEPREFIX=tmp/pycache PYTHONPATH=. conda run -n orpheus pytest -q
+tests/unit/test_hypothesis_rollout.py tests/integration/test_oracle_online_loop.py`
+passed (`25 passed in 1.69s`), followed by Ruff on the changed source/test
+(`All checks passed`). This improves only the explicit analytic fallback; it
+does not constitute an accuracy result, change the live training run, or
+justify promotion.

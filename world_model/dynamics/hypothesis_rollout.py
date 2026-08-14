@@ -134,11 +134,18 @@ class ConstantVelocityDynamics:
             raise ValueError("delta_time must have shape [B]")
         objects = belief.objects.clone()
         active = objects.active.unsqueeze(-1)
-        objects.position = objects.position + objects.velocity * delta_time[:, None, None] * active
         if self.damping:
-            objects.velocity = objects.velocity * torch.exp(
-                -self.damping * delta_time[:, None, None]
-            )
+            # Integrate ``dv/dt = -d v`` exactly.  Advancing by ``v * dt``
+            # and then decaying velocity overstates displacement whenever the
+            # selectable damped hypothesis is used over a non-trivial query.
+            # The zero-damping branch below keeps the transparent CV case
+            # exact without a numerically fragile division by ``d``.
+            decay = torch.exp(-self.damping * delta_time[:, None, None])
+            displacement_scale = (1.0 - decay) / self.damping
+            objects.position = objects.position + objects.velocity * displacement_scale * active
+            objects.velocity = objects.velocity * decay
+        else:
+            objects.position = objects.position + objects.velocity * delta_time[:, None, None] * active
         objects.fast_log_variance = (
             objects.fast_log_variance + delta_time[:, None, None] * 1.0e-3
         ).clamp(-20.0, 10.0)

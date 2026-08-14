@@ -3632,3 +3632,20 @@
   revise-future order. Reported online selection can be worse than historical
   hindsight-conditioned diagnostic figures, which is expected and must not be
   hidden by reinterpreting old reports as new accuracy evidence.
+
+## ADR-128 — Integrate selectable damped-velocity fallbacks exactly
+
+- **Date:** 2026-08-14
+- **Status:** accepted
+- **Context:** The heterogeneous pool exposes a damped constant-velocity
+  alternative for short-lived drag-like motion. Its former implementation
+  decayed velocity but used an undamped position increment, producing an
+  internally inconsistent candidate at longer query times.
+- **Decision:** Integrate the candidate's `dv/dt = -d v` branch in closed
+  form: position advances by `v * (1 - exp(-d * dt)) / d` and velocity by
+  `exp(-d * dt)`. Preserve the exact existing `d = 0` constant-velocity
+  branch.
+- **Consequences:** This strengthens an explicit analytic hypothesis without
+  hard-coding simulator parameters or altering the persistent belief, learned
+  dynamics, filter, selector, or live experiment. Any measured gain still
+  requires the normal causal full-mixture and MPS promotion gates.

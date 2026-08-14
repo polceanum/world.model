@@ -2898,3 +2898,7 @@ further gravity-axis threshold tuning.
   learned on all 148 decisions, while x-axis prior selection sometimes chooses
   analytic alternatives. It is a diagnostic, not a promotion. The evaluator
   now applies UTC timestamp prefixes to its output artifacts.
+- Corrected the damped constant-velocity fallback's kinematics: its position
+  now uses the exact linear-drag integral rather than undamped displacement
+  followed by a velocity-only decay. The zero-damping candidate is unchanged;
+  focused hypothesis and online-loop tests pass (`25 passed`).
