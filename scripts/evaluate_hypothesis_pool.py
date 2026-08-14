@@ -117,6 +117,7 @@ def evaluate_episode(
     blend_positions: bool,
     temperature: float,
     event_threshold: float,
+    uncertainty_aware: bool,
 ) -> dict[str, Any]:
     model.reset(batch_size=1)
     pool: HypothesisDynamicsPool | None = None
@@ -203,7 +204,7 @@ def evaluate_episode(
                     position_gate_ratio=position_gate_ratio,
                     axis_gate_ratio=axis_gate_ratio,
                     axis_weights=axis_weights,
-                    uncertainty_aware=False,
+                    uncertainty_aware=uncertainty_aware,
                 )
                 selected = int(selection.selected_index[0])
                 choice_counts[selected] += 1
@@ -357,6 +358,7 @@ def main() -> int:
     parser.add_argument("--blend-positions", action="store_true")
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--event-threshold", type=float, default=0.5)
+    parser.add_argument("--uncertainty-aware", action="store_true")
     args = parser.parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
@@ -400,6 +402,7 @@ def main() -> int:
             args.blend_positions,
             args.temperature,
             args.event_threshold,
+            args.uncertainty_aware,
         )
         for index in range(args.episodes)
     ]
@@ -422,6 +425,7 @@ def main() -> int:
                 "blend_positions": args.blend_positions,
                 "temperature": args.temperature,
                 "event_threshold": args.event_threshold,
+                "uncertainty_aware": args.uncertainty_aware,
                 "candidate_names": [
                     "learned",
                     "constant_velocity_damped_0.0",
