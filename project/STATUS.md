@@ -9880,3 +9880,13 @@ The declared recovery protocol is 512 attention-node-z-only updates,
 lifecycle/identity/calibration guardrails and must not replace the incumbent
 unless the full comparator accepts it. Routine polling is intentionally
 disabled; inspect only numbered checkpoints and validation milestones.
+
+That run's initial fixed-manifest selector completed in `1232.20 s` on the
+active Aqua session. It exactly preserved the imported incumbent and passed
+all guardrails: selector `0.3213161872`, aggregate position RMSE `0.2514598 m`
+(x/y/z `0.2817742/0.2019070/0.2636911 m`), target coverage `0.37625`,
+precision `0.3573124`, identity-switch rate `0.0135922`, collision F1
+`0.1954887`, and 90% position coverage `0.9338605`. The run records
+`selection_accepted=1` at step zero solely because this is the frozen imported
+incumbent; it is not evidence that the new z-only update is accepted. Training
+now proceeds from that explicitly verified control.

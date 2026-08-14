@@ -2846,3 +2846,6 @@ further gravity-axis threshold tuning.
 - Launched the timestamped active-Aqua MPS `attention_node_z` 512-update
   qualification from the protected incumbent. It is a controlled pending run,
   not a promotion or reported accuracy result.
+- Completed that run's step-zero active-Aqua fixed-manifest selector in
+  `1232.20 s`. The imported incumbent was reproduced exactly and passed all
+  guardrails before any z-only update; recovery training remains pending.
