@@ -2736,3 +2736,5 @@ further gravity-axis threshold tuning.
 - Used horizon-resolved counts to identify ballistic short/long wins and
   undamped-velocity sparsity; scheduled a data-driven conditioned prior rather
   than hard-coding candidate exclusions.
+- Exposed opt-in uncertainty-aware hypothesis scoring; the pilot suppressed
+  undamped velocity but regressed long-horizon z/event metrics and was rejected.

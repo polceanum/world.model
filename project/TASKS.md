@@ -1631,3 +1631,5 @@
   wins; leave horizon behavior data-driven and schedule a conditioned prior.
 - [ ] Implement and validate a horizon-conditioned candidate prior without
   hard-coding ballistic exclusion.
+- [x] Test predictive-uncertainty-aware scoring as a generic conditioned prior;
+  reject it for long-horizon z/event regressions.

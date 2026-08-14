@@ -9507,3 +9507,10 @@ Ballistic selections were concentrated at 0.10 s and reappeared at 0.75–1.00
 s, while undamped velocity was selected only five times across both episodes.
 This supports a horizon-conditioned prior or learned interaction trigger as
 the next principled intervention; no horizon exclusion is hard-coded.
+
+Added opt-in `--uncertainty-aware` scoring to use predictive variance in
+hypothesis NLL. The fresh four-candidate pilot at
+`runs/20260815-000000-hypothesis-pool-uncertainty4-disjoint2/report.json`
+selected `[259, 3, 0, 34]`; it suppressed undamped velocity, but increased
+ballistic long-horizon wins and regressed z and collision F1 at 0.75–1.00 s.
+It is rejected for this checkpoint and remains opt-in.
