@@ -80,6 +80,9 @@
 - Added composite position/lifecycle/collision evidence scoring. Event weight
   0.5 improved events but regressed mature y position and was rejected; a
   four-episode event-weight 0.1 screen is promising but remains unpromoted.
+- Completed the lower-weight eight-episode event-aware validation. Collision F1
+  improves across horizons, but mature position is not uniformly non-regressive;
+  event weighting remains opt-in and the incumbent default is unchanged.
 - Added three focused regression tests; all pass. The stopped relation-only
   campaign remains protected and unchanged.
 

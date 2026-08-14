@@ -41,6 +41,8 @@
   screen for eight-episode validation.
 - [ ] Complete the lower-weight eight-episode event-aware comparison before
   changing selector defaults.
+- [x] Complete lower-weight event-aware eight-episode validation; retain it as
+  an explicit Pareto tradeoff and do not change defaults.
 - [x] Batch all requested horizons into one rollout per frame in the evaluation
   harness; verify equivalent toy/attention smoke execution before relaunch.
 - [x] Run a four-episode protected decay-1.0 versus decay-0.1 matrix; retain

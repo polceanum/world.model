@@ -7986,6 +7986,17 @@ selected x/y/z RMSE `0.5174/0.3173/0.5331`, `0.5433/0.3290/0.5398`, and
 `0.6009/0.2504/0.5544 m` at those horizons. This is a promising screen, not
 yet a full promotion result.
 
+The lower-weight eight-episode validation is complete at
+`runs/20260814-030000-hypothesis-pool-eventweight01-8ep/report.json`.
+Selections are learned/constant/ballistic `928/241/15`. Mean selected collision
+F1 improves over learned-only at every horizon (`0.2985/0.2895/0.2418/0.2029/0.1274`
+versus `0.2002/0.1737/0.1763/0.1807/0.1259`), while selected x/y/z RMSE is
+`0.6115/0.3328/0.6632`, `0.6213/0.3399/0.6700`,
+`0.6511/0.2603/0.6844`, `0.6685/0.2390/0.6962`, and
+`0.6973/0.2369/0.7116 m`. The event gain is real, but mature position is not
+uniformly non-regressive; event weighting remains opt-in and the position-only
+incumbent default is unchanged.
+
 The required 32-episode decay-0.1 protected comparison completed from the
 immutable reference checkpoint at
 `runs/20260813-230000-hypothesis-pool-protected-32ep/report.json`. It contains
