@@ -128,6 +128,30 @@ def test_runtime_exposes_persistent_hypothesis_pool_without_replacing_belief() -
     torch.testing.assert_close(model.belief.objects.position, belief.objects.position)
 
 
+def test_runtime_assimilates_robust_hypothesis_ensemble_without_replacing_belief() -> None:
+    model = OnlineWorldModel.from_config(_oracle_config(), device="cpu")
+    belief = model.ingest(_packet(0.0, 0.0))
+    pool = HypothesisDynamicsPool([_FixedDynamics(0.0), _FixedDynamics(0.45)])
+    first = model.predict_hypotheses(pool, [0.1])
+    nearby = HypothesisDynamicsPool([_FixedDynamics(0.6), _FixedDynamics(0.45)])
+    second = model.predict_hypotheses(nearby, [0.1])
+    target_positions = torch.zeros_like(first[0].positions)
+    target_mask = torch.zeros_like(first[0].active_mask)
+    target_mask[:, :, 0] = True
+    selection = model.assimilate_hypothesis_ensemble(
+        pool,
+        target_positions,
+        target_mask,
+        [first, second],
+        risk_penalty=0.2,
+        uncertainty_aware=False,
+    )
+    assert selection.sample_count == 2
+    assert selection.selected_index.tolist() == [1]
+    assert model.belief is not None
+    torch.testing.assert_close(model.belief.objects.position, belief.objects.position)
+
+
 def test_runtime_assigns_permanent_id_only_after_configured_birth_confirmations() -> None:
     config = _oracle_config()
     config = replace(

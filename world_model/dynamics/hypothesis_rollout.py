@@ -29,6 +29,9 @@ class HypothesisSelection:
     posterior_weights: Tensor
     axis_scores: Tensor | None = None
     axis_posterior: Tensor | None = None
+    score_spread: Tensor | None = None
+    axis_score_spread: Tensor | None = None
+    sample_count: int = 1
 
     def axis_posterior_weights(self, *, temperature: float = 1.0) -> Tensor:
         """Return per-axis hypothesis weights from delayed position evidence.
@@ -76,6 +79,14 @@ class HypothesisSelection:
             or self.axis_posterior.shape[2] != self.scores.shape[1]
         ):
             raise ValueError("axis_posterior must have shape [B,D,H]")
+        if self.score_spread is not None and self.score_spread.shape != self.scores.shape:
+            raise ValueError("score_spread must match scores")
+        if self.axis_score_spread is not None and (
+            self.axis_scores is None or self.axis_score_spread.shape != self.axis_scores.shape
+        ):
+            raise ValueError("axis_score_spread must match axis_scores")
+        if self.sample_count <= 0:
+            raise ValueError("sample_count must be positive")
         if self.selected_index.dtype != torch.int64:
             raise TypeError("selected_index must use torch.int64")
         if not torch.isfinite(self.scores).all() or not torch.isfinite(
@@ -91,6 +102,12 @@ class HypothesisSelection:
                 atol=1e-5,
             ):
                 raise ValueError("axis posterior weights must sum to one")
+        for name, value in (
+            ("score_spread", self.score_spread),
+            ("axis_score_spread", self.axis_score_spread),
+        ):
+            if value is not None and (not torch.isfinite(value).all() or torch.any(value < 0)):
+                raise ValueError(f"{name} must be finite and nonnegative")
         if torch.any(self.selected_index < 0) or torch.any(
             self.selected_index >= self.scores.shape[1]
         ):
@@ -441,6 +458,79 @@ class HypothesisRolloutEngine:
             axis_scores=torch.stack(axis_position_scores, dim=-1),
         ).validate()
 
+    @staticmethod
+    def _robust_aggregate(sample_values: Tensor, risk_penalty: float) -> tuple[Tensor, Tensor]:
+        """Aggregate candidate losses over nearby mental-simulation samples.
+
+        The mean captures expected delayed prediction error.  The optional
+        standard-deviation penalty rejects a candidate whose apparent success
+        depends on one brittle imagined world, while preserving the exact
+        single-sample score when ``risk_penalty`` is zero.
+        """
+
+        if sample_values.ndim < 2:
+            raise ValueError("sample values must begin with [S,B,...]")
+        if risk_penalty < 0 or not torch.isfinite(torch.as_tensor(risk_penalty)):
+            raise ValueError("risk_penalty must be finite and nonnegative")
+        mean = sample_values.mean(dim=0)
+        spread = sample_values.std(dim=0, unbiased=False)
+        return mean + float(risk_penalty) * spread, spread
+
+    def score_ensemble(
+        self,
+        trajectory_samples: Sequence[Sequence[BeliefTrajectory]],
+        target_positions: Tensor,
+        target_mask: Tensor,
+        *,
+        risk_penalty: float = 0.0,
+        temperature: float = 1.0,
+        **score_kwargs: object,
+    ) -> HypothesisSelection:
+        """Score a set of nearby short-horizon rollout worlds robustly.
+
+        Each sample contains one trajectory per candidate in the same order.
+        Samples can represent belief uncertainty, action perturbations, or
+        alternate model parameters, but are always evaluated only when real
+        delayed evidence is available.  This preserves asynchronous online
+        correction and does not alter ``WorldBelief``.
+        """
+
+        if not trajectory_samples:
+            raise ValueError("trajectory_samples must be nonempty")
+        selections = [
+            self.score(sample, target_positions, target_mask, **score_kwargs)
+            for sample in trajectory_samples
+        ]
+        candidate_count = selections[0].scores.shape[-1]
+        if any(selection.scores.shape != selections[0].scores.shape for selection in selections):
+            raise ValueError("all ensemble samples must share score shape")
+        if any(selection.scores.shape[-1] != candidate_count for selection in selections):
+            raise ValueError("all ensemble samples must share candidate order")
+        scores, score_spread = self._robust_aggregate(
+            torch.stack([selection.scores for selection in selections]), risk_penalty
+        )
+        axis_scores = None
+        axis_score_spread = None
+        if selections[0].axis_scores is not None:
+            if any(selection.axis_scores is None for selection in selections):
+                raise ValueError("all ensemble samples must expose axis scores")
+            axis_scores, axis_score_spread = self._robust_aggregate(
+                torch.stack([selection.axis_scores for selection in selections if selection.axis_scores is not None]),
+                risk_penalty,
+            )
+        if temperature <= 0 or not torch.isfinite(torch.as_tensor(temperature)):
+            raise ValueError("temperature must be finite and positive")
+        scale = torch.as_tensor(temperature, device=scores.device, dtype=scores.dtype)
+        return HypothesisSelection(
+            scores=scores,
+            selected_index=scores.argmin(dim=-1).to(torch.int64),
+            posterior_weights=torch.softmax(-scores / scale, dim=-1),
+            axis_scores=axis_scores,
+            score_spread=score_spread,
+            axis_score_spread=axis_score_spread,
+            sample_count=len(selections),
+        ).validate()
+
 
 class HypothesisDynamicsPool:
     """Persistent candidate pool for receding-horizon model selection.
@@ -543,6 +633,67 @@ class HypothesisDynamicsPool:
             uncertainty_aware=uncertainty_aware,
             temperature=self.temperature,
         )
+        return self._update_evidence(
+            prior,
+            selection,
+            evidence_decay_override=evidence_decay_override,
+            axis_prior_strength=axis_prior_strength,
+        )
+
+    def assimilate_ensemble(
+        self,
+        belief: WorldBelief,
+        target_positions: Tensor,
+        target_mask: Tensor,
+        *,
+        trajectory_samples: Sequence[Sequence[BeliefTrajectory]],
+        risk_penalty: float = 0.0,
+        target_collision: Tensor | None = None,
+        position_weight: float = 1.0,
+        lifecycle_weight: float = 0.0,
+        event_weight: float = 0.0,
+        position_gate_ratio: float = 0.0,
+        axis_gate_ratio: float = 0.0,
+        event_gate_ratio: float = 0.0,
+        axis_weights: Sequence[float] | Tensor | None = None,
+        uncertainty_aware: bool = True,
+        evidence_decay_override: float | None = None,
+        axis_prior_strength: float = 0.0,
+    ) -> HypothesisSelection:
+        """Assimilate robust delayed evidence from nearby imagined worlds."""
+
+        prior = self._ensure_weights(belief)
+        selection = self.rollout_engine.score_ensemble(
+            trajectory_samples,
+            target_positions,
+            target_mask,
+            risk_penalty=risk_penalty,
+            temperature=self.temperature,
+            target_collision=target_collision,
+            position_weight=position_weight,
+            lifecycle_weight=lifecycle_weight,
+            event_weight=event_weight,
+            position_gate_ratio=position_gate_ratio,
+            axis_gate_ratio=axis_gate_ratio,
+            event_gate_ratio=event_gate_ratio,
+            axis_weights=axis_weights,
+            uncertainty_aware=uncertainty_aware,
+        )
+        return self._update_evidence(
+            prior,
+            selection,
+            evidence_decay_override=evidence_decay_override,
+            axis_prior_strength=axis_prior_strength,
+        )
+
+    def _update_evidence(
+        self,
+        prior: Tensor,
+        selection: HypothesisSelection,
+        *,
+        evidence_decay_override: float | None,
+        axis_prior_strength: float,
+    ) -> HypothesisSelection:
         decay = self.evidence_decay if evidence_decay_override is None else float(evidence_decay_override)
         if not 0.0 < decay <= 1.0 or not torch.isfinite(torch.as_tensor(decay)):
             raise ValueError("evidence_decay_override must lie in (0,1]")
@@ -569,6 +720,9 @@ class HypothesisDynamicsPool:
             posterior,
             axis_scores=selection.axis_scores,
             axis_posterior=axis_posterior,
+            score_spread=selection.score_spread,
+            axis_score_spread=selection.axis_score_spread,
+            sample_count=selection.sample_count,
         ).validate()
         return self.last_selection
 

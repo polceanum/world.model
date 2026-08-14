@@ -1681,6 +1681,14 @@
   families with CPU-safe workers and record truthful checkpoint metrics.
 - [x] Evaluate the one-step checkpoint for immediate regressions; reject it
   because x worsened despite y/z improvements.
-- [ ] Re-run the long attention training campaign on an Apple-Silicon host
-  where `torch.backends.mps.is_available()` is true; require finite loss and
-  the existing all-axis/per-horizon comparator before promotion.
+- [x] Verify the supplied local PyTorch build and project execute on the i9
+  Radeon/MPS machine from the active Aqua session; do not use the agent
+  sandbox's Metal visibility as a device verdict.
+- [x] Add a robust nearby-rollout ensemble evidence primitive, including
+  runtime preservation of `WorldBelief` and focused unit/integration tests.
+- [ ] Expose deterministic belief/action perturbation ensembles in the RGB
+  hypothesis evaluator and compare zero-risk, expected-error, and robust-risk
+  settings on the same explicit seed manifest.
+- [ ] Run the long attention training campaign on this active Aqua/MPS session;
+  require finite loss and the existing all-axis/per-horizon comparator before
+  promotion.

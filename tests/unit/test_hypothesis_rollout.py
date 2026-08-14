@@ -171,6 +171,50 @@ def test_selector_rejects_empty_or_bad_mask() -> None:
         HypothesisRolloutEngine.score([_trajectory(0.0)], target, mask.to(torch.float32))
 
 
+def test_ensemble_scoring_penalizes_brittle_nearby_rollouts() -> None:
+    target = torch.zeros(1, 2, 1, 3)
+    mask = torch.ones(1, 2, 1, dtype=torch.bool)
+    engine = HypothesisRolloutEngine()
+    samples = [
+        [_trajectory(0.0), _trajectory(0.45)],
+        [_trajectory(0.6), _trajectory(0.45)],
+    ]
+    expected_error = engine.score_ensemble(
+        samples, target, mask, uncertainty_aware=False
+    )
+    robust_error = engine.score_ensemble(
+        samples, target, mask, uncertainty_aware=False, risk_penalty=0.2
+    )
+    assert expected_error.sample_count == 2
+    assert expected_error.selected_index.tolist() == [0]
+    assert robust_error.selected_index.tolist() == [1]
+    assert robust_error.score_spread is not None
+    assert robust_error.score_spread[0, 0] > robust_error.score_spread[0, 1]
+    assert robust_error.axis_score_spread is not None
+
+
+def test_pool_assimilates_robust_ensemble_evidence_without_mutating_belief() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    pool = HypothesisDynamicsPool([_FixedDynamics(0.0), _FixedDynamics(0.45)])
+    target = torch.zeros(1, 1, 1, 3)
+    mask = torch.ones(1, 1, 1, dtype=torch.bool)
+    first = pool.rollout(belief, [0.1])
+    nearby_world = HypothesisDynamicsPool([_FixedDynamics(0.6), _FixedDynamics(0.45)])
+    second = nearby_world.rollout(belief, [0.1])
+    selection = pool.assimilate_ensemble(
+        belief,
+        target,
+        mask,
+        trajectory_samples=[first, second],
+        risk_penalty=0.2,
+        uncertainty_aware=False,
+    )
+    assert selection.sample_count == 2
+    assert selection.selected_index.tolist() == [1]
+    assert pool.selected_index(belief).tolist() == [1]
+    assert belief.timestamp.item() == pytest.approx(0.0)
+
+
 def test_dynamics_adapter_uses_predict_step_contract() -> None:
     belief = BeliefFactory(max_objects=1).create()
     source_position = belief.objects.position.clone()

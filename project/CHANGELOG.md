@@ -2807,3 +2807,10 @@ further gravity-axis threshold tuning.
 - Corrected the environment diagnosis: the restored local PyTorch build works
   on MPS in the active Aqua session (`mps:0` matrix smoke passed). The earlier
   unavailable probe ran in the agent sandbox, which cannot access Metal.
+- Re-read both original mental-simulation papers and added robust nearby-world
+  hypothesis evidence: expected delayed loss plus optional score dispersion.
+  The new runtime path preserves `WorldBelief`; focused tests passed
+  (`192 passed`).
+- Completed the first full active-Aqua MPS project smoke with the supplied
+  local torch build. It is finite but not promoted because the one-step final
+  1.00 s validation rollout RMSE regressed versus the initial incumbent.

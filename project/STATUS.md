@@ -9726,3 +9726,25 @@ session with `launchctl asuser 501` reports `torch 2.9.0a0+gitcbe1a35`,
 multiplication returned `64.0`. The Mac has both Intel UHD 630 and AMD Radeon
 Pro 5500M Metal devices. Use the active Aqua session for MPS training and
 evaluation; do not infer accelerator availability from the agent sandbox.
+
+The new paper-informed goal is active: improve robust RGB-only long-horizon
+prediction through persistent, calibrated mental simulation rather than a
+single long autoregressive forecast. Both source papers were re-read. Their
+actionable common points are small ordered simulation steps, heterogeneous
+model selection by prediction-vs-reality error, and outcome-range selection
+to reject isolated false successes. The first implementation is an opt-in
+robust ensemble scorer: it aggregates real delayed-target candidate loss over
+nearby imagined rollout samples as `mean + risk_penalty * std`, reports
+per-axis spread, updates only pool evidence, and preserves `WorldBelief`.
+Focused unit/runtime tests passed: `192 passed in 4.20s`. It has not yet been
+promoted for RGB accuracy; evaluator integration and fixed-manifest comparison
+remain the next task.
+
+The active-Aqua MPS smoke at
+`runs/20260814-074043-orpheus-attention-pilot-mps` completed one optimizer
+step and its eight-scenario final validation. It used torch
+`2.9.0a0+gitcbe1a35`, `measurement_device: mps`, and produced valid
+`last.pt`/`best_rollout.pt` checkpoints. Observed train loss was `4.048636`;
+the final validation rollout RMSE at 1.00 s was `0.338335` versus the
+initial-incumbent `0.327330`, so this finite execution smoke is not a model
+promotion.

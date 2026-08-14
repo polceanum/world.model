@@ -1270,6 +1270,58 @@ class OnlineWorldModel(nn.Module):
             axis_prior_strength=axis_prior_strength,
         )
 
+    def assimilate_hypothesis_ensemble(
+        self,
+        hypothesis_pool: object,
+        target_positions: Tensor,
+        target_mask: Tensor,
+        trajectory_samples: Sequence[Sequence[BeliefTrajectory]],
+        *,
+        risk_penalty: float = 0.0,
+        target_collision: Tensor | None = None,
+        position_weight: float = 1.0,
+        lifecycle_weight: float = 0.0,
+        event_weight: float = 0.0,
+        position_gate_ratio: float = 0.0,
+        axis_gate_ratio: float = 0.0,
+        event_gate_ratio: float = 0.0,
+        axis_weights: Sequence[float] | Tensor | None = None,
+        uncertainty_aware: bool = True,
+        evidence_decay_override: float | None = None,
+        axis_prior_strength: float = 0.0,
+    ) -> object:
+        """Assimilate robust delayed evidence without replacing WorldBelief.
+
+        The caller supplies a same-candidate-order collection of nearby
+        imagined rollout worlds.  The persistent runtime belief remains the
+        only source of truth; this method updates only the injected pool's
+        evidence weights when real delayed targets are available.
+        """
+
+        if self.state.belief is None:
+            raise RuntimeError("OnlineWorldModel must ingest an observation first")
+        assimilate = getattr(hypothesis_pool, "assimilate_ensemble", None)
+        if not callable(assimilate):
+            raise TypeError("hypothesis_pool must expose assimilate_ensemble(...)")
+        return assimilate(
+            self.state.belief,
+            target_positions,
+            target_mask,
+            trajectory_samples=trajectory_samples,
+            risk_penalty=risk_penalty,
+            target_collision=target_collision,
+            position_weight=position_weight,
+            lifecycle_weight=lifecycle_weight,
+            event_weight=event_weight,
+            position_gate_ratio=position_gate_ratio,
+            axis_gate_ratio=axis_gate_ratio,
+            event_gate_ratio=event_gate_ratio,
+            axis_weights=axis_weights,
+            uncertainty_aware=uncertainty_aware,
+            evidence_decay_override=evidence_decay_override,
+            axis_prior_strength=axis_prior_strength,
+        )
+
     def selected_hypothesis_axes(self, hypothesis_pool: object) -> Tensor:
         """Read per-axis hypothesis choices without replacing ``WorldBelief``.
 
