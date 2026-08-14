@@ -2923,3 +2923,7 @@ further gravity-axis threshold tuning.
   strict guardrail failures. Finite, causally supported training throughout
   establishes a failed parameterization plateau; no further z-only run or MPS
   promotion replay is warranted.
+- Added low-frequency flushed per-episode heartbeats to the heterogeneous-pool
+  evaluator. This is observability only: candidate rollout, causal selection,
+  scores, report schema, and artifact semantics are unchanged. Focused tests
+  and Ruff pass.

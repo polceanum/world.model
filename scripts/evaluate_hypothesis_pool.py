@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import time
 from typing import Any
 
 import torch
@@ -646,10 +647,18 @@ def main() -> int:
         load_checkpoint(args.checkpoint, model=model, map_location=device, expected_config=config)
         model.eval()
     horizons = tuple(float(value) for value in config.evaluation.horizons_seconds)
-    episodes = [
-        evaluate_episode(
+    episodes: list[dict[str, Any]] = []
+    for index in range(args.episodes):
+        episode_seed = args.seed + index
+        started = time.perf_counter()
+        print(
+            f"hypothesis-pool progress episode={index + 1}/{args.episodes} "
+            f"seed={episode_seed} status=started",
+            flush=True,
+        )
+        result = evaluate_episode(
             model,
-            generate_episode(config, args.seed + index),
+            generate_episode(config, episode_seed),
             horizons,
             config.simulator.frame_rate,
             tuple(config.simulator.image_size),
@@ -673,10 +682,15 @@ def main() -> int:
             args.ensemble_position_std_scale,
             args.ensemble_velocity_std_scale,
             args.ensemble_risk_penalty,
-            args.seed + index,
+            episode_seed,
         )
-        for index in range(args.episodes)
-    ]
+        episodes.append(result)
+        print(
+            f"hypothesis-pool progress episode={index + 1}/{args.episodes} "
+            f"seed={episode_seed} status=completed "
+            f"elapsed_seconds={time.perf_counter() - started:.3f}",
+            flush=True,
+        )
     output = timestamped_artifact_path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(

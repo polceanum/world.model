@@ -10086,3 +10086,11 @@ undertrained candidate. The protected incumbent remains unchanged; the failed
 legacy-CPU candidate is not eligible for MPS promotion replay. Its terminal
 checkpoint is
 `runs/20260814-101500-attention-node-z-recovery-512/checkpoints/validation_step_000512.pt`.
+
+Long causal-pool comparisons now emit a flushed start/completion heartbeat for
+each episode, including its seed and elapsed seconds. This changes no pool
+candidate, evidence update, score, metric, artifact contents, or runtime
+semantics; it makes a multi-hour fixed RGB/MPS comparison observable without
+high-frequency external polling. Focused evaluator tests (`3 passed`) and Ruff
+pass. The currently running eight-episode protected MPS comparison predates
+this source change and retains its original immutable behavior.
