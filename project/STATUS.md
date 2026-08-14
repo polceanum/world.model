@@ -9476,3 +9476,10 @@ It selected `[269, 21, 6]`; long-horizon x improved, but 0.10 s collision F1
 fell (`0.1331 → 0.0997`) and other axes were mixed. It is rejected as well.
 Further gains require better calibrated event hypotheses, not simply removing
 event evidence from the selector.
+
+Added vectorized approaching-pair elastic impulses to the ballistic hypothesis.
+The two-episode comparison at
+`runs/20260814-210000-hypothesis-pool-ballistic-pair-disjoint2/report.json`
+selected `[251, 7, 38]`; y and several event-F1 horizons improved, but small z
+regressions remained at 0.25/0.50/1.00 s. The contact-response implementation
+is retained and tested, while selector promotion remains rejected.

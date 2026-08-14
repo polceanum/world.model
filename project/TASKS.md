@@ -1623,3 +1623,5 @@
   jumps are physically consistent; verify focused tests and RGB smoke.
 - [x] Compare the corrected ballistic candidate on fresh episodes; reject
   promotion for long-horizon z/event regressions while retaining the fix.
+- [x] Add and test approaching-pair elastic impulses; reject promotion after a
+  fresh comparison with residual z regressions.

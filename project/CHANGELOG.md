@@ -2724,3 +2724,6 @@ further gravity-axis threshold tuning.
   restitution velocity jumps; added regression coverage and an RGB smoke.
 - Evaluated the corrected ballistic candidate; it improved long-horizon x/y but
   regressed z and had mixed event F1, so promotion was rejected.
+- Added vectorized approaching-pair elastic impulses to the ballistic candidate;
+  fresh evidence improved y/events but retained small z regressions, so no
+  selector promotion was made.
