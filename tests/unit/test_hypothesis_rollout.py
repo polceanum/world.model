@@ -102,6 +102,26 @@ def test_axis_weights_can_prefer_lower_error_on_critical_axis() -> None:
     assert y_weighted.selected_index.tolist() == [1]
 
 
+def test_axis_gate_blocks_candidate_with_single_axis_regression() -> None:
+    target = torch.zeros(1, 2, 1, 3)
+    mask = torch.ones(1, 2, 1, dtype=torch.bool)
+    learned = _trajectory(0.0)
+    alternative = _trajectory(0.0)
+    learned.positions[..., 0] = 0.2
+    alternative.positions[..., 0] = 0.2
+    learned.positions[..., 1] = 0.2
+    alternative.positions[..., 1] = 1.0
+    selection = HypothesisRolloutEngine.score(
+        [learned, alternative],
+        target,
+        mask,
+        event_weight=0.0,
+        axis_gate_ratio=0.05,
+        uncertainty_aware=False,
+    )
+    assert selection.selected_index.tolist() == [0]
+
+
 def test_selector_ignores_occluded_frames_and_scores_uncertainty() -> None:
     target = torch.zeros(1, 2, 1, 3)
     mask = torch.tensor([[[True], [False]]])
