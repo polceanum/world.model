@@ -1681,3 +1681,6 @@
   families with CPU-safe workers and record truthful checkpoint metrics.
 - [x] Evaluate the one-step checkpoint for immediate regressions; reject it
   because x worsened despite y/z improvements.
+- [ ] Re-run the long attention training campaign on an Apple-Silicon host
+  where `torch.backends.mps.is_available()` is true; require finite loss and
+  the existing all-axis/per-horizon comparator before promotion.

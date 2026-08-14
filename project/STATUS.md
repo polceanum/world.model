@@ -9697,3 +9697,14 @@ It aggregates per-horizon x/y/z RMSE, lifecycle mismatch, identity coverage,
 event F1, and uncertainty, and returns a nonzero exit status on regressions.
 The independent-draw comparison passed with the predeclared `1e-4` uncertainty
 tolerance; exact deltas are saved in `/tmp/newdraw-guardrail.json`.
+
+After the machine restart, the required environment was rechecked directly:
+`conda run --no-capture-output -n orpheus python -c "import torch; print(torch.__version__, torch.backends.mps.is_built(), torch.backends.mps.is_available())"`
+reported `2.10.0 True False`. The interpreter and kernel are both `x86_64`
+(`/usr/local/Caskroom/miniforge/base/envs/orpheus/bin/python`, macOS 26.5.2),
+so this host still cannot execute Apple MPS kernels despite the PyTorch build
+including MPS support. No long CPU training run was launched. A focused audit
+suite passed: `191 passed in 5.33s` covering hypothesis rollout, comparator,
+oracle online-loop, and config contracts. The next convergence run remains
+blocked on an Apple-Silicon/MPS-capable host (or an explicitly approved
+long-running CPU campaign); no checkpoint was promoted from this audit.

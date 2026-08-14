@@ -2794,3 +2794,6 @@ further gravity-axis threshold tuning.
   not a convergence result.
 - Evaluated that one-step checkpoint on RGB and rejected promotion after x
   regressed on every horizon versus the protected reference.
+- Rechecked the restarted `orpheus` environment: PyTorch 2.10.0 is MPS-built
+  but MPS remains unavailable because this runtime is x86_64; added the exact
+  hardware/device result and focused audit result (`191 passed`) to status.
