@@ -215,6 +215,7 @@ def test_pool_assimilates_late_evidence_and_updates_selected_model() -> None:
     assert selection.selected_index.tolist() == [1]
     assert pool.selected_index(belief).tolist() == [1]
     assert pool.last_selection is not None
+    assert pool.selected_axis_index(belief).shape == (1, 3)
     assert belief.timestamp.item() == pytest.approx(0.0)
 
 

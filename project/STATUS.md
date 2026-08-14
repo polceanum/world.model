@@ -9632,6 +9632,15 @@ enables x/y composition with `hypothesis_axis_independent: true` and axes
 the resolved setting and completed successfully. This promotes the qualified
 behavior only for the attention pilot config, not globally.
 
+A follow-up pilot attempted to inject the full joint persistent prior into
+per-axis posterior weights at
+`runs/20260815-103000-hypothesis-pool-axis-prior-fresh2ep`. On the same fresh
+seeds, x/y returned to joint-baseline RMSE (the prior overpowered useful
+coordinate-specific evidence), so the change was rejected and removed. The
+accepted axis path intentionally uses current delayed per-axis position
+evidence while the joint pool retains the persistent prior; a separately
+calibrated per-axis prior is still required before changing that semantics.
+
 Broader verification passed the attention profile dry run and the full
 repository suite: `755 passed, 6 skipped in 225.32 s`; all skips were
 MPS-conditional because this environment reports MPS built but unavailable.

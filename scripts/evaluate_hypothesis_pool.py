@@ -255,7 +255,9 @@ def evaluate_episode(
                     independent_axes = (
                         tuple(range(3)) if axis_independent_axes is None else axis_independent_axes
                     )
-                    axis_scores = selection.axis_scores[0].argmin(dim=-1)
+                    axis_scores = selection.axis_selected_index[0]
+                    if axis_scores is None:
+                        raise RuntimeError("axis-independent selection requires axis indices")
                     for axis in independent_axes:
                         axis_selected[axis] = axis_scores[axis]
                     for axis, candidate in enumerate(axis_selected.tolist()):

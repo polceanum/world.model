@@ -2776,3 +2776,6 @@ further gravity-axis threshold tuning.
   the joint default, and a no-CLI-flag smoke verified the resolved setting.
 - Re-ran the attention dry run and full suite after promotion: `755 passed,
   6 skipped`; skips are MPS-conditional because MPS is unavailable here.
+- Tested injecting the joint persistent prior into coordinate posteriors; it
+  erased the qualified x/y gains and was rejected. The accepted path keeps
+  persistent joint evidence and coordinate-specific delayed evidence separate.

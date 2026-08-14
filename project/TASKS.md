@@ -1665,3 +1665,7 @@
   config; retain the joint selector in all other configs.
 - [x] Run the full test suite and attention dry run after promotion; record
   MPS availability and the complete result.
+- [x] Test injecting the joint persistent prior into axis posteriors; reject it
+  after fresh-draw x/y gains collapsed to baseline.
+- [ ] Calibrate a separate per-axis prior/evidence decay without regressing
+  the qualified x/y gains.
