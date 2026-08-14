@@ -9582,3 +9582,13 @@ were horizon-dependent (`0.10--0.20`). This is directional evidence only: the
 sample is too small for promotion, and event reporting does not change
 position selection. An earlier eight-episode attempt was stopped after it
 exceeded the practical CPU runtime without producing a partial report.
+
+The compatible `reference_rollout.pt` calibration then completed across eight
+episodes at
+`runs/20260815-083000-hypothesis-pool-labeled-calibration-8ep`. The learned
+event candidate had the best offline F1 at every horizon (`0.149/0.147/0.138/
+0.153/0.222` for 0.10--1.00 s); ballistic contact did not generalize beyond
+the earlier two-episode draw. The best supported threshold is approximately
+`0.10` (0.25 s is degenerate at this histogram resolution). Since this only
+changes event reporting and does not improve position selection, the runtime
+default remains unchanged.

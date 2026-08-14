@@ -1651,5 +1651,7 @@
   keep estimates diagnostic until multi-episode calibration is available.
 - [x] Run a bounded attention-checkpoint calibration; record horizon-specific
   learned/ballistic event evidence without promoting a two-episode result.
-- [ ] Repeat calibration on a practical multi-episode CPU/MPS-capable setup
+- [x] Repeat calibration on a practical multi-episode CPU/MPS-capable setup
   before changing event thresholds or horizon priors.
+- [x] Complete the eight-episode calibration; learned event probabilities win
+  all horizons, so reject ballistic/event-prior promotion.

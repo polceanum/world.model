@@ -2758,3 +2758,5 @@ further gravity-axis threshold tuning.
 - Completed a bounded two-episode attention-checkpoint calibration; learned
   events lead through 0.75 s while ballistic contact leads at 1.00 s, so no
   horizon-specific threshold or candidate was promoted.
+- Completed an eight-episode compatible calibration; learned event prediction
+  wins every horizon and the earlier ballistic signal does not replicate.
