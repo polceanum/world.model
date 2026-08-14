@@ -2843,3 +2843,6 @@ further gravity-axis threshold tuning.
   AdamW updates to exactly one x/y/z node-acceleration row and preserve every
   excluded row and optimizer moment exactly; focused schedule/config tests
   pass (`270 passed`).
+- Launched the timestamped active-Aqua MPS `attention_node_z` 512-update
+  qualification from the protected incumbent. It is a controlled pending run,
+  not a promotion or reported accuracy result.

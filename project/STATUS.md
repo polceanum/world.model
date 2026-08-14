@@ -9867,3 +9867,16 @@ joint runtime unchanged while allowing a z-focused training experiment to
 retain x/y control. Focused schedule/config tests passed (`270 passed in
 17.58 s`) under `conda run -n orpheus`; no accuracy result is claimed until a
 complete active-Aqua fixed-manifest validation is recorded.
+
+An active-Aqua, one-shot MPS qualification is now running with the supplied
+`orpheus` interpreter through launch agent
+`com.orpheus.attention.node-z.recovery512`. It initializes weights only from
+the protected
+`runs/20260814-083918-attention-robust-transition-128-continuation/checkpoints/best_rollout.pt`
+into timestamped run `runs/20260814-101500-attention-node-z-recovery-512`.
+The declared recovery protocol is 512 attention-node-z-only updates,
+`rollout_position_z=1.5`, checkpoints every 64 updates, and complete fixed
+32-episode selector validation every 128 updates. It retains all previous
+lifecycle/identity/calibration guardrails and must not replace the incumbent
+unless the full comparator accepts it. Routine polling is intentionally
+disabled; inspect only numbered checkpoints and validation milestones.
