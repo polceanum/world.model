@@ -43,9 +43,15 @@
   full position/lifecycle/identity/event/uncertainty report before changing
   the configuration default. The completed x-only report preserves the x gain,
   restores learned-quality y, and leaves lifecycle/identity/event totals exact.
-- [ ] Run the same x-only causal selection on the fixed 32-episode MPS manifest
+- [x] Run the same x-only causal selection on the fixed 32-episode MPS manifest
   and compare selected x/y/z, lifecycle, identity, collision, and calibration
   evidence against the protected learned candidate before any default change.
+  It passes: x improves at every horizon, y/z/lifecycle/identity match learned,
+  and event FP is lower by one per horizon. Promote `[0]` as the evaluation
+  pool default only; runtime pool integration remains a separate guarded task.
+- [ ] Integrate the validated injected hypothesis pool into the normal RGB
+  `WorldBelief` runtime behind an explicit opt-in configuration, then repeat
+  the full MPS guardrail protocol before changing a runtime default.
 - [x] Complete the three-candidate eight-episode protected comparison; retain
   ballistic as diagnostic only because it is rarely selected and regresses
   mature event/position behavior.

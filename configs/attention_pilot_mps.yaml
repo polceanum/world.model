@@ -247,7 +247,9 @@ evaluation:
   episodes: 32
   rgb_only: true
   hypothesis_axis_independent: true
-  hypothesis_axis_independent_axes: [0, 1]
+  # Fixed 32-episode RGB/MPS causal evidence improves only x; retaining learned
+  # y/z avoids the measured y regression from an otherwise sparse fallback.
+  hypothesis_axis_independent_axes: [0]
   hypothesis_axis_prior_strength: 0.001
 demo:
   seed: 200000

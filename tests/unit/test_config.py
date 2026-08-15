@@ -60,7 +60,7 @@ def test_axis_composition_is_configured_only_for_attention_pilot() -> None:
     attention = load_config(CONFIG_DIR / "attention_pilot_mps.yaml")
     assert not default.evaluation.hypothesis_axis_independent
     assert attention.evaluation.hypothesis_axis_independent
-    assert attention.evaluation.hypothesis_axis_independent_axes == (0, 1)
+    assert attention.evaluation.hypothesis_axis_independent_axes == (0,)
 
 
 def test_simulator_scenario_mixture_is_typed_and_validated() -> None:

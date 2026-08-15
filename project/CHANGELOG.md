@@ -2947,3 +2947,7 @@ further gravity-axis threshold tuning.
 - Added exact multi-episode aggregate summaries to future heterogeneous-pool
   reports, pooling additive SSE/counts and selected lifecycle, identity, and
   collision evidence. Focused regression tests and Ruff pass.
+- Completed the fixed 32-episode active-Aqua MPS x-only causal-selection gate.
+  X improves at all five horizons; y/z/lifecycle/identity match learned and
+  collision FP improves by one per horizon. Promoted `[0]` as the evaluator
+  pool default only; no model or runtime behavior changes.

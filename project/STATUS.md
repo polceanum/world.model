@@ -10154,3 +10154,18 @@ counts. A focused unequal-count regression proves it does not average
 episode-local RMSE (`22 passed`; Ruff clean). This is reporting only; the
 active immutable 32-episode process predates it and retains sufficient raw
 additive evidence for the same post-completion calculation.
+
+The full fixed 32-episode active-Aqua MPS x-only report completed at
+`runs/20260815-042317-protected-causal-hypothesis-pool-32-x-only`. Across
+seeds `100000`--`100031`, selected x improves over learned at all horizons:
+`0.790574/0.800766/0.825534/0.832335/0.849664` m versus
+`0.790927/0.801860/0.831506/0.861608/0.902549` m at
+0.10/0.25/0.50/0.75/1.00 s. y and z are equal to learned up to rounding;
+lifecycle mismatch and identity coverage are exactly equal; collision TP/FN
+are equal and FP is lower by one at every horizon because the rare joint
+alternative is retained for event output. The x-only evaluation selection
+default in `attention_pilot_mps.yaml` is therefore promoted from `[0, 1]` to
+`[0]`. This is a validated evaluator/pool policy only: it does not change
+learned weights, `WorldBelief`, simulator, or the normal runtime's default
+predict–correct path, which still needs a separately guarded pool integration
+before it can consume this policy.
