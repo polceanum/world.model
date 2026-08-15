@@ -39,6 +39,9 @@ def _small_rgb_config() -> OrpheusConfig:
         global_every_steps=5,
         global_uncertainty_threshold=4.0,
         surprise_threshold=8.0,
+        structured_disc_center_enabled=True,
+        structured_disc_depth_relative_std=0.05,
+        structured_disc_position_confidence=0.995,
     )
     dynamics = replace(
         config.model.dynamics,
@@ -185,9 +188,12 @@ def test_global_pass_preserves_separate_temporal_history_and_reset_clears_it() -
     assert "camera" in model.caches
     assert "camera" in model.state.temporal_histories
     assert model.last_measurements is not None
-    assert {"velocity", "velocity_from_position"}.isdisjoint(
-        model.last_measurements.supported_state_fields
-    )
+    assert "velocity_from_position" in model.last_measurements.supported_state_fields
+    assert "velocity" not in model.last_measurements.supported_state_fields
+    # Two samples cannot satisfy the default three-sample temporal observer.
+    # Ordinary position innovation must nevertheless retain its conservative
+    # velocity correction path.
+    assert not model.last_measurements.auxiliary["world_velocity_valid_mask"].any()
     history_before = model.state.temporal_histories["camera"]
     assert isinstance(history_before, RGBTemporalPositionHistory)
     valid_before = int(history_before.valid_mask.sum())
@@ -206,10 +212,10 @@ def test_global_pass_preserves_separate_temporal_history_and_reset_clears_it() -
     assert isinstance(history_after, RGBTemporalPositionHistory)
     assert int(history_after.valid_mask.sum()) >= valid_before
     assert model.last_measurements is not None
-    assert {"velocity", "velocity_from_position"}.isdisjoint(
-        model.last_measurements.supported_state_fields
-    )
+    assert "velocity_from_position" in model.last_measurements.supported_state_fields
+    assert "velocity" not in model.last_measurements.supported_state_fields
     assert "world_velocity_valid_mask" in model.last_measurements.auxiliary
+    assert "world_velocity_axis_valid_mask" in model.last_measurements.auxiliary
     assert "world_velocity_log_variance" in model.last_measurements.auxiliary
 
     model.detach_state()
@@ -334,3 +340,63 @@ def test_synthetic_episode_runs_through_rgb_only_online_path() -> None:
     assert not model.diagnostics.oracle_used
     assert {record.modality for record in model.diagnostics.records} == {"rgb"}
     assert torch.isfinite(belief.objects.position).all()
+
+
+def test_combined_camera_fast_depth_supplies_strict_raw_velocity_support() -> None:
+    """The promoted raw observer must receive evidence at its real ROI cadence."""
+
+    config = _small_rgb_config()
+    config = replace(
+        config,
+        simulator=replace(
+            config.simulator,
+            frame_rate=20.0,
+            physics_rate=120.0,
+            camera_motion="combined",
+        ),
+        model=replace(
+            config.model,
+            rgb=replace(
+                config.model.rgb,
+                global_every_steps=3,
+                temporal_velocity_enabled=True,
+                temporal_velocity_history_size=3,
+                temporal_velocity_min_samples=3,
+                temporal_velocity_max_age_steps=None,
+                temporal_velocity_lateral_only=False,
+                temporal_velocity_independent_raw_history_enabled=True,
+                temporal_velocity_continuous_gravity_axis_enabled=True,
+                structured_disc_fast_depth_enabled=True,
+            ),
+        ),
+    )
+    config.validate()
+    episode = generate_episode(config, seed=48)
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    fast_measurement_count = 0
+    supported_fast_velocity_count = 0
+    for frame_index in range(8):
+        packet = ObservationPacket(
+            modality="rgb",
+            sensor_id="camera",
+            timestamp=float(episode["timestamps"][frame_index]),
+            payload=episode["rgb"][frame_index],
+            calibration={
+                "intrinsics": episode["camera"]["intrinsics"][frame_index],
+                "world_from_camera": episode["camera"]["world_from_camera"][frame_index],
+            },
+            frame_id="camera:camera",
+        )
+        model.ingest(packet)
+        assert model.last_measurements is not None
+        if model.diagnostics.latest is not None and (
+            model.diagnostics.latest.observation_mode == "FAST_ROI"
+        ):
+            fast_measurement_count += 1
+            supported_fast_velocity_count += int(
+                model.last_measurements.auxiliary["world_velocity_axis_valid_mask"].any()
+            )
+
+    assert fast_measurement_count > 0
+    assert supported_fast_velocity_count > 0
+    assert not model.diagnostics.oracle_used

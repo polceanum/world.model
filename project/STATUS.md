@@ -1,5 +1,94 @@
 # Project status
 
+## Specification 1.46 grounded convergence repair — 2026-08-16
+
+The pre-training technical audit is complete and the authoritative contract is
+now specification `1.46` with simulator protocol `sphere_world_v6`. This is a
+coherent repair boundary, not an accuracy-promotion claim. The main changes are:
+
+- familiar ensured-pair impacts are preflighted in the complete scene and kept
+  free of floor, wall, third-body, lifecycle, and random-impulse confounds for
+  two observation frames; free flight is the same closed-form gravity/drag
+  transition in simulator and analytic dynamics;
+- structured RGB centres, observed radii, inverse depth, packet confidence,
+  covariance, and birth support are direct typed evidence; ambiguous scale has
+  inflated uncertainty and unused learned queries cannot create ghosts merely
+  from fresh logits;
+- independent raw temporal RGB history is an explicit opt-in with per-axis
+  provenance. Prior-copied ROI coordinates cannot become velocity evidence;
+  structured fast depth supplies full combined-camera support and a causal
+  known-gravity fit estimates velocity at the current timestamp;
+- fast correction keeps unsupported axes on their prior and slow drag/
+  restitution updates use causal prior error, elapsed time, combined
+  uncertainty, confidence, and independent-axis support. Position displacement
+  cannot fabricate restitution evidence;
+- the primary evaluator is clean. Recovery uses a separate runtime from the
+  same immutable checkpoint snapshot, persistent-ID-safe support, and a
+  disjoint metric namespace. Exact checkpoint bytes, source/config/protocol
+  hashes, simulator/spec versions, seed manifest, horizons, batching, schema,
+  and real simulator interventions are recorded. Nonfinite state, event logits,
+  or final metrics fail rather than serialize NaN;
+- relation endpoint incidence, smooth pair applicability, and within-call
+  multi-rate learned effects are explicit legacy-false semantic controls.
+  Multi-rate remains disabled in the new accuracy profile because the measured
+  MPS wall-time gain was only `1.20x` and still needs a matched accuracy gate;
+- `state_roi` and `state_relation_roi` scopes stage perception/filter/
+  identification learning before local relation capacity. Unconditional node
+  acceleration, global discovery, analytic dynamics, and unrelated heads stay
+  frozen in that curriculum.
+
+The new validated profile is
+`configs/grounded_convergence_mps.yaml`: 9,216 balanced updates, eight scenarios
+per update, 73,728 episode draws, 512-update warmup, 8,192-update cosine decay,
+a 512-update minimum-rate tail, and a scope transition at update 3,072. It uses
+MPS for the online model, keeps the CPU global-proposal workaround, enables
+structured fast depth/raw history/current-time gravity fitting, and keeps the
+runtime hypothesis pool off. It must first pass matched step-zero ablations for
+raw observation semantics and pair applicability; only then will the long run
+start from the protected weights by `--initialize-from`.
+
+Stable verification from the existing `orpheus` environment:
+
+```bash
+PYTHONPATH=. conda run -n orpheus ruff format .
+# 214 files left unchanged
+PYTHONPATH=. conda run -n orpheus ruff check .
+# All checks passed!
+git diff --check
+# passed
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-pycache PYTHONPATH=. conda run -n orpheus python -m compileall -q world_model tests train.py evaluate.py demo.py monitor.py
+# passed
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q
+# 934 passed, 12 skipped in 390.93s
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/integration/test_rgb_online_loop.py::test_combined_camera_fast_depth_supplies_strict_raw_velocity_support
+# 1 passed in 4.36s
+launchctl asuser 501 /bin/zsh -lc 'cd /Users/mike/Work/world.model && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/local/Caskroom/miniforge/base/envs/orpheus/bin/python -m pytest -q tests/integration/test_mps_attention_pilot_smoke.py tests/unit/test_interaction_applicability.py::test_applicability_is_finite_and_differentiable_on_mps tests/unit/test_multirate_dynamics.py::test_mps_held_attention_effect_is_finite_and_differentiable tests/unit/test_hybrid_dynamics.py::test_mps_zero_tangent_noncollision_boundary_stays_finite tests/unit/test_association.py::test_association_transfers_cost_to_cpu_without_mps_float64'
+# 6 passed in 64.01s
+```
+
+The active-Aqua environment reports `x86_64`, PyTorch
+`2.9.0a0+gitcbe1a35`, `mps.is_built() == True`, and
+`mps.is_available() == True`. The user-provided build was not modified.
+
+One pre-v6 clean four-episode diagnostic exists at
+`runs/20260815-205611-rgb-anchor-repair-clean-mps-4/`. It observed current
+position RMSE `0.11656 m`, horizon RMSEs
+`0.14817/0.18252/0.24886/0.29908/0.32670 m`, target coverage `0.975`,
+prediction precision `0.68477`, and collision F1 `0.17073`. It is useful
+diagnosis that RGB anchoring was the largest blocker, but it ran simulator v4
+before the final birth/ROI/simulator/evaluator semantics and is therefore not a
+specification-1.46 baseline or promotion result.
+
+Known limitations are explicit: no specification-1.46 weights have trained to
+plateau yet; pair applicability is untrained/unqualified; hard analytic event
+logits, an unused contact-logit scale, and analytic-only pair event logits
+still limit learned event timing; per-scenario evaluator slices are marked
+diagnostic-only because they omit some calibration/baseline promotion fields;
+and the rejected runtime hypothesis pool still lacks coherent bounded-step
+event/regime composition. The next concrete actions are commit/push, matched
+clean MPS step-zero diagnostics, then the long staged campaign and disjoint
+validation/test/OOD evaluation.
+
 ## Low-noise live run monitor — 2026-08-15
 
 `python monitor.py` now provides a read-only terminal view of the newest
@@ -160,9 +249,16 @@ the corrected route at `runs/...-runtime-hypothesis-pool-mps-32/`. Its results
 must be inspected before any runtime-default change; no broad metric is
 claimed while it is running.
 
-That first detached 32-episode launch later exited without creating its report,
-so it is explicitly **no result** rather than a model failure or metric. The
-captured four-episode active-Aqua diagnostic completed successfully in
+The first detached 32-episode launch did complete and its artifacts are present
+at `runs/20260815-144936-runtime-hypothesis-pool-mps-32/`; the earlier status
+claim that it produced no report was incorrect. It is a full eight-scenario,
+32-episode RGB-only MPS pool report, but it has no matched learned-only
+32-episode control under the same evaluator/runtime semantics and therefore
+cannot promote or reject the pool. Its current posterior RMSE is `0.814683 m`,
+velocity RMSE is `1.06348 m/s`, distance-gated recall/precision are
+`0.3745/0.35057`, identity-switch rate is `0.02537`, collision F1 is `0.19407`,
+and all reported outputs are finite. The captured four-episode active-Aqua
+diagnostic completed successfully in
 `787.49 s` at
 `runs/20260815-141904-runtime-hypothesis-pool-mps-diagnostic-4/`. It is
 RGB-only, has `nonfinite_output_count=0`, and confirms the runtime controller

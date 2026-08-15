@@ -62,6 +62,9 @@ class SimulatorConfig:
     ensured_pair_surface_gap_range: tuple[float, float] = (0.75, 0.9)
     ensured_pair_speed_range: tuple[float, float] = (0.85, 1.25)
     ensured_pair_lateral_offset_range: tuple[float, float] = (0.0, 0.0)
+    ensured_pair_floor_clearance_frames: int = 2
+    ensured_pair_floor_clearance_margin_m: float = 0.03
+    ensured_pair_scene_resample_attempts: int = 32
     gravity: tuple[float, float, float] = (0.0, -9.81, 0.0)
     camera_motion: str = "orbit"
     known_camera_pose: bool = True
@@ -108,6 +111,8 @@ class RGBConfig:
     temporal_velocity_variance_floor: float = 0.25
     temporal_velocity_variance_ceiling: float | None = None
     temporal_velocity_lateral_only: bool = False
+    temporal_velocity_independent_raw_history_enabled: bool = False
+    temporal_velocity_continuous_gravity_axis_enabled: bool = False
     temporal_velocity_post_event_gravity_axis_enabled: bool = False
     temporal_velocity_unobserved_variance: float = 1.0e4
     temporal_velocity_reset_on_collision: bool = False
@@ -193,6 +198,16 @@ class RGBConfig:
 @dataclass(frozen=True)
 class DynamicsConfig:
     max_substep: float = 1.0 / 120.0
+    # Opt-in multi-rate execution. ``None`` retains one graph/attention
+    # evaluation per analytic microstep for exact historical compatibility.
+    learned_effect_interval_seconds: float | None = None
+    # Smooth, parameter-free support for learned pair/event residuals. Disabled
+    # preserves the historical broad candidate-mask behavior exactly.
+    pair_applicability_enabled: bool = False
+    pair_applicability_lookahead_seconds: float = 0.05
+    pair_applicability_margin_m: float = 0.05
+    pair_applicability_gap_temperature_m: float = 0.025
+    pair_applicability_velocity_temperature_mps: float = 0.10
     hidden_dim: int = 96
     interaction_radius: float = 1.0
     process_noise_position: float = 1e-4
@@ -200,6 +215,10 @@ class DynamicsConfig:
     modal_acceleration_scale: float = 0.25
     residual_acceleration_scale: float = 0.5
     attention_residual_enabled: bool = False
+    # Historical attention checkpoints used relation geometry without explicit
+    # entity-endpoint incidence. Keep that exact function unless a new
+    # protocol opts into symmetric endpoint binding.
+    attention_relation_endpoint_binding_enabled: bool = False
     attention_width: int = 128
     attention_heads: int = 4
     attention_layers: int = 4
@@ -447,6 +466,9 @@ class EvaluationConfig:
     horizons_seconds: tuple[float, ...] = (0.1, 0.25, 0.5, 1.0, 2.0)
     episodes: int = 16
     rgb_only: bool = True
+    # Recovery is an independent checkpoint-loaded prefix replay. The primary
+    # evaluator trajectory is always intervention-free.
+    recovery_probe_enabled: bool = False
     perturbation_position_std: float = 0.15
     perturbation_velocity_std: float = 0.25
     confidence_level: float = 0.90
@@ -617,6 +639,19 @@ class OrpheusConfig:
             raise ValueError(
                 "model.rgb.temporal_velocity_variance_ceiling must be finite "
                 "and no smaller than temporal_velocity_variance_floor"
+            )
+        if model.rgb.temporal_velocity_continuous_gravity_axis_enabled and (
+            not model.rgb.temporal_velocity_enabled
+        ):
+            raise ValueError(
+                "model.rgb continuous gravity-axis velocity requires temporal velocity"
+            )
+        if model.rgb.temporal_velocity_independent_raw_history_enabled and not (
+            model.rgb.temporal_velocity_enabled or model.rgb.temporal_position_enabled
+        ):
+            raise ValueError(
+                "model.rgb independent raw RGB history requires temporal velocity "
+                "or temporal position"
             )
         if (
             not math.isfinite(model.rgb.temporal_velocity_unobserved_variance)
@@ -926,10 +961,52 @@ class OrpheusConfig:
             raise ValueError(
                 "model.lifecycle.birth_confirmation_distance_m must be finite and positive"
             )
-        if model.dynamics.max_substep <= 0:
-            raise ValueError("model.dynamics.max_substep must be positive")
+        if not math.isfinite(model.dynamics.max_substep) or model.dynamics.max_substep <= 0:
+            raise ValueError("model.dynamics.max_substep must be finite and positive")
+        if model.dynamics.learned_effect_interval_seconds is not None and (
+            isinstance(model.dynamics.learned_effect_interval_seconds, bool)
+            or not math.isfinite(model.dynamics.learned_effect_interval_seconds)
+            or model.dynamics.learned_effect_interval_seconds < model.dynamics.max_substep
+        ):
+            raise ValueError(
+                "model.dynamics.learned_effect_interval_seconds must be finite and "
+                "no smaller than max_substep"
+            )
+        if not isinstance(model.dynamics.pair_applicability_enabled, bool):
+            raise ValueError("model.dynamics.pair_applicability_enabled must be boolean")
+        for name, value in (
+            (
+                "pair_applicability_lookahead_seconds",
+                model.dynamics.pair_applicability_lookahead_seconds,
+            ),
+            (
+                "pair_applicability_margin_m",
+                model.dynamics.pair_applicability_margin_m,
+            ),
+        ):
+            if isinstance(value, bool) or not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"model.dynamics.{name} must be finite and nonnegative")
+        for name, value in (
+            (
+                "pair_applicability_gap_temperature_m",
+                model.dynamics.pair_applicability_gap_temperature_m,
+            ),
+            (
+                "pair_applicability_velocity_temperature_mps",
+                model.dynamics.pair_applicability_velocity_temperature_mps,
+            ),
+        ):
+            if isinstance(value, bool) or not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"model.dynamics.{name} must be finite and positive")
         if not isinstance(model.dynamics.attention_residual_enabled, bool):
             raise ValueError("model.dynamics.attention_residual_enabled must be boolean")
+        if not isinstance(
+            model.dynamics.attention_relation_endpoint_binding_enabled,
+            bool,
+        ):
+            raise ValueError(
+                "model.dynamics.attention_relation_endpoint_binding_enabled must be boolean"
+            )
         for name in ("attention_width", "attention_heads", "attention_layers"):
             value = getattr(model.dynamics, name)
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
@@ -987,6 +1064,40 @@ class OrpheusConfig:
             raise ValueError("restitution_range must lie in [0, 1]")
         if not (0 <= simulator.friction_range[0] <= simulator.friction_range[1] <= 1):
             raise ValueError("friction_range must lie in [0, 1]")
+        if simulator.ensure_collision and simulator.max_objects >= 2:
+            if (
+                isinstance(simulator.ensured_pair_floor_clearance_frames, bool)
+                or not isinstance(simulator.ensured_pair_floor_clearance_frames, int)
+                or simulator.ensured_pair_floor_clearance_frames < 1
+            ):
+                raise ValueError(
+                    "simulator.ensured_pair_floor_clearance_frames must be a positive integer"
+                )
+            if simulator.ensured_pair_floor_clearance_frames + 1 >= simulator.sequence_frames:
+                raise ValueError(
+                    "simulator.ensured_pair_floor_clearance_frames must leave room "
+                    "for a pair event and later floor event"
+                )
+            if (
+                not math.isfinite(simulator.ensured_pair_floor_clearance_margin_m)
+                or simulator.ensured_pair_floor_clearance_margin_m <= 0
+            ):
+                raise ValueError(
+                    "simulator.ensured_pair_floor_clearance_margin_m must be finite and positive"
+                )
+            if simulator.ensured_pair_lateral_offset_range[1] >= 2.0 * simulator.radius_range[0]:
+                raise ValueError(
+                    "simulator ensured pair lateral offset must remain below the "
+                    "minimum combined sphere radius"
+                )
+            if (
+                isinstance(simulator.ensured_pair_scene_resample_attempts, bool)
+                or not isinstance(simulator.ensured_pair_scene_resample_attempts, int)
+                or simulator.ensured_pair_scene_resample_attempts < 1
+            ):
+                raise ValueError(
+                    "simulator.ensured_pair_scene_resample_attempts must be a positive integer"
+                )
         if not simulator.scenario_mixture:
             raise ValueError("simulator.scenario_mixture must contain at least one scenario")
         supported_scenarios = {
@@ -1171,6 +1282,8 @@ class OrpheusConfig:
             "updater_mean_y",
             "fast_roi",
             "state_dynamics",
+            "state_roi",
+            "state_relation_roi",
             "state_dynamics_fast_roi",
             "state_dynamics_roi",
         }
@@ -1181,7 +1294,7 @@ class OrpheusConfig:
                 "'attention_node_y', 'attention_node_z', 'dynamics', "
                 "'updater', 'updater_mean', "
                 "'updater_mean_y', 'fast_roi', "
-                "'state_dynamics', "
+                "'state_dynamics', 'state_roi', 'state_relation_roi', "
                 "'state_dynamics_fast_roi', or 'state_dynamics_roi'"
             )
         late_scope = self.training.closed_loop_late_trainable_scope
@@ -1193,6 +1306,13 @@ class OrpheusConfig:
             )
         if late_scope is not None and late_scope not in valid_closed_loop_scopes:
             raise ValueError("training.closed_loop_late_trainable_scope is invalid")
+        if (
+            "state_relation_roi" in {self.training.closed_loop_trainable_scope, late_scope}
+            and not self.model.dynamics.attention_residual_enabled
+        ):
+            raise ValueError(
+                "state_relation_roi scope requires model.dynamics.attention_residual_enabled=true"
+            )
         if transition_steps is not None and (
             isinstance(transition_steps, bool)
             or not isinstance(transition_steps, int)

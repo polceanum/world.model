@@ -221,6 +221,12 @@ class OnlineWorldModel(nn.Module):
                         rgb_config.temporal_velocity_variance_ceiling
                     ),
                     temporal_velocity_lateral_only=(rgb_config.temporal_velocity_lateral_only),
+                    temporal_velocity_independent_raw_history_enabled=(
+                        rgb_config.temporal_velocity_independent_raw_history_enabled
+                    ),
+                    temporal_velocity_continuous_gravity_axis_enabled=(
+                        rgb_config.temporal_velocity_continuous_gravity_axis_enabled
+                    ),
                     temporal_velocity_post_event_gravity_axis_enabled=(
                         rgb_config.temporal_velocity_post_event_gravity_axis_enabled
                     ),
@@ -1029,6 +1035,7 @@ class OnlineWorldModel(nn.Module):
                 },
             )
         active_before = int(posterior.objects.active.sum().detach().cpu())
+        predicted_belief = posterior
         association = self.associator.match(posterior, measurements, predicted)
         if self.hypothesis_controller is not None and packet.modality == "rgb":
             self.hypothesis_controller.assimilate_observation(
@@ -1118,6 +1125,9 @@ class OnlineWorldModel(nn.Module):
                 innovation,
                 association,
                 observable,
+                elapsed_seconds=prediction_dt,
+                predicted_belief=predicted_belief,
+                direct_velocity_evidence=velocity_evidence,
             )
         cached_after_update = self.state.caches.get(packet.sensor_id)
         if cached_after_update is not None and not self._cache_matches_belief(

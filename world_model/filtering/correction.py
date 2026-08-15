@@ -570,23 +570,50 @@ class BeliefUpdater(nn.Module):
                     analytic_position.log_variance
                 )
 
-        valid = evidence.valid_mask & prior.objects.active
+        axis_valid = evidence.resolved_axis_valid_mask() & prior.objects.active.unsqueeze(-1)
+        valid = axis_valid.any(dim=-1)
         batch_index, belief_index = torch.nonzero(valid, as_tuple=True)
         velocity_slice = fast_packing_map(prior.objects)["velocity"]
         if batch_index.numel():
-            analytic_velocity = diagonal_kalman_update(
-                packed[batch_index, belief_index, velocity_slice],
-                log_variance[batch_index, belief_index, velocity_slice],
+            component_valid = axis_valid[batch_index, belief_index]
+            prior_velocity = packed[batch_index, belief_index, velocity_slice]
+            prior_velocity_log_variance = log_variance[
+                batch_index,
+                belief_index,
+                velocity_slice,
+            ]
+            component_confidence = evidence.confidence[
+                batch_index,
+                belief_index,
+            ].unsqueeze(-1) * component_valid.to(evidence.confidence.dtype)
+            # Unsupported components must not participate in the vector
+            # robust-influence norm.  Merely assigning them zero confidence
+            # after computing that norm would let an arbitrary unobserved
+            # value suppress the correction of a genuinely observed axis.
+            component_measurement = torch.where(
+                component_valid,
                 evidence.velocity[batch_index, belief_index],
+                prior_velocity,
+            )
+            analytic_velocity = diagonal_kalman_update(
+                prior_velocity,
+                prior_velocity_log_variance,
+                component_measurement,
                 evidence.log_variance[batch_index, belief_index],
-                confidence=evidence.confidence[batch_index, belief_index],
+                confidence=component_confidence,
                 robust_clip_norm=self.config.robust_clip_norm,
                 minimum_log_variance=self.config.minimum_log_variance,
                 maximum_log_variance=self.config.maximum_log_variance,
             )
-            updated_packed[batch_index, belief_index, velocity_slice] = analytic_velocity.mean
-            updated_log_variance[batch_index, belief_index, velocity_slice] = (
-                analytic_velocity.log_variance
+            updated_packed[batch_index, belief_index, velocity_slice] = torch.where(
+                component_valid,
+                analytic_velocity.mean,
+                prior_velocity,
+            )
+            updated_log_variance[batch_index, belief_index, velocity_slice] = torch.where(
+                component_valid,
+                analytic_velocity.log_variance,
+                prior_velocity_log_variance,
             )
         if batch_index.numel() == 0 and position_update_count == 0:
             return prior

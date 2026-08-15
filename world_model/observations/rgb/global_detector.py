@@ -98,9 +98,10 @@ class GlobalObjectDetector(nn.Module):
         self.variance_head = nn.Linear(feature_dim, 7)
         self.appearance_head = nn.Linear(feature_dim, appearance_dim)
         self.register_buffer("query_anchors", _anchor_grid(query_count))
-        # A mildly positive prior makes an untrained smoke model initialise
-        # tentative slots; supervised existence learning quickly overrides it.
-        nn.init.constant_(self.existence_head.bias, 0.5)
+        # A fresh learned fallback should require visual evidence before it can
+        # create persistent state.  A negative prior stays below the runtime
+        # birth gate while supervised positive/negative queries can move it.
+        nn.init.constant_(self.existence_head.bias, -2.0)
         nn.init.constant_(self.visibility_head.bias, 0.5)
         nn.init.constant_(self.variance_head.bias, -2.0)
 

@@ -7,7 +7,7 @@ import torch
 from world_model.datasets.splits import SPLIT_SEED_RANGES
 from world_model.observations.rgb.structured_centres import structured_disc_centres
 from world_model.simulator.physics import PhysicsConfig
-from world_model.utils.config import load_config
+from world_model.utils.config import load_config, save_resolved_config
 
 CONFIG_DIR = Path(__file__).parents[2] / "configs"
 
@@ -53,6 +53,39 @@ def test_dotted_override_is_typed(tmp_path: Path) -> None:
     )
     assert config.training.steps == 3
     assert config.simulator.image_size == (32, 40)
+
+
+def test_primary_evaluation_is_clean_and_recovery_is_explicit() -> None:
+    clean = load_config(CONFIG_DIR / "default.yaml")
+    recovery = load_config(
+        CONFIG_DIR / "default.yaml",
+        overrides=["evaluation.recovery_probe_enabled=true"],
+    )
+
+    assert not clean.evaluation.recovery_probe_enabled
+    assert recovery.evaluation.recovery_probe_enabled
+
+
+def test_ensured_pair_scene_resampling_is_explicit_and_validated() -> None:
+    config = load_config(CONFIG_DIR / "default.yaml")
+
+    assert config.simulator.ensured_pair_scene_resample_attempts == 32
+    with pytest.raises(
+        ValueError,
+        match="simulator.ensured_pair_scene_resample_attempts must be a positive integer",
+    ):
+        load_config(
+            CONFIG_DIR / "default.yaml",
+            overrides=["simulator.ensured_pair_scene_resample_attempts=0"],
+        )
+
+
+def test_legacy_contaminating_evaluation_mode_is_rejected() -> None:
+    with pytest.raises(KeyError, match="apply_perturbations"):
+        load_config(
+            CONFIG_DIR / "default.yaml",
+            overrides=["evaluation.apply_perturbations=true"],
+        )
 
 
 def test_axis_composition_is_configured_only_for_attention_pilot() -> None:
@@ -107,6 +140,8 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
     assert default.model.rgb.temporal_velocity_min_samples == 3
     assert default.model.rgb.temporal_velocity_variance_ceiling is None
     assert not default.model.rgb.temporal_velocity_lateral_only
+    assert not default.model.rgb.temporal_velocity_independent_raw_history_enabled
+    assert not default.model.rgb.temporal_velocity_continuous_gravity_axis_enabled
     assert default.model.rgb.temporal_velocity_unobserved_variance == 1.0e4
     assert not default.model.rgb.temporal_velocity_reset_on_collision
     assert default.model.rgb.temporal_velocity_max_age_steps is None
@@ -132,6 +167,8 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
             "model.rgb.temporal_velocity_variance_floor=0.4",
             "model.rgb.temporal_velocity_variance_ceiling=2.0",
             "model.rgb.temporal_velocity_lateral_only=true",
+            "model.rgb.temporal_velocity_independent_raw_history_enabled=true",
+            "model.rgb.temporal_velocity_continuous_gravity_axis_enabled=true",
             "model.rgb.temporal_velocity_unobserved_variance=1000.0",
             "model.rgb.temporal_velocity_reset_on_collision=true",
             "model.rgb.temporal_velocity_max_age_steps=3",
@@ -155,6 +192,8 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
     assert enabled.model.rgb.temporal_velocity_variance_floor == 0.4
     assert enabled.model.rgb.temporal_velocity_variance_ceiling == 2.0
     assert enabled.model.rgb.temporal_velocity_lateral_only
+    assert enabled.model.rgb.temporal_velocity_independent_raw_history_enabled
+    assert enabled.model.rgb.temporal_velocity_continuous_gravity_axis_enabled
     assert enabled.model.rgb.temporal_velocity_unobserved_variance == 1000.0
     assert enabled.model.rgb.temporal_velocity_reset_on_collision
     assert enabled.model.rgb.temporal_velocity_max_age_steps == 3
@@ -169,6 +208,22 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
     assert not enabled.model.rgb.temporal_position_depth_only
     assert enabled.model.rgb.structured_disc_depth_outlier_relative_threshold == 0.12
     assert enabled.model.rgb.structured_disc_depth_outlier_variance_scale == 9.0
+
+    with pytest.raises(ValueError, match="continuous gravity-axis velocity"):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=[
+                "model.rgb.temporal_velocity_continuous_gravity_axis_enabled=true",
+            ],
+        )
+
+    with pytest.raises(ValueError, match="independent raw RGB history"):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=[
+                "model.rgb.temporal_velocity_independent_raw_history_enabled=true",
+            ],
+        )
 
 
 @pytest.mark.parametrize(
@@ -313,6 +368,76 @@ def test_closed_loop_trainable_scope_is_explicit() -> None:
         overrides=["training.closed_loop_trainable_scope=attention_relation"],
     )
     assert relation_config.training.closed_loop_trainable_scope == "attention_relation"
+
+
+def test_state_roi_scope_roundtrips_as_typed_configuration(tmp_path: Path) -> None:
+    config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=[
+            "training.closed_loop_trainable_scope=state_roi",
+            "training.closed_loop_late_trainable_scope=state_dynamics_roi",
+            "training.closed_loop_scope_transition_steps=512",
+        ],
+    )
+    resolved_path = tmp_path / "state-roi-resolved.yaml"
+
+    save_resolved_config(config, resolved_path)
+    restored = load_config(resolved_path)
+
+    assert restored.training.closed_loop_trainable_scope == "state_roi"
+    assert restored.training.closed_loop_late_trainable_scope == "state_dynamics_roi"
+    assert restored.training.closed_loop_scope_transition_steps == 512
+    assert restored.to_dict() == config.to_dict()
+
+
+def test_state_relation_roi_scope_is_typed_and_requires_attention(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="state_relation_roi.*requires.*attention"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[
+                "training.closed_loop_trainable_scope=state_roi",
+                "training.closed_loop_late_trainable_scope=state_relation_roi",
+                "training.closed_loop_scope_transition_steps=512",
+            ],
+        )
+
+    config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=[
+            "model.dynamics.attention_residual_enabled=true",
+            "training.closed_loop_trainable_scope=state_roi",
+            "training.closed_loop_late_trainable_scope=state_relation_roi",
+            "training.closed_loop_scope_transition_steps=512",
+        ],
+    )
+    resolved_path = tmp_path / "state-relation-roi-resolved.yaml"
+
+    save_resolved_config(config, resolved_path)
+    restored = load_config(resolved_path)
+
+    assert restored.training.closed_loop_trainable_scope == "state_roi"
+    assert restored.training.closed_loop_late_trainable_scope == "state_relation_roi"
+    assert restored.training.closed_loop_scope_transition_steps == 512
+    assert restored.to_dict() == config.to_dict()
+
+
+def test_attention_relation_endpoint_binding_is_explicit_opt_in(tmp_path: Path) -> None:
+    legacy = load_config(CONFIG_DIR / "default.yaml")
+    enabled = load_config(
+        CONFIG_DIR / "default.yaml",
+        overrides=[
+            "model.dynamics.attention_residual_enabled=true",
+            "model.dynamics.attention_relation_endpoint_binding_enabled=true",
+        ],
+    )
+    resolved_path = tmp_path / "endpoint-binding-resolved.yaml"
+
+    save_resolved_config(enabled, resolved_path)
+    restored = load_config(resolved_path)
+
+    assert not legacy.model.dynamics.attention_relation_endpoint_binding_enabled
+    assert enabled.model.dynamics.attention_relation_endpoint_binding_enabled
+    assert restored.to_dict() == enabled.to_dict()
 
 
 @pytest.mark.parametrize(

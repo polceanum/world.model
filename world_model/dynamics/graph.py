@@ -103,6 +103,39 @@ class InteractionGraph(nn.Module):
         nn.init.zeros_(self.node_network.output.weight)
         nn.init.zeros_(self.node_network.output.bias)
 
+    def candidate_edge_mask(self, objects: ObjectBeliefTensor) -> Tensor:
+        """Return the current symmetric structured interaction mask.
+
+        This geometry-only path is intentionally separate from the learned
+        edge/node networks.  Multi-rate rollout can therefore keep contact
+        applicability and uncertainty density current on every analytic tick
+        without re-running the expensive proposal stack.
+        """
+
+        _, count = objects.active.shape
+        rel_position = objects.position[:, None, :, :] - objects.position[:, :, None, :]
+        distance = torch.linalg.vector_norm(rel_position, dim=-1).clamp_min(1e-7)
+        radius = objects.radius.squeeze(-1)
+        radius_sum = radius[:, :, None] + radius[:, None, :]
+        position_variance = objects.fast_log_variance[..., :3].exp().mean(dim=-1)
+        pair_position_variance = position_variance[:, :, None] + position_variance[:, None, :]
+        position_std = pair_position_variance.clamp_min(0.0).sqrt()
+        active_pair = objects.active[:, :, None] & objects.active[:, None, :]
+        identity = torch.eye(count, device=objects.active.device, dtype=torch.bool)
+        candidate = distance <= (
+            radius_sum + self.interaction_radius + self.uncertainty_margin_scale * position_std
+        )
+        upper_mask = (
+            active_pair
+            & ~identity.unsqueeze(0)
+            & candidate
+            & torch.triu(
+                torch.ones(count, count, device=objects.active.device, dtype=torch.bool),
+                diagonal=1,
+            ).unsqueeze(0)
+        )
+        return upper_mask | upper_mask.transpose(1, 2)
+
     def forward(
         self,
         objects: ObjectBeliefTensor,

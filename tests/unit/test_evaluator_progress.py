@@ -12,6 +12,8 @@ def test_evaluate_checkpoint_persists_terminal_failure_progress(
     monkeypatch,
 ) -> None:
     progress_path = tmp_path / "evaluation_progress.json"
+    checkpoint = tmp_path / "checkpoint.pt"
+    checkpoint.write_bytes(b"placeholder checkpoint bytes")
     callback_events: list[dict[str, object]] = []
 
     def fail_after_progress(*_args, progress_sink, **_kwargs):
@@ -34,7 +36,7 @@ def test_evaluate_checkpoint_persists_terminal_failure_progress(
     with pytest.raises(RuntimeError, match="forced evaluator failure"):
         evaluator.evaluate_checkpoint(
             object(),
-            tmp_path / "checkpoint.pt",
+            checkpoint,
             progress_callback=callback_events.append,
             progress_path=progress_path,
         )
@@ -54,6 +56,8 @@ def test_evaluate_checkpoint_persists_terminal_failure_progress(
 
 def test_default_progress_path_captures_prestart_failure(tmp_path, monkeypatch) -> None:
     checkpoint = tmp_path / "run" / "checkpoints" / "last.pt"
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_bytes(b"placeholder checkpoint bytes")
 
     def fail_before_start(*_args, **_kwargs):
         raise ValueError("invalid checkpoint before start")

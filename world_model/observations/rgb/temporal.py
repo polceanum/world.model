@@ -13,13 +13,14 @@ from world_model.observations.base import ModalityHistory
 
 @dataclass
 class RGBTemporalPositionHistory(ModalityHistory):
-    """Recent corrected posterior positions aligned by persistent object ID."""
+    """Recent associated RGB position observations aligned by persistent object ID."""
 
     object_ids: Tensor
     timestamps: Tensor
     positions: Tensor
     position_log_variance: Tensor
     valid_mask: Tensor
+    position_axis_valid_mask: Tensor
     scale_timestamps: Tensor
     scale_positions: Tensor
     scale_position_log_variance: Tensor
@@ -75,6 +76,14 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 batch,
                 objects,
                 history_size,
+                device=object_ids.device,
+                dtype=torch.bool,
+            ),
+            position_axis_valid_mask=torch.zeros(
+                batch,
+                objects,
+                history_size,
+                3,
                 device=object_ids.device,
                 dtype=torch.bool,
             ),
@@ -148,6 +157,7 @@ class RGBTemporalPositionHistory(ModalityHistory):
         positions: Tensor,
         history_size: int,
     ) -> bool:
+        position_axis_valid_mask = getattr(self, "position_axis_valid_mask", None)
         return (
             self.history_size == history_size
             and self.object_ids.ndim == 2
@@ -156,6 +166,15 @@ class RGBTemporalPositionHistory(ModalityHistory):
             and self.positions.shape == (*object_ids.shape, history_size, 3)
             and self.position_log_variance.shape == self.positions.shape
             and self.valid_mask.shape == self.timestamps.shape
+            and (
+                position_axis_valid_mask is None
+                or (
+                    isinstance(position_axis_valid_mask, Tensor)
+                    and position_axis_valid_mask.shape == self.positions.shape
+                    and position_axis_valid_mask.dtype == torch.bool
+                    and position_axis_valid_mask.device == positions.device
+                )
+            )
             and self.scale_timestamps.shape == self.timestamps.shape
             and self.scale_positions.shape == self.positions.shape
             and self.scale_position_log_variance.shape == self.positions.shape
@@ -170,12 +189,59 @@ class RGBTemporalPositionHistory(ModalityHistory):
             and self.positions.dtype == positions.dtype
         )
 
+    def resolved_position_axis_valid_mask(self) -> Tensor:
+        """Return explicit per-sample world-axis observation support.
+
+        Histories serialized before this field existed contained only complete
+        position samples.  Resolve those legacy histories as all-axis support;
+        every newly appended RGB sample carries an explicit mask.
+        """
+
+        position_axis_valid_mask = getattr(self, "position_axis_valid_mask", None)
+        if position_axis_valid_mask is None:
+            return self.valid_mask.unsqueeze(-1).expand_as(self.positions)
+        if (
+            position_axis_valid_mask.shape != self.positions.shape
+            or position_axis_valid_mask.dtype != torch.bool
+            or position_axis_valid_mask.device != self.positions.device
+        ):
+            raise ValueError("position_axis_valid_mask must be boolean and match history positions")
+        return position_axis_valid_mask & self.valid_mask.unsqueeze(-1)
+
+    def _complete_position_sample_mask(self) -> Tensor:
+        """Return samples safe for consumers that project complete vectors."""
+
+        return self.valid_mask & self.resolved_position_axis_valid_mask().all(dim=-1)
+
+    def _latest_sample_indices(
+        self,
+        sample_mask: Tensor,
+        *,
+        sample_count: int,
+    ) -> tuple[Tensor, Tensor]:
+        """Return chronological indices of the latest supported samples."""
+
+        if sample_mask.shape != self.valid_mask.shape or sample_mask.dtype != torch.bool:
+            raise ValueError("sample_mask must be boolean and match valid_mask")
+        if not 1 <= sample_count <= self.history_size:
+            raise ValueError("sample_count must lie within the temporal history")
+        count = sample_mask.sum(dim=-1)
+        index = torch.arange(
+            self.history_size,
+            device=sample_mask.device,
+            dtype=torch.long,
+        ).view(*((1,) * (sample_mask.ndim - 1)), self.history_size)
+        supported_index = torch.where(sample_mask, index, torch.full_like(index, -1))
+        latest = torch.topk(supported_index, k=sample_count, dim=-1, sorted=True).values
+        return latest.flip(-1).clamp_min(0), count >= sample_count
+
     def append(
         self,
         *,
         object_ids: Tensor,
         active_mask: Tensor,
         observed_mask: Tensor,
+        observed_axis_mask: Tensor | None = None,
         scale_valid_mask: Tensor | None = None,
         reset_mask: Tensor | None = None,
         scale_reset_mask: Tensor | None = None,
@@ -195,6 +261,18 @@ class RGBTemporalPositionHistory(ModalityHistory):
             raise ValueError("active_mask must be boolean [B,N]")
         if observed_mask.shape != object_ids.shape or observed_mask.dtype != torch.bool:
             raise ValueError("observed_mask must be boolean [B,N]")
+        if observed_axis_mask is None:
+            # Backward-compatible complete-position semantics for callers that
+            # predate explicit axis support. RGB runtime callers always pass
+            # the measurement-derived mask.
+            observed_axis_mask = observed_mask.unsqueeze(-1).expand(*object_ids.shape, 3)
+        if (
+            observed_axis_mask.shape != (*object_ids.shape, 3)
+            or observed_axis_mask.dtype != torch.bool
+        ):
+            raise ValueError("observed_axis_mask must be boolean [B,N,3]")
+        if torch.any(observed_axis_mask & ~observed_mask.unsqueeze(-1)):
+            raise ValueError("observed_axis_mask must be a subset of observed_mask")
         if reset_mask is None:
             reset_mask = torch.zeros_like(active_mask)
         if reset_mask.shape != object_ids.shape or reset_mask.dtype != torch.bool:
@@ -233,6 +311,7 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 history_size=self.history_size,
                 dtype=positions.dtype,
             )
+        source_axis_valid_mask = source.resolved_position_axis_valid_mask()
         current_ids = torch.where(
             active_mask & (object_ids >= 0),
             object_ids,
@@ -265,6 +344,9 @@ class RGBTemporalPositionHistory(ModalityHistory):
                     batch_index, previous_slot
                 ]
                 aligned.valid_mask[batch_index, slot] = source.valid_mask[
+                    batch_index, previous_slot
+                ]
+                aligned.position_axis_valid_mask[batch_index, slot] = source_axis_valid_mask[
                     batch_index, previous_slot
                 ]
                 aligned.scale_timestamps[batch_index, slot] = source.scale_timestamps[
@@ -311,6 +393,9 @@ class RGBTemporalPositionHistory(ModalityHistory):
             aligned.position_log_variance,
         )
         aligned.valid_mask = aligned.valid_mask & ~reset_edge.unsqueeze(-1)
+        aligned.position_axis_valid_mask = (
+            aligned.position_axis_valid_mask & ~reset_edge[..., None, None]
+        )
         aligned.scale_timestamps = torch.where(
             scale_reset_edge.unsqueeze(-1),
             torch.zeros_like(aligned.scale_timestamps),
@@ -341,7 +426,9 @@ class RGBTemporalPositionHistory(ModalityHistory):
         aligned.reset_active = reset_mask & active_mask
         aligned.scale_reset_active = scale_reset_mask & active_mask
 
-        append_mask = observed_mask & active_mask & (current_ids >= 0)
+        append_mask = (
+            observed_mask & observed_axis_mask.any(dim=-1) & active_mask & (current_ids >= 0)
+        )
         finite = torch.isfinite(positions).all(dim=-1) & torch.isfinite(position_log_variance).all(
             dim=-1
         )
@@ -366,6 +453,9 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 aligned.valid_mask[batch_index, slot, :-1] = aligned.valid_mask[
                     batch_index, slot, 1:
                 ].clone()
+                aligned.position_axis_valid_mask[batch_index, slot, :-1] = (
+                    aligned.position_axis_valid_mask[batch_index, slot, 1:].clone()
+                )
                 count = self.history_size - 1
             aligned.timestamps[batch_index, slot, count] = current_timestamp
             aligned.positions[batch_index, slot, count] = positions[batch_index, slot]
@@ -373,6 +463,10 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 batch_index, slot
             ]
             aligned.valid_mask[batch_index, slot, count] = True
+            aligned.position_axis_valid_mask[batch_index, slot, count] = observed_axis_mask[
+                batch_index,
+                slot,
+            ]
             if aligned.has_reset[batch_index, slot]:
                 aligned.post_reset_sample_count[batch_index, slot] += 1
         scale_append_mask = append_mask & scale_valid_mask
@@ -422,13 +516,43 @@ class RGBTemporalPositionHistory(ModalityHistory):
         query_timestamp: Tensor | None = None,
         known_acceleration: Tensor | None = None,
     ) -> tuple[Tensor, Tensor, Tensor]:
-        """Return causal LS slope and propagated diagonal uncertainty.
+        """Return a complete-vector causal LS slope.
+
+        This compatibility entry point requires every coordinate to have
+        enough independent samples. Call :meth:`least_squares_velocity_axis_local`
+        when a consumer can apply explicit per-axis evidence.
+        """
+
+        velocity, log_variance, axis_valid = self.least_squares_velocity_axis_local(
+            minimum_dt=minimum_dt,
+            minimum_samples=minimum_samples,
+            variance_scale=variance_scale,
+            variance_floor=variance_floor,
+            variance_ceiling=variance_ceiling,
+            query_timestamp=query_timestamp,
+            known_acceleration=known_acceleration,
+        )
+        return velocity, log_variance, axis_valid.all(dim=-1)
+
+    def least_squares_velocity_axis_local(
+        self,
+        *,
+        minimum_dt: float,
+        minimum_samples: int = 3,
+        variance_scale: float,
+        variance_floor: float,
+        variance_ceiling: float | None = None,
+        query_timestamp: Tensor | None = None,
+        known_acceleration: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        """Return causal LS slopes with independent validity per world axis.
 
         When a known acceleration is supplied, subtract its quadratic
         displacement about ``query_timestamp`` before fitting.  The resulting
         slope estimates velocity at the query time rather than at the history
-        window midpoint.  This keeps the observer causal while avoiding a
-        systematic gravity bias.
+        window midpoint. Each coordinate uses only timestamps whose RGB sample
+        explicitly supports that world axis, so a prior-copied ROI coordinate
+        can never complete or influence another coordinate's fit.
         """
 
         if variance_scale < 1 or not math.isfinite(variance_scale):
@@ -460,40 +584,212 @@ class RGBTemporalPositionHistory(ModalityHistory):
             positions = positions - 0.5 * known_acceleration[:, None, None, :] * (
                 time_from_query[..., None].square()
             )
-        mask = self.valid_mask
-        count = mask.sum(dim=-1)
+        mask = self.resolved_position_axis_valid_mask()
+        count = mask.sum(dim=-2)
         mask_float = mask.to(self.timestamps.dtype)
-        mean_timestamp = (self.timestamps * mask_float).sum(dim=-1) / count.clamp_min(1)
-        centred = (self.timestamps - mean_timestamp.unsqueeze(-1)) * mask_float
-        denominator = centred.square().sum(dim=-1)
-        weights = centred / denominator.clamp_min(minimum_dt * minimum_dt).unsqueeze(-1)
-        velocity = (weights.unsqueeze(-1) * positions).sum(dim=-2)
+        timestamps = self.timestamps.unsqueeze(-1)
+        mean_timestamp = (timestamps * mask_float).sum(dim=-2) / count.clamp_min(1)
+        centred = (timestamps - mean_timestamp.unsqueeze(-2)) * mask_float
+        denominator = centred.square().sum(dim=-2)
+        weights = centred / denominator.clamp_min(minimum_dt * minimum_dt).unsqueeze(-2)
+        velocity = (weights * positions).sum(dim=-2)
         position_variance = self.position_log_variance.clamp(-30.0, 30.0).exp()
-        velocity_variance = (weights.square().unsqueeze(-1) * position_variance).sum(
-            dim=-2
-        ) * variance_scale
+        velocity_variance = (weights.square() * position_variance).sum(dim=-2) * variance_scale
         velocity_variance = velocity_variance.clamp_min(variance_floor)
         if variance_ceiling is not None:
             velocity_variance = velocity_variance.clamp_max(variance_ceiling)
-        adjacent = mask[..., 1:] & mask[..., :-1]
-        monotonic = (
-            (~adjacent) | ((self.timestamps[..., 1:] - self.timestamps[..., :-1]) > minimum_dt)
-        ).all(dim=-1)
+        adjacent = mask[..., 1:, :] & mask[..., :-1, :]
+        timestamp_delta = self.timestamps[..., 1:] - self.timestamps[..., :-1]
+        monotonic = ((~adjacent) | (timestamp_delta.unsqueeze(-1) > minimum_dt)).all(dim=-2)
         valid = (
             (count >= minimum_samples)
             & monotonic
             & (denominator > minimum_dt * minimum_dt)
-            & torch.isfinite(velocity).all(dim=-1)
-            & torch.isfinite(velocity_variance).all(dim=-1)
+            & torch.isfinite(velocity)
+            & torch.isfinite(velocity_variance)
         )
-        velocity = torch.where(valid.unsqueeze(-1), velocity, torch.zeros_like(velocity))
+        velocity = torch.where(valid, velocity, torch.zeros_like(velocity))
         default_log_variance = torch.full_like(velocity, math.log(variance_floor))
         log_variance = torch.where(
-            valid.unsqueeze(-1),
+            valid,
             velocity_variance.log(),
             default_log_variance,
         )
         return velocity, log_variance, valid
+
+    def gravity_aware_least_squares_velocity(
+        self,
+        *,
+        minimum_dt: float,
+        minimum_samples: int,
+        variance_scale: float,
+        variance_floor: float,
+        query_timestamp: Tensor,
+        known_acceleration: Tensor,
+        variance_ceiling: float | None = None,
+        orthogonal_axis: Tensor | None = None,
+        reference_velocity: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        """Estimate current velocity with a known-acceleration component.
+
+        The ordinary causal LS estimate supplies the subspace orthogonal to
+        ``known_acceleration``.  A second LS estimate subtracts the known
+        quadratic displacement and supplies the gravity-aligned component at
+        ``query_timestamp``.  With ``orthogonal_axis=None`` the complete
+        orthogonal plane is retained.  Supplying an axis retains only its
+        gravity-orthogonal projection, which lets the RGB lateral-only mode
+        add continuous gravity evidence without conflating the two axes.
+
+        Both estimates use the same raw RGB samples and weights; acceleration
+        subtraction is deterministic.  Their stochastic error is therefore
+        shared, not independent.  If ``A`` is the combined complementary
+        projector, the exact supported diagonal is
+        ``diag(A @ diag(var) @ A.T)``.  Taking the elementwise maximum of the
+        numerically equal LS variances keeps this propagation conservative if
+        clamping introduces a tiny discrepancy.
+
+        Output-axis support fails closed whenever any source world coordinate
+        required by either projector lacks independent raw RGB samples.
+        """
+
+        batch = self.object_ids.shape[0]
+        if query_timestamp.shape != (batch,):
+            raise ValueError("query_timestamp must have shape [B]")
+        if known_acceleration.shape != (batch, 3):
+            raise ValueError("known_acceleration must have shape [B,3]")
+        if not torch.isfinite(query_timestamp).all():
+            raise ValueError("query_timestamp must be finite")
+        if not torch.isfinite(known_acceleration).all():
+            raise ValueError("known_acceleration must be finite")
+        if orthogonal_axis is not None:
+            if orthogonal_axis.shape != (batch, 3):
+                raise ValueError("orthogonal_axis must have shape [B,3]")
+            if not torch.isfinite(orthogonal_axis).all():
+                raise ValueError("orthogonal_axis must be finite")
+        expected_velocity_shape = (*self.object_ids.shape, 3)
+        if reference_velocity is None:
+            reference_velocity = self.positions.new_zeros(expected_velocity_shape)
+        elif reference_velocity.shape != expected_velocity_shape:
+            raise ValueError("reference_velocity must have shape [B,N,3]")
+        elif not torch.isfinite(reference_velocity).all():
+            raise ValueError("reference_velocity must be finite")
+
+        ordinary_velocity, ordinary_log_variance, ordinary_valid = (
+            self.least_squares_velocity_axis_local(
+                minimum_dt=minimum_dt,
+                minimum_samples=minimum_samples,
+                variance_scale=variance_scale,
+                variance_floor=variance_floor,
+                variance_ceiling=variance_ceiling,
+            )
+        )
+        accelerated_velocity, accelerated_log_variance, accelerated_valid = (
+            self.least_squares_velocity_axis_local(
+                minimum_dt=minimum_dt,
+                minimum_samples=minimum_samples,
+                variance_scale=variance_scale,
+                variance_floor=variance_floor,
+                variance_ceiling=variance_ceiling,
+                query_timestamp=query_timestamp,
+                known_acceleration=known_acceleration,
+            )
+        )
+
+        dependency_epsilon = 1.0e-6
+        acceleration_norm = torch.linalg.vector_norm(
+            known_acceleration,
+            dim=-1,
+            keepdim=True,
+        )
+        gravity_axis = torch.where(
+            acceleration_norm > dependency_epsilon,
+            known_acceleration / acceleration_norm.clamp_min(dependency_epsilon),
+            torch.zeros_like(known_acceleration),
+        )
+        gravity_projection = torch.einsum("bi,bj->bij", gravity_axis, gravity_axis)
+        identity = (
+            torch.eye(
+                3,
+                device=self.positions.device,
+                dtype=self.positions.dtype,
+            )
+            .unsqueeze(0)
+            .expand(batch, -1, -1)
+        )
+        if orthogonal_axis is None:
+            orthogonal_projection = identity - gravity_projection
+        else:
+            orthogonal_direction = orthogonal_axis - gravity_axis * (
+                orthogonal_axis * gravity_axis
+            ).sum(dim=-1, keepdim=True)
+            orthogonal_norm = torch.linalg.vector_norm(
+                orthogonal_direction,
+                dim=-1,
+                keepdim=True,
+            )
+            orthogonal_direction = torch.where(
+                orthogonal_norm > dependency_epsilon,
+                orthogonal_direction / orthogonal_norm.clamp_min(dependency_epsilon),
+                torch.zeros_like(orthogonal_direction),
+            )
+            orthogonal_projection = torch.einsum(
+                "bi,bj->bij",
+                orthogonal_direction,
+                orthogonal_direction,
+            )
+        combined_projection = orthogonal_projection + gravity_projection
+
+        ordinary_delta = ordinary_velocity - reference_velocity
+        accelerated_delta = accelerated_velocity - reference_velocity
+        velocity = (
+            reference_velocity
+            + torch.einsum(
+                "bij,bnj->bni",
+                orthogonal_projection,
+                ordinary_delta,
+            )
+            + torch.einsum(
+                "bij,bnj->bni",
+                gravity_projection,
+                accelerated_delta,
+            )
+        )
+
+        def _projected_support(projection: Tensor, source_valid: Tensor) -> Tensor:
+            required = projection.abs() > dependency_epsilon
+            return ((~required[:, None, :, :]) | source_valid[:, :, None, :]).all(dim=-1)
+
+        axis_valid = _projected_support(
+            orthogonal_projection,
+            ordinary_valid,
+        ) & _projected_support(
+            gravity_projection,
+            accelerated_valid,
+        )
+        projection_support = combined_projection.square().sum(dim=-1) > (
+            dependency_epsilon * dependency_epsilon
+        )
+        axis_valid = axis_valid & projection_support[:, None, :]
+
+        shared_variance = torch.maximum(
+            ordinary_log_variance.exp(),
+            accelerated_log_variance.exp(),
+        )
+        velocity_variance = torch.einsum(
+            "bij,bnj->bni",
+            combined_projection.square(),
+            shared_variance,
+        ).clamp_min(variance_floor)
+        if variance_ceiling is not None:
+            velocity_variance = velocity_variance.clamp_max(variance_ceiling)
+        axis_valid = axis_valid & torch.isfinite(velocity) & torch.isfinite(velocity_variance)
+        velocity = torch.where(axis_valid, velocity, reference_velocity)
+        log_variance = torch.where(
+            axis_valid,
+            velocity_variance.log(),
+            torch.full_like(velocity_variance, math.log(variance_floor)),
+        )
+        return velocity, log_variance, axis_valid
 
     def kinematic_change_point(
         self,
@@ -534,9 +830,8 @@ class RGBTemporalPositionHistory(ModalityHistory):
                 "strong_velocity_change must be no smaller than minimum_velocity_change"
             )
 
-        count = self.valid_mask.sum(dim=-1)
-        enough = count >= 3
-        last_indices = torch.stack((count - 3, count - 2, count - 1), dim=-1).clamp_min(0)
+        complete_mask = self._complete_position_sample_mask()
+        last_indices, enough = self._latest_sample_indices(complete_mask, sample_count=3)
         timestamps = self.timestamps.gather(dim=-1, index=last_indices)
         positions = self.positions.gather(
             dim=-2,
@@ -612,9 +907,8 @@ class RGBTemporalPositionHistory(ModalityHistory):
         if not math.isfinite(minimum_dt) or minimum_dt <= 0:
             raise ValueError("minimum_dt must be finite and positive")
 
-        count = self.valid_mask.sum(dim=-1)
-        enough = count >= 3
-        last_indices = torch.stack((count - 3, count - 2, count - 1), dim=-1).clamp_min(0)
+        complete_mask = self._complete_position_sample_mask()
+        last_indices, enough = self._latest_sample_indices(complete_mask, sample_count=3)
         timestamps = self.timestamps.gather(dim=-1, index=last_indices)
         positions = self.positions.gather(
             dim=-2,
@@ -695,10 +989,10 @@ class RGBTemporalPositionHistory(ModalityHistory):
 
         if not math.isfinite(minimum_dt) or minimum_dt <= 0:
             raise ValueError("minimum_dt must be finite and positive")
-        count = self.valid_mask.sum(dim=-1)
-        indices = torch.stack((count - 3, count - 2, count - 1), dim=-1).clamp_min(0)
+        complete_mask = self._complete_position_sample_mask()
+        indices, enough = self._latest_sample_indices(complete_mask, sample_count=3)
         timestamps = self.timestamps.gather(dim=-1, index=indices)
-        valid = (count >= 3) & (
+        valid = enough & (
             (timestamps[..., 1] - timestamps[..., 0] > minimum_dt)
             & (timestamps[..., 2] - timestamps[..., 1] > minimum_dt)
         )
@@ -837,6 +1131,7 @@ class RGBTemporalPositionHistory(ModalityHistory):
             positions=self.positions.detach(),
             position_log_variance=self.position_log_variance.detach(),
             valid_mask=self.valid_mask.detach(),
+            position_axis_valid_mask=self.resolved_position_axis_valid_mask().detach(),
             scale_timestamps=self.scale_timestamps.detach(),
             scale_positions=self.scale_positions.detach(),
             scale_position_log_variance=self.scale_position_log_variance.detach(),

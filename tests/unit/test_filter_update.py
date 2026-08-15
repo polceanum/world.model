@@ -596,6 +596,47 @@ def test_invalid_direct_velocity_evidence_leaves_velocity_unchanged() -> None:
     )
 
 
+def test_invalid_temporal_velocity_preserves_position_innovation_velocity_update() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(enable_learned_corrector=False),
+    )
+    ordinary = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+    )
+    assert ordinary.objects.velocity[0, 0, 0] > 0.0
+
+    posterior = updater.correct_direct_velocity(
+        ordinary,
+        DirectVelocityEvidence(
+            velocity=torch.full((1, 1, 3), 99.0),
+            log_variance=torch.full((1, 1, 3), -8.0),
+            valid_mask=torch.tensor([[False]]),
+            confidence=torch.ones(1, 1),
+            axis_valid_mask=torch.ones(1, 1, 3, dtype=torch.bool),
+        ),
+    )
+
+    assert torch.equal(posterior.objects.velocity, ordinary.objects.velocity)
+    assert torch.equal(
+        posterior.objects.fast_log_variance[..., 3:6],
+        ordinary.objects.fast_log_variance[..., 3:6],
+    )
+
+
 def test_post_association_direct_velocity_updates_only_valid_active_slots() -> None:
     factory = BeliefFactory(max_objects=2, appearance_dim=4)
     belief = factory.create().replace(
@@ -623,8 +664,128 @@ def test_post_association_direct_velocity_updates_only_valid_active_slots() -> N
     )
 
     assert posterior.objects.velocity[0, 0, 0] > 1.5
+    assert posterior.objects.velocity[0, 0, 1] < -0.75
+    assert posterior.objects.velocity[0, 0, 2] > 0.375
     torch.testing.assert_close(posterior.objects.velocity[0, 1], torch.zeros(3))
     assert updater.last_diagnostics is sentinel
+
+
+def test_direct_velocity_fifth_positional_argument_remains_position() -> None:
+    velocity = torch.zeros(1, 1, 3)
+    log_variance = torch.zeros_like(velocity)
+    valid_mask = torch.tensor([[False]])
+    confidence = torch.ones(1, 1)
+    position = torch.tensor([[[0.25, -0.5, 1.0]]])
+    position_log_variance = torch.zeros_like(position)
+    position_valid_mask = torch.tensor([[True]])
+    axis_valid_mask = torch.tensor([[[True, False, True]]])
+
+    evidence = DirectVelocityEvidence(
+        velocity,
+        log_variance,
+        valid_mask,
+        confidence,
+        position,
+        position_log_variance,
+        position_valid_mask,
+        axis_valid_mask,
+    )
+
+    assert evidence.position is position
+    assert evidence.position_log_variance is position_log_variance
+    assert evidence.position_valid_mask is position_valid_mask
+    assert evidence.axis_valid_mask is axis_valid_mask
+    evidence.validate()
+
+
+def test_direct_velocity_axis_mask_leaves_unsupported_components_bitwise_unchanged() -> None:
+    factory = BeliefFactory(max_objects=1, appearance_dim=4)
+    base = factory.create()
+    initial_velocity = torch.tensor([[[0.25, -1.5, 0.75]]])
+    belief = base.replace(
+        objects=base.objects.replace(
+            active=torch.tensor([[True]]),
+            object_id=torch.tensor([[5]]),
+            velocity=initial_velocity,
+        )
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=factory.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(enable_learned_corrector=False),
+    )
+
+    posterior = updater.correct_direct_velocity(
+        belief,
+        DirectVelocityEvidence(
+            velocity=torch.tensor([[[2.0, 9.0, -4.0]]]),
+            log_variance=torch.full((1, 1, 3), -8.0),
+            valid_mask=torch.tensor([[True]]),
+            confidence=torch.ones(1, 1),
+            axis_valid_mask=torch.tensor([[[True, False, False]]]),
+        ),
+    )
+
+    assert posterior.objects.velocity[0, 0, 0] > 1.0
+    assert torch.equal(
+        posterior.objects.velocity[..., 1:],
+        belief.objects.velocity[..., 1:],
+    )
+    assert torch.equal(
+        posterior.objects.fast_log_variance[..., 4:6],
+        belief.objects.fast_log_variance[..., 4:6],
+    )
+    assert posterior.objects.fast_log_variance[0, 0, 3] < belief.objects.fast_log_variance[0, 0, 3]
+
+
+def test_unsupported_velocity_components_do_not_reduce_valid_axis_influence() -> None:
+    factory = BeliefFactory(max_objects=1, appearance_dim=4)
+    base = factory.create()
+    belief = base.replace(
+        objects=base.objects.replace(
+            active=torch.tensor([[True]]),
+            object_id=torch.tensor([[5]]),
+            velocity=torch.tensor([[[0.25, -1.5, 0.75]]]),
+        )
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=factory.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(enable_learned_corrector=False),
+    )
+    common = {
+        "log_variance": torch.full((1, 1, 3), -8.0),
+        "valid_mask": torch.tensor([[True]]),
+        "confidence": torch.ones(1, 1),
+        "axis_valid_mask": torch.tensor([[[True, False, False]]]),
+    }
+    neutral = updater.correct_direct_velocity(
+        belief,
+        DirectVelocityEvidence(
+            velocity=torch.tensor([[[2.0, -1.5, 0.75]]]),
+            **common,
+        ),
+    )
+    extreme_unsupported = updater.correct_direct_velocity(
+        belief,
+        DirectVelocityEvidence(
+            velocity=torch.tensor([[[2.0, 1.0e6, -1.0e6]]]),
+            **common,
+        ),
+    )
+
+    torch.testing.assert_close(
+        extreme_unsupported.objects.velocity,
+        neutral.objects.velocity,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        extreme_unsupported.objects.fast_log_variance,
+        neutral.objects.fast_log_variance,
+        rtol=0.0,
+        atol=0.0,
+    )
 
 
 def test_post_association_direct_position_can_update_without_velocity() -> None:

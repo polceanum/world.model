@@ -119,6 +119,8 @@ class BeliefTrajectory(TensorDataclassMixin):
             raise ValueError("active mask must have shape [B,T,N]")
         if self.active_mask.dtype is not torch.bool:
             raise TypeError("active mask must be torch.bool")
+        if self.event_logits is not None and self.event_logits.shape[:3] != object_shape:
+            raise ValueError("trajectory event logits must begin with [B,T,N]")
         if steps > 1 and torch.any(self.timestamps[:, 1:] < self.timestamps[:, :-1]):
             raise ValueError("trajectory timestamps must be sorted")
         for name, value in (
@@ -131,6 +133,15 @@ class BeliefTrajectory(TensorDataclassMixin):
         ):
             if not torch.isfinite(value).all():
                 raise ValueError(f"trajectory {name} contains NaN or Inf")
+        if self.event_logits is not None and not torch.isfinite(self.event_logits).all():
+            raise ValueError("trajectory event_logits contains NaN or Inf")
+        for name, value in self.auxiliary.items():
+            if not isinstance(value, Tensor):
+                raise TypeError(f"trajectory auxiliary {name} must be a tensor")
+            if (value.is_floating_point() or value.is_complex()) and not torch.isfinite(
+                value
+            ).all():
+                raise ValueError(f"trajectory auxiliary {name} contains NaN or Inf")
         return self
 
 

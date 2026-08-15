@@ -2,6 +2,46 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-15 grounded RGB convergence and integrity repair
+
+- Advanced the authoritative contract to specification 1.46 and simulator
+  protocol `sphere_world_v6`. Ensured familiar pair collisions now have a
+  complete-scene two-frame clean window free from floor, wall, third-body,
+  birth, or stochastic-impulse confounds. Simulator and analytic free flight
+  share the same closed-form gravity/linear-drag transition.
+- Made structured RGB centres, observed radii, inverse depth, covariance, and
+  packet confidence direct typed evidence. Ambiguous scale is uncertainty-
+  inflated; unsupported spare learned queries fail closed for births while
+  retaining detector gradients.
+- Added explicit per-axis observation provenance to temporal RGB history and
+  direct velocity correction. Prior-copied ROI coordinates cannot become new
+  velocity evidence. Historical posterior/measurement blending remains the
+  default semantic; the new independent raw-history mode is opt-in.
+- Added an optional current-time known-gravity temporal estimator using only
+  RGB history and `WorldBelief.gravity`, with strict support and shared-noise
+  uncertainty propagation. A combined-camera online test verifies that
+  structured fast depth supplies real fast-path velocity support.
+- Made analytic parameter identification use causal prior error, elapsed time,
+  predictive-plus-measurement variance, confidence, and independent-axis
+  support. Position displacement no longer fabricates restitution evidence.
+- Isolated optional recovery from the clean primary evaluator, added additive
+  per-scenario metrics and explicit pair/ground/wall/compound/no-collision
+  classes, and separated checkpoint/evaluation simulator and source
+  provenance. Immutable checkpoint/protocol and complete finite-output
+  hardening are part of the same precommit repair.
+- Added symmetric relation endpoint incidence, smooth pair applicability, and
+  within-call multi-rate learned-effect evaluation as explicit opt-in semantic
+  features. Defaults preserve historical behavior; topology/event
+  invalidation and permutation/gradient tests cover new paths.
+- Added `state_roi` and `state_relation_roi` training scopes so the next long
+  campaign learns perceptual anchoring before relation capacity while keeping
+  unconditional node acceleration and the analytic prior fixed.
+- Added `configs/grounded_convergence_mps.yaml`, a 9,216-update balanced staged
+  campaign with warmup, fixed cosine horizon, repeated selectors, and 73,728
+  declared episode draws. Stable verification is `934 passed, 12 skipped` plus
+  six active-Aqua MPS tests; no specification-1.46 accuracy promotion is
+  claimed before matched diagnostics and long training.
+
 ### 2026-08-15 low-noise live monitoring
 
 - Added the read-only root `monitor.py` command. It recursively discovers

@@ -1,5 +1,47 @@
 # Tasks
 
+## Grounded convergence protocol — specification 1.46
+
+- [x] Replace confounded ensured-pair scenes with the `sphere_world_v6`
+  complete-scene preflight: exact analytic free flight, two-frame clean
+  pair-impact window, reserved corridor, delayed births/impulses, and
+  validation/test/OOD seed coverage.
+- [x] Make structured RGB centres/radii/inverse depth and packet confidence
+  truthful core measurements; inflate ambiguous scale uncertainty and suppress
+  unsupported learned-query births without removing detector gradients.
+- [x] Preserve historical temporal blend semantics and add explicit independent
+  raw RGB history with per-axis provenance, ROI copied-coordinate rejection,
+  identity/lifecycle reset, and known-gravity current-time velocity fitting.
+- [x] Prove the intended combined-camera, structured-fast-depth cadence emits
+  supported non-oracle velocity evidence with no sample-age dead zone.
+- [x] Make slow drag/restitution signals causal, elapsed-time and uncertainty
+  aware; require independent ROI axes and direct velocity for restitution.
+- [x] Finish immutable-checkpoint evaluator identity, complete finite-state
+  validation, lifecycle-safe recovery support, and resolved protocol hashes.
+- [x] Finish legacy-false semantic versioning for attention endpoint incidence,
+  public positional velocity-evidence compatibility, and early simulator-
+  provenance resume rejection.
+- [x] Add opt-in pair applicability and within-call multi-rate learned effects;
+  retain exact default behavior and keep multi-rate disabled pending a paired
+  MPS accuracy/latency gate.
+- [x] Add `state_roi` and `state_relation_roi` staged trainable scopes with
+  exact optimizer ownership, transition, checkpoint, and resume tests.
+- [x] Add additive clean per-scenario current/horizon/coverage/identity/event
+  reporting and explicit collision classes without a second rollout.
+- [x] Run the complete repository suite, stable CLI roundtrip, and active-Aqua
+  MPS execution after the source tree is frozen; record exact outcomes.
+- [ ] Commit and push the coherent specification-1.46 repair set to `main`.
+- [ ] Run matched clean fixed-manifest legacy/raw/applicability diagnostics from
+  the protected checkpoint; select only a non-regressive runtime protocol.
+- [ ] Launch the multi-thousand-update balanced MPS `state_roi` to
+  `state_relation_roi` campaign and monitor repeated fixed validation through
+  warmup, useful-rate, and decay phases.
+- [ ] Evaluate the best eligible checkpoint on disjoint validation, test, and
+  OOD manifests; promote only if every critical current/axis/horizon, coverage,
+  identity, event, calibration, finite-state, and latency guardrail passes.
+- [ ] Separately repair and qualify differentiable pair-event calibration;
+  hard analytic logits and the unused contact-logit scale remain explicit.
+
 ## Immediate accuracy target — evidence-bounded mental simulation
 
 - [x] Run a matched four-episode active-Aqua MPS runtime-pool/control

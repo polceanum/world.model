@@ -21,7 +21,13 @@ def write_evaluation_report(
     json_path = target / "evaluation.json"
     markdown_path = target / "report.md"
     payload = {"metadata": metadata, "metrics": metrics, "limitations": limitations}
-    atomic_write_text(json_path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    serialized = json.dumps(
+        payload,
+        allow_nan=False,
+        indent=2,
+        sort_keys=True,
+    )
+    atomic_write_text(json_path, serialized + "\n")
 
     lines = [
         "# Orpheus evaluation report",

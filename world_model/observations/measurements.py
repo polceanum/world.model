@@ -61,6 +61,24 @@ class MeasurementSet:
             measurements,
         ):
             raise ValueError("class_logits must begin with shape [B, M]")
+        for key in (
+            "position_independent_camera_axis_mask",
+            "world_position_independent_axis_mask",
+        ):
+            axis_mask = self.auxiliary.get(key)
+            if axis_mask is None:
+                continue
+            if axis_mask.shape != (batch, measurements, 3):
+                raise ValueError(f"auxiliary.{key} must have shape [B,M,3]")
+            if axis_mask.dtype != torch.bool:
+                raise TypeError(f"auxiliary.{key} must use torch.bool")
+        if "world_position_independent_axis_mask" in self.auxiliary and (
+            "world_position" not in self.auxiliary
+            or "world_position_log_variance" not in self.auxiliary
+        ):
+            raise ValueError(
+                "auxiliary.world_position_independent_axis_mask requires world position and variance"
+            )
         source_fields = (
             self.source_belief_indices,
             self.source_object_ids,
@@ -269,6 +287,7 @@ class DirectVelocityEvidence:
     position: Tensor | None = None
     position_log_variance: Tensor | None = None
     position_valid_mask: Tensor | None = None
+    axis_valid_mask: Tensor | None = None
 
     def validate(self) -> None:
         if self.velocity.ndim != 3 or self.velocity.shape[-1] != 3:
@@ -281,6 +300,11 @@ class DirectVelocityEvidence:
             raise ValueError("direct velocity confidence must have shape [B,N]")
         if self.valid_mask.dtype != torch.bool:
             raise TypeError("direct velocity valid_mask must be torch.bool")
+        if self.axis_valid_mask is not None:
+            if self.axis_valid_mask.shape != self.velocity.shape:
+                raise ValueError("direct velocity axis_valid_mask must have shape [B,N,3]")
+            if self.axis_valid_mask.dtype != torch.bool:
+                raise TypeError("direct velocity axis_valid_mask must be torch.bool")
         if not torch.isfinite(self.velocity).all():
             raise ValueError("direct velocity contains NaN or Inf")
         if not torch.isfinite(self.log_variance).all():
@@ -312,3 +336,17 @@ class DirectVelocityEvidence:
                 raise ValueError("direct position contains NaN or Inf")
             if not torch.isfinite(self.position_log_variance).all():
                 raise ValueError("direct position log_variance contains NaN or Inf")
+
+    def resolved_axis_valid_mask(self) -> Tensor:
+        """Return component support while preserving the legacy object mask.
+
+        Historical callers supplied only ``valid_mask`` and therefore support
+        all three velocity components for each valid object.  New observers
+        may additionally restrict evidence to explicit world-frame axes.  The
+        object mask remains authoritative in both cases.
+        """
+
+        object_valid = self.valid_mask.unsqueeze(-1)
+        if self.axis_valid_mask is None:
+            return object_valid.expand_as(self.velocity)
+        return object_valid & self.axis_valid_mask

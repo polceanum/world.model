@@ -3853,3 +3853,123 @@
   terminal state with their last progress. An uncatchable process kill still
   leaves no terminal event, so the monitor reports the dead process as stale
   rather than fabricating completion.
+
+## ADR-136 — Isolate familiar pair impacts in the complete simulator scene
+
+- **Date:** 2026-08-15
+- **Status:** accepted; simulator protocol `sphere_world_v6`
+- **Context:** Several supposedly simple pair-collision episodes put the same
+  spheres into floor or third-body contact in the same observation interval.
+  The resulting friction impulse could cancel x velocity, making both ground
+  truth and learned prediction look physically unfamiliar. Free-flight data
+  also used a timestep-dependent integrator different from the analytic prior.
+- **Decision:** Preflight the complete deterministic scene with the production
+  solver. Keep both ensured-pair objects free from every other contact for two
+  observation frames after impact, reserve their corridor, delay births and
+  impulses, and resample extra objects when needed. Use the same closed-form
+  gravity/linear-drag free-flight transition as analytic dynamics. Label
+  genuinely compound interactions separately.
+- **Consequences:** The familiar benchmark now tests the interaction it names;
+  v4/v5 reports remain historical diagnostics and cannot serve as matched v6
+  promotion controls. Contact substep-rate changes still need separate parity
+  qualification.
+
+## ADR-137 — Make independent raw RGB temporal history an explicit protocol
+
+- **Date:** 2026-08-15
+- **Status:** accepted
+- **Context:** Corrected posterior positions and prior-conditioned ROI copies
+  are correlated with the dynamics being estimated. Treating them as fresh
+  temporal observations reinforces model bias and understates uncertainty.
+  Replacing them unconditionally, however, silently changed historical
+  checkpoints that encoded a nonzero posterior/measurement blend.
+- **Decision:** Add an exact legacy-false semantic switch. Historical configs
+  keep their configured blend; new grounded configs opt into independent raw
+  RGB history. Persist per-sample, per-axis provenance; source-bound ROI values
+  count only where structured centre/scale directly observes them. Enable
+  structured fast depth and no age cutoff in the grounded combined-camera
+  protocol. Optionally compensate known `WorldBelief.gravity` to estimate
+  current-time velocity.
+- **Consequences:** Old checkpoint behavior is preserved while new training can
+  remove observer self-reinforcement. A real combined-camera online test must
+  show nonzero fast-path support before launch. The strict mode uses no
+  simulator state.
+
+## ADR-138 — Separate clean accuracy from recovery and bind immutable evidence
+
+- **Date:** 2026-08-15
+- **Status:** accepted
+- **Context:** Public evaluation formerly injected a belief perturbation into
+  the same runtime used for ordinary accuracy, unlike clean trainer
+  validation. A mutable `last.pt` could also be replaced between primary load,
+  recovery reload, and final hashing.
+- **Decision:** Keep the primary pass intervention-free at the evaluator level.
+  Run recovery in an independent replay from the same immutable checkpoint
+  payload, and publish its metrics in a disjoint namespace. Bind exact bytes,
+  checkpoint/evaluation versions, source provenance, resolved protocol, seed
+  manifest, scenarios, horizons, batching, and metric schema. Reject any
+  nonfinite state/event/metric before completed JSON and exclude lifecycle slot
+  reuse from recovery matches.
+- **Consequences:** Primary metrics are comparable with fixed validation and
+  bitwise invariant to recovery settings. Simulator scenarios may still
+  contain declared physical impulses; reports distinguish those from evaluator
+  perturbations. Per-scenario slices are additive diagnostic views unless they
+  contain every promotion guardrail.
+
+## ADR-139 — Version relation binding and keep learned effects local
+
+- **Date:** 2026-08-15
+- **Status:** accepted for opt-in qualification
+- **Context:** Symmetric endpoint binding makes a relation token structurally
+  meaningful, but enabling it implicitly would change historical attention
+  checkpoints. Learned pair residuals also acted far outside contact, while
+  repeated attention evaluation dominated rollout cost.
+- **Decision:** Gate endpoint binding behind a legacy-false checkpoint semantic
+  and enable it only in the new campaign. Provide an opt-in, smooth gap/
+  closing/uncertainty pair-applicability multiplier recomputed every physical
+  microstep. Provide an opt-in within-call multi-rate learned proposal cache
+  invalidated by topology changes or collisions. Keep analytic contact and all
+  physical/uncertainty microsteps exact and keep both optimizations off by
+  default.
+- **Consequences:** Historical inference stays stable. New relation capacity is
+  entity-incidence aware and local to plausible interactions. The measured
+  MPS multi-rate gain is useful but modest, so cadence remains disabled until
+  matched accuracy and latency pass.
+
+## ADR-140 — Stage perceptual anchoring before relation learning
+
+- **Date:** 2026-08-15
+- **Status:** accepted for the next long campaign
+- **Context:** The protected checkpoint's typed attention decoders are zero;
+  generic attention stages produced aggregate long-horizon gains but damaged
+  current coverage and familiar scenarios. Current RGB tracking/velocity
+  support is the larger end-to-end limitation.
+- **Decision:** Train `state_roi` first: filter/updater, identifier, fast ROI,
+  projection, and early visual features only. At a declared causal boundary,
+  transition to `state_relation_roi`, adding graph-edge and relation/shared
+  attention parameters while preserving zero/untrained node acceleration,
+  analytic kinematics, global discovery, and unrelated heads. Use balanced
+  batches, a complete warmup/useful-rate/decay schedule, repeated immutable
+  validation, and a multi-thousand-update budget.
+- **Consequences:** Capacity is added where interaction evidence exists without
+  sacrificing the constant/damped free-flight prior. No stage is promoted from
+  a local win; all scenario/axis/horizon/lifecycle/event/calibration guardrails
+  remain binding.
+
+## ADR-141 — Slow parameters require independent, uncertainty-aware evidence
+
+- **Date:** 2026-08-15
+- **Status:** accepted
+- **Context:** The analytic identifier used corrected-position residuals and
+  could interpret ambiguous or copied ROI coordinates as strong physical
+  evidence. Position displacement was also being treated as if it directly
+  measured post-impact restitution.
+- **Decision:** Use causal measured-minus-prior error, actual elapsed time,
+  combined predictive and measurement variance, and explicit confidence.
+  Respect per-axis independence provenance and fail closed when source-bound
+  ROI provenance is absent. Position supports drag only; restitution requires
+  supported direct velocity or the labelled oracle debug path.
+- **Consequences:** Asynchronous RGB updates remain cheap, but slow parameter
+  gates now reflect observability rather than residual magnitude alone. Cold
+  temporal support deliberately delays the analytic update instead of
+  inventing evidence.

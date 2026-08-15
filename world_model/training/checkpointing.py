@@ -47,6 +47,8 @@ _RGB_LEGACY_DEFAULT_FIELDS = (
     "temporal_velocity_variance_floor",
     "temporal_velocity_variance_ceiling",
     "temporal_velocity_lateral_only",
+    "temporal_velocity_independent_raw_history_enabled",
+    "temporal_velocity_continuous_gravity_axis_enabled",
     "temporal_velocity_post_event_gravity_axis_enabled",
     "temporal_velocity_unobserved_variance",
     "temporal_velocity_reset_on_collision",
@@ -124,11 +126,24 @@ _DYNAMICS_LEGACY_DEFAULTS = {
     "pair_collision_speed_epsilon": 1.0e-4,
     "boundary_collision_speed_epsilon": 0.1,
     "attention_residual_enabled": False,
+    # Checkpoints written before explicit incidence binding used relation
+    # geometry alone. Missing must retain that exact historical function.
+    "attention_relation_endpoint_binding_enabled": False,
     "attention_width": 128,
     "attention_heads": 4,
     "attention_layers": 4,
     "attention_feed_forward_width": 512,
     "attention_dropout": 0.0,
+    # Historical dynamics evaluated graph/attention effects on every analytic
+    # microstep. ``None`` is exactly that behavior.
+    "learned_effect_interval_seconds": None,
+    # Historical pair/event residuals used the broad candidate edge mask as an
+    # exact unit gate. New smooth applicability is an opt-in runtime semantic.
+    "pair_applicability_enabled": False,
+    "pair_applicability_lookahead_seconds": 0.05,
+    "pair_applicability_margin_m": 0.05,
+    "pair_applicability_gap_temperature_m": 0.025,
+    "pair_applicability_velocity_temperature_mps": 0.10,
 }
 _ASSOCIATION_MIGRATION_DEFAULT_FIELDS = ("minimum_measurement_confidence",)
 _LIFECYCLE_MIGRATION_DEFAULT_FIELDS = (
@@ -521,6 +536,20 @@ def validate_training_resume_config(
     their kernels and RNG streams are not bitwise-equivalent continuations.
     """
 
+    checkpoint_simulator_version = payload.get("simulator_version")
+    if not isinstance(checkpoint_simulator_version, str) or not checkpoint_simulator_version:
+        raise ValueError(
+            "checkpoint does not contain a valid top-level simulator_version; "
+            "exact resume provenance cannot be established"
+        )
+    if checkpoint_simulator_version != SIMULATOR_VERSION:
+        raise ValueError(
+            "checkpoint simulator version differs from this exact resume: "
+            f"checkpoint={checkpoint_simulator_version!r}, "
+            f"requested={SIMULATOR_VERSION!r}. Use --initialize-from for a "
+            "weights-only transfer across simulator protocols."
+        )
+
     checkpoint_config = payload.get("config")
     if not isinstance(checkpoint_config, Mapping):
         raise ValueError("checkpoint does not contain a resolved config mapping")
@@ -814,7 +843,13 @@ def load_checkpoint(
     if not source.is_file():
         raise FileNotFoundError(f"Checkpoint not found: {source}")
     payload = torch.load(source, map_location=map_location, weights_only=False)
-    required = {"model_state", "step", "config", "specification_version"}
+    required = {
+        "model_state",
+        "step",
+        "config",
+        "specification_version",
+        "simulator_version",
+    }
     missing = required - set(payload)
     if missing:
         raise ValueError(f"Checkpoint is missing fields: {sorted(missing)}")
@@ -958,7 +993,13 @@ def load_model_weights(
     if not source.is_file():
         raise FileNotFoundError(f"Checkpoint not found: {source}")
     payload = torch.load(source, map_location="cpu", weights_only=False)
-    required = {"model_state", "step", "config", "specification_version"}
+    required = {
+        "model_state",
+        "step",
+        "config",
+        "specification_version",
+        "simulator_version",
+    }
     missing = required - set(payload)
     if missing:
         raise ValueError(f"Checkpoint is missing fields: {sorted(missing)}")

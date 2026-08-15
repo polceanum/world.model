@@ -103,7 +103,29 @@ python demo.py --config configs/toy_mps.yaml --checkpoint <path>
 pytest
 ```
 
-For the multi-day shared-model accuracy campaign:
+The current specification-1.46 grounded campaign is:
+
+```bash
+python train.py \
+  --config configs/grounded_convergence_mps.yaml \
+  --initialize-from \
+    runs/20260814-101500-attention-node-z-recovery-512/checkpoints/best_rollout.pt \
+  --run-name "$(date -u +%Y%m%d-%H%M%S)-grounded-convergence-mps" \
+  --device mps
+```
+
+It uses simulator-v6 clean interaction windows, independent raw structured RGB
+history with current-time gravity compensation, a balanced eight-scenario
+batch at every update, and 9,216 causal updates (73,728 episode draws). The
+first 3,072 updates train state/ROI anchoring; the remaining schedule adds only
+relation/shared interaction capacity. Warmup, cosine decay, repeated fixed
+32-episode validation, and a final low-rate tail make this a convergence run,
+not a short architecture probe. The protected checkpoint is transferred by
+weights only because simulator, observation, and semantic protocols changed.
+Run matched step-zero diagnostics before launching; pair applicability is
+explicit and the runtime hypothesis pool remains disabled.
+
+The older multi-day shared-model accuracy campaign was:
 
 ```bash
 python train.py \

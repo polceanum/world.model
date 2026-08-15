@@ -110,6 +110,14 @@ def build_innovation(
             auxiliary[f"measured_{key}"] = gather_pairs(
                 value, association.measurement_indices, pair_mask
             )
+    if measured.source_belief_indices is not None:
+        assert measured.source_object_ids is not None
+        source_bound = (measured.source_belief_indices >= 0) & (measured.source_object_ids >= 0)
+        auxiliary["measured_source_bound"] = gather_pairs(
+            source_bound,
+            association.measurement_indices,
+            pair_mask,
+        )
     for key, value in predicted.auxiliary.items():
         if value.ndim >= 2 and value.shape[:2] == predicted.values.shape[:2]:
             auxiliary[f"predicted_{key}"] = gather_pairs(value, prediction_indices, pair_mask)

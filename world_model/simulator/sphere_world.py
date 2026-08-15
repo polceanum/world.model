@@ -15,10 +15,12 @@ from world_model.simulator.camera import (
     CameraTrajectory,
     CameraTrajectoryConfig,
 )
+from world_model.simulator.collisions import resolve_sphere_sphere_collisions
 from world_model.simulator.physics import (
     PhysicsConfig,
     PhysicsStepEvents,
     SphereState,
+    _integrate_free_motion_exact,
     advance_spheres,
 )
 from world_model.simulator.renderer import RenderOutput, render_spheres
@@ -68,6 +70,12 @@ class SphereWorldConfig:
     ensured_pair_surface_gap_range: tuple[float, float] = (0.75, 0.9)
     ensured_pair_speed_range: tuple[float, float] = (0.85, 1.25)
     ensured_pair_lateral_offset_range: tuple[float, float] = (0.0, 0.0)
+    # A value of two leaves one complete observation interval between the
+    # labelled pair-impact interval and the first permitted floor-impact
+    # interval.  The initial height is raised deterministically when needed.
+    ensured_pair_floor_clearance_frames: int = 2
+    ensured_pair_floor_clearance_margin_m: float = 0.03
+    ensured_pair_scene_resample_attempts: int = 32
     camera_motion: str = "fixed"
     camera_fov_degrees: float = 48.0
     camera_translation_amplitude: float = 0.35
@@ -129,6 +137,43 @@ class SphereWorldConfig:
                 raise ValueError(f"{name} must be nonnegative and increasing")
         if self.radius_range[0] <= 0 or self.mass_range[0] <= 0:
             raise ValueError("radius and mass must be strictly positive")
+        if self.ensure_collision and self.max_objects >= 2:
+            if (
+                isinstance(self.ensured_pair_floor_clearance_frames, bool)
+                or not isinstance(self.ensured_pair_floor_clearance_frames, int)
+                or self.ensured_pair_floor_clearance_frames < 1
+            ):
+                raise ValueError("ensured_pair_floor_clearance_frames must be a positive integer")
+            if self.ensured_pair_floor_clearance_frames + 1 >= self.sequence_frames:
+                raise ValueError(
+                    "ensured_pair_floor_clearance_frames must leave room for the "
+                    "pair event and a later floor event inside the episode"
+                )
+            if (
+                not math.isfinite(self.ensured_pair_floor_clearance_margin_m)
+                or self.ensured_pair_floor_clearance_margin_m <= 0
+            ):
+                raise ValueError(
+                    "ensured_pair_floor_clearance_margin_m must be finite and positive"
+                )
+            if self.ensured_pair_lateral_offset_range[1] >= 2.0 * self.radius_range[0]:
+                raise ValueError(
+                    "ensured pair lateral offset must remain below the minimum "
+                    "combined sphere radius so contact is geometrically reachable"
+                )
+            vertical_room = (
+                self.world_bounds[1][1] - self.world_bounds[1][0] - 2.0 * self.radius_range[1]
+            )
+            if vertical_room <= self.ensured_pair_floor_clearance_margin_m:
+                raise ValueError(
+                    "world vertical bounds cannot fit the ensured pair clearance margin"
+                )
+            if (
+                isinstance(self.ensured_pair_scene_resample_attempts, bool)
+                or not isinstance(self.ensured_pair_scene_resample_attempts, int)
+                or self.ensured_pair_scene_resample_attempts < 1
+            ):
+                raise ValueError("ensured_pair_scene_resample_attempts must be a positive integer")
         if not 0 <= self.restitution_range[0] <= self.restitution_range[1] <= 1:
             raise ValueError("restitution must lie in [0, 1]")
         for probability_name in (
@@ -314,7 +359,7 @@ class SphereWorldConfig:
                 drag_range=(0.005, 0.08),
                 friction_range=(0.01, 0.08),
                 initial_speed_range=(1.1, 1.8),
-                ensured_pair_lateral_offset_range=(0.18, 0.32),
+                ensured_pair_lateral_offset_range=(0.18, 0.30),
                 external_impulse_probability=0.0,
             )
         if scenario == "heavy_light_impacts":
@@ -345,6 +390,246 @@ def _uniform(
     return lower + (upper - lower) * torch.rand(shape, generator=generator)
 
 
+def _isolated_pair_clearance_height(
+    config: SphereWorldConfig,
+    *,
+    position: Tensor,
+    velocity: Tensor,
+    radius: Tensor,
+    mass: Tensor,
+    restitution: Tensor,
+    drag: Tensor,
+    friction: Tensor,
+) -> tuple[float, int]:
+    """Return the minimum common pair height and isolated impact frame.
+
+    Before either sphere reaches a boundary, translating both along world y
+    cannot change their relative collision.  We therefore run the exact
+    free-motion/contact update for only the ensured pair with a zero common
+    height, measure its lowest surface through the required clean interval, and
+    translate that trajectory above the floor.  This is deterministic and much
+    cheaper than simulating and repeatedly resampling a complete scene.
+    """
+
+    pair_position = position[:2].clone()
+    pair_position[:, 1] = 0.0
+    pair_velocity = velocity[:2].clone()
+    pair_radius = radius[:2].clone()
+    pair_mass = mass[:2].clone()
+    pair_restitution = restitution[:2].clone()
+    pair_drag = drag[:2].clone()
+    pair_friction = friction[:2].clone()
+    gravity = pair_position.new_tensor(config.gravity)
+    movable = torch.ones(2, dtype=torch.bool, device=pair_position.device)
+    physics_config = PhysicsConfig(
+        gravity=config.gravity,
+        bounds=config.world_bounds,
+        max_substep=1.0 / config.physics_rate,
+        solver_iterations=config.solver_iterations,
+    )
+
+    substeps_per_frame = max(
+        1,
+        math.ceil(config.observation_dt / physics_config.max_substep),
+    )
+    sub_dt = config.observation_dt / substeps_per_frame
+    maximum_substeps = (config.sequence_frames - 1) * substeps_per_frame
+    pair_event_frame: int | None = None
+    clearance_final_substep: int | None = None
+    lowest_surface = float((pair_position[:, 1] - pair_radius[:, 0]).min())
+
+    for substep_index in range(maximum_substeps):
+        pair_position, pair_velocity = _integrate_free_motion_exact(
+            pair_position,
+            pair_velocity,
+            pair_drag,
+            gravity,
+            sub_dt,
+            movable,
+        )
+        pair_collision = False
+        for _ in range(config.solver_iterations):
+            result = resolve_sphere_sphere_collisions(
+                pair_position,
+                pair_velocity,
+                pair_radius,
+                pair_mass,
+                pair_restitution,
+                friction=pair_friction,
+                active=movable,
+                position_correction=physics_config.position_correction,
+                penetration_slop=physics_config.penetration_slop,
+                max_position_correction=physics_config.max_position_correction,
+            )
+            pair_position = result.position
+            pair_velocity = result.velocity
+            pair_collision |= bool(result.collision[0, 1])
+
+        lowest_surface = min(
+            lowest_surface,
+            float((pair_position[:, 1] - pair_radius[:, 0]).min()),
+        )
+        if pair_collision and pair_event_frame is None:
+            pair_event_frame = substep_index // substeps_per_frame + 1
+            clearance_final_frame = (
+                pair_event_frame + config.ensured_pair_floor_clearance_frames - 1
+            )
+            if clearance_final_frame >= config.sequence_frames:
+                raise ValueError(
+                    "ensured pair collision occurs too late to satisfy the configured "
+                    "floor-clearance frames inside the episode"
+                )
+            clearance_final_substep = clearance_final_frame * substeps_per_frame
+        if clearance_final_substep is not None and substep_index + 1 >= clearance_final_substep:
+            break
+
+    if pair_event_frame is None:
+        raise ValueError(
+            "ensured pair parameters do not produce a collision inside the episode; "
+            "reduce surface gap/lateral offset or increase pair speed"
+        )
+    floor = float(config.world_bounds[1][0])
+    required_height = floor - lowest_surface + config.ensured_pair_floor_clearance_margin_m
+    maximum_height = (
+        float(config.world_bounds[1][1])
+        - float(pair_radius.max())
+        - config.ensured_pair_floor_clearance_margin_m
+    )
+    if required_height > maximum_height:
+        raise ValueError(
+            "world vertical bounds cannot satisfy ensured pair/floor clearance: "
+            f"required initial height {required_height:.3f} m exceeds "
+            f"available {maximum_height:.3f} m"
+        )
+    return required_height, pair_event_frame
+
+
+@dataclass(frozen=True)
+class _EnsuredPairScenePreflight:
+    valid: bool
+    pair_frame: int | None
+    floor_frame: int | None
+    first_third_object_contact_frame: int | None
+    first_boundary_contact_frame: int | None
+    reason: str
+
+
+def _preflight_ensured_pair_scene(
+    state: SphereState,
+    config: SphereWorldConfig,
+    physics_config: PhysicsConfig,
+) -> _EnsuredPairScenePreflight:
+    """Verify the complete sampled scene without consuming intervention RNG.
+
+    The preflight runs the real high-rate solver with zero external impulse.
+    Through the declared clean window, slots zero and one may contact only each
+    other: a third-object overlap or any boundary contact would already alter
+    the supposedly interpretable pair event, even if no impulse label fired.
+    """
+
+    simulated = state.clone()
+    pair_frame: int | None = None
+    floor_frame: int | None = None
+    third_contact_frames: list[int] = []
+    boundary_contact_frames: list[int] = []
+    zero_impulse = torch.zeros_like(state.velocity)
+    for frame_index in range(1, config.sequence_frames):
+        simulated, events = advance_spheres(
+            simulated,
+            config.observation_dt,
+            physics_config,
+            external_impulse=zero_impulse,
+        )
+        if pair_frame is None and bool(events.pair_collision[0, 1]):
+            pair_frame = frame_index
+        if floor_frame is None and bool(events.ground_collision[:2].any()):
+            floor_frame = frame_index
+        if state.max_objects > 2 and bool(events.pair_contact[:2, 2:].any()):
+            third_contact_frames.append(frame_index)
+        if bool(events.boundary_contact[:2].any()):
+            boundary_contact_frames.append(frame_index)
+        if (
+            pair_frame is not None
+            and floor_frame is not None
+            and frame_index >= pair_frame + config.ensured_pair_floor_clearance_frames - 1
+        ):
+            break
+
+    first_third = min(third_contact_frames, default=None)
+    first_boundary = min(boundary_contact_frames, default=None)
+    if pair_frame is None:
+        return _EnsuredPairScenePreflight(
+            False,
+            None,
+            floor_frame,
+            first_third,
+            first_boundary,
+            "ensured pair did not collide",
+        )
+    clean_final_frame = pair_frame + config.ensured_pair_floor_clearance_frames - 1
+    if clean_final_frame >= config.sequence_frames:
+        return _EnsuredPairScenePreflight(
+            False,
+            pair_frame,
+            floor_frame,
+            first_third,
+            first_boundary,
+            "ensured pair clean window exceeds episode",
+        )
+    third_confound = next(
+        (frame for frame in third_contact_frames if frame <= clean_final_frame),
+        None,
+    )
+    if third_confound is not None:
+        return _EnsuredPairScenePreflight(
+            False,
+            pair_frame,
+            floor_frame,
+            third_confound,
+            first_boundary,
+            f"third-object contact at frame {third_confound}",
+        )
+    boundary_confound = next(
+        (frame for frame in boundary_contact_frames if frame <= clean_final_frame),
+        None,
+    )
+    if boundary_confound is not None:
+        return _EnsuredPairScenePreflight(
+            False,
+            pair_frame,
+            floor_frame,
+            first_third,
+            boundary_confound,
+            f"boundary contact at frame {boundary_confound}",
+        )
+    if floor_frame is None:
+        return _EnsuredPairScenePreflight(
+            False,
+            pair_frame,
+            None,
+            first_third,
+            first_boundary,
+            "ensured pair never reached the floor inside the episode",
+        )
+    if floor_frame - pair_frame < config.ensured_pair_floor_clearance_frames:
+        return _EnsuredPairScenePreflight(
+            False,
+            pair_frame,
+            floor_frame,
+            first_third,
+            first_boundary,
+            "ensured pair/floor gap is below the configured minimum",
+        )
+    return _EnsuredPairScenePreflight(
+        True,
+        pair_frame,
+        floor_frame,
+        first_third,
+        first_boundary,
+        "clean",
+    )
+
+
 class SphereWorld:
     """Stateful deterministic simulator with explicit frame-time stepping."""
 
@@ -361,6 +646,12 @@ class SphereWorld:
         self.config.validate()
         self.generator = torch.Generator(device="cpu")
         self.generator.manual_seed(self.seed & 0x7FFF_FFFF_FFFF_FFFF)
+        # Placement retries must not change lifecycle or intervention draws.
+        # This stream is allowed to advance during bounded scene preflight.
+        self.placement_generator = torch.Generator(device="cpu")
+        self.placement_generator.manual_seed((self.seed + 130_363) & 0x7FFF_FFFF_FFFF_FFFF)
+        self.intervention_generator = torch.Generator(device="cpu")
+        self.intervention_generator.manual_seed((self.seed + 524_287) & 0x7FFF_FFFF_FFFF_FFFF)
         # Rendering can consume a frame-sized number of random samples. Keep it
         # independent from the physical/lifecycle stream so changing only
         # observation noise cannot change future external impulses.
@@ -383,6 +674,7 @@ class SphereWorld:
             max_substep=1.0 / self.config.physics_rate,
             solver_iterations=self.config.solver_iterations,
         )
+        self._external_impulse_not_before_frame = 0
         (
             self.state,
             self._simulator_ids,
@@ -460,56 +752,162 @@ class SphereWorld:
             speed = float(_uniform(self.generator, (), config.ensured_pair_speed_range))
             velocity[0] = torch.tensor([speed, 0.15, 0.0])
             velocity[1] = torch.tensor([-speed, 0.15, 0.0])
+            clearance_height, isolated_pair_frame = _isolated_pair_clearance_height(
+                config,
+                position=position,
+                velocity=velocity,
+                radius=radius,
+                mass=mass,
+                restitution=restitution,
+                drag=drag,
+                friction=friction,
+            )
+            # Random interventions are intentionally a later surprise. Letting
+            # one alter the constructed reference impact would silently turn
+            # the ensured pair/floor sequence into a different compound event.
+            self._external_impulse_not_before_frame = (
+                isolated_pair_frame + config.ensured_pair_floor_clearance_frames - 1
+            )
+            pair_height = max(pair_height, clearance_height)
+            maximum_pair_height = (
+                float(bounds[1, 1])
+                - float(radius[:2].max())
+                - config.ensured_pair_floor_clearance_margin_m
+            )
+            if pair_height > maximum_pair_height:
+                raise ValueError(
+                    "sampled ensured pair height exceeds the available vertical bounds"
+                )
+            position[:2, 1] = pair_height
             placed = 2
 
-        for slot in range(placed, count):
-            candidate = None
-            for _ in range(128):
-                candidate = torch.stack(
-                    (
-                        _uniform(
-                            self.generator,
-                            (),
-                            (
-                                float(bounds[0, 0] + radius[slot, 0] + 0.1),
-                                float(bounds[0, 1] - radius[slot, 0] - 0.1),
-                            ),
-                        ),
-                        _uniform(
-                            self.generator,
-                            (),
-                            (
-                                float(bounds[1, 0] + radius[slot, 0] + 0.12),
-                                min(
-                                    2.5,
-                                    float(bounds[1, 1] - radius[slot, 0] - 0.1),
+        # Extra objects retain their full scene diversity: they are sampled
+        # anywhere in bounds, then the real solver rejects only trajectories
+        # that actually confound the ensured pair's declared clean window.
+        # A dedicated stream means a rejection cannot shift lifecycle or
+        # intervention draws for the same episode seed.
+        base_position = position.clone()
+        base_velocity = velocity.clone()
+        ensured_pair = placed == 2
+        scene_attempts = (
+            config.ensured_pair_scene_resample_attempts if ensured_pair and count > placed else 1
+        )
+        accepted_scene = False
+        last_preflight: _EnsuredPairScenePreflight | None = None
+        placement_failed = False
+        for _ in range(scene_attempts):
+            position.copy_(base_position)
+            velocity.copy_(base_velocity)
+            placement_failed = False
+            for slot in range(placed, count):
+                candidate = None
+                for _ in range(128):
+                    sampled_candidate = torch.stack(
+                        (
+                            _uniform(
+                                self.placement_generator,
+                                (),
+                                (
+                                    float(bounds[0, 0] + radius[slot, 0] + 0.1),
+                                    float(bounds[0, 1] - radius[slot, 0] - 0.1),
                                 ),
                             ),
-                        ),
-                        _uniform(
-                            self.generator,
-                            (),
-                            (
-                                float(bounds[2, 0] + radius[slot, 0] + 0.1),
-                                float(bounds[2, 1] - radius[slot, 0] - 0.1),
+                            _uniform(
+                                self.placement_generator,
+                                (),
+                                (
+                                    float(bounds[1, 0] + radius[slot, 0] + 0.12),
+                                    min(
+                                        2.5,
+                                        float(bounds[1, 1] - radius[slot, 0] - 0.1),
+                                    ),
+                                ),
                             ),
-                        ),
+                            _uniform(
+                                self.placement_generator,
+                                (),
+                                (
+                                    float(bounds[2, 0] + radius[slot, 0] + 0.1),
+                                    float(bounds[2, 1] - radius[slot, 0] - 0.1),
+                                ),
+                            ),
+                        )
                     )
+                    if slot == 0:
+                        candidate = sampled_candidate
+                        break
+                    separation = torch.linalg.vector_norm(
+                        position[:slot] - sampled_candidate,
+                        dim=-1,
+                    )
+                    required = radius[:slot, 0] + radius[slot, 0] + 0.08
+                    if bool(torch.all(separation > required)):
+                        candidate = sampled_candidate
+                        break
+                if candidate is None:
+                    placement_failed = True
+                    break
+                position[slot] = candidate
+                direction = torch.randn(3, generator=self.placement_generator)
+                direction[1] *= 0.55
+                direction = direction / torch.linalg.vector_norm(direction).clamp_min(1.0e-6)
+                speed = _uniform(
+                    self.placement_generator,
+                    (),
+                    config.initial_speed_range,
                 )
-                if slot == 0:
-                    break
-                separation = torch.linalg.vector_norm(position[:slot] - candidate, dim=-1)
-                required = radius[:slot, 0] + radius[slot, 0] + 0.08
-                if bool(torch.all(separation > required)):
-                    break
-            if candidate is None:
-                raise RuntimeError("failed to sample a sphere position")
-            position[slot] = candidate
-            direction = torch.randn(3, generator=self.generator)
-            direction[1] *= 0.55
-            direction = direction / torch.linalg.vector_norm(direction).clamp_min(1.0e-6)
-            speed = _uniform(self.generator, (), config.initial_speed_range)
-            velocity[slot] = direction * speed
+                velocity[slot] = direction * speed
+
+            if placement_failed:
+                continue
+            if ensured_pair:
+                preflight_object_id = torch.full((n_max,), -1, dtype=torch.int64)
+                preflight_object_id[:count] = torch.arange(count, dtype=torch.int64)
+                preflight_active = torch.zeros(n_max, dtype=torch.bool)
+                preflight_active[:count] = True
+                preflight_orientation = torch.zeros((n_max, 4), dtype=torch.float32)
+                preflight_orientation[:, 3] = 1.0
+                preflight_state = SphereState(
+                    object_id=preflight_object_id,
+                    active=preflight_active,
+                    position=position,
+                    velocity=velocity,
+                    radius=radius,
+                    mass=mass,
+                    restitution=restitution,
+                    drag=drag,
+                    friction=friction,
+                    albedo=albedo,
+                    orientation=preflight_orientation,
+                    angular_velocity=torch.zeros((n_max, 3), dtype=torch.float32),
+                    sleeping=torch.zeros(n_max, dtype=torch.bool),
+                    sleep_counter=torch.zeros(n_max, dtype=torch.int64),
+                )
+                last_preflight = _preflight_ensured_pair_scene(
+                    preflight_state,
+                    config,
+                    self.physics_config,
+                )
+                if not last_preflight.valid:
+                    continue
+                assert last_preflight.pair_frame is not None
+                self._external_impulse_not_before_frame = (
+                    last_preflight.pair_frame + config.ensured_pair_floor_clearance_frames - 1
+                )
+            accepted_scene = True
+            break
+
+        if not accepted_scene:
+            if placement_failed and last_preflight is None:
+                detail = "could not place every sampled sphere without initial overlap"
+            elif last_preflight is not None:
+                detail = last_preflight.reason
+            else:
+                detail = "scene did not satisfy the ensured-pair contract"
+            raise RuntimeError(
+                "failed to sample a clean ensured-pair scene after "
+                f"{scene_attempts} bounded attempts: {detail}"
+            )
 
         simulator_ids = torch.arange(n_max, dtype=torch.int64)
         object_id = torch.full((n_max,), -1, dtype=torch.int64)
@@ -528,24 +926,34 @@ class SphereWorld:
             and float(torch.rand((), generator=self.generator)) < config.birth_probability
         ):
             slot = count - 1
-            birth_low = max(2, config.sequence_frames // 4)
+            # An initially absent third object must not spawn into the clean
+            # pair window after that window was preflighted with all objects
+            # active.  The conservative all-active preflight plus this lower
+            # bound keeps both lifecycle variants valid.
+            birth_low = max(
+                2,
+                config.sequence_frames // 4,
+                self._external_impulse_not_before_frame + 1,
+            )
             birth_high = max(birth_low + 1, config.sequence_frames // 2 + 1)
-            spawn_frame[slot] = int(
-                torch.randint(birth_low, birth_high, (), generator=self.generator)
-            )
-            active[slot] = False
-            object_id[slot] = -1
-            side = -1.0 if int(torch.randint(0, 2, (), generator=self.generator)) == 0 else 1.0
-            spawn_position[slot, 0] = (
-                bounds[0, 0] + radius[slot, 0] + 0.02
-                if side < 0
-                else bounds[0, 1] - radius[slot, 0] - 0.02
-            )
-            spawn_position[slot, 1] = 1.0
-            spawn_position[slot, 2] = 0.0
-            spawn_velocity[slot] = torch.tensor([-side * 1.0, 0.25, 0.0])
-            position[slot] = spawn_position[slot]
-            velocity[slot].zero_()
+            if birth_low < config.sequence_frames:
+                birth_high = min(birth_high, config.sequence_frames)
+                spawn_frame[slot] = int(
+                    torch.randint(birth_low, birth_high, (), generator=self.generator)
+                )
+                active[slot] = False
+                object_id[slot] = -1
+                side = -1.0 if int(torch.randint(0, 2, (), generator=self.generator)) == 0 else 1.0
+                spawn_position[slot, 0] = (
+                    bounds[0, 0] + radius[slot, 0] + 0.02
+                    if side < 0
+                    else bounds[0, 1] - radius[slot, 0] - 0.02
+                )
+                spawn_position[slot, 1] = 1.0
+                spawn_position[slot, 2] = 0.0
+                spawn_velocity[slot] = torch.tensor([-side * 1.0, 0.25, 0.0])
+                position[slot] = spawn_position[slot]
+                velocity[slot].zero_()
 
         if (
             config.allow_removals
@@ -639,8 +1047,10 @@ class SphereWorld:
         impulse = torch.zeros_like(self.state.velocity)
         if self.config.external_impulse_probability <= 0:
             return impulse
+        if self.frame_index < self._external_impulse_not_before_frame:
+            return impulse
         if (
-            float(torch.rand((), generator=self.generator))
+            float(torch.rand((), generator=self.intervention_generator))
             >= self.config.external_impulse_probability
         ):
             return impulse
@@ -648,11 +1058,24 @@ class SphereWorld:
         if candidates.numel() == 0:
             return impulse
         selected = int(
-            candidates[int(torch.randint(0, candidates.numel(), (), generator=self.generator))]
+            candidates[
+                int(
+                    torch.randint(
+                        0,
+                        candidates.numel(),
+                        (),
+                        generator=self.intervention_generator,
+                    )
+                )
+            ]
         )
-        direction = torch.randn(3, generator=self.generator)
+        direction = torch.randn(3, generator=self.intervention_generator)
         direction = direction / torch.linalg.vector_norm(direction).clamp_min(1.0e-6)
-        magnitude = _uniform(self.generator, (), self.config.external_impulse_range)
+        magnitude = _uniform(
+            self.intervention_generator,
+            (),
+            self.config.external_impulse_range,
+        )
         impulse[selected] = direction * magnitude
         return impulse
 

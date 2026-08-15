@@ -1266,6 +1266,149 @@ def test_state_dynamics_roi_scope_trains_fast_rgb_without_global_perception() ->
     assert not any(parameter.requires_grad for parameter in rgb.global_detector.parameters())
 
 
+def test_state_roi_scope_trains_fast_state_and_shared_roi_without_dynamics() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+    rgb = model.observation_modules["rgb"]
+
+    set_closed_loop_trainable_scope(model, scope="state_roi")
+
+    expected_trainable = {
+        name
+        for name, _ in model.named_parameters()
+        if (
+            (
+                name.startswith("updater.")
+                and not name.startswith("updater.learned_corrector.visibility_head.")
+            )
+            or (name.startswith("identifier.") and not name.startswith("identifier.variance_head."))
+            or (
+                name.startswith("observation_modules.rgb.roi_updater.")
+                and not name.startswith("observation_modules.rgb.roi_updater.event_head.")
+            )
+            or name.startswith("observation_modules.rgb.backbone.stages.0.")
+            or name.startswith("observation_modules.rgb.backbone.stages.1.")
+            or name.startswith("observation_modules.rgb.backbone.fast_projection.")
+        )
+    }
+    actual_trainable = {
+        name for name, parameter in model.named_parameters() if parameter.requires_grad
+    }
+
+    assert actual_trainable == expected_trainable
+    assert not any(parameter.requires_grad for parameter in model.dynamics.parameters())
+    assert not any(
+        parameter.requires_grad
+        for stage in rgb.backbone.stages[2:]
+        for parameter in stage.parameters()
+    )
+    assert not any(
+        parameter.requires_grad
+        for projection in rgb.backbone.projections
+        for parameter in projection.parameters()
+    )
+    assert not any(parameter.requires_grad for parameter in rgb.global_detector.parameters())
+    assert _global_measurement_has_trainable_path(rgb)
+    assert _fast_measurement_has_trainable_perception_path(rgb)
+
+
+def test_state_roi_optimizer_step_cannot_mutate_frozen_dynamics_or_global_heads() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+    set_closed_loop_trainable_scope(model, scope="state_roi")
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.01, weight_decay=0.01)
+    before = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
+
+    for parameter in model.parameters():
+        if parameter.requires_grad:
+            parameter.grad = torch.ones_like(parameter)
+    optimizer.step()
+
+    for name, parameter in model.named_parameters():
+        if parameter.requires_grad:
+            assert not torch.equal(parameter, before[name]), name
+        else:
+            torch.testing.assert_close(parameter, before[name], rtol=0.0, atol=0.0)
+
+
+def test_state_relation_roi_scope_has_exact_pair_state_and_roi_boundary() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    model = OnlineWorldModel.from_config(config)
+
+    set_closed_loop_trainable_scope(model, scope="state_relation_roi")
+
+    expected_trainable = {
+        name
+        for name, _ in model.named_parameters()
+        if (
+            (
+                name.startswith("updater.")
+                and not name.startswith("updater.learned_corrector.visibility_head.")
+            )
+            or (name.startswith("identifier.") and not name.startswith("identifier.variance_head."))
+            or (
+                name.startswith("observation_modules.rgb.roi_updater.")
+                and not name.startswith("observation_modules.rgb.roi_updater.event_head.")
+            )
+            or name.startswith("observation_modules.rgb.backbone.stages.0.")
+            or name.startswith("observation_modules.rgb.backbone.stages.1.")
+            or name.startswith("observation_modules.rgb.backbone.fast_projection.")
+            or name.startswith("dynamics.interactions.edge_network.")
+            or (
+                name.startswith("dynamics.attention_interactions.")
+                and not name.startswith("dynamics.attention_interactions.node_decoder.")
+            )
+        )
+    }
+    actual_trainable = {
+        name for name, parameter in model.named_parameters() if parameter.requires_grad
+    }
+
+    assert actual_trainable == expected_trainable
+    assert not any(
+        parameter.requires_grad
+        for parameter in model.dynamics.interactions.node_network.parameters()
+    )
+    assert not any(parameter.requires_grad for parameter in model.dynamics.modal.parameters())
+    assert not any(parameter.requires_grad for parameter in model.dynamics.events.parameters())
+    assert not any(parameter.requires_grad for parameter in model.dynamics.uncertainty.parameters())
+    assert model.dynamics.attention_interactions is not None
+    assert not any(
+        parameter.requires_grad
+        for parameter in model.dynamics.attention_interactions.node_decoder.parameters()
+    )
+
+
+def test_state_relation_roi_optimizer_step_cannot_mutate_frozen_node_or_global_paths() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    model = OnlineWorldModel.from_config(config)
+    set_closed_loop_trainable_scope(model, scope="state_relation_roi")
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.01, weight_decay=0.01)
+    before = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
+
+    for parameter in model.parameters():
+        if parameter.requires_grad:
+            parameter.grad = torch.ones_like(parameter)
+    optimizer.step()
+
+    for name, parameter in model.named_parameters():
+        if parameter.requires_grad:
+            assert not torch.equal(parameter, before[name]), name
+        else:
+            torch.testing.assert_close(parameter, before[name], rtol=0.0, atol=0.0)
+
+
+def test_state_relation_roi_scope_requires_enabled_attention() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+
+    with pytest.raises(ValueError, match="requires typed attention"):
+        set_closed_loop_trainable_scope(model, scope="state_relation_roi")
+
+
 def test_state_dynamics_fast_roi_scope_keeps_shared_backbone_frozen() -> None:
     model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
     rgb = model.observation_modules["rgb"]
@@ -1330,6 +1473,82 @@ def test_closed_loop_scope_transition_counts_causal_updates() -> None:
     assert _closed_loop_trainable_scope_for_step(config, completed_step=612) == (
         "state_dynamics",
         True,
+    )
+
+
+def test_state_roi_can_transition_to_state_dynamics_roi_at_causal_boundary() -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            rgb_pretrain_steps=100,
+            closed_loop_trainable_scope="state_roi",
+            closed_loop_late_trainable_scope="state_dynamics_roi",
+            closed_loop_scope_transition_steps=512,
+        ),
+    )
+    config.validate()
+
+    early_scope = _closed_loop_trainable_scope_for_step(config, completed_step=611)
+    late_scope = _closed_loop_trainable_scope_for_step(config, completed_step=612)
+
+    assert early_scope == (
+        "state_roi",
+        False,
+    )
+    assert late_scope == (
+        "state_dynamics_roi",
+        True,
+    )
+    model = OnlineWorldModel.from_config(config)
+    set_closed_loop_trainable_scope(model, scope=early_scope[0])
+    assert not any(parameter.requires_grad for parameter in model.dynamics.parameters())
+    set_closed_loop_trainable_scope(model, scope=late_scope[0])
+    assert all(parameter.requires_grad for parameter in model.dynamics.parameters())
+
+
+def test_state_roi_can_transition_to_state_relation_roi_without_opening_node_dynamics() -> None:
+    source = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            rgb_pretrain_steps=100,
+            closed_loop_trainable_scope="state_roi",
+            closed_loop_late_trainable_scope="state_relation_roi",
+            closed_loop_scope_transition_steps=512,
+        ),
+    )
+    config.validate()
+
+    assert _closed_loop_trainable_scope_for_step(config, completed_step=611) == (
+        "state_roi",
+        False,
+    )
+    assert _closed_loop_trainable_scope_for_step(config, completed_step=612) == (
+        "state_relation_roi",
+        True,
+    )
+    model = OnlineWorldModel.from_config(config)
+    set_closed_loop_trainable_scope(model, scope="state_roi")
+    assert not any(parameter.requires_grad for parameter in model.dynamics.parameters())
+    set_closed_loop_trainable_scope(model, scope="state_relation_roi")
+    assert any(
+        parameter.requires_grad
+        for parameter in model.dynamics.interactions.edge_network.parameters()
+    )
+    assert not any(
+        parameter.requires_grad
+        for parameter in model.dynamics.interactions.node_network.parameters()
+    )
+    assert model.dynamics.attention_interactions is not None
+    assert not any(
+        parameter.requires_grad
+        for parameter in model.dynamics.attention_interactions.node_decoder.parameters()
     )
 
 

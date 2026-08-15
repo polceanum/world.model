@@ -15,6 +15,7 @@ _TEMPORAL_VELOCITY_KEYS = (
     "world_velocity_log_variance",
     "world_velocity_valid_mask",
 )
+_TEMPORAL_VELOCITY_AXIS_MASK_KEY = "world_velocity_axis_valid_mask"
 
 
 def _validate_velocity_inputs(
@@ -228,6 +229,7 @@ class TemporalVelocityMeasurementAccumulator:
     valid_object_count: int = 0
     reported_variance_sum: float = 0.0
     reported_variance_coordinate_count: int = 0
+    axis_valid_coordinate_count: list[int] = field(default_factory=lambda: [0, 0, 0])
 
     def update(self, measurements: MeasurementSet | None) -> None:
         """Inspect one update; ``None`` denotes no fresh measurement at its timestamp."""
@@ -263,17 +265,27 @@ class TemporalVelocityMeasurementAccumulator:
             raise TypeError("auxiliary.world_velocity_valid_mask must be torch.bool")
         if measurements.measurement_mask.dtype != torch.bool:
             raise TypeError("measurement_mask must be torch.bool")
+        axis_valid_mask = measurements.auxiliary.get(_TEMPORAL_VELOCITY_AXIS_MASK_KEY)
+        if axis_valid_mask is None:
+            # Checkpoints predating component-local temporal velocity support
+            # used one object-valid flag to mean all three coordinates.
+            axis_valid_mask = valid_mask.unsqueeze(-1).expand_as(velocity)
+        else:
+            if axis_valid_mask.shape != expected_vector_shape:
+                raise ValueError("auxiliary.world_velocity_axis_valid_mask must have shape [B,M,3]")
+            if axis_valid_mask.dtype != torch.bool:
+                raise TypeError("auxiliary.world_velocity_axis_valid_mask must be torch.bool")
 
         self.explicit_field_update_count += 1
         self.candidate_object_count += int(measurements.measurement_mask.sum().detach().cpu())
         valid = valid_mask & measurements.measurement_mask
-        valid_count = int(valid.sum().detach().cpu())
+        valid_axes = axis_valid_mask & valid.unsqueeze(-1)
+        valid_count = int(valid_axes.any(dim=-1).sum().detach().cpu())
         self.valid_object_count += valid_count
         if valid_count == 0:
             return
-        expanded = valid.unsqueeze(-1).expand_as(velocity)
-        selected_velocity = velocity.masked_select(expanded)
-        selected_log_variance = log_variance.masked_select(expanded)
+        selected_velocity = velocity.masked_select(valid_axes)
+        selected_log_variance = log_variance.masked_select(valid_axes)
         if not torch.isfinite(selected_velocity).all():
             raise ValueError("explicit temporal velocity contains NaN or Inf where valid")
         if not torch.isfinite(selected_log_variance).all():
@@ -284,9 +296,13 @@ class TemporalVelocityMeasurementAccumulator:
         self.valid_update_count += 1
         self.reported_variance_sum += float(variance.sum())
         self.reported_variance_coordinate_count += int(variance.numel())
+        for axis in range(3):
+            self.axis_valid_coordinate_count[axis] += int(
+                valid_axes[..., axis].sum().detach().cpu()
+            )
 
     def metrics(self) -> dict[str, float | None]:
-        return {
+        metrics = {
             "temporal_velocity_measurement_inspected_update_count": float(
                 self.inspected_update_count
             ),
@@ -317,6 +333,13 @@ class TemporalVelocityMeasurementAccumulator:
                 self.reported_variance_coordinate_count
             ),
         }
+        for axis, label in enumerate(("x", "y", "z")):
+            count = self.axis_valid_coordinate_count[axis]
+            metrics[f"temporal_velocity_measurement_{label}_valid_coordinate_count"] = float(count)
+            metrics[f"temporal_velocity_measurement_{label}_valid_object_fraction"] = (
+                count / self.candidate_object_count if self.candidate_object_count else None
+            )
+        return metrics
 
 
 __all__ = [

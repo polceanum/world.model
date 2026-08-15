@@ -227,6 +227,56 @@ def _replace_state(
     )
 
 
+def _integrate_free_motion_exact(
+    position: Tensor,
+    velocity: Tensor,
+    drag: Tensor,
+    gravity: Tensor,
+    dt: float,
+    movable: Tensor,
+) -> tuple[Tensor, Tensor]:
+    """Integrate constant gravity and linear drag over one substep exactly.
+
+    The continuous free-motion system is ``dv/dt = gravity - drag * v``.
+    Keeping this implementation identical to the analytic dynamics prior makes
+    a collision-free simulator trajectory independent of the chosen physics
+    substep size (up to floating-point roundoff).  Contacts are still checked
+    after every configured high-rate substep.
+    """
+
+    coefficient = drag.clamp_min(0.0)
+    decay = torch.exp(-coefficient * dt)
+    one_minus_decay = -torch.expm1(-coefficient * dt)
+    small_drag = 1.0e-5
+    safe_coefficient = coefficient.clamp_min(small_drag)
+    acceleration = gravity.unsqueeze(0)
+
+    velocity_with_drag = velocity * decay + acceleration * one_minus_decay / safe_coefficient
+    position_with_drag = (
+        position
+        + velocity * one_minus_decay / safe_coefficient
+        + acceleration * (dt / safe_coefficient - one_minus_decay / safe_coefficient.square())
+    )
+    velocity_without_drag = velocity + acceleration * dt
+    position_without_drag = position + velocity * dt + 0.5 * acceleration * dt**2
+    use_drag = coefficient >= small_drag
+    integrated_velocity = torch.where(
+        use_drag,
+        velocity_with_drag,
+        velocity_without_drag,
+    )
+    integrated_position = torch.where(
+        use_drag,
+        position_with_drag,
+        position_without_drag,
+    )
+    movable_field = movable.unsqueeze(-1)
+    return (
+        torch.where(movable_field, integrated_position, position),
+        torch.where(movable_field, integrated_velocity, torch.zeros_like(velocity)),
+    )
+
+
 def advance_spheres(
     state: SphereState,
     dt: float,
@@ -236,9 +286,9 @@ def advance_spheres(
 ) -> tuple[SphereState, PhysicsStepEvents]:
     """Advance a scene by real seconds using deterministic high-rate substeps.
 
-    Linear drag is integrated exponentially, gravity is applied
-    semi-implicitly, and analytic contact impulses are resolved after each
-    position step.  ``state`` is never mutated.
+    Linear drag and constant gravity are integrated with their exact
+    continuous-time solution, and analytic contact impulses are resolved after
+    each position step.  ``state`` is never mutated.
     """
 
     config.validate()
@@ -294,16 +344,13 @@ def advance_spheres(
 
     for substep_index in range(num_substeps):
         movable = active & ~sleeping
-        drag_factor = torch.exp(-state.drag.clamp_min(0.0) * sub_dt)
-        velocity = torch.where(
-            movable.unsqueeze(-1),
-            velocity * drag_factor + gravity.unsqueeze(0) * sub_dt,
-            torch.zeros_like(velocity),
-        )
-        position = torch.where(
-            movable.unsqueeze(-1),
-            position + velocity * sub_dt,
+        position, velocity = _integrate_free_motion_exact(
             position,
+            velocity,
+            state.drag,
+            gravity,
+            sub_dt,
+            movable,
         )
 
         substep_pair_collision = torch.zeros_like(pair_collision)

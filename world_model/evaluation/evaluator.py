@@ -8,6 +8,7 @@ import json
 import math
 import os
 import statistics
+import tempfile
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
@@ -19,12 +20,12 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader
 
-from world_model.belief import MotionMode
+from world_model.belief import BeliefTrajectory, MotionMode, WorldBelief
 from world_model.datasets import SyntheticSphereDataset, collate_episodes
 from world_model.evaluation.baselines import baseline_bundle
 from world_model.evaluation.collision_conditioned import (
     CollisionConditionedForecastAccumulator,
-    collision_mask_for_forecast_window,
+    collision_class_masks_for_forecast_window,
 )
 from world_model.evaluation.latency import synchronize
 from world_model.evaluation.occlusion_metrics import (
@@ -44,7 +45,7 @@ from world_model.evaluation.velocity_metrics import (
 from world_model.identification import ParameterUpdateDiagnostics
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator.sphere_world import SphereWorldConfig
-from world_model.training.checkpointing import load_checkpoint
+from world_model.training.checkpointing import capture_git_metadata, load_checkpoint
 from world_model.training.event_windows import (
     ObservationWindowQueryPlan,
     observation_window_query_plan,
@@ -63,10 +64,13 @@ from world_model.utils.config import OrpheusConfig
 from world_model.utils.device import DeviceInfo, select_device
 from world_model.utils.io import atomic_write_text
 from world_model.utils.seeds import seed_everything
-from world_model.utils.version import SIMULATOR_VERSION
+from world_model.utils.version import SIMULATOR_VERSION, SPECIFICATION_VERSION
 
 _IDENTIFIER_PARAMETERS = ("mass", "restitution", "drag", "friction", "radius")
 _CURRENT_DETECTION_DISTANCE_THRESHOLD_M = 0.5
+_EVALUATION_PROTOCOL_SCHEMA_VERSION = "held_out_rgb_online_v2"
+_EVALUATION_METRIC_SCHEMA_VERSION = "held_out_rgb_metrics_v2"
+_PER_SCENARIO_METRIC_SCHEMA = "clean_primary_additive_support_diagnostic_v2"
 _RUNTIME_HYPOTHESIS_CANDIDATES = (
     "learned",
     "constant_velocity",
@@ -225,6 +229,166 @@ class _CorrectionAccumulator:
 
 
 @dataclass
+class _RecoveryProbeResult:
+    """Metrics produced only by an isolated recovery-prefix replay."""
+
+    correction: _CorrectionAccumulator = field(default_factory=_CorrectionAccumulator)
+    perturbation_updates: int = 0
+    evaluated_episodes: int = 0
+    nonfinite_outputs: int = 0
+    uncertainty_contraction: list[float] = field(default_factory=list)
+
+    def metrics(self) -> dict[str, float | None]:
+        contraction = _mean_or_none(self.uncertainty_contraction)
+        return {
+            **self.correction.metrics(),
+            "injected_perturbation_batch_updates": float(self.perturbation_updates),
+            "recovery_probe_evaluated_episodes": float(self.evaluated_episodes),
+            "recovery_probe_nonfinite_output_count": float(self.nonfinite_outputs),
+            "recovery_probe_post_observation_std_contraction_mean_m": contraction,
+            # Backwards-compatible name; this has always been populated only
+            # by the injected recovery update, never ordinary observations.
+            "post_observation_std_contraction_mean_m": contraction,
+        }
+
+
+@dataclass
+class _PosteriorTraceHasher:
+    """Hash the clean primary posterior sequence without retaining device tensors."""
+
+    _digest: Any = field(default_factory=hashlib.sha256)
+    frame_count: int = 0
+
+    @staticmethod
+    def _named_tensors(belief: WorldBelief) -> tuple[tuple[str, Tensor], ...]:
+        tensors: list[tuple[str, Tensor]] = [
+            ("timestamp", belief.timestamp),
+            ("gravity", belief.gravity),
+            ("global_code", belief.global_code),
+            ("global_log_variance", belief.global_log_variance),
+            ("next_object_id", belief.next_object_id),
+        ]
+        tensors.extend(
+            (f"objects.{name}", value)
+            for name, value in vars(belief.objects).items()
+            if isinstance(value, Tensor)
+        )
+        tensors.extend(
+            (f"camera.{name}", value)
+            for name, value in vars(belief.camera).items()
+            if isinstance(value, Tensor)
+        )
+        return tuple(tensors)
+
+    def update(self, *, batch_index: int, frame_index: int, belief: WorldBelief) -> None:
+        self._digest.update(f"batch={batch_index};frame={frame_index};".encode("ascii"))
+        for name, value in self._named_tensors(belief):
+            detached = value.detach().cpu()
+            self._digest.update(name.encode("utf-8"))
+            self._digest.update(str(detached.dtype).encode("ascii"))
+            self._digest.update(str(tuple(detached.shape)).encode("ascii"))
+            self._digest.update(detached.numpy().tobytes(order="C"))
+        self.frame_count += 1
+
+    def hexdigest(self) -> str:
+        return self._digest.hexdigest()
+
+
+def _require_finite_belief(belief: WorldBelief, *, context: str) -> None:
+    """Fail before any metric or trace consumes a nonfinite belief tensor."""
+
+    for name, value in _PosteriorTraceHasher._named_tensors(belief):
+        if (value.is_floating_point() or value.is_complex()) and not bool(
+            torch.isfinite(value).all()
+        ):
+            raise FloatingPointError(f"{context} belief tensor {name} contains NaN or Inf")
+
+
+def _require_finite_trajectory(
+    trajectory: BeliefTrajectory,
+    *,
+    context: str,
+) -> None:
+    """Fail before accumulators consume any nonfinite rollout tensor."""
+
+    named: list[tuple[str, Tensor]] = [
+        (name, value) for name, value in vars(trajectory).items() if isinstance(value, Tensor)
+    ]
+    named.extend(
+        (f"auxiliary.{name}", value)
+        for name, value in trajectory.auxiliary.items()
+        if isinstance(value, Tensor)
+    )
+    for name, value in named:
+        if (value.is_floating_point() or value.is_complex()) and not bool(
+            torch.isfinite(value).all()
+        ):
+            raise FloatingPointError(f"{context} trajectory tensor {name} contains NaN or Inf")
+
+
+def _require_finite_measurements(measurements: Any, *, context: str) -> None:
+    """Validate measurement diagnostics before metric extraction."""
+
+    named = [
+        (name, value) for name, value in vars(measurements).items() if isinstance(value, Tensor)
+    ]
+    auxiliary = getattr(measurements, "auxiliary", {})
+    if isinstance(auxiliary, Mapping):
+        named.extend(
+            (f"auxiliary.{name}", value)
+            for name, value in auxiliary.items()
+            if isinstance(value, Tensor)
+        )
+    for name, value in named:
+        if (value.is_floating_point() or value.is_complex()) and not bool(
+            torch.isfinite(value).all()
+        ):
+            raise FloatingPointError(f"{context} measurement tensor {name} contains NaN or Inf")
+
+
+def _require_finite_diagnostics(diagnostics: Any, *, context: str) -> None:
+    """Validate tensor diagnostics before their lossy scalar accumulation."""
+
+    for name, value in vars(diagnostics).items():
+        if (
+            isinstance(value, Tensor)
+            and (value.is_floating_point() or value.is_complex())
+            and not bool(torch.isfinite(value).all())
+        ):
+            raise FloatingPointError(f"{context} diagnostic tensor {name} contains NaN or Inf")
+
+
+def _recovery_persistent_support(
+    prior: WorldBelief,
+    posterior: WorldBelief,
+    posterior_match: Tensor,
+) -> Tensor:
+    """Support recovery only where one persistent entity spans both states."""
+
+    if posterior_match.shape != prior.objects.active.shape:
+        raise ValueError("recovery posterior match must have shape [B,N]")
+    return (
+        posterior_match
+        & prior.objects.active
+        & posterior.objects.active
+        & (prior.objects.object_id >= 0)
+        & (prior.objects.object_id == posterior.objects.object_id)
+    )
+
+
+def _require_finite_metrics(metrics: Mapping[str, Any]) -> None:
+    """Reject nonfinite public metrics before hashing or serialization."""
+
+    for name, value in metrics.items():
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(f"evaluation metric {name!r} must be numeric or null")
+        if not math.isfinite(float(value)):
+            raise FloatingPointError(f"evaluation metric {name!r} is nonfinite: {value!r}")
+
+
+@dataclass
 class _BinaryAccumulator:
     true_positive: int = 0
     false_positive: int = 0
@@ -253,8 +417,18 @@ class _BinaryAccumulator:
         evaluated = (
             self.true_positive + self.false_positive + self.false_negative + self.true_negative
         )
+        confusion = {
+            f"{prefix}_true_positive_count": float(self.true_positive),
+            f"{prefix}_false_positive_count": float(self.false_positive),
+            f"{prefix}_false_negative_count": float(self.false_negative),
+            f"{prefix}_true_negative_count": float(self.true_negative),
+            f"{prefix}_f1_denominator": float(
+                2 * self.true_positive + self.false_positive + self.false_negative
+            ),
+        }
         if evaluated == 0:
             return {
+                **confusion,
                 f"{prefix}_precision": None,
                 f"{prefix}_recall": None,
                 f"{prefix}_f1": None,
@@ -268,6 +442,7 @@ class _BinaryAccumulator:
         f1 = 2.0 * precision * recall / (precision + recall) if precision + recall else 0.0
         false_positive_denominator = self.false_positive + self.true_negative
         return {
+            **confusion,
             f"{prefix}_precision": precision,
             f"{prefix}_recall": recall,
             f"{prefix}_f1": f1,
@@ -494,12 +669,212 @@ class _TrackingAccumulator:
         }
 
 
-def _checkpoint_sha256(path: Path) -> str:
+@dataclass
+class _ScenarioEvaluationAccumulator:
+    """Additive clean-pass metrics for one declared simulator scenario.
+
+    The evaluator applies a batch-row scenario mask to the same tensors and
+    support masks used by its pooled metrics.  This keeps scenario reporting a
+    cheap accounting view of the primary rollout rather than a second model
+    pass with potentially different state or randomness.
+    """
+
+    episode_count: int = 0
+    current_position: _ErrorAccumulator = field(default_factory=_ErrorAccumulator)
+    current_velocity: MaskedVelocityErrorAccumulator = field(
+        default_factory=MaskedVelocityErrorAccumulator
+    )
+    forecast_position: dict[str, _ErrorAccumulator] = field(default_factory=dict)
+    forecast_velocity: dict[str, MaskedVelocityErrorAccumulator] = field(default_factory=dict)
+    collision_events: _BinaryAccumulator = field(default_factory=_BinaryAccumulator)
+    collision_events_by_horizon: dict[str, _BinaryAccumulator] = field(default_factory=dict)
+    tracking: _TrackingAccumulator = field(default_factory=_TrackingAccumulator)
+    target_object_frames: int = 0
+    predicted_object_frames: int = 0
+    matched_object_frames: int = 0
+    distance_gated_matched_object_frames: int = 0
+    forecast_target_count: dict[str, int] = field(default_factory=dict)
+    forecast_tracked_count: dict[str, int] = field(default_factory=dict)
+    forecast_active_count: dict[str, int] = field(default_factory=dict)
+    forecast_predictable_target_count: dict[str, int] = field(default_factory=dict)
+    forecast_censored_tracked_count: dict[str, int] = field(default_factory=dict)
+
+    @staticmethod
+    def _increment(values: dict[str, int], horizon: str, count: int) -> None:
+        values[horizon] = values.get(horizon, 0) + count
+
+    def metrics(
+        self,
+        *,
+        scenario: str,
+        horizons: tuple[str, ...],
+        detection_threshold_label: str,
+    ) -> dict[str, float | None]:
+        """Flatten the scenario view into the public metrics namespace."""
+
+        local: dict[str, float | None] = {
+            "episode_count": float(self.episode_count),
+            "current_assignment_target_coverage": (
+                self.matched_object_frames / self.target_object_frames
+                if self.target_object_frames
+                else None
+            ),
+            "current_assignment_prediction_coverage": (
+                self.matched_object_frames / self.predicted_object_frames
+                if self.predicted_object_frames
+                else None
+            ),
+            f"current_detection_recall@{detection_threshold_label}": (
+                self.distance_gated_matched_object_frames / self.target_object_frames
+                if self.target_object_frames
+                else None
+            ),
+            f"current_detection_precision@{detection_threshold_label}": (
+                self.distance_gated_matched_object_frames / self.predicted_object_frames
+                if self.predicted_object_frames
+                else None
+            ),
+            "target_object_frames": float(self.target_object_frames),
+            "predicted_object_frames": float(self.predicted_object_frames),
+            "assignment_matched_object_frames": float(self.matched_object_frames),
+            f"distance_gated_matched_object_frames@{detection_threshold_label}": float(
+                self.distance_gated_matched_object_frames
+            ),
+        }
+        local.update(self.current_position.metrics("posterior_current"))
+        local.update(self.current_velocity.metrics("posterior_current"))
+        local.update(self.tracking.metrics())
+        local.update(self.collision_events.metrics("collision"))
+        for horizon in horizons:
+            position = self.forecast_position.get(horizon, _ErrorAccumulator())
+            velocity = self.forecast_velocity.get(
+                horizon,
+                MaskedVelocityErrorAccumulator(),
+            )
+            local.update(position.metrics(f"model@{horizon}"))
+            local.update(velocity.metrics(f"model@{horizon}"))
+            local.update(
+                self.collision_events_by_horizon.get(horizon, _BinaryAccumulator()).metrics(
+                    f"collision@{horizon}"
+                )
+            )
+            target_count = self.forecast_target_count.get(horizon, 0)
+            tracked_count = self.forecast_tracked_count.get(horizon, 0)
+            active_count = self.forecast_active_count.get(horizon, 0)
+            local.update(
+                {
+                    f"forecast_target_count@{horizon}": float(target_count),
+                    f"forecast_tracked_count@{horizon}": float(tracked_count),
+                    f"forecast_active_count@{horizon}": float(active_count),
+                    f"forecast_target_coverage@{horizon}": (
+                        active_count / target_count if target_count else None
+                    ),
+                    f"tracked_forecast_active_coverage@{horizon}": (
+                        active_count / tracked_count if tracked_count else None
+                    ),
+                    f"model_dropped_forecast_count@{horizon}": float(tracked_count - active_count),
+                    f"forecast_predictable_target_count@{horizon}": float(
+                        self.forecast_predictable_target_count.get(horizon, 0)
+                    ),
+                    f"forecast_censored_tracked_count@{horizon}": float(
+                        self.forecast_censored_tracked_count.get(horizon, 0)
+                    ),
+                    f"forecast_evaluated_object_horizons@{horizon}": float(position.count // 3),
+                }
+            )
+        prefix = f"scenario_{scenario}_"
+        return {f"{prefix}{name}": value for name, value in local.items()}
+
+
+@dataclass(frozen=True)
+class _CapturedCheckpoint:
+    """One immutable byte snapshot shared by every evaluation runtime."""
+
+    source_path: Path
+    snapshot_path: Path
+    sha256: str
+    byte_count: int
+
+
+@contextlib.contextmanager
+def _capture_checkpoint_snapshot(path: Path):
+    """Copy and hash one opened checkpoint before loading any model runtime.
+
+    Evaluation often targets a mutable ``last.pt`` symlink or pathname while a
+    trainer is running.  Both the clean primary runtime and the independent
+    recovery runtime must therefore load this private immutable byte snapshot,
+    never reopen the mutable source pathname.
+    """
+
+    source = path.expanduser().resolve()
+    descriptor, temporary_name = tempfile.mkstemp(prefix="orpheus-eval-", suffix=".pt")
+    snapshot = Path(temporary_name)
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
+    byte_count = 0
+    try:
+        with os.fdopen(descriptor, "wb") as output_handle, source.open("rb") as input_handle:
+            while chunk := input_handle.read(1024 * 1024):
+                output_handle.write(chunk)
+                digest.update(chunk)
+                byte_count += len(chunk)
+            output_handle.flush()
+            os.fsync(output_handle.fileno())
+        if byte_count == 0:
+            raise ValueError(f"checkpoint is empty: {source}")
+        snapshot.chmod(0o400)
+        yield _CapturedCheckpoint(
+            source_path=source,
+            snapshot_path=snapshot,
+            sha256=digest.hexdigest(),
+            byte_count=byte_count,
+        )
+    finally:
+        # The private snapshot contains user model weights.  Remove it on both
+        # success and failure; published reports retain only its digest.
+        snapshot.unlink(missing_ok=True)
+
+
+def _canonical_sha256(value: Mapping[str, Any]) -> str:
+    encoded = json.dumps(
+        value,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _resolved_evaluation_protocol(
+    config: OrpheusConfig,
+    *,
+    checkpoint_sha256: str,
+    resolved_seed_protocol: Any,
+    batch_size: int,
+    runtime_hypothesis_pool: bool,
+) -> dict[str, Any]:
+    """Canonical, JSON-safe contract for one resolved evaluation pass."""
+
+    return {
+        "schema_version": _EVALUATION_PROTOCOL_SCHEMA_VERSION,
+        "metric_schema_version": _EVALUATION_METRIC_SCHEMA_VERSION,
+        "per_scenario_metric_schema": _PER_SCENARIO_METRIC_SCHEMA,
+        "checkpoint_sha256": checkpoint_sha256,
+        "resolved_config_sha256": _canonical_sha256(config.to_dict()),
+        "split": resolved_seed_protocol.split,
+        "seed_protocol": resolved_seed_protocol.name,
+        "seed_manifest": list(resolved_seed_protocol.manifest.seeds),
+        "horizons_seconds_requested": list(config.evaluation.horizons_seconds),
+        "horizons_observation_grid": list(_configured_horizon_keys(config)),
+        "batch_size": batch_size,
+        "episode_count": config.evaluation.episodes,
+        "runtime_intervention": {
+            "evaluator_state_perturbation_in_primary": False,
+            "runtime_hypothesis_pool": runtime_hypothesis_pool,
+            "recovery_probe_enabled": config.evaluation.recovery_probe_enabled,
+            "recovery_probe_position_std": config.evaluation.perturbation_position_std,
+            "recovery_probe_velocity_std": config.evaluation.perturbation_velocity_std,
+        },
+    }
 
 
 def _future_queries(
@@ -521,6 +896,17 @@ def _future_queries(
 
 def _horizon_key(seconds: float) -> str:
     return f"{seconds:.3f}s"
+
+
+def _configured_horizon_keys(config: OrpheusConfig) -> tuple[str, ...]:
+    """Return the unique observation-grid horizons promised by the config."""
+
+    frame_rate = config.simulator.frame_rate
+    seconds = {
+        max(1, int(round(horizon * frame_rate))) / frame_rate
+        for horizon in config.evaluation.horizons_seconds
+    }
+    return tuple(_horizon_key(value) for value in sorted(seconds))
 
 
 def _collision_logits_for_observation_windows(
@@ -553,6 +939,215 @@ def _mean_or_none(values: list[float]) -> float | None:
     return statistics.mean(values) if values else None
 
 
+def _load_evaluation_model(
+    config: OrpheusConfig,
+    checkpoint: Path,
+    *,
+    device: torch.device,
+    runtime_hypothesis_pool: bool,
+) -> tuple[OnlineWorldModel, dict[str, Any]]:
+    """Checkpoint-load one independent evaluation runtime."""
+
+    model = OnlineWorldModel.from_config(config, device=device)
+    payload = load_checkpoint(
+        checkpoint,
+        model=model,
+        # Keep unused optimizer moments off the accelerator; model loading
+        # copies only needed weights to their owning (possibly hybrid) devices.
+        map_location="cpu",
+        expected_config=config,
+    )
+    if runtime_hypothesis_pool:
+        enable_runtime_hypothesis_pool(model, config)
+    if (model.hypothesis_controller is not None) != runtime_hypothesis_pool:
+        raise RuntimeError("reported runtime hypothesis policy does not match active controller")
+    model.eval()
+    return model, payload
+
+
+def _run_recovery_probe(
+    config: OrpheusConfig,
+    checkpoint: Path,
+    *,
+    loader: DataLoader[Any],
+    device: torch.device,
+    runtime_hypothesis_pool: bool,
+    report_progress: Callable[..., None] | None = None,
+) -> _RecoveryProbeResult:
+    """Replay clean RGB prefixes in a separate runtime, then probe recovery.
+
+    The primary evaluator model is deliberately not an argument. This helper
+    checkpoint-loads its own runtime and stops each replay immediately after
+    the perturbed observation, so synthetic state can never enter the primary
+    online posterior sequence or any later primary forecast anchor.
+    """
+
+    seed_everything(
+        config.project.seed + 60_000,
+        deterministic=config.project.deterministic,
+    )
+    model, recovery_payload = _load_evaluation_model(
+        config,
+        checkpoint,
+        device=device,
+        runtime_hypothesis_pool=runtime_hypothesis_pool,
+    )
+    del recovery_payload
+    result = _RecoveryProbeResult()
+    if report_progress is not None:
+        report_progress("recovery_probe_started")
+
+    with torch.no_grad():
+        for batch_index, raw_batch in enumerate(loader, start=1):
+            batch = move_batch_to_device(raw_batch, device)
+            rgb = batch["rgb"]
+            if rgb.ndim != 5:
+                raise ValueError("evaluation DataLoader must emit [B,T,3,H,W]")
+            batch_size, total_frames = rgb.shape[:2]
+            model.reset(batch_size=batch_size)
+            perturbation_frame = max(1, total_frames // 3)
+
+            # Reconstruct the same causal RGB history in a fresh runtime. No
+            # simulator state participates in these online updates.
+            for frame_index in range(perturbation_frame):
+                packet = make_rgb_packet(batch, frame_index)
+                prepared = (
+                    None if model.belief is None else model.prepare_propagation(packet.timestamp)
+                )
+                prefix_belief = model.ingest(packet, prepared=prepared)
+                _require_finite_belief(
+                    prefix_belief,
+                    context=f"recovery batch {batch_index} prefix frame {frame_index}",
+                )
+
+            if model.belief is None:
+                raise RuntimeError("recovery probe prefix did not initialize WorldBelief")
+            packet = make_rgb_packet(batch, perturbation_frame)
+            # Model construction and prefix replay may consume different RNG
+            # streams as architectures evolve. Bind the synthetic recovery
+            # intervention to the explicit batch manifest immediately before
+            # sampling so the same evaluation seed means the same probe.
+            seed_everything(
+                config.project.seed + 60_000 + batch_index,
+                deterministic=config.project.deterministic,
+            )
+            perturbed = perturb_belief(
+                model.belief,
+                position_std=config.evaluation.perturbation_position_std,
+                velocity_std=config.evaluation.perturbation_velocity_std,
+                covariance_log_bias=0.5,
+            )
+            model.state.belief = perturbed
+            if model.hypothesis_controller is not None:
+                model.hypothesis_controller.invalidate_pending(
+                    reason="evaluation_recovery_probe_perturbation",
+                    reset_evidence=True,
+                    belief=perturbed,
+                )
+            prepared = model.prepare_propagation(packet.timestamp)
+            prior = prepared.prior
+            _require_finite_belief(
+                prior,
+                context=f"recovery batch {batch_index} perturbed prior",
+            )
+            frame_offsets, query_seconds = _future_queries(
+                config,
+                perturbation_frame,
+                total_frames,
+            )
+            prior_rollout = None
+            prior_std = None
+            if query_seconds:
+                prior_rollout = model.dynamics.rollout(
+                    prior,
+                    query_seconds,
+                    return_events=False,
+                )
+                _require_finite_trajectory(
+                    prior_rollout,
+                    context=f"recovery batch {batch_index} prior rollout",
+                )
+                prior_std = prior.objects.fast_log_variance[..., :3].exp().mean(dim=-1).sqrt()
+                result.perturbation_updates += batch_size
+
+            posterior = model.ingest(packet, prepared=prepared)
+            _require_finite_belief(
+                posterior,
+                context=f"recovery batch {batch_index} posterior",
+            )
+            if model.diagnostics.oracle_used:
+                raise RuntimeError("oracle diagnostics detected during RGB-only recovery probe")
+            target_position = batch["objects"]["position"][:, perturbation_frame]
+            target_active = batch["objects"]["active"][:, perturbation_frame].bool()
+            target_indices, matched = match_belief_to_targets(
+                posterior,
+                target_position,
+                target_active,
+            )
+            persistent_support = _recovery_persistent_support(prior, posterior, matched)
+            if prior_std is not None:
+                posterior_std = (
+                    posterior.objects.fast_log_variance[..., :3].exp().mean(dim=-1).sqrt()
+                )
+                contraction_valid = persistent_support
+                result.uncertainty_contraction.extend(
+                    (prior_std - posterior_std)
+                    .masked_select(contraction_valid)
+                    .detach()
+                    .float()
+                    .cpu()
+                    .tolist()
+                )
+
+            if prior_rollout is not None:
+                posterior_rollout = model.dynamics.rollout(
+                    posterior,
+                    query_seconds,
+                    return_events=False,
+                )
+                _require_finite_trajectory(
+                    posterior_rollout,
+                    context=f"recovery batch {batch_index} posterior rollout",
+                )
+                for query_index, frame_offset in enumerate(frame_offsets):
+                    target_frame = perturbation_frame + frame_offset
+                    future_target = gather_target_slots(
+                        batch["objects"]["position"][:, target_frame],
+                        target_indices,
+                    )
+                    future_active = (
+                        gather_target_slots(
+                            batch["objects"]["active"][:, target_frame].unsqueeze(-1),
+                            target_indices,
+                        )
+                        .squeeze(-1)
+                        .bool()
+                    )
+                    valid = persistent_support & future_active
+                    valid &= future_predictable_mask(
+                        batch,
+                        anchor_index=perturbation_frame,
+                        target_index=target_frame,
+                        target_indices=target_indices,
+                    )
+                    result.correction.update(
+                        prior_rollout.positions[:, query_index],
+                        posterior_rollout.positions[:, query_index],
+                        future_target,
+                        valid,
+                    )
+            result.evaluated_episodes += batch_size
+            if report_progress is not None:
+                report_progress(
+                    "recovery_probe_batch_complete",
+                    recovery_probe_batch=batch_index,
+                    recovery_probe_batches=len(loader),
+                    recovery_probe_evaluated_episodes=result.evaluated_episodes,
+                )
+
+    return result
+
+
 @dataclass
 class _EvaluationProgressSink:
     """Durable progress channel available before model initialization."""
@@ -566,7 +1161,7 @@ class _EvaluationProgressSink:
         if self.path is not None:
             atomic_write_text(
                 self.path,
-                json.dumps(event, indent=2, sort_keys=True) + "\n",
+                json.dumps(event, allow_nan=False, indent=2, sort_keys=True) + "\n",
             )
         if self.callback is not None:
             self.callback(event)
@@ -595,7 +1190,7 @@ class _EvaluationProgressSink:
             with contextlib.suppress(Exception):
                 atomic_write_text(
                     self.path,
-                    json.dumps(event, indent=2, sort_keys=True) + "\n",
+                    json.dumps(event, allow_nan=False, indent=2, sort_keys=True) + "\n",
                 )
         if self.callback is not None:
             with contextlib.suppress(Exception):
@@ -651,32 +1246,66 @@ def evaluate_checkpoint(
         path=durable_progress_path,
         callback=progress_callback,
     )
+    # These identities must precede the first durable progress write.  In
+    # particular, a custom non-ignored output path must not contaminate the
+    # source fingerprint that the resulting report claims to have evaluated.
+    evaluation_source_provenance = capture_git_metadata(Path(__file__).resolve().parents[2])
+    initial_event: dict[str, Any] = {
+        "stage": "initializing",
+        "updated_utc": datetime.now(timezone.utc).isoformat(),
+        "pid": os.getpid(),
+        "split": split,
+        "seed_protocol": seed_protocol,
+        "checkpoint": str(checkpoint),
+        "evaluation_source_provenance": evaluation_source_provenance,
+        "output_directory": str(planned_output),
+        "runtime_hypothesis_pool": runtime_hypothesis_pool,
+        "rgb_only": True,
+    }
     try:
-        sink.publish(
-            {
-                "stage": "initializing",
-                "updated_utc": datetime.now(timezone.utc).isoformat(),
-                "pid": os.getpid(),
-                "split": split,
-                "seed_protocol": seed_protocol,
-                "checkpoint": str(checkpoint),
-                "output_directory": str(planned_output),
-                "runtime_hypothesis_pool": runtime_hypothesis_pool,
-                "rgb_only": True,
-            }
-        )
-        return _evaluate_checkpoint_impl(
-            config,
-            checkpoint,
-            split=split,
-            seed_protocol=seed_protocol,
-            seed_offset=seed_offset,
-            output=planned_output,
-            device_info=device_info,
-            runtime_hypothesis_pool=runtime_hypothesis_pool,
-            progress_sink=sink,
-        )
+        # Capture bytes before notifying external callbacks. A callback or
+        # concurrent trainer may atomically replace ``last.pt`` immediately
+        # after the initializing event; primary and recovery must still use
+        # the exact pre-notification snapshot. This copies bytes only—it does
+        # not deserialize or construct the model.
+        with _capture_checkpoint_snapshot(checkpoint) as captured_checkpoint:
+            sink.publish(
+                {
+                    **initial_event,
+                    "checkpoint_capture_status": "captured",
+                    "checkpoint_sha256": captured_checkpoint.sha256,
+                    "checkpoint_byte_count": captured_checkpoint.byte_count,
+                }
+            )
+            return _evaluate_checkpoint_impl(
+                config,
+                checkpoint,
+                captured_checkpoint=captured_checkpoint,
+                evaluation_source_provenance=evaluation_source_provenance,
+                split=split,
+                seed_protocol=seed_protocol,
+                seed_offset=seed_offset,
+                output=planned_output,
+                device_info=device_info,
+                runtime_hypothesis_pool=runtime_hypothesis_pool,
+                progress_sink=sink,
+            )
     except BaseException as error:
+        if sink.last_event is None:
+            # A missing, empty, or unreadable checkpoint still gets a durable
+            # initializing→failed lifecycle. Callback failure here becomes the
+            # terminal error because the requested progress consumer itself
+            # prevented delivery.
+            try:
+                sink.publish(
+                    {
+                        **initial_event,
+                        "checkpoint_capture_status": "failed",
+                    }
+                )
+            except BaseException as progress_error:
+                sink.fail(progress_error)
+                raise
         sink.fail(error)
         raise
 
@@ -685,6 +1314,8 @@ def _evaluate_checkpoint_impl(
     config: OrpheusConfig,
     checkpoint_path: str | Path,
     *,
+    captured_checkpoint: _CapturedCheckpoint,
+    evaluation_source_provenance: Mapping[str, Any],
     split: str = "test",
     seed_protocol: str = STANDARD_SEED_PROTOCOL,
     seed_offset: int | None = None,
@@ -717,21 +1348,12 @@ def _evaluate_checkpoint_impl(
         config.project.seed + 50_000,
         deterministic=config.project.deterministic,
     )
-    model = OnlineWorldModel.from_config(config, device=device)
-    payload = load_checkpoint(
-        checkpoint,
-        model=model,
-        # Keep unused optimizer moments off the accelerator; model loading
-        # copies only the needed weights to their owning (possibly hybrid)
-        # devices.
-        map_location="cpu",
-        expected_config=config,
+    model, payload = _load_evaluation_model(
+        config,
+        captured_checkpoint.snapshot_path,
+        device=device,
+        runtime_hypothesis_pool=runtime_hypothesis_pool,
     )
-    if runtime_hypothesis_pool:
-        enable_runtime_hypothesis_pool(model, config)
-    if (model.hypothesis_controller is not None) != runtime_hypothesis_pool:
-        raise RuntimeError("reported runtime hypothesis policy does not match active controller")
-    model.eval()
 
     progress_context: dict[str, Any] = {}
 
@@ -757,6 +1379,16 @@ def _evaluate_checkpoint_impl(
         raise ValueError(
             "checkpoint config training.validation_episodes must be a nonnegative integer"
         )
+    checkpoint_step = int(payload["step"])
+    checkpoint_simulator_version = str(payload["simulator_version"])
+    checkpoint_specification_version = str(payload["specification_version"])
+    stored_checkpoint_source = payload.get("git")
+    checkpoint_source_provenance = (
+        dict(stored_checkpoint_source) if isinstance(stored_checkpoint_source, Mapping) else None
+    )
+    # Loading validates the complete payload, but evaluation needs only these
+    # scalar/config values after weights have been copied into the model.
+    del payload
     resolved_seed_protocol = make_evaluation_seed_protocol(
         name=seed_protocol,
         split=split,
@@ -770,17 +1402,26 @@ def _evaluate_checkpoint_impl(
         seeds=resolved_seed_protocol.manifest,
         memory_cache=True,
     )
+    evaluation_batch_size = min(
+        config.training.batch_size,
+        max(1, config.evaluation.episodes),
+    )
     loader = DataLoader(
         dataset,
-        batch_size=min(
-            config.training.batch_size,
-            max(1, config.evaluation.episodes),
-        ),
+        batch_size=evaluation_batch_size,
         shuffle=False,
         num_workers=config.training.num_workers,
         collate_fn=collate_episodes,
         drop_last=False,
     )
+    resolved_evaluation_protocol = _resolved_evaluation_protocol(
+        config,
+        checkpoint_sha256=captured_checkpoint.sha256,
+        resolved_seed_protocol=resolved_seed_protocol,
+        batch_size=evaluation_batch_size,
+        runtime_hypothesis_pool=runtime_hypothesis_pool,
+    )
+    resolved_evaluation_protocol_sha256 = _canonical_sha256(resolved_evaluation_protocol)
     progress_context.update(
         {
             "split": resolved_seed_protocol.split,
@@ -790,7 +1431,7 @@ def _evaluate_checkpoint_impl(
             "episodes": config.evaluation.episodes,
             "batches": len(loader),
             "checkpoint": str(checkpoint),
-            "checkpoint_step": int(payload["step"]),
+            "checkpoint_step": checkpoint_step,
             "output_directory": str(output),
             "runtime_hypothesis_pool": runtime_hypothesis_pool,
             "rgb_only": True,
@@ -805,8 +1446,9 @@ def _evaluate_checkpoint_impl(
     ordinary_velocity_correction = OrdinaryVelocityCorrectionAccumulator()
     temporal_velocity_measurements = TemporalVelocityMeasurementAccumulator()
     forecast_errors: dict[tuple[str, str], _ErrorAccumulator] = {}
-    correction = _CorrectionAccumulator()
+    forecast_velocity_errors: dict[str, MaskedVelocityErrorAccumulator] = {}
     events = _BinaryAccumulator()
+    events_by_horizon: dict[str, _BinaryAccumulator] = {}
     calibration = _CalibrationAccumulator()
     collision_conditioned_forecasts = CollisionConditionedForecastAccumulator()
     parameters = _ParameterAccumulator()
@@ -819,10 +1461,9 @@ def _evaluate_checkpoint_impl(
     rollout_latencies: list[float] = []
     uncertainty_visible: list[float] = []
     uncertainty_occluded: list[float] = []
-    uncertainty_contraction: list[float] = []
     nonfinite_outputs = 0
     evaluated_episodes = 0
-    perturbation_updates = 0
+    primary_posterior_trace = _PosteriorTraceHasher()
     target_object_frames = 0
     predicted_object_frames = 0
     matched_object_frames = 0
@@ -835,6 +1476,10 @@ def _evaluate_checkpoint_impl(
     gravity_intervention_gain_sum = 0.0
     gravity_intervention_feature_count = 0
     gravity_intervention_gain_above_half_count = 0
+    simulator_external_actuation_object_event_count = 0
+    simulator_external_actuation_interval_count = 0
+    simulator_created_object_event_count = 0
+    simulator_removed_object_event_count = 0
     runtime_hypothesis_forecast_anchor_count = 0
     runtime_hypothesis_axis_selection_count = {
         axis: [0 for _ in _RUNTIME_HYPOTHESIS_CANDIDATES]
@@ -853,6 +1498,10 @@ def _evaluate_checkpoint_impl(
     forecast_active_count: dict[str, int] = {}
     forecast_predictable_target_count: dict[str, int] = {}
     forecast_censored_tracked_count: dict[str, int] = {}
+    configured_horizons = _configured_horizon_keys(config)
+    scenario_accumulators = {
+        scenario: _ScenarioEvaluationAccumulator() for scenario in config.simulator.scenario_mixture
+    }
 
     with torch.no_grad():
         for batch_index, raw_batch in enumerate(loader, start=1):
@@ -861,66 +1510,58 @@ def _evaluate_checkpoint_impl(
             if rgb.ndim != 5:
                 raise ValueError("evaluation DataLoader must emit [B,T,3,H,W]")
             batch_size, total_frames = rgb.shape[:2]
+            scenario_names = batch.get("metadata", {}).get("scenario")
+            if (
+                not isinstance(scenario_names, list)
+                or len(scenario_names) != batch_size
+                or not all(isinstance(name, str) for name in scenario_names)
+            ):
+                raise ValueError("evaluation metadata.scenario must contain one string per episode")
+            undeclared_scenarios = set(scenario_names) - set(scenario_accumulators)
+            if undeclared_scenarios:
+                raise ValueError(
+                    "evaluation batch contains undeclared scenarios: "
+                    + ", ".join(sorted(undeclared_scenarios))
+                )
+            scenario_batch_masks = {
+                scenario: torch.tensor(
+                    [name == scenario for name in scenario_names],
+                    device=device,
+                    dtype=torch.bool,
+                )
+                for scenario in scenario_accumulators
+            }
+            for scenario, row_mask in scenario_batch_masks.items():
+                scenario_accumulators[scenario].episode_count += int(row_mask.sum().detach().cpu())
+            externally_actuated = batch["events"]["externally_actuated"].bool()
+            simulator_external_actuation_object_event_count += int(
+                externally_actuated.sum().detach().cpu()
+            )
+            simulator_external_actuation_interval_count += int(
+                externally_actuated.any(dim=-1).sum().detach().cpu()
+            )
+            simulator_created_object_event_count += int(
+                batch["events"]["created"].bool().sum().detach().cpu()
+            )
+            simulator_removed_object_event_count += int(
+                batch["events"]["removed"].bool().sum().detach().cpu()
+            )
             model.reset(batch_size=batch_size)
-            perturbation_frame = max(1, total_frames // 3)
             anchor_stride = max(1, total_frames // 8)
             diagnostic_offset = 0
 
             for frame_index in range(total_frames):
                 packet = make_rgb_packet(batch, frame_index)
-                prior_rollout = None
-                prior_variance = None
                 ordinary_velocity_prior = None
                 prepared_propagation = None
                 propagation_elapsed_ms = 0.0
-                perturb_offsets: list[int] = []
-                perturb_seconds: list[float] = []
-                if model.belief is not None and frame_index != perturbation_frame:
+                if model.belief is not None:
                     synchronize(device)
                     propagation_started = time.perf_counter()
                     prepared_propagation = model.prepare_propagation(packet.timestamp)
                     synchronize(device)
                     propagation_elapsed_ms += (time.perf_counter() - propagation_started) * 1000.0
                     ordinary_velocity_prior = prepared_propagation.prior
-                if model.belief is not None and frame_index == perturbation_frame:
-                    source_belief = perturb_belief(
-                        model.belief,
-                        position_std=config.evaluation.perturbation_position_std,
-                        velocity_std=config.evaluation.perturbation_velocity_std,
-                        covariance_log_bias=0.5,
-                    )
-                    # Perturb the carried posterior, not the already
-                    # timestamp-advanced prior.  Runtime ingest must retain
-                    # the positive dt used by velocity-aware correction.
-                    model.state.belief = source_belief
-                    if model.hypothesis_controller is not None:
-                        # The perturbation is an evaluator-only posterior
-                        # revision. Forecasts issued from the unperturbed
-                        # belief must never be scored against later RGB.
-                        model.hypothesis_controller.invalidate_pending(
-                            reason="evaluation_belief_perturbation",
-                            reset_evidence=True,
-                            belief=source_belief,
-                        )
-                    synchronize(device)
-                    propagation_started = time.perf_counter()
-                    prepared_propagation = model.prepare_propagation(packet.timestamp)
-                    synchronize(device)
-                    propagation_elapsed_ms += (time.perf_counter() - propagation_started) * 1000.0
-                    prior = prepared_propagation.prior
-                    perturb_offsets, perturb_seconds = _future_queries(
-                        config, frame_index, total_frames
-                    )
-                    if perturb_seconds:
-                        prior_rollout = model.dynamics.rollout(
-                            prior,
-                            perturb_seconds,
-                            return_events=False,
-                        )
-                        prior_variance = (
-                            prior.objects.fast_log_variance[..., :3].exp().mean(dim=-1).sqrt()
-                        )
-                        perturbation_updates += batch_size
 
                 pre_ingest_parameters: dict[str, Tensor] | None = None
                 if model.belief is not None:
@@ -937,6 +1578,15 @@ def _evaluate_checkpoint_impl(
                 update_elapsed_ms = (
                     propagation_elapsed_ms + (time.perf_counter() - update_started) * 1000.0
                 )
+                _require_finite_belief(
+                    belief,
+                    context=f"primary batch {batch_index} frame {frame_index}",
+                )
+                primary_posterior_trace.update(
+                    batch_index=batch_index,
+                    frame_index=frame_index,
+                    belief=belief,
+                )
                 last_measurements = model.last_measurements
                 if last_measurements is not None:
                     expected_measurement_timestamp = last_measurements.timestamp.new_full(
@@ -952,6 +1602,11 @@ def _evaluate_checkpoint_impl(
                         # SKIP leaves the previous diagnostics snapshot in the
                         # runtime; never count that stale measurement twice.
                         last_measurements = None
+                if last_measurements is not None:
+                    _require_finite_measurements(
+                        last_measurements,
+                        context=f"primary batch {batch_index} frame {frame_index}",
+                    )
                 temporal_velocity_measurements.update(last_measurements)
                 if last_measurements is not None:
                     change_point_mask = last_measurements.auxiliary.get(
@@ -1074,6 +1729,42 @@ def _evaluate_checkpoint_impl(
                     distance_gated_matched,
                     episode_offset=evaluated_episodes,
                 )
+                for scenario, row_mask in scenario_batch_masks.items():
+                    scenario_metrics = scenario_accumulators[scenario]
+                    object_mask = row_mask.unsqueeze(-1)
+                    scenario_target_active = target_active & object_mask
+                    scenario_predicted_active = belief.objects.active & object_mask
+                    scenario_matched = matched & object_mask
+                    scenario_distance_gated_matched = distance_gated_matched & object_mask
+                    scenario_metrics.target_object_frames += int(
+                        scenario_target_active.sum().detach().cpu()
+                    )
+                    scenario_metrics.predicted_object_frames += int(
+                        scenario_predicted_active.sum().detach().cpu()
+                    )
+                    scenario_metrics.matched_object_frames += int(
+                        scenario_matched.sum().detach().cpu()
+                    )
+                    scenario_metrics.distance_gated_matched_object_frames += int(
+                        scenario_distance_gated_matched.sum().detach().cpu()
+                    )
+                    scenario_metrics.current_position.update(
+                        belief.objects.position,
+                        aligned_position,
+                        scenario_matched,
+                    )
+                    scenario_metrics.current_velocity.update(
+                        belief.objects.velocity,
+                        aligned_velocity,
+                        scenario_distance_gated_matched,
+                    )
+                    scenario_metrics.tracking.update(
+                        belief.objects.object_id,
+                        batch["objects"]["id"][:, frame_index],
+                        target_indices,
+                        scenario_distance_gated_matched,
+                        episode_offset=evaluated_episodes,
+                    )
 
                 visible_fraction = gather_target_slots(
                     batch["objects"]["visible_fraction"][:, frame_index].unsqueeze(-1),
@@ -1101,21 +1792,6 @@ def _evaluate_checkpoint_impl(
                     uncertainty_occluded.extend(
                         position_std.masked_select(occluded_mask).detach().float().cpu().tolist()
                     )
-                if prior_variance is not None:
-                    valid = matched & belief.objects.active
-                    if valid.any():
-                        posterior_variance = (
-                            belief.objects.fast_log_variance[..., :3].exp().mean(dim=-1).sqrt()
-                        )
-                        uncertainty_contraction.extend(
-                            (prior_variance - posterior_variance)
-                            .masked_select(valid)
-                            .detach()
-                            .float()
-                            .cpu()
-                            .tolist()
-                        )
-
                 aligned_radius = gather_target_slots(
                     batch["objects"]["radius"][:, frame_index],
                     target_indices,
@@ -1140,6 +1816,10 @@ def _evaluate_checkpoint_impl(
                     model.identifier.last_diagnostics if model.identifier is not None else None
                 )
                 if identifier_diagnostics is not None:
+                    _require_finite_diagnostics(
+                        identifier_diagnostics,
+                        context=f"primary batch {batch_index} frame {frame_index} identifier",
+                    )
                     identifier_metrics.update(
                         identifier_diagnostics,
                         belief.objects.active,
@@ -1248,7 +1928,7 @@ def _evaluate_checkpoint_impl(
                             & drag_informative,
                         )
 
-                run_forecast = frame_index % anchor_stride == 0 or frame_index == perturbation_frame
+                run_forecast = frame_index % anchor_stride == 0
                 frame_offsets, query_seconds = _future_queries(config, frame_index, total_frames)
                 if run_forecast and query_seconds:
                     event_query_plan = observation_window_query_plan(
@@ -1263,6 +1943,10 @@ def _evaluate_checkpoint_impl(
                     # policy: calling ``model.dynamics`` here would attach the
                     # policy yet silently score only its learned candidate.
                     trajectory = model.predict(event_query_plan.query_seconds)
+                    _require_finite_trajectory(
+                        trajectory,
+                        context=f"primary batch {batch_index} frame {frame_index}",
+                    )
                     if runtime_hypothesis_pool:
                         axis_indices = trajectory.auxiliary.get("hypothesis_axis_index")
                         axis_supported = trajectory.auxiliary.get("hypothesis_axis_supported")
@@ -1443,6 +2127,9 @@ def _evaluate_checkpoint_impl(
                     synchronize(device)
                     rollout_latencies.append((time.perf_counter() - rollout_started) * 1000.0)
                     model_positions = event_query_plan.select_target_endpoints(trajectory.positions)
+                    model_velocities = event_query_plan.select_target_endpoints(
+                        trajectory.velocities
+                    )
                     model_log_variance = event_query_plan.select_target_endpoints(
                         trajectory.fast_log_variance
                     )
@@ -1478,6 +2165,10 @@ def _evaluate_checkpoint_impl(
                         target_frame = frame_index + frame_offset
                         future_target = gather_target_slots(
                             batch["objects"]["position"][:, target_frame],
+                            target_indices,
+                        )
+                        future_target_velocity = gather_target_slots(
+                            batch["objects"]["velocity"][:, target_frame],
                             target_indices,
                         )
                         future_active = (
@@ -1534,6 +2225,14 @@ def _evaluate_checkpoint_impl(
                             future_target,
                             point_valid,
                         )
+                        forecast_velocity_errors.setdefault(
+                            horizon,
+                            MaskedVelocityErrorAccumulator(),
+                        ).update(
+                            model_velocities[:, query_index],
+                            future_target_velocity,
+                            point_valid,
+                        )
                         for baseline_name, positions in baselines.items():
                             forecast_errors.setdefault(
                                 (baseline_name, horizon),
@@ -1552,11 +2251,12 @@ def _evaluate_checkpoint_impl(
                             future_target,
                             common_valid,
                         )
-                        collision_during_window = collision_mask_for_forecast_window(
-                            batch["events"]["collision"],
+                        collision_class_masks = collision_class_masks_for_forecast_window(
+                            batch["events"],
                             anchor_frame=frame_index,
                             target_frame=target_frame,
                         )
+                        collision_during_window = ~collision_class_masks["no_collision"]
                         aligned_collision_during_window = (
                             gather_target_slots(
                                 collision_during_window.unsqueeze(-1),
@@ -1565,6 +2265,14 @@ def _evaluate_checkpoint_impl(
                             .squeeze(-1)
                             .bool()
                         )
+                        collision_classes = {
+                            class_name: (
+                                gather_target_slots(class_mask.unsqueeze(-1), target_indices)
+                                .squeeze(-1)
+                                .bool()
+                            )
+                            for class_name, class_mask in collision_class_masks.items()
+                        }
                         collision_conditioned_forecasts.update(
                             horizon=horizon,
                             predictions={
@@ -1577,6 +2285,7 @@ def _evaluate_checkpoint_impl(
                             target=future_target,
                             valid_mask=point_valid,
                             collision_mask=aligned_collision_during_window,
+                            collision_classes=collision_classes,
                         )
                         if model_collision_logits is not None:
                             # The selected endpoint logit covers exactly
@@ -1592,54 +2301,96 @@ def _evaluate_checkpoint_impl(
                                 collision_target,
                                 point_valid,
                             )
-                    if not bool(
-                        torch.isfinite(trajectory.positions).all()
-                        and torch.isfinite(trajectory.fast_log_variance).all()
-                    ):
-                        nonfinite_outputs += 1
-
-                if (
-                    prior_rollout is not None
-                    and perturb_seconds
-                    and query_seconds == perturb_seconds
-                ):
-                    posterior_rollout = model.dynamics.rollout(
-                        belief, perturb_seconds, return_events=False
-                    )
-                    for query_index, frame_offset in enumerate(perturb_offsets):
-                        target_frame = frame_index + frame_offset
-                        future_target = gather_target_slots(
-                            batch["objects"]["position"][:, target_frame],
-                            target_indices,
-                        )
-                        future_active = (
-                            gather_target_slots(
-                                batch["objects"]["active"][:, target_frame].unsqueeze(-1),
-                                target_indices,
+                            events_by_horizon.setdefault(
+                                horizon,
+                                _BinaryAccumulator(),
+                            ).update(
+                                model_collision_logits[:, query_index],
+                                collision_target,
+                                point_valid,
                             )
-                            .squeeze(-1)
-                            .bool()
-                        )
-                        valid = matched & future_active
-                        valid &= future_predictable_mask(
-                            batch,
-                            anchor_index=frame_index,
-                            target_index=target_frame,
-                            target_indices=target_indices,
-                        )
-                        correction.update(
-                            prior_rollout.positions[:, query_index],
-                            posterior_rollout.positions[:, query_index],
-                            future_target,
-                            valid,
-                        )
-
-                if not bool(
-                    torch.isfinite(belief.objects.position).all()
-                    and torch.isfinite(belief.objects.fast_log_variance).all()
-                ):
-                    nonfinite_outputs += 1
-
+                        for scenario, row_mask in scenario_batch_masks.items():
+                            scenario_metrics = scenario_accumulators[scenario]
+                            object_mask = row_mask.unsqueeze(-1)
+                            scenario_point_valid = point_valid & object_mask
+                            scenario_common_valid = common_valid & object_mask
+                            scenario_metrics.forecast_position.setdefault(
+                                horizon,
+                                _ErrorAccumulator(),
+                            ).update(
+                                model_positions[:, query_index],
+                                future_target,
+                                scenario_point_valid,
+                            )
+                            scenario_metrics.forecast_velocity.setdefault(
+                                horizon,
+                                MaskedVelocityErrorAccumulator(),
+                            ).update(
+                                model_velocities[:, query_index],
+                                future_target_velocity,
+                                scenario_point_valid,
+                            )
+                            scenario_metrics._increment(
+                                scenario_metrics.forecast_target_count,
+                                horizon,
+                                int(
+                                    (
+                                        batch["objects"]["active"][:, target_frame].bool()
+                                        & object_mask
+                                    )
+                                    .sum()
+                                    .detach()
+                                    .cpu()
+                                ),
+                            )
+                            scenario_metrics._increment(
+                                scenario_metrics.forecast_tracked_count,
+                                horizon,
+                                int(scenario_common_valid.sum().detach().cpu()),
+                            )
+                            scenario_metrics._increment(
+                                scenario_metrics.forecast_active_count,
+                                horizon,
+                                int(
+                                    (scenario_common_valid & model_active_mask[:, query_index])
+                                    .sum()
+                                    .detach()
+                                    .cpu()
+                                ),
+                            )
+                            scenario_metrics._increment(
+                                scenario_metrics.forecast_predictable_target_count,
+                                horizon,
+                                int(
+                                    (
+                                        batch["objects"]["active"][:, target_frame].bool()
+                                        & scene_predictable[:, None]
+                                        & object_mask
+                                    )
+                                    .sum()
+                                    .detach()
+                                    .cpu()
+                                ),
+                            )
+                            scenario_metrics._increment(
+                                scenario_metrics.forecast_censored_tracked_count,
+                                horizon,
+                                int((scenario_common_valid & ~predictable).sum().detach().cpu()),
+                            )
+                            if model_collision_logits is not None:
+                                scenario_metrics.collision_events.update(
+                                    model_collision_logits[:, query_index],
+                                    collision_target,
+                                    scenario_point_valid,
+                                )
+                                scenario_metrics.collision_events_by_horizon.setdefault(
+                                    horizon,
+                                    _BinaryAccumulator(),
+                                ).update(
+                                    model_collision_logits[:, query_index],
+                                    collision_target,
+                                    scenario_point_valid,
+                                )
                 new_diagnostics = model.diagnostics.records[diagnostic_offset:]
                 diagnostic_offset = len(model.diagnostics.records)
                 for diagnostic in new_diagnostics:
@@ -1679,9 +2430,19 @@ def _evaluate_checkpoint_impl(
     metrics.update(temporal_velocity_measurements.metrics())
     for (method, horizon), accumulator in sorted(forecast_errors.items()):
         metrics.update(accumulator.metrics(f"{method}@{horizon}"))
+    for horizon in configured_horizons:
+        metrics.update(
+            forecast_velocity_errors.get(
+                horizon,
+                MaskedVelocityErrorAccumulator(),
+            ).metrics(f"model@{horizon}")
+        )
     metrics.update(collision_conditioned_forecasts.metrics())
-    metrics.update(correction.metrics())
     metrics.update(events.metrics("collision"))
+    for horizon in configured_horizons:
+        metrics.update(
+            events_by_horizon.get(horizon, _BinaryAccumulator()).metrics(f"collision@{horizon}")
+        )
     metrics.update(calibration.metrics())
     metrics.update(parameters.metrics())
     directional_parameter_metrics = directional_parameters.metrics()
@@ -1775,6 +2536,9 @@ def _evaluate_checkpoint_impl(
     for horizon, target_count in sorted(forecast_target_count.items()):
         tracked_count = forecast_tracked_count.get(horizon, 0)
         active_count = forecast_active_count.get(horizon, 0)
+        metrics[f"forecast_target_count@{horizon}"] = float(target_count)
+        metrics[f"forecast_tracked_count@{horizon}"] = float(tracked_count)
+        metrics[f"forecast_active_count@{horizon}"] = float(active_count)
         metrics[f"forecast_target_coverage@{horizon}"] = (
             active_count / target_count if target_count else None
         )
@@ -1788,6 +2552,14 @@ def _evaluate_checkpoint_impl(
         metrics[f"forecast_censored_tracked_count@{horizon}"] = float(
             forecast_censored_tracked_count.get(horizon, 0)
         )
+    for scenario, accumulator in scenario_accumulators.items():
+        metrics.update(
+            accumulator.metrics(
+                scenario=scenario,
+                horizons=configured_horizons,
+                detection_threshold_label=detection_threshold_label,
+            )
+        )
     metrics.update(
         {
             "rgb_global_update_latency_mean_ms": _mean_or_none(global_latencies),
@@ -1795,12 +2567,55 @@ def _evaluate_checkpoint_impl(
             "future_rollout_latency_mean_ms": _mean_or_none(rollout_latencies),
             "visible_position_std_mean_m": _mean_or_none(uncertainty_visible),
             "occluded_position_std_mean_m": _mean_or_none(uncertainty_occluded),
-            "post_observation_std_contraction_mean_m": _mean_or_none(uncertainty_contraction),
             "nonfinite_output_count": float(nonfinite_outputs),
             "evaluated_episodes": float(evaluated_episodes),
-            "injected_perturbation_batch_updates": float(perturbation_updates),
+            "simulator_external_actuation_object_event_count": float(
+                simulator_external_actuation_object_event_count
+            ),
+            "simulator_external_actuation_interval_count": float(
+                simulator_external_actuation_interval_count
+            ),
+            "simulator_created_object_event_count": float(simulator_created_object_event_count),
+            "simulator_removed_object_event_count": float(simulator_removed_object_event_count),
         }
     )
+    # Freeze a canonical digest before the optional probe executes. Recovery
+    # metrics are appended under a disjoint schema and cannot overwrite the
+    # clean primary measurements represented by this digest.
+    primary_physical_metrics = {
+        name: value for name, value in metrics.items() if "latency" not in name
+    }
+    _require_finite_metrics(primary_physical_metrics)
+    primary_physical_metrics_sha256 = hashlib.sha256(
+        json.dumps(
+            primary_physical_metrics,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    recovery_probe = _RecoveryProbeResult()
+    if config.evaluation.recovery_probe_enabled:
+        # Release the completed primary runtime before loading the independent
+        # probe copy; no primary state or module object crosses this boundary.
+        del model
+        recovery_probe = _run_recovery_probe(
+            config,
+            captured_checkpoint.snapshot_path,
+            loader=loader,
+            device=device,
+            runtime_hypothesis_pool=runtime_hypothesis_pool,
+            report_progress=report_progress,
+        )
+    recovery_metrics = recovery_probe.metrics()
+    overlapping_metrics = set(metrics) & set(recovery_metrics)
+    if overlapping_metrics:
+        raise RuntimeError(
+            "recovery probe attempted to overwrite primary metrics: "
+            + ", ".join(sorted(overlapping_metrics))
+        )
+    metrics.update(recovery_metrics)
+    _require_finite_metrics(metrics)
 
     limitations = [
         (
@@ -1825,7 +2640,7 @@ def _evaluate_checkpoint_impl(
             "intervention. Its delayed evidence uses RGB associations only; "
             "this report does not change checkpoint or deployment defaults."
         )
-    if correction.count == 0:
+    if config.evaluation.recovery_probe_enabled and recovery_probe.correction.count == 0:
         limitations.append(
             "No active matched object/horizon was available for perturbation correction metrics."
         )
@@ -1923,10 +2738,37 @@ def _evaluate_checkpoint_impl(
         ).hexdigest()
     metadata = {
         "checkpoint": str(checkpoint),
-        "checkpoint_sha256": _checkpoint_sha256(checkpoint),
-        "checkpoint_step": int(payload["step"]),
+        "checkpoint_sha256": captured_checkpoint.sha256,
+        "checkpoint_byte_count": captured_checkpoint.byte_count,
+        "checkpoint_identity_source": "captured_pre_evaluation_immutable_byte_snapshot",
+        "checkpoint_step": checkpoint_step,
+        "checkpoint_simulator_version": checkpoint_simulator_version,
+        "evaluation_simulator_version": SIMULATOR_VERSION,
+        "checkpoint_specification_version": checkpoint_specification_version,
+        "evaluation_specification_version": SPECIFICATION_VERSION,
+        "checkpoint_source_provenance": checkpoint_source_provenance,
+        "evaluation_source_provenance": dict(evaluation_source_provenance),
+        "evaluation_metric_schema_version": _EVALUATION_METRIC_SCHEMA_VERSION,
+        "resolved_evaluation_config_sha256": resolved_evaluation_protocol["resolved_config_sha256"],
+        "resolved_evaluation_protocol": resolved_evaluation_protocol,
+        "resolved_evaluation_protocol_sha256": resolved_evaluation_protocol_sha256,
+        # Backwards-compatible alias for consumers that predate the explicit
+        # checkpoint-versus-evaluation protocol split.
         "simulator_version": SIMULATOR_VERSION,
         "scenario_mixture": list(config.simulator.scenario_mixture),
+        "per_scenario_metrics_schema": _PER_SCENARIO_METRIC_SCHEMA,
+        "per_scenario_metrics_status": "diagnostic_only_not_checkpoint_promotion_complete",
+        "per_scenario_metrics_known_omissions": [
+            "calibration",
+            "nonfinite_evidence",
+            "physical_baselines",
+            "configured_support_floor_markers",
+        ],
+        "per_scenario_metrics_scenarios": list(config.simulator.scenario_mixture),
+        "per_scenario_metrics_horizons": list(configured_horizons),
+        "per_scenario_metrics_source": (
+            "same_primary_rollout_tensors_and_support_masks_as_pooled_metrics"
+        ),
         "resolved_scenarios": {
             scenario: asdict(
                 SphereWorldConfig.from_config(config)
@@ -1944,6 +2786,36 @@ def _evaluate_checkpoint_impl(
         "device": str(device),
         "precision": resolved_device.precision,
         "rgb_only": True,
+        "primary_online_pass_evaluator_state_perturbation_free": True,
+        # Deprecated compatibility alias.  Its explicit scope prevents this
+        # from being read as a claim that simulator interventions were absent.
+        "primary_online_pass_intervention_free": True,
+        "primary_online_pass_intervention_free_scope": (
+            "evaluator_injected_state_perturbations_only"
+        ),
+        "primary_online_pass_simulator_external_actuation_present": bool(
+            simulator_external_actuation_object_event_count
+        ),
+        "primary_online_pass_simulator_external_actuation_object_event_count": (
+            simulator_external_actuation_object_event_count
+        ),
+        "primary_online_pass_simulator_external_actuation_interval_count": (
+            simulator_external_actuation_interval_count
+        ),
+        "primary_posterior_trace_sha256": primary_posterior_trace.hexdigest(),
+        "primary_posterior_trace_frame_count": primary_posterior_trace.frame_count,
+        "primary_posterior_trace_schema": "world_belief_tensor_fields_v1",
+        "primary_physical_metrics_sha256": primary_physical_metrics_sha256,
+        "primary_physical_metrics_hash_excludes": ["latency metrics"],
+        "recovery_probe_enabled": config.evaluation.recovery_probe_enabled,
+        "recovery_probe_runtime_isolation": (
+            "independent_runtime_shared_immutable_checkpoint_snapshot_clean_prefix_replay"
+            if config.evaluation.recovery_probe_enabled
+            else None
+        ),
+        # Compatibility field: the primary pass can no longer apply synthetic
+        # perturbations, regardless of whether the separate probe is enabled.
+        "evaluation_perturbations_applied": False,
         "oracle_runtime_input_used": False,
         "runtime_hypothesis_pool_enabled": runtime_hypothesis_pool,
         "runtime_hypothesis_pool_policy": runtime_hypothesis_policy,
@@ -1958,6 +2830,18 @@ def _evaluate_checkpoint_impl(
         "collision_conditioned_mask_source": (
             "deterministic_forecast_support_and_evaluation_only_simulator_"
             "collision_any_in_(anchor_frame,target_frame]"
+        ),
+        "collision_class_conditioned_schema": [
+            "pair_only",
+            "ground_only",
+            "wall_only",
+            "other_only",
+            "compound",
+            "no_collision",
+        ],
+        "collision_class_conditioned_mask_source": (
+            "deterministic_forecast_support_and_mutually_exclusive_evaluation_only_"
+            "simulator_event_kinds_any_in_(anchor_frame,target_frame]"
         ),
         "parameter_metric_mask_source": "runtime_identifier_diagnostics",
         "directional_parameter_metric_mask_source": (
@@ -1998,7 +2882,7 @@ def _evaluate_checkpoint_impl(
         "json_report": str(json_path),
         "markdown_report": str(markdown_path),
         "checkpoint": str(checkpoint),
-        "checkpoint_step": int(payload["step"]),
+        "checkpoint_step": checkpoint_step,
         "split": split,
         "seed_protocol": resolved_seed_protocol.name,
         "episode_seeds": list(resolved_seed_protocol.manifest.seeds),

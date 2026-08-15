@@ -17,10 +17,15 @@ from world_model.belief import (
     WorldBelief,
 )
 from world_model.dynamics.analytic import AnalyticKinematics
+from world_model.dynamics.applicability import (
+    PairApplicability,
+    PairApplicabilityConfig,
+    apply_pair_applicability,
+)
 from world_model.dynamics.attention import TypedAttentionInteractionResidual
 from world_model.dynamics.contacts import ContactPlane, SphereContactResolver
 from world_model.dynamics.events import EventModel
-from world_model.dynamics.graph import InteractionGraph
+from world_model.dynamics.graph import InteractionGraph, InteractionOutput
 from world_model.dynamics.modal import ModalDynamics
 from world_model.dynamics.rollout import RolloutEngine, RolloutStep
 from world_model.dynamics.uncertainty import UncertaintyDynamics
@@ -67,6 +72,20 @@ class DynamicsConfig:
     appearance_dim: int = 32
     parameter_memory_dim: int = 48
     max_substep: float = 1.0 / 120.0
+    # ``None`` preserves the historical behavior: evaluate the learned
+    # interaction stack on every analytic microstep.  A finite value holds one
+    # graph/attention proposal for at most this many seconds while modal state,
+    # analytic kinematics, contacts/events, and uncertainty continue to advance
+    # on the stable ``max_substep`` grid.
+    learned_effect_interval_seconds: float | None = None
+    # Disabled is the exact historical behavior.  When enabled, only learned
+    # pair/event residuals receive a smooth causal geometry/motion/uncertainty
+    # envelope; analytic kinematics and contact jumps remain unmodified.
+    pair_applicability_enabled: bool = False
+    pair_applicability_lookahead_seconds: float = 0.05
+    pair_applicability_margin_m: float = 0.05
+    pair_applicability_gap_temperature_m: float = 0.025
+    pair_applicability_velocity_temperature_mps: float = 0.10
     graph_hidden_dim: int = 64
     uncertainty_hidden_dim: int = 32
     interaction_radius: float = 0.5
@@ -75,6 +94,7 @@ class DynamicsConfig:
     max_pair_force: float = 2.0
     max_node_acceleration: float = 2.0
     attention_residual_enabled: bool = False
+    attention_relation_endpoint_binding_enabled: bool = False
     attention_width: int = 128
     attention_heads: int = 4
     attention_layers: int = 4
@@ -118,8 +138,41 @@ class DynamicsConfig:
             raise ValueError("attention feed-forward width must be positive")
         if not 0.0 <= self.attention_dropout < 1.0:
             raise ValueError("attention dropout must lie in [0,1)")
+        if not isinstance(self.attention_relation_endpoint_binding_enabled, bool):
+            raise ValueError("attention relation endpoint binding flag must be boolean")
         if self.max_substep <= 0 or not math.isfinite(self.max_substep):
             raise ValueError("max_substep must be finite and positive")
+        if self.learned_effect_interval_seconds is not None and (
+            isinstance(self.learned_effect_interval_seconds, bool)
+            or not math.isfinite(self.learned_effect_interval_seconds)
+            or self.learned_effect_interval_seconds < self.max_substep
+        ):
+            raise ValueError(
+                "learned_effect_interval_seconds must be finite and no smaller than max_substep"
+            )
+        if not isinstance(self.pair_applicability_enabled, bool):
+            raise ValueError("pair_applicability_enabled must be boolean")
+        for name, value in (
+            (
+                "pair_applicability_lookahead_seconds",
+                self.pair_applicability_lookahead_seconds,
+            ),
+            ("pair_applicability_margin_m", self.pair_applicability_margin_m),
+        ):
+            if isinstance(value, bool) or not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and nonnegative")
+        for name, value in (
+            (
+                "pair_applicability_gap_temperature_m",
+                self.pair_applicability_gap_temperature_m,
+            ),
+            (
+                "pair_applicability_velocity_temperature_mps",
+                self.pair_applicability_velocity_temperature_mps,
+            ),
+        ):
+            if isinstance(value, bool) or not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{name} must be finite and positive")
         if self.interaction_radius <= 0:
             raise ValueError("interaction_radius must be positive")
         for name, value in (
@@ -171,6 +224,14 @@ class DynamicsModel(nn.Module):
         elif config is None:
             config = DynamicsConfig(**overrides)
         self.config = config.validate()
+        self.pair_applicability_config = PairApplicabilityConfig(
+            enabled=self.config.pair_applicability_enabled,
+            lookahead_seconds=self.config.pair_applicability_lookahead_seconds,
+            margin_m=self.config.pair_applicability_margin_m,
+            gap_temperature_m=self.config.pair_applicability_gap_temperature_m,
+            velocity_temperature_mps=(self.config.pair_applicability_velocity_temperature_mps),
+            collision_speed_epsilon=self.config.pair_collision_speed_epsilon,
+        )
         self.analytic = AnalyticKinematics()
         self.modal = ModalDynamics(
             self.config.modal_count,
@@ -196,6 +257,9 @@ class DynamicsModel(nn.Module):
                 parameter_memory_dim=self.config.parameter_memory_dim,
                 motion_mode_dim=len(MotionMode),
                 global_code_dim=self.config.global_code_dim,
+                relation_endpoint_binding_enabled=(
+                    self.config.attention_relation_endpoint_binding_enabled
+                ),
                 width=self.config.attention_width,
                 heads=self.config.attention_heads,
                 layers=self.config.attention_layers,
@@ -292,6 +356,22 @@ class DynamicsModel(nn.Module):
             appearance_dim=int(state.appearance_dim),
             parameter_memory_dim=int(state.parameter_memory_dim),
             max_substep=float(dynamics.max_substep),
+            learned_effect_interval_seconds=(
+                None
+                if dynamics.learned_effect_interval_seconds is None
+                else float(dynamics.learned_effect_interval_seconds)
+            ),
+            pair_applicability_enabled=bool(dynamics.pair_applicability_enabled),
+            pair_applicability_lookahead_seconds=(
+                float(dynamics.pair_applicability_lookahead_seconds)
+            ),
+            pair_applicability_margin_m=float(dynamics.pair_applicability_margin_m),
+            pair_applicability_gap_temperature_m=(
+                float(dynamics.pair_applicability_gap_temperature_m)
+            ),
+            pair_applicability_velocity_temperature_mps=(
+                float(dynamics.pair_applicability_velocity_temperature_mps)
+            ),
             graph_hidden_dim=int(dynamics.hidden_dim),
             uncertainty_hidden_dim=max(16, int(dynamics.hidden_dim) // 2),
             interaction_radius=float(dynamics.interaction_radius),
@@ -299,6 +379,9 @@ class DynamicsModel(nn.Module):
             max_pair_force=float(dynamics.residual_acceleration_scale),
             max_node_acceleration=float(dynamics.residual_acceleration_scale),
             attention_residual_enabled=bool(dynamics.attention_residual_enabled),
+            attention_relation_endpoint_binding_enabled=bool(
+                dynamics.attention_relation_endpoint_binding_enabled
+            ),
             attention_width=int(dynamics.attention_width),
             attention_heads=int(dynamics.attention_heads),
             attention_layers=int(dynamics.attention_layers),
@@ -375,26 +458,70 @@ class DynamicsModel(nn.Module):
             raise ValueError("dt must contain finite nonnegative seconds")
         return value
 
+    def _evaluate_interaction(
+        self,
+        belief: WorldBelief,
+        modal_acceleration: Tensor,
+    ) -> InteractionOutput:
+        """Evaluate one differentiable learned interaction proposal.
+
+        The returned tensors are deliberately not detached.  An opt-in
+        multi-rate prediction may consume the same proposal on several
+        analytic microsteps, allowing endpoint losses to accumulate gradient
+        into the graph/attention invocation that produced it.
+        """
+
+        interaction = self.interactions(
+            belief.objects,
+            belief.global_code,
+            modal_acceleration=modal_acceleration,
+        )
+        if self.attention_interactions is not None:
+            interaction = self.attention_interactions(
+                belief.objects,
+                belief,
+                interaction,
+            )
+        return interaction
+
+    def _apply_pair_applicability(
+        self,
+        objects: ObjectBeliefTensor,
+        interaction: InteractionOutput,
+    ) -> tuple[InteractionOutput, PairApplicability]:
+        """Apply current causal support to a possibly held learned proposal."""
+
+        return apply_pair_applicability(
+            objects,
+            interaction,
+            self.pair_applicability_config,
+        )
+
+    def _learned_effect_stride(self) -> int:
+        """Return the bounded number of analytic ticks per learned proposal."""
+
+        interval = self.config.learned_effect_interval_seconds
+        if interval is None:
+            return 1
+        # Validation guarantees ``interval >= max_substep``.  Flooring keeps
+        # the actual hold duration bounded because every analytic microstep is
+        # no longer than ``max_substep``.  The small tolerance only avoids an
+        # off-by-one from decimal serialization of an integral ratio.
+        ratio = interval / self.config.max_substep
+        return max(1, int(math.floor(ratio + 1.0e-12)))
+
     def _substep(
         self,
         belief: WorldBelief,
         dt: Tensor,
         *,
+        modal_acceleration: Tensor,
+        interaction: InteractionOutput,
+        applicability: PairApplicability,
         external_acceleration: Tensor | None = None,
     ) -> RolloutStep:
-        objects, modal = self.modal(belief.objects, dt)
-        interaction = self.interactions(
-            objects,
-            belief.global_code,
-            modal_acceleration=modal.residual_acceleration,
-        )
-        if self.attention_interactions is not None:
-            interaction = self.attention_interactions(
-                objects,
-                belief,
-                interaction,
-            )
-        total_residual = modal.residual_acceleration + interaction.residual_acceleration
+        objects = belief.objects
+        total_residual = modal_acceleration + interaction.residual_acceleration
         objects = self.analytic(
             objects,
             belief.gravity,
@@ -446,6 +573,8 @@ class DynamicsModel(nn.Module):
                 "process_variance": uncertainty.process_variance,
                 "edge_process_noise": interaction.edge_process_noise,
                 "residual_acceleration": total_residual,
+                "pair_applicability": applicability.pair,
+                "collision_applicability": applicability.collision,
             },
             update_batch,
         )
@@ -553,6 +682,13 @@ class DynamicsModel(nn.Module):
             ),
             "edge_process_noise": objects.position.new_zeros(batch, count, count),
             "residual_acceleration": objects.position.new_zeros(batch, count, 3),
+            "pair_applicability": objects.position.new_zeros(batch, count, count),
+            "collision_applicability": objects.position.new_zeros(batch, count, count),
+            "learned_effect_evaluation_count": torch.zeros(
+                batch,
+                device=belief.device,
+                dtype=torch.int64,
+            ),
         }
         return RolloutStep(
             belief=belief.clone(),
@@ -575,6 +711,11 @@ class DynamicsModel(nn.Module):
             return self._zero_step(output)
         sub_dt = elapsed / substeps
         result: RolloutStep | None = None
+        held_interaction: InteractionOutput | None = None
+        learned_effect_stride = self._learned_effect_stride()
+        microsteps_since_effect_evaluation = learned_effect_stride
+        learned_effect_evaluations = 0
+        recompute_after_collision: Tensor | None = None
         interval_collision_logits: Tensor | None = None
         interval_pair_contact: Tensor | None = None
         interval_pair_collision: Tensor | None = None
@@ -585,12 +726,57 @@ class DynamicsModel(nn.Module):
         interval_pair_impulse: Tensor | None = None
         interval_max_penetration: Tensor | None = None
         for _ in range(substeps):
+            # Stable modal state and its inexpensive readout remain current on
+            # every physical tick.  Only the expensive graph/attention proposal
+            # is held.  Keeping this transition outside the held proposal also
+            # preserves the exact modal composition contract.
+            modal_objects, modal = self.modal(output.objects, sub_dt)
+            output = replace(output, objects=modal_objects)
+            evaluate_interaction = (
+                held_interaction is None
+                or microsteps_since_effect_evaluation >= learned_effect_stride
+            )
+            if not evaluate_interaction:
+                current_edge_mask = self.interactions.candidate_edge_mask(output.objects)
+                edge_set_changed = torch.any(current_edge_mask != held_interaction.edge_mask)
+                invalidated = edge_set_changed
+                if recompute_after_collision is not None:
+                    invalidated = torch.logical_or(
+                        invalidated,
+                        recompute_after_collision,
+                    )
+                # A changed edge set invalidates the complete force/logit/noise
+                # tuple, as does the previous tick's discrete velocity jump.
+                # Partially remasking a stale vector proposal would be
+                # incoherent, so pay one fresh learned evaluation before this
+                # physical tick. One combined host decision avoids a second
+                # accelerator synchronization for collision invalidation.
+                evaluate_interaction = bool(invalidated.detach().cpu().item())
+            if evaluate_interaction:
+                held_interaction = self._evaluate_interaction(
+                    output,
+                    modal.residual_acceleration,
+                )
+                learned_effect_evaluations += 1
+                microsteps_since_effect_evaluation = 0
+            assert held_interaction is not None
+            # Applicability depends on current geometry, relative motion, and
+            # uncertainty, so it is refreshed every physical tick even when the
+            # expensive raw learned proposal is held by multi-rate execution.
+            step_interaction, applicability = self._apply_pair_applicability(
+                output.objects,
+                held_interaction,
+            )
             result = self._substep(
                 output,
                 sub_dt,
+                modal_acceleration=modal.residual_acceleration,
+                interaction=step_interaction,
+                applicability=applicability,
                 external_acceleration=external_acceleration,
             )
             output = result.belief
+            microsteps_since_effect_evaluation += 1
             event_valid = (sub_dt > 0).unsqueeze(-1) & output.objects.active
             collision_logits = torch.where(
                 event_valid,
@@ -638,6 +824,14 @@ class DynamicsModel(nn.Module):
                     interval_max_penetration,
                     result.auxiliary["max_penetration"],
                 )
+            # Contacts/events still run on every microstep. Carry a tensor-only
+            # collision flag to the next tick, where it shares the one host
+            # decision already required by dynamic edge-set invalidation.
+            if learned_effect_stride > 1:
+                recompute_after_collision = torch.logical_or(
+                    result.auxiliary["pair_collision"].any(),
+                    result.auxiliary["boundary_collision"].any(),
+                )
         assert result is not None
         assert interval_collision_logits is not None
         assert interval_pair_contact is not None
@@ -666,6 +860,12 @@ class DynamicsModel(nn.Module):
                 "ground_collision": interval_ground_collision,
                 "pair_impulse": interval_pair_impulse,
                 "max_penetration": interval_max_penetration,
+                "learned_effect_evaluation_count": torch.full(
+                    (belief.batch_size,),
+                    learned_effect_evaluations,
+                    device=belief.device,
+                    dtype=torch.int64,
+                ),
             }
         )
         return RolloutStep(

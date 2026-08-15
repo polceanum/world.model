@@ -112,6 +112,7 @@ class TypedAttentionInteractionResidual(nn.Module):
         parameter_memory_dim: int,
         motion_mode_dim: int,
         global_code_dim: int,
+        relation_endpoint_binding_enabled: bool = False,
         width: int = 128,
         heads: int = 4,
         layers: int = 4,
@@ -150,6 +151,7 @@ class TypedAttentionInteractionResidual(nn.Module):
         self.max_event_logit_residual = max_event_logit_residual
         self.max_process_noise_residual = max_process_noise_residual
         self.global_code_dim = global_code_dim
+        self.relation_endpoint_binding_enabled = relation_endpoint_binding_enabled
         # Scene features mix latent values, log variances, world-space
         # quantities, homogeneous transforms, and pixel-space intrinsics.  A
         # fixed pre-projection normalization prevents those units from making
@@ -510,6 +512,26 @@ class TypedAttentionInteractionResidual(nn.Module):
             relation_count=relation_count,
         )
 
+    def _bind_relation_endpoints(
+        self,
+        relation_tokens: Tensor,
+        entity_tokens: Tensor,
+        pair_i: Tensor,
+        pair_j: Tensor,
+    ) -> Tensor:
+        """Bind every unordered relation token to its two entity endpoints.
+
+        Relation geometry alone does not identify which entity tokens own a
+        pair inside the unordered attention set.  The symmetric endpoint mean
+        supplies that incidence information without slot embeddings, ordered
+        endpoint roles, new parameters, or checkpoint-shape changes.
+        """
+
+        if not self.relation_endpoint_binding_enabled:
+            return relation_tokens
+        endpoint_context = 0.5 * (entity_tokens[:, pair_i, :] + entity_tokens[:, pair_j, :])
+        return relation_tokens + endpoint_context
+
     def forward(
         self,
         objects: ObjectBeliefTensor,
@@ -534,6 +556,12 @@ class TypedAttentionInteractionResidual(nn.Module):
         entity_tokens = self.entity_projection(self._entity_features(objects))
         selected_relation_features = relation_features[:, pair_i, pair_j]
         relation_tokens = self.relation_projection(selected_relation_features)
+        relation_tokens = self._bind_relation_endpoints(
+            relation_tokens,
+            entity_tokens,
+            pair_i,
+            pair_j,
+        )
         tokens = torch.cat((scene_tokens, entity_tokens, relation_tokens), dim=1)
         token_types = torch.cat(
             (

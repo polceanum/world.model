@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.45
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation and low-noise live-monitoring amendments 15 August 2026
+**Version:** 1.46
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6917,6 +6917,168 @@ explicit evidence/applicability semantics above, and remove duplicated
 candidate/runtime propagation before another paired MPS comparison. No repair
 is considered complete until focused tests and the matched runtime protocol
 verify it.
+
+---
+
+# Part XXXVIII — Grounded RGB convergence and protocol-integrity amendment
+
+## 213. Familiar validation physics must isolate the interaction under test
+
+The familiar sphere-world protocol must not make a requested pair collision
+coincide with a floor, wall, third-body, birth, or stochastic-impulse event
+unless the scenario is explicitly labelled as compound. An ensured pair is
+constructed and preflighted with the same complete scene, solver, observation
+clock, and deterministic random streams used by the final episode. Its two
+objects must remain free of every other contact through a declared clean
+window of at least two observation frames after pair impact. Extra objects,
+lifecycle births, and external impulses are resampled or delayed around that
+window. Compound interactions remain useful, but must be separately named and
+reported rather than silently contaminating a basic collision benchmark.
+
+Free flight in simulator and analytic dynamics uses one closed-form
+constant-gravity/linear-drag transition. This removes a systematic integrator
+mismatch that formerly forced the learned residual to cancel the data
+generator's timestep error. Contact resolution still runs on bounded physical
+substeps; a faster contact rate is a new simulator protocol and needs its own
+penetration, impulse, and endpoint qualification. The resulting simulator
+protocol is `sphere_world_v6`. Old v4/v5 metric reports remain historical
+diagnostics and cannot be compared as if generated by v6.
+
+## 214. RGB temporal evidence distinguishes observation from copied prior
+
+A position is eligible for temporal differentiation only to the extent that
+its coordinates are independently supported by the RGB observation. Global
+image discovery is observation-derived. A residual ROI is prior-conditioned:
+only a direct structured image centre supplies camera-lateral coordinates and
+only a valid structured scale supplies depth. A zero residual, disabled head,
+or coordinate copied from a predicted ROI remains a useful ordinary filter
+measurement but is not an independent temporal sample. Histories persist a
+per-object, per-sample, per-world-axis support mask and fit each supported axis
+without allowing an unsupported coordinate to complete or influence it.
+
+Independent raw history is an explicit semantic opt-in. Historical
+checkpoints retain their configured posterior/measurement blend; a missing
+new flag resolves to that legacy behavior. New grounded protocols enable raw
+history, structured fast depth, an unbounded causal sample age unless a tested
+cutoff is supplied, and a cadence that actually produces the configured
+minimum number of samples. A combined-camera execution test must prove that
+the fast path emits nonzero supported velocity evidence before launch.
+
+When gravity in `WorldBelief` is known, a causal observer may subtract its
+quadratic displacement before least-squares fitting and estimate velocity at
+the current observation time. It combines that gravity-aligned estimate with
+the ordinary orthogonal component, preserves strict raw-axis dependencies,
+and propagates the shared measurement uncertainty rather than pretending the
+two fits are independent. It consumes no simulator state and is opt-in; zero
+gravity and legacy-disabled behavior remain exact fallbacks.
+
+## 215. Structured RGB discovery is direct evidence, not permission for ghosts
+
+For the synthetic RGB contract, connected foreground components supply direct
+centres, observed radii, analytic inverse depth, and uncertainty. Ambiguous or
+truncated scale remains usable only with explicitly inflated covariance.
+Packet confidence multiplies structured confidence; a low-confidence packet
+cannot be promoted to a fixed near-one birth probability. This evidence is
+carried into the core existence logit with a straight-through learned
+gradient.
+
+Queries without a component or an explicitly missing component assignment
+remain trainable but fail closed for runtime birth. A touching component that
+was successfully split and assigned is not permission for unrelated learned
+queries to create duplicate objects. A true no-component image and a bounded
+partial-assignment gap remain explicit learned-discovery escape hatches for
+future real video. This preserves a modern learned detector path without
+allowing fresh random logits to dominate the currently reliable abstraction.
+
+## 216. Primary evaluation is intervention-free and recovery is independent
+
+Headline state, horizon, lifecycle, identity, event, baseline, uncertainty,
+and per-scenario accuracy metrics come from one clean RGB-only online pass.
+The evaluator must never perturb that authoritative runtime. An optional
+recovery probe constructs an independent runtime from the exact same immutable
+checkpoint payload, replays the causal RGB prefix, applies the declared belief
+perturbation there, measures correction, and discards the branch. Changing or
+disabling the probe must leave every non-latency primary physical metric and
+the primary posterior trace bit-for-bit unchanged.
+
+Evaluation binds the exact checkpoint bytes loaded, checkpoint/evaluation
+simulator and specification versions, source provenance, resolved config,
+split, seed manifest, scenario ordering, horizons, batching, metric schema,
+and runtime intervention to canonical hashes. Mutable `last.pt` replacement
+must not let a primary pass, recovery probe, step, and reported SHA refer to
+different weights. Nonfinite beliefs, trajectories, event logits, or final
+numeric metrics fail before a completed report; JSON output forbids NaN/Inf.
+Per-scenario metrics are additive views of the same clean tensors and masks,
+not second rollouts. Any incomplete slice is labelled diagnostic-only and
+cannot satisfy a promotion guardrail by itself.
+
+## 217. Learned interactions are local residual effects with explicit semantics
+
+Constant/damped analytic motion remains the no-evidence prior. Learned pair
+force, event, noise, and impulse residuals may be multiplied by a smooth
+parameter-free applicability function of signed gap, closing motion,
+uncertainty, and the current bounded-step geometry. The gate is recomputed on
+every analytic microstep, including while a learned proposal is held, and may
+not gate the analytic contact resolver. It defaults to exact identity-off and
+is a checkpoint semantic.
+
+Relation attention binds an unordered pair token to the symmetric mean of its
+two endpoint entity tokens only behind an explicit semantic flag. Historical
+attention checkpoints resolve the flag false and keep their old forward
+function. A new grounded campaign may enable it, with permutation, inactive-
+endpoint, checkpoint, and zero-decoder identity tests. A configurable
+multi-rate cadence may hold a complete graph/attention proposal within one
+predict call, but topology changes and collisions invalidate it. Analytic,
+modal, contact, event, and uncertainty steps continue at every microstep. The
+historical exact cadence remains the default until a paired accuracy/latency
+gate passes.
+
+## 218. Slow physical parameters use causal, observable, uncertain evidence
+
+Drag/restitution identification consumes the causal prior error, never an
+already-corrected posterior error. Position displacement is divided by actual
+elapsed time, combined predictive-plus-measurement variance controls its
+reliability, and direct confidence scales the signal. A source-bound ROI can
+contribute an analytic position signal only on independently observed axes;
+missing provenance fails closed. Position displacement may support drag but
+cannot fabricate a post-impact restitution measurement. Restitution requires
+direct supported pre/post velocity or the labelled debug oracle. Fast state
+and slow parameters retain separate update gates and memories.
+
+## 219. Convergence campaigns stage perception before interaction capacity
+
+The next accepted campaign starts from the protected finite weights through a
+weights-only, protocol-versioned transfer. The `state_roi` stage trains the
+filter/updater, identifier, fast ROI projection, and early visual features
+while leaving dynamics and global discovery frozen. Only after a declared
+number of causal optimizer updates may `state_relation_roi` add relation/shared
+attention and graph edge parameters while keeping unconditional node
+acceleration, analytic dynamics, modal/event/uncertainty modules, and the
+global detector frozen. This tests perceptual anchoring before interaction
+capacity and prevents a generic node residual from becoming a free-flight
+shortcut.
+
+Training must be long enough for fixed validation to repeat across the
+learning-rate schedule: balanced updates draw every declared scenario,
+checkpoint frequently, validate on immutable disjoint manifests, and run
+through warmup, useful-rate, and decay phases. A noisy mixed-scenario batch
+loss is not convergence evidence. Promotion requires sustained improvement or
+a truthful plateau on current state and every axis/horizon, plus coverage,
+identity, event, calibration, finite-state, and latency guardrails. A local
+slice win that regresses another critical scenario is retained as an ablation,
+not promoted.
+
+## 220. Remaining event-learning limits stay explicit
+
+The current analytic contact path is intentionally strong and the new
+familiar simulator makes its correctness interpretable. Learned event
+calibration is not yet complete: hard analytic event logits, the unused
+contact-logit scale, and analytic-only pair event logits limit how trajectory
+loss can move a missed event boundary. This is a separately qualified target,
+not a reason to hide perception, lifecycle, or simulator defects behind more
+capacity. No documentation or report may claim full event convergence until
+pair-specific differentiable event calibration passes the normal fixed RGB
+promotion protocol.
 
 ---
 

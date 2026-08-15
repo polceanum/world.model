@@ -296,15 +296,82 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
     assert report["metadata"]["checkpoint_step"] == 3
     assert report["metadata"]["rgb_only"] is True
     assert report["metadata"]["oracle_runtime_input_used"] is False
+    assert report["metadata"]["evaluation_perturbations_applied"] is False
+    assert report["metadata"]["primary_online_pass_evaluator_state_perturbation_free"] is True
+    assert report["metadata"]["primary_online_pass_intervention_free_scope"] == (
+        "evaluator_injected_state_perturbations_only"
+    )
+    assert report["metadata"]["recovery_probe_enabled"] is False
     assert report["metadata"]["current_detection_distance_threshold_m"] == 0.5
     assert report["metrics"]["evaluated_episodes"] == 1.0
     assert report["metrics"]["nonfinite_output_count"] == 0.0
+    assert report["metrics"]["injected_perturbation_batch_updates"] == 0.0
+    assert report["metrics"]["recovery_probe_evaluated_episodes"] == 0.0
     assert report["metrics"]["current_assignment_target_coverage"] is not None
     assert "current_detection_recall@0.500m" in report["metrics"]
     assert "current_detection_precision@0.500m" in report["metrics"]
     assert "forecast_target_coverage@0.050s" in report["metrics"]
     assert "forecast_predictable_target_count@0.050s" in report["metrics"]
     assert report["metrics"]["forecast_censored_tracked_count@0.050s"] == 0.0
+    assert report["metadata"]["per_scenario_metrics_schema"] == (
+        "clean_primary_additive_support_diagnostic_v2"
+    )
+    assert report["metadata"]["per_scenario_metrics_status"] == (
+        "diagnostic_only_not_checkpoint_promotion_complete"
+    )
+    assert report["metadata"]["per_scenario_metrics_scenarios"] == ["baseline"]
+    assert report["metadata"]["collision_class_conditioned_schema"] == [
+        "pair_only",
+        "ground_only",
+        "wall_only",
+        "other_only",
+        "compound",
+        "no_collision",
+    ]
+    assert "collision_class_no_collision_object_horizons@0.050s" in report["metrics"]
+    assert "collision_class_pair_only_model@0.050s_position_rmse_m" in report["metrics"]
+    scenario_prefix = "scenario_baseline_"
+    for metric_name in (
+        "posterior_current_position_rmse_m",
+        "posterior_current_position_x_count",
+        "posterior_current_velocity_rmse_mps",
+        "posterior_current_velocity_x_count",
+        "current_assignment_target_coverage",
+        "current_assignment_prediction_coverage",
+        "current_detection_recall@0.500m",
+        "current_detection_precision@0.500m",
+        "distance_gated_identity_switch_rate",
+        "model@0.050s_position_rmse_m",
+        "model@0.050s_position_x_count",
+        "model@0.050s_velocity_rmse_mps",
+        "collision@0.050s_true_positive_count",
+        "collision@0.050s_false_positive_count",
+        "collision@0.050s_false_negative_count",
+        "collision@0.050s_true_negative_count",
+        "collision@0.050s_f1",
+        "forecast_target_count@0.050s",
+        "forecast_tracked_count@0.050s",
+        "forecast_active_count@0.050s",
+        "forecast_predictable_target_count@0.050s",
+        "forecast_censored_tracked_count@0.050s",
+    ):
+        assert f"{scenario_prefix}{metric_name}" in report["metrics"]
+    for pooled_metric in (
+        "posterior_current_position_rmse_m",
+        "posterior_current_velocity_rmse_mps",
+        "current_assignment_target_coverage",
+        "current_detection_precision@0.500m",
+        "distance_gated_identity_switch_rate",
+        "model@0.050s_position_rmse_m",
+        "model@0.050s_velocity_rmse_mps",
+        "collision@0.050s_f1",
+        "forecast_target_count@0.050s",
+        "forecast_active_count@0.050s",
+    ):
+        assert (
+            report["metrics"][f"{scenario_prefix}{pooled_metric}"]
+            == report["metrics"][pooled_metric]
+        )
     assert (
         report["metrics"]["forecast_calibration_coordinate_count"]
         >= (report["metrics"]["model@0.050s_position_coordinate_count"])
@@ -325,7 +392,11 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
     training_state = json.loads((run_directory / "training_state.json").read_text(encoding="utf-8"))
     assert training_state["state"] == "completed"
     assert training_state["completed_steps"] == 3
-    assert (evaluation_directory / "report.md").is_file()
+    markdown_report = evaluation_directory / "report.md"
+    assert markdown_report.is_file()
+    assert "scenario_baseline_model@0.050s_position_rmse_m" in markdown_report.read_text(
+        encoding="utf-8"
+    )
     evaluation_progress = json.loads(
         (evaluation_directory / "evaluation_progress.json").read_text(encoding="utf-8")
     )

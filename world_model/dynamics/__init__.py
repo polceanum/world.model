@@ -1,6 +1,12 @@
 """Hybrid structured and learned belief dynamics."""
 
 from world_model.dynamics.analytic import AnalyticKinematics
+from world_model.dynamics.applicability import (
+    PairApplicability,
+    PairApplicabilityConfig,
+    apply_pair_applicability,
+    pair_applicability,
+)
 from world_model.dynamics.attention import (
     AttentionTokenLayout,
     TypedAttentionInteractionResidual,
@@ -57,12 +63,15 @@ __all__ = [
     "BallisticContactDynamics",
     "ModalDynamics",
     "ModalOutput",
+    "PairApplicability",
+    "PairApplicabilityConfig",
     "RolloutEngine",
     "RolloutStep",
     "SphereContactResolver",
     "TypedAttentionInteractionResidual",
     "UncertaintyDynamics",
     "UncertaintyOutput",
+    "apply_pair_applicability",
     "geodesic_orientation_loss",
     "integrate_quaternion",
     "normalize_quaternion",
@@ -71,4 +80,5 @@ __all__ = [
     "quaternion_from_rotation_vector",
     "quaternion_geodesic_distance",
     "quaternion_multiply",
+    "pair_applicability",
 ]

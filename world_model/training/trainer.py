@@ -3175,9 +3175,27 @@ def set_closed_loop_trainable_scope(
             model.identifier.requires_grad_(True)
         _freeze_disconnected_training_heads(model)
         return
-    if scope in {"fast_roi", "state_dynamics_fast_roi", "state_dynamics_roi"}:
-        if scope != "fast_roi":
+    if scope in {
+        "fast_roi",
+        "state_roi",
+        "state_relation_roi",
+        "state_dynamics_fast_roi",
+        "state_dynamics_roi",
+    }:
+        if scope in {"state_dynamics_fast_roi", "state_dynamics_roi"}:
             model.dynamics.requires_grad_(True)
+        if scope == "state_relation_roi":
+            attention = model.dynamics.attention_interactions
+            if attention is None:
+                raise ValueError("state_relation_roi scope requires typed attention dynamics")
+            # Pair/event proposals may adapt, but neither learned node path may
+            # acquire an unconditional free-flight acceleration.  The shared
+            # typed token stack remains trainable because relation tokens are
+            # contextualized jointly with entity and scene tokens.
+            model.dynamics.interactions.edge_network.requires_grad_(True)
+            attention.requires_grad_(True)
+            attention.node_decoder.requires_grad_(False)
+        if scope != "fast_roi":
             model.updater.requires_grad_(True)
             if model.identifier is not None:
                 model.identifier.requires_grad_(True)
@@ -3188,7 +3206,7 @@ def set_closed_loop_trainable_scope(
         backbone = getattr(rgb_module, "backbone", None)
         if backbone is None:
             raise TypeError("RGB module is missing backbone")
-        if scope == "state_dynamics_roi":
+        if scope in {"state_roi", "state_relation_roi", "state_dynamics_roi"}:
             for stage in backbone.stages[:2]:
                 stage.requires_grad_(True)
         backbone.fast_projection.requires_grad_(True)
@@ -3200,7 +3218,7 @@ def set_closed_loop_trainable_scope(
         "'attention_relation', 'attention_node_x', 'attention_node_y', "
         "'attention_node_z', 'dynamics', 'updater', "
         "'updater_mean', 'updater_mean_y', 'fast_roi', 'state_dynamics', "
-        "'state_dynamics_fast_roi', or "
+        "'state_roi', 'state_relation_roi', 'state_dynamics_fast_roi', or "
         "'state_dynamics_roi'"
     )
 
@@ -5785,6 +5803,12 @@ def train_from_config(
                     )
                 result.metrics["closed_loop_scope_state_dynamics_only"] = float(
                     active_closed_loop_scope == "state_dynamics"
+                )
+                result.metrics["closed_loop_scope_state_roi_only"] = float(
+                    active_closed_loop_scope == "state_roi"
+                )
+                result.metrics["closed_loop_scope_state_relation_roi_only"] = float(
+                    active_closed_loop_scope == "state_relation_roi"
                 )
                 result.metrics["closed_loop_scope_updater_only"] = float(
                     active_closed_loop_scope == "updater"

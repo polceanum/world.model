@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
 import torch
 
 from world_model.datasets import (
@@ -118,6 +119,170 @@ def test_ensured_pair_collision_is_not_confounded_with_floor_impact() -> None:
     assert separating_speed > 0.5
 
 
+def test_ensured_pair_clean_window_holds_on_validation_test_and_ood_manifests() -> None:
+    source = load_config("configs/sustained_accuracy_balanced_mps.yaml")
+    base_config = SphereWorldConfig.from_config(source)
+    failures: list[tuple[str, int, str, int | None, int | None, list[int], list[int]]] = []
+    profiles = (
+        ("validation", base_config, make_seed_manifest("validation", 32)),
+        ("test", base_config, make_seed_manifest("test", 32)),
+        ("ood", base_config.for_distribution("ood"), make_seed_manifest("ood", 32)),
+    )
+
+    for split, config, manifest in profiles:
+        for seed in manifest:
+            world = SphereWorld(config, seed=seed)
+            pair_frame: int | None = None
+            floor_frame: int | None = None
+            third_contact_frames: list[int] = []
+            boundary_contact_frames: list[int] = []
+            for frame_index in range(1, config.sequence_frames):
+                events = world.step(config.observation_dt)
+                if pair_frame is None and bool(events.pair_collision[0, 1]):
+                    pair_frame = frame_index
+                if floor_frame is None and bool(events.ground_collision[:2].any()):
+                    floor_frame = frame_index
+                if bool(events.pair_contact[:2, 2:].any()):
+                    third_contact_frames.append(frame_index)
+                if bool(events.boundary_contact[:2].any()):
+                    boundary_contact_frames.append(frame_index)
+            clean_final_frame = (
+                None
+                if pair_frame is None
+                else pair_frame + config.ensured_pair_floor_clearance_frames - 1
+            )
+            if (
+                pair_frame is None
+                or floor_frame is None
+                or floor_frame - pair_frame < config.ensured_pair_floor_clearance_frames
+                or any(
+                    clean_final_frame is not None and frame <= clean_final_frame
+                    for frame in third_contact_frames
+                )
+                or any(
+                    clean_final_frame is not None and frame <= clean_final_frame
+                    for frame in boundary_contact_frames
+                )
+            ):
+                failures.append(
+                    (
+                        split,
+                        seed,
+                        world.scenario_name,
+                        pair_frame,
+                        floor_frame,
+                        third_contact_frames,
+                        boundary_contact_frames,
+                    )
+                )
+
+    assert failures == []
+
+
+@pytest.mark.parametrize("seed", [300_009, 300_050])
+def test_ood_ensured_pair_regression_has_no_third_object_confound(seed: int) -> None:
+    source = load_config("configs/sustained_accuracy_balanced_mps.yaml")
+    config = SphereWorldConfig.from_config(source).for_distribution("ood")
+    world = SphereWorld(config, seed=seed)
+    pair_frame: int | None = None
+    floor_frame: int | None = None
+    third_contact_frames: list[int] = []
+    boundary_contact_frames: list[int] = []
+
+    for frame_index in range(1, config.sequence_frames):
+        events = world.step(config.observation_dt)
+        if pair_frame is None and bool(events.pair_collision[0, 1]):
+            pair_frame = frame_index
+        if floor_frame is None and bool(events.ground_collision[:2].any()):
+            floor_frame = frame_index
+        if bool(events.pair_contact[:2, 2:].any()):
+            third_contact_frames.append(frame_index)
+        if bool(events.boundary_contact[:2].any()):
+            boundary_contact_frames.append(frame_index)
+
+    assert pair_frame is not None
+    assert floor_frame is not None
+    assert floor_frame - pair_frame >= config.ensured_pair_floor_clearance_frames
+    clean_final_frame = pair_frame + config.ensured_pair_floor_clearance_frames - 1
+    assert all(frame > clean_final_frame for frame in third_contact_frames)
+    assert all(frame > clean_final_frame for frame in boundary_contact_frames)
+
+
+def test_ensured_pair_clearance_validation_is_disabled_without_ensured_collision() -> None:
+    config = SphereWorldConfig(
+        sequence_frames=2,
+        min_objects=1,
+        max_objects=1,
+        ensure_collision=False,
+        ensured_pair_floor_clearance_frames=100,
+        ensured_pair_floor_clearance_margin_m=-1.0,
+    )
+
+    config.validate()
+
+
+def test_ensured_pair_scene_resampling_requires_a_positive_bounded_attempt_count() -> None:
+    config = SphereWorldConfig(ensured_pair_scene_resample_attempts=0)
+
+    with pytest.raises(ValueError, match="scene_resample_attempts must be a positive integer"):
+        config.validate()
+
+
+def test_placement_retry_rng_is_isolated_from_external_interventions() -> None:
+    config = SphereWorldConfig(
+        sequence_frames=32,
+        min_objects=3,
+        max_objects=3,
+        external_impulse_probability=1.0,
+    )
+    first = SphereWorld(config, seed=12_345)
+    second = SphereWorld(config, seed=12_345)
+    assert first._external_impulse_not_before_frame == second._external_impulse_not_before_frame
+
+    torch.rand((256,), generator=first.placement_generator)
+    while first.frame_index < first._external_impulse_not_before_frame:
+        first.step(external_impulse=torch.zeros_like(first.state.velocity))
+        second.step(external_impulse=torch.zeros_like(second.state.velocity))
+
+    torch.testing.assert_close(
+        first.sample_external_impulse(),
+        second.sample_external_impulse(),
+        rtol=0,
+        atol=0,
+    )
+
+
+def test_scheduled_third_object_birth_starts_after_ensured_pair_clean_window() -> None:
+    config = SphereWorldConfig(
+        sequence_frames=32,
+        min_objects=3,
+        max_objects=3,
+        allow_births=True,
+        birth_probability=1.0,
+    )
+    world = SphereWorld(config, seed=5_432)
+    delayed = torch.nonzero(world._spawn_frame > 0, as_tuple=False).flatten()
+
+    assert delayed.numel() == 1
+    assert int(world._spawn_frame[delayed[0]]) > world._external_impulse_not_before_frame
+
+
+def test_ensured_pair_clearance_rejects_infeasible_vertical_bounds() -> None:
+    config = SphereWorldConfig(
+        frame_rate=20.0,
+        physics_rate=120.0,
+        sequence_frames=40,
+        min_objects=2,
+        max_objects=2,
+        radius_range=(0.2, 0.2),
+        world_bounds=((-2.25, 2.25), (0.0, 0.8), (-1.5, 1.5)),
+        ensure_collision=True,
+    )
+
+    with pytest.raises(ValueError, match="cannot satisfy ensured pair/floor clearance"):
+        SphereWorld(config, seed=200_000)
+
+
 def test_seeded_scenario_mixture_exercises_distinct_physical_regimes() -> None:
     scenarios = (
         "baseline",
@@ -131,7 +296,9 @@ def test_seeded_scenario_mixture_exercises_distinct_physical_regimes() -> None:
     )
     config = SphereWorldConfig(
         image_size=(24, 24),
-        sequence_frames=4,
+        # The ensured-pair constructor now validates that the requested pair
+        # event and its clean floor-clearance window fit inside the episode.
+        sequence_frames=24,
         min_objects=3,
         max_objects=3,
         scenario_mixture=scenarios,

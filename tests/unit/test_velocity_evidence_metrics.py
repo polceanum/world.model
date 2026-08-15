@@ -115,6 +115,40 @@ def test_temporal_velocity_measurement_availability_and_variance() -> None:
         14.0 / 3.0
     )
     assert metrics["temporal_velocity_measurement_reported_variance_coordinate_count"] == 3.0
+    assert metrics["temporal_velocity_measurement_x_valid_coordinate_count"] == 1.0
+    assert metrics["temporal_velocity_measurement_y_valid_coordinate_count"] == 1.0
+    assert metrics["temporal_velocity_measurement_z_valid_coordinate_count"] == 1.0
+
+
+def test_temporal_velocity_measurement_counts_only_supported_axes() -> None:
+    log_variance = (
+        torch.tensor([[[math.log(4.0), math.log(1.0e4), math.log(1.0e4)]]]).expand(1, 3, 3).clone()
+    )
+    accumulator = TemporalVelocityMeasurementAccumulator()
+    accumulator.update(
+        _measurements(
+            auxiliary={
+                "world_velocity": torch.tensor(
+                    [[[2.0, 1.0e6, -1.0e6], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]]
+                ),
+                "world_velocity_log_variance": log_variance,
+                "world_velocity_valid_mask": torch.tensor([[True, False, False]]),
+                "world_velocity_axis_valid_mask": torch.tensor(
+                    [[[True, False, False], [False, False, False], [False, False, False]]]
+                ),
+            }
+        )
+    )
+
+    metrics = accumulator.metrics()
+    assert metrics["temporal_velocity_measurement_valid_object_count"] == 1.0
+    assert metrics["temporal_velocity_measurement_reported_variance_mean_mps2"] == pytest.approx(
+        4.0
+    )
+    assert metrics["temporal_velocity_measurement_reported_variance_coordinate_count"] == 1.0
+    assert metrics["temporal_velocity_measurement_x_valid_coordinate_count"] == 1.0
+    assert metrics["temporal_velocity_measurement_y_valid_coordinate_count"] == 0.0
+    assert metrics["temporal_velocity_measurement_z_valid_coordinate_count"] == 0.0
 
 
 def test_temporal_velocity_measurement_rejects_partial_explicit_fields() -> None:

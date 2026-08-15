@@ -27,6 +27,9 @@ simulator:
   drag_range: [0.01, 0.16]
   friction_range: [0.05, 0.35]
   ensured_pair_lateral_offset_range: [0.0, 0.0]
+  ensured_pair_floor_clearance_frames: 2
+  ensured_pair_floor_clearance_margin_m: 0.03
+  ensured_pair_scene_resample_attempts: 32
   gravity: [0.0, -9.81, 0.0]
   camera_motion: orbit
   known_camera_pose: true
@@ -59,6 +62,8 @@ model:
     global_every_steps: 12
     roi_size: 20
     fast_depth_residual_enabled: false
+    temporal_velocity_independent_raw_history_enabled: false
+    temporal_velocity_continuous_gravity_axis_enabled: false
     structured_disc_center_enabled: true
     roi_uncertainty_scale: 2.5
     global_uncertainty_threshold: 4.0
@@ -68,12 +73,19 @@ model:
     measurement_log_variance_max: 4.0
   dynamics:
     max_substep: 0.008333333333333333
+    learned_effect_interval_seconds: null
+    pair_applicability_enabled: false
+    pair_applicability_lookahead_seconds: 0.05
+    pair_applicability_margin_m: 0.05
+    pair_applicability_gap_temperature_m: 0.025
+    pair_applicability_velocity_temperature_mps: 0.10
     hidden_dim: 96
     interaction_radius: 1.0
     process_noise_position: 0.0001
     process_noise_velocity: 0.002
     modal_acceleration_scale: 0.25
     residual_acceleration_scale: 0.5
+    attention_relation_endpoint_binding_enabled: false
     penetration_slop: 0.001
     max_penetration_correction: 0.08
     contact_confidence_sigma: 0.25
@@ -178,6 +190,7 @@ evaluation:
   horizons_seconds: [0.1, 0.25, 0.5, 1.0, 2.0]
   episodes: 16
   rgb_only: true
+  recovery_probe_enabled: false
   perturbation_position_std: 0.15
   perturbation_velocity_std: 0.25
   confidence_level: 0.9
