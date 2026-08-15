@@ -2951,3 +2951,10 @@ further gravity-axis threshold tuning.
   X improves at all five horizons; y/z/lifecycle/identity match learned and
   collision FP improves by one per horizon. Promoted `[0]` as the evaluator
   pool default only; no model or runtime behavior changes.
+- Added an opt-in normal-runtime heterogeneous-pool controller. It records
+  short candidate rollouts after corrected `WorldBelief` posteriors, scores
+  only exact-due associated RGB world-position measurements, rejects late or
+  slot-reused evidence, and splices only selected x into future predictions.
+  It is disabled by default; focused CPU RGB/invariant tests and a stateful
+  active-Aqua MPS smoke (`1 passed in 15.99s`) pass. Full-manifest
+  qualification remains required.

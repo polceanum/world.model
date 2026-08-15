@@ -279,6 +279,15 @@ class RuntimeConfig:
     enable_debug_oracle: bool = False
     strict_timestamps: bool = True
     modality_order: tuple[str, ...] = ("debug_oracle", "rgb")
+    # Opt-in, RGB-measurement-only delayed rollout selection.  This remains
+    # separate from WorldBelief: candidates are planning proposals and their
+    # evidence is never an alternate state estimate.
+    hypothesis_pool_enabled: bool = False
+    hypothesis_evidence_horizons_seconds: tuple[float, ...] = (0.05,)
+    hypothesis_axis_independent_axes: tuple[int, ...] = (0,)
+    hypothesis_axis_prior_strength: float = 0.001
+    hypothesis_evidence_decay: float = 1.0
+    hypothesis_timestamp_tolerance_seconds: float = 1.0e-5
 
 
 @dataclass(frozen=True)
@@ -486,6 +495,30 @@ class OrpheusConfig:
             0.0 <= self.evaluation.hypothesis_axis_prior_strength <= 1.0
         ):
             raise ValueError("evaluation.hypothesis_axis_prior_strength must lie in [0,1]")
+        runtime = self.runtime
+        if any(axis not in (0, 1, 2) for axis in runtime.hypothesis_axis_independent_axes) or len(
+            set(runtime.hypothesis_axis_independent_axes)
+        ) != len(runtime.hypothesis_axis_independent_axes):
+            raise ValueError("runtime.hypothesis_axis_independent_axes must contain unique axes 0, 1, or 2")
+        if runtime.hypothesis_pool_enabled and not runtime.hypothesis_axis_independent_axes:
+            raise ValueError("enabled runtime hypothesis selection requires at least one axis")
+        if not runtime.hypothesis_evidence_horizons_seconds or any(
+            not math.isfinite(horizon) or horizon <= 0.0
+            for horizon in runtime.hypothesis_evidence_horizons_seconds
+        ):
+            raise ValueError("runtime.hypothesis_evidence_horizons_seconds must be finite and positive")
+        if not math.isfinite(runtime.hypothesis_evidence_decay) or not (
+            0.0 < runtime.hypothesis_evidence_decay <= 1.0
+        ):
+            raise ValueError("runtime.hypothesis_evidence_decay must lie in (0,1]")
+        if not math.isfinite(runtime.hypothesis_axis_prior_strength) or not (
+            0.0 <= runtime.hypothesis_axis_prior_strength <= 1.0
+        ):
+            raise ValueError("runtime.hypothesis_axis_prior_strength must lie in [0,1]")
+        if not math.isfinite(runtime.hypothesis_timestamp_tolerance_seconds) or (
+            runtime.hypothesis_timestamp_tolerance_seconds < 0.0
+        ):
+            raise ValueError("runtime.hypothesis_timestamp_tolerance_seconds must be finite and nonnegative")
         if simulator.type != "sphere_world":
             raise ValueError(f"Unsupported simulator type {simulator.type!r}")
         if len(simulator.image_size) != 2 or any(size <= 0 for size in simulator.image_size):

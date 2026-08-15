@@ -49,9 +49,15 @@
   It passes: x improves at every horizon, y/z/lifecycle/identity match learned,
   and event FP is lower by one per horizon. Promote `[0]` as the evaluation
   pool default only; runtime pool integration remains a separate guarded task.
-- [ ] Integrate the validated injected hypothesis pool into the normal RGB
-  `WorldBelief` runtime behind an explicit opt-in configuration, then repeat
-  the full MPS guardrail protocol before changing a runtime default.
+- [x] Integrate the validated injected hypothesis pool into the normal RGB
+  `WorldBelief` runtime behind an explicit opt-in configuration. The runtime
+  now schedules candidate forecasts only after a corrected posterior, scores
+  only exact-due associated RGB back-projections, and composes x only; it never
+  stores candidates as world truth or receives simulator state.
+- [ ] Run the full 32-episode active-Aqua MPS runtime guardrail protocol for
+  that opt-in path (per-axis/horizon, lifecycle, identity, events, and
+  calibration) before changing any runtime default. The current implementation
+  test is not a promotion result.
 - [x] Complete the three-candidate eight-episode protected comparison; retain
   ballistic as diagnostic only because it is rarely selected and regresses
   mature event/position behavior.

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 import torch
 
@@ -11,6 +13,7 @@ from world_model.dynamics import (
     HypothesisDynamicsPool,
     HypothesisRolloutEngine,
     RolloutStep,
+    RuntimeHypothesisController,
 )
 
 
@@ -332,6 +335,69 @@ def test_pool_evidence_decay_allows_local_model_switch() -> None:
         uncertainty_aware=False,
     )
     assert second.selected_index.item() == 0
+
+
+def test_runtime_controller_uses_only_associated_measurements_and_splices_x() -> None:
+    """A pending rollout is scored from RGB-style associated evidence only."""
+
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+    controller.schedule(source)
+    at_due_time = source.replace(timestamp=torch.tensor([0.1]))
+    measured = SimpleNamespace(
+        timestamp=torch.tensor([0.1]),
+        measurement_mask=torch.tensor([[True]]),
+        auxiliary={"world_position": torch.tensor([[[0.0, 0.0, 0.0]]])},
+    )
+    association = SimpleNamespace(
+        pair_mask=torch.tensor([[True]]),
+        belief_indices=torch.tensor([[0]], dtype=torch.int64),
+        measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+    )
+
+    selection = controller.assimilate_observation(at_due_time, measured, association)
+
+    assert selection is not None
+    assert controller.pool.selected_index(at_due_time).tolist() == [1]
+    forecast = controller.predict(at_due_time, [0.1])
+    assert forecast is not None
+    assert forecast.positions[0, 0, 0, 0] == pytest.approx(0.0)
+    assert "hypothesis_axis_index" in forecast.auxiliary
+    torch.testing.assert_close(source.objects.position, belief.objects.position)
+
+
+def test_runtime_controller_discards_late_evidence_without_interpolation() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_FixedDynamics(0.0), _FixedDynamics(1.0)]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+    )
+    controller.reset(1, device=belief.device, dtype=belief.dtype)
+    controller.schedule(belief)
+    late = belief.replace(timestamp=torch.tensor([0.2]))
+    measured = SimpleNamespace(
+        timestamp=torch.tensor([0.2]),
+        measurement_mask=torch.tensor([[True]]),
+        auxiliary={"world_position": torch.zeros(1, 1, 3)},
+    )
+    association = SimpleNamespace(
+        pair_mask=torch.tensor([[True]]),
+        belief_indices=torch.tensor([[0]], dtype=torch.int64),
+        measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+    )
+    assert controller.assimilate_observation(late, measured, association) is None
+    assert controller.pool.last_selection is None
+    assert not controller.pending
 
 
 def test_constant_velocity_hypothesis_is_transparent_and_non_mutating() -> None:

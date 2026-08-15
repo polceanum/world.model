@@ -117,6 +117,35 @@ def test_runtime_exposes_detached_last_measurements_and_reset_clears_them() -> N
     assert model.last_measurements is None
 
 
+def test_opt_in_runtime_pool_uses_rgb_measurements_without_oracle_state() -> None:
+    """The normal runtime can accumulate delayed RGB evidence before predicting."""
+
+    torch.manual_seed(3)
+    config = _small_rgb_config()
+    config = replace(
+        config,
+        runtime=replace(
+            config.runtime,
+            hypothesis_pool_enabled=True,
+            hypothesis_evidence_horizons_seconds=(1.0 / 30.0,),
+            hypothesis_axis_independent_axes=(0,),
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    model.ingest(_rgb_packet(0.0))
+    model.ingest(_rgb_packet(1.0 / 30.0, shift=1))
+    model.ingest(_rgb_packet(2.0 / 30.0, shift=1))
+    model.ingest(_rgb_packet(3.0 / 30.0, shift=1))
+
+    controller = model.hypothesis_controller
+    assert controller is not None
+    assert controller.pool.last_selection is not None
+    assert not model.diagnostics.oracle_used
+    future = model.predict([0.1])
+    assert "hypothesis_axis_index" in future.auxiliary
+    assert torch.isfinite(future.positions).all()
+
+
 def test_global_pass_invalidates_fast_roi_cache() -> None:
     torch.manual_seed(3)
     model = OnlineWorldModel.from_config(_small_rgb_config(), device="cpu")

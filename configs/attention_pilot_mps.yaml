@@ -152,6 +152,13 @@ model:
 runtime:
   modality: rgb
   enable_debug_oracle: false
+  # The integrated candidate pool is guarded off until its normal-runtime MPS
+  # fixed-manifest protocol passes. Enable only for the explicit experiment.
+  hypothesis_pool_enabled: false
+  hypothesis_evidence_horizons_seconds: [0.05]
+  hypothesis_axis_independent_axes: [0]
+  hypothesis_axis_prior_strength: 0.001
+  hypothesis_evidence_decay: 1.0
 training:
   # One example from every scenario contributes to every optimizer update.
   batch_size: 8

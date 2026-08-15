@@ -24,6 +24,7 @@ from world_model.belief import (
     ObjectLifecycle,
     WorldBelief,
 )
+from world_model.dynamics.hypothesis_rollout import RuntimeHypothesisController
 from world_model.filtering import (
     BeliefUpdater,
     BeliefUpdaterConfig,
@@ -123,6 +124,7 @@ class OnlineWorldModel(nn.Module):
         birth_confidence: float = 0.55,
         initial_velocity_variance: float = 1.0,
         gravity: Sequence[float] = (0.0, -9.81, 0.0),
+        hypothesis_controller: RuntimeHypothesisController | None = None,
     ) -> None:
         super().__init__()
         validate_module_mapping(observation_modules)
@@ -142,6 +144,7 @@ class OnlineWorldModel(nn.Module):
         self.birth_confidence = birth_confidence
         self.initial_velocity_variance = initial_velocity_variance
         self.gravity = tuple(float(value) for value in gravity)
+        self.hypothesis_controller = hypothesis_controller
         self.state = RuntimeState()
         self.diagnostics = RuntimeDiagnostics()
         self._last_measurements: MeasurementSet | None = None
@@ -159,7 +162,12 @@ class OnlineWorldModel(nn.Module):
         """Build the complete RGB/oracle-debug vertical path from typed config."""
 
         from world_model.belief import NUM_MOTION_MODES
-        from world_model.dynamics import DynamicsModel
+        from world_model.dynamics import (
+            BallisticContactDynamics,
+            ConstantVelocityDynamics,
+            DynamicsModel,
+            HypothesisDynamicsPool,
+        )
         from world_model.observations.rgb import (
             RGBObservationConfig,
             RGBObservationModule,
@@ -468,6 +476,27 @@ class OnlineWorldModel(nn.Module):
             uncertainty_threshold=rgb_config.global_uncertainty_threshold,
             surprise_threshold=rgb_config.surprise_threshold,
         )
+        hypothesis_controller = None
+        if config.runtime.hypothesis_pool_enabled:
+            # Candidate zero is always the learned dynamics, preserving its
+            # full lifecycle/event trajectory.  Analytic candidates are only
+            # coordinate proposals selected later by RGB delayed evidence.
+            pool = HypothesisDynamicsPool(
+                (
+                    dynamics,
+                    ConstantVelocityDynamics(),
+                    ConstantVelocityDynamics(damping=0.05),
+                    BallisticContactDynamics(),
+                ),
+                evidence_decay=config.runtime.hypothesis_evidence_decay,
+            )
+            hypothesis_controller = RuntimeHypothesisController(
+                pool,
+                evidence_horizons_seconds=config.runtime.hypothesis_evidence_horizons_seconds,
+                axis_independent_axes=config.runtime.hypothesis_axis_independent_axes,
+                axis_prior_strength=config.runtime.hypothesis_axis_prior_strength,
+                timestamp_tolerance_seconds=config.runtime.hypothesis_timestamp_tolerance_seconds,
+            )
         model = cls(
             observation_modules=modules,
             dynamics=dynamics,
@@ -485,6 +514,7 @@ class OnlineWorldModel(nn.Module):
             allow_debug_oracle=debug_allowed,
             birth_confidence=lifecycle_config.birth_confidence,
             gravity=config.simulator.gravity,
+            hypothesis_controller=hypothesis_controller,
         )
         if device is not None:
             model = model.to(device)
@@ -530,6 +560,9 @@ class OnlineWorldModel(nn.Module):
         self.scheduler.reset()
         self.diagnostics.reset()
         self._last_measurements = None
+        if self.hypothesis_controller is not None:
+            device, dtype = self._model_device_dtype()
+            self.hypothesis_controller.reset(batch_size, device=device, dtype=dtype)
         if self.identifier is not None:
             self.identifier.last_diagnostics = None
 
@@ -976,6 +1009,12 @@ class OnlineWorldModel(nn.Module):
             )
         active_before = int(posterior.objects.active.sum().detach().cpu())
         association = self.associator.match(posterior, measurements, predicted)
+        if self.hypothesis_controller is not None and packet.modality == "rgb":
+            self.hypothesis_controller.assimilate_observation(
+                posterior,
+                measurements,
+                association,
+            )
         innovation = module.innovation(measurements, predicted, association)
         surprise = self.surprise_classifier(innovation, association)
         posterior = self.updater.correct(
@@ -1125,6 +1164,12 @@ class OnlineWorldModel(nn.Module):
                     )
                 self.state.batch_size = _packet_batch_size(group[0])
                 self.state.belief = self._initial_belief(group[0])
+                if self.hypothesis_controller is not None:
+                    self.hypothesis_controller.reset(
+                        self.state.batch_size,
+                        device=self.state.belief.device,
+                        dtype=self.state.belief.dtype,
+                    )
             current = self.state.belief
             requested = self._requested_timestamp(current, timestamp)
             if prepared is not None:
@@ -1173,6 +1218,8 @@ class OnlineWorldModel(nn.Module):
                 )
             self.state.belief = posterior.with_timestamp(timestamp)
             self.state.ingest_count += 1
+            if self.hypothesis_controller is not None:
+                self.hypothesis_controller.schedule(self.state.belief)
         assert self.state.belief is not None
         return self.state.belief
 
@@ -1200,6 +1247,10 @@ class OnlineWorldModel(nn.Module):
             raise ValueError("query_times must be [T] or [B,T]")
         if not torch.isfinite(times).all() or torch.any(times < 0):
             raise ValueError("query_times must be finite nonnegative offsets")
+        if self.hypothesis_controller is not None:
+            selected = self.hypothesis_controller.predict(self.state.belief, times)
+            if selected is not None:
+                return selected
         return self.dynamics.rollout(self.state.belief, times)
 
     def predict_hypotheses(

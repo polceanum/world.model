@@ -18,6 +18,7 @@ from world_model.dynamics.hypothesis_rollout import (
     HypothesisDynamicsPool,
     HypothesisRolloutEngine,
     HypothesisSelection,
+    RuntimeHypothesisController,
 )
 from world_model.dynamics.modal import ModalDynamics, ModalOutput
 from world_model.dynamics.model import DynamicsConfig, DynamicsModel
@@ -51,6 +52,7 @@ __all__ = [
     "HypothesisRolloutEngine",
     "HypothesisSelection",
     "HypothesisDynamicsPool",
+    "RuntimeHypothesisController",
     "ConstantVelocityDynamics",
     "BallisticContactDynamics",
     "ModalDynamics",

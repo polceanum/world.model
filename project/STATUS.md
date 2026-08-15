@@ -1,5 +1,52 @@
 # Project status
 
+## Runtime hypothesis-pool integration — 2026-08-15
+
+The evaluator-only x selection policy now has an explicitly opt-in normal RGB
+runtime adapter. `RuntimeHypothesisController` keeps pending candidate
+rollouts outside `WorldBelief`; once an RGB packet arrives at the exact
+configured endpoint it forms targets only from the RGB module's back-projected
+`world_position` and normal association result. It neither reads simulator
+state nor treats corrected posterior positions as labels. Late timestamps are
+discarded rather than silently interpolated, and an identity check rejects
+slots reused by lifecycle birth. Candidate trajectories never replace belief;
+after delayed evidence only configured x coordinates may be composed into a
+future rollout while learned lifecycle, event, identity, and uncertainty
+outputs remain in force.
+
+The feature is disabled by default via `runtime.hypothesis_pool_enabled: false`.
+An enabled run constructs learned/CV/damped-CV/ballistic candidates, starts
+with no selection until RGB delayed evidence exists, and uses the x-only axis
+contract. This is an integration result, not a deployment promotion or an
+accuracy claim. The necessary next gate is a complete fixed 32-episode
+active-Aqua MPS comparison from the protected checkpoint, including every
+axis/horizon, lifecycle, identity, collision, and calibration report.
+
+Focused CPU verification completed on the `orpheus` environment:
+
+```bash
+PYTHONPYCACHEPREFIX=tmp/pycache PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_hypothesis_rollout.py tests/unit/test_config.py tests/integration/test_rgb_online_loop.py
+# 198 passed in 6.70s
+PYTHONPYCACHEPREFIX=tmp/pycache PYTHONPATH=. conda run -n orpheus ruff check world_model/dynamics/hypothesis_rollout.py world_model/dynamics/__init__.py world_model/runtime/online_world_model.py world_model/utils/config.py tests/unit/test_hypothesis_rollout.py tests/integration/test_rgb_online_loop.py
+# All checks passed
+```
+
+The new tests cover candidate evidence from associated measurements, axis-only
+composition, no mutation of the source belief, rejection of late evidence, and
+an end-to-end RGB-only opt-in loop with no oracle use.
+
+An active-Aqua MPS stateful RGB smoke also passed on this Intel i9/Radeon host
+with the existing user-provided PyTorch build:
+
+```bash
+launchctl asuser 501 /bin/zsh -lc 'cd /Users/mike/Work/world.model && PYTHONPYCACHEPREFIX=tmp/pycache PYTHONPATH=. /usr/local/Caskroom/miniforge/base/envs/orpheus/bin/python -m pytest -q tests/integration/test_mps_attention_pilot_smoke.py::test_opt_in_rgb_hypothesis_pool_is_finite_on_mps'
+# 1 passed in 15.99s
+```
+
+It covers actual MPS RGB discovery/ROI association, delayed selector evidence,
+and a selected future rollout. It is deliberately bounded; it does not replace
+the pending 32-episode runtime accuracy/calibration guardrail protocol.
+
 **Date:** 2026-08-13
 **Specification:** `PROJECT_SPEC.md` 1.44; the active immutable relation-only
 campaign uses specification 1.42 and the rejected schedule control uses 1.41

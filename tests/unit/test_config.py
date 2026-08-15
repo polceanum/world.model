@@ -61,6 +61,9 @@ def test_axis_composition_is_configured_only_for_attention_pilot() -> None:
     assert not default.evaluation.hypothesis_axis_independent
     assert attention.evaluation.hypothesis_axis_independent
     assert attention.evaluation.hypothesis_axis_independent_axes == (0,)
+    assert not attention.runtime.hypothesis_pool_enabled
+    assert attention.runtime.hypothesis_evidence_horizons_seconds == (0.05,)
+    assert attention.runtime.hypothesis_axis_independent_axes == (0,)
 
 
 def test_simulator_scenario_mixture_is_typed_and_validated() -> None:

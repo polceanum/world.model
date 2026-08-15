@@ -815,3 +815,201 @@ class HypothesisDynamicsPool:
         if self.last_selection is None or self.last_selection.axis_selected_index is None:
             raise RuntimeError("axis selection is unavailable before assimilation")
         return self.last_selection.axis_selected_index
+
+
+@dataclass(frozen=True)
+class PendingHypothesisEvidence:
+    """One RGB-only forecast awaiting an observation at its due timestamp."""
+
+    due_timestamp: Tensor
+    source_object_ids: Tensor
+    trajectories: tuple[BeliefTrajectory, ...]
+
+
+class RuntimeHypothesisController:
+    """Causal adapter from associated RGB positions to a candidate pool.
+
+    This controller is deliberately runtime-local rather than belief state. It
+    remembers only pending imagined rollouts and their evidence weights.  At a
+    later packet it uses *associated RGB world-position measurements* to score
+    a due rollout, then future calls can compose only explicitly configured
+    coordinate axes.  Simulator state, ground-truth IDs, and posterior object
+    positions are never used as selector targets.
+    """
+
+    def __init__(
+        self,
+        pool: HypothesisDynamicsPool,
+        *,
+        evidence_horizons_seconds: Sequence[float],
+        axis_independent_axes: Sequence[int],
+        axis_prior_strength: float = 0.0,
+        timestamp_tolerance_seconds: float = 1.0e-5,
+    ) -> None:
+        if not evidence_horizons_seconds or any(
+            horizon <= 0 or not torch.isfinite(torch.as_tensor(horizon))
+            for horizon in evidence_horizons_seconds
+        ):
+            raise ValueError("evidence horizons must be finite and positive")
+        if any(axis not in (0, 1, 2) for axis in axis_independent_axes):
+            raise ValueError("axis_independent_axes must contain only 0, 1, or 2")
+        if not 0.0 <= axis_prior_strength <= 1.0:
+            raise ValueError("axis_prior_strength must lie in [0,1]")
+        if timestamp_tolerance_seconds < 0 or not torch.isfinite(
+            torch.as_tensor(timestamp_tolerance_seconds)
+        ):
+            raise ValueError("timestamp_tolerance_seconds must be finite and nonnegative")
+        self.pool = pool
+        self.evidence_horizons_seconds = tuple(float(value) for value in evidence_horizons_seconds)
+        self.axis_independent_axes = tuple(sorted(set(int(axis) for axis in axis_independent_axes)))
+        self.axis_prior_strength = float(axis_prior_strength)
+        self.timestamp_tolerance_seconds = float(timestamp_tolerance_seconds)
+        self.pending: list[PendingHypothesisEvidence] = []
+
+    def reset(self, batch_size: int, *, device: torch.device, dtype: torch.dtype) -> None:
+        self.pool.reset(batch_size, device=device, dtype=dtype)
+        self.pending.clear()
+
+    def schedule(self, belief: WorldBelief) -> None:
+        """Issue small candidate rollouts after a corrected posterior."""
+
+        self.pool._ensure_weights(belief)
+        # A non-RGB asynchronous packet may advance time beyond a pending
+        # endpoint. Such a forecast cannot later acquire an exact RGB target,
+        # so bound runtime-local memory without inventing interpolation.
+        self.pending = [
+            pending
+            for pending in self.pending
+            if bool(
+                torch.all(
+                    belief.timestamp
+                    <= pending.due_timestamp + self.timestamp_tolerance_seconds
+                )
+            )
+        ]
+        for horizon in self.evidence_horizons_seconds:
+            trajectories = self.pool.rollout(belief, [horizon])
+            self.pending.append(
+                PendingHypothesisEvidence(
+                    due_timestamp=belief.timestamp.detach().clone() + horizon,
+                    source_object_ids=belief.objects.object_id.detach().clone(),
+                    trajectories=tuple(trajectories),
+                )
+            )
+
+    @staticmethod
+    def _associated_rgb_targets(
+        belief: WorldBelief,
+        measured: object,
+        association: object,
+        source_object_ids: Tensor,
+    ) -> tuple[Tensor, Tensor] | None:
+        """Map associated RGB back-projections to persistent candidate slots."""
+
+        auxiliary = getattr(measured, "auxiliary", None)
+        positions = auxiliary.get("world_position") if isinstance(auxiliary, dict) else None
+        measurement_mask = getattr(measured, "measurement_mask", None)
+        pair_mask = getattr(association, "pair_mask", None)
+        belief_indices = getattr(association, "belief_indices", None)
+        measurement_indices = getattr(association, "measurement_indices", None)
+        if not all(isinstance(value, Tensor) for value in (
+            positions, measurement_mask, pair_mask, belief_indices, measurement_indices,
+        )):
+            return None
+        assert isinstance(positions, Tensor)
+        assert isinstance(measurement_mask, Tensor)
+        assert isinstance(pair_mask, Tensor)
+        assert isinstance(belief_indices, Tensor)
+        assert isinstance(measurement_indices, Tensor)
+        expected = (*measurement_mask.shape, 3)
+        if positions.shape != expected or source_object_ids.shape != belief.objects.object_id.shape:
+            return None
+        target = belief.objects.position.new_zeros(belief.objects.position.shape)
+        target_mask = torch.zeros_like(belief.objects.active)
+        for batch_index in range(belief.batch_size):
+            for pair_index in torch.nonzero(pair_mask[batch_index], as_tuple=False).flatten().tolist():
+                slot = int(belief_indices[batch_index, pair_index])
+                measurement_index = int(measurement_indices[batch_index, pair_index])
+                if not (0 <= slot < belief.objects.max_objects and 0 <= measurement_index < positions.shape[1]):
+                    continue
+                if not bool(measurement_mask[batch_index, measurement_index]):
+                    continue
+                # A slot reused by lifecycle birth is never evidence about an
+                # older candidate trajectory.
+                if source_object_ids[batch_index, slot] != belief.objects.object_id[batch_index, slot]:
+                    continue
+                target[batch_index, slot] = positions[batch_index, measurement_index]
+                target_mask[batch_index, slot] = True
+        return target, target_mask
+
+    def assimilate_observation(
+        self,
+        belief: WorldBelief,
+        measured: object,
+        association: object,
+    ) -> HypothesisSelection | None:
+        """Score only due forecasts using the packet's own RGB evidence."""
+
+        timestamp = getattr(measured, "timestamp", None)
+        if not isinstance(timestamp, Tensor) or timestamp.shape != belief.timestamp.shape:
+            return None
+        retained: list[PendingHypothesisEvidence] = []
+        latest: HypothesisSelection | None = None
+        for pending in self.pending:
+            difference = timestamp - pending.due_timestamp
+            if bool(torch.all(difference < -self.timestamp_tolerance_seconds)):
+                retained.append(pending)
+                continue
+            # An asynchronous packet that arrives after the forecast's exact
+            # endpoint cannot be used as an interpolated target silently.
+            if not bool(torch.all(difference.abs() <= self.timestamp_tolerance_seconds)):
+                continue
+            targets = self._associated_rgb_targets(
+                belief, measured, association, pending.source_object_ids
+            )
+            if targets is None:
+                continue
+            target_positions, target_mask = targets
+            if not bool(target_mask.any()):
+                continue
+            latest = self.pool.assimilate(
+                belief,
+                target_positions.unsqueeze(1),
+                target_mask.unsqueeze(1),
+                trajectories=pending.trajectories,
+                axis_prior_strength=self.axis_prior_strength,
+            )
+        self.pending = retained
+        return latest
+
+    def predict(self, belief: WorldBelief, query_times: Tensor | Sequence[float]) -> BeliefTrajectory | None:
+        """Compose only validated axes; lifecycle/events stay learned-model outputs."""
+
+        if self.pool.last_selection is None:
+            return None
+        trajectories = self.pool.rollout(belief, query_times)
+        learned = trajectories[0]
+        choices = self.pool.selected_axis_index(belief)
+        positions = learned.positions.clone()
+        candidate_positions = torch.stack([item.positions for item in trajectories], dim=-1)
+        for axis in self.axis_independent_axes:
+            selected = choices[:, axis].view(belief.batch_size, 1, 1, 1, 1)
+            positions[..., axis] = torch.gather(
+                candidate_positions[..., axis, :], -1, selected.expand(
+                    belief.batch_size, positions.shape[1], positions.shape[2], 1, 1
+                ).squeeze(-2),
+            ).squeeze(-1)
+        return BeliefTrajectory(
+            timestamps=learned.timestamps,
+            positions=positions,
+            velocities=learned.velocities,
+            orientations=learned.orientations,
+            motion_mode_logits=learned.motion_mode_logits,
+            fast_log_variance=learned.fast_log_variance,
+            active_mask=learned.active_mask,
+            event_logits=learned.event_logits,
+            auxiliary={
+                **learned.auxiliary,
+                "hypothesis_axis_index": choices.detach().clone(),
+            },
+        ).validate()

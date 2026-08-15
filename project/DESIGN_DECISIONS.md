@@ -1,5 +1,31 @@
 # Design decisions
 
+## ADR-131 — Runtime selection consumes associated RGB evidence only
+
+- **Date:** 2026-08-15
+- **Status:** accepted and implemented; broad MPS qualification pending
+- **Context:** The fixed 32-episode MPS evaluator established a narrow causal
+  benefit from x-only candidate selection, but its simulator-aligned targets
+  are evaluation-only and cannot enter the normal RGB runtime.
+- **Decision:** Add an opt-in runtime controller outside `WorldBelief`. After
+  every corrected posterior it records short candidate rollouts. At a later
+  packet it scores only forecasts whose configured endpoint exactly matches
+  the RGB timestamp, using `world_position` reconstructed by the RGB module
+  and the normal association mapping. It rejects late, interpolated evidence
+  and slot-reused identities. The learned candidate remains candidate zero;
+  only configured x coordinates are spliced into future trajectories, while
+  learned lifecycle, identity, event, uncertainty, and the authoritative
+  belief remain intact.
+- **Alternatives considered:** use simulator target alignment in the runtime;
+  score posterior positions after correction; maintain a second candidate
+  belief; interpolate delayed asynchronous measurements; replace entire
+  trajectories including lifecycle/events.
+- **Consequences:** The feature is causally executable with RGB only, but it
+  is disabled by default. It must pass the complete fixed active-Aqua MPS
+  protocol before normal runtime promotion. Exact endpoint matching means a
+  future asynchronous/interpolation contract is required before non-aligned
+  sensors can contribute delayed evidence.
+
 ## ADR-117 — Make adjacent trend windows non-overlapping
 
 - **Date:** 2026-08-13

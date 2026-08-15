@@ -8,6 +8,7 @@ import pytest
 import torch
 
 from world_model.datasets import collate_episodes
+from world_model.observations import ObservationPacket
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
 from world_model.training.loop import move_batch_to_device, run_closed_loop_batch
@@ -65,3 +66,49 @@ def test_attention_pilot_rgb_closed_loop_z_scope_is_finite_on_mps() -> None:
     assert torch.isfinite(result.total_loss)
     assert z_gradient is not None
     assert torch.isfinite(z_gradient).all()
+
+
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(),
+    reason="requires an active Aqua MPS device",
+)
+def test_opt_in_rgb_hypothesis_pool_is_finite_on_mps() -> None:
+    """Exercise the stateful RGB-only delayed-evidence adapter on MPS."""
+
+    source = load_config("configs/attention_pilot_mps.yaml")
+    config = replace(
+        source,
+        runtime=replace(
+            source.runtime,
+            hypothesis_pool_enabled=True,
+            hypothesis_evidence_horizons_seconds=(0.05,),
+            hypothesis_axis_independent_axes=(0,),
+        ),
+    )
+    config.validate()
+    model = OnlineWorldModel.from_config(config, device="mps")
+    intrinsics = torch.tensor(
+        [[56.0, 0.0, 31.5], [0.0, 56.0, 31.5], [0.0, 0.0, 1.0]]
+    )
+    world_from_camera = torch.eye(4)
+    world_from_camera[2, 3] = -4.0
+    for frame in range(4):
+        image = torch.zeros(3, 64, 64)
+        image[0, 14:27, 10 + frame : 23 + frame] = 1.0
+        image[1, 35:47, 39 - frame : 51 - frame] = 0.8
+        model.ingest(
+            ObservationPacket(
+                modality="rgb",
+                sensor_id="camera",
+                timestamp=frame * 0.05,
+                payload=image,
+                calibration={
+                    "intrinsics": intrinsics,
+                    "world_from_camera": world_from_camera,
+                },
+                frame_id=f"camera:{frame}",
+            )
+        )
+    assert model.hypothesis_controller is not None
+    assert model.hypothesis_controller.pool.last_selection is not None
+    assert torch.isfinite(model.predict([0.1]).positions).all()
