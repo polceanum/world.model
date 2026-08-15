@@ -10135,3 +10135,14 @@ at 1.00 s. Conversely, allowing y selection regresses y at those horizons
 diagnostic—not a complete deployment comparator—but it justifies one fixed
 MPS x-only axis-selection ablation (`axes=[0]`) before considering any
 selection default; it does not authorize a y fallback or model-weight update.
+
+That x-only ablation completed on active-Aqua MPS at
+`runs/20260815-002727-protected-causal-hypothesis-pool-8-x-only` over the
+same eight RGB-only seeds. It preserves the exact selected x RMSE gains from
+the x/y splice (`0.766911`, `0.760859`, `0.781858` m at 0.50/0.75/1.00 s),
+restores y to learned-quality (`0.239430`, `0.250243`, `0.249090` m), and
+leaves z, joint counts, lifecycle mismatch, identity coverage, and aggregate
+collision TP/FP/FN totals bitwise identical to the x/y diagnostic. This
+isolates y selection—not the x causal fallback—as the regression source. It
+is still only an eight-episode diagnostic, so configuration defaults remain
+unchanged pending the fixed 32-episode MPS all-guardrail protocol.

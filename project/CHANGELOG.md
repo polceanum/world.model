@@ -2940,3 +2940,7 @@ further gravity-axis threshold tuning.
 - Completed the exact additive-evidence eight-episode MPS pool rerun. Causal
   axis selection improves x at 0.50--1.00 s but y switching regresses y,
   motivating a guarded x-only ablation rather than a selector default change.
+- Completed the x-only eight-episode MPS causal-selection ablation. It retains
+  x-axis long-horizon gains, returns y to learned quality, and leaves lifecycle,
+  identity, and collision totals unchanged. Escalate only to the fixed
+  32-episode guardrail protocol; no default changes yet.

@@ -3673,7 +3673,7 @@
 ## ADR-130 — Isolate demonstrated x-axis selection benefit before changing defaults
 
 - **Date:** 2026-08-15
-- **Status:** pending fixed MPS ablation
+- **Status:** eight-episode ablation passed; pending fixed 32-episode MPS protocol
 - **Context:** Exact additive evidence from eight RGB-only MPS episodes shows
   causal axis-aware selection improves x at 0.50/0.75/1.00 s, but the small
   number of y switches worsens y over the same horizons. Z stays effectively
@@ -3687,3 +3687,9 @@
   axis-factorized physics claim. It can fail because even an x-only position
   splice may affect tracked object availability, event interpretation, or
   calibrated uncertainty; all such effects remain measured.
+
+  The completed eight-episode result retains the x improvement, restores y to
+  the learned candidate, and leaves lifecycle/identity/collision totals exact.
+  That establishes the localized mechanism but is insufficient to change a
+  runtime default; the fixed 32-episode all-guardrail comparison remains the
+  promotion boundary.
