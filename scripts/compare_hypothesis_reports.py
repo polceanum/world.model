@@ -83,7 +83,9 @@ def main() -> int:
     if args.tolerance < 0:
         raise ValueError("--tolerance must be nonnegative")
     result = compare_reports(
-        json.loads(args.baseline.read_text()), json.loads(args.candidate.read_text()), tolerance=args.tolerance
+        json.loads(args.baseline.read_text()),
+        json.loads(args.candidate.read_text()),
+        tolerance=args.tolerance,
     )
     payload = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.output:

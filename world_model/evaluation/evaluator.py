@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import math
@@ -552,6 +553,73 @@ def _mean_or_none(values: list[float]) -> float | None:
     return statistics.mean(values) if values else None
 
 
+@dataclass
+class _EvaluationProgressSink:
+    """Durable progress channel available before model initialization."""
+
+    path: Path | None
+    callback: Callable[[dict[str, Any]], None] | None
+    last_event: dict[str, Any] | None = None
+
+    def publish(self, event: dict[str, Any]) -> None:
+        self.last_event = event
+        if self.path is not None:
+            atomic_write_text(
+                self.path,
+                json.dumps(event, indent=2, sort_keys=True) + "\n",
+            )
+        if self.callback is not None:
+            self.callback(event)
+
+    def fail(self, error: BaseException) -> None:
+        if self.path is None and self.callback is None:
+            return
+        event: dict[str, Any] = {
+            "stage": "interrupted" if isinstance(error, KeyboardInterrupt) else "failed",
+            "updated_utc": datetime.now(timezone.utc).isoformat(),
+            "pid": os.getpid(),
+            "exception_type": type(error).__name__,
+            "message": str(error),
+        }
+        if self.last_event is not None:
+            event.update(
+                {
+                    key: value
+                    for key, value in self.last_event.items()
+                    if key not in {"stage", "updated_utc", "pid"}
+                }
+            )
+            event["last_stage"] = self.last_event.get("stage")
+            event["last_progress"] = self.last_event
+        if self.path is not None:
+            with contextlib.suppress(Exception):
+                atomic_write_text(
+                    self.path,
+                    json.dumps(event, indent=2, sort_keys=True) + "\n",
+                )
+        if self.callback is not None:
+            with contextlib.suppress(Exception):
+                self.callback(event)
+
+
+def _planned_evaluation_output(
+    checkpoint_path: str | Path,
+    *,
+    split: str,
+    seed_protocol: str,
+    output_dir: str | Path | None,
+) -> tuple[Path, Path]:
+    checkpoint = Path(checkpoint_path).expanduser().resolve()
+    requested_output = (
+        Path(output_dir).expanduser().resolve()
+        if output_dir is not None
+        else checkpoint.parent.parent
+        / "evaluation"
+        / (split if seed_protocol == STANDARD_SEED_PROTOCOL else f"{split}-{seed_protocol}")
+    )
+    return checkpoint, timestamped_artifact_path(requested_output).resolve()
+
+
 def evaluate_checkpoint(
     config: OrpheusConfig,
     checkpoint_path: str | Path,
@@ -565,6 +633,66 @@ def evaluate_checkpoint(
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
     progress_path: str | Path | None = None,
 ) -> dict[str, Any]:
+    """Evaluate a trusted checkpoint with progress from initialization onward."""
+
+    checkpoint, planned_output = _planned_evaluation_output(
+        checkpoint_path,
+        split=split,
+        seed_protocol=seed_protocol,
+        output_dir=output_dir,
+    )
+    durable_progress_path = (
+        Path(progress_path).expanduser().resolve()
+        if progress_path is not None
+        else planned_output / "evaluation_progress.json"
+    )
+
+    sink = _EvaluationProgressSink(
+        path=durable_progress_path,
+        callback=progress_callback,
+    )
+    try:
+        sink.publish(
+            {
+                "stage": "initializing",
+                "updated_utc": datetime.now(timezone.utc).isoformat(),
+                "pid": os.getpid(),
+                "split": split,
+                "seed_protocol": seed_protocol,
+                "checkpoint": str(checkpoint),
+                "output_directory": str(planned_output),
+                "runtime_hypothesis_pool": runtime_hypothesis_pool,
+                "rgb_only": True,
+            }
+        )
+        return _evaluate_checkpoint_impl(
+            config,
+            checkpoint,
+            split=split,
+            seed_protocol=seed_protocol,
+            seed_offset=seed_offset,
+            output=planned_output,
+            device_info=device_info,
+            runtime_hypothesis_pool=runtime_hypothesis_pool,
+            progress_sink=sink,
+        )
+    except BaseException as error:
+        sink.fail(error)
+        raise
+
+
+def _evaluate_checkpoint_impl(
+    config: OrpheusConfig,
+    checkpoint_path: str | Path,
+    *,
+    split: str = "test",
+    seed_protocol: str = STANDARD_SEED_PROTOCOL,
+    seed_offset: int | None = None,
+    output: Path,
+    device_info: DeviceInfo | None = None,
+    runtime_hypothesis_pool: bool = False,
+    progress_sink: _EvaluationProgressSink,
+) -> dict[str, Any]:
     """Evaluate a trusted local checkpoint on held-out RGB episodes.
 
     Simulator state and parameters are used for metrics and the explicitly
@@ -577,6 +705,11 @@ def evaluate_checkpoint(
         raise ValueError("Milestone 1 evaluation must set evaluation.rgb_only=true")
     if config.runtime.modality != "rgb" or config.runtime.enable_debug_oracle:
         raise ValueError("held-out RGB evaluation forbids debug_oracle runtime input")
+    if config.runtime.hypothesis_pool_enabled:
+        raise ValueError(
+            "checkpoint evaluation config must keep runtime.hypothesis_pool_enabled=false; "
+            "use the explicit runtime_hypothesis_pool intervention"
+        )
     checkpoint = Path(checkpoint_path).expanduser().resolve()
     resolved_device = device_info or select_device(config.device.preference)
     device = resolved_device.device
@@ -596,21 +729,21 @@ def evaluate_checkpoint(
     )
     if runtime_hypothesis_pool:
         enable_runtime_hypothesis_pool(model, config)
+    if (model.hypothesis_controller is not None) != runtime_hypothesis_pool:
+        raise RuntimeError("reported runtime hypothesis policy does not match active controller")
     model.eval()
 
-    durable_progress_path: Path | None = None
+    progress_context: dict[str, Any] = {}
 
     def report_progress(stage: str, **values: Any) -> None:
         event = {
             "stage": stage,
             "updated_utc": datetime.now(timezone.utc).isoformat(),
             "pid": os.getpid(),
+            **progress_context,
             **values,
         }
-        if durable_progress_path is not None:
-            atomic_write_text(durable_progress_path, json.dumps(event, indent=2, sort_keys=True) + "\n")
-        if progress_callback is not None:
-            progress_callback(event)
+        progress_sink.publish(event)
 
     checkpoint_training_config = payload["config"].get("training")
     if not isinstance(checkpoint_training_config, Mapping):
@@ -648,28 +781,23 @@ def evaluate_checkpoint(
         collate_fn=collate_episodes,
         drop_last=False,
     )
-    requested_output = (
-        Path(output_dir).expanduser().resolve()
-        if output_dir is not None
-        else checkpoint.parent.parent
-        / "evaluation"
-        / (
-            split
-            if resolved_seed_protocol.name == STANDARD_SEED_PROTOCOL
-            else f"{split}-{resolved_seed_protocol.name}"
-        )
+    progress_context.update(
+        {
+            "split": resolved_seed_protocol.split,
+            "seed_protocol": resolved_seed_protocol.name,
+            "device": str(device),
+            "precision": resolved_device.precision,
+            "episodes": config.evaluation.episodes,
+            "batches": len(loader),
+            "checkpoint": str(checkpoint),
+            "checkpoint_step": int(payload["step"]),
+            "output_directory": str(output),
+            "runtime_hypothesis_pool": runtime_hypothesis_pool,
+            "rgb_only": True,
+        }
     )
-    output = timestamped_artifact_path(requested_output)
-    if progress_path is not None:
-        durable_progress_path = Path(progress_path).expanduser().resolve()
-    elif progress_callback is not None:
-        durable_progress_path = output / "evaluation_progress.json"
     report_progress(
         "started",
-        episodes=config.evaluation.episodes,
-        batches=len(loader),
-        device=str(device),
-        runtime_hypothesis_pool=runtime_hypothesis_pool,
     )
 
     current_error = _ErrorAccumulator()
@@ -712,6 +840,14 @@ def evaluate_checkpoint(
         axis: [0 for _ in _RUNTIME_HYPOTHESIS_CANDIDATES]
         for axis in config.runtime.hypothesis_axis_independent_axes
     }
+    runtime_hypothesis_horizon_axis_selection_count: dict[tuple[str, int], list[int]] = {}
+    runtime_hypothesis_axis_supported_count = {
+        axis: 0 for axis in config.runtime.hypothesis_axis_independent_axes
+    }
+    runtime_hypothesis_axis_fallback_count = {
+        axis: 0 for axis in config.runtime.hypothesis_axis_independent_axes
+    }
+    runtime_hypothesis_horizon_axis_support_count: dict[tuple[str, int], tuple[int, int]] = {}
     forecast_target_count: dict[str, int] = {}
     forecast_tracked_count: dict[str, int] = {}
     forecast_active_count: dict[str, int] = {}
@@ -735,17 +871,17 @@ def evaluate_checkpoint(
                 prior_rollout = None
                 prior_variance = None
                 ordinary_velocity_prior = None
+                prepared_propagation = None
+                propagation_elapsed_ms = 0.0
                 perturb_offsets: list[int] = []
                 perturb_seconds: list[float] = []
                 if model.belief is not None and frame_index != perturbation_frame:
-                    requested = model.belief.timestamp.new_full(
-                        model.belief.timestamp.shape,
-                        packet.timestamp,
-                    )
-                    ordinary_velocity_prior = model.dynamics.predict(
-                        model.belief,
-                        requested - model.belief.timestamp,
-                    )
+                    synchronize(device)
+                    propagation_started = time.perf_counter()
+                    prepared_propagation = model.prepare_propagation(packet.timestamp)
+                    synchronize(device)
+                    propagation_elapsed_ms += (time.perf_counter() - propagation_started) * 1000.0
+                    ordinary_velocity_prior = prepared_propagation.prior
                 if model.belief is not None and frame_index == perturbation_frame:
                     source_belief = perturb_belief(
                         model.belief,
@@ -757,13 +893,21 @@ def evaluate_checkpoint(
                     # timestamp-advanced prior.  Runtime ingest must retain
                     # the positive dt used by velocity-aware correction.
                     model.state.belief = source_belief
-                    requested = source_belief.timestamp.new_full(
-                        source_belief.timestamp.shape, packet.timestamp
-                    )
-                    prior = model.dynamics.predict(
-                        source_belief,
-                        requested - source_belief.timestamp,
-                    )
+                    if model.hypothesis_controller is not None:
+                        # The perturbation is an evaluator-only posterior
+                        # revision. Forecasts issued from the unperturbed
+                        # belief must never be scored against later RGB.
+                        model.hypothesis_controller.invalidate_pending(
+                            reason="evaluation_belief_perturbation",
+                            reset_evidence=True,
+                            belief=source_belief,
+                        )
+                    synchronize(device)
+                    propagation_started = time.perf_counter()
+                    prepared_propagation = model.prepare_propagation(packet.timestamp)
+                    synchronize(device)
+                    propagation_elapsed_ms += (time.perf_counter() - propagation_started) * 1000.0
+                    prior = prepared_propagation.prior
                     perturb_offsets, perturb_seconds = _future_queries(
                         config, frame_index, total_frames
                     )
@@ -788,9 +932,11 @@ def evaluate_checkpoint(
                     }
                 synchronize(device)
                 update_started = time.perf_counter()
-                belief = model.ingest(packet)
+                belief = model.ingest(packet, prepared=prepared_propagation)
                 synchronize(device)
-                update_elapsed_ms = (time.perf_counter() - update_started) * 1000.0
+                update_elapsed_ms = (
+                    propagation_elapsed_ms + (time.perf_counter() - update_started) * 1000.0
+                )
                 last_measurements = model.last_measurements
                 if last_measurements is not None:
                     expected_measurement_timestamp = last_measurements.timestamp.new_full(
@@ -1119,6 +1265,7 @@ def evaluate_checkpoint(
                     trajectory = model.predict(event_query_plan.query_seconds)
                     if runtime_hypothesis_pool:
                         axis_indices = trajectory.auxiliary.get("hypothesis_axis_index")
+                        axis_supported = trajectory.auxiliary.get("hypothesis_axis_supported")
                         # Before the first exact-due RGB observation there is
                         # deliberately no selector evidence, and normal
                         # runtime falls back to the learned rollout. Record
@@ -1127,27 +1274,172 @@ def evaluate_checkpoint(
                         if axis_indices is None:
                             axis_indices = torch.zeros(
                                 batch_size,
+                                len(event_query_plan.query_seconds),
+                                belief.objects.max_objects,
                                 3,
                                 device=belief.device,
                                 dtype=torch.int64,
                             )
-                        if not isinstance(axis_indices, Tensor) or axis_indices.shape != (batch_size, 3):
+                            axis_supported = torch.zeros_like(
+                                axis_indices,
+                                dtype=torch.bool,
+                            )
+                        if isinstance(axis_indices, Tensor) and axis_indices.shape == (
+                            batch_size,
+                            3,
+                        ):
+                            axis_indices = (
+                                axis_indices.unsqueeze(1)
+                                .unsqueeze(2)
+                                .expand(
+                                    batch_size,
+                                    len(event_query_plan.query_seconds),
+                                    belief.objects.max_objects,
+                                    3,
+                                )
+                            )
+                        if isinstance(axis_indices, Tensor) and axis_indices.shape == (
+                            batch_size,
+                            len(event_query_plan.query_seconds),
+                            3,
+                        ):
+                            axis_indices = axis_indices.unsqueeze(2).expand(
+                                batch_size,
+                                len(event_query_plan.query_seconds),
+                                belief.objects.max_objects,
+                                3,
+                            )
+                        if isinstance(axis_supported, Tensor) and axis_supported.shape == (
+                            batch_size,
+                            3,
+                        ):
+                            axis_supported = (
+                                axis_supported.unsqueeze(1)
+                                .unsqueeze(2)
+                                .expand(
+                                    batch_size,
+                                    len(event_query_plan.query_seconds),
+                                    belief.objects.max_objects,
+                                    3,
+                                )
+                            )
+                        if isinstance(axis_supported, Tensor) and axis_supported.shape == (
+                            batch_size,
+                            len(event_query_plan.query_seconds),
+                            3,
+                        ):
+                            axis_supported = axis_supported.unsqueeze(2).expand(
+                                batch_size,
+                                len(event_query_plan.query_seconds),
+                                belief.objects.max_objects,
+                                3,
+                            )
+                        if not isinstance(axis_indices, Tensor) or axis_indices.shape != (
+                            batch_size,
+                            len(event_query_plan.query_seconds),
+                            belief.objects.max_objects,
+                            3,
+                        ):
                             raise RuntimeError(
                                 "runtime hypothesis forecast must expose "
-                                "hypothesis_axis_index [B,3]"
+                                "hypothesis_axis_index [B,Q,N,3]"
                             )
-                        if axis_indices.dtype != torch.int64 or torch.any(axis_indices < 0) or torch.any(
-                            axis_indices >= len(_RUNTIME_HYPOTHESIS_CANDIDATES)
+                        if (
+                            not isinstance(axis_supported, Tensor)
+                            or axis_supported.shape != axis_indices.shape
+                            or axis_supported.dtype != torch.bool
+                        ):
+                            raise RuntimeError(
+                                "runtime hypothesis forecast must expose boolean "
+                                "hypothesis_axis_supported [B,Q,N,3]"
+                            )
+                        if (
+                            axis_indices.dtype != torch.int64
+                            or torch.any(axis_indices < 0)
+                            or torch.any(axis_indices >= len(_RUNTIME_HYPOTHESIS_CANDIDATES))
                         ):
                             raise RuntimeError("runtime hypothesis axis index is invalid")
                         runtime_hypothesis_forecast_anchor_count += batch_size
+                        target_axis_indices = event_query_plan.select_target_endpoints(axis_indices)
+                        target_axis_supported = event_query_plan.select_target_endpoints(
+                            axis_supported
+                        )
+                        target_hypothesis_active = event_query_plan.select_target_endpoints(
+                            trajectory.active_mask
+                        )
                         for axis in config.runtime.hypothesis_axis_independent_axes:
-                            selected_counts = torch.bincount(
-                                axis_indices[:, axis],
-                                minlength=len(_RUNTIME_HYPOTHESIS_CANDIDATES),
-                            ).detach().cpu().tolist()
+                            supported_count = int(
+                                (target_axis_supported[..., axis] & target_hypothesis_active)
+                                .sum()
+                                .detach()
+                                .cpu()
+                            )
+                            active_count_for_axis = int(
+                                target_hypothesis_active.sum().detach().cpu()
+                            )
+                            fallback_count = active_count_for_axis - supported_count
+                            runtime_hypothesis_axis_supported_count[axis] += supported_count
+                            runtime_hypothesis_axis_fallback_count[axis] += fallback_count
+                            selected_counts = (
+                                torch.bincount(
+                                    target_axis_indices[..., axis].masked_select(
+                                        target_hypothesis_active & target_axis_supported[..., axis]
+                                    ),
+                                    minlength=len(_RUNTIME_HYPOTHESIS_CANDIDATES),
+                                )
+                                .detach()
+                                .cpu()
+                                .tolist()
+                            )
                             for candidate_index, count in enumerate(selected_counts):
-                                runtime_hypothesis_axis_selection_count[axis][candidate_index] += int(count)
+                                runtime_hypothesis_axis_selection_count[axis][candidate_index] += (
+                                    int(count)
+                                )
+                            for query_index, query_seconds_value in enumerate(query_seconds):
+                                horizon = _horizon_key(query_seconds_value)
+                                key = (horizon, axis)
+                                horizon_counts = (
+                                    runtime_hypothesis_horizon_axis_selection_count.setdefault(
+                                        key,
+                                        [0 for _ in _RUNTIME_HYPOTHESIS_CANDIDATES],
+                                    )
+                                )
+                                selected_counts = (
+                                    torch.bincount(
+                                        target_axis_indices[:, query_index, :, axis].masked_select(
+                                            target_hypothesis_active[:, query_index]
+                                            & target_axis_supported[:, query_index, :, axis]
+                                        ),
+                                        minlength=len(_RUNTIME_HYPOTHESIS_CANDIDATES),
+                                    )
+                                    .detach()
+                                    .cpu()
+                                    .tolist()
+                                )
+                                for candidate_index, count in enumerate(selected_counts):
+                                    horizon_counts[candidate_index] += int(count)
+                                query_supported_count = int(
+                                    (
+                                        target_axis_supported[:, query_index, :, axis]
+                                        & target_hypothesis_active[:, query_index]
+                                    )
+                                    .sum()
+                                    .detach()
+                                    .cpu()
+                                )
+                                query_active_count = int(
+                                    target_hypothesis_active[:, query_index].sum().detach().cpu()
+                                )
+                                prior_supported, prior_fallback = (
+                                    runtime_hypothesis_horizon_axis_support_count.get(
+                                        key,
+                                        (0, 0),
+                                    )
+                                )
+                                runtime_hypothesis_horizon_axis_support_count[key] = (
+                                    prior_supported + query_supported_count,
+                                    prior_fallback + query_active_count - query_supported_count,
+                                )
                     synchronize(device)
                     rollout_latencies.append((time.perf_counter() - rollout_started) * 1000.0)
                     model_positions = event_query_plan.select_target_endpoints(trajectory.positions)
@@ -1458,6 +1750,28 @@ def evaluate_checkpoint(
         for axis, counts in runtime_hypothesis_axis_selection_count.items():
             for candidate, count in zip(_RUNTIME_HYPOTHESIS_CANDIDATES, counts, strict=True):
                 metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_{candidate}_count"] = float(count)
+            metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_supported_count"] = float(
+                runtime_hypothesis_axis_supported_count[axis]
+            )
+            metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_fallback_count"] = float(
+                runtime_hypothesis_axis_fallback_count[axis]
+            )
+        for (horizon, axis), counts in sorted(
+            runtime_hypothesis_horizon_axis_selection_count.items()
+        ):
+            for candidate, count in zip(_RUNTIME_HYPOTHESIS_CANDIDATES, counts, strict=True):
+                metrics[f"runtime_hypothesis@{horizon}_axis_{'xyz'[axis]}_{candidate}_count"] = (
+                    float(count)
+                )
+            supported_count, fallback_count = runtime_hypothesis_horizon_axis_support_count[
+                (horizon, axis)
+            ]
+            metrics[f"runtime_hypothesis@{horizon}_axis_{'xyz'[axis]}_supported_count"] = float(
+                supported_count
+            )
+            metrics[f"runtime_hypothesis@{horizon}_axis_{'xyz'[axis]}_fallback_count"] = float(
+                fallback_count
+            )
     for horizon, target_count in sorted(forecast_target_count.items()):
         tracked_count = forecast_tracked_count.get(horizon, 0)
         active_count = forecast_active_count.get(horizon, 0)
@@ -1573,6 +1887,40 @@ def evaluate_checkpoint(
             + ", ".join(no_informative_directional_updates)
             + "; directional before/after parameter metrics are unavailable."
         )
+    runtime_hypothesis_policy: dict[str, Any] | None = None
+    if runtime_hypothesis_pool:
+        runtime_hypothesis_policy = {
+            "policy_version": "evidence_bounded_entity_axis_horizon_v1",
+            "candidates": [
+                {"name": "learned", "parameters": {}},
+                {"name": "constant_velocity", "parameters": {"damping": 0.0}},
+                {
+                    "name": "damped_constant_velocity",
+                    "parameters": {"damping": 0.05},
+                },
+                {
+                    "name": "ballistic_contact",
+                    "parameters": {"ground_height": 0.0, "event_logit": 5.0},
+                },
+            ],
+            "evidence_horizons_seconds": list(config.runtime.hypothesis_evidence_horizons_seconds),
+            "axis_independent_axes": list(config.runtime.hypothesis_axis_independent_axes),
+            "axis_prior_strength": config.runtime.hypothesis_axis_prior_strength,
+            "evidence_decay": config.runtime.hypothesis_evidence_decay,
+            "temperature": 1.0,
+            "score": "gaussian_nll_predictive_plus_rgb_measurement_variance",
+            "selection_locality": "persistent_entity_axis_exact_horizon",
+            "unsupported_query_policy": "learned_fallback",
+            "composition": "coherent_axis_state_endpoint_splice_diagnostic_only",
+            "timestamp_tolerance_seconds": (config.runtime.hypothesis_timestamp_tolerance_seconds),
+        }
+        runtime_hypothesis_policy["fingerprint_sha256"] = hashlib.sha256(
+            json.dumps(
+                runtime_hypothesis_policy,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
     metadata = {
         "checkpoint": str(checkpoint),
         "checkpoint_sha256": _checkpoint_sha256(checkpoint),
@@ -1598,17 +1946,7 @@ def evaluate_checkpoint(
         "rgb_only": True,
         "oracle_runtime_input_used": False,
         "runtime_hypothesis_pool_enabled": runtime_hypothesis_pool,
-        "runtime_hypothesis_pool_policy": (
-            {
-                "candidates": list(_RUNTIME_HYPOTHESIS_CANDIDATES),
-                "evidence_horizons_seconds": list(config.runtime.hypothesis_evidence_horizons_seconds),
-                "axis_independent_axes": list(config.runtime.hypothesis_axis_independent_axes),
-                "evidence_decay": config.runtime.hypothesis_evidence_decay,
-                "timestamp_tolerance_seconds": config.runtime.hypothesis_timestamp_tolerance_seconds,
-            }
-            if runtime_hypothesis_pool
-            else None
-        ),
+        "runtime_hypothesis_pool_policy": runtime_hypothesis_policy,
         "simulator_state_usage": "metrics_and_baselines_only",
         "deterministic_forecast_support_mask_source": (
             "persistent_target_match_and_target_active_and_no_unseen_external_"

@@ -3764,3 +3764,92 @@
   `[0]`. The pool is not yet the normal runtime default, so this acceptance
   neither changes `WorldBelief` nor silently alters predict–correct behavior;
   runtime integration has a separate explicit opt-in and full-guardrail gate.
+
+## ADR-134 — Bind heterogeneous model choice to local causal evidence
+
+- **Date:** 2026-08-15
+- **Status:** accepted architecture contract; implementation repair active and
+  not yet qualified
+- **Context:** A reread of the AAAI ORPHEUS paper and its Theory-of-Mind
+  framework makes their core mechanism precise: perception constructs an
+  entity-centred imaginary world; domain-expert and learned models coexist in
+  a replaceable pool; model assignment is revised from simulation-versus-
+  reality error; physical and behavioral effects are interleaved in stable
+  small steps; and several nearby future simulations expose uncertainty and
+  brittle outcomes. The first normal-runtime integration violated the local
+  scope of that evidence. It learned candidate preference only from a
+  0.05-second delayed RGB target, then used that choice for x forecasts through
+  1.00 second. A matched four-episode MPS comparison against the learned-only
+  runtime shows why this is invalid: 1.00-second x RMSE regresses
+  `0.771005 -> 0.895082` (`+16.1%`), aggregate position RMSE regresses
+  `0.618738 -> 0.672120` (`+8.63%`), NLL worsens `1.985%`, and global/fast
+  update latency rises `2.216x`/`2.392x`.
+- **Decision:** `WorldBelief` remains the sole persistent physical truth and
+  the papers' perceptual mental image. Candidate applicability/evidence lives
+  beside it and is keyed by persistent entity, state component/axis,
+  interaction/event regime, supported horizon or short-step interval, and the
+  exact source-belief/dynamics revision. A choice is never transferred beyond
+  those keys. Missing support uses an explicit accepted-learned fallback and is
+  reported separately from positive learned-model selection. Continuous
+  evidence uses the innovation likelihood under predictive plus measurement
+  variance, robust masks/influence, and explicit support/freshness/
+  observability. Any external belief replacement, reset, lifecycle slot reuse,
+  incompatible correction, runtime-mode change, or dynamics mutation
+  invalidates pending evidence. Selected effects compose through bounded
+  state-transition steps; position, velocity, and variance remain coherent,
+  and joint event/cross-axis state cannot be replaced by an unrelated
+  coordinate splice. Candidate branches remain transient futures and never
+  become alternate world truth.
+- **Alternatives considered:** retain the current 0.05-second scene/axis choice
+  at every horizon; tune evidence decay until the four examples improve;
+  select with simulator truth; splice position while retaining learned
+  velocity and uncertainty; discard analytic candidates; or increase learned
+  model capacity before repairing runtime semantics.
+- **Consequences:** The current runtime pool remains opt-in and is rejected for
+  promotion. The immediate repair is horizon-bound fallback, followed by
+  per-entity/regime applicability, combined-uncertainty scoring, causal
+  invalidation, coherent short-step composition, and removal of redundant
+  propagation. Every change requires focused tests and an exact paired MPS
+  comparison including current and every x/y/z position/velocity horizon,
+  lifecycle, identity, events, calibration, nonfinite integrity, and global/
+  fast/forecast latency. The four-episode result is diagnostic because it
+  covers only four of eight scenarios and overlaps validation; it cannot
+  establish convergence even though it is sufficient to reject the policy.
+- **Primary sources:** Polceanu, Parenthoën, and Buche, “ORPHEUS: Mental
+  Simulation as Support for Decision-Making in a Virtual Agent”
+  (https://cdn.aaai.org/ocs/10371/10371-46146-1-PB.pdf); Polceanu and Buche,
+  “Towards A Theory-Of-Mind-Inspired Generic Decision-Making Framework”
+  (https://arxiv.org/abs/1405.5048).
+
+## ADR-135 — Monitor durable artifacts without touching model execution
+
+- **Date:** 2026-08-15
+- **Status:** accepted
+- **Context:** Long RGB/MPS training and evaluation phases can spend minutes in
+  one real causal batch or forecast anchor. Frequent ad hoc shell/process
+  checks create noise, while raw `metrics.jsonl` rows are too wide to make
+  convergence, guardrail rejection, or a dead process obvious. Optional
+  evaluator progress also meant a normal invocation could not be monitored
+  after detaching.
+- **Decision:** Provide one root `monitor.py` that reads only durable atomic
+  run artifacts, a bounded recent JSONL tail, checkpoint file metadata, and
+  advisory process state. It recursively discovers timestamp-first nested
+  runs, prefers verified-active work, uses a 60-second default interval,
+  suppresses unchanged snapshots, and emits a ten-poll heartbeat. Raw training
+  loss is summarized by rolling medians and previous-window delta; immutable
+  validation decisions and per-horizon RMSE remain the accuracy signal. The
+  monitor never imports/executes the model, deserializes checkpoints, consumes
+  accelerator memory, mutates the run, or contacts a service. Standard
+  evaluation progress is durable by default; `--progress` adds stdout only.
+- **Alternatives considered:** high-frequency external polling; loading the
+  latest checkpoint to probe it; requiring TensorBoard or an experiment-
+  tracking service; treating a stale PID file or old summary as proof of live
+  or completed work; and diagnosing collapse from one mixed-scenario loss.
+- **Consequences:** A local terminal can follow training/evaluation cheaply and
+  truthfully, including resumed older run directories and nested evaluations.
+  Hard failure/nonfinite/staleness signals are visible without changing model
+  timing. Evaluation output is planned and `initializing` is persisted before
+  model/checkpoint setup; caught exceptions and keyboard interruption record
+  terminal state with their last progress. An uncatchable process kill still
+  leaves no terminal event, so the monitor reports the dead process as stale
+  rather than fabricating completion.

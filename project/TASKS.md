@@ -1,5 +1,64 @@
 # Tasks
 
+## Immediate accuracy target — evidence-bounded mental simulation
+
+- [x] Run a matched four-episode active-Aqua MPS runtime-pool/control
+  diagnostic using identical checkpoint bytes, seeds, scenarios, RGB-only
+  inputs, horizons, precision, and evaluator semantics. Reject the pool:
+  1.00-second x/aggregate position RMSE regress `16.1%`/`8.63%`, forecast NLL
+  regresses `1.985%`, and global/fast update latency rises `2.216x`/`2.392x`.
+- [x] Complete and verify the horizon-bound repair. Keep separate
+  evidence state for each configured horizon and use the accepted learned
+  runtime as an explicit no-evidence fallback; never transfer a 0.05-second
+  selection to an unsupported 0.10--1.00-second query.
+- [x] Make applicability local to persistent entity, axis/state component, and
+  horizon; reset it on lifecycle slot reuse and preserve partial-batch rows
+  without new evidence. Keep every candidate outside `WorldBelief`.
+- [ ] Extend applicability to explicit interaction/event regime and persist
+  support count, freshness/expiry, observability, and confidence margin.
+- [x] Score delayed RGB evidence with predictive plus RGB measurement
+  uncertainty and exact masks; cover no-evidence, partial-batch, high-
+  measurement-noise, and candidate-variance behavior.
+- [ ] Add a calibrated robust-influence rule and held-out support/confidence
+  thresholds without hiding rejected or stale evidence.
+- [x] Bind every pending prediction to its exact source-belief/dynamics
+  revision, timestamp, object IDs, runtime mode, and applicability cell.
+  Invalidate it on external belief replacement, reset, lifecycle slot reuse,
+  incompatible correction, result mutation, or parameter/buffer mutation.
+- [ ] Replace independent long-horizon coordinate splicing with coherent
+  short-step effect composition. A locally selected axis must emit compatible
+  position, velocity, and variance while joint event/cross-axis state remains
+  consistent.
+- [x] Reuse the already prepared causal propagation for evaluator
+  supervision/ingestion and for due learned evidence where revision-safe.
+  Remove duplicate learned rollouts, handle float timestamp-grid equivalence
+  without stale reuse, and include prepare plus ingest in runtime timing.
+- [x] Run focused CPU tests, the full non-device suite, and an active-Aqua MPS
+  smoke for the fail-closed repair.
+- [ ] After bounded-step composition affects scored horizons, repeat the exact
+  four-episode paired comparison. Proceed to the full eight-scenario/32-episode
+  manifest only if it is finite, materially faster, and non-regressive at
+  current state and every x/y/z position/velocity horizon plus lifecycle,
+  identity, event, and calibration metrics.
+- [ ] Only after the corrected pool passes paired runtime gates, train shared
+  candidate/applicability components to a declared plateau on balanced
+  hundreds/thousands of scenarios. Keep learned/domain-expert candidates
+  replaceable and preserve the accepted incumbent throughout.
+
+## Operational observability
+
+- [x] Add one read-only `python monitor.py` command that recursively follows
+  the newest verified-active timestamped training/evaluation artifact, exposes
+  step/phase/robust loss trend/validation/horizon/device/checkpoint/failure
+  state, defaults to 60-second change-only polling, and supports one-shot/JSON
+  output.
+- [x] Make standard evaluation progress atomic and durable by default while
+  retaining `--progress` only as an optional stdout stream.
+- [x] Plan the evaluation output before model/checkpoint initialization,
+  persist `initializing` immediately, and replace it with explicit terminal
+  failure/interruption context when caught. Continue to report an uncatchably
+  killed or unverifiable process as stale, never completed.
+
 ## Paper-guided next target — short-step hypothesis selection
 
 - [x] Add a functional, non-mutating multi-hypothesis rollout wrapper and a
@@ -60,11 +119,14 @@
   test is not a promotion result. Use `evaluate.py --runtime-hypothesis-pool`
   so immutable checkpoint configuration validation precedes the explicitly
   labelled post-load runtime intervention. The evaluator now routes scored
-  forecasts through `OnlineWorldModel.predict`; use `--progress` for
-  batch-level durable progress rather than frequent status polling. A
-  four-episode RGB-only MPS diagnostic is complete and finite but is not a
-  paired broad comparison; the prior detached 32-episode attempt produced no
-  report and must not be used as evidence.
+  forecasts through `OnlineWorldModel.predict`; use `monitor.py` for durable
+  batch/anchor progress and `--progress` only when stdout JSON is also useful.
+  The
+  four-episode RGB-only MPS diagnostic now has a matched learned-only control
+  and is rejected for long-horizon x, calibration, and latency regressions.
+  It is still not the broad comparison; the prior detached 32-episode attempt
+  produced no report and must not be used as evidence. Rerun the broad protocol
+  only after the evidence-bounded repair above passes its smaller paired gate.
 - [x] Complete the three-candidate eight-episode protected comparison; retain
   ballistic as diagnostic only because it is rarely selected and regresses
   mature event/position behavior.

@@ -657,10 +657,31 @@ class OnlineWorldModel(nn.Module):
             )
         delta_time = requested - current.timestamp
         source_tensor_signature = tensor_identity_version_signature(current)
+        dynamics_tensor_signature_before = self._dynamics_tensor_signature()
+        if self.hypothesis_controller is not None:
+            self.hypothesis_controller.synchronize_runtime_context(
+                current,
+                dynamics_tensor_signature=dynamics_tensor_signature_before,
+                dynamics_training=self.dynamics.training,
+                tensor_signature=tensor_identity_version_signature,
+            )
         predict_step = getattr(self.dynamics, "predict_step", None)
         if not callable(predict_step):
             raise TypeError("prepared propagation requires dynamics.predict_step")
-        propagation = predict_step(current, delta_time)
+        propagation = (
+            self.hypothesis_controller.reusable_learned_step(
+                current,
+                requested,
+                source_revision=self.state.ingest_count,
+                source_tensor_signature=source_tensor_signature,
+                dynamics_tensor_signature=dynamics_tensor_signature_before,
+                dynamics_training=self.dynamics.training,
+            )
+            if self.hypothesis_controller is not None
+            else None
+        )
+        if propagation is None:
+            propagation = predict_step(current, delta_time)
         if tensor_identity_version_signature(current) != source_tensor_signature:
             raise PreparedPropagationError(
                 "dynamics.predict_step mutated the prepared propagation source belief"
@@ -1172,6 +1193,15 @@ class OnlineWorldModel(nn.Module):
                     )
             current = self.state.belief
             requested = self._requested_timestamp(current, timestamp)
+            source_tensor_signature = tensor_identity_version_signature(current)
+            dynamics_tensor_signature = self._dynamics_tensor_signature()
+            if self.hypothesis_controller is not None:
+                self.hypothesis_controller.synchronize_runtime_context(
+                    current,
+                    dynamics_tensor_signature=dynamics_tensor_signature,
+                    dynamics_training=self.dynamics.training,
+                    tensor_signature=tensor_identity_version_signature,
+                )
             if prepared is not None:
                 packet_batch_sizes = {_packet_batch_size(packet) for packet in group}
                 if len(packet_batch_sizes) != 1:
@@ -1193,7 +1223,20 @@ class OnlineWorldModel(nn.Module):
                 predict_step = getattr(self.dynamics, "predict_step", None)
                 prior_interval_collision_mask: Tensor | None = None
                 if callable(predict_step):
-                    propagation = predict_step(current, dt)
+                    propagation = (
+                        self.hypothesis_controller.reusable_learned_step(
+                            current,
+                            requested,
+                            source_revision=self.state.ingest_count,
+                            source_tensor_signature=source_tensor_signature,
+                            dynamics_tensor_signature=dynamics_tensor_signature,
+                            dynamics_training=self.dynamics.training,
+                        )
+                        if self.hypothesis_controller is not None
+                        else None
+                    )
+                    if propagation is None:
+                        propagation = predict_step(current, dt)
                     prior = propagation.belief
                     auxiliary = getattr(propagation, "auxiliary", None)
                     if not isinstance(auxiliary, Mapping):
@@ -1219,7 +1262,19 @@ class OnlineWorldModel(nn.Module):
             self.state.belief = posterior.with_timestamp(timestamp)
             self.state.ingest_count += 1
             if self.hypothesis_controller is not None:
-                self.hypothesis_controller.schedule(self.state.belief)
+                source_tensor_signature = tensor_identity_version_signature(self.state.belief)
+                self.hypothesis_controller.schedule(
+                    self.state.belief,
+                    source_revision=self.state.ingest_count,
+                    source_tensor_signature=source_tensor_signature,
+                    dynamics_tensor_signature=self._dynamics_tensor_signature(),
+                    dynamics_training=self.dynamics.training,
+                    tensor_signature=tensor_identity_version_signature,
+                )
+                if tensor_identity_version_signature(self.state.belief) != source_tensor_signature:
+                    raise PreparedPropagationError(
+                        "hypothesis scheduling mutated the persistent source belief"
+                    )
         assert self.state.belief is not None
         return self.state.belief
 
@@ -1386,7 +1441,7 @@ class OnlineWorldModel(nn.Module):
             raise RuntimeError("OnlineWorldModel must ingest an observation first")
         selected = getattr(hypothesis_pool, "selected_axis_index", None)
         if not callable(selected):
-            raise TypeError("hypothesis_pool must expose selected_axis_index(...)" )
+            raise TypeError("hypothesis_pool must expose selected_axis_index(...)")
         return selected(self.state.belief)
 
     def step(

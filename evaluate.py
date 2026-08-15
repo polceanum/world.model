@@ -50,13 +50,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--progress",
         action="store_true",
-        help="Emit one flushed JSON progress line per completed evaluation batch.",
+        help=(
+            "Also echo flushed JSON progress lines to stdout. Durable progress is "
+            "always written for live monitoring."
+        ),
     )
     parser.add_argument(
         "--progress-path",
         help=(
-            "Optional durable JSON progress path. With --progress and no value, "
-            "write evaluation_progress.json inside the timestamped output directory."
+            "Override the durable JSON progress path. By default, write "
+            "evaluation_progress.json inside the timestamped output directory."
         ),
     )
     return parser.parse_args()

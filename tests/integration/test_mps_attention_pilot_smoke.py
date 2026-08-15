@@ -87,9 +87,7 @@ def test_opt_in_rgb_hypothesis_pool_is_finite_on_mps() -> None:
     )
     config.validate()
     model = OnlineWorldModel.from_config(config, device="mps")
-    intrinsics = torch.tensor(
-        [[56.0, 0.0, 31.5], [0.0, 56.0, 31.5], [0.0, 0.0, 1.0]]
-    )
+    intrinsics = torch.tensor([[56.0, 0.0, 31.5], [0.0, 56.0, 31.5], [0.0, 0.0, 1.0]])
     world_from_camera = torch.eye(4)
     world_from_camera[2, 3] = -4.0
     for frame in range(4):

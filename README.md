@@ -201,6 +201,37 @@ For the deterministic convergence/debug run:
 python train.py --config configs/tiny_overfit.yaml --run-name tiny-debug
 ```
 
+## Live monitoring
+
+In a second terminal, one command follows the newest verified-active training
+or evaluation run (including timestamped evaluations nested below a training
+run):
+
+```bash
+conda activate orpheus
+python monitor.py
+```
+
+The monitor is read-only. It does not import the model, load checkpoints, use
+the network, or consume accelerator memory. It polls every 60 seconds, prints
+only when an artifact or process state changes, and emits an unchanged
+heartbeat every 10 polls. The dashboard includes phase, step/target and ETA,
+robust recent-loss trend, fixed-validation decision and horizon RMSEs,
+validation/evaluation episode progress, device placement, checkpoint age, and
+hard failure/staleness/non-finite signals. `evaluate.py` now writes its atomic
+`evaluation_progress.json` automatically from pre-load initialization through
+completed, failed, or interrupted state; `--progress` additionally echoes the
+same events to stdout.
+
+Pin a particular run, relax the interval further, take a one-shot snapshot, or
+emit JSON with:
+
+```bash
+python monitor.py --run runs/<timestamped-run> --interval 120
+python monitor.py --once
+python monitor.py --once --json
+```
+
 Generated training, evaluation, and demo directory basenames begin with a UTC
 `YYYYMMDD-HHMMSS-` timestamp, so ordinary filename sorting puts the newest
 artifact last. Explicit `--run-name` and `--output` values are treated as

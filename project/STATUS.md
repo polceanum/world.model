@@ -1,5 +1,141 @@
 # Project status
 
+## Low-noise live run monitor — 2026-08-15
+
+`python monitor.py` now provides a read-only terminal view of the newest
+verified-active run, automatically switching when a newer training or nested
+evaluation run appears. It recursively discovers timestamp-first artifacts,
+prefers a trainer whose advisory lock is actually held, and otherwise verifies
+the evaluation PID/command before calling a process live. The default cadence
+is 60 seconds; unchanged output is suppressed with one heartbeat every ten
+polls. `--run`, `--interval`, `--once`, `--json`, and configurable stale/
+heartbeat thresholds support pinned, slower, one-shot, and machine-readable
+inspection.
+
+The display reads only atomic state/progress files, a bounded tail of
+`metrics.jsonl`, metadata, report metrics, and checkpoint file metadata. It
+does not import or execute PyTorch/model code and never deserializes a
+checkpoint. It reports train step/target/ETA, phase, a rolling-median loss
+trend rather than diagnosing one noisy scenario batch, fixed-validation
+acceptance plus per-horizon RMSE, evaluation frame/batch/episode progress,
+split device placement, checkpoint age, and hard nonfinite/failure/staleness
+signals. A current `training_failure.json` wins over stale summaries or live
+locks; an old terminal summary cannot make an in-place resumed run look
+complete.
+
+Standard `evaluate.py` runs now always write atomic
+`evaluation_progress.json`; `--progress` only adds flushed stdout JSON. A
+timestamped output path and `initializing` event are persisted before model
+construction or checkpoint loading, and any caught failure or interruption
+replaces that event with terminal exception context plus the last completed
+progress. A
+real one-shot inspection of the completed learned-control MPS report displayed
+its actual 0.10/0.25/0.50/0.75/1.00-second RMSEs
+`0.56862/0.57299/0.58234/0.60770/0.61874 m` and report path without loading
+its checkpoint. Verification so far:
+
+```bash
+PYTHONPYCACHEPREFIX=tmp/pycache PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_evaluator_progress.py tests/unit/test_live_monitor.py
+# 27 passed in 2.45s
+PYTHONPYCACHEPREFIX=tmp/pycache PYTHONPATH=. conda run -n orpheus pytest -q tests/integration/test_cli_smoke.py::test_train_resume_and_evaluate_cli_rgb_only
+# 1 passed in 104.30s
+conda run -n orpheus python monitor.py --once --run runs/20260815-181351-learned-control-mps-diagnostic-4
+# completed evaluation; MPS/float32; current RMSE 0.66426 m; 1.00 s RMSE 0.61874 m
+```
+
+An evaluator terminated by an uncatchable process kill cannot write a terminal
+event; the monitor detects its dead/mismatched PID and reports `STALE` rather
+than inventing completion. Ordinary exceptions and keyboard interruption are
+persisted explicitly as `failed` and `interrupted`.
+
+## Paired runtime-pool rejection and paper-guided contract — 2026-08-15
+
+The opt-in runtime hypothesis pool has now been compared with a matched
+learned-only control. Both reports use the same checkpoint SHA-256
+`0ba00e72adeffcf746268d875d623f153ec56814439fce030a8666d7704ca455`,
+MPS/float32 execution, RGB-only observations, seeds `100000--100003`, the
+same four scenarios (`reference_pairs`, `baseline`, `elastic_pairs`, and
+`damped_contacts`), and the same five forecast horizons. Simulator state is
+used only for metrics and baselines. Both runs are finite:
+
+- pool:
+  `runs/20260815-141904-runtime-hypothesis-pool-mps-diagnostic-4/`;
+- learned control:
+  `runs/20260815-181351-learned-control-mps-diagnostic-4/`.
+
+The pool is **rejected**. Its four non-learned x selections out of 36 forecast
+anchors produce an increasing long-horizon regression:
+
+| Horizon | pool x RMSE (m) | control x RMSE (m) | pool minus control (m) |
+| --- | ---: | ---: | ---: |
+| 0.10 s | 0.690993 | 0.691007 | -0.000014 |
+| 0.25 s | 0.710823 | 0.709911 | +0.000912 |
+| 0.50 s | 0.744573 | 0.732866 | +0.011708 |
+| 0.75 s | 0.803391 | 0.755562 | +0.047830 |
+| 1.00 s | 0.895082 | 0.771005 | +0.124077 |
+
+At 1.00 seconds, x regresses `16.1%` and aggregate position RMSE regresses
+`0.618738 -> 0.672120 m` (`+8.63%`). Y, z, lifecycle, coverage, identity, and
+events are bit-exact unchanged, so the failure is localized to the selected x
+trajectory. Calibration also worsens: Gaussian NLL is
+`0.834268 -> 0.850832` (`+1.985%`), nominal 90% coverage falls
+`0.909804 -> 0.903268`, and sharpness remains exactly `0.673644`. Mean global
+and fast update latency rises `3243.35 -> 7187.86 ms` (`2.216x`) and
+`2572.50 -> 6152.81 ms` (`2.392x`); mean forecast latency rises
+`26898.4 -> 35508.9 ms` (`1.320x`). This four-episode manifest covers only the
+first four of eight scenarios and overlaps the training-validation range, so
+it is diagnostic rejection evidence, not a broad convergence result.
+
+The primary cause is now explicit: the runtime configured selection evidence
+only at `0.05 s`, then transferred that choice to queries through `1.00 s`.
+The reread AAAI ORPHEUS and Theory-of-Mind framework papers instead support
+localized model assignment by prediction-versus-reality error, short-step
+interleaving of physical and behavioral effects, heterogeneous expert/learned
+models, and range-aware future comparison. `PROJECT_SPEC.md` 1.45 therefore
+requires applicability by entity, axis, interaction regime, and horizon;
+explicit no-evidence fallback; combined predictive/measurement uncertainty;
+coherent position/velocity/variance output; causal invalidation of pending
+evidence; and paired runtime plus latency qualification.
+
+The corresponding runtime repair is implemented but **not yet promotable**.
+Evidence is now separate by supported horizon, persistent entity, and axis;
+unmatched horizons use an explicit learned fallback. Partial-batch missing
+evidence preserves prior evidence, lifecycle slot reuse resets entity-local
+applicability, and RGB measurement variance is combined with predictive
+variance. Pending predictions are bound to source belief/revision/tensor
+versions, candidate dynamics revision and mode, exact object IDs, result
+tensor signatures, and timestamp tolerance; stale source/result/dynamics/mode
+mutations invalidate them. Selected axes now keep position, velocity, and
+their variances internally aligned. Prepared propagation and the due learned
+step remove duplicate ordinary/evidence rollouts, including float32 timestamp
+grid snapping with result retimestamping and mutation checks.
+
+Focused CPU tests pass (`59 passed`), the complete non-device suite passes
+(`821 passed, 9 skipped, 1 deselected in 407.45s`), and the active-Aqua MPS opt-in RGB
+smoke passes (`1 passed in 50.15s`) on the untouched local PyTorch build. This
+is still a fail-closed diagnostic policy: interaction/event regime,
+support-count/freshness/confidence expiry, and paper-compliant bounded-step
+cross-object/event composition remain unfinished. With only a 0.05-second
+supported evidence horizon, scored 0.10--1.00-second endpoints correctly fall
+back to learned behavior rather than claiming a useful gain. A new paired MPS
+accuracy/latency report is therefore deferred until the policy can affect
+scored horizons coherently. No runtime default changes.
+
+Environment inspection from the ordinary restricted shell used the existing
+environment and did not modify it:
+
+```bash
+conda run --no-capture-output -n orpheus python -c 'import platform, torch; print(platform.machine()); print(torch.__version__); print(torch.backends.mps.is_built()); print(torch.backends.mps.is_available())'
+# x86_64
+# 2.9.0a0+gitcbe1a35
+# True
+# False
+```
+
+`mps.is_available()` is false in that non-Aqua subprocess; the paired reports
+above were run through the active Aqua user session and record `device: mps`.
+The user-provided PyTorch build remains untouched.
+
 ## Runtime hypothesis evaluation unblocked — 2026-08-15
 
 The broad evaluator previously attached `RuntimeHypothesisController` but
@@ -10,9 +146,10 @@ is actually part of the reported RGB-only forecast. The controller also rolls
 out only the learned candidate plus candidates selected for configured axes;
 it preserves learned lifecycle, event, identity, and uncertainty outputs.
 
-`evaluate.py --progress` emits flushed JSON at start, each completed batch,
-and completion. This makes active-Aqua MPS evaluation observable without
-high-frequency polling. A corrected one-episode MPS report completed at
+`evaluate.py --progress` emits additional flushed stdout JSON at start, each
+completed batch, and completion; durable progress is now automatic. This makes
+active-Aqua MPS evaluation observable without high-frequency polling. A
+corrected one-episode MPS report completed at
 `runs/20260815-072629-runtime-hypothesis-pool-mps-smoke-1/`: RGB-only,
 `runtime_hypothesis_pool_enabled=true`, `nonfinite_output_count=0`, and mean
 forecast-anchor latency `26453.20 ms`. Its one-episode errors are an execution
@@ -33,11 +170,13 @@ made x-axis choices at 36 forecast anchors: learned 32, damped-CV 2, ballistic
 2. Its mean forecast-anchor latency is `35508.86 ms`; this is too slow for a
 casual full comparison but is a functioning MPS execution result, not a
 deadlock. It is only a four-episode diagnostic and has no paired learned-only
-control, so it cannot promote the policy.
+control at the time of that entry. The subsequent matched learned-only control
+is recorded in the newer status section above and rejects the pool; neither
+four-episode report can promote the policy.
 
-The next invocation also writes those events atomically to
-`evaluation_progress.json` inside its timestamped output directory whenever
-`--progress` is set (or to `--progress-path` when explicitly supplied). This
+Every invocation now writes those events atomically to
+`evaluation_progress.json` inside its timestamped output directory (or to
+`--progress-path` when explicitly supplied). This
 persists progress across detached launch output and records the active PID,
 timestamp, completed batch/episode counts, and eventual output path.
 It additionally refreshes only at rollout anchors and the final frame, which

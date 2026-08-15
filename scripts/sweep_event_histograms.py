@@ -38,7 +38,16 @@ def sweep_report(report: dict[str, Any]) -> dict[str, dict[str, list[dict[str, f
     """Return threshold metrics keyed by horizon and candidate name."""
     names = report.get("candidate_names")
     if not names:
-        names = [str(i) for i in range(len(next(iter(report["episode_results"])["event_probability_histograms"].values())[0]))]
+        names = [
+            str(i)
+            for i in range(
+                len(
+                    next(iter(report["episode_results"])["event_probability_histograms"].values())[
+                        0
+                    ]
+                )
+            )
+        ]
     aggregate: dict[str, dict[str, list[list[int]]]] = {}
     for episode in report["episode_results"]:
         for horizon, candidates in episode["event_probability_positive_histograms"].items():

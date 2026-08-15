@@ -2,6 +2,49 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-15 low-noise live monitoring
+
+- Added the read-only root `monitor.py` command. It recursively discovers
+  timestamped training and nested evaluation runs, prioritizes verified-live
+  work, and displays phase, step/target/ETA, rolling-median loss trend,
+  fixed-validation decisions, per-horizon RMSE, device placement, checkpoint
+  age, and hard nonfinite/failure/staleness signals.
+- Defaulted monitoring to 60-second change-only refreshes with a ten-poll
+  heartbeat; added explicit run, interval, stale threshold, one-shot, and JSON
+  modes. The monitor reads a bounded JSONL tail and file metadata only; it does
+  not import PyTorch, load a checkpoint, use the network, or mutate artifacts.
+- Made atomic `evaluation_progress.json` output unconditional for standard
+  evaluations, beginning before model construction/checkpoint loading and
+  ending with explicit completed, failed, or interrupted state.
+  `evaluate.py --progress` now controls only stdout echoing.
+- Added 27 focused monitor/progress tests and extended the real tiny RGB CLI
+  smoke to require stable context in the completed default evaluation progress
+  artifact.
+
+### 2026-08-15 evidence-bounded mental-simulation contract
+
+- Recorded the matched four-episode active-Aqua MPS learned-only control for
+  the normal runtime hypothesis pool. The pool is rejected: 1.00-second x and
+  aggregate position RMSE regress `16.1%`/`8.63%`, forecast Gaussian NLL
+  regresses `1.985%`, and global/fast update latency rises `2.216x`/`2.392x`.
+  Y, z, lifecycle, identity, and events are unchanged; the result is diagnostic
+  because only four of eight scenarios are covered.
+- Advanced the authoritative specification to 1.45 after rereading the two
+  original Orpheus papers. The contract now identifies `WorldBelief` as the
+  perception-built mental image, permits heterogeneous domain-expert and
+  learned models, and requires small-step physical/behavioral effect
+  composition plus transient multiple branches.
+- Required model applicability/evidence to be local to entity, axis/state
+  component, interaction regime, horizon, and source revision. Added explicit
+  no-evidence fallback, predictive-plus-measurement uncertainty scoring,
+  coherent position/velocity/variance output, and causal invalidation of
+  pending evidence.
+- Made paired runtime accuracy, calibration, finite-state, and latency checks
+  mandatory for promotion. Implemented horizon/entity/axis-local evidence,
+  uncertainty-aware scoring, provenance invalidation, coherent selected-axis
+  fields, and duplicate-propagation removal; bounded-step event/regime
+  composition remains active work and no repaired policy is promoted.
+
 ### 2026-08-15 runtime evaluation route and observability repair
 
 - Corrected broad evaluation to score forecasts through

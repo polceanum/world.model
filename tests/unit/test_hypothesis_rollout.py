@@ -15,6 +15,7 @@ from world_model.dynamics import (
     RolloutStep,
     RuntimeHypothesisController,
 )
+from world_model.runtime.prepared import tensor_identity_version_signature
 
 
 def _trajectory(position: float, *, variance: float = 1.0) -> BeliefTrajectory:
@@ -27,6 +28,25 @@ def _trajectory(position: float, *, variance: float = 1.0) -> BeliefTrajectory:
         fast_log_variance=torch.full((1, 2, 1, 13), variance),
         active_mask=torch.ones(1, 2, 1, dtype=torch.bool),
         event_logits=torch.zeros(1, 2, 1, 11),
+    ).validate()
+
+
+def _repeat_batch(trajectory: BeliefTrajectory, batch_size: int) -> BeliefTrajectory:
+    def repeat(value):
+        if value is None:
+            return None
+        return value.expand(batch_size, *value.shape[1:]).clone()
+
+    return BeliefTrajectory(
+        timestamps=repeat(trajectory.timestamps),
+        positions=repeat(trajectory.positions),
+        velocities=repeat(trajectory.velocities),
+        orientations=repeat(trajectory.orientations),
+        motion_mode_logits=repeat(trajectory.motion_mode_logits),
+        fast_log_variance=repeat(trajectory.fast_log_variance),
+        active_mask=repeat(trajectory.active_mask),
+        event_logits=repeat(trajectory.event_logits),
+        auxiliary={name: repeat(value) for name, value in trajectory.auxiliary.items()},
     ).validate()
 
 
@@ -157,12 +177,32 @@ def test_selector_ignores_occluded_frames_and_scores_uncertainty() -> None:
     mask = torch.tensor([[[True], [False]]])
     narrow = _trajectory(0.2, variance=0.0)
     wide = _trajectory(0.3, variance=2.0)
-    selection = HypothesisRolloutEngine.score(
-        [narrow, wide], target, mask, uncertainty_aware=True
-    )
+    selection = HypothesisRolloutEngine.score([narrow, wide], target, mask, uncertainty_aware=True)
     # The log-variance penalty prevents a deliberately broad forecast from
     # winning just because its normalized residual is smaller.
     assert selection.selected_index.item() == 0
+
+
+def test_selector_combines_rgb_and_predictive_position_variance() -> None:
+    target = torch.zeros(1, 2, 1, 3)
+    mask = torch.ones(1, 2, 1, dtype=torch.bool)
+    narrow = _trajectory(0.5, variance=-4.6051702)
+    broad = _trajectory(1.0, variance=0.0)
+
+    prediction_only = HypothesisRolloutEngine.score(
+        [narrow, broad],
+        target,
+        mask,
+    )
+    noisy_rgb = HypothesisRolloutEngine.score(
+        [narrow, broad],
+        target,
+        mask,
+        target_position_log_variance=torch.full_like(target, 4.6051702),
+    )
+
+    assert prediction_only.selected_index.tolist() == [1]
+    assert noisy_rgb.selected_index.tolist() == [0]
 
 
 def test_selector_rejects_empty_or_bad_mask() -> None:
@@ -182,9 +222,7 @@ def test_ensemble_scoring_penalizes_brittle_nearby_rollouts() -> None:
         [_trajectory(0.0), _trajectory(0.45)],
         [_trajectory(0.6), _trajectory(0.45)],
     ]
-    expected_error = engine.score_ensemble(
-        samples, target, mask, uncertainty_aware=False
-    )
+    expected_error = engine.score_ensemble(samples, target, mask, uncertainty_aware=False)
     robust_error = engine.score_ensemble(
         samples, target, mask, uncertainty_aware=False, risk_penalty=0.2
     )
@@ -292,7 +330,9 @@ def test_pool_assimilates_late_evidence_and_updates_selected_model() -> None:
     trajectories = pool.rollout(belief, [0.1, 0.2])
     target = torch.zeros(1, 2, 1, 3)
     mask = torch.ones(1, 2, 1, dtype=torch.bool)
-    selection = pool.assimilate(belief, target, mask, trajectories=trajectories, uncertainty_aware=False)
+    selection = pool.assimilate(
+        belief, target, mask, trajectories=trajectories, uncertainty_aware=False
+    )
     assert selection.selected_index.tolist() == [1]
     assert pool.selected_index(belief).tolist() == [1]
     assert pool.last_selection is not None
@@ -324,9 +364,7 @@ def test_pool_selection_respects_accumulated_prior() -> None:
 
 def test_pool_evidence_decay_allows_local_model_switch() -> None:
     belief = BeliefFactory(max_objects=1).create()
-    pool = HypothesisDynamicsPool(
-        [_FixedDynamics(1.0), _FixedDynamics(0.0)], evidence_decay=0.1
-    )
+    pool = HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)], evidence_decay=0.1)
     trajectories = pool.rollout(belief, [0.1])
     mask = torch.ones_like(trajectories[0].active_mask)
     first = pool.assimilate(
@@ -345,6 +383,66 @@ def test_pool_evidence_decay_allows_local_model_switch() -> None:
         uncertainty_aware=False,
     )
     assert second.selected_index.item() == 0
+
+
+def test_pool_preserves_axis_evidence_for_batch_row_without_new_match() -> None:
+    belief = BeliefFactory(max_objects=1).create(batch_size=2)
+    pool = HypothesisDynamicsPool(
+        [_FixedDynamics(1.0), _FixedDynamics(0.0)],
+        temperature=1.0,
+    )
+    trajectories = [
+        _repeat_batch(_trajectory(1.0), 2),
+        _repeat_batch(_trajectory(0.0), 2),
+    ]
+    mask = torch.ones(2, 2, 1, dtype=torch.bool)
+    pool.assimilate(
+        belief,
+        torch.zeros(2, 2, 1, 3),
+        mask,
+        trajectories=trajectories,
+        uncertainty_aware=False,
+    )
+    assert pool.axis_log_weights is not None
+    previous = pool.axis_log_weights[1].clone()
+
+    second_target = torch.ones(2, 2, 1, 3)
+    second_mask = mask.clone()
+    second_mask[1] = False
+    pool.assimilate(
+        belief,
+        second_target,
+        second_mask,
+        trajectories=trajectories,
+        uncertainty_aware=False,
+    )
+
+    torch.testing.assert_close(pool.axis_log_weights[1], previous)
+    assert pool.selected_axis_index(belief)[1].tolist() == [1, 1, 1]
+
+
+def test_pool_resets_entity_evidence_when_lifecycle_reuses_slot() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    pool = HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)])
+    trajectories = pool.rollout(source, [0.1])
+    pool.assimilate(
+        source,
+        torch.zeros_like(trajectories[0].positions),
+        torch.ones_like(trajectories[0].active_mask),
+        trajectories=trajectories,
+        uncertainty_aware=False,
+    )
+    assert pool.selected_entity_axis_index(source)[0, 0].tolist() == [1, 0, 0]
+
+    reused_objects = source.objects.clone()
+    reused_objects.object_id[0, 0] = 8
+    reused = source.replace(objects=reused_objects)
+
+    assert pool.selected_entity_axis_index(reused)[0, 0].tolist() == [0, 0, 0]
 
 
 def test_runtime_controller_uses_only_associated_measurements_and_splices_x() -> None:
@@ -382,7 +480,93 @@ def test_runtime_controller_uses_only_associated_measurements_and_splices_x() ->
     assert forecast is not None
     assert forecast.positions[0, 0, 0, 0] == pytest.approx(0.0)
     assert "hypothesis_axis_index" in forecast.auxiliary
+    assert forecast.auxiliary["hypothesis_axis_index"].shape == (1, 1, 1, 3)
     torch.testing.assert_close(source.objects.position, belief.objects.position)
+
+
+def test_runtime_controller_does_not_extrapolate_short_evidence_to_long_horizon() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+    controller.schedule(source)
+    at_due_time = source.replace(timestamp=torch.tensor([0.1]))
+    measured = SimpleNamespace(
+        timestamp=torch.tensor([0.1]),
+        measurement_mask=torch.tensor([[True]]),
+        auxiliary={"world_position": torch.tensor([[[0.0, 0.0, 0.0]]])},
+    )
+    association = SimpleNamespace(
+        pair_mask=torch.tensor([[True]]),
+        belief_indices=torch.tensor([[0]], dtype=torch.int64),
+        measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+    )
+    controller.assimilate_observation(at_due_time, measured, association)
+
+    forecast = controller.predict(at_due_time, [0.1, 0.5])
+
+    assert forecast is not None
+    assert forecast.positions[0, 0, 0, 0] == pytest.approx(0.0)
+    assert forecast.positions[0, 1, 0, 0] == pytest.approx(1.0)
+    assert forecast.auxiliary["hypothesis_axis_index"][0, :, 0, 0].tolist() == [1, 0]
+    assert forecast.auxiliary["hypothesis_axis_supported"][0, :, 0, 0].tolist() == [
+        True,
+        False,
+    ]
+
+
+def test_runtime_controller_keeps_independent_evidence_per_horizon() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)]),
+        evidence_horizons_seconds=(0.1, 0.2),
+        axis_independent_axes=(0,),
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+    controller.schedule(source)
+    association = SimpleNamespace(
+        pair_mask=torch.tensor([[True]]),
+        belief_indices=torch.tensor([[0]], dtype=torch.int64),
+        measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+    )
+    first_due = source.replace(timestamp=torch.tensor([0.1]))
+    controller.assimilate_observation(
+        first_due,
+        SimpleNamespace(
+            timestamp=torch.tensor([0.1]),
+            measurement_mask=torch.tensor([[True]]),
+            auxiliary={"world_position": torch.tensor([[[0.0, 0.0, 0.0]]])},
+        ),
+        association,
+    )
+    second_due = source.replace(timestamp=torch.tensor([0.2]))
+    controller.assimilate_observation(
+        second_due,
+        SimpleNamespace(
+            timestamp=torch.tensor([0.2]),
+            measurement_mask=torch.tensor([[True]]),
+            auxiliary={"world_position": torch.tensor([[[1.0, 0.0, 0.0]]])},
+        ),
+        association,
+    )
+
+    forecast = controller.predict(second_due, [0.1, 0.2])
+
+    assert forecast is not None
+    assert forecast.positions[0, :, 0, 0].tolist() == pytest.approx([0.0, 1.0])
+    assert controller.pools[0].selected_axis_index(second_due)[0, 0].item() == 1
+    assert controller.pools[1].selected_axis_index(second_due)[0, 0].item() == 0
 
 
 def test_runtime_controller_discards_late_evidence_without_interpolation() -> None:
@@ -408,6 +592,198 @@ def test_runtime_controller_discards_late_evidence_without_interpolation() -> No
     assert controller.assimilate_observation(late, measured, association) is None
     assert controller.pool.last_selection is None
     assert not controller.pending
+
+
+def test_runtime_controller_invalidates_predictions_after_external_revision() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_FixedDynamics(0.0), _FixedDynamics(1.0)]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+    )
+    controller.reset(1, device=belief.device, dtype=belief.dtype)
+    controller.schedule(belief)
+
+    controller.invalidate_pending()
+
+    assert not controller.pending
+
+
+@pytest.mark.parametrize(
+    ("mutation", "reason"),
+    [
+        ("source", "source_tensor_revision"),
+        ("result", "scheduled_result_revision"),
+    ],
+)
+def test_runtime_controller_rejects_mutated_pending_provenance(
+    mutation: str,
+    reason: str,
+) -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_FixedDynamics(0.0), _FixedDynamics(1.0)]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+    )
+    controller.reset(1, device=belief.device, dtype=belief.dtype)
+    controller.schedule(
+        belief,
+        source_revision=1,
+        source_tensor_signature=tensor_identity_version_signature(belief),
+        dynamics_tensor_signature=("dynamics",),
+        dynamics_training=False,
+        tensor_signature=tensor_identity_version_signature,
+    )
+    if mutation == "source":
+        belief.objects.position.add_(0.25)
+    else:
+        controller.pending[0].learned_step.belief.objects.position.add_(0.25)
+
+    controller.synchronize_runtime_context(
+        belief,
+        dynamics_tensor_signature=("dynamics",),
+        dynamics_training=False,
+        tensor_signature=tensor_identity_version_signature,
+    )
+
+    assert not controller.pending
+    assert controller.pending_invalidation_counts[reason] == 1
+
+
+def test_runtime_controller_resets_applicability_on_dynamics_revision() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+    controller.synchronize_runtime_context(
+        source,
+        dynamics_tensor_signature=("revision", 1),
+        dynamics_training=False,
+        tensor_signature=tensor_identity_version_signature,
+    )
+    controller.schedule(
+        source,
+        source_revision=1,
+        source_tensor_signature=tensor_identity_version_signature(source),
+        dynamics_tensor_signature=("revision", 1),
+        dynamics_training=False,
+        tensor_signature=tensor_identity_version_signature,
+    )
+    due = source.replace(timestamp=torch.tensor([0.1]))
+    controller.assimilate_observation(
+        due,
+        SimpleNamespace(
+            timestamp=torch.tensor([0.1]),
+            measurement_mask=torch.tensor([[True]]),
+            auxiliary={"world_position": torch.zeros(1, 1, 3)},
+        ),
+        SimpleNamespace(
+            pair_mask=torch.tensor([[True]]),
+            belief_indices=torch.tensor([[0]], dtype=torch.int64),
+            measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+        ),
+    )
+    assert controller.predict(due, [0.1]) is not None
+
+    controller.synchronize_runtime_context(
+        due,
+        dynamics_tensor_signature=("revision", 2),
+        dynamics_training=False,
+        tensor_signature=tensor_identity_version_signature,
+    )
+
+    assert controller.predict(due, [0.1]) is None
+
+
+def test_runtime_controller_reuses_due_learned_step_only_for_exact_source() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    learned = _CountingFixedDynamics(0.0)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([learned, _FixedDynamics(1.0)]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+    )
+    controller.reset(1, device=belief.device, dtype=belief.dtype)
+    source_signature = ("source",)
+    dynamics_signature = ("dynamics",)
+    controller.schedule(
+        belief,
+        source_revision=4,
+        source_tensor_signature=source_signature,
+        dynamics_tensor_signature=dynamics_signature,
+        dynamics_training=False,
+    )
+    assert learned.calls == 1
+
+    reused = controller.reusable_learned_step(
+        belief,
+        torch.tensor([0.1]),
+        source_revision=4,
+        source_tensor_signature=source_signature,
+        dynamics_tensor_signature=dynamics_signature,
+        dynamics_training=False,
+    )
+    revised = belief.replace(objects=belief.objects.clone())
+    stale = controller.reusable_learned_step(
+        revised,
+        torch.tensor([0.1]),
+        source_revision=4,
+        source_tensor_signature=source_signature,
+        dynamics_tensor_signature=dynamics_signature,
+        dynamics_training=False,
+    )
+
+    assert reused is controller.pending[0].learned_step
+    assert stale is None
+    assert learned.calls == 1
+
+
+def test_runtime_controller_reuses_absolute_float32_frame_clock_for_80_steps() -> None:
+    learned = _CountingFixedDynamics(0.0)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([learned, _FixedDynamics(1.0)]),
+        evidence_horizons_seconds=(0.05,),
+        axis_independent_axes=(0,),
+    )
+    belief = BeliefFactory(max_objects=1).create()
+    controller.reset(1, device=belief.device, dtype=belief.dtype)
+
+    for frame_index in range(80):
+        source_signature = ("source", frame_index)
+        controller.schedule(
+            belief,
+            source_revision=frame_index,
+            source_tensor_signature=source_signature,
+            dynamics_tensor_signature=("dynamics",),
+            dynamics_training=False,
+        )
+        target_timestamp = torch.tensor([(frame_index + 1) / 20], dtype=torch.float32)
+        reused = controller.reusable_learned_step(
+            belief,
+            target_timestamp,
+            source_revision=frame_index,
+            source_tensor_signature=source_signature,
+            dynamics_tensor_signature=("dynamics",),
+            dynamics_training=False,
+        )
+        assert reused is not None
+        torch.testing.assert_close(
+            reused.belief.timestamp,
+            target_timestamp,
+            rtol=0.0,
+            atol=0.0,
+        )
+        belief = reused.belief
+
+    assert learned.calls == 80
 
 
 def test_runtime_controller_rolls_out_only_selected_axis_candidates() -> None:
@@ -439,6 +815,108 @@ def test_runtime_controller_rolls_out_only_selected_axis_candidates() -> None:
     assert forecast.auxiliary["hypothesis_rollout_candidate_indices"].tolist() == [0]
 
 
+class _FixedXStateDynamics(_FixedDynamics):
+    def __init__(self, position: float, velocity: float, log_variance: float) -> None:
+        super().__init__(position)
+        self.velocity = velocity
+        self.log_variance = log_variance
+
+    def predict_step(self, belief, delta_time):
+        step = super().predict_step(belief, delta_time)
+        objects = step.belief.objects.clone()
+        objects.velocity[..., 0] = self.velocity
+        objects.fast_log_variance[..., 0] = self.log_variance
+        objects.fast_log_variance[..., 3] = self.log_variance
+        return RolloutStep(
+            belief=step.belief.replace(objects=objects),
+            event_logits=step.event_logits,
+            auxiliary=step.auxiliary,
+        )
+
+
+def test_runtime_controller_splices_coherent_axis_state() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool(
+            [
+                _FixedXStateDynamics(1.0, 10.0, 1.0),
+                _FixedXStateDynamics(0.0, 2.0, -2.0),
+            ]
+        ),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+    controller.schedule(source)
+    due = source.replace(timestamp=torch.tensor([0.1]))
+    controller.assimilate_observation(
+        due,
+        SimpleNamespace(
+            timestamp=torch.tensor([0.1]),
+            measurement_mask=torch.tensor([[True]]),
+            auxiliary={
+                "world_position": torch.tensor([[[0.0, 0.0, 0.0]]]),
+                "world_position_log_variance": torch.full((1, 1, 3), -4.0),
+            },
+        ),
+        SimpleNamespace(
+            pair_mask=torch.tensor([[True]]),
+            belief_indices=torch.tensor([[0]], dtype=torch.int64),
+            measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+        ),
+    )
+
+    forecast = controller.predict(due, [0.1])
+
+    assert forecast is not None
+    assert forecast.positions[0, 0, 0, 0] == pytest.approx(0.0)
+    assert forecast.velocities[0, 0, 0, 0] == pytest.approx(2.0)
+    assert forecast.fast_log_variance[0, 0, 0, 0] == pytest.approx(-2.0)
+    assert forecast.fast_log_variance[0, 0, 0, 3] == pytest.approx(-2.0)
+
+
+def test_runtime_controller_selects_models_per_persistent_entity() -> None:
+    belief = BeliefFactory(max_objects=2).create()
+    objects = belief.objects.clone()
+    objects.active[0, :2] = True
+    objects.object_id[0, :2] = torch.tensor([7, 8])
+    source = belief.replace(objects=objects)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+    controller.schedule(source)
+    due = source.replace(timestamp=torch.tensor([0.1]))
+    controller.assimilate_observation(
+        due,
+        SimpleNamespace(
+            timestamp=torch.tensor([0.1]),
+            measurement_mask=torch.tensor([[True, True]]),
+            auxiliary={"world_position": torch.tensor([[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]])},
+        ),
+        SimpleNamespace(
+            pair_mask=torch.tensor([[True, True]]),
+            belief_indices=torch.tensor([[0, 1]], dtype=torch.int64),
+            measurement_indices=torch.tensor([[0, 1]], dtype=torch.int64),
+        ),
+    )
+
+    forecast = controller.predict(due, [0.1])
+
+    assert forecast is not None
+    assert forecast.positions[0, 0, :2, 0].tolist() == pytest.approx([0.0, 1.0])
+    assert forecast.auxiliary["hypothesis_axis_index"][0, 0, :2, 0].tolist() == [
+        1,
+        0,
+    ]
+
+
 def test_constant_velocity_hypothesis_is_transparent_and_non_mutating() -> None:
     belief = BeliefFactory(max_objects=1).create()
     objects = belief.objects.clone()
@@ -453,9 +931,13 @@ def test_constant_velocity_hypothesis_is_transparent_and_non_mutating() -> None:
     )
     torch.testing.assert_close(source.objects.position[0, 0], torch.tensor([1.0, 2.0, 3.0]))
     damped = ConstantVelocityDynamics(damping=2.0).predict_step(source, torch.tensor([2.0]))
-    assert damped.belief.objects.velocity[0, 0, 0].item() == pytest.approx(2.0 * torch.exp(torch.tensor(-4.0)).item())
+    assert damped.belief.objects.velocity[0, 0, 0].item() == pytest.approx(
+        2.0 * torch.exp(torch.tensor(-4.0)).item()
+    )
     expected_displacement = 2.0 * (1.0 - torch.exp(torch.tensor(-4.0)).item()) / 2.0
-    assert damped.belief.objects.position[0, 0, 0].item() == pytest.approx(1.0 + expected_displacement)
+    assert damped.belief.objects.position[0, 0, 0].item() == pytest.approx(
+        1.0 + expected_displacement
+    )
     trajectory = HypothesisRolloutEngine().rollout_dynamics(
         [ConstantVelocityDynamics()], source, [0.25, 0.5]
     )[0]

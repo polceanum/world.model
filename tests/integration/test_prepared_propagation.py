@@ -60,6 +60,19 @@ def _rgb_config() -> OrpheusConfig:
     )
 
 
+def _rgb_hypothesis_config() -> OrpheusConfig:
+    config = _rgb_config()
+    return replace(
+        config,
+        runtime=replace(
+            config.runtime,
+            hypothesis_pool_enabled=True,
+            hypothesis_evidence_horizons_seconds=(1.0 / 30.0,),
+            hypothesis_axis_independent_axes=(0,),
+        ),
+    )
+
+
 def _rgb_packet(timestamp: float, shift: int = 0) -> ObservationPacket:
     image = torch.zeros(3, 32, 32)
     image[0, 10:17, 8 + shift : 15 + shift] = 1.0
@@ -185,6 +198,81 @@ def test_prepared_ingest_matches_normal_runtime_state_and_diagnostics() -> None:
         strict=True,
     ):
         _assert_nested_close(prepared_record, normal_record)
+
+
+def test_runtime_pool_reuses_scheduled_learned_step_for_next_prepared_ingest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = OnlineWorldModel.from_config(_rgb_hypothesis_config(), device="cpu")
+    model.eval()
+    calls = 0
+    original_predict_step = model.dynamics.predict_step
+
+    def recording_predict_step(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        return original_predict_step(*args, **kwargs)
+
+    monkeypatch.setattr(model.dynamics, "predict_step", recording_predict_step)
+    model.ingest(_rgb_packet(0.0))
+    # Initialization performs one zero-delta prior plus the first delayed-
+    # evidence forecast.
+    assert calls == 2
+
+    prepared = model.prepare_propagation(1.0 / 30.0)
+
+    assert calls == 2
+    model.ingest(_rgb_packet(1.0 / 30.0, shift=1), prepared=prepared)
+    assert calls == 3  # only the next delayed-evidence forecast was added
+    model.ingest(_rgb_packet(2.0 / 30.0, shift=2))
+    assert calls == 4  # ordinary ingest reuses the due forecast as well
+
+
+@pytest.mark.parametrize(
+    ("mutation", "reason"),
+    [
+        ("source", "source_tensor_revision"),
+        ("result", "scheduled_result_revision"),
+        ("weight", "dynamics_revision"),
+        ("mode", "dynamics_mode"),
+    ],
+)
+def test_runtime_pool_rejects_stale_scheduled_propagation(
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+    reason: str,
+) -> None:
+    model = OnlineWorldModel.from_config(_rgb_hypothesis_config(), device="cpu")
+    model.eval()
+    calls = 0
+    original_predict_step = model.dynamics.predict_step
+
+    def recording_predict_step(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        return original_predict_step(*args, **kwargs)
+
+    monkeypatch.setattr(model.dynamics, "predict_step", recording_predict_step)
+    model.ingest(_rgb_packet(0.0))
+    assert calls == 2
+    assert model.hypothesis_controller is not None
+    pending = model.hypothesis_controller.pending[0]
+    if mutation == "source":
+        assert model.belief is not None
+        model.belief.objects.position.add_(0.01)
+    elif mutation == "result":
+        pending.learned_step.belief.objects.position.add_(0.01)
+    elif mutation == "weight":
+        with torch.no_grad():
+            next(model.dynamics.parameters()).add_(0.01)
+    else:
+        model.train()
+
+    prepared = model.prepare_propagation(1.0 / 30.0)
+
+    assert calls == 3
+    assert torch.isfinite(prepared.prior.objects.position).all()
+    assert model.hypothesis_controller.pending_invalidation_counts[reason] >= 1
 
 
 def test_prepared_propagation_rejects_wrong_target_stale_revision_and_reuse() -> None:

@@ -326,3 +326,19 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
     assert training_state["state"] == "completed"
     assert training_state["completed_steps"] == 3
     assert (evaluation_directory / "report.md").is_file()
+    evaluation_progress = json.loads(
+        (evaluation_directory / "evaluation_progress.json").read_text(encoding="utf-8")
+    )
+    assert evaluation_progress["stage"] == "completed"
+    assert evaluation_progress["evaluated_episodes"] == 1
+    assert evaluation_progress["split"] == "test"
+    assert evaluation_progress["seed_protocol"] == "standard"
+    assert evaluation_progress["episodes"] == 1
+    assert evaluation_progress["batches"] == 1
+    assert evaluation_progress["checkpoint_step"] == 3
+    assert evaluation_progress["checkpoint"] == str(checkpoint.resolve())
+    assert evaluation_progress["output_directory"] == str(evaluation_directory.resolve())
+    assert evaluation_progress["runtime_hypothesis_pool"] is False
+    assert evaluation_progress["rgb_only"] is True
+    assert isinstance(evaluation_progress["device"], str)
+    assert isinstance(evaluation_progress["precision"], str)

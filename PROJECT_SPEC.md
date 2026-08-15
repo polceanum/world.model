@@ -3,8 +3,8 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.44
-**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026
+**Version:** 1.45
+**Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation and low-noise live-monitoring amendments 15 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -5735,6 +5735,22 @@ time, process ID, last seed/scenario when attributable, and the exact protocol
 hash. An interruption records the exception type and last completed progress
 without fabricating partial metrics.
 
+Every standard evaluation must likewise write a durable atomic progress file
+by default; its timestamped output is planned and an `initializing` event is
+written before model construction or checkpoint loading. A caught exception or
+interruption atomically replaces that event with terminal type/message and the
+last completed progress. An uncatchable process death remains explicitly stale,
+never implicitly complete. Console JSON is optional presentation, not the
+persistence gate.
+The repository provides one read-only local monitor that recursively discovers
+timestamped training and evaluation artifacts, prefers a verified-live run,
+and reports phase, step/target, robust rolling training trends, fixed-
+validation decisions, per-horizon accuracy, device placement, checkpoint age,
+and hard nonfinite/failure/staleness signals. Its default polling is relaxed,
+unchanged snapshots are suppressed apart from a coarse heartbeat, and it must
+not import/execute the model, load checkpoints, consume accelerator memory,
+contact a service, or mutate run state.
+
 Training workers must not be started or allowed to prefetch while
 initialization or handoff validation is still running. Construct the training
 loader deterministically, but create its iterator only when the first training
@@ -6757,6 +6773,150 @@ cadence need not produce `N+1`. Tests must cover candidate, reference, and
 validation exclusion at the exact boundary. This is a read-only evidence
 correction and does not reinterpret already serialized metrics or alter the
 active trainer.
+
+---
+
+# Part XXXVII — Evidence-bounded heterogeneous mental-simulation amendment
+
+## 208. The perceptual mental image is the persistent world belief
+
+The two original Orpheus papers sharpen rather than replace the architecture
+above. Their *mental image* or internal model is an entity-centred imaginary
+world constructed from perception, including physical properties that may not
+be directly observable. In this repository that role belongs exclusively to
+`WorldBelief`: timestamped RGB measurements discover and correct entities,
+while inferred state, uncertainty, identity, lifecycle, parameters, relations,
+and events persist between observations. Simulator state remains supervision
+and evaluation truth only.
+
+Domain-expert models and learned models may coexist behind the dynamics
+contract. Analytic kinematics, contact solvers, stable modes, learned residuals,
+and behavioral/event operators are complementary candidate effects, not rival
+sources of world state. Normal online improvement updates the belief and the
+small applicability/evidence state associated with these models; it does not
+require a large network-weight update or re-encoding observation history.
+
+Primary sources for this interpretation are:
+
+- Mihai Polceanu, Marc Parenthoën, and Cedric Buche, “ORPHEUS: Mental
+  Simulation as Support for Decision-Making in a Virtual Agent,” AAAI 2015,
+  https://cdn.aaai.org/ocs/10371/10371-46146-1-PB.pdf; and
+- Mihai Polceanu and Cedric Buche, “Towards A Theory-Of-Mind-Inspired Generic
+  Decision-Making Framework,” arXiv:1405.5048,
+  https://arxiv.org/abs/1405.5048.
+
+## 209. Local model applicability is evidence-bounded
+
+A heterogeneous candidate pool must represent explicit applicability, not one
+scene-wide winner. Evidence and assignment are local to at least:
+
+- persistent entity identity;
+- state component or axis;
+- interaction/event regime;
+- prediction horizon or composed short-step interval; and
+- the belief/dynamics revision from which the prediction was made.
+
+Candidate confidence is updated only by causal comparison between a prediction
+made before an observation and the later associated measurement. A model
+choice must never be transferred beyond the entity, component, regime, or
+horizon for which that comparison supplies evidence. In particular, a choice
+supported at 0.05 seconds cannot govern a 0.10--1.00-second query merely
+because it belongs to the same axis. Unmatched horizons use the explicit
+no-evidence fallback until they receive their own evidence or are reached by a
+qualified composition of supported short steps.
+
+The default no-evidence fallback is the accepted learned/structured runtime
+incumbent. Reports must distinguish fallback caused by no applicable evidence
+from a learned candidate selected by positive evidence. Applicability state
+must expose support count, age/freshness, observability, regime identity,
+uncertainty, and selection confidence. Missing or stale evidence cannot be
+encoded as a zero error or an arbitrarily confident prior.
+
+## 210. Physical and behavioral effects compose in stable short steps
+
+Mental simulation advances through ordered bounded substeps. Within each
+substep, analytic physical effects, structured interactions, learned
+residuals, behavior/action effects, and discrete event jumps are interleaved
+and accumulated under the same causal state-transition contract. An effect
+that is selected for one local interval modifies that interval; a longer
+forecast is produced by repeatedly evolving the resulting coherent state,
+re-evaluating applicability at supported boundaries, and propagating
+uncertainty. It is not produced by substituting an independently computed
+long-horizon coordinate into an otherwise unrelated learned trajectory.
+
+Axis-local evidence is useful, but emitted state must remain mathematically
+coherent. When a candidate controls an axis it must supply, or trigger a
+documented consistent recomputation of, the associated position mean,
+velocity mean, and predictive variance. Event state and cross-axis coupling
+remain joint. A position splice that retains incompatible velocity or
+variance is invalid even when its position RMSE improves.
+
+The runtime may maintain several simultaneous action/event/model branches and
+roll them forward from cloned beliefs. Branches are possible futures, never
+independent persistent truth. They are weighted by later measurement
+likelihood, may be pruned or merged, and must leave the authoritative source
+belief unmodified until ordinary association, innovation, and correction
+assimilate real evidence.
+
+## 211. Evidence combines both uncertainties and is invalidated causally
+
+For a continuous associated measurement, model evidence must combine the
+candidate's predictive uncertainty with measurement uncertainty. A Gaussian
+candidate score uses the innovation under their sum, for example:
+
+\[
+S_k = \frac12\sum_d m_d
+\left[
+\frac{(y_d-\mu_{k,d})^2}{P_{k,d}+R_d}
++\log(P_{k,d}+R_d)
+\right],
+\]
+
+with finite clamps and explicit masks. Candidate variance alone, measurement
+variance alone, or unnormalised squared error is not the complete likelihood.
+Nearby/range simulations may estimate expected score and fragility, but their
+dispersion augments rather than replaces calibrated predictive uncertainty.
+
+Pending evidence is valid only for the exact source belief identity and
+revision, timestamp, persistent object IDs, candidate/dynamics revision,
+runtime train/eval mode, and configured applicability cell that created it.
+Any external belief replacement, reset, lifecycle slot reuse, incompatible
+correction, parameter/buffer mutation, or mode change invalidates the pending
+item. A late or invalidated target is discarded and reported; it must not
+train confidence for a different state.
+
+Continuous model improvement means updating this bounded evidence and
+applicability state after every valid prediction-versus-reality comparison,
+with robust influence and explicit forgetting where configured. It does not
+authorize online full-model backpropagation. Approximate outcomes within a
+calibrated useful range can outrank brittle point accuracy, but every reported
+range must be tested against realised coverage and likelihood.
+
+## 212. Runtime-pool promotion includes accuracy and cost
+
+A new selection/composition policy is a runtime semantic change. Promotion
+requires a paired learned-only control using the same checkpoint bytes, device,
+precision, RGB-only observation path, seed/scenario manifest, anchors,
+horizons, and metric implementation. Compare current state and x/y/z position
+and velocity at every declared horizon, lifecycle/coverage, identity,
+collisions/events, uncertainty likelihood and coverage, nonfinite state, and
+latency for global updates, fast updates, and future rollouts.
+
+The 15 August four-episode MPS diagnostic does not pass this gate. Against its
+matched learned-only control, the runtime pool's x RMSE at 1.00 seconds is
+`0.895082` versus `0.771005` (`+16.1%`), aggregate position RMSE is `0.672120`
+versus `0.618738` (`+8.63%`), forecast Gaussian NLL is `0.850832` versus
+`0.834268` (`+1.985%`), and global/fast update latency is `2.216x`/`2.392x`.
+Lifecycle, identity, events, y, and z are unchanged, but those equal slices do
+not offset the accuracy, calibration, and cost regressions. The policy is
+therefore rejected and remains opt-in. This result covers four validation
+episodes and is diagnostic rather than a broad convergence claim.
+
+The immediate repair must eliminate unsupported horizon transfer, add the
+explicit evidence/applicability semantics above, and remove duplicated
+candidate/runtime propagation before another paired MPS comparison. No repair
+is considered complete until focused tests and the matched runtime protocol
+verify it.
 
 ---
 

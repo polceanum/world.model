@@ -129,7 +129,10 @@ def _aggregate_episode_reports(
             for axis in range(3)
         ]
         selected_count = [
-            sum(int(result["selected_position_coordinate_count"][key][axis]) for result in episode_results)
+            sum(
+                int(result["selected_position_coordinate_count"][key][axis])
+                for result in episode_results
+            )
             for axis in range(3)
         ]
         aggregate["selected_rmse_m"][key] = _rmse(selected_sse, selected_count)
@@ -226,9 +229,7 @@ def evaluate_episode(
     identity_covered = [[0 for _ in range(candidate_count)] for _ in horizons]
     selected_lifecycle_mismatch = [0 for _ in horizons]
     selected_identity_covered = [0 for _ in horizons]
-    event_counts = [
-        [{"tp": 0, "fp": 0, "fn": 0} for _ in range(candidate_count)] for _ in horizons
-    ]
+    event_counts = [[{"tp": 0, "fp": 0, "fn": 0} for _ in range(candidate_count)] for _ in horizons]
     event_probability_histograms = [
         [[0 for _ in range(10)] for _ in range(candidate_count)] for _ in horizons
     ]
@@ -244,9 +245,7 @@ def evaluate_episode(
     horizon_choice_counts = [[0 for _ in range(candidate_count)] for _ in horizons]
     posterior_choice_counts = [0 for _ in range(candidate_count)]
     posterior_horizon_choice_counts = [[0 for _ in range(candidate_count)] for _ in horizons]
-    axis_choice_counts = [
-        [[0 for _ in range(candidate_count)] for _ in range(3)] for _ in horizons
-    ]
+    axis_choice_counts = [[[0 for _ in range(candidate_count)] for _ in range(3)] for _ in horizons]
     posterior_axis_choice_counts = [
         [[0 for _ in range(candidate_count)] for _ in range(3)] for _ in horizons
     ]
@@ -312,8 +311,12 @@ def evaluate_episode(
                             positions=trajectory.positions[:, query_index : query_index + 1],
                             velocities=trajectory.velocities[:, query_index : query_index + 1],
                             orientations=trajectory.orientations[:, query_index : query_index + 1],
-                            motion_mode_logits=trajectory.motion_mode_logits[:, query_index : query_index + 1],
-                            fast_log_variance=trajectory.fast_log_variance[:, query_index : query_index + 1],
+                            motion_mode_logits=trajectory.motion_mode_logits[
+                                :, query_index : query_index + 1
+                            ],
+                            fast_log_variance=trajectory.fast_log_variance[
+                                :, query_index : query_index + 1
+                            ],
                             active_mask=trajectory.active_mask[:, query_index : query_index + 1],
                             event_logits=(
                                 trajectory.event_logits[:, query_index : query_index + 1]
@@ -377,20 +380,43 @@ def evaluate_episode(
                 else:
                     single_step_samples = []
                     for sample_trajectories in ensemble_trajectories:
-                        single_step_samples.append([
-                            trajectory.__class__(
-                                timestamps=trajectory.timestamps[:, query_index : query_index + 1],
-                                positions=trajectory.positions[:, query_index : query_index + 1],
-                                velocities=trajectory.velocities[:, query_index : query_index + 1],
-                                orientations=trajectory.orientations[:, query_index : query_index + 1],
-                                motion_mode_logits=trajectory.motion_mode_logits[:, query_index : query_index + 1],
-                                fast_log_variance=trajectory.fast_log_variance[:, query_index : query_index + 1],
-                                active_mask=trajectory.active_mask[:, query_index : query_index + 1],
-                                event_logits=(trajectory.event_logits[:, query_index : query_index + 1] if trajectory.event_logits is not None else None),
-                                auxiliary={name: value[:, query_index : query_index + 1] for name, value in trajectory.auxiliary.items()},
-                            )
-                            for trajectory in sample_trajectories
-                        ])
+                        single_step_samples.append(
+                            [
+                                trajectory.__class__(
+                                    timestamps=trajectory.timestamps[
+                                        :, query_index : query_index + 1
+                                    ],
+                                    positions=trajectory.positions[
+                                        :, query_index : query_index + 1
+                                    ],
+                                    velocities=trajectory.velocities[
+                                        :, query_index : query_index + 1
+                                    ],
+                                    orientations=trajectory.orientations[
+                                        :, query_index : query_index + 1
+                                    ],
+                                    motion_mode_logits=trajectory.motion_mode_logits[
+                                        :, query_index : query_index + 1
+                                    ],
+                                    fast_log_variance=trajectory.fast_log_variance[
+                                        :, query_index : query_index + 1
+                                    ],
+                                    active_mask=trajectory.active_mask[
+                                        :, query_index : query_index + 1
+                                    ],
+                                    event_logits=(
+                                        trajectory.event_logits[:, query_index : query_index + 1]
+                                        if trajectory.event_logits is not None
+                                        else None
+                                    ),
+                                    auxiliary={
+                                        name: value[:, query_index : query_index + 1]
+                                        for name, value in trajectory.auxiliary.items()
+                                    },
+                                )
+                                for trajectory in sample_trajectories
+                            ]
+                        )
                     selection = model.assimilate_hypothesis_ensemble(
                         evidence_pool,
                         target,
@@ -421,9 +447,14 @@ def evaluate_episode(
                     predicted_positions = torch.stack(
                         [trajectory.positions[0, 0] for trajectory in single_step_trajectories]
                     )
-                    blended_position = torch.einsum("h,hnd->nd", prior_posterior, predicted_positions)
+                    blended_position = torch.einsum(
+                        "h,hnd->nd", prior_posterior, predicted_positions
+                    )
                     predicted_variances = torch.stack(
-                        [trajectory.fast_log_variance[0, 0, ..., :3].exp() for trajectory in single_step_trajectories]
+                        [
+                            trajectory.fast_log_variance[0, 0, ..., :3].exp()
+                            for trajectory in single_step_trajectories
+                        ]
                     )
                     blended_variance = torch.einsum(
                         "h,hnd->nd",
@@ -436,19 +467,30 @@ def evaluate_episode(
                         [trajectory.positions[0, 0] for trajectory in single_step_trajectories]
                     )
                     predicted_variances = torch.stack(
-                        [trajectory.fast_log_variance[0, 0, ..., :3].exp() for trajectory in single_step_trajectories]
+                        [
+                            trajectory.fast_log_variance[0, 0, ..., :3].exp()
+                            for trajectory in single_step_trajectories
+                        ]
                     )
                     blended_position = torch.stack(
-                        [predicted_positions[int(axis_selected[axis]), :, axis] for axis in range(3)],
+                        [
+                            predicted_positions[int(axis_selected[axis]), :, axis]
+                            for axis in range(3)
+                        ],
                         dim=-1,
                     )
                     blended_variance = torch.stack(
-                        [predicted_variances[int(axis_selected[axis]), :, axis] for axis in range(3)],
+                        [
+                            predicted_variances[int(axis_selected[axis]), :, axis]
+                            for axis in range(3)
+                        ],
                         dim=-1,
                     )
                 else:
                     blended_position = single_step_trajectories[selected].positions[0, 0]
-                    blended_variance = single_step_trajectories[selected].fast_log_variance[0, 0, ..., :3].exp()
+                    blended_variance = (
+                        single_step_trajectories[selected].fast_log_variance[0, 0, ..., :3].exp()
+                    )
                 truth = collision_target[:, 0]
                 for candidate_index, trajectory in enumerate(single_step_trajectories):
                     residual = trajectory.positions[:, 0] - target
@@ -457,7 +499,9 @@ def evaluate_episode(
                         candidate_squares[horizon_index][candidate_index][axis] += float(
                             values.square().sum().cpu()
                         )
-                        candidate_counts[horizon_index][candidate_index][axis] += int(values.numel())
+                        candidate_counts[horizon_index][candidate_index][axis] += int(
+                            values.numel()
+                        )
                     active_prediction = trajectory.active_mask[:, 0]
                     lifecycle_mismatch[horizon_index][candidate_index] += int(
                         (active_prediction != mask[:, 0]).sum().cpu()
@@ -466,15 +510,20 @@ def evaluate_episode(
                         (active_prediction & mask[:, 0]).sum().cpu()
                     )
                     event_prediction = (
-                        trajectory.event_logits[:, 0, :, MotionMode.COLLISION].sigmoid() >= event_threshold
+                        trajectory.event_logits[:, 0, :, MotionMode.COLLISION].sigmoid()
+                        >= event_threshold
                     )
-                    event_probability = trajectory.event_logits[:, 0, :, MotionMode.COLLISION].sigmoid()
+                    event_probability = trajectory.event_logits[
+                        :, 0, :, MotionMode.COLLISION
+                    ].sigmoid()
                     bins = (event_probability.clamp(0.0, 1.0 - 1.0e-7) * 10).to(torch.int64)
                     histogram = torch.bincount(bins.flatten(), minlength=10).tolist()
                     event_probability_histograms[horizon_index][candidate_index] = [
                         previous + current
                         for previous, current in zip(
-                            event_probability_histograms[horizon_index][candidate_index], histogram, strict=True
+                            event_probability_histograms[horizon_index][candidate_index],
+                            histogram,
+                            strict=True,
                         )
                     ]
                     for destination, selector in (
@@ -510,12 +559,18 @@ def evaluate_episode(
                 selected_lifecycle_mismatch[horizon_index] += mismatch
                 selected_identity_covered[horizon_index] += coverage
                 selected_event = (
-                    single_step_trajectories[selected].event_logits[:, 0, :, MotionMode.COLLISION].sigmoid()
+                    single_step_trajectories[selected]
+                    .event_logits[:, 0, :, MotionMode.COLLISION]
+                    .sigmoid()
                     >= event_threshold
                 )
                 truth = collision_target[:, 0]
-                selected_event_counts[horizon_index]["tp"] += int((selected_event & truth).sum().cpu())
-                selected_event_counts[horizon_index]["fp"] += int((selected_event & ~truth).sum().cpu())
+                selected_event_counts[horizon_index]["tp"] += int(
+                    (selected_event & truth).sum().cpu()
+                )
+                selected_event_counts[horizon_index]["fp"] += int(
+                    (selected_event & ~truth).sum().cpu()
+                )
                 selected_event_counts[horizon_index]["fn"] += int(
                     ((~selected_event) & truth).sum().cpu()
                 )
@@ -538,25 +593,22 @@ def evaluate_episode(
             "collision_false_positive": float(fp),
             "collision_false_negative": float(fn),
         }
+
     return {
         # Preserve additive position evidence, not just episode-local RMSE.
         # Visibility and lifecycle vary by episode, so downstream full-manifest
         # comparisons must pool SSE and coordinate counts before taking a root.
         "candidate_position_sse_m2": {
-            str(horizon): candidate_squares[index]
-            for index, horizon in enumerate(horizons)
+            str(horizon): candidate_squares[index] for index, horizon in enumerate(horizons)
         },
         "candidate_position_coordinate_count": {
-            str(horizon): candidate_counts[index]
-            for index, horizon in enumerate(horizons)
+            str(horizon): candidate_counts[index] for index, horizon in enumerate(horizons)
         },
         "selected_position_sse_m2": {
-            str(horizon): selected_squares[index]
-            for index, horizon in enumerate(horizons)
+            str(horizon): selected_squares[index] for index, horizon in enumerate(horizons)
         },
         "selected_position_coordinate_count": {
-            str(horizon): selected_counts[index]
-            for index, horizon in enumerate(horizons)
+            str(horizon): selected_counts[index] for index, horizon in enumerate(horizons)
         },
         "candidate_rmse_m": {
             str(horizon): [
@@ -571,7 +623,8 @@ def evaluate_episode(
         },
         "selection_counts": choice_counts,
         "selection_counts_by_horizon": {
-            str(horizon): counts for horizon, counts in zip(horizons, horizon_choice_counts, strict=True)
+            str(horizon): counts
+            for horizon, counts in zip(horizons, horizon_choice_counts, strict=True)
         },
         "posterior_selection_counts": posterior_choice_counts,
         "posterior_selection_counts_by_horizon": {
@@ -579,7 +632,8 @@ def evaluate_episode(
             for horizon, counts in zip(horizons, posterior_horizon_choice_counts, strict=True)
         },
         "axis_selection_counts_by_horizon": {
-            str(horizon): counts for horizon, counts in zip(horizons, axis_choice_counts, strict=True)
+            str(horizon): counts
+            for horizon, counts in zip(horizons, axis_choice_counts, strict=True)
         },
         "posterior_axis_selection_counts_by_horizon": {
             str(horizon): counts
@@ -596,8 +650,7 @@ def evaluate_episode(
             for index, horizon in enumerate(horizons)
         },
         "selected_identity_coverage": {
-            str(horizon): selected_identity_covered[index]
-            for index, horizon in enumerate(horizons)
+            str(horizon): selected_identity_covered[index] for index, horizon in enumerate(horizons)
         },
         "candidate_event_metrics": {
             str(horizon): [event_metrics(item) for item in event_counts[index]]
@@ -681,11 +734,14 @@ def main() -> int:
         raise ValueError("--episodes must be positive")
     if args.ensemble_samples <= 0:
         raise ValueError("--ensemble-samples must be positive")
-    if any(value < 0 or not math.isfinite(value) for value in (
-        args.ensemble_position_std_scale,
-        args.ensemble_velocity_std_scale,
-        args.ensemble_risk_penalty,
-    )):
+    if any(
+        value < 0 or not math.isfinite(value)
+        for value in (
+            args.ensemble_position_std_scale,
+            args.ensemble_velocity_std_scale,
+            args.ensemble_risk_penalty,
+        )
+    ):
         raise ValueError("ensemble scales and risk penalty must be finite and nonnegative")
     if not 0.0 < args.evidence_decay <= 1.0:
         raise ValueError("--evidence-decay must lie in (0,1]")
@@ -706,7 +762,9 @@ def main() -> int:
     if any((weight < 0 or not math.isfinite(weight)) for weight in args.axis_weights) or not any(
         weight > 0 for weight in args.axis_weights
     ):
-        raise ValueError("--axis-weights must contain finite nonnegative values and one positive value")
+        raise ValueError(
+            "--axis-weights must contain finite nonnegative values and one positive value"
+        )
     config = load_config(args.config, overrides=[f"device.preference={args.device}"])
     axis_independent = (
         config.evaluation.hypothesis_axis_independent

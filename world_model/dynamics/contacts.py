@@ -12,7 +12,6 @@ from torch import Tensor, nn
 from world_model.belief import ObjectBeliefTensor
 from world_model.dynamics.graph import InteractionOutput
 
-
 _TANGENT_DIRECTION_EPSILON = 1.0e-7
 
 

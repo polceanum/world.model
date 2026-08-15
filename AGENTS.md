@@ -196,6 +196,13 @@ Working rules:
 - Keep selector validation full-manifest and atomic, but emit per-episode
   stdout and durable `training_progress.json` heartbeats. Do not start
   training-loader workers before initialization/handoff validation finishes.
+- Use the read-only root `monitor.py` for live run inspection instead of
+  frequent ad hoc status polling. Its default cadence is 60 seconds, it prints
+  only artifact/process changes plus a ten-poll heartbeat, and it must never
+  import the model, deserialize checkpoints, consume accelerator memory, or
+  mutate run artifacts. Every standard evaluation writes atomic durable
+  progress from pre-load initialization through terminal completion/failure by
+  default; `evaluate.py --progress` only adds stdout events.
 - Reject nonfinite model parameters or optimizer state immediately after an
   optimizer step. Validate model buffers, weights, optimizer/scheduler tensors,
   and nonnegative step counters before checkpoint replacement and before
