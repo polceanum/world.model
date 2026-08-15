@@ -62,6 +62,12 @@ from world_model.utils.version import SIMULATOR_VERSION
 
 _IDENTIFIER_PARAMETERS = ("mass", "restitution", "drag", "friction", "radius")
 _CURRENT_DETECTION_DISTANCE_THRESHOLD_M = 0.5
+_RUNTIME_HYPOTHESIS_CANDIDATES = (
+    "learned",
+    "constant_velocity",
+    "damped_constant_velocity",
+    "ballistic_contact",
+)
 
 
 def enable_runtime_hypothesis_pool(
@@ -670,6 +676,11 @@ def evaluate_checkpoint(
     gravity_intervention_gain_sum = 0.0
     gravity_intervention_feature_count = 0
     gravity_intervention_gain_above_half_count = 0
+    runtime_hypothesis_forecast_anchor_count = 0
+    runtime_hypothesis_axis_selection_count = {
+        axis: [0 for _ in _RUNTIME_HYPOTHESIS_CANDIDATES]
+        for axis in config.runtime.hypothesis_axis_independent_axes
+    }
     forecast_target_count: dict[str, int] = {}
     forecast_tracked_count: dict[str, int] = {}
     forecast_active_count: dict[str, int] = {}
@@ -1075,6 +1086,37 @@ def evaluate_checkpoint(
                     # policy: calling ``model.dynamics`` here would attach the
                     # policy yet silently score only its learned candidate.
                     trajectory = model.predict(event_query_plan.query_seconds)
+                    if runtime_hypothesis_pool:
+                        axis_indices = trajectory.auxiliary.get("hypothesis_axis_index")
+                        # Before the first exact-due RGB observation there is
+                        # deliberately no selector evidence, and normal
+                        # runtime falls back to the learned rollout. Record
+                        # that explicit default rather than pretending an
+                        # axis-selection tensor already exists.
+                        if axis_indices is None:
+                            axis_indices = torch.zeros(
+                                batch_size,
+                                3,
+                                device=belief.device,
+                                dtype=torch.int64,
+                            )
+                        if not isinstance(axis_indices, Tensor) or axis_indices.shape != (batch_size, 3):
+                            raise RuntimeError(
+                                "runtime hypothesis forecast must expose "
+                                "hypothesis_axis_index [B,3]"
+                            )
+                        if axis_indices.dtype != torch.int64 or torch.any(axis_indices < 0) or torch.any(
+                            axis_indices >= len(_RUNTIME_HYPOTHESIS_CANDIDATES)
+                        ):
+                            raise RuntimeError("runtime hypothesis axis index is invalid")
+                        runtime_hypothesis_forecast_anchor_count += batch_size
+                        for axis in config.runtime.hypothesis_axis_independent_axes:
+                            selected_counts = torch.bincount(
+                                axis_indices[:, axis],
+                                minlength=len(_RUNTIME_HYPOTHESIS_CANDIDATES),
+                            ).detach().cpu().tolist()
+                            for candidate_index, count in enumerate(selected_counts):
+                                runtime_hypothesis_axis_selection_count[axis][candidate_index] += int(count)
                     synchronize(device)
                     rollout_latencies.append((time.perf_counter() - rollout_started) * 1000.0)
                     model_positions = event_query_plan.select_target_endpoints(trajectory.positions)
@@ -1364,6 +1406,13 @@ def evaluate_checkpoint(
             ),
         }
     )
+    if runtime_hypothesis_pool:
+        metrics["runtime_hypothesis_forecast_anchor_count"] = float(
+            runtime_hypothesis_forecast_anchor_count
+        )
+        for axis, counts in runtime_hypothesis_axis_selection_count.items():
+            for candidate, count in zip(_RUNTIME_HYPOTHESIS_CANDIDATES, counts, strict=True):
+                metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_{candidate}_count"] = float(count)
     for horizon, target_count in sorted(forecast_target_count.items()):
         tracked_count = forecast_tracked_count.get(horizon, 0)
         active_count = forecast_active_count.get(horizon, 0)
@@ -1518,7 +1567,7 @@ def evaluate_checkpoint(
         "runtime_hypothesis_pool_enabled": runtime_hypothesis_pool,
         "runtime_hypothesis_pool_policy": (
             {
-                "candidates": ["learned", "constant_velocity", "damped_constant_velocity", "ballistic_contact"],
+                "candidates": list(_RUNTIME_HYPOTHESIS_CANDIDATES),
                 "evidence_horizons_seconds": list(config.runtime.hypothesis_evidence_horizons_seconds),
                 "axis_independent_axes": list(config.runtime.hypothesis_axis_independent_axes),
                 "evidence_decay": config.runtime.hypothesis_evidence_decay,

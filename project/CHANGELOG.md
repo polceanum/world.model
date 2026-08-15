@@ -9,6 +9,9 @@
   hypothesis controller via `DynamicsModel.rollout`.
 - Added opt-in, flushed per-batch evaluator progress (`evaluate.py --progress`)
   and avoided fresh rollouts for unselected hypothesis candidates.
+- Added per-axis runtime candidate-selection counts to future evaluation
+  reports, including an explicit learned fallback count before delayed RGB
+  evidence is available.
 - Added a regression test for selected-candidate-only runtime rollout and
   retained a successful active-Aqua MPS RGB-only one-episode execution report.
 

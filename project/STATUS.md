@@ -23,6 +23,12 @@ the corrected route at `runs/...-runtime-hypothesis-pool-mps-32/`. Its results
 must be inspected before any runtime-default change; no broad metric is
 claimed while it is running.
 
+Subsequent runtime-pool reports also expose the number of forecast anchors and
+the learned/CV/damped-CV/ballistic selections for each configured composed
+axis. Before delayed RGB evidence exists, the required learned-runtime
+fallback is counted explicitly as `learned`; this distinguishes no-evidence
+anchors from an actual learned-model preference.
+
 Focused verification after the fix:
 
 ```bash

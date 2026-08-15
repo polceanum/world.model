@@ -18,6 +18,9 @@
 - **Consequences:** Existing learned-only evaluation behavior is unchanged;
   enabled runtime-pool reports are now semantically valid. The feature remains
   opt-in until the complete fixed 32-episode MPS guardrail comparison passes.
+  Reports count each configured axis's learned/CV/damped-CV/ballistic choice at
+  forecast anchors; pre-evidence learned fallback is counted separately only
+  through that same learned candidate label.
 
 ## ADR-131 — Runtime selection consumes associated RGB evidence only
 
