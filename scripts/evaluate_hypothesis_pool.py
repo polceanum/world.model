@@ -103,6 +103,73 @@ def _rmse(sum_of_squares: list[float], count: list[int]) -> list[float | None]:
     ]
 
 
+def _aggregate_episode_reports(
+    episode_results: list[dict[str, Any]],
+    horizons: tuple[float, ...],
+    *,
+    candidate_count: int,
+) -> dict[str, Any]:
+    """Pool additive causal evidence across episodes without RMSE averaging."""
+
+    aggregate: dict[str, Any] = {
+        "selected_rmse_m": {},
+        "candidate_rmse_m": {},
+        "selection_counts": [0] * candidate_count,
+        "selected_lifecycle_mismatch": {},
+        "selected_identity_coverage": {},
+        "selected_collision_counts": {},
+    }
+    for result in episode_results:
+        for candidate, count in enumerate(result["selection_counts"]):
+            aggregate["selection_counts"][candidate] += int(count)
+    for horizon in horizons:
+        key = str(horizon)
+        selected_sse = [
+            sum(float(result["selected_position_sse_m2"][key][axis]) for result in episode_results)
+            for axis in range(3)
+        ]
+        selected_count = [
+            sum(int(result["selected_position_coordinate_count"][key][axis]) for result in episode_results)
+            for axis in range(3)
+        ]
+        aggregate["selected_rmse_m"][key] = _rmse(selected_sse, selected_count)
+        candidates: list[list[float | None]] = []
+        for candidate in range(candidate_count):
+            sse = [
+                sum(
+                    float(result["candidate_position_sse_m2"][key][candidate][axis])
+                    for result in episode_results
+                )
+                for axis in range(3)
+            ]
+            count = [
+                sum(
+                    int(result["candidate_position_coordinate_count"][key][candidate][axis])
+                    for result in episode_results
+                )
+                for axis in range(3)
+            ]
+            candidates.append(_rmse(sse, count))
+        aggregate["candidate_rmse_m"][key] = candidates
+        aggregate["selected_lifecycle_mismatch"][key] = sum(
+            int(result["selected_lifecycle_mismatch"][key]) for result in episode_results
+        )
+        aggregate["selected_identity_coverage"][key] = sum(
+            int(result["selected_identity_coverage"][key]) for result in episode_results
+        )
+        aggregate["selected_collision_counts"][key] = {
+            name: sum(
+                float(result["selected_event_metrics"][key][name]) for result in episode_results
+            )
+            for name in (
+                "collision_true_positive",
+                "collision_false_positive",
+                "collision_false_negative",
+            )
+        }
+    return aggregate
+
+
 def _selected_lifecycle_counts(
     predicted_active: torch.Tensor,
     target_active: torch.Tensor,
@@ -748,6 +815,11 @@ def main() -> int:
                 ],
                 "horizons_seconds": horizons,
                 "episode_results": episodes,
+                "aggregate": _aggregate_episode_reports(
+                    episodes,
+                    horizons,
+                    candidate_count=4,
+                ),
             },
             indent=2,
         )

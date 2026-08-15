@@ -10146,3 +10146,11 @@ collision TP/FP/FN totals bitwise identical to the x/y diagnostic. This
 isolates y selection—not the x causal fallback—as the regression source. It
 is still only an eight-episode diagnostic, so configuration defaults remain
 unchanged pending the fixed 32-episode MPS all-guardrail protocol.
+
+Future pool reports now include an `aggregate` block that exactly pools
+per-episode SSE/count evidence before computing selected and per-candidate
+RMSE, selection counts, selected lifecycle/identity totals, and collision
+counts. A focused unequal-count regression proves it does not average
+episode-local RMSE (`22 passed`; Ruff clean). This is reporting only; the
+active immutable 32-episode process predates it and retains sufficient raw
+additive evidence for the same post-completion calculation.

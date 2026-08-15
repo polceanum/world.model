@@ -2944,3 +2944,6 @@ further gravity-axis threshold tuning.
   x-axis long-horizon gains, returns y to learned quality, and leaves lifecycle,
   identity, and collision totals unchanged. Escalate only to the fixed
   32-episode guardrail protocol; no default changes yet.
+- Added exact multi-episode aggregate summaries to future heterogeneous-pool
+  reports, pooling additive SSE/counts and selected lifecycle, identity, and
+  collision evidence. Focused regression tests and Ruff pass.
