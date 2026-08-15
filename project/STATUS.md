@@ -23,6 +23,18 @@ the corrected route at `runs/...-runtime-hypothesis-pool-mps-32/`. Its results
 must be inspected before any runtime-default change; no broad metric is
 claimed while it is running.
 
+That first detached 32-episode launch later exited without creating its report,
+so it is explicitly **no result** rather than a model failure or metric. The
+captured four-episode active-Aqua diagnostic completed successfully in
+`787.49 s` at
+`runs/20260815-141904-runtime-hypothesis-pool-mps-diagnostic-4/`. It is
+RGB-only, has `nonfinite_output_count=0`, and confirms the runtime controller
+made x-axis choices at 36 forecast anchors: learned 32, damped-CV 2, ballistic
+2. Its mean forecast-anchor latency is `35508.86 ms`; this is too slow for a
+casual full comparison but is a functioning MPS execution result, not a
+deadlock. It is only a four-episode diagnostic and has no paired learned-only
+control, so it cannot promote the policy.
+
 The next invocation also writes those events atomically to
 `evaluation_progress.json` inside its timestamped output directory whenever
 `--progress` is set (or to `--progress-path` when explicitly supplied). This

@@ -12,6 +12,9 @@
   rollouts for unselected hypothesis candidates.
 - Added coarse rollout-anchor heartbeats to durable evaluation progress so a
   slow long-horizon MPS forecast can be distinguished from a stalled batch.
+- Completed a four-episode active-Aqua MPS runtime-pool diagnostic with a
+  captured report: RGB-only and finite, with real x-axis fallback selections;
+  retained as a throughput/integration result only.
 - Added per-axis runtime candidate-selection counts to future evaluation
   reports, including an explicit learned fallback count before delayed RGB
   evidence is available.

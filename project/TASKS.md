@@ -61,7 +61,10 @@
   so immutable checkpoint configuration validation precedes the explicitly
   labelled post-load runtime intervention. The evaluator now routes scored
   forecasts through `OnlineWorldModel.predict`; use `--progress` for
-  batch-level durable progress rather than frequent status polling.
+  batch-level durable progress rather than frequent status polling. A
+  four-episode RGB-only MPS diagnostic is complete and finite but is not a
+  paired broad comparison; the prior detached 32-episode attempt produced no
+  report and must not be used as evidence.
 - [x] Complete the three-candidate eight-episode protected comparison; retain
   ballistic as diagnostic only because it is rarely selected and regresses
   mature event/position behavior.
