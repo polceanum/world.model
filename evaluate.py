@@ -52,6 +52,13 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Emit one flushed JSON progress line per completed evaluation batch.",
     )
+    parser.add_argument(
+        "--progress-path",
+        help=(
+            "Optional durable JSON progress path. With --progress and no value, "
+            "write evaluation_progress.json inside the timestamped output directory."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -78,6 +85,7 @@ def main() -> int:
         device_info=device,
         runtime_hypothesis_pool=args.runtime_hypothesis_pool,
         progress_callback=report_progress if args.progress else None,
+        progress_path=args.progress_path,
     )
     print(json.dumps(result, indent=2, default=str))
     return 0

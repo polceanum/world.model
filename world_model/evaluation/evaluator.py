@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
+import os
 import statistics
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +60,7 @@ from world_model.training.perturbations import perturb_belief
 from world_model.utils.artifacts import timestamped_artifact_path
 from world_model.utils.config import OrpheusConfig
 from world_model.utils.device import DeviceInfo, select_device
+from world_model.utils.io import atomic_write_text
 from world_model.utils.seeds import seed_everything
 from world_model.utils.version import SIMULATOR_VERSION
 
@@ -559,6 +563,7 @@ def evaluate_checkpoint(
     device_info: DeviceInfo | None = None,
     runtime_hypothesis_pool: bool = False,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    progress_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Evaluate a trusted local checkpoint on held-out RGB episodes.
 
@@ -593,9 +598,19 @@ def evaluate_checkpoint(
         enable_runtime_hypothesis_pool(model, config)
     model.eval()
 
+    durable_progress_path: Path | None = None
+
     def report_progress(stage: str, **values: Any) -> None:
+        event = {
+            "stage": stage,
+            "updated_utc": datetime.now(timezone.utc).isoformat(),
+            "pid": os.getpid(),
+            **values,
+        }
+        if durable_progress_path is not None:
+            atomic_write_text(durable_progress_path, json.dumps(event, indent=2, sort_keys=True) + "\n")
         if progress_callback is not None:
-            progress_callback({"stage": stage, **values})
+            progress_callback(event)
 
     checkpoint_training_config = payload["config"].get("training")
     if not isinstance(checkpoint_training_config, Mapping):
@@ -633,6 +648,22 @@ def evaluate_checkpoint(
         collate_fn=collate_episodes,
         drop_last=False,
     )
+    requested_output = (
+        Path(output_dir).expanduser().resolve()
+        if output_dir is not None
+        else checkpoint.parent.parent
+        / "evaluation"
+        / (
+            split
+            if resolved_seed_protocol.name == STANDARD_SEED_PROTOCOL
+            else f"{split}-{resolved_seed_protocol.name}"
+        )
+    )
+    output = timestamped_artifact_path(requested_output)
+    if progress_path is not None:
+        durable_progress_path = Path(progress_path).expanduser().resolve()
+    elif progress_callback is not None:
+        durable_progress_path = output / "evaluation_progress.json"
     report_progress(
         "started",
         episodes=config.evaluation.episodes,
@@ -1443,18 +1474,6 @@ def evaluate_checkpoint(
         }
     )
 
-    requested_output = (
-        Path(output_dir).expanduser().resolve()
-        if output_dir is not None
-        else checkpoint.parent.parent
-        / "evaluation"
-        / (
-            split
-            if resolved_seed_protocol.name == STANDARD_SEED_PROTOCOL
-            else f"{split}-{resolved_seed_protocol.name}"
-        )
-    )
-    output = timestamped_artifact_path(requested_output)
     limitations = [
         (
             "Evaluation uses the synthetic sphere-world split and does not "

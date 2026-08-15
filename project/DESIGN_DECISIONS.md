@@ -20,7 +20,9 @@
   opt-in until the complete fixed 32-episode MPS guardrail comparison passes.
   Reports count each configured axis's learned/CV/damped-CV/ballistic choice at
   forecast anchors; pre-evidence learned fallback is counted separately only
-  through that same learned candidate label.
+  through that same learned candidate label. Progress is atomically persisted
+  to the timestamped evaluation directory so launchd/terminal detachment
+  cannot turn a still-running guardrail run into an apparently empty log.
 
 ## ADR-131 — Runtime selection consumes associated RGB evidence only
 

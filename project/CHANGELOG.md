@@ -8,7 +8,8 @@
   `OnlineWorldModel.predict` rather than bypassing an attached runtime
   hypothesis controller via `DynamicsModel.rollout`.
 - Added opt-in, flushed per-batch evaluator progress (`evaluate.py --progress`)
-  and avoided fresh rollouts for unselected hypothesis candidates.
+  plus durable atomic `evaluation_progress.json` output and avoided fresh
+  rollouts for unselected hypothesis candidates.
 - Added per-axis runtime candidate-selection counts to future evaluation
   reports, including an explicit learned fallback count before delayed RGB
   evidence is available.

@@ -23,6 +23,12 @@ the corrected route at `runs/...-runtime-hypothesis-pool-mps-32/`. Its results
 must be inspected before any runtime-default change; no broad metric is
 claimed while it is running.
 
+The next invocation also writes those events atomically to
+`evaluation_progress.json` inside its timestamped output directory whenever
+`--progress` is set (or to `--progress-path` when explicitly supplied). This
+persists progress across detached launch output and records the active PID,
+timestamp, completed batch/episode counts, and eventual output path.
+
 Subsequent runtime-pool reports also expose the number of forecast anchors and
 the learned/CV/damped-CV/ballistic selections for each configured composed
 axis. Before delayed RGB evidence exists, the required learned-runtime
