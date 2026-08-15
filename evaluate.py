@@ -39,6 +39,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"])
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
+    parser.add_argument(
+        "--runtime-hypothesis-pool",
+        action="store_true",
+        help=(
+            "Attach the explicit RGB-only delayed-evidence hypothesis policy after "
+            "checkpoint validation. This is an evaluation intervention, not a default."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -60,6 +68,7 @@ def main() -> int:
         seed_offset=args.seed_offset,
         output_dir=args.output,
         device_info=device,
+        runtime_hypothesis_pool=args.runtime_hypothesis_pool,
     )
     print(json.dumps(result, indent=2, default=str))
     return 0

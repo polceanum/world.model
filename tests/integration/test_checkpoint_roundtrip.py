@@ -1055,6 +1055,31 @@ def test_rgb_runtime_controls_are_semantic_with_legacy_defaults() -> None:
         validate_checkpoint_config(payload, architecture_change)
 
 
+def test_disabled_runtime_hypothesis_policy_migrates_but_enabled_policy_is_strict() -> None:
+    config = _small_config()
+    payload = {"config": config.to_dict()}
+    legacy_payload = deepcopy(payload)
+    legacy_runtime = legacy_payload["config"]["runtime"]
+    for field_name in (
+        "hypothesis_pool_enabled",
+        "hypothesis_evidence_horizons_seconds",
+        "hypothesis_axis_independent_axes",
+        "hypothesis_axis_prior_strength",
+        "hypothesis_evidence_decay",
+        "hypothesis_timestamp_tolerance_seconds",
+    ):
+        legacy_runtime.pop(field_name)
+
+    validate_checkpoint_config(legacy_payload, config)
+    enabled = replace(
+        config,
+        runtime=replace(config.runtime, hypothesis_pool_enabled=True),
+    )
+    enabled.validate()
+    with pytest.raises(ValueError, match="runtime"):
+        validate_checkpoint_config(legacy_payload, enabled)
+
+
 def test_innovation_anchored_correction_is_semantic_with_legacy_false() -> None:
     config = _small_config()
     payload = {"config": config.to_dict()}

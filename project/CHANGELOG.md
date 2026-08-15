@@ -2958,3 +2958,9 @@ further gravity-axis threshold tuning.
   It is disabled by default; focused CPU RGB/invariant tests and a stateful
   active-Aqua MPS smoke (`1 passed in 15.99s`) pass. Full-manifest
   qualification remains required.
+- Added `evaluate.py --runtime-hypothesis-pool`, which first validates an
+  immutable checkpoint under its original runtime configuration and then
+  attaches the parameter-free RGB-only runtime policy as an explicitly labelled
+  evaluation intervention. Historical checkpoints missing the new disabled
+  policy fields now migrate only to the disabled defaults; enabled policy
+  semantics remain strict. Focused compatibility regression tests pass.

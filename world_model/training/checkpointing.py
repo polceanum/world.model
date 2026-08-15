@@ -23,6 +23,7 @@ from world_model.utils.config import (
     LifecycleConfig,
     OrpheusConfig,
     RGBConfig,
+    RuntimeConfig,
 )
 from world_model.utils.version import SIMULATOR_VERSION, SPECIFICATION_VERSION, __version__
 
@@ -313,6 +314,35 @@ def _model_checkpoint_semantics(value: object) -> object:
     return model
 
 
+def _runtime_checkpoint_semantics(value: object) -> object:
+    """Normalize absent disabled pool controls in historical checkpoints.
+
+    These controls create no candidate state and do not alter inference while
+    the pool is disabled. Missing fields therefore mean the explicit disabled
+    default. Once enabled, every policy field remains a strict runtime
+    semantic, including the evidence horizon and axis composition.
+    """
+
+    if not isinstance(value, Mapping):
+        return value
+    runtime = dict(value)
+    defaults = RuntimeConfig()
+    policy_fields = (
+        "hypothesis_pool_enabled",
+        "hypothesis_evidence_horizons_seconds",
+        "hypothesis_axis_independent_axes",
+        "hypothesis_axis_prior_strength",
+        "hypothesis_evidence_decay",
+        "hypothesis_timestamp_tolerance_seconds",
+    )
+    for field_name in policy_fields:
+        runtime.setdefault(field_name, getattr(defaults, field_name))
+    if not runtime["hypothesis_pool_enabled"]:
+        for field_name in policy_fields[1:]:
+            runtime[field_name] = getattr(defaults, field_name)
+    return runtime
+
+
 def validate_checkpoint_config(
     payload: Mapping[str, Any],
     config: OrpheusConfig,
@@ -333,7 +363,9 @@ def validate_checkpoint_config(
         _model_checkpoint_semantics(requested["model"])
     ):
         mismatches.append("model")
-    if checkpoint_config.get("runtime") != requested["runtime"]:
+    if _runtime_checkpoint_semantics(checkpoint_config.get("runtime")) != (
+        _runtime_checkpoint_semantics(requested["runtime"])
+    ):
         mismatches.append("runtime")
     checkpoint_simulator = checkpoint_config.get("simulator")
     if not isinstance(checkpoint_simulator, Mapping):
@@ -385,7 +417,9 @@ def _validate_attention_depth_growth_config(
     mismatches: list[str] = []
     if checkpoint_model != requested_model:
         mismatches.append("model except attention_layers")
-    if checkpoint_config.get("runtime") != requested["runtime"]:
+    if _runtime_checkpoint_semantics(checkpoint_config.get("runtime")) != (
+        _runtime_checkpoint_semantics(requested["runtime"])
+    ):
         mismatches.append("runtime")
     checkpoint_simulator = checkpoint_config.get("simulator")
     if not isinstance(checkpoint_simulator, Mapping):

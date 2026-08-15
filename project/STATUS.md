@@ -47,6 +47,17 @@ It covers actual MPS RGB discovery/ROI association, delayed selector evidence,
 and a selected future rollout. It is deliberately bounded; it does not replace
 the pending 32-episode runtime accuracy/calibration guardrail protocol.
 
+The broad evaluator now supports the explicit
+`evaluate.py --runtime-hypothesis-pool` intervention. It validates a checkpoint
+against its original runtime configuration before attaching the parameter-free
+controller, and records the candidate/evidence/axis policy in report metadata.
+Historical checkpoints that predate the disabled fields remain compatible only
+with their disabled defaults; enabling the policy remains an explicit
+post-load evaluation treatment. A detached one-episode MPS evaluator attempt
+ended without a log or report, so it is recorded as no result and no metric is
+claimed. The bounded stateful MPS test above remains the only MPS evidence for
+the integration.
+
 **Date:** 2026-08-13
 **Specification:** `PROJECT_SPEC.md` 1.44; the active immutable relation-only
 campaign uses specification 1.42 and the rejected schedule control uses 1.41

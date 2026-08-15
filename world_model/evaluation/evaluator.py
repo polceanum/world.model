@@ -64,6 +64,43 @@ _IDENTIFIER_PARAMETERS = ("mass", "restitution", "drag", "friction", "radius")
 _CURRENT_DETECTION_DISTANCE_THRESHOLD_M = 0.5
 
 
+def enable_runtime_hypothesis_pool(
+    model: OnlineWorldModel,
+    config: OrpheusConfig,
+) -> None:
+    """Attach the explicitly requested evaluation-only runtime policy.
+
+    Checkpoints are loaded against their original runtime configuration first.
+    This post-load attachment is therefore an auditable evaluation intervention,
+    not a weakened checkpoint-semantic comparison or a hidden model transfer.
+    It owns no learnable state and remains outside ``WorldBelief``.
+    """
+
+    from world_model.dynamics import (
+        BallisticContactDynamics,
+        ConstantVelocityDynamics,
+        HypothesisDynamicsPool,
+        RuntimeHypothesisController,
+    )
+
+    runtime = config.runtime
+    model.hypothesis_controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool(
+            (
+                model.dynamics,
+                ConstantVelocityDynamics(),
+                ConstantVelocityDynamics(damping=0.05),
+                BallisticContactDynamics(),
+            ),
+            evidence_decay=runtime.hypothesis_evidence_decay,
+        ),
+        evidence_horizons_seconds=runtime.hypothesis_evidence_horizons_seconds,
+        axis_independent_axes=runtime.hypothesis_axis_independent_axes,
+        axis_prior_strength=runtime.hypothesis_axis_prior_strength,
+        timestamp_tolerance_seconds=runtime.hypothesis_timestamp_tolerance_seconds,
+    )
+
+
 @dataclass
 class _ErrorAccumulator:
     squared_sum: float = 0.0
@@ -514,6 +551,7 @@ def evaluate_checkpoint(
     seed_offset: int | None = None,
     output_dir: str | Path | None = None,
     device_info: DeviceInfo | None = None,
+    runtime_hypothesis_pool: bool = False,
 ) -> dict[str, Any]:
     """Evaluate a trusted local checkpoint on held-out RGB episodes.
 
@@ -544,6 +582,8 @@ def evaluate_checkpoint(
         map_location="cpu",
         expected_config=config,
     )
+    if runtime_hypothesis_pool:
+        enable_runtime_hypothesis_pool(model, config)
     model.eval()
 
     checkpoint_training_config = payload["config"].get("training")
@@ -1364,6 +1404,12 @@ def evaluate_checkpoint(
             "and are reported only as assignment coverage."
         ),
     ]
+    if runtime_hypothesis_pool:
+        limitations.append(
+            "The runtime hypothesis pool is an explicit post-load evaluation "
+            "intervention. Its delayed evidence uses RGB associations only; "
+            "this report does not change checkpoint or deployment defaults."
+        )
     if correction.count == 0:
         limitations.append(
             "No active matched object/horizon was available for perturbation correction metrics."
@@ -1450,6 +1496,18 @@ def evaluate_checkpoint(
         "precision": resolved_device.precision,
         "rgb_only": True,
         "oracle_runtime_input_used": False,
+        "runtime_hypothesis_pool_enabled": runtime_hypothesis_pool,
+        "runtime_hypothesis_pool_policy": (
+            {
+                "candidates": ["learned", "constant_velocity", "damped_constant_velocity", "ballistic_contact"],
+                "evidence_horizons_seconds": list(config.runtime.hypothesis_evidence_horizons_seconds),
+                "axis_independent_axes": list(config.runtime.hypothesis_axis_independent_axes),
+                "evidence_decay": config.runtime.hypothesis_evidence_decay,
+                "timestamp_tolerance_seconds": config.runtime.hypothesis_timestamp_tolerance_seconds,
+            }
+            if runtime_hypothesis_pool
+            else None
+        ),
         "simulator_state_usage": "metrics_and_baselines_only",
         "deterministic_forecast_support_mask_source": (
             "persistent_target_match_and_target_active_and_no_unseen_external_"
@@ -1503,6 +1561,7 @@ def evaluate_checkpoint(
         "device": str(device),
         "rgb_only": True,
         "oracle_runtime_input_used": False,
+        "runtime_hypothesis_pool_enabled": runtime_hypothesis_pool,
         "metrics": metrics,
         "limitations": limitations,
     }

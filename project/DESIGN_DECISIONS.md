@@ -26,6 +26,24 @@
   future asynchronous/interpolation contract is required before non-aligned
   sensors can contribute delayed evidence.
 
+## ADR-132 — Runtime-policy evaluation is post-load and checkpoint-strict
+
+- **Date:** 2026-08-15
+- **Status:** accepted and implemented; MPS report pending
+- **Context:** Enabling the runtime pool in a resolved config must not make an
+  existing checkpoint appear semantically compatible, while old checkpoints
+  naturally lack the newly introduced disabled-policy fields.
+- **Decision:** `evaluate.py --runtime-hypothesis-pool` first validates and
+  loads the checkpoint against its unmodified disabled runtime config, then
+  attaches the parameter-free policy as an explicit evaluation intervention.
+  Missing historical pool fields normalize only to the disabled defaults.
+  An enabled policy or changed enabled-policy values remain strict runtime
+  mismatches.
+- **Consequences:** Reports label the intervention and its candidate/horizon/
+  axis policy. The checkpoint is neither rewritten nor treated as trained with
+  the policy. A run that fails before producing a report is no evidence for or
+  against the policy.
+
 ## ADR-117 — Make adjacent trend windows non-overlapping
 
 - **Date:** 2026-08-13

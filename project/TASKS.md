@@ -57,7 +57,9 @@
 - [ ] Run the full 32-episode active-Aqua MPS runtime guardrail protocol for
   that opt-in path (per-axis/horizon, lifecycle, identity, events, and
   calibration) before changing any runtime default. The current implementation
-  test is not a promotion result.
+  test is not a promotion result. Use `evaluate.py --runtime-hypothesis-pool`
+  so immutable checkpoint configuration validation precedes the explicitly
+  labelled post-load runtime intervention.
 - [x] Complete the three-candidate eight-episode protected comparison; retain
   ballistic as diagnostic only because it is rarely selected and regresses
   mature event/position behavior.
