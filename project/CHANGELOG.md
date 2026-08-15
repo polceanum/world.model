@@ -2,6 +2,16 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-15 runtime evaluation route and observability repair
+
+- Corrected broad evaluation to score forecasts through
+  `OnlineWorldModel.predict` rather than bypassing an attached runtime
+  hypothesis controller via `DynamicsModel.rollout`.
+- Added opt-in, flushed per-batch evaluator progress (`evaluate.py --progress`)
+  and avoided fresh rollouts for unselected hypothesis candidates.
+- Added a regression test for selected-candidate-only runtime rollout and
+  retained a successful active-Aqua MPS RGB-only one-episode execution report.
+
 ### 2026-08-13 paper-guided hypothesis selector
 
 - Added `HypothesisRolloutEngine` and `HypothesisSelection` for parallel

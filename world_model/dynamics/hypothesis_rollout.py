@@ -987,13 +987,34 @@ class RuntimeHypothesisController:
 
         if self.pool.last_selection is None:
             return None
-        trajectories = self.pool.rollout(belief, query_times)
-        learned = trajectories[0]
         choices = self.pool.selected_axis_index(belief)
+        # The forecast retains learned lifecycle, event, identity, and
+        # uncertainty outputs.  Only candidates selected for configured axes
+        # need a fresh long-horizon rollout.  In the common learned-selection
+        # case this avoids needlessly evaluating every analytic alternative at
+        # every forecast anchor, which otherwise multiplies MPS work without
+        # changing any emitted tensor.
+        candidate_indices = {0}
+        for axis in self.axis_independent_axes:
+            candidate_indices.update(int(index) for index in choices[:, axis].detach().cpu().tolist())
+        ordered_indices = tuple(sorted(candidate_indices))
+        trajectories = self.pool.rollout_engine.rollout_dynamics(
+            tuple(self.pool.dynamics_models[index] for index in ordered_indices),
+            belief,
+            query_times,
+        )
+        learned = trajectories[0]
         positions = learned.positions.clone()
         candidate_positions = torch.stack([item.positions for item in trajectories], dim=-1)
+        local_index = torch.empty(
+            len(self.pool.dynamics_models),
+            device=belief.device,
+            dtype=torch.int64,
+        )
+        for local, external in enumerate(ordered_indices):
+            local_index[external] = local
         for axis in self.axis_independent_axes:
-            selected = choices[:, axis].view(belief.batch_size, 1, 1, 1, 1)
+            selected = local_index[choices[:, axis]].view(belief.batch_size, 1, 1, 1, 1)
             positions[..., axis] = torch.gather(
                 candidate_positions[..., axis, :], -1, selected.expand(
                     belief.batch_size, positions.shape[1], positions.shape[2], 1, 1
@@ -1011,5 +1032,10 @@ class RuntimeHypothesisController:
             auxiliary={
                 **learned.auxiliary,
                 "hypothesis_axis_index": choices.detach().clone(),
+                "hypothesis_rollout_candidate_indices": torch.tensor(
+                    ordered_indices,
+                    dtype=torch.int64,
+                    device=belief.device,
+                ),
             },
         ).validate()

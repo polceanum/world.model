@@ -276,6 +276,16 @@ class _FixedDynamics:
         )
 
 
+class _CountingFixedDynamics(_FixedDynamics):
+    def __init__(self, position: float) -> None:
+        super().__init__(position)
+        self.calls = 0
+
+    def predict_step(self, belief, delta_time):
+        self.calls += 1
+        return super().predict_step(belief, delta_time)
+
+
 def test_pool_assimilates_late_evidence_and_updates_selected_model() -> None:
     belief = BeliefFactory(max_objects=1).create()
     pool = HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)])
@@ -398,6 +408,35 @@ def test_runtime_controller_discards_late_evidence_without_interpolation() -> No
     assert controller.assimilate_observation(late, measured, association) is None
     assert controller.pool.last_selection is None
     assert not controller.pending
+
+
+def test_runtime_controller_rolls_out_only_selected_axis_candidates() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    models = [_CountingFixedDynamics(0.0), _CountingFixedDynamics(1.0), _CountingFixedDynamics(2.0)]
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool(models),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+    )
+    controller.reset(1, device=belief.device, dtype=belief.dtype)
+    controller.schedule(belief)
+    at_due_time = belief.replace(timestamp=torch.tensor([0.1]))
+    measured = SimpleNamespace(
+        timestamp=torch.tensor([0.1]),
+        measurement_mask=torch.tensor([[True]]),
+        auxiliary={"world_position": torch.tensor([[[0.0, 0.0, 0.0]]])},
+    )
+    association = SimpleNamespace(
+        pair_mask=torch.tensor([[True]]),
+        belief_indices=torch.tensor([[0]], dtype=torch.int64),
+        measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+    )
+    controller.assimilate_observation(at_due_time, measured, association)
+    before = [model.calls for model in models]
+    forecast = controller.predict(at_due_time, [0.1])
+    assert forecast is not None
+    assert [model.calls - prior for model, prior in zip(models, before, strict=True)] == [1, 0, 0]
+    assert forecast.auxiliary["hypothesis_rollout_candidate_indices"].tolist() == [0]
 
 
 def test_constant_velocity_hypothesis_is_transparent_and_non_mutating() -> None:

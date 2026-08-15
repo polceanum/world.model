@@ -1,5 +1,37 @@
 # Project status
 
+## Runtime hypothesis evaluation unblocked — 2026-08-15
+
+The broad evaluator previously attached `RuntimeHypothesisController` but
+scored its future anchors through `model.dynamics.rollout(...)`, bypassing the
+controller and silently measuring the learned candidate alone. It now scores
+through `OnlineWorldModel.predict(...)`, so an explicitly enabled runtime pool
+is actually part of the reported RGB-only forecast. The controller also rolls
+out only the learned candidate plus candidates selected for configured axes;
+it preserves learned lifecycle, event, identity, and uncertainty outputs.
+
+`evaluate.py --progress` emits flushed JSON at start, each completed batch,
+and completion. This makes active-Aqua MPS evaluation observable without
+high-frequency polling. A corrected one-episode MPS report completed at
+`runs/20260815-072629-runtime-hypothesis-pool-mps-smoke-1/`: RGB-only,
+`runtime_hypothesis_pool_enabled=true`, `nonfinite_output_count=0`, and mean
+forecast-anchor latency `26453.20 ms`. Its one-episode errors are an execution
+smoke only, not a promotion comparison.
+
+The full fixed 32-episode active-Aqua MPS guardrail run has been launched with
+the corrected route at `runs/...-runtime-hypothesis-pool-mps-32/`. Its results
+must be inspected before any runtime-default change; no broad metric is
+claimed while it is running.
+
+Focused verification after the fix:
+
+```bash
+PYTHONPYCACHEPREFIX=tmp/pycache PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_hypothesis_rollout.py tests/integration/test_rgb_online_loop.py tests/integration/test_checkpoint_roundtrip.py -k 'hypothesis or runtime_hypothesis or rgb_only_runtime or opt_in_runtime_pool or disabled_runtime_hypothesis'
+# 24 passed, 40 deselected in 5.25s
+PYTHONPYCACHEPREFIX=tmp/pycache PYTHONPATH=. conda run -n orpheus ruff check world_model/dynamics/hypothesis_rollout.py world_model/evaluation/evaluator.py evaluate.py tests/unit/test_hypothesis_rollout.py
+# All checks passed
+```
+
 ## Runtime hypothesis-pool integration — 2026-08-15
 
 The evaluator-only x selection policy now has an explicitly opt-in normal RGB

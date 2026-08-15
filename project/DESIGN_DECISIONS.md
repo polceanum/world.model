@@ -1,5 +1,24 @@
 # Design decisions
 
+## ADR-133 — Score runtime interventions through the runtime prediction seam
+
+- **Date:** 2026-08-15
+- **Status:** accepted and implemented
+- **Context:** `evaluate.py --runtime-hypothesis-pool` correctly attached the
+  explicit post-load controller, but broad forecast metrics called
+  `model.dynamics.rollout` directly. This made the report metadata claim an
+  intervention while measurements scored the learned candidate alone.
+- **Decision:** Every scored future anchor now calls
+  `OnlineWorldModel.predict`, the public normal-runtime seam. The controller
+  remains outside `WorldBelief`, uses only delayed associated RGB evidence,
+  and only composes configured axes. It rolls out candidate zero plus actually
+  selected axis candidates rather than every alternative when they cannot
+  affect emitted outputs. The evaluator provides an optional batch-level
+  progress callback exposed as `evaluate.py --progress`.
+- **Consequences:** Existing learned-only evaluation behavior is unchanged;
+  enabled runtime-pool reports are now semantically valid. The feature remains
+  opt-in until the complete fixed 32-episode MPS guardrail comparison passes.
+
 ## ADR-131 — Runtime selection consumes associated RGB evidence only
 
 - **Date:** 2026-08-15

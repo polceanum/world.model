@@ -59,7 +59,9 @@
   calibration) before changing any runtime default. The current implementation
   test is not a promotion result. Use `evaluate.py --runtime-hypothesis-pool`
   so immutable checkpoint configuration validation precedes the explicitly
-  labelled post-load runtime intervention.
+  labelled post-load runtime intervention. The evaluator now routes scored
+  forecasts through `OnlineWorldModel.predict`; use `--progress` for
+  batch-level durable progress rather than frequent status polling.
 - [x] Complete the three-candidate eight-episode protected comparison; retain
   ballistic as diagnostic only because it is rarely selected and regresses
   mature event/position behavior.

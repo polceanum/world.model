@@ -6,7 +6,7 @@ import hashlib
 import math
 import statistics
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -552,6 +552,7 @@ def evaluate_checkpoint(
     output_dir: str | Path | None = None,
     device_info: DeviceInfo | None = None,
     runtime_hypothesis_pool: bool = False,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Evaluate a trusted local checkpoint on held-out RGB episodes.
 
@@ -585,6 +586,10 @@ def evaluate_checkpoint(
     if runtime_hypothesis_pool:
         enable_runtime_hypothesis_pool(model, config)
     model.eval()
+
+    def report_progress(stage: str, **values: Any) -> None:
+        if progress_callback is not None:
+            progress_callback({"stage": stage, **values})
 
     checkpoint_training_config = payload["config"].get("training")
     if not isinstance(checkpoint_training_config, Mapping):
@@ -621,6 +626,13 @@ def evaluate_checkpoint(
         num_workers=config.training.num_workers,
         collate_fn=collate_episodes,
         drop_last=False,
+    )
+    report_progress(
+        "started",
+        episodes=config.evaluation.episodes,
+        batches=len(loader),
+        device=str(device),
+        runtime_hypothesis_pool=runtime_hypothesis_pool,
     )
 
     current_error = _ErrorAccumulator()
@@ -665,7 +677,7 @@ def evaluate_checkpoint(
     forecast_censored_tracked_count: dict[str, int] = {}
 
     with torch.no_grad():
-        for raw_batch in loader:
+        for batch_index, raw_batch in enumerate(loader, start=1):
             batch = move_batch_to_device(raw_batch, device)
             rgb = batch["rgb"]
             if rgb.ndim != 5:
@@ -1057,11 +1069,12 @@ def evaluate_checkpoint(
                     )
                     synchronize(device)
                     rollout_started = time.perf_counter()
-                    trajectory = model.dynamics.rollout(
-                        belief,
-                        event_query_plan.query_seconds,
-                        return_events=True,
-                    )
+                    # Route scored forecasts through the online runtime.  This
+                    # is normally equivalent to the learned rollout, but is
+                    # essential for an explicitly enabled runtime hypothesis
+                    # policy: calling ``model.dynamics`` here would attach the
+                    # policy yet silently score only its learned candidate.
+                    trajectory = model.predict(event_query_plan.query_seconds)
                     synchronize(device)
                     rollout_latencies.append((time.perf_counter() - rollout_started) * 1000.0)
                     model_positions = event_query_plan.select_target_endpoints(trajectory.positions)
@@ -1273,6 +1286,12 @@ def evaluate_checkpoint(
                     elif diagnostic.observation_mode == "FAST_ROI":
                         fast_latencies.append(update_elapsed_ms)
             evaluated_episodes += batch_size
+            report_progress(
+                "batch_complete",
+                batch=batch_index,
+                batches=len(loader),
+                evaluated_episodes=evaluated_episodes,
+            )
 
     metrics: dict[str, Any] = {}
     metrics.update(current_error.metrics("posterior_current"))
@@ -1548,6 +1567,11 @@ def evaluate_checkpoint(
         metadata=metadata,
         metrics=metrics,
         limitations=limitations,
+    )
+    report_progress(
+        "completed",
+        evaluated_episodes=evaluated_episodes,
+        output_directory=str(output),
     )
     return {
         "output_directory": str(output),

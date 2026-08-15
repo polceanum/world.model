@@ -47,6 +47,11 @@ def parse_args() -> argparse.Namespace:
             "checkpoint validation. This is an evaluation intervention, not a default."
         ),
     )
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="Emit one flushed JSON progress line per completed evaluation batch.",
+    )
     return parser.parse_args()
 
 
@@ -60,6 +65,9 @@ def main() -> int:
 
     from world_model.evaluation.evaluator import evaluate_checkpoint
 
+    def report_progress(event: dict[str, object]) -> None:
+        print(json.dumps({"evaluation_progress": event}, default=str), flush=True)
+
     result = evaluate_checkpoint(
         config=config,
         checkpoint_path=args.checkpoint,
@@ -69,6 +77,7 @@ def main() -> int:
         output_dir=args.output,
         device_info=device,
         runtime_hypothesis_pool=args.runtime_hypothesis_pool,
+        progress_callback=report_progress if args.progress else None,
     )
     print(json.dumps(result, indent=2, default=str))
     return 0
