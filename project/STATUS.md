@@ -28,6 +28,8 @@ The next invocation also writes those events atomically to
 `--progress` is set (or to `--progress-path` when explicitly supplied). This
 persists progress across detached launch output and records the active PID,
 timestamp, completed batch/episode counts, and eventual output path.
+It additionally refreshes only at rollout anchors and the final frame, which
+identifies expensive long-horizon work without a per-frame status stream.
 
 Subsequent runtime-pool reports also expose the number of forecast anchors and
 the learned/CV/damped-CV/ballistic selections for each configured composed

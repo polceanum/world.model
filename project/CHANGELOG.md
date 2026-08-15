@@ -10,6 +10,8 @@
 - Added opt-in, flushed per-batch evaluator progress (`evaluate.py --progress`)
   plus durable atomic `evaluation_progress.json` output and avoided fresh
   rollouts for unselected hypothesis candidates.
+- Added coarse rollout-anchor heartbeats to durable evaluation progress so a
+  slow long-horizon MPS forecast can be distinguished from a stalled batch.
 - Added per-axis runtime candidate-selection counts to future evaluation
   reports, including an explicit learned fallback count before delayed RGB
   evidence is available.

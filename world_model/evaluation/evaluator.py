@@ -1358,6 +1358,20 @@ def evaluate_checkpoint(
                         global_latencies.append(update_elapsed_ms)
                     elif diagnostic.observation_mode == "FAST_ROI":
                         fast_latencies.append(update_elapsed_ms)
+                # Forecast anchors are the expensive part of this evaluator.
+                # Persist only at those coarse milestones (plus the final
+                # frame) so a detached MPS run is diagnosable without turning
+                # every observation update into a status write.
+                if run_forecast or frame_index == total_frames - 1:
+                    report_progress(
+                        "anchor_complete",
+                        batch=batch_index,
+                        batches=len(loader),
+                        frame=frame_index + 1,
+                        total_frames=total_frames,
+                        evaluated_episodes=evaluated_episodes,
+                        batch_episode_count=batch_size,
+                    )
             evaluated_episodes += batch_size
             report_progress(
                 "batch_complete",
