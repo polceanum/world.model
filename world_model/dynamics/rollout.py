@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 
 import torch
@@ -56,8 +56,17 @@ class RolloutEngine:
         *,
         return_events: bool = True,
         return_auxiliary: bool = True,
+        auxiliary_names: Collection[str] | None = None,
     ) -> BeliefTrajectory:
         """Roll forward while optionally retaining event and auxiliary traces."""
+
+        if auxiliary_names is not None and not return_auxiliary:
+            raise ValueError("auxiliary_names requires return_auxiliary=True")
+        selected_auxiliary = None if auxiliary_names is None else frozenset(auxiliary_names)
+        if selected_auxiliary is not None and any(
+            not isinstance(name, str) or not name for name in selected_auxiliary
+        ):
+            raise ValueError("auxiliary_names must contain nonempty strings")
 
         offsets = self._normalise_query_times(belief, query_times)
         count = offsets.shape[1]
@@ -105,8 +114,18 @@ class RolloutEngine:
                 event_values.append(step.event_logits)
             if return_auxiliary:
                 for name, value in step.auxiliary.items():
+                    if selected_auxiliary is not None and name not in selected_auxiliary:
+                        continue
                     auxiliary_values.setdefault(name, []).append(value)
             previous_offset = offsets[:, index]
+
+        if selected_auxiliary is not None:
+            missing_auxiliary = selected_auxiliary - auxiliary_values.keys()
+            if missing_auxiliary:
+                raise KeyError(
+                    "predictor did not emit requested auxiliaries: "
+                    + ", ".join(sorted(missing_auxiliary))
+                )
 
         trajectory = BeliefTrajectory(
             timestamps=torch.stack([item.timestamp for item in beliefs], dim=1),

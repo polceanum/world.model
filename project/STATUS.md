@@ -1,6 +1,117 @@
 # Project status
 
-## Specification 1.46 grounded convergence repair — 2026-08-16
+## Specification 1.47 causal objective and event repair — 2026-08-16
+
+The specification-1.46 grounded repair was committed and pushed to `main` as
+`0485664` (`Ground RGB dynamics and evaluation for convergence`). The current
+post-audit contract is specification `1.47`, still on simulator
+`sphere_world_v6`. The implementation is technically qualified for a matched
+campaign preflight, but no specification-1.47 checkpoint has trained and no
+smooth-event or accuracy promotion is claimed.
+
+The final pre-launch decisions are evidence-bounded:
+
+- structured fast RGB centres remain enabled, but structured fast depth is
+  disabled. A prior-conditioned component radius does not expose whether the
+  component is complete after overlap, truncation, or merging. On seed 100000,
+  28 accepted samples overestimated projected radius by `1.1587x` on average
+  (range `1.026--1.2124`). Across seeds `100000--100007`, disabling this depth
+  reduced pooled current position RMSE `0.27719 -> 0.13479 m` (x/y/z
+  `0.14815/0.15601/0.42920 -> 0.12922/0.13017/0.14443`) and improved
+  distance-gated precision/recall `0.70265/0.68704 -> 0.96628/0.92870`;
+- independent raw, current-time gravity-aware temporal velocity remains
+  enabled, but its variance ceiling is raised `0.25 -> 4.0`. Direct-evidence
+  MSE x/y/z was `0.18443/3.82435/0.14449` while reported variance was
+  `0.22444/0.23707/0.25000`, making y about `16.13x` overconfident. With the
+  same weights/simulator/eight seeds and fast depth off, the new ceiling
+  improved position x/y/z/all
+  `0.129215/0.130169/0.144431/0.134785 ->`
+  `0.123896/0.121938/0.143362/0.130092 m`, distance-gated velocity
+  `0.456640/1.241236/0.223000/0.774363 ->`
+  `0.454941/1.216228/0.214243/0.759842 m/s`, and precision/recall/F1
+  `0.966281/0.928704/0.947120 -> 0.973025/0.935185/0.953730`. A proposed
+  contact-free change-point reset was tested and rejected;
+- pair applicability is disabled. In its matched seed-100000 diagnostic it
+  regressed current position/velocity by `0.56%/0.38%`, regressed 0.25/0.50/
+  0.75/1.00-second position by `0.75%/0.88%/1.02%/0.77%`, and gave no
+  collision-F1 gain;
+- smooth pair/boundary event hazards are an opt-in, legacy-false semantic; the
+  grounded candidate opts in while defaults and historical checkpoints remain
+  false. They preserve hard analytic jumps as a fail-safe, expose learned pair
+  residuals, and add direct unique-pair collision ownership. The loss uses a
+  fixed configured horizon denominator. A dtype-aware positive variance floor
+  before square root fixes the dense self-pair `sqrt(0)` backward NaN;
+- newborn velocity and correction objectives now require a causally surviving
+  prior (`age_steps > 0`, matched active posterior, and an active prior where
+  correction is scored). Unsupported terms are omitted structurally, while
+  public physical metrics still score all estimates;
+- the event objective is omitted in `state_roi` with effective weight `0.0`
+  and admitted at weight `0.05` in `state_relation_roi`, when a relation/event
+  owner is trainable. Historical configs without scope overrides preserve
+  their legacy weight.
+
+Focused verification in the unchanged `orpheus` environment includes:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_analytic_dynamics.py tests/unit/test_hybrid_dynamics.py tests/unit/test_multirate_dynamics.py tests/unit/test_interaction_applicability.py tests/unit/test_training_losses.py tests/unit/test_training_objective_regressions.py tests/unit/test_parameter_supervision.py tests/unit/test_training_schedule.py tests/unit/test_event_window_scoring.py tests/unit/test_config.py
+# 411 passed, 5 skipped in 30.76s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_hybrid_dynamics.py
+# 32 passed, 2 skipped
+
+launchctl asuser 501 /bin/zsh -lc 'cd /Users/mike/Work/world.model && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/local/Caskroom/miniforge/base/envs/orpheus/bin/python -m pytest -q tests/unit/test_hybrid_dynamics.py::test_smooth_event_hazard_is_finite_and_differentiable_on_mps'
+# 1 passed in 4.26s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/integration/test_checkpoint_roundtrip.py::test_checkpoint_specification_version_matches_authoritative_contract
+# 1 passed in 0.56s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q
+# 959 passed, 13 skipped in 390.25s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check .
+# 214 files already formatted
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check .
+# All checks passed!
+
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-pycache PYTHONPATH=. conda run -n orpheus python -m compileall -q world_model tests train.py evaluate.py demo.py monitor.py
+# passed
+
+git diff --check
+# passed
+```
+
+The exact recursive seed-70 RGB gradient reproduction is finite on every
+trainable tensor: `79/79` tensors in `state_roi` (aggregate norm `1.4687713`)
+and `133/133` in `state_relation_roi` (aggregate norm `4.7846830`), with zero
+NaNs. The broader stage/objective suite was `341 passed in 33.22s`; the event
+repair's relevant dynamics/training suite was `430 passed, 6 skipped`, and its
+config/checkpoint suite was `222 passed`. These overlap and are focused
+evidence. The final frozen specification-1.47 repository suite is
+`959 passed, 13 skipped in 390.25s`; all skips require the active Aqua MPS
+context and are exercised separately where relevant.
+
+A protected-weight CPU preflight through the real full RGB validation loop on
+seeds `100000--100007` compared only the smooth-hazard semantic. Current
+position/velocity RMSE changed by `-1.95e-7 m`/`+1.94e-8 m/s`; position-RMSE
+deltas at `0.10/0.25/0.50/0.75/1.00 s` were
+`-1.193e-7/-1.629e-7/-1.724e-8/+1.174e-7/+1.239e-7 m`. Collision F1 and
+coverage were exact at every horizon. Mode logits were intentionally
+non-identical, so this qualifies a non-regressive step-zero transfer rather
+than smooth-event accuracy.
+
+The configured campaign remains 9,216 balanced updates, transitions scopes at
+3,072, and now evaluates every 512 updates: 18 post-update fixed-manifest
+validations through step 9,216, in addition to step zero. The next actions are
+to commit/push the frozen coherent repair, then launch the long active-Aqua MPS
+campaign. The source/config audit and launcher dry-run found no remaining code
+blocker and resolved the existing `orpheus` interpreter, `caffeinate`, MPS
+request, and protected initialization checkpoint. Promotion still requires
+repeated non-regression across every scenario, axis, horizon, velocity,
+lifecycle, identity, event, uncertainty, finite-state, and latency guardrail,
+followed by disjoint test and OOD runs.
+
+## Specification 1.46 grounded convergence repair (superseded boundary) — 2026-08-16
 
 The pre-training technical audit is complete and the authoritative contract is
 now specification `1.46` with simulator protocol `sphere_world_v6`. This is a
@@ -16,8 +127,8 @@ coherent repair boundary, not an accuracy-promotion claim. The main changes are:
   from fresh logits;
 - independent raw temporal RGB history is an explicit opt-in with per-axis
   provenance. Prior-copied ROI coordinates cannot become velocity evidence;
-  structured fast depth supplies full combined-camera support and a causal
-  known-gravity fit estimates velocity at the current timestamp;
+  the 1.46 candidate exercised structured fast depth and a causal known-gravity
+  fit, but the subsequent 1.47 completeness audit rejected fast depth;
 - fast correction keeps unsupported axes on their prior and slow drag/
   restitution updates use causal prior error, elapsed time, combined
   uncertainty, confidence, and independent-axis support. Position displacement
@@ -41,11 +152,11 @@ The new validated profile is
 `configs/grounded_convergence_mps.yaml`: 9,216 balanced updates, eight scenarios
 per update, 73,728 episode draws, 512-update warmup, 8,192-update cosine decay,
 a 512-update minimum-rate tail, and a scope transition at update 3,072. It uses
-MPS for the online model, keeps the CPU global-proposal workaround, enables
-structured fast depth/raw history/current-time gravity fitting, and keeps the
-runtime hypothesis pool off. It must first pass matched step-zero ablations for
-raw observation semantics and pair applicability; only then will the long run
-start from the protected weights by `--initialize-from`.
+MPS for the online model, keeps the CPU global-proposal workaround, and keeps
+the runtime hypothesis pool off. Specification 1.47 supersedes its candidate
+settings by disabling structured fast depth and pair applicability, retaining
+raw history/current-time gravity fitting with a calibrated variance ceiling,
+and adding the event/objective repair before long training.
 
 Stable verification from the existing `orpheus` environment:
 
@@ -79,15 +190,13 @@ diagnosis that RGB anchoring was the largest blocker, but it ran simulator v4
 before the final birth/ROI/simulator/evaluator semantics and is therefore not a
 specification-1.46 baseline or promotion result.
 
-Known limitations are explicit: no specification-1.46 weights have trained to
-plateau yet; pair applicability is untrained/unqualified; hard analytic event
-logits, an unused contact-logit scale, and analytic-only pair event logits
-still limit learned event timing; per-scenario evaluator slices are marked
-diagnostic-only because they omit some calibration/baseline promotion fields;
-and the rejected runtime hypothesis pool still lacks coherent bounded-step
-event/regime composition. The next concrete actions are commit/push, matched
-clean MPS step-zero diagnostics, then the long staged campaign and disjoint
-validation/test/OOD evaluation.
+Known limitations at this superseded boundary were explicit: no 1.46 weights
+had trained to plateau, pair applicability was unqualified, and event logits
+lacked a useful differentiable training path. Specification 1.47 repairs those
+technical gaps while rejecting the pair gate; it still makes no trained
+accuracy claim. Per-scenario evaluator slices remain diagnostic-only when they
+omit promotion fields, and the rejected runtime hypothesis pool still lacks
+coherent bounded-step event/regime composition.
 
 ## Low-noise live run monitor — 2026-08-15
 

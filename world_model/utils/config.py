@@ -231,6 +231,13 @@ class DynamicsConfig:
     contact_confidence_sigma: float = 0.0
     pair_collision_speed_epsilon: float = 1.0e-7
     boundary_collision_speed_epsilon: float = 0.1
+    # False is the exact historical hard-logit event semantic.  New protocols
+    # may opt into continuous analytic hazards plus learned pair calibration;
+    # physical contact jumps remain hard and fail-safe in both modes.
+    smooth_event_hazard_enabled: bool = False
+    event_hazard_gap_temperature_m: float = 0.02
+    event_hazard_velocity_temperature_mps: float = 0.10
+    event_hazard_resolved_logit_floor: float = 2.0
     sleep_speed: float = 0.05
     allow_large_substep: bool = False
 
@@ -336,6 +343,11 @@ class TrainingConfig:
     # the late scope applies from the boundary onward.
     closed_loop_late_trainable_scope: str | None = None
     closed_loop_scope_transition_steps: int | None = None
+    # Optional exact per-scope overrides for the event objective.  An empty
+    # mapping preserves the historical ``loss_weights.event`` behavior.  This
+    # lets staged causal curricula suppress event supervision until a scope
+    # with an explicit event/relation owner is trainable.
+    closed_loop_event_loss_weights: dict[str, float] = field(default_factory=dict)
     # A measurement-only checkpoint may score well on the few proposals that
     # survive lifecycle gating while destroying the persistent runtime's
     # training support.  At the stage boundary, require both absolute and
@@ -596,6 +608,24 @@ class OrpheusConfig:
         ):
             if not math.isfinite(value) or value < 0:
                 raise ValueError(f"model.dynamics.{name} must be finite and nonnegative")
+        if not isinstance(model.dynamics.smooth_event_hazard_enabled, bool):
+            raise ValueError("model.dynamics.smooth_event_hazard_enabled must be boolean")
+        for name, value in (
+            (
+                "event_hazard_gap_temperature_m",
+                model.dynamics.event_hazard_gap_temperature_m,
+            ),
+            (
+                "event_hazard_velocity_temperature_mps",
+                model.dynamics.event_hazard_velocity_temperature_mps,
+            ),
+            (
+                "event_hazard_resolved_logit_floor",
+                model.dynamics.event_hazard_resolved_logit_floor,
+            ),
+        ):
+            if isinstance(value, bool) or not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"model.dynamics.{name} must be finite and positive")
         if (
             isinstance(model.rgb.global_every_steps, bool)
             or not isinstance(model.rgb.global_every_steps, int)
@@ -1306,6 +1336,21 @@ class OrpheusConfig:
             )
         if late_scope is not None and late_scope not in valid_closed_loop_scopes:
             raise ValueError("training.closed_loop_late_trainable_scope is invalid")
+        event_loss_weights = self.training.closed_loop_event_loss_weights
+        if any(
+            not isinstance(scope, str) or scope not in valid_closed_loop_scopes
+            for scope in event_loss_weights
+        ) or any(
+            isinstance(weight, bool)
+            or not isinstance(weight, (int, float))
+            or not math.isfinite(weight)
+            or weight < 0.0
+            for weight in event_loss_weights.values()
+        ):
+            raise ValueError(
+                "training.closed_loop_event_loss_weights must map valid scopes "
+                "to finite nonnegative weights"
+            )
         if (
             "state_relation_roi" in {self.training.closed_loop_trainable_scope, late_scope}
             and not self.model.dynamics.attention_residual_enabled

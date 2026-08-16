@@ -1,5 +1,42 @@
 # Tasks
 
+## Causal objective and event repair — specification 1.47
+
+- [x] Trace structured fast ROI depth to source pixels and reject it from the
+  grounded profile: component completeness is not observable, radius was
+  systematically high, and disabling depth improved every pooled current-axis
+  and tracking metric over seeds `100000--100007`. Retain direct fast centres.
+- [x] Calibrate gravity-aware temporal velocity uncertainty from the same
+  eight-seed evidence. Raise only the variance ceiling `0.25 -> 4.0`; reject
+  the noisier contact-free change-point reset.
+- [x] Add an exact legacy-false smooth event-hazard semantic with pair and
+  boundary logits, learned relation residuals, hard analytic jump fail-safe,
+  direct matched-pair ownership, and fixed configured horizon weighting.
+- [x] Repair the dense self-pair `sqrt(0)` backward NaN with a dtype-aware
+  positive projected-variance floor; prove finite recursive CPU and active-
+  Aqua MPS gradients.
+- [x] Restrict velocity/correction optimization to matched mature slots with a
+  real causal prior, structurally omit unsupported terms, expose support
+  counters, and leave public physical error metrics unchanged.
+- [x] Make the event objective stage-owned: omit it at weight `0.0` in
+  `state_roi`, admit it at `0.05` in `state_relation_roi`, and preserve legacy
+  weights for configurations without an override.
+- [x] Complete the matched seed-100000 pair-applicability diagnostic and keep
+  the gate disabled after current and long-horizon regression with no event-F1
+  gain.
+- [x] Set the 9,216-update campaign's fixed evaluation cadence to 512 updates,
+  giving 18 post-update validations plus the immutable step-zero baseline.
+- [x] Run the final frozen-tree full suite, formatting/lint/compile/diff checks,
+  and relevant active-Aqua MPS tests; record only the exact final outcomes.
+- [x] Run the matched zero-update final configuration/event preflight from the
+  protected checkpoint. Smooth-hazard implementation tests are not empirical
+  event or trajectory promotion evidence. The eight-seed physical deltas are
+  at numerical-noise scale and collision F1/coverage are exact.
+- [ ] Launch and monitor the long active-Aqua MPS campaign through all 18 fixed
+  validations. Do not claim convergence from training loss or a local slice.
+- [ ] Evaluate the best eligible checkpoint on disjoint validation, test, and
+  OOD manifests and promote only after every declared guardrail passes.
+
 ## Grounded convergence protocol — specification 1.46
 
 - [x] Replace confounded ensured-pair scenes with the `sphere_world_v6`
@@ -12,8 +49,9 @@
 - [x] Preserve historical temporal blend semantics and add explicit independent
   raw RGB history with per-axis provenance, ROI copied-coordinate rejection,
   identity/lifecycle reset, and known-gravity current-time velocity fitting.
-- [x] Prove the intended combined-camera, structured-fast-depth cadence emits
-  supported non-oracle velocity evidence with no sample-age dead zone.
+- [x] Prove the intended combined-camera cadence can emit supported non-oracle
+  velocity evidence, then reject structured fast depth in the 1.47 source-
+  completeness audit while retaining direct fast centres.
 - [x] Make slow drag/restitution signals causal, elapsed-time and uncertainty
   aware; require independent ROI axes and direct velocity for restitution.
 - [x] Finish immutable-checkpoint evaluator identity, complete finite-state
@@ -30,17 +68,22 @@
   reporting and explicit collision classes without a second rollout.
 - [x] Run the complete repository suite, stable CLI roundtrip, and active-Aqua
   MPS execution after the source tree is frozen; record exact outcomes.
-- [ ] Commit and push the coherent specification-1.46 repair set to `main`.
-- [ ] Run matched clean fixed-manifest legacy/raw/applicability diagnostics from
-  the protected checkpoint; select only a non-regressive runtime protocol.
+- [x] Commit and push the coherent specification-1.46 repair set to `main` as
+  `0485664`.
+- [x] Run matched clean fixed-manifest raw/observer/applicability diagnostics
+  from the protected checkpoint; disable fast depth and pair applicability and
+  retain the calibrated raw gravity-aware observer.
 - [ ] Launch the multi-thousand-update balanced MPS `state_roi` to
   `state_relation_roi` campaign and monitor repeated fixed validation through
   warmup, useful-rate, and decay phases.
 - [ ] Evaluate the best eligible checkpoint on disjoint validation, test, and
   OOD manifests; promote only if every critical current/axis/horizon, coverage,
   identity, event, calibration, finite-state, and latency guardrail passes.
-- [ ] Separately repair and qualify differentiable pair-event calibration;
-  hard analytic logits and the unused contact-logit scale remain explicit.
+- [x] Repair the differentiable pair/boundary event path, direct pair
+  ownership, horizon weighting, and recursive finite gradients under
+  specification 1.47.
+- [ ] Qualify smooth-event accuracy on fixed RGB validation; the technical
+  repair alone is not a trained promotion.
 
 ## Immediate accuracy target — evidence-bounded mental simulation
 

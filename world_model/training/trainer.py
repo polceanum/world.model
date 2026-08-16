@@ -5784,6 +5784,7 @@ def train_from_config(
                     apply_perturbations=True,
                     include_measurement_supervision=True,
                     rollout_anchors_per_window=(config.training.rollout_anchors_per_window),
+                    active_trainable_scope=active_closed_loop_scope,
                 )
                 result.metrics["closed_loop_scope_transitioned"] = float(
                     closed_loop_scope_transitioned

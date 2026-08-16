@@ -66,7 +66,7 @@ model:
     temporal_velocity_min_samples: 3
     temporal_velocity_variance_scale: 1.5
     temporal_velocity_variance_floor: 0.04
-    temporal_velocity_variance_ceiling: 0.25
+    temporal_velocity_variance_ceiling: 4.0
     temporal_velocity_lateral_only: false
     temporal_velocity_independent_raw_history_enabled: true
     temporal_velocity_continuous_gravity_axis_enabled: true
@@ -86,7 +86,7 @@ model:
     temporal_position_variance_ceiling: 0.5
     temporal_position_depth_only: true
     structured_disc_center_enabled: true
-    structured_disc_fast_depth_enabled: true
+    structured_disc_fast_depth_enabled: false
     structured_disc_depth_relative_std: 0.08
     structured_disc_depth_outlier_relative_threshold: null
     structured_disc_depth_outlier_variance_scale: 9.0
@@ -101,7 +101,7 @@ model:
     attention_feed_forward_width: 512
     attention_dropout: 0.0
     learned_effect_interval_seconds: null
-    pair_applicability_enabled: true
+    pair_applicability_enabled: false
     pair_applicability_lookahead_seconds: 0.05
     pair_applicability_margin_m: 0.05
     pair_applicability_gap_temperature_m: 0.025
@@ -112,6 +112,10 @@ model:
     penetration_slop: 0.0001
     contact_confidence_sigma: 0.0
     pair_collision_speed_epsilon: 0.0000001
+    smooth_event_hazard_enabled: true
+    event_hazard_gap_temperature_m: 0.02
+    event_hazard_velocity_temperature_mps: 0.10
+    event_hazard_resolved_logit_floor: 2.0
   filter:
     hidden_dim: 192
     innovation_anchored_correction: true
@@ -143,6 +147,11 @@ training:
   closed_loop_trainable_scope: state_roi
   closed_loop_late_trainable_scope: state_relation_roi
   closed_loop_scope_transition_steps: 3072
+  # Event labels have no trainable event owner during state/RGB anchoring.
+  # Admit them conservatively once the relation decoders become trainable.
+  closed_loop_event_loss_weights:
+    state_roi: 0.0
+    state_relation_roi: 0.05
   fast_roi_pretrain_weight: 1.0
   handoff_minimum_target_coverage: 0.05
   handoff_minimum_forecast_coverage: 0.05
@@ -170,7 +179,9 @@ training:
   attention_impulse_output_grad_clip_norm: 0.1
   closed_loop_perception_grad_clip_norm: 1.0
   checkpoint_every: 128
-  eval_every: 1024
+  # Eighteen fixed-manifest validations across 9,216 updates satisfy the
+  # declared four-consecutive-512-step plateau contract.
+  eval_every: 512
   log_every: 8
   validation_episodes: 32
   num_workers: 2

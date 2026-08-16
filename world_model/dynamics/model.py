@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, fields, replace
 from typing import Any
 
@@ -113,6 +113,13 @@ class DynamicsConfig:
     contact_confidence_sigma: float = 0.0
     pair_collision_speed_epsilon: float = 1.0e-7
     boundary_collision_speed_epsilon: float = 0.1
+    # Historical event logits were hard +/- constants with learned pair
+    # residuals added afterward.  The opt-in hazard path keeps hard analytic
+    # resolution for jumps while exposing continuous, calibratable logits.
+    smooth_event_hazard_enabled: bool = False
+    event_hazard_gap_temperature_m: float = 0.02
+    event_hazard_velocity_temperature_mps: float = 0.10
+    event_hazard_resolved_logit_floor: float = 2.0
     solver_iterations: int = 2
     sleep_speed: float = 0.02
     world_bounds: tuple[tuple[float, float], ...] | None = None
@@ -200,6 +207,21 @@ class DynamicsConfig:
         ):
             if value < 0 or not math.isfinite(value):
                 raise ValueError(f"{name} must be finite and nonnegative")
+        if not isinstance(self.smooth_event_hazard_enabled, bool):
+            raise ValueError("smooth_event_hazard_enabled must be boolean")
+        for name, value in (
+            ("event_hazard_gap_temperature_m", self.event_hazard_gap_temperature_m),
+            (
+                "event_hazard_velocity_temperature_mps",
+                self.event_hazard_velocity_temperature_mps,
+            ),
+            (
+                "event_hazard_resolved_logit_floor",
+                self.event_hazard_resolved_logit_floor,
+            ),
+        ):
+            if isinstance(value, bool) or not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{name} must be finite and positive")
         if self.solver_iterations < 1:
             raise ValueError("solver_iterations must be at least one")
         if self.world_bounds is not None and (
@@ -284,6 +306,10 @@ class DynamicsModel(nn.Module):
         )
         self.events = EventModel(
             resolver,
+            smooth_hazard_enabled=self.config.smooth_event_hazard_enabled,
+            contact_logit_scale=self.config.event_hazard_gap_temperature_m,
+            collision_velocity_logit_scale=(self.config.event_hazard_velocity_temperature_mps),
+            resolved_event_logit_floor=(self.config.event_hazard_resolved_logit_floor),
             sleep_speed_threshold=self.config.sleep_speed,
         )
         self.uncertainty = UncertaintyDynamics(
@@ -399,6 +425,12 @@ class DynamicsModel(nn.Module):
             contact_confidence_sigma=float(dynamics.contact_confidence_sigma),
             pair_collision_speed_epsilon=(float(dynamics.pair_collision_speed_epsilon)),
             boundary_collision_speed_epsilon=(float(dynamics.boundary_collision_speed_epsilon)),
+            smooth_event_hazard_enabled=bool(dynamics.smooth_event_hazard_enabled),
+            event_hazard_gap_temperature_m=float(dynamics.event_hazard_gap_temperature_m),
+            event_hazard_velocity_temperature_mps=float(
+                dynamics.event_hazard_velocity_temperature_mps
+            ),
+            event_hazard_resolved_logit_floor=float(dynamics.event_hazard_resolved_logit_floor),
             solver_iterations=(
                 int(getattr(simulator, "solver_iterations", 2)) if simulator is not None else 2
             ),
@@ -567,6 +599,8 @@ class DynamicsModel(nn.Module):
                 "interval_ground_contact": events.contacts.interval_ground_contact,
                 "ground_collision": events.contacts.ground_collision,
                 "pair_impulse": events.contacts.pair_impulse,
+                "pair_event_logits": events.pair_event_logits,
+                "boundary_event_logits": events.boundary_event_logits,
                 "max_penetration": events.contacts.max_penetration,
                 "mean_penetration": events.contacts.mean_penetration,
                 "action_reaction_residual": (events.contacts.action_reaction_residual),
@@ -578,6 +612,16 @@ class DynamicsModel(nn.Module):
             },
             update_batch,
         )
+        for name in ("pair_event_logits", "boundary_event_logits"):
+            value = auxiliary[name]
+            mask = update_batch
+            while mask.ndim < value.ndim:
+                mask = mask.unsqueeze(-1)
+            auxiliary[name] = torch.where(
+                mask,
+                value,
+                value.new_full((), -4.0),
+            )
         event_logits = torch.where(
             update_batch[:, None, None],
             events.event_logits,
@@ -672,6 +716,14 @@ class DynamicsModel(nn.Module):
             "interval_ground_contact": torch.zeros_like(objects.active),
             "ground_collision": torch.zeros_like(objects.active),
             "pair_impulse": objects.position.new_zeros(batch, count, count),
+            "pair_event_logits": objects.position.new_full(
+                (batch, count, count, 2),
+                -4.0,
+            ),
+            "boundary_event_logits": objects.position.new_full(
+                (batch, count, len(self.events.resolver.plane_names), 2),
+                -4.0,
+            ),
             "max_penetration": belief.timestamp.new_zeros(batch),
             "mean_penetration": belief.timestamp.new_zeros(batch),
             "action_reaction_residual": belief.timestamp.new_zeros(batch),
@@ -724,6 +776,8 @@ class DynamicsModel(nn.Module):
         interval_ground_contact: Tensor | None = None
         interval_ground_collision: Tensor | None = None
         interval_pair_impulse: Tensor | None = None
+        interval_pair_event_logits: Tensor | None = None
+        interval_boundary_event_logits: Tensor | None = None
         interval_max_penetration: Tensor | None = None
         for _ in range(substeps):
             # Stable modal state and its inexpensive readout remain current on
@@ -792,6 +846,8 @@ class DynamicsModel(nn.Module):
                 interval_ground_contact = result.auxiliary["interval_ground_contact"]
                 interval_ground_collision = result.auxiliary["ground_collision"]
                 interval_pair_impulse = result.auxiliary["pair_impulse"]
+                interval_pair_event_logits = result.auxiliary["pair_event_logits"]
+                interval_boundary_event_logits = result.auxiliary["boundary_event_logits"]
                 interval_max_penetration = result.auxiliary["max_penetration"]
             else:
                 interval_collision_logits = torch.maximum(
@@ -820,6 +876,28 @@ class DynamicsModel(nn.Module):
                     interval_pair_impulse,
                     result.auxiliary["pair_impulse"],
                 )
+                current_pair_event_logits = result.auxiliary["pair_event_logits"]
+                interval_pair_event_logits = torch.stack(
+                    (
+                        current_pair_event_logits[..., 0],
+                        torch.maximum(
+                            interval_pair_event_logits[..., 1],
+                            current_pair_event_logits[..., 1],
+                        ),
+                    ),
+                    dim=-1,
+                )
+                current_boundary_event_logits = result.auxiliary["boundary_event_logits"]
+                interval_boundary_event_logits = torch.stack(
+                    (
+                        current_boundary_event_logits[..., 0],
+                        torch.maximum(
+                            interval_boundary_event_logits[..., 1],
+                            current_boundary_event_logits[..., 1],
+                        ),
+                    ),
+                    dim=-1,
+                )
                 interval_max_penetration = torch.maximum(
                     interval_max_penetration,
                     result.auxiliary["max_penetration"],
@@ -841,6 +919,8 @@ class DynamicsModel(nn.Module):
         assert interval_ground_contact is not None
         assert interval_ground_collision is not None
         assert interval_pair_impulse is not None
+        assert interval_pair_event_logits is not None
+        assert interval_boundary_event_logits is not None
         assert interval_max_penetration is not None
         # Avoid accumulated timestamp roundoff from many substeps.
         final_belief = replace(output, timestamp=belief.timestamp + elapsed)
@@ -859,6 +939,8 @@ class DynamicsModel(nn.Module):
                 "interval_ground_contact": interval_ground_contact,
                 "ground_collision": interval_ground_collision,
                 "pair_impulse": interval_pair_impulse,
+                "pair_event_logits": interval_pair_event_logits,
+                "boundary_event_logits": interval_boundary_event_logits,
                 "max_penetration": interval_max_penetration,
                 "learned_effect_evaluation_count": torch.full(
                     (belief.batch_size,),
@@ -899,6 +981,7 @@ class DynamicsModel(nn.Module):
         *,
         return_events: bool = True,
         return_auxiliary: bool = True,
+        auxiliary_names: Collection[str] | None = None,
     ) -> BeliefTrajectory:
         """Predict at sorted future offsets in seconds without mutating input.
 
@@ -913,4 +996,5 @@ class DynamicsModel(nn.Module):
             query_times,
             return_events=return_events,
             return_auxiliary=return_auxiliary,
+            auxiliary_names=auxiliary_names,
         )

@@ -16,6 +16,7 @@ from world_model.dynamics import (
     TypedAttentionInteractionResidual,
 )
 from world_model.simulator.collisions import resolve_axis_aligned_boundaries
+from world_model.training.losses import balanced_binary_cross_entropy
 
 
 def _two_objects():
@@ -888,3 +889,241 @@ def test_positive_valid_learned_edge_still_increases_collision_logit() -> None:
         result.event_logits[..., MotionMode.COLLISION],
         baseline.event_logits[..., MotionMode.COLLISION] + 2.5,
     )
+
+
+def test_smooth_event_hazard_uses_scale_and_learned_pair_logit_coherently() -> None:
+    _, objects = _two_objects()
+    # Keep a small positive surface gap, so the hard resolver must not jump.
+    objects.position[0, 0, 0] = -0.11
+    objects.position[0, 1, 0] = 0.11
+    edge_mask = torch.tensor([[[False, True], [True, False]]])
+    learned_collision = torch.tensor([[[0.0, 1.25], [1.25, 0.0]]])
+    graph = _graph_output(
+        objects,
+        collision_logits=learned_collision,
+        edge_mask=edge_mask,
+    )
+
+    narrow = EventModel(
+        smooth_hazard_enabled=True,
+        contact_logit_scale=0.02,
+    )(objects, graph)
+    broad = EventModel(
+        smooth_hazard_enabled=True,
+        contact_logit_scale=0.10,
+    )(objects, graph)
+
+    assert not narrow.contacts.pair_collision.any()
+    torch.testing.assert_close(narrow.objects.velocity, objects.velocity)
+    # The configured gap scale is operational rather than a dead constructor
+    # argument, and a bounded +1.25 learned residual can cross the decision
+    # threshold for a near missed analytic event.
+    assert narrow.pair_event_logits[0, 0, 1, 0] < broad.pair_event_logits[0, 0, 1, 0]
+    assert narrow.pair_event_logits[0, 0, 1, 1] > 0.0
+    torch.testing.assert_close(
+        narrow.event_logits[0, :, MotionMode.COLLISION],
+        narrow.pair_event_logits[0, :, :, 1].amax(dim=-1),
+    )
+
+
+def test_smooth_event_hazard_self_pair_variance_has_finite_gradient() -> None:
+    _, source = _two_objects()
+    source.position[0, 0, 0] = -0.11
+    source.position[0, 1, 0] = 0.11
+    position = source.position.detach().clone().requires_grad_()
+    velocity = source.velocity.detach().clone().requires_grad_()
+    fast_log_variance = source.fast_log_variance.detach().clone().requires_grad_()
+    objects = replace(
+        source,
+        position=position,
+        velocity=velocity,
+        fast_log_variance=fast_log_variance,
+    )
+
+    result = EventModel(smooth_hazard_enabled=True)(objects)
+    score = result.pair_event_logits[:, 0, 1, 1]
+    loss = torch.nn.functional.binary_cross_entropy_with_logits(
+        score,
+        torch.ones_like(score),
+    )
+    loss.backward()
+
+    for gradient in (position.grad, velocity.grad, fast_log_variance.grad):
+        assert gradient is not None
+        assert torch.isfinite(gradient).all()
+    assert position.grad.abs().sum() > 0.0
+    assert velocity.grad.abs().sum() > 0.0
+
+
+def test_smooth_positive_collision_loss_backpropagates_through_recursive_rollout() -> None:
+    belief, source = _two_objects()
+    source.position[0, 0, 0] = -0.12
+    source.position[0, 1, 0] = 0.12
+    position = source.position.detach().clone().requires_grad_()
+    velocity = source.velocity.detach().clone().requires_grad_()
+    fast_log_variance = source.fast_log_variance.detach().clone().requires_grad_()
+    belief = replace(
+        belief,
+        objects=replace(
+            source,
+            position=position,
+            velocity=velocity,
+            fast_log_variance=fast_log_variance,
+        ),
+    )
+    model = DynamicsModel.from_belief(
+        belief,
+        smooth_event_hazard_enabled=True,
+        max_substep=0.01,
+        max_modal_acceleration=0.0,
+        max_pair_force=0.0,
+        max_node_acceleration=0.0,
+    )
+
+    trajectory = model.rollout(
+        belief,
+        [0.01, 0.02, 0.03],
+        auxiliary_names=("pair_event_logits",),
+    )
+    score = trajectory.auxiliary["pair_event_logits"][:, :, 0, 1, 1]
+    loss = torch.nn.functional.binary_cross_entropy_with_logits(
+        score,
+        torch.ones_like(score),
+    )
+    loss.backward()
+
+    for gradient in (position.grad, velocity.grad, fast_log_variance.grad):
+        assert gradient is not None
+        assert torch.isfinite(gradient).all()
+    parameter_gradients = [
+        parameter.grad
+        for parameter in model.parameters()
+        if parameter.requires_grad and parameter.grad is not None
+    ]
+    assert parameter_gradients
+    assert all(torch.isfinite(gradient).all() for gradient in parameter_gradients)
+    collision_bias_gradient = model.interactions.edge_network.output.bias.grad
+    assert collision_bias_gradient is not None
+    assert collision_bias_gradient[1].abs() > 0.0
+
+
+def test_smooth_event_hazard_keeps_analytic_jump_fail_safe_and_trainable() -> None:
+    _, objects = _two_objects()
+    edge_mask = torch.tensor([[[False, True], [True, False]]])
+    learned_collision = torch.tensor(
+        [[[0.0, -20.0], [-20.0, 0.0]]],
+        requires_grad=True,
+    )
+    graph = _graph_output(
+        objects,
+        collision_logits=learned_collision,
+        edge_mask=edge_mask,
+    )
+
+    result = EventModel(
+        smooth_hazard_enabled=True,
+        resolved_event_logit_floor=2.0,
+    )(objects, graph)
+
+    # A badly calibrated learned hazard cannot suppress the structured jump or
+    # make an analytically resolved event fall below the runtime threshold.
+    assert result.contacts.pair_collision[0, 0, 1]
+    assert result.pair_event_logits[0, 0, 1, 1].item() == pytest.approx(2.0)
+    assert result.event_logits[0, 0, MotionMode.COLLISION].item() == pytest.approx(2.0)
+    assert result.objects.velocity[0, 0, 0] < 0.0
+    assert result.objects.velocity[0, 1, 0] > 0.0
+
+    loss = balanced_binary_cross_entropy(
+        result.event_logits[..., MotionMode.COLLISION],
+        torch.ones_like(result.event_logits[..., MotionMode.COLLISION]),
+        torch.ones_like(result.event_logits[..., MotionMode.COLLISION], dtype=torch.bool),
+    )
+    loss.backward()
+
+    assert learned_collision.grad is not None
+    assert torch.isfinite(learned_collision.grad).all()
+    assert learned_collision.grad[0, 0, 1].abs() > 0.0
+    assert learned_collision.grad[0, 1, 0].abs() > 0.0
+
+
+def test_smooth_pair_and_boundary_event_logits_survive_interval_rollout() -> None:
+    belief, _ = _two_objects()
+    belief.objects.active[:] = True
+    belief.objects.object_id[0] = torch.tensor([10, 11])
+    belief.objects.position[0, 0] = torch.tensor([-0.11, 1.0, 0.0])
+    belief.objects.position[0, 1] = torch.tensor([0.11, 1.0, 0.0])
+    belief.objects.velocity[0, 0, 0] = 1.0
+    belief.objects.velocity[0, 1, 0] = -1.0
+    belief.objects.geometry[..., 0] = 0.1
+    belief.objects.fast_log_variance.fill_(-8.0)
+    model = DynamicsModel.from_belief(
+        belief,
+        smooth_event_hazard_enabled=True,
+        max_substep=0.01,
+        max_modal_acceleration=0.0,
+        max_pair_force=0.0,
+        max_node_acceleration=0.0,
+    )
+
+    step = model.predict_step(belief, 0.02)
+
+    assert step.auxiliary["pair_event_logits"].shape == (1, 2, 2, 2)
+    assert step.auxiliary["boundary_event_logits"].shape == (1, 2, 1, 2)
+    assert step.auxiliary["pair_collision"][0, 0, 1]
+    assert step.auxiliary["pair_event_logits"][0, 0, 1, 1] > 0.0
+    combined = torch.maximum(
+        step.auxiliary["pair_event_logits"][..., 1].amax(dim=-1),
+        step.auxiliary["boundary_event_logits"][..., 1].amax(dim=-1),
+    )
+    torch.testing.assert_close(
+        step.event_logits[..., MotionMode.COLLISION],
+        combined,
+    )
+
+
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(),
+    reason="requires an active Aqua MPS device",
+)
+def test_smooth_event_hazard_is_finite_and_differentiable_on_mps() -> None:
+    _, cpu_objects = _two_objects()
+    source = cpu_objects.to("mps")
+    position = source.position.detach().clone().requires_grad_()
+    velocity = source.velocity.detach().clone().requires_grad_()
+    fast_log_variance = source.fast_log_variance.detach().clone().requires_grad_()
+    objects = replace(
+        source,
+        position=position,
+        velocity=velocity,
+        fast_log_variance=fast_log_variance,
+    )
+    edge_mask = torch.tensor(
+        [[[False, True], [True, False]]],
+        device="mps",
+    )
+    learned_collision = torch.tensor(
+        [[[0.0, -20.0], [-20.0, 0.0]]],
+        device="mps",
+        requires_grad=True,
+    )
+    graph = _graph_output(
+        objects,
+        collision_logits=learned_collision,
+        edge_mask=edge_mask,
+    )
+
+    result = EventModel(smooth_hazard_enabled=True).to("mps")(objects, graph)
+    loss = balanced_binary_cross_entropy(
+        result.event_logits[..., MotionMode.COLLISION],
+        torch.ones_like(result.event_logits[..., MotionMode.COLLISION]),
+        torch.ones_like(result.event_logits[..., MotionMode.COLLISION], dtype=torch.bool),
+    )
+    loss.backward()
+
+    assert torch.isfinite(result.event_logits).all().cpu().item()
+    assert learned_collision.grad is not None
+    assert torch.isfinite(learned_collision.grad).all().cpu().item()
+    assert learned_collision.grad[0, 0, 1].abs().cpu().item() > 0.0
+    for gradient in (position.grad, velocity.grad, fast_log_variance.grad):
+        assert gradient is not None
+        assert torch.isfinite(gradient).all().cpu().item()

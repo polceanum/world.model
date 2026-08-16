@@ -5,6 +5,7 @@ import pytest
 import torch
 
 from world_model.datasets.splits import SPLIT_SEED_RANGES
+from world_model.dynamics import DynamicsModel
 from world_model.observations.rgb.structured_centres import structured_disc_centres
 from world_model.simulator.physics import PhysicsConfig
 from world_model.utils.config import load_config, save_resolved_config
@@ -421,6 +422,47 @@ def test_state_relation_roi_scope_is_typed_and_requires_attention(tmp_path: Path
     assert restored.to_dict() == config.to_dict()
 
 
+def test_scope_owned_event_weights_roundtrip_as_typed_configuration(tmp_path: Path) -> None:
+    config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=[
+            "training.closed_loop_event_loss_weights={state_roi: 0.0, state_relation_roi: 0.05}",
+        ],
+    )
+    resolved_path = tmp_path / "scope-event-weights-resolved.yaml"
+
+    save_resolved_config(config, resolved_path)
+    restored = load_config(resolved_path)
+
+    assert restored.training.closed_loop_event_loss_weights == {
+        "state_roi": 0.0,
+        "state_relation_roi": 0.05,
+    }
+    assert restored.to_dict() == config.to_dict()
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["-1.0", ".nan", "true", "not-a-number"],
+)
+def test_scope_owned_event_weights_must_be_finite_and_nonnegative(value: str) -> None:
+    with pytest.raises(ValueError, match="closed_loop_event_loss_weights"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[
+                f"training.closed_loop_event_loss_weights={{state_roi: {value}}}",
+            ],
+        )
+
+
+def test_scope_owned_event_weights_reject_unknown_scope() -> None:
+    with pytest.raises(ValueError, match="closed_loop_event_loss_weights"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=["training.closed_loop_event_loss_weights={perception: 0.0}"],
+        )
+
+
 def test_attention_relation_endpoint_binding_is_explicit_opt_in(tmp_path: Path) -> None:
     legacy = load_config(CONFIG_DIR / "default.yaml")
     enabled = load_config(
@@ -438,6 +480,45 @@ def test_attention_relation_endpoint_binding_is_explicit_opt_in(tmp_path: Path) 
     assert not legacy.model.dynamics.attention_relation_endpoint_binding_enabled
     assert enabled.model.dynamics.attention_relation_endpoint_binding_enabled
     assert restored.to_dict() == enabled.to_dict()
+
+
+def test_smooth_event_hazard_is_explicit_and_roundtrips(tmp_path: Path) -> None:
+    legacy = load_config(CONFIG_DIR / "default.yaml")
+    enabled = load_config(
+        CONFIG_DIR / "default.yaml",
+        overrides=[
+            "model.dynamics.smooth_event_hazard_enabled=true",
+            "model.dynamics.event_hazard_gap_temperature_m=0.03",
+            "model.dynamics.event_hazard_velocity_temperature_mps=0.2",
+            "model.dynamics.event_hazard_resolved_logit_floor=1.5",
+        ],
+    )
+    resolved_path = tmp_path / "smooth-event-hazard-resolved.yaml"
+
+    save_resolved_config(enabled, resolved_path)
+    restored = load_config(resolved_path)
+    dynamics = DynamicsModel.from_config(enabled)
+
+    assert not legacy.model.dynamics.smooth_event_hazard_enabled
+    assert enabled.model.dynamics.smooth_event_hazard_enabled
+    assert dynamics.events.smooth_hazard_enabled
+    assert dynamics.events.contact_logit_scale == pytest.approx(0.03)
+    assert dynamics.events.collision_velocity_logit_scale == pytest.approx(0.2)
+    assert dynamics.events.resolved_event_logit_floor == pytest.approx(1.5)
+    assert restored.to_dict() == enabled.to_dict()
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        "model.dynamics.event_hazard_gap_temperature_m=0.0",
+        "model.dynamics.event_hazard_velocity_temperature_mps=-0.1",
+        "model.dynamics.event_hazard_resolved_logit_floor=0.0",
+    ],
+)
+def test_smooth_event_hazard_scales_must_be_positive(override: str) -> None:
+    with pytest.raises(ValueError, match="event_hazard"):
+        load_config(CONFIG_DIR / "default.yaml", overrides=[override])
 
 
 @pytest.mark.parametrize(

@@ -2,6 +2,42 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-16 causal RGB objective and event repair
+
+- Advanced the authoritative contract to specification 1.47. Recorded that the
+  specification-1.46 grounded repair was already committed and pushed as
+  `0485664`.
+- Disabled structured fast ROI depth after source tracing showed that component
+  completeness is not observable and radius was systematically high. Across
+  eight fixed seeds, disabling it reduced pooled current position RMSE
+  `0.27719 -> 0.13479 m` and improved distance-gated precision/recall
+  `0.70265/0.68704 -> 0.96628/0.92870`; direct fast centres remain enabled.
+- Recalibrated the gravity-aware temporal velocity observer by raising only its
+  variance ceiling `0.25 -> 4.0`. The matched eight-seed setting improved
+  position, velocity, precision, recall, and F1; a noisier contact-free
+  change-point candidate was rejected.
+- Added opt-in, legacy-false smooth pair/boundary event hazards while preserving
+  hard analytic jumps as a fail-safe. Added learned relation residuals, direct
+  unique-pair collision ownership, and fixed configured horizon weighting.
+- Fixed a critical recursive event-gradient NaN by flooring dense self-pair
+  projected variance before square root. Exact recursive RGB gradients are
+  finite for all `79/79` `state_roi` and `133/133` `state_relation_roi`
+  trainable tensors; the active-Aqua MPS hazard regression passes.
+- Restricted velocity and correction objectives to mature matched slots with a
+  real causal prior, omitted unsupported terms structurally, and retained
+  unfiltered public accuracy metrics. Made event supervision stage-owned:
+  `state_roi: 0.0`, `state_relation_roi: 0.05`.
+- Rejected and disabled pair applicability after matched current and horizon
+  regressions with no event-F1 gain. Increased fixed campaign evaluation
+  cadence to every 512 updates, giving 18 post-update validations across 9,216
+  updates plus step zero.
+- Focused integrated verification is `411 passed, 5 skipped`; the final frozen
+  specification-1.47 repository suite is `959 passed, 13 Aqua-MPS-context
+  skips in 390.25s`. A same-weight eight-seed RGB preflight changed physical
+  RMSE only at roughly `1e-7 m` and left collision F1/coverage exact. No trained
+  checkpoint, smooth-hazard accuracy promotion, or convergence result is
+  claimed yet.
+
 ### 2026-08-15 grounded RGB convergence and integrity repair
 
 - Advanced the authoritative contract to specification 1.46 and simulator

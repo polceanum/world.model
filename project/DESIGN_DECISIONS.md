@@ -3877,7 +3877,7 @@
 ## ADR-137 — Make independent raw RGB temporal history an explicit protocol
 
 - **Date:** 2026-08-15
-- **Status:** accepted
+- **Status:** accepted; fast-depth clause superseded by ADR-142
 - **Context:** Corrected posterior positions and prior-conditioned ROI copies
   are correlated with the dynamics being estimated. Treating them as fresh
   temporal observations reinforces model bias and understates uncertainty.
@@ -3886,14 +3886,16 @@
 - **Decision:** Add an exact legacy-false semantic switch. Historical configs
   keep their configured blend; new grounded configs opt into independent raw
   RGB history. Persist per-sample, per-axis provenance; source-bound ROI values
-  count only where structured centre/scale directly observes them. Enable
-  structured fast depth and no age cutoff in the grounded combined-camera
-  protocol. Optionally compensate known `WorldBelief.gravity` to estimate
-  current-time velocity.
+  count only where structured centre/scale directly observes them. The 1.46
+  candidate enabled structured fast depth; ADR-142 subsequently disables it
+  because component completeness is not observable. Keep no age cutoff and
+  optionally compensate known `WorldBelief.gravity` to estimate current-time
+  velocity.
 - **Consequences:** Old checkpoint behavior is preserved while new training can
   remove observer self-reinforcement. A real combined-camera online test must
   show nonzero fast-path support before launch. The strict mode uses no
-  simulator state.
+  simulator state, and current fast-path depth support remains intentionally
+  absent until scale completeness is independently qualified.
 
 ## ADR-138 — Separate clean accuracy from recovery and bind immutable evidence
 
@@ -3973,3 +3975,111 @@
   gates now reflect observability rather than residual magnitude alone. Cold
   temporal support deliberately delays the analytic update instead of
   inventing evidence.
+
+## ADR-142 — Retain fast centres but reject unqualified fast component depth
+
+- **Date:** 2026-08-16
+- **Status:** accepted
+- **Context:** A prior-conditioned ROI can localize a foreground component, but
+  its measured radius does not reveal whether overlap, truncation, or merging
+  hid or added part of the physical disc. On seed 100000 the 28 accepted
+  radius ratios averaged `1.1587`; over eight seeds, fast depth on/off pooled
+  current position RMSE was `0.27719/0.13479 m` and precision/recall was
+  `0.70265/0.68704` versus `0.96628/0.92870`.
+- **Decision:** Keep structured fast centres as independent lateral evidence
+  and disable structured fast depth in the grounded profile. Require an
+  explicit completeness/visibility model and matched broad evidence before
+  re-enabling component radius as independent depth.
+- **Consequences:** The cheap residual path still corrects image-plane motion,
+  while ambiguous scale cannot drag posterior z or break association. This
+  rejects one evidence claim, not the point-and-trajectory abstraction.
+
+## ADR-143 — Calibrate temporal velocity variance to empirical residuals
+
+- **Date:** 2026-08-16
+- **Status:** accepted
+- **Context:** Eight-seed gravity-aware direct velocity evidence had y MSE
+  `3.82435` against variance `0.23707`, about `16.13x` overconfidence. The
+  `0.25` ceiling prevented the filter from representing the observed error.
+- **Decision:** Raise only the grounded temporal velocity variance ceiling to
+  `4.0`; retain independent raw history and continuous gravity fitting. Reject
+  the tested contact-free change-point reset because its early noisy resets
+  regressed the calibrated observer.
+- **Consequences:** With identical weights and fast depth off, position all-axis
+  RMSE improves `0.134785 -> 0.130092 m`, distance-gated velocity improves
+  `0.774363 -> 0.759842 m/s`, and F1 improves `0.947120 -> 0.953730` over
+  seeds `100000--100007`. This is observer calibration evidence, not trained
+  model convergence.
+
+## ADR-144 — Add finite smooth event hazards behind a legacy-false semantic
+
+- **Date:** 2026-08-16
+- **Status:** accepted for training qualification
+- **Context:** Hard analytic event logits correctly protected physical jumps
+  but gave relation parameters little ownership of event timing. Dense
+  self-pair projected variance also reached `sqrt(0)` before masking, producing
+  an infinite derivative and recursive `0 * inf` NaNs.
+- **Decision:** Add opt-in smooth pair/boundary contact and collision hazards
+  from gap, incoming normal motion, uncertainty, and learned relation residuals.
+  Keep the hard resolver as the physical fail-safe and use a straight-through
+  positive floor for resolved events. Clamp projected variance to a
+  dtype-aware positive floor before square root. Supervise unique matched
+  pairs directly in addition to node events.
+- **Consequences:** CPU and active-Aqua MPS recursive gradients are finite and
+  event decoders have a causal owner. Historical checkpoints remain exact with
+  the flag false. A same-weight eight-seed preflight changed horizon position
+  RMSE by at most `1.63e-7 m` and left collision F1/coverage exact, clearing the
+  inherited physical baseline without claiming event learning. The feature
+  remains unpromoted until trained fixed RGB validation demonstrates accuracy
+  and calibration.
+
+## ADR-145 — Weight each event horizon against the configured schedule
+
+- **Date:** 2026-08-16
+- **Status:** accepted
+- **Context:** Re-normalizing over only currently eligible event anchors let a
+  late `0.1`-weight horizon inherit full unit weight when earlier anchors lacked
+  causal support. That silently changed the objective across windows.
+- **Decision:** Emit explicit per-horizon event terms and apply the fixed
+  configured horizon-weight denominator, just as for the physical rollout
+  terms. Missing early support contributes no numerator and does not reshape
+  the declared schedule.
+- **Consequences:** Event pressure is comparable across batches, causal support
+  patterns, and exact resume. Direct pair and node ownership share the existing
+  event scale rather than doubling it.
+
+## ADR-146 — Require causal support and a trainable stage owner
+
+- **Date:** 2026-08-16
+- **Status:** accepted
+- **Context:** Discovery births receive hard-zero runtime velocity and have no
+  trainable incoming prior. Scoring their velocity/correction in the objective
+  diluted denominators, while event loss in `state_roi` could pressure shared
+  perception even though its event/relation heads were frozen.
+- **Decision:** Support velocity only for matched active slots with
+  `age_steps > 0`; support correction only when both prior and posterior are
+  active under the same causal age contract. Structurally omit unsupported
+  loss terms. Set grounded event weight to `0.0` in `state_roi` and `0.05` in
+  `state_relation_roi`, structurally omitting zero-weight terms. Preserve
+  historical event weights when no scope override exists.
+- **Consequences:** Every optimized term has a causal trainable path. Explicit
+  counters expose excluded/supported coordinates and objects. Public physical
+  metrics remain unfiltered and continue to reveal poor newborn estimates.
+
+## ADR-147 — Reject pair applicability and increase formal validation cadence
+
+- **Date:** 2026-08-16
+- **Status:** accepted for the next campaign
+- **Context:** The matched seed-100000 pair gate regressed current position/
+  velocity `0.56%/0.38%` and 0.25/0.50/0.75/1.00-second position
+  `0.75%/0.88%/1.02%/0.77%` without collision-F1 gain. The prior 1,024-update
+  evaluation cadence also provided too few formal observations for a stable
+  plateau decision over 9,216 updates.
+- **Decision:** Keep pair applicability disabled. Evaluate the fixed manifest
+  every 512 updates, yielding 18 post-update validations through step 9,216,
+  plus an immutable step-zero baseline. Preserve the 3,072 scope transition
+  and declared warmup/cosine/tail schedule.
+- **Consequences:** A plausible local gate cannot enter the campaign after a
+  matched regression. The longer experiment now has enough predeclared
+  observations to distinguish convergence from noisy batch wobble, but no
+  convergence is claimed before those evaluations exist.

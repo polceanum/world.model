@@ -752,6 +752,37 @@ def test_training_resume_binds_state_relation_roi_late_scope() -> None:
         validate_training_resume_config(payload, changed)
 
 
+def test_training_resume_binds_scope_owned_event_weights_with_legacy_empty_default() -> None:
+    config = _small_config()
+    checkpoint_config = config.to_dict()
+    checkpoint_config["training"].pop("closed_loop_event_loss_weights")
+    legacy_payload = {
+        "config": checkpoint_config,
+        "simulator_version": SIMULATOR_VERSION,
+    }
+
+    # A checkpoint predating the field has the exact empty-map legacy
+    # behavior and remains resumable under today's default.
+    validate_training_resume_config(legacy_payload, config)
+
+    changed = replace(
+        config,
+        training=replace(
+            config.training,
+            closed_loop_event_loss_weights={
+                "state_roi": 0.0,
+                "state_relation_roi": 0.05,
+            },
+        ),
+    )
+    changed.validate()
+    with pytest.raises(
+        ValueError,
+        match=r"training\.closed_loop_event_loss_weights",
+    ):
+        validate_training_resume_config(legacy_payload, changed)
+
+
 @pytest.mark.parametrize(
     ("field_name", "value"),
     [
@@ -1381,6 +1412,46 @@ def test_attention_relation_endpoint_binding_is_semantic_with_legacy_false() -> 
     with pytest.raises(
         ValueError,
         match=r"model\.dynamics\.attention_relation_endpoint_binding_enabled",
+    ):
+        validate_training_resume_config(legacy_payload, enabled)
+
+
+def test_smooth_event_hazard_is_semantic_with_legacy_false() -> None:
+    config = _small_config()
+    payload = {
+        "config": config.to_dict(),
+        "simulator_version": SIMULATOR_VERSION,
+    }
+    legacy_payload = deepcopy(payload)
+    for field_name in (
+        "smooth_event_hazard_enabled",
+        "event_hazard_gap_temperature_m",
+        "event_hazard_velocity_temperature_mps",
+        "event_hazard_resolved_logit_floor",
+    ):
+        legacy_payload["config"]["model"]["dynamics"].pop(field_name)
+
+    validate_checkpoint_config(legacy_payload, config)
+    validate_training_resume_config(legacy_payload, config)
+
+    enabled = replace(
+        config,
+        model=replace(
+            config.model,
+            dynamics=replace(
+                config.model.dynamics,
+                smooth_event_hazard_enabled=True,
+            ),
+        ),
+    )
+    enabled.validate()
+    enabled_model = OnlineWorldModel.from_config(enabled, device="cpu")
+    assert enabled_model.dynamics.events.smooth_hazard_enabled
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(legacy_payload, enabled)
+    with pytest.raises(
+        ValueError,
+        match=r"model\.dynamics\.smooth_event_hazard_enabled",
     ):
         validate_training_resume_config(legacy_payload, enabled)
 

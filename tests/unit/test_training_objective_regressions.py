@@ -18,13 +18,16 @@ from world_model.simulator import generate_episode
 from world_model.training.loop import (
     TrainingBatchResult,
     _belief_state_losses,
+    _current_correction_objective_support,
     _future_predictable_mask,
     _group_closed_loop_terms,
     _rollout_loss_result,
     _select_rollout_anchor_frames,
+    _state_velocity_objective_axis_support,
     _update_geometric_identity_metrics,
     _weighted_closed_loop_total,
     future_scene_predictable_mask,
+    gather_target_pairs,
     match_belief_to_targets,
     measurement_localization_metrics,
     pretrain_rgb_measurements,
@@ -76,6 +79,34 @@ def _active_belief(
     objects.position.copy_(positions)
     objects.age_steps.copy_(age_steps)
     return replace(belief, objects=objects)
+
+
+def test_gather_target_pairs_aligns_both_axes_and_zeros_unmatched_slots() -> None:
+    target = torch.tensor(
+        [
+            [
+                [0, 1, 2],
+                [3, 4, 5],
+                [6, 7, 8],
+            ]
+        ]
+    )
+    indices = torch.tensor([[2, 0, -1]], dtype=torch.int64)
+
+    aligned = gather_target_pairs(target, indices)
+
+    torch.testing.assert_close(
+        aligned,
+        torch.tensor(
+            [
+                [
+                    [8, 6, 0],
+                    [2, 0, 0],
+                    [0, 0, 0],
+                ]
+            ]
+        ),
+    )
 
 
 def test_geometric_identity_metric_counts_track_swaps() -> None:
@@ -460,6 +491,107 @@ def test_unsupported_state_and_parameter_terms_are_omitted_not_zero_averaged() -
     assert losses == {}
 
 
+def test_birth_velocity_is_excluded_from_loss_numerator_and_denominator() -> None:
+    belief = _active_belief(
+        positions=torch.zeros(1, 2, 3),
+        age_steps=torch.tensor([[0, 1]], dtype=torch.int64),
+    )
+    predicted_velocity = torch.zeros(1, 2, 3, requires_grad=True)
+    belief = belief.replace(
+        objects=belief.objects.replace(velocity=predicted_velocity),
+    )
+    target_velocity = torch.tensor(
+        [[[[10.0, -10.0, 10.0], [0.5, -1.0, 2.0]]]],
+    )
+    batch = {
+        "objects": {
+            "active": torch.ones(1, 1, 2, dtype=torch.bool),
+            "position": torch.zeros(1, 1, 2, 3),
+            "velocity": target_velocity,
+            "drag": torch.zeros(1, 1, 2, 1),
+            "restitution": torch.zeros(1, 1, 2, 1),
+        }
+    }
+    indices = torch.tensor([[0, 1]], dtype=torch.int64)
+    matched = torch.ones(1, 2, dtype=torch.bool)
+
+    support = _state_velocity_objective_axis_support(belief, matched)
+    losses, _, _ = _belief_state_losses(
+        belief,
+        batch,
+        _single_horizon_config(),
+        frame_index=0,
+        indices=indices,
+        matched=matched,
+        velocity_axis_support=support,
+    )
+
+    assert support.tolist() == [[[False, False, False], [True, True, True]]]
+    assert support.sum().item() == 3
+    expected = torch.nn.functional.smooth_l1_loss(
+        predicted_velocity[:, 1],
+        target_velocity[:, 0, 1],
+    )
+    torch.testing.assert_close(losses["state_velocity"], expected)
+
+    losses["state_velocity"].backward()
+    torch.testing.assert_close(
+        predicted_velocity.grad[:, 0],
+        torch.zeros(1, 3),
+    )
+    assert torch.count_nonzero(predicted_velocity.grad[:, 1]).item() == 3
+
+
+def test_all_birth_velocity_support_omits_the_objective() -> None:
+    belief = _active_belief(
+        positions=torch.zeros(1, 2, 3),
+        age_steps=torch.zeros(1, 2, dtype=torch.int64),
+    )
+    batch = {
+        "objects": {
+            "active": torch.ones(1, 1, 2, dtype=torch.bool),
+            "position": torch.zeros(1, 1, 2, 3),
+            "velocity": torch.full((1, 1, 2, 3), 100.0),
+            "drag": torch.zeros(1, 1, 2, 1),
+            "restitution": torch.zeros(1, 1, 2, 1),
+        }
+    }
+
+    losses, _, _ = _belief_state_losses(
+        belief,
+        batch,
+        _single_horizon_config(),
+        frame_index=0,
+        indices=torch.tensor([[0, 1]], dtype=torch.int64),
+        matched=torch.ones(1, 2, dtype=torch.bool),
+    )
+
+    assert "state_position" in losses
+    assert "state_velocity" not in losses
+
+
+def test_velocity_correction_support_requires_a_surviving_incoming_prior() -> None:
+    belief = _active_belief(
+        positions=torch.zeros(1, 2, 3),
+        age_steps=torch.tensor([[0, 1]], dtype=torch.int64),
+    )
+    prior = _active_belief(
+        positions=torch.zeros(1, 2, 3),
+        age_steps=torch.zeros(1, 2, dtype=torch.int64),
+    )
+    prior = prior.replace(
+        objects=prior.objects.replace(active=torch.tensor([[False, True]])),
+    )
+
+    support = _current_correction_objective_support(
+        belief,
+        prior,
+        torch.ones(1, 2, dtype=torch.bool),
+    )
+
+    assert support.tolist() == [[False, True]]
+
+
 def test_existence_belief_supervises_only_causally_active_predictions() -> None:
     belief = BeliefFactory(max_objects=2).create(batch_size=1)
     existence_logit = torch.zeros((1, 2), requires_grad=True)
@@ -732,6 +864,11 @@ def test_frozen_global_measurement_is_diagnostic_only_with_fast_roi_scope() -> N
     assert "frozen_global_measurement" in result.metrics
     assert "measurement_fast" in result.metrics
     assert "measurement_global" not in result.metrics
+    assert (
+        result.metrics["state_velocity_objective_supported_coordinate_count"]
+        + result.metrics["state_velocity_objective_excluded_coordinate_count"]
+        == result.metrics["physical_state_velocity_coordinate_count"]
+    )
     torch.testing.assert_close(
         result.loss_terms["measurement"].detach(),
         torch.tensor(result.metrics["measurement_fast"])

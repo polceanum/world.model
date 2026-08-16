@@ -705,6 +705,33 @@ def gather_target_slots(target: Tensor, indices: Tensor) -> Tensor:
     return torch.where(unmatched, torch.zeros_like(gathered), gathered)
 
 
+def gather_target_pairs(target: Tensor, indices: Tensor) -> Tensor:
+    """Gather both object axes of a target relation matrix into belief order.
+
+    ``target`` begins with ``[B,N,N]`` and ``indices`` is ``[B,M]`` with ``-1``
+    for unmatched belief slots. Any relation incident to an unmatched slot is
+    returned as zero and must remain masked by the caller.
+    """
+
+    if (
+        target.ndim < 3
+        or target.shape[1] != target.shape[2]
+        or indices.ndim != 2
+        or target.shape[0] != indices.shape[0]
+    ):
+        raise ValueError("target/indices must begin with compatible [B,N,N] and [B,M] axes")
+    batch, belief_count = indices.shape
+    safe = indices.clamp_min(0)
+    batch_index = torch.arange(batch, device=target.device)[:, None, None]
+    first_index = safe[:, :, None].expand(batch, belief_count, belief_count)
+    second_index = safe[:, None, :].expand(batch, belief_count, belief_count)
+    gathered = target[batch_index, first_index, second_index]
+    unmatched = (indices < 0)[:, :, None] | (indices < 0)[:, None, :]
+    while unmatched.ndim < gathered.ndim:
+        unmatched = unmatched.unsqueeze(-1)
+    return torch.where(unmatched, torch.zeros_like(gathered), gathered)
+
+
 def _add_world_position_supervision(
     outputs: dict[str, Tensor],
     targets: dict[str, Tensor],
@@ -1960,6 +1987,7 @@ def _globally_weight_horizon_details(
         "rollout_position",
         "rollout_velocity",
         "rollout_position_nll",
+        "event_collision",
         "correction_future",
         "correction_future_velocity",
     ]
@@ -2318,6 +2346,7 @@ def _belief_state_losses(
     indices: Tensor | None = None,
     matched: Tensor | None = None,
     parameter_supervision: _ParameterSupervisionMasks | None = None,
+    velocity_axis_support: Tensor | None = None,
 ) -> tuple[dict[str, Tensor], Tensor, Tensor]:
     objects = belief.objects
     target_objects = batch["objects"]
@@ -2334,7 +2363,18 @@ def _belief_state_losses(
     aligned_position = gather_target_slots(target_position, indices)
     aligned_velocity = gather_target_slots(target_objects["velocity"][:, frame_index], indices)
     state_position = masked_huber(objects.position, aligned_position, matched)
-    state_velocity = masked_huber(objects.velocity, aligned_velocity, matched)
+    if velocity_axis_support is None:
+        velocity_axis_support = _state_velocity_objective_axis_support(
+            belief,
+            matched,
+        )
+    elif (
+        velocity_axis_support.shape != objects.velocity.shape
+        or velocity_axis_support.dtype is not torch.bool
+    ):
+        raise ValueError("velocity axis support must be boolean belief-slot coordinates [B,N,3]")
+    elif (velocity_axis_support & ~_state_velocity_objective_axis_support(belief, matched)).any():
+        raise ValueError("velocity axis support cannot include a newborn or unmatched slot")
     uncertainty = gaussian_nll(
         objects.position,
         aligned_position,
@@ -2383,9 +2423,14 @@ def _belief_state_losses(
         losses.update(
             {
                 "state_position": state_position,
-                "state_velocity": state_velocity,
                 "uncertainty_position_nll": uncertainty,
             }
+        )
+    if velocity_axis_support.any():
+        losses["state_velocity"] = masked_huber(
+            objects.velocity,
+            aligned_velocity,
+            velocity_axis_support,
         )
     if drag_observable.any():
         losses["parameter_drag"] = masked_huber(
@@ -2403,6 +2448,47 @@ def _belief_state_losses(
         losses,
         indices,
         matched,
+    )
+
+
+def _state_velocity_objective_axis_support(
+    belief: WorldBelief,
+    matched: Tensor,
+) -> Tensor:
+    """Return causal coordinate support for current velocity supervision.
+
+    RGB discovery births initialise velocity to a hard zero and have no prior
+    state, temporal baseline, or position innovation from which a trainable
+    velocity correction could be computed on that same frame.  Once a track
+    has survived one predict-observe cycle, analytic/learned dynamics and the
+    position-to-velocity correction path make every velocity coordinate a
+    causal training target.  The coordinate-shaped mask keeps that contract
+    explicit without incorrectly requiring direct temporal velocity evidence.
+    """
+
+    objects = belief.objects
+    if matched.shape != objects.active.shape or matched.dtype is not torch.bool:
+        raise ValueError("matched velocity support must be boolean belief-slot [B,N]")
+    supported_slots = matched & objects.active.bool() & (objects.age_steps > 0)
+    return supported_slots.unsqueeze(-1).expand_as(objects.velocity)
+
+
+def _current_correction_objective_support(
+    belief: WorldBelief,
+    prior_belief: WorldBelief,
+    matched: Tensor,
+) -> Tensor:
+    """Return slots with a real incoming prior for correction objectives."""
+
+    if matched.shape != belief.objects.active.shape or matched.dtype is not torch.bool:
+        raise ValueError("matched correction support must be boolean belief-slot [B,N]")
+    if prior_belief.objects.active.shape != matched.shape:
+        raise ValueError("prior correction support must use the same belief-slot shape")
+    return (
+        matched
+        & belief.objects.active.bool()
+        & prior_belief.objects.active.bool()
+        & (belief.objects.age_steps > 0)
     )
 
 
@@ -2437,11 +2523,28 @@ def _rollout_loss_result(
         frame_offsets,
         frame_rate=config.simulator.frame_rate,
     )
+    smooth_event_hazard_enabled = config.model.dynamics.smooth_event_hazard_enabled
+    pair_collision_targets: Tensor | None = None
+    if smooth_event_hazard_enabled:
+        event_targets = batch.get("events")
+        pair_collision_targets = (
+            event_targets.get("pair_collision") if isinstance(event_targets, Mapping) else None
+        )
+        if (
+            not isinstance(pair_collision_targets, Tensor)
+            or pair_collision_targets.ndim != 4
+            or pair_collision_targets.shape[1] != total_frames
+            or pair_collision_targets.shape[2] != pair_collision_targets.shape[3]
+        ):
+            raise ValueError(
+                "smooth event-hazard training requires events.pair_collision [B,T,N,N]"
+            )
     trajectory = model.dynamics.rollout(
         belief,
         event_query_plan.query_seconds,
         return_events=True,
-        return_auxiliary=False,
+        return_auxiliary=smooth_event_hazard_enabled,
+        **({"auxiliary_names": ("pair_event_logits",)} if smooth_event_hazard_enabled else {}),
     )
     target_positions = event_query_plan.select_target_endpoints(trajectory.positions)
     target_velocities = event_query_plan.select_target_endpoints(trajectory.velocities)
@@ -2453,6 +2556,11 @@ def _rollout_loss_result(
         None
         if trajectory.event_logits is None
         else event_query_plan.select_target_endpoints(trajectory.event_logits)
+    )
+    target_pair_event_logits = (
+        event_query_plan.select_target_endpoints(trajectory.auxiliary["pair_event_logits"])
+        if smooth_event_hazard_enabled
+        else None
     )
     position_losses: list[Tensor] = []
     position_axis_losses: dict[str, list[Tensor]] = {
@@ -2640,15 +2748,43 @@ def _rollout_loss_result(
             # the same interval, independent of the other forecast horizons.
             event_scores = target_event_logits[:, query_index, :, MotionMode.COLLISION]
             if loss_valid.any():
-                event_losses.append(
-                    balanced_binary_cross_entropy(
-                        event_scores,
-                        event_target,
-                        loss_valid,
-                        maximum_positive_weight=(config.training.collision_positive_weight_max),
-                    )
+                event_loss = balanced_binary_cross_entropy(
+                    event_scores,
+                    event_target,
+                    loss_valid,
+                    maximum_positive_weight=(config.training.collision_positive_weight_max),
                 )
+                if target_pair_event_logits is not None:
+                    assert pair_collision_targets is not None
+                    pair_target = gather_target_pairs(
+                        pair_collision_targets[:, target_index],
+                        indices,
+                    ).to(reference.dtype)
+                    belief_count = loss_valid.shape[1]
+                    unique_pair = torch.triu(
+                        torch.ones(
+                            belief_count,
+                            belief_count,
+                            device=loss_valid.device,
+                            dtype=torch.bool,
+                        ),
+                        diagonal=1,
+                    ).unsqueeze(0)
+                    pair_loss_valid = loss_valid[:, :, None] & loss_valid[:, None, :] & unique_pair
+                    if pair_loss_valid.any():
+                        pair_event_scores = target_pair_event_logits[:, query_index, :, :, 1]
+                        pair_event_loss = balanced_binary_cross_entropy(
+                            pair_event_scores,
+                            pair_target,
+                            pair_loss_valid,
+                            maximum_positive_weight=(config.training.collision_positive_weight_max),
+                        )
+                        # Keep the historical event objective's aggregate scale
+                        # while adding direct relation ownership supervision.
+                        event_loss = 0.5 * (event_loss + pair_event_loss)
+                event_losses.append(event_loss)
                 event_weights.append(horizon_weights[query_index])
+                horizon_losses[rollout_horizon_loss_key("event_collision", seconds)] = event_loss
                 event_prediction = event_scores.detach().sigmoid() >= 0.5
                 event_truth = event_target.detach().bool()
                 confusion = {
@@ -2817,7 +2953,10 @@ def _weighted_closed_loop_total(
     component weight such as ``state_position`` or ``rollout_velocity``, the
     two physical components replace their aggregate for optimisation.  This
     makes position/velocity trade-offs explicit while keeping old profiles
-    numerically unchanged.
+    numerically unchanged. Terms with an effective zero weight are structurally
+    omitted from the autograd graph. Multiplying a disabled branch by zero is
+    insufficient because a nonfinite local derivative can still contaminate
+    otherwise healthy gradients.
     """
 
     aggregate_families = {
@@ -2865,12 +3004,52 @@ def _weighted_closed_loop_total(
                     selected[component] = terms[component]
         elif aggregate in terms:
             selected[aggregate] = terms[aggregate]
+    selected = {
+        name: value
+        for name, value in selected.items()
+        if float(weights.get(name, weights.get(name.split("_", 1)[0], 1.0))) != 0.0
+    }
     if not selected:
         # Every supported term may be optional and disabled by the resolved
-        # weights. Preserve a differentiable no-op without assigning an
-        # accidental unit fallback weight.
-        return next(iter(terms.values())).sum() * 0
+        # weights. Return a detached no-op so disabled branches cannot receive
+        # hooks or propagate a zero-times-nonfinite derivative.
+        return next(iter(terms.values())).detach().new_zeros(())
     return weighted_total(selected, weights)
+
+
+def _closed_loop_loss_weights_for_scope(
+    config: OrpheusConfig,
+    *,
+    active_trainable_scope: str | None,
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Resolve a causal scope's objective weights and numeric provenance.
+
+    A missing scope override is exactly the historical behavior: the event
+    term uses ``loss_weights.event`` (or the weighted-total unit fallback when
+    that legacy key is absent). The caller passes the already-resolved causal
+    scope so a staged transition cannot depend on window or data details.
+    """
+
+    weights = dict(config.training.loss_weights)
+    legacy_event_weight = float(weights.get("event", 1.0))
+    scope_weights = config.training.closed_loop_event_loss_weights
+    override_active = active_trainable_scope is not None and active_trainable_scope in scope_weights
+    effective_event_weight = (
+        float(scope_weights[active_trainable_scope])
+        if override_active and active_trainable_scope is not None
+        else legacy_event_weight
+    )
+    weights["event"] = effective_event_weight
+    suppressed_without_owner = (
+        override_active and active_trainable_scope == "state_roi" and effective_event_weight == 0.0
+    )
+    diagnostics = {
+        "effective_event_loss_weight": effective_event_weight,
+        "event_loss_scope_override_active": float(override_active),
+        "event_loss_legacy_weight_active": float(not override_active),
+        "event_loss_suppressed_no_trainable_owner": float(suppressed_without_owner),
+    }
+    return weights, diagnostics
 
 
 def _attention_node_complexity_details(model: OnlineWorldModel) -> dict[str, Tensor]:
@@ -3134,6 +3313,7 @@ def run_closed_loop_batch(
     include_measurement_supervision: bool = True,
     rollout_anchors_per_window: int | None = None,
     compute_future_correction: bool = True,
+    active_trainable_scope: str | None = None,
 ) -> TrainingBatchResult:
     """Run one causal RGB-only sequence window through the real runtime.
 
@@ -3191,6 +3371,10 @@ def run_closed_loop_batch(
     perturbed_updates = 0
     matched_count = 0
     existence_negative_support_count = 0
+    state_velocity_objective_supported_coordinate_count = 0
+    state_velocity_objective_excluded_coordinate_count = 0
+    current_velocity_correction_supported_object_count = 0
+    future_velocity_correction_supported_object_horizon_count = 0
     target_object_frames = 0
     predicted_object_frames = 0
     fast_supervised_frames = 0
@@ -3401,6 +3585,17 @@ def run_closed_loop_batch(
             parameter_supervision_metrics,
             parameter_supervision.detached_metrics(),
         )
+        velocity_axis_support = _state_velocity_objective_axis_support(
+            belief,
+            matched,
+        )
+        matched_velocity_axes = matched.unsqueeze(-1).expand_as(belief.objects.velocity)
+        state_velocity_objective_supported_coordinate_count += int(
+            velocity_axis_support.sum().detach().cpu()
+        )
+        state_velocity_objective_excluded_coordinate_count += int(
+            (matched_velocity_axes & ~velocity_axis_support).sum().detach().cpu()
+        )
         current, indices, matched = _belief_state_losses(
             belief,
             batch,
@@ -3409,6 +3604,7 @@ def run_closed_loop_batch(
             indices=indices,
             matched=matched,
             parameter_supervision=parameter_supervision,
+            velocity_axis_support=velocity_axis_support,
         )
         matched_count += int(matched.sum().detach().cpu())
         if "existence_belief" in current:
@@ -3498,7 +3694,11 @@ def run_closed_loop_batch(
         for name, value in current.items():
             add(name, value)
         if prior_belief is not None:
-            correction_valid = matched & prior_belief.objects.active
+            correction_valid = _current_correction_objective_support(
+                belief,
+                prior_belief,
+                matched,
+            )
             prior_current_error = torch.linalg.vector_norm(
                 prior_belief.objects.position - aligned_position,
                 dim=-1,
@@ -3506,14 +3706,6 @@ def run_closed_loop_batch(
             posterior_current_error = torch.linalg.vector_norm(
                 belief.objects.position - aligned_position,
                 dim=-1,
-            )
-            add(
-                "correction_current",
-                posterior_improvement_hinge(
-                    posterior_current_error,
-                    prior_current_error,
-                    correction_valid,
-                ),
             )
             prior_current_velocity_error = torch.linalg.vector_norm(
                 prior_belief.objects.velocity - aligned_velocity,
@@ -3523,15 +3715,26 @@ def run_closed_loop_batch(
                 belief.objects.velocity - aligned_velocity,
                 dim=-1,
             )
-            add(
-                "correction_current_velocity",
-                posterior_improvement_hinge(
-                    posterior_current_velocity_error,
-                    prior_current_velocity_error,
-                    correction_valid,
-                ),
-            )
             if correction_valid.any():
+                current_velocity_correction_supported_object_count += int(
+                    correction_valid.sum().detach().cpu()
+                )
+                add(
+                    "correction_current",
+                    posterior_improvement_hinge(
+                        posterior_current_error,
+                        prior_current_error,
+                        correction_valid,
+                    ),
+                )
+                add(
+                    "correction_current_velocity",
+                    posterior_improvement_hinge(
+                        posterior_current_velocity_error,
+                        prior_current_velocity_error,
+                        correction_valid,
+                    ),
+                )
                 current_correction_improvements.append(
                     float(
                         (prior_current_error - posterior_current_error)
@@ -3606,6 +3809,9 @@ def run_closed_loop_batch(
                 )
                 valid &= belief.objects.age_steps >= config.training.minimum_rollout_age_steps
                 if valid.any():
+                    future_velocity_correction_supported_object_horizon_count += int(
+                        valid.sum().detach().cpu()
+                    )
                     prior_error = torch.linalg.vector_norm(
                         prior_rollout_positions[:, query_index] - target_position,
                         dim=-1,
@@ -3720,8 +3926,13 @@ def run_closed_loop_batch(
     details.update(_attention_node_complexity_details(model))
     details.update(_attention_node_activity_details(model))
     terms = _group_closed_loop_terms(details, reference)
-    total = _weighted_closed_loop_total(terms, config.training.loss_weights)
+    loss_weights, event_weight_metrics = _closed_loop_loss_weights_for_scope(
+        config,
+        active_trainable_scope=active_trainable_scope,
+    )
+    total = _weighted_closed_loop_total(terms, loss_weights)
     metrics = {name: float(value.detach().cpu()) for name, value in details.items()}
+    metrics.update(event_weight_metrics)
     metrics.update(physical_metrics)
     metrics.update(parameter_supervision_metrics)
     metrics.update(
@@ -3948,6 +4159,18 @@ def run_closed_loop_batch(
         {
             "matched_object_frames": float(matched_count),
             "existence_negative_supervision_object_frames": float(existence_negative_support_count),
+            "state_velocity_objective_supported_coordinate_count": float(
+                state_velocity_objective_supported_coordinate_count
+            ),
+            "state_velocity_objective_excluded_coordinate_count": float(
+                state_velocity_objective_excluded_coordinate_count
+            ),
+            "correction_current_velocity_objective_supported_object_count": float(
+                current_velocity_correction_supported_object_count
+            ),
+            "correction_future_velocity_objective_supported_object_horizon_count": float(
+                future_velocity_correction_supported_object_horizon_count
+            ),
             "perturbed_updates": float(perturbed_updates),
             "fast_path_supervised": float(fast_supervised_frames > 0),
             "fast_supervised_frames": float(fast_supervised_frames),

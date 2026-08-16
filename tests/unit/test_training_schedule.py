@@ -13,6 +13,7 @@ from world_model.runtime import OnlineWorldModel
 from world_model.training.loop import (
     TrainingBatchResult,
     _attention_node_complexity_details,
+    _closed_loop_loss_weights_for_scope,
     _combine_measurement_objectives,
     _distance_gate_physical_matches,
     _fast_measurement_has_trainable_perception_path,
@@ -1552,6 +1553,93 @@ def test_state_roi_can_transition_to_state_relation_roi_without_opening_node_dyn
     )
 
 
+def test_scope_owned_event_weight_omits_early_gradient_and_admits_exact_late_weight() -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            closed_loop_event_loss_weights={
+                "state_roi": 0.0,
+                "state_relation_roi": 0.05,
+            },
+        ),
+    )
+    config.validate()
+
+    early_weights, early_metrics = _closed_loop_loss_weights_for_scope(
+        config,
+        active_trainable_scope="state_roi",
+    )
+    early_event = torch.tensor(3.0, requires_grad=True)
+    early_state = torch.tensor(2.0, requires_grad=True)
+    early_event_gradients: list[torch.Tensor] = []
+    early_event.register_hook(early_event_gradients.append)
+    early_total = _weighted_closed_loop_total(
+        {"event": early_event, "state_position": early_state},
+        early_weights,
+    )
+    early_total.backward()
+
+    assert early_metrics == {
+        "effective_event_loss_weight": 0.0,
+        "event_loss_scope_override_active": 1.0,
+        "event_loss_legacy_weight_active": 0.0,
+        "event_loss_suppressed_no_trainable_owner": 1.0,
+    }
+    assert early_event.grad is None
+    assert early_event_gradients == []
+    torch.testing.assert_close(
+        early_state.grad,
+        torch.tensor(config.training.loss_weights["state_position"]),
+    )
+
+    late_weights, late_metrics = _closed_loop_loss_weights_for_scope(
+        config,
+        active_trainable_scope="state_relation_roi",
+    )
+    late_event = torch.tensor(3.0, requires_grad=True)
+    late_state = torch.tensor(2.0, requires_grad=True)
+    late_total = _weighted_closed_loop_total(
+        {"event": late_event, "state_position": late_state},
+        late_weights,
+    )
+    late_total.backward()
+
+    assert late_metrics == {
+        "effective_event_loss_weight": 0.05,
+        "event_loss_scope_override_active": 1.0,
+        "event_loss_legacy_weight_active": 0.0,
+        "event_loss_suppressed_no_trainable_owner": 0.0,
+    }
+    torch.testing.assert_close(late_event.grad, torch.tensor(0.05))
+
+
+def test_missing_scope_event_override_is_exactly_legacy_weight() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    weights, metrics = _closed_loop_loss_weights_for_scope(
+        config,
+        active_trainable_scope="state_roi",
+    )
+    event = torch.tensor(3.0, requires_grad=True)
+    state = torch.tensor(2.0, requires_grad=True)
+    total = _weighted_closed_loop_total(
+        {"event": event, "state_position": state},
+        weights,
+    )
+    total.backward()
+
+    expected = config.training.loss_weights["event"]
+    assert weights["event"] == expected
+    assert metrics == {
+        "effective_event_loss_weight": expected,
+        "event_loss_scope_override_active": 0.0,
+        "event_loss_legacy_weight_active": 1.0,
+        "event_loss_suppressed_no_trainable_owner": 0.0,
+    }
+    torch.testing.assert_close(event.grad, torch.tensor(expected))
+
+
 def test_global_measurement_trainability_ignores_roi_only_projection() -> None:
     model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
     rgb = model.observation_modules["rgb"]
@@ -1784,6 +1872,24 @@ def test_missing_long_horizon_does_not_renormalize_short_losses() -> None:
         balanced["rollout_position_x"],
         torch.tensor((1.0 * 2.0 + 1.5 * 4.0) / 4.5),
     )
+
+
+def test_event_loss_uses_fixed_global_horizon_denominator() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    details = {
+        # The per-anchor aggregate must not survive as the optimized value once
+        # comparable horizon-specific means are available.
+        "event_collision": torch.tensor(99.0),
+        rollout_horizon_loss_key("event_collision", 0.1): torch.tensor(3.0),
+        rollout_horizon_loss_key("event_collision", 0.25): torch.tensor(6.0),
+    }
+
+    balanced = _globally_weight_horizon_details(details, config, torch.zeros(()))
+    terms = _group_closed_loop_terms(balanced, torch.zeros(()))
+
+    expected = torch.tensor((1.0 * 3.0 + 1.5 * 6.0) / 4.5)
+    torch.testing.assert_close(balanced["event_collision"], expected)
+    torch.testing.assert_close(terms["event"], expected)
 
 
 def test_legacy_axis_horizon_normalization_remains_explicitly_available() -> None:

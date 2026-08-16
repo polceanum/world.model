@@ -144,6 +144,13 @@ _DYNAMICS_LEGACY_DEFAULTS = {
     "pair_applicability_margin_m": 0.05,
     "pair_applicability_gap_temperature_m": 0.025,
     "pair_applicability_velocity_temperature_mps": 0.10,
+    # Historical event outputs used hard +/- constants. Missing is therefore
+    # exactly the disabled semantic; the accompanying values are inert until
+    # a new protocol explicitly enables smooth hazards.
+    "smooth_event_hazard_enabled": False,
+    "event_hazard_gap_temperature_m": 0.02,
+    "event_hazard_velocity_temperature_mps": 0.10,
+    "event_hazard_resolved_logit_floor": 2.0,
 }
 _ASSOCIATION_MIGRATION_DEFAULT_FIELDS = ("minimum_measurement_confidence",)
 _LIFECYCLE_MIGRATION_DEFAULT_FIELDS = (
@@ -169,6 +176,7 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
     ("training", "joint_collision_long_horizon_sampling"): False,
     ("training", "minimum_rollout_age_steps"): 0,
     ("training", "validation_rollout_anchors_per_episode"): None,
+    ("training", "closed_loop_event_loss_weights"): {},
     ("training", "loss_weights", "rollout_nll"): 0.0,
     ("device", "closed_loop_preference"): "same",
     # Checkpoints predating the switch ran the proposal transformer natively

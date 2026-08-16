@@ -3,8 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.46
+**Version:** 1.47
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -6959,10 +6960,13 @@ without allowing an unsupported coordinate to complete or influence it.
 Independent raw history is an explicit semantic opt-in. Historical
 checkpoints retain their configured posterior/measurement blend; a missing
 new flag resolves to that legacy behavior. New grounded protocols enable raw
-history, structured fast depth, an unbounded causal sample age unless a tested
-cutoff is supplied, and a cadence that actually produces the configured
-minimum number of samples. A combined-camera execution test must prove that
-the fast path emits nonzero supported velocity evidence before launch.
+history, an unbounded causal sample age unless a tested cutoff is supplied,
+and a cadence that actually produces the configured minimum number of samples.
+A combined-camera execution test must prove that the fast path emits nonzero
+supported velocity evidence before launch. Structured fast depth was present
+in the initial 1.46 candidate but is disabled by section 221 because component
+completeness is not observable; only independently qualified scale may restore
+that support.
 
 When gravity in `WorldBelief` is known, a causal observer may subtract its
 quadratic displacement before least-squares fitting and estimate velocity at
@@ -7079,6 +7083,132 @@ not a reason to hide perception, lifecycle, or simulator defects behind more
 capacity. No documentation or report may claim full event convergence until
 pair-specific differentiable event calibration passes the normal fixed RGB
 promotion protocol.
+
+---
+
+# Part XXXIX — Causal RGB and event-objective convergence amendment
+
+## 221. A component centre does not prove complete scale
+
+A structured RGB centre remains useful direct lateral evidence, but the radius
+of a prior-conditioned residual-ROI component is not automatically independent
+depth evidence. Occlusion, overlap, truncation, and component merging make the
+fraction of the physical disc represented by that component unobservable from
+the component alone. A syntactically valid radius therefore cannot certify
+component completeness.
+
+The grounded campaign keeps structured fast centres but disables structured
+fast depth. Re-enabling it requires an explicit completeness or visibility
+model and matched multi-scenario evidence. In the qualifying diagnostic, 28
+accepted seed-100000 fast-depth samples had a measured/true projected-radius
+ratio with mean `1.1587` and range `1.026--1.2124`; across seeds
+`100000--100007`, disabling fast depth reduced pooled current position RMSE
+from `0.27719` to `0.13479 m`, with x/y/z
+`0.14815/0.15601/0.42920` to `0.12922/0.13017/0.14443 m`, and raised
+distance-gated precision/recall from `0.70265/0.68704` to
+`0.96628/0.92870`. This rejects the fast-depth setting, not the direct-centre
+abstraction or the general RGB measurement contract.
+
+## 222. Temporal evidence uncertainty must cover observed error
+
+Temporal velocity fitting remains causal, raw-RGB-only, per-axis, and
+gravity-aware, but its covariance must describe empirical residual error rather
+than saturate at a convenient small ceiling. The eight-seed diagnostic measured
+gravity-aware direct-evidence MSE x/y/z of `0.18443/3.82435/0.14449` against
+reported variance `0.22444/0.23707/0.25000`; the y evidence was about `16.13x`
+overconfident. The grounded protocol therefore raises only the temporal
+velocity variance ceiling from `0.25` to `4.0`.
+
+With identical weights, simulator, seeds `100000--100007`, independent raw
+history, gravity fitting, and fast depth disabled, that change improved current
+position x/y/z/all RMSE from
+`0.129215/0.130169/0.144431/0.134785` to
+`0.123896/0.121938/0.143362/0.130092 m`; distance-gated velocity x/y/z/all
+RMSE from `0.456640/1.241236/0.223000/0.774363` to
+`0.454941/1.216228/0.214243/0.759842 m/s`; and precision/recall/F1 from
+`0.966281/0.928704/0.947120` to `0.973025/0.935185/0.953730`. A proposed
+contact-free change-point reset is rejected because it made noisy early resets
+and regressed the calibrated setting.
+
+## 223. Differentiable hazards complement the hard event resolver
+
+Smooth pair and boundary contact/collision hazards are an explicit
+legacy-false checkpoint semantic; the grounded candidate explicitly opts in so
+the event path can be trained and evaluated. They use signed gap, incoming
+normal motion, uncertainty, and learned relation residuals, while the analytic
+contact resolver remains the fail-safe owner of physical jumps. A resolved hard
+event may impose a positive forward logit floor through a straight-through
+expression; it may not remove the hazard gradient. Pair collision supervision
+is gathered in belief order from unique matched object pairs and combined with
+node ownership.
+
+Dense pair geometry must remain differentiable before diagonal masks are
+applied. Projected directional variance is clamped to a dtype-aware positive
+floor before square root so a zero self-pair cannot create the critical
+`0 * sqrt'(0)` NaN. Recursive CPU and active-Aqua MPS gradient tests are
+required. Event losses emitted per forecast horizon use the fixed configured
+horizon-weight denominator, including when early anchors are causally
+ineligible; an eligible late anchor may not silently inherit full unit weight.
+
+This implementation makes event learning technically possible. It is not an
+empirical accuracy promotion: no smooth-hazard checkpoint is accepted until
+the full fixed RGB validation protocol passes.
+
+The protected-weight, same-seed step-zero preflight may establish that the new
+semantic does not damage the inherited physical baseline, but it is not a
+substitute for training. Over validation seeds `100000--100007`, enabling the
+smooth hazard changed current position/velocity RMSE by only
+`-1.95e-7 m`/`+1.94e-8 m/s`; every 0.10--1.00-second position-RMSE delta had
+magnitude at most `1.63e-7 m`, and collision F1 and target coverage were exact.
+Mode logits changed substantially as intended, so this is a non-regressive
+semantic preflight rather than a claim of bit-identical execution.
+
+## 224. Objectives require causal support and a trainable owner
+
+An RGB discovery birth initializes velocity by a hard runtime rule and has no
+incoming trainable prior. Current velocity supervision is therefore supported
+only on matched, active belief slots with `age_steps > 0`, expanded explicitly
+over the three axes. Current correction supervision additionally requires both
+the prior and posterior slot to be active; future correction uses the same
+causal age/support contract. Unsupported velocity or correction terms are
+structurally omitted rather than divided into a loss as zeros. Public physical
+error metrics continue to score newborn estimates and may not be cosmetically
+filtered by the optimization support mask.
+
+Event supervision is likewise stage-owned. In the grounded curriculum its
+effective weight is `0.0` in `state_roi`, where no event/relation owner is
+trainable, and `0.05` in `state_relation_roi`, where relation event decoders
+become trainable. A zero-effective-weight term is omitted from the objective
+graph, not merely multiplied by zero after building an unrelated gradient
+path. Historical configurations without per-scope weights retain their legacy
+event weight.
+
+## 225. Plausible gates remain rejected until they improve the whole protocol
+
+The smooth pair-applicability multiplier remains a tested capability but is
+disabled in the grounded campaign. On the matched seed-100000 diagnostic it
+regressed current position/velocity by `0.56%/0.38%`, regressed position at
+`0.25/0.50/0.75/1.00 s` by `0.75%/0.88%/1.02%/0.77%`, and produced no
+collision-F1 gain. Local physical plausibility is insufficient evidence for a
+runtime or training default; the analytic prior and relation model remain
+ungated unless a broad paired protocol passes.
+
+## 226. The long campaign has repeated formal convergence observations
+
+The grounded campaign remains 9,216 balanced optimizer updates with the
+declared 512-update warmup, 8,192-update cosine decay, 512-update minimum-rate
+tail, and transition from `state_roi` to `state_relation_roi` at update 3,072.
+Fixed-manifest evaluation occurs every 512 updates, yielding 18 post-update
+validations through update 9,216 in addition to the immutable step-zero
+baseline. This cadence is part of the campaign protocol and exact-resume
+semantics.
+
+Training loss movement alone is never convergence. Promotion requires a stable
+sequence of fixed validations and non-regression across current state, every
+x/y/z forecast horizon, velocity, lifecycle, identity, events, uncertainty,
+finite-state, latency, and scenario slices, followed by disjoint validation,
+test, and OOD evaluation. The repairs in this amendment authorize that
+experiment; they do not claim that it has run or converged.
 
 ---
 
