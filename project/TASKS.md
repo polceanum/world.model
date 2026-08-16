@@ -34,6 +34,9 @@
   at numerical-noise scale and collision F1/coverage are exact.
 - [ ] Launch and monitor the long active-Aqua MPS campaign through all 18 fixed
   validations. Do not claim convergence from training loss or a local slice.
+  The `20260816-003531` restricted-agent attempt failed at launchd bootstrap
+  before creating a run; retry from the active Aqua context after explicit
+  approval.
 - [ ] Evaluate the best eligible checkpoint on disjoint validation, test, and
   OOD manifests and promote only after every declared guardrail passes.
 

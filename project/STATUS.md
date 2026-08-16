@@ -111,6 +111,18 @@ repeated non-regression across every scenario, axis, horizon, velocity,
 lifecycle, identity, event, uncertainty, finite-state, and latency guardrail,
 followed by disjoint test and OOD runs.
 
+The first persistent launch attempt used run name
+`20260816-003531-grounded-convergence-spec147-mps`. Its dry-run resolved the
+correct `orpheus` Python, protected checkpoint, Standard/default launchd
+classification, `caffeinate -dimsu`, MPS request, and timestamped logs. The
+actual restricted-agent invocation stopped before training with
+`launchctl bootstrap gui/501` error 5. No run directory, stdout/stderr log,
+checkpoint, or false running state was created; only the temporary launchd
+plist exists under `/private/tmp`. A subsequent active-Aqua escalation requires
+fresh explicit user approval because the Codex escalation quota rejected the
+request. This is an operational launch blocker, not a model/configuration or
+PyTorch failure.
+
 ## Specification 1.46 grounded convergence repair (superseded boundary) — 2026-08-16
 
 The pre-training technical audit is complete and the authoritative contract is
