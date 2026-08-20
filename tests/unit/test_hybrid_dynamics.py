@@ -891,6 +891,26 @@ def test_positive_valid_learned_edge_still_increases_collision_logit() -> None:
     )
 
 
+def test_smooth_event_conjunction_matches_stable_cpu_logaddexp_at_extreme_logits() -> None:
+    first = torch.tensor(
+        [-1.0e5, -500.0, -100.0, -90.0, -1.0, 0.0, 1.0, 90.0, 100.0, 1.0e5],
+        requires_grad=True,
+    )
+    second = torch.tensor(
+        [1.0e5, 100.0, -90.0, -100.0, 1.0, 0.0, -1.0, 100.0, 90.0, -1.0e5],
+        requires_grad=True,
+    )
+
+    actual = EventModel._smooth_conjunction(first, second)
+    expected = -torch.logaddexp(-first.detach(), -second.detach())
+
+    assert torch.isfinite(actual).all()
+    torch.testing.assert_close(actual, expected)
+    actual.sum().backward()
+    assert first.grad is not None and torch.isfinite(first.grad).all()
+    assert second.grad is not None and torch.isfinite(second.grad).all()
+
+
 def test_smooth_event_hazard_uses_scale_and_learned_pair_logit_coherently() -> None:
     _, objects = _two_objects()
     # Keep a small positive surface gap, so the hard resolver must not jump.
@@ -1079,6 +1099,43 @@ def test_smooth_pair_and_boundary_event_logits_survive_interval_rollout() -> Non
         step.event_logits[..., MotionMode.COLLISION],
         combined,
     )
+
+
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(),
+    reason="requires an active Aqua MPS device",
+)
+def test_smooth_event_conjunction_and_far_pair_remain_finite_on_mps() -> None:
+    first_cpu = torch.tensor([-1.0e5, -500.0, -100.0, -90.0, 90.0, 100.0, 500.0, 1.0e5])
+    second_cpu = torch.tensor([1.0e5, 100.0, -90.0, -100.0, 100.0, 90.0, -1.0e5, 500.0])
+    expected = -torch.logaddexp(-first_cpu, -second_cpu)
+    first = first_cpu.to("mps").requires_grad_()
+    second = second_cpu.to("mps").requires_grad_()
+    conjunction = EventModel._smooth_conjunction(first, second)
+
+    _, cpu_objects = _two_objects()
+    source = cpu_objects.to("mps")
+    position = source.position.detach().clone()
+    position[0, 0, 0] = -2.0
+    position[0, 1, 0] = 2.0
+    position.requires_grad_()
+    fast_log_variance = source.fast_log_variance.detach().clone().requires_grad_()
+    objects = replace(
+        source,
+        position=position,
+        fast_log_variance=fast_log_variance,
+    )
+    result = EventModel(smooth_hazard_enabled=True).to("mps")(objects)
+
+    assert torch.isfinite(conjunction).all().cpu().item()
+    torch.testing.assert_close(conjunction.cpu(), expected)
+    assert torch.isfinite(result.pair_event_logits).all().cpu().item()
+    assert torch.isfinite(result.event_logits).all().cpu().item()
+    loss = conjunction.sum() + result.pair_event_logits[0, 0, 1].sum()
+    loss.backward()
+    for gradient in (first.grad, second.grad, position.grad, fast_log_variance.grad):
+        assert gradient is not None
+        assert torch.isfinite(gradient).all().cpu().item()
 
 
 @pytest.mark.skipif(

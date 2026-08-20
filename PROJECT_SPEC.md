@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.47
+**Version:** 1.48
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -7209,6 +7209,53 @@ x/y/z forecast horizon, velocity, lifecycle, identity, events, uncertainty,
 finite-state, latency, and scenario slices, followed by disjoint validation,
 test, and OOD evaluation. The repairs in this amendment authorize that
 experiment; they do not claim that it has run or converged.
+
+---
+
+# Part XL — Production MPS event-hazard numerical-integrity amendment
+
+## 227. Smooth event conjunction uses an algebraically stable device form
+
+The smooth collision hazard combines two logit-space conditions with the
+soft minimum
+
+\[
+-\operatorname{logaddexp}(-a,-b)
+=
+\min(a,b)-\operatorname{softplus}(-|a-b|).
+\]
+
+These expressions are algebraically identical over real inputs, but backend
+primitive behavior is part of production numerical correctness. On the
+user-provided custom PyTorch `2.9.0a0+gitcbe1a35` build in an active Aqua MPS
+session, `torch.logaddexp` can overflow for finite inputs whose magnitudes are
+only around `90`. A distant valid object pair then turns a finite negative
+collision hazard into `-Inf`, which contaminates interval
+`pair_event_logits` and correctly fails trajectory validation.
+
+The production event path therefore evaluates the equivalent
+`minimum-softplus` form. This is not a clamp, learned gate, CPU fallback, or
+change to the event model: it preserves the mathematical hazard, hard analytic
+contact resolver, straight-through resolved-event floor, gradients, and all
+checkpoint tensors. Extreme-logit forward/backward tests must cover CPU and
+active-Aqua MPS, and the complete production validation episode must remain
+finite through every RGB frame and rollout anchor before another sustained
+campaign is launched.
+
+The first specification-1.47 campaign at
+`runs/20260820-213418-grounded-convergence-spec147-mps` is retained as failure
+evidence. It stopped before any optimizer update during the first incumbent
+validation, at `0/32` completed episodes, with
+`trajectory auxiliary pair_event_logits contains NaN or Inf`. After the
+algebraic repair, the exact first validation episode (seed `100000`, 40 frames,
+8 rollout anchors) completes on MPS with finite loss
+`2.279386520385742` and 307 finite metrics in approximately 137.4 seconds.
+This one-episode reproduction proves the localized repair only. It is not the
+complete 32-episode initialization validation, a fixed-selector result, a
+campaign relaunch, or convergence evidence. The frozen specification-1.48
+repository gate passes 960 tests with 14 expected non-Aqua MPS-context skips;
+lint, format, compile, and diff checks pass. The 9,216-update campaign must
+start in a fresh timestamped run from that committed source.
 
 ---
 

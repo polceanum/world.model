@@ -1,5 +1,40 @@
 # Tasks
 
+## Production MPS event-hazard repair — specification 1.48
+
+- [x] Retain
+  `runs/20260820-213418-grounded-convergence-spec147-mps` as terminal failure
+  evidence: initialization validation stopped at `0/32` before any optimizer
+  update because trajectory `pair_event_logits` contained a nonfinite value.
+- [x] Reproduce the first failing seed and localize the fault below the model:
+  custom PyTorch `2.9.0a0+gitcbe1a35` in active-Aqua MPS overflows
+  `torch.logaddexp` for ordinary finite logits with magnitude around `90`.
+- [x] Replace `-logaddexp(-a, -b)` in the production smooth conjunction with
+  the algebraically identical stable form
+  `minimum(a, b) - softplus(-abs(a - b))`, preserving the hard resolver,
+  event semantics, gradients, devices, and checkpoint tensors.
+- [x] Cover extreme logits and a distant valid pair in CPU and active-Aqua MPS
+  forward/backward tests. The complete hybrid unit file is `33 passed,
+  3 MPS-context skips`; the two focused active-Aqua MPS regressions pass.
+- [x] Replay the exact first production validation episode on MPS: seed
+  `100000`, 40 frames, and 8 rollout anchors complete with finite loss
+  `2.279386520385742` and 307 finite metrics in approximately 137.4 seconds.
+- [x] Run the specification-version checkpoint regression under `orpheus`;
+  `1 passed in 0.59s`.
+- [x] Run the focused integration, full repository, lint, formatting, compile,
+  and diff gates. The frozen result is `960 passed, 14 skipped`; do not infer
+  `32/32` validation or campaign health from the one-episode replay or tests.
+- [x] Commit and push the coherent specification-1.48 numerical repair before
+  launching the source-frozen successor campaign.
+- [ ] Launch a fresh timestamped 9,216-update active-Aqua MPS campaign after
+  the gates pass; never resume or reuse the failed specification-1.47 run.
+  Confirm the complete `32/32` step-zero validation before reporting the first
+  optimizer update, then monitor all 18 fixed post-update validations.
+- [ ] Evaluate any eligible incumbent on disjoint validation, test, and OOD
+  manifests and promote only if every scenario/axis/horizon, velocity,
+  lifecycle, identity, event, uncertainty, finite-state, and latency guardrail
+  passes.
+
 ## Causal objective and event repair — specification 1.47
 
 - [x] Trace structured fast ROI depth to source pixels and reject it from the

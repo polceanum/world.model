@@ -4083,3 +4083,39 @@
   matched regression. The longer experiment now has enough predeclared
   observations to distinguish convergence from noisy batch wobble, but no
   convergence is claimed before those evaluations exist.
+
+## ADR-148 — Use an algebraically stable smooth conjunction on production MPS
+
+- **Date:** 2026-08-20
+- **Status:** accepted numerical repair; full campaign qualification pending
+- **Context:** The first active-Aqua specification-1.47 campaign at
+  `runs/20260820-213418-grounded-convergence-spec147-mps` failed before any
+  optimizer update in its first incumbent validation (`0/32`) because
+  trajectory `pair_event_logits` contained NaN or Inf. Exact seed-100000 replay
+  showed that all model inputs and learned outputs were finite until the
+  custom PyTorch `2.9.0a0+gitcbe1a35` MPS `torch.logaddexp` primitive
+  overflowed for finite inputs with magnitude around `90`. The smooth
+  collision conjunction `-logaddexp(-a, -b)` consequently became `-Inf` for a
+  distant valid pair. This was a backend numerical defect, not training
+  collapse, corrupt weights, or an invalid uncertainty state.
+- **Decision:** Evaluate the same soft minimum as
+  `minimum(a, b) - softplus(-abs(a - b))`. The form is algebraically identical
+  over real inputs and retains the existing hazard, gradients,
+  straight-through resolved-event floor, hard analytic jump fail-safe,
+  devices, tensor shapes, and checkpoint contents. Treat forward and backward
+  finiteness at extreme logits as a production device contract. Retain the
+  failed run as terminal evidence and start the repaired 9,216-update campaign
+  in a fresh timestamped directory rather than resume or reuse it.
+- **Alternatives considered:** clamp the hazard logits; disable the new smooth
+  event semantic; move event evaluation to CPU; ignore or sanitize the
+  nonfinite auxiliary after rollout; or attribute the failure to model
+  instability and change weights or capacity.
+- **Consequences:** CPU hybrid tests pass `33` cases with `3` Aqua-MPS skips,
+  and the two focused active-Aqua MPS regressions pass. The exact first
+  production episode (seed `100000`, 40 frames, 8 rollout anchors) completes
+  on MPS with finite loss `2.279386520385742` and 307 finite metrics in about
+  137.4 seconds. The frozen repository suite passes `960` tests with `14`
+  expected non-Aqua MPS-context skips; lint, format, compile, and diff checks
+  pass. This qualifies only the localized repair and repository integrity.
+  Complete `32/32` initialization validation, a campaign relaunch, selector
+  behavior, prediction accuracy, and convergence remain unproved.

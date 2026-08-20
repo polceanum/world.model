@@ -6,6 +6,7 @@ import math
 from dataclasses import dataclass, replace
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
 
 from world_model.belief import NUM_MOTION_MODES, MotionMode, ObjectBeliefTensor
@@ -321,7 +322,11 @@ class EventModel(nn.Module):
     def _smooth_conjunction(first: Tensor, second: Tensor) -> Tensor:
         """A finite differentiable logit-space approximation to ``min``/AND."""
 
-        return -torch.logaddexp(-first, -second)
+        # Algebraically this is ``-logaddexp(-first, -second)``.  Keep the
+        # explicit stable form because the custom MPS build's logaddexp kernel
+        # overflows for ordinary finite inputs above roughly 88, turning a
+        # distant pair's strong negative contact hazard into ``-inf``.
+        return torch.minimum(first, second) - F.softplus(-torch.abs(first - second))
 
     def _learned_pair_residual(
         self,

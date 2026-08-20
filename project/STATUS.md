@@ -1,5 +1,85 @@
 # Project status
 
+## Specification 1.48 production MPS event-hazard repair — 2026-08-20
+
+The first active-Aqua grounded campaign launched successfully from the frozen
+specification-1.47 source into
+`runs/20260820-213418-grounded-convergence-spec147-mps`, using the existing
+user-provided `orpheus` PyTorch `2.9.0a0+gitcbe1a35` build on the Intel i9
+host with MPS built and available. It did not reach training. The incumbent
+step-zero validation failed before any optimizer update and before any of its
+32 episodes completed (`0/32`) with:
+
+```text
+ValueError: trajectory auxiliary pair_event_logits contains NaN or Inf
+```
+
+The terminal `training_failure.json`, `training_state.json`, and
+`training_progress.json` remain under that run as truthful failure evidence.
+The failed directory is not resumable convergence evidence and will not be
+reused for the repaired campaign.
+
+Exact active-Aqua replay localized the first nonfinite value to the smooth
+collision conjunction for an ordinary distant valid pair. The model inputs,
+uncertainty, learned relation outputs, and hard resolver were finite. On this
+custom PyTorch 2.9 MPS build, `torch.logaddexp` itself overflows for finite
+inputs with magnitude around `90`, so the mathematically stable expression
+`-logaddexp(-a, -b)` produced `-Inf`. The production path now evaluates its
+algebraically identical form:
+
+```text
+minimum(a, b) - softplus(-abs(a - b))
+```
+
+This changes no event semantics, checkpoint tensors, learned gate, hard
+analytic jump, or CPU/MPS placement. It removes the defective backend
+primitive from the production hazard and retains finite gradients.
+
+Verification completed so far in the unchanged `orpheus` environment:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_hybrid_dynamics.py
+# 33 passed, 3 skipped; the three skips require an active Aqua MPS device
+
+launchctl asuser 501 /bin/zsh -lc 'cd /Users/mike/Work/world.model && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/local/Caskroom/miniforge/base/envs/orpheus/bin/python -m pytest -q tests/unit/test_hybrid_dynamics.py::test_smooth_event_conjunction_and_far_pair_remain_finite_on_mps tests/unit/test_hybrid_dynamics.py::test_smooth_event_hazard_is_finite_and_differentiable_on_mps'
+# 2 passed
+
+launchctl asuser 501 /bin/zsh -lc 'cd /Users/mike/Work/world.model && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/local/Caskroom/miniforge/base/envs/orpheus/bin/python /private/tmp/orpheus_pair_event_nonfinite_replay.py'
+# seed 100000; 40 frames; 8 rollout anchors; finite loss
+# 2.279386520385742; 307 finite metrics; approximately 137.4 s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/integration/test_checkpoint_roundtrip.py::test_checkpoint_specification_version_matches_authoritative_contract
+# 1 passed in 0.59s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/unit/test_analytic_dynamics.py tests/unit/test_hybrid_dynamics.py tests/unit/test_multirate_dynamics.py tests/unit/test_interaction_applicability.py tests/unit/test_training_losses.py tests/unit/test_training_objective_regressions.py tests/unit/test_training_schedule.py tests/unit/test_event_window_scoring.py tests/unit/test_config.py tests/integration/test_checkpoint_roundtrip.py tests/integration/test_mps_attention_pilot_smoke.py
+# 445 passed, 7 skipped in 43.68 s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q
+# 960 passed, 14 skipped in 391.40 s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff check .
+# All checks passed!
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus ruff format --check .
+# 214 files already formatted
+
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-spec148-pycache PYTHONPATH=. conda run -n orpheus python -m compileall -q world_model tests train.py evaluate.py demo.py monitor.py
+# passed
+
+git diff --check
+# passed
+```
+
+This exact one-episode production replay proves the localized numerical repair;
+it is not a completed `32/32` initialization validation, campaign relaunch,
+selector result, accuracy promotion, or convergence claim. The focused,
+version, full-suite, lint, formatting, compile, and diff gates are now green.
+The next concrete action is to commit and push the coherent repair, then launch
+a fresh timestamped 9,216-update active-Aqua MPS campaign. Its step-zero
+validation must complete all 32 episodes before the first optimizer update,
+after which the predeclared 18 fixed post-update validations and disjoint
+test/OOD gates remain authoritative.
+
 ## Specification 1.47 causal objective and event repair — 2026-08-16
 
 The specification-1.46 grounded repair was committed and pushed to `main` as

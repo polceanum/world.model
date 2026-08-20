@@ -2,6 +2,33 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-20 production MPS event-hazard numerical repair
+
+- Advanced the authoritative contract to specification 1.48 after the first
+  active-Aqua specification-1.47 campaign failed before any optimizer update
+  in incumbent validation (`0/32`). Retained
+  `runs/20260820-213418-grounded-convergence-spec147-mps` and its terminal
+  `pair_event_logits` nonfinite artifacts as truthful failure evidence.
+- Localized the failure to the custom PyTorch `2.9.0a0+gitcbe1a35` MPS
+  `torch.logaddexp` primitive, which overflowed on ordinary finite logits with
+  magnitude around `90`; model inputs, learned outputs, and the hard contact
+  resolver remained finite.
+- Replaced the production smooth-event conjunction
+  `-logaddexp(-a, -b)` with its algebraically identical stable form
+  `minimum(a, b) - softplus(-abs(a - b))`. Event semantics, gradients,
+  checkpoint tensors, hard analytic jumps, and device placement are unchanged.
+- Added CPU and active-Aqua MPS extreme-logit/far-pair regressions. The hybrid
+  unit file is `33 passed, 3 MPS-context skips`; both focused active-Aqua MPS
+  tests pass. The exact seed-100000 production episode completes 40 frames and
+  8 rollout anchors with finite loss `2.279386520385742` and 307 finite metrics
+  in approximately 137.4 seconds.
+- The broader focused gate is `445 passed, 7 skipped`; the frozen repository
+  suite is `960 passed, 14 expected non-Aqua MPS-context skips in 391.40 s`.
+  Ruff lint/format, compile, and diff checks pass.
+- No complete 32-episode initialization validation, campaign relaunch,
+  selector result, accuracy promotion, or convergence is claimed. The repaired
+  9,216-update campaign will use a fresh timestamped run from committed source.
+
 ### 2026-08-16 causal RGB objective and event repair
 
 - Advanced the authoritative contract to specification 1.47. Recorded that the
