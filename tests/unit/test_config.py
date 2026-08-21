@@ -441,6 +441,36 @@ def test_scope_owned_event_weights_roundtrip_as_typed_configuration(tmp_path: Pa
     assert restored.to_dict() == config.to_dict()
 
 
+def test_prior_future_correction_rollout_is_legacy_true_and_roundtrips(
+    tmp_path: Path,
+) -> None:
+    legacy = load_config(CONFIG_DIR / "default.yaml")
+    disabled = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=["training.closed_loop_prior_future_correction_enabled=false"],
+    )
+    resolved_path = tmp_path / "no-prior-correction-rollout.yaml"
+
+    save_resolved_config(disabled, resolved_path)
+    restored = load_config(resolved_path)
+
+    assert legacy.training.closed_loop_prior_future_correction_enabled
+    assert not restored.training.closed_loop_prior_future_correction_enabled
+    assert restored.to_dict() == disabled.to_dict()
+
+
+@pytest.mark.parametrize("value", ["0", "1", "null", "not-a-boolean"])
+def test_prior_future_correction_rollout_requires_boolean(value: str) -> None:
+    with pytest.raises(
+        (TypeError, ValueError),
+        match="closed_loop_prior_future_correction_enabled|boolean",
+    ):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.closed_loop_prior_future_correction_enabled={value}"],
+        )
+
+
 @pytest.mark.parametrize(
     "value",
     ["-1.0", ".nan", "true", "not-a-number"],

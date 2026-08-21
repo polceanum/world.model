@@ -430,6 +430,12 @@ class TrainingConfig:
     # frame in a TBPTT window. Long-running profiles may bound the expensive
     # recursive rollouts while still ingesting and supervising every frame.
     rollout_anchors_per_window: int | None = None
+    # Historical causal training builds one detached prior rollout at every
+    # scored post-initial anchor so it can optimize future correction
+    # improvement.  This is an explicit objective/compute protocol: disabling
+    # it retains current-correction and posterior-rollout supervision while
+    # omitting the extra prior rollout and every future-correction loss term.
+    closed_loop_prior_future_correction_enabled: bool = True
     # Trend validation still ingests and scores every current frame, but may
     # use a deterministic spread of forecast anchors. Full promotion
     # evaluation remains a separate, larger manifest.
@@ -1507,6 +1513,11 @@ class OrpheusConfig:
             and self.training.rollout_anchors_per_window <= 0
         ):
             raise ValueError("training.rollout_anchors_per_window must be positive or null")
+        if not isinstance(
+            self.training.closed_loop_prior_future_correction_enabled,
+            bool,
+        ):
+            raise ValueError("training.closed_loop_prior_future_correction_enabled must be boolean")
         if (
             self.training.validation_rollout_anchors_per_episode is not None
             and self.training.validation_rollout_anchors_per_episode <= 0

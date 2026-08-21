@@ -10,18 +10,21 @@ from torch import Tensor, nn
 
 import world_model.training.loop as training_loop
 from world_model.datasets import collate_episodes
-from world_model.observations import MeasurementSet
+from world_model.observations import MeasurementSet, SensorContext
 from world_model.observations.rgb.losses import rgb_measurement_losses
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
 from world_model.training.loop import (
     _fast_pair_metrics,
+    _weighted_measurement_total,
+    make_rgb_packet,
     physical_validation_metrics,
     pretrain_rgb_measurements,
     run_closed_loop_batch,
     supervised_measurement_losses,
     supervised_slot_measurement_losses,
 )
+from world_model.training.trainer import set_closed_loop_trainable_scope
 from world_model.utils.config import load_config
 
 
@@ -761,6 +764,193 @@ def test_closed_loop_supervises_every_frame_with_a_usable_prior() -> None:
         (result.metrics["measurement_global"] + fast_weight * result.metrics["measurement_fast"])
         / (1.0 + fast_weight)
     )
+
+
+def test_state_roi_measurement_backward_is_perception_local(
+    monkeypatch: Any,
+) -> None:
+    """The auxiliary loss must not own the live physical-state graph."""
+
+    config = _closed_loop_config()
+    batch = collate_episodes([generate_episode(config, seed=7)])
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    set_closed_loop_trainable_scope(model, scope="state_roi")
+    monkeypatch.setattr(
+        training_loop,
+        "_PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M",
+        10.0,
+    )
+    live_prior_positions: list[Tensor] = []
+    original_prepare = model.prepare_propagation
+
+    def record_live_prior(timestamp: float) -> Any:
+        prepared = original_prepare(timestamp)
+        position = prepared.prior.objects.position
+        if position.requires_grad:
+            position.retain_grad()
+            live_prior_positions.append(position)
+        return prepared
+
+    monkeypatch.setattr(model, "prepare_propagation", record_live_prior)
+    result = run_closed_loop_batch(
+        model,
+        batch,
+        config,
+        window_steps=4,
+        apply_perturbations=False,
+        include_measurement_supervision=True,
+        rollout_anchors_per_window=1,
+        compute_future_correction=False,
+        active_trainable_scope="state_roi",
+    )
+
+    assert "measurement" in result.loss_terms
+    assert result.metrics["fast_supervised_frames"] > 0.0
+    model.zero_grad(set_to_none=True)
+    result.loss_terms["measurement"].backward(retain_graph=True)
+
+    rgb = model.observation_modules["rgb"]
+    for component in (
+        rgb.backbone.stages[0],
+        rgb.backbone.stages[1],
+        rgb.backbone.fast_projection,
+        rgb.roi_updater,
+    ):
+        gradients = [
+            parameter.grad
+            for parameter in component.parameters()
+            if parameter.requires_grad and parameter.grad is not None
+        ]
+        assert gradients
+        assert all(torch.isfinite(gradient).all() for gradient in gradients)
+        assert any(bool(torch.count_nonzero(gradient)) for gradient in gradients)
+
+    assert live_prior_positions
+    assert all(position.grad is None for position in live_prior_positions)
+    physical_modules: list[nn.Module] = [model.updater, model.dynamics]
+    if model.identifier is not None:
+        physical_modules.append(model.identifier)
+    assert all(
+        parameter.grad is None
+        for component in physical_modules
+        for parameter in component.parameters()
+    )
+
+    # The isolation is auxiliary-only: ordinary posterior supervision still
+    # reaches the live runtime and its trainable fast-state corrector.
+    model.zero_grad(set_to_none=True)
+    result.loss_terms["state"].backward()
+    updater_gradients = [
+        parameter.grad
+        for parameter in model.updater.parameters()
+        if parameter.requires_grad and parameter.grad is not None
+    ]
+    assert updater_gradients
+    assert all(torch.isfinite(gradient).all() for gradient in updater_gradients)
+    assert any(bool(torch.count_nonzero(gradient)) for gradient in updater_gradients)
+    assert any(position.grad is not None for position in live_prior_positions)
+
+
+def test_detached_fast_auxiliary_preserves_loss_and_perception_gradients() -> None:
+    """Detaching the conditioning belief changes ownership, not branch math."""
+
+    config = _closed_loop_config()
+    batch = collate_episodes([generate_episode(config, seed=7)])
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    set_closed_loop_trainable_scope(model, scope="state_roi")
+    model.eval()
+    first_packet = make_rgb_packet(batch, 0)
+    second_packet = make_rgb_packet(batch, 1)
+    with torch.no_grad():
+        model.ingest(first_packet)
+        assert model.belief is not None
+        elapsed = second_packet.timestamp - float(model.belief.timestamp[0])
+        base_prior = model.dynamics.predict(model.belief, elapsed)
+
+    leaf_position = base_prior.objects.position.detach().clone().requires_grad_(True)
+    live_prior = base_prior.replace(
+        objects=base_prior.objects.replace(position=leaf_position),
+    )
+    detached_prior = live_prior.detach().clone()
+    context = SensorContext(
+        sensor_id=second_packet.sensor_id,
+        timestamp=second_packet.timestamp,
+        calibration=second_packet.calibration,
+        frame_id=second_packet.frame_id,
+        image_size=second_packet.metadata["image_size"],
+        metadata=second_packet.metadata,
+    )
+    module = model.observation_modules["rgb"]
+
+    def auxiliary_loss(prior: Any) -> Tensor:
+        predicted = module.project(prior, context)
+        measured, _ = module.encode_measurements(
+            [second_packet],
+            prior,
+            predicted,
+            None,
+        )
+        matched = prior.objects.active & predicted.valid_mask
+        target_indices = torch.where(
+            matched,
+            torch.zeros_like(prior.objects.object_id),
+            torch.full_like(prior.objects.object_id, -1),
+        )
+        losses = supervised_slot_measurement_losses(
+            module,
+            measured,
+            batch,
+            frame_index=1,
+            target_indices=target_indices,
+            matched_slots=matched,
+            roi_bounds=predicted.rois,
+        )
+        return _weighted_measurement_total(
+            losses,
+            config.training.measurement_loss_weights,
+        )
+
+    live_loss = auxiliary_loss(live_prior)
+    detached_loss = auxiliary_loss(detached_prior)
+    perception_parameters = tuple(
+        parameter
+        for component in (
+            module.backbone.stages[0],
+            module.backbone.stages[1],
+            module.backbone.fast_projection,
+            module.roi_updater,
+        )
+        for parameter in component.parameters()
+        if parameter.requires_grad
+    )
+    live_gradients = torch.autograd.grad(
+        live_loss,
+        (*perception_parameters, leaf_position),
+        allow_unused=True,
+    )
+    detached_gradients = torch.autograd.grad(
+        detached_loss,
+        perception_parameters,
+        allow_unused=True,
+    )
+
+    torch.testing.assert_close(detached_loss, live_loss)
+    for live_gradient, detached_gradient in zip(
+        live_gradients[:-1],
+        detached_gradients,
+        strict=True,
+    ):
+        assert (live_gradient is None) == (detached_gradient is None)
+        if live_gradient is not None and detached_gradient is not None:
+            torch.testing.assert_close(detached_gradient, live_gradient)
+    assert any(
+        gradient is not None and bool(torch.count_nonzero(gradient))
+        for gradient in detached_gradients
+    )
+    prior_gradient = live_gradients[-1]
+    assert prior_gradient is not None
+    assert torch.isfinite(prior_gradient).all()
+    assert bool(torch.count_nonzero(prior_gradient))
 
 
 def test_mid_episode_window_burns_in_the_causal_prefix() -> None:

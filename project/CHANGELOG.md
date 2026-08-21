@@ -2,6 +2,65 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-21 objective ownership, zero-output execution, and live training progress
+
+- Advanced the authoritative contract to specification 1.50. Fast-ROI
+  auxiliary supervision now consumes a detached cloned prior and detached
+  modality cache, preventing perception-local geometry/existence/colour/NLL
+  losses from updating the belief updater, identifier, or dynamics through
+  prior conditioning. The ordinary prepared propagation and runtime cache stay
+  live for the actual online ingest and posterior physical objectives.
+- Resolved scope-specific event ownership before trajectory construction. An
+  exact-zero effective event weight now omits pair-event rollout auxiliaries
+  and collision BCE from the objective graph while preserving detached
+  physical event counts and confusion metrics.
+- Added protocol-bound
+  `training.closed_loop_prior_future_correction_enabled`. Legacy/default
+  behavior remains `true`, and the grounded accuracy profile retains `true`
+  because explicit prior-versus-posterior future improvement is a real
+  correction hinge. `false` remains available for matched ablations and omits
+  only that extra prior rollout and its loss terms; current correction,
+  posterior ingestion, and posterior state/rollout supervision remain.
+- The matched exact-cadence CPU `state_roi` benchmark measured hinge-enabled
+  versus disabled recursive compute as `16.940 s` versus `15.316 s`
+  (`~10.6%`), and total time including data as `32.360 s` versus `30.411 s`
+  (`~6.4%`). The modest cost supports retaining the accuracy objective; this
+  ephemeral one-update timing is not accuracy or convergence evidence.
+- Added a semantics-preserving exact-zero attention bypass. Frozen zero typed
+  decoders return the original structured interaction without token/
+  Transformer execution; trainable decoders in grad mode, nonzero decoders,
+  and training dropout fail open. Ownership-aware hooks no longer clip live
+  upstream gradients when attention has no trainable semantic output, and
+  unused functional-node graph bookkeeping is omitted.
+- Added atomic live optimizer progress at `data`, `forward`, `backward`, and
+  `optimizer` stages with update/draw/retry counters and timings. The read-only
+  monitor now renders those stages and ignores stale running progress whose PID
+  conflicts with the held trainer lock.
+- Measured recursive forward/backward compute approximately `3.5--3.9x`
+  faster on CPU than active-Aqua MPS for matched production windows on this
+  Intel/custom-PyTorch host. The grounded profile retains MPS measurement/
+  evaluation support but selects CPU for closed-loop optimization. Exact
+  learned-effect cadence remains enabled because a semantically different
+  `0.05 s` hold gave only about a `1.16x` late-scope CPU compute speedup.
+- Completed a repaired 32-seed CPU step-zero diagnostic in `261.963382 s` at
+  `runs/20260821-050232-repaired-cpu-validation-32/qualification.json`.
+  Selection score is `0.2654622904`, current position/velocity RMSE is
+  `0.1580636715 m`/`0.8310918938 m/s`, and 1-second position RMSE is
+  `0.3234116180 m`. This diagnostic used the disabled future-correction path
+  and is finite execution evidence only; no trained gain, promotion, or
+  convergence is claimed.
+- Completed the disabled-path CPU trainer smoke at
+  `runs/20260821-050816-repaired-hybrid-trainer-smoke-8`: eight balanced
+  updates/64 episode draws applied without skips, terminal state is complete,
+  and durable checkpoints/progress/summary exist. It validates trainer and
+  heartbeat mechanics only and does not support disabling the correction hinge
+  in the accuracy campaign.
+- Focused verification is `489 passed, 3 expected non-Aqua MPS-context skips
+  in 57.50s`. The final repository gate is `1013 passed, 16 skipped in
+  405.36s`; Ruff check and format-check pass with 217 files already formatted,
+  and compileall plus `git diff --check` pass.
+  Commit/push and the retained-hinge sustained campaign remain pending.
+
 ### 2026-08-21 dynamics synchronization and validation-anchor batching
 
 - Advanced the authoritative contract to specification 1.49. Composite

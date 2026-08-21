@@ -1,5 +1,139 @@
 # Design decisions
 
+## ADR-153 — Run grounded recursive optimization on the measured faster CPU
+
+- **Date:** 2026-08-21
+- **Status:** accepted for the grounded profile; disabled-path trainer smoke
+  complete and retained-hinge sustained campaign pending
+- **Context:** The first full active-Aqua MPS launch was numerically healthy,
+  but step-zero validation took `5165.944729` seconds and eight causal updates
+  took about `1699` seconds. A matched same-window benchmark after removing
+  unowned graph work measured recursive forward/backward compute approximately
+  `3.5--3.9x` faster on CPU than the user-provided custom MPS build. The task is
+  branch-heavy recursive autograd over small typed states, so MPS availability
+  did not translate to better throughput. A `0.05 s` learned-effect hold gave
+  only about a `1.16x` late-scope CPU compute speedup and changed forward
+  semantics.
+- **Decision:** Keep `device.preference: mps` and the supported hybrid RGB/MPS
+  execution policy, but set `device.closed_loop_preference: cpu` in
+  `configs/grounded_convergence_mps.yaml`. Keep
+  `learned_effect_interval_seconds: null`, so learned relation effects execute
+  at exact microstep cadence. Treat both device placement and cadence as
+  resolved protocol and exact-resume semantics. Do not alter or replace the
+  user's custom PyTorch build.
+- **Alternatives considered:** insist on MPS because it is available; reduce
+  the validation manifest or horizon support; enable the semantically
+  non-identical multi-rate hold from throughput evidence alone; change the
+  model architecture before removing unowned graph work; reinstall PyTorch.
+- **Consequences:** The repaired CPU fixed 32-seed diagnostic completes in
+  `261.963382` seconds and remains finite with selection score `0.2654622904`,
+  close to the prior MPS step-zero score `0.2654857751`. This is execution and
+  same-manifest accuracy evidence, not bitwise device parity, a trained gain,
+  or convergence. The subsequent eight-update CPU trainer smoke used the
+  disabled future-correction ablation and qualifies execution only. The full
+  repository, lint, format, compile, and diff gates pass. Committed source,
+  retained-hinge campaign execution, and the complete sustained selection
+  protocol remain mandatory.
+
+## ADR-152 — Expose every long causal update through an atomic stage heartbeat
+
+- **Date:** 2026-08-21
+- **Status:** accepted and implemented; disabled-path trainer exercise complete
+  and retained-hinge sustained-run exercise pending
+- **Context:** Training metrics are intentionally emitted sparsely. During the
+  first MPS campaign this made a healthy sequence of long data, forward, and
+  backward stages look stalled, and the first cadence row represented eight
+  completed updates rather than one extremely slow update. Existing
+  validation progress could also outlive its PID and mislabel a later trainer.
+- **Decision:** Atomically overwrite `training_progress.json` at the `data`,
+  `forward`, `backward`, and `optimizer` boundaries. Record PID, completed and
+  attempted updates, target, absolute data-draw index, retry count, phase and
+  scope, elapsed/stage/last-update timings, and applied-update state. Keep loss
+  and physical trends in sparse `metrics.jsonl`. The read-only monitor accepts
+  running progress only when the trainer lock is held and the recorded PID is
+  compatible with its owner; otherwise it warns and ignores the stale running
+  heartbeat.
+- **Alternatives considered:** log a complete metrics row at every stage;
+  reduce the monitor interval; infer progress only from CPU utilization;
+  deserialize checkpoints from the monitor; trust the newest progress file
+  without checking its process identity.
+- **Consequences:** Operators can distinguish data generation, forward,
+  backward, optimizer, retry, and completed-update time without changing
+  checkpoint-selection evidence or consuming accelerator memory. Focused
+  monitor/schedule tests pass. The completed eight-update disabled-path CPU
+  smoke exercised the artifact through real applied updates; the retained-
+  hinge sustained campaign remains outstanding.
+
+## ADR-151 — Elide exact-zero attention only when semantics and ownership prove identity
+
+- **Date:** 2026-08-21
+- **Status:** accepted, implemented, and repository-gated
+- **Context:** The protected checkpoint's typed attention decoders are exact
+  zero in the early `state_roi` phase, yet recursive dynamics executed the
+  complete token/attention/SwiGLU stack 138 times per draw. The frozen stack
+  could not change the forward result or learn, while configured typed-output
+  hooks still intercepted and potentially clipped upstream gradients owned by
+  the belief/perception path. Functional-node bookkeeping also retained graph
+  tensors despite having no owner.
+- **Decision:** Prove exact-zero decoder state from finite values and cache the
+  proof against parameter identity/version, `requires_grad`, and grad mode.
+  Return the original structured interaction directly only when the output is
+  exact zero and no trainable semantic decoder owner can consume a gradient.
+  Fail open for a trainable decoder under autograd, every nonzero decoder, and
+  training dropout. Permit no-grad/inference bypass of an exact-zero decoder
+  even if it is declared trainable. Install typed-output hooks only for a
+  semantic output with a trainable attention owner, and retain node-activity
+  records only for a configured objective or trainable node output.
+- **Alternatives considered:** always run the frozen stack; manufacture zero
+  residual tensors after attention; key the cache only by `requires_grad`;
+  bypass a zero trainable decoder during its first backward; leave old hooks
+  active because their parameter gradients are zero.
+- **Consequences:** Structured forward values and their true upstream gradient
+  paths remain exact, while irrelevant recursive work and graph retention are
+  removed. Later trainable/nonzero attention stages execute normally. The
+  repaired 32-seed step-zero diagnostic remains finite and close to the prior
+  selector, and the full repository gate passes. This optimization does not
+  qualify learned attention accuracy.
+
+## ADR-150 — Route each causal objective only through its semantic owner
+
+- **Date:** 2026-08-21
+- **Status:** accepted, implemented, and repository-gated
+- **Context:** Section 186 froze the fast perception branch during
+  `state_dynamics`, but its auxiliary ROI forward consumed a live predicted
+  prior and cache. Geometry, existence, colour, likelihood, and world-position
+  losses could therefore train the updater, identifier, or dynamics through
+  conditioning rather than their authoritative physical objectives. Separately,
+  an exact-zero event coefficient still built pair-event auxiliaries/BCE. The
+  extra prior future-correction rollout also lacked an explicit switch, so its
+  throughput cost could not be isolated in a matched ablation even though its
+  prior-versus-posterior improvement hinge is accuracy-relevant.
+- **Decision:** Feed the auxiliary-only fast-ROI forward a detached cloned
+  prior and detached modality cache. Preserve the ordinary ingest's live
+  prepared propagation and live cache. Resolve effective stage event weight
+  before rollout construction and omit event auxiliary/BCE graph work at exact
+  zero while retaining detached physical event metrics. Add
+  `training.closed_loop_prior_future_correction_enabled`: legacy/default
+  `true`, with the grounded accuracy profile also retaining `true`. Disabled
+  means a matched ablation that omits only the extra prior rollout and future-
+  correction terms, never current correction or posterior rollout. Bind the
+  flag to configuration, checkpoints, validation protocol, and exact resume.
+- **Alternatives considered:** rely on frozen perception parameters alone;
+  detach the complete prior and lose physical state gradients; keep a zero-
+  multiplied event graph for diagnostics; remove all correction supervision;
+  change legacy checkpoint behavior silently.
+- **Consequences:** Perception-local auxiliaries no longer steer physical state
+  through their inputs, while the real predict-observe-associate-innovate-
+  correct path remains differentiable. Event metrics survive a zero event
+  objective without its unowned graph. Historical checkpoints retain their
+  prior rollout behavior. Matched exact-cadence CPU timing puts the hinge's
+  overhead at about `10.6%` of recursive compute and `6.4%` including data,
+  which is modest relative to its explicit accuracy role. The completed eight-
+  update disabled-path CPU smoke is technical execution evidence only; it does
+  not authorize removing the correction hinge. Focused ownership/config/
+  checkpoint regressions and the full repository gate pass; a changed flag
+  still requires a fresh weights-only campaign.
+
 ## ADR-133 — Score runtime interventions through the runtime prediction seam
 
 - **Date:** 2026-08-15

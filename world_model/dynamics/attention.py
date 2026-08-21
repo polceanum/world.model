@@ -209,11 +209,121 @@ class TypedAttentionInteractionResidual(nn.Module):
             "force": 0,
             "impulse": 0,
         }
+        # A frozen exact-zero decoder makes the complete attention residual
+        # mathematically independent of both its token inputs and its shared
+        # transformer.  Cache that proof against parameter identity/version
+        # so recursive dynamics can return the typed base interaction without
+        # repeatedly synchronising the device or executing an irrelevant
+        # million-parameter stack.  These fields are deliberately transient:
+        # they do not alter state-dict or checkpoint semantics.
+        self._zero_output_cache_signature: tuple[bool, tuple[tuple[int, int, bool], ...]] | None = (
+            None
+        )
+        self._zero_output_cache_result = False
         # Per-draw differentiable statistics for the optional functional
         # node-activity prior. These are deliberately transient rather than
         # buffers: they describe the current causal rollout graph and must
         # never become persistent model state or checkpoint provenance.
+        self._node_activity_tracking_enabled = True
+        self._node_activity_zero_reference: Tensor | None = None
         self._node_activity_records: list[tuple[Tensor, Tensor, Tensor]] = []
+
+    def _decoder_parameters(self) -> tuple[nn.Parameter, ...]:
+        """Return every parameter that directly owns a typed output."""
+
+        return tuple(self.node_decoder.parameters()) + tuple(self.relation_decoder.parameters())
+
+    @staticmethod
+    def _parameters_are_exact_zero(parameters: tuple[nn.Parameter, ...]) -> bool:
+        """Prove that every supplied finite tensor is bitwise numeric zero."""
+
+        with torch.no_grad():
+            return all(
+                bool(torch.isfinite(parameter).all().detach().cpu().item())
+                and int(torch.count_nonzero(parameter).detach().cpu().item()) == 0
+                for parameter in parameters
+            )
+
+    def zero_output_bypass_eligible(self) -> bool:
+        """Return whether the attention contribution is provably exact zero.
+
+        With autograd enabled, a trainable decoder must always execute even at
+        zero initialization: its first backward pass is how the typed output
+        becomes learnable. Evaluation under ``no_grad``/inference mode cannot
+        consume that update and may bypass an exact-zero decoder regardless of
+        its declaration. Frozen nonzero decoders always execute because their
+        fixed function can still carry gradients into belief/perception input
+        when a graph is active.
+        """
+
+        # Even an output-independent stochastic stack owns RNG progression.
+        # Preserve exact continuation by executing configured dropout while
+        # training; evaluation disables dropout and may still take the path.
+        if self.training and any(block.dropout.p > 0.0 for block in self.blocks):
+            return False
+        if not all(
+            math.isfinite(scale)
+            for scale in (
+                self.max_pair_force,
+                self.max_node_acceleration,
+                self.max_event_logit_residual,
+                self.max_process_noise_residual,
+            )
+        ):
+            return False
+
+        parameters = self._decoder_parameters()
+        grad_enabled = torch.is_grad_enabled()
+        signature = (
+            grad_enabled,
+            tuple(
+                (id(parameter), int(parameter._version), bool(parameter.requires_grad))
+                for parameter in parameters
+            ),
+        )
+        if signature != self._zero_output_cache_signature:
+            self._zero_output_cache_signature = signature
+            decoder_trainable = any(parameter.requires_grad for parameter in parameters)
+            self._zero_output_cache_result = (
+                not grad_enabled or not decoder_trainable
+            ) and self._parameters_are_exact_zero(parameters)
+        return self._zero_output_cache_result
+
+    def has_trainable_parameters(self) -> bool:
+        """Return whether this residual currently owns any trainable tensor."""
+
+        return any(parameter.requires_grad for parameter in self.parameters())
+
+    def _decoder_output_has_trainable_owner(self, decoder: nn.Linear) -> bool:
+        """Return whether one decoder output can update attention state."""
+
+        decoder_parameters = tuple(decoder.parameters())
+        if any(parameter.requires_grad for parameter in decoder_parameters):
+            return True
+        decoder_parameter_ids = {id(parameter) for parameter in self._decoder_parameters()}
+        shared_trainable = any(
+            parameter.requires_grad
+            for parameter in self.parameters()
+            if id(parameter) not in decoder_parameter_ids
+        )
+        return shared_trainable and not self._parameters_are_exact_zero(decoder_parameters)
+
+    def node_output_has_trainable_owner(self) -> bool:
+        """Return whether emitted node acceleration can train this module."""
+
+        return self._decoder_output_has_trainable_owner(self.node_decoder)
+
+    def configure_node_activity_tracking(self, *, enabled: bool) -> None:
+        """Enable differentiable functional-node bookkeeping for one draw.
+
+        The trainer disables this when neither an objective nor a trainable
+        node output consumes the statistic.  Standalone module use retains
+        the historical enabled default.
+        """
+
+        if not isinstance(enabled, bool):
+            raise TypeError("attention node activity tracking flag must be boolean")
+        self._node_activity_tracking_enabled = enabled
 
     def configure_output_gradient_clipping(
         self,
@@ -243,8 +353,23 @@ class TypedAttentionInteractionResidual(nn.Module):
                 or value <= 0.0
             ):
                 raise ValueError(f"attention {name} output gradient cap must be positive")
+        # A frozen output can remain differentiable with respect to belief
+        # tensors produced by the updater/ROI path. A hook without a trainable
+        # attention owner would silently clip those upstream gradients, so
+        # keep that semantic group's cap structurally absent. A frozen nonzero
+        # decoder still owns a shared-stack update when the shared stack is
+        # trainable; an exact-zero decoder cannot transmit such a gradient.
+        node_owned = self._decoder_output_has_trainable_owner(self.node_decoder)
+        relation_owned = self._decoder_output_has_trainable_owner(self.relation_decoder)
+        ownership = {
+            "node": node_owned,
+            "collision": relation_owned,
+            "force": relation_owned,
+            "impulse": relation_owned,
+        }
         self._output_gradient_clip_norms = {
-            name: None if value is None else float(value) for name, value in values.items()
+            name: None if value is None or not ownership[name] else float(value)
+            for name, value in values.items()
         }
 
     def reset_output_gradient_diagnostics(self) -> None:
@@ -262,6 +387,7 @@ class TypedAttentionInteractionResidual(nn.Module):
             "force": 0,
             "impulse": 0,
         }
+        self._node_activity_zero_reference = None
         self._node_activity_records = []
 
     def node_activity_details(self) -> dict[str, Tensor]:
@@ -277,6 +403,22 @@ class TypedAttentionInteractionResidual(nn.Module):
         """
 
         if not self._node_activity_records:
+            if self._node_activity_zero_reference is not None:
+                zero = self._node_activity_zero_reference
+                return {
+                    "attention_node_activity": zero,
+                    "attention_node_drift": zero,
+                    "attention_node_variation": zero,
+                    "attention_node_activity_x": zero,
+                    "attention_node_drift_x": zero,
+                    "attention_node_variation_x": zero,
+                    "attention_node_activity_y": zero,
+                    "attention_node_drift_y": zero,
+                    "attention_node_variation_y": zero,
+                    "attention_node_activity_z": zero,
+                    "attention_node_drift_z": zero,
+                    "attention_node_variation_z": zero,
+                }
             return {}
         emitted_sum = torch.stack(
             [record_sum for record_sum, _, _ in self._node_activity_records]
@@ -347,7 +489,7 @@ class TypedAttentionInteractionResidual(nn.Module):
         node_values: Tensor,
         relation_values: Tensor,
     ) -> None:
-        if not self.training:
+        if not self.training or not self.has_trainable_parameters():
             return
 
         node_cap = self._output_gradient_clip_norms["node"]
@@ -543,6 +685,14 @@ class TypedAttentionInteractionResidual(nn.Module):
             raise ValueError("world belief batch does not match object belief")
         if base.edge_mask.shape != (batch, count, count):
             raise ValueError("base interaction edge mask has incompatible shape")
+        if self.zero_output_bypass_eligible():
+            # Returning the original typed object is stronger than adding
+            # manufactured zeros: every value, alias, auxiliary consumer, and
+            # gradient path owned by the structured graph remains exact.  The
+            # attention contribution has no input or parameter gradient.
+            if self._node_activity_tracking_enabled:
+                self._node_activity_zero_reference = base.node_acceleration.new_zeros(())
+            return base
 
         pair_indices = torch.triu_indices(count, count, offset=1, device=objects.position.device)
         pair_i, pair_j = pair_indices[0], pair_indices[1]
@@ -594,7 +744,7 @@ class TypedAttentionInteractionResidual(nn.Module):
         )
         node_residual = self.max_node_acceleration * torch.tanh(node_values)
         node_residual = node_residual * objects.active.unsqueeze(-1)
-        if self.training and torch.is_grad_enabled():
+        if self._node_activity_tracking_enabled and self.training and torch.is_grad_enabled():
             active_count = objects.active.sum().to(dtype=node_residual.dtype)
             self._node_activity_records.append(
                 (

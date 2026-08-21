@@ -177,6 +177,7 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
     ("training", "minimum_rollout_age_steps"): 0,
     ("training", "validation_rollout_anchors_per_episode"): None,
     ("training", "validation_rollout_anchor_batch_size"): 1,
+    ("training", "closed_loop_prior_future_correction_enabled"): True,
     ("training", "closed_loop_event_loss_weights"): {},
     ("training", "loss_weights", "rollout_nll"): 0.0,
     ("device", "closed_loop_preference"): "same",

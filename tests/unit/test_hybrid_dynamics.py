@@ -147,6 +147,7 @@ def _attention_residual(
     belief,
     *,
     relation_endpoint_binding_enabled: bool = True,
+    dropout: float = 0.0,
 ) -> TypedAttentionInteractionResidual:
     return TypedAttentionInteractionResidual(
         modal_count=objects.modal_count,
@@ -162,6 +163,7 @@ def _attention_residual(
         heads=4,
         layers=4,
         feed_forward_width=512,
+        dropout=dropout,
     )
 
 
@@ -206,6 +208,274 @@ def test_typed_attention_starts_as_exact_graph_identity_with_mac_scale_capacity(
         )
     parameter_count = sum(parameter.numel() for parameter in attention.parameters())
     assert 1_000_000 <= parameter_count <= 4_000_000
+
+
+def test_frozen_zero_typed_attention_bypasses_transformer_with_exact_identity() -> None:
+    belief, objects = _two_objects()
+    graph = InteractionGraph(4, 3, hidden_dim=16, interaction_radius=1.0)
+    base = graph(objects, belief.global_code)
+    attention = _attention_residual(objects, belief)
+    attention.requires_grad_(False)
+    attention.train()
+    attention.configure_node_activity_tracking(enabled=False)
+    calls: list[object] = []
+    handle = attention.blocks[0].register_forward_hook(lambda *unused: calls.append(object()))
+
+    try:
+        output = attention(objects, belief, base)
+    finally:
+        handle.remove()
+
+    assert attention.zero_output_bypass_eligible()
+    assert output is base
+    assert calls == []
+    assert attention.node_activity_details() == {}
+    assert all(parameter.grad is None for parameter in attention.parameters())
+
+    source = torch.tensor([[[0.25, -0.50, 0.75], [1.0, -1.5, 2.0]]], requires_grad=True)
+    differentiable_base = replace(base, residual_acceleration=source)
+    differentiable_output = attention(objects, belief, differentiable_base)
+    differentiable_output.residual_acceleration.square().sum().backward()
+    torch.testing.assert_close(source.grad, 2.0 * source.detach(), rtol=0.0, atol=0.0)
+    assert all(parameter.grad is None for parameter in attention.parameters())
+
+    attention.configure_node_activity_tracking(enabled=True)
+    attention.reset_output_gradient_diagnostics()
+    attention(objects, belief, base)
+    details = attention.node_activity_details()
+    assert details
+    for value in details.values():
+        torch.testing.assert_close(value, torch.zeros_like(value), rtol=0.0, atol=0.0)
+        assert not value.requires_grad
+
+
+def test_zero_output_bypass_fails_open_for_trainable_or_nonzero_decoder() -> None:
+    belief, objects = _two_objects()
+    graph = InteractionGraph(4, 3, hidden_dim=16, interaction_radius=1.0)
+    base = graph(objects, belief.global_code)
+    attention = _attention_residual(objects, belief)
+    attention.requires_grad_(False)
+
+    assert attention.zero_output_bypass_eligible()
+    attention.node_decoder.weight.requires_grad_(True)
+    assert not attention.zero_output_bypass_eligible()
+    attention.node_decoder.weight.requires_grad_(False)
+    with torch.no_grad():
+        attention.relation_decoder.bias[0] = 0.25
+    assert not attention.zero_output_bypass_eligible()
+
+    calls: list[object] = []
+    handle = attention.blocks[0].register_forward_hook(lambda *unused: calls.append(object()))
+    try:
+        output = attention(objects, belief, base)
+    finally:
+        handle.remove()
+    assert output is not base
+    assert len(calls) == 1
+    assert torch.count_nonzero(output.contact_logits - base.contact_logits) > 0
+
+
+def test_zero_output_bypass_preserves_training_dropout_rng_semantics() -> None:
+    belief, objects = _two_objects()
+    graph = InteractionGraph(4, 3, hidden_dim=16, interaction_radius=1.0)
+    base = graph(objects, belief.global_code)
+    attention = _attention_residual(objects, belief, dropout=0.1)
+    attention.requires_grad_(False)
+    calls: list[object] = []
+    handle = attention.blocks[0].register_forward_hook(lambda *unused: calls.append(object()))
+
+    try:
+        attention.train()
+        assert not attention.zero_output_bypass_eligible()
+        training_output = attention(objects, belief, base)
+        attention.eval()
+        assert attention.zero_output_bypass_eligible()
+        evaluation_output = attention(objects, belief, base)
+    finally:
+        handle.remove()
+
+    assert len(calls) == 1
+    assert training_output is not base
+    assert evaluation_output is base
+    for item in fields(base):
+        torch.testing.assert_close(
+            getattr(training_output, item.name),
+            getattr(base, item.name),
+            rtol=0.0,
+            atol=0.0,
+        )
+
+
+def test_trainable_zero_typed_decoders_execute_and_receive_first_step_gradient() -> None:
+    belief, objects = _two_objects()
+    graph = InteractionGraph(4, 3, hidden_dim=16, interaction_radius=1.0)
+    base = graph(objects, belief.global_code)
+    attention = _attention_residual(objects, belief)
+    attention.train()
+    calls: list[object] = []
+    handle = attention.blocks[0].register_forward_hook(lambda *unused: calls.append(object()))
+
+    try:
+        output = attention(objects, belief, base)
+        loss = output.residual_acceleration.sum() + output.collision_logits.sum()
+        loss.backward()
+    finally:
+        handle.remove()
+
+    assert not attention.zero_output_bypass_eligible()
+    assert len(calls) == 1
+    assert attention.node_decoder.weight.grad is not None
+    assert attention.relation_decoder.weight.grad is not None
+    assert torch.count_nonzero(attention.node_decoder.weight.grad) > 0
+    assert torch.count_nonzero(attention.relation_decoder.weight.grad) > 0
+
+
+def test_no_grad_zero_bypass_does_not_leak_into_trainable_forward() -> None:
+    belief, objects = _two_objects()
+    graph = InteractionGraph(4, 3, hidden_dim=16, interaction_radius=1.0)
+    base = graph(objects, belief.global_code)
+    attention = _attention_residual(objects, belief)
+    attention.eval()
+    calls: list[object] = []
+    handle = attention.blocks[0].register_forward_hook(lambda *unused: calls.append(object()))
+
+    try:
+        with torch.no_grad():
+            assert attention.zero_output_bypass_eligible()
+            no_grad_output = attention(objects, belief, base)
+        assert no_grad_output is base
+        assert calls == []
+
+        # Autograd mode is part of the proof cache. Returning from no_grad must
+        # invalidate the inference result so zero-initialized trainable typed
+        # decoders execute and receive their first useful update.
+        assert not attention.zero_output_bypass_eligible()
+        trainable_output = attention(objects, belief, base)
+        loss = (
+            trainable_output.residual_acceleration.sum() + trainable_output.collision_logits.sum()
+        )
+        loss.backward()
+        assert len(calls) == 1
+        assert attention.node_decoder.weight.grad is not None
+        assert attention.relation_decoder.weight.grad is not None
+        assert torch.count_nonzero(attention.node_decoder.weight.grad) > 0
+        assert torch.count_nonzero(attention.relation_decoder.weight.grad) > 0
+
+        with torch.inference_mode():
+            assert attention.zero_output_bypass_eligible()
+            inference_output = attention(objects, belief, base)
+        assert inference_output is base
+        assert len(calls) == 1
+    finally:
+        handle.remove()
+
+
+def test_frozen_zero_attention_preserves_complete_dynamics_step_exactly() -> None:
+    belief, objects = _two_objects()
+    belief = replace(belief, objects=objects)
+    common = {
+        "max_substep": 0.01,
+        "max_modal_acceleration": 0.2,
+        "max_pair_force": 0.3,
+        "max_node_acceleration": 0.4,
+        "smooth_event_hazard_enabled": True,
+    }
+    graph_only = DynamicsModel.from_belief(belief, **common)
+    with_attention = DynamicsModel.from_belief(
+        belief,
+        attention_residual_enabled=True,
+        attention_width=32,
+        attention_heads=4,
+        attention_layers=2,
+        attention_feed_forward_width=64,
+        **common,
+    )
+    missing, unexpected = with_attention.load_state_dict(
+        graph_only.state_dict(),
+        strict=False,
+    )
+    assert unexpected == []
+    assert missing
+    assert all(key.startswith("attention_interactions.") for key in missing)
+    attention = with_attention.attention_interactions
+    assert attention is not None
+    attention.requires_grad_(False)
+    graph_only.eval()
+    with_attention.eval()
+    calls: list[object] = []
+    handle = attention.blocks[0].register_forward_hook(lambda *unused: calls.append(object()))
+
+    try:
+        expected = graph_only.predict_step(belief, 0.025)
+        actual = with_attention.predict_step(belief, 0.025)
+    finally:
+        handle.remove()
+
+    assert calls == []
+    for item in fields(expected.belief.objects):
+        torch.testing.assert_close(
+            getattr(actual.belief.objects, item.name),
+            getattr(expected.belief.objects, item.name),
+            rtol=0.0,
+            atol=0.0,
+        )
+    for item in fields(expected.belief.camera):
+        torch.testing.assert_close(
+            getattr(actual.belief.camera, item.name),
+            getattr(expected.belief.camera, item.name),
+            rtol=0.0,
+            atol=0.0,
+        )
+    for name in (
+        "timestamp",
+        "gravity",
+        "global_code",
+        "global_log_variance",
+        "next_object_id",
+    ):
+        torch.testing.assert_close(
+            getattr(actual.belief, name),
+            getattr(expected.belief, name),
+            rtol=0.0,
+            atol=0.0,
+        )
+    assert actual.belief.active_modalities == expected.belief.active_modalities
+    assert actual.belief.metadata == expected.belief.metadata
+    torch.testing.assert_close(actual.event_logits, expected.event_logits, rtol=0.0, atol=0.0)
+    assert actual.auxiliary.keys() == expected.auxiliary.keys()
+    for name in actual.auxiliary:
+        torch.testing.assert_close(
+            actual.auxiliary[name],
+            expected.auxiliary[name],
+            rtol=0.0,
+            atol=0.0,
+        )
+
+
+def test_zero_attention_fast_path_is_transient_checkpoint_state() -> None:
+    belief, objects = _two_objects()
+    attention = _attention_residual(objects, belief)
+    expected_keys = tuple(attention.state_dict())
+    payload = {name: value.detach().clone() for name, value in attention.state_dict().items()}
+    attention.requires_grad_(False)
+    assert attention.zero_output_bypass_eligible()
+    attention.configure_node_activity_tracking(enabled=False)
+    attention.configure_output_gradient_clipping(
+        node=0.1,
+        collision=0.1,
+        force=0.1,
+        impulse=0.1,
+    )
+
+    restored = _attention_residual(objects, belief)
+    restored.load_state_dict(payload, strict=True)
+    restored.requires_grad_(False)
+
+    assert tuple(attention.state_dict()) == expected_keys
+    assert tuple(restored.state_dict()) == expected_keys
+    assert restored.zero_output_bypass_eligible()
+    for name, value in payload.items():
+        torch.testing.assert_close(restored.state_dict()[name], value, rtol=0.0, atol=0.0)
 
 
 def test_typed_attention_is_permutation_equivariant_after_nonzero_decoding() -> None:

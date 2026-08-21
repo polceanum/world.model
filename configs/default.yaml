@@ -164,6 +164,7 @@ training:
   normalize_rollout_axes_over_configured_horizons: true
   joint_collision_long_horizon_sampling: true
   minimum_rollout_age_steps: 0
+  closed_loop_prior_future_correction_enabled: true
   validation_rollout_anchors_per_episode: null
   validation_rollout_anchor_batch_size: 1
   collision_positive_weight_max: 10.0

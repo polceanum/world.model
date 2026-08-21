@@ -52,6 +52,7 @@ from world_model.training.trainer import (
     _validation_loader_result,
     _validation_protocol_checkpoint_metrics,
     _validation_step,
+    _write_training_update_progress,
     closed_loop_learning_rate_at_update,
     measurement_pretrain_frame_index,
     set_closed_loop_trainable_scope,
@@ -293,6 +294,17 @@ def test_attention_relation_scope_freezes_only_node_decoder() -> None:
         parameter.requires_grad is (not name.startswith("node_decoder."))
         for name, parameter in model.dynamics.attention_interactions.named_parameters()
     )
+    attention = model.dynamics.attention_interactions
+    attention.configure_output_gradient_clipping(
+        node=0.1,
+        collision=0.1,
+        force=0.1,
+        impulse=0.1,
+    )
+    diagnostics = attention.output_gradient_diagnostics()
+    assert diagnostics["attention_node_output_backprop_gradient_local_clip_enabled"] == 0.0
+    for name in ("collision", "force", "impulse"):
+        assert diagnostics[f"attention_{name}_output_backprop_gradient_local_clip_enabled"] == 1.0
 
 
 def test_attention_node_z_scope_preserves_excluded_rows_through_adamw() -> None:
@@ -804,6 +816,61 @@ def test_attention_typed_output_hooks_clip_before_shared_backpropagation() -> No
         assert diagnostics[f"{prefix}_norm_applied_before_parameter_clips"] == pytest.approx(
             0.1, abs=1.0e-6
         )
+
+
+def test_frozen_attention_cannot_configure_or_register_upstream_gradient_hooks() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    set_closed_loop_trainable_scope(model, scope="state_roi")
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+    assert not attention.has_trainable_parameters()
+    attention.train()
+    attention.configure_output_gradient_clipping(
+        node=0.1,
+        collision=0.1,
+        force=0.1,
+        impulse=0.1,
+    )
+    attention.reset_output_gradient_diagnostics()
+
+    node_source = torch.zeros(1, 1, 3, requires_grad=True)
+    relation_source = torch.zeros(1, 1, attention.relation_output_dim, requires_grad=True)
+    node_values = node_source * 2.0
+    relation_values = relation_source * 2.0
+    node_values.retain_grad()
+    relation_values.retain_grad()
+    attention._register_output_gradient_hooks(node_values, relation_values)
+    node_signal = torch.tensor([[[3.0, 4.0, 0.0]]])
+    relation_signal = torch.zeros_like(relation_values)
+    relation_signal[..., attention.collision_output_index] = 3.0
+    relation_signal[..., attention.force_output_indices[0]] = 3.0
+    relation_signal[..., attention.force_output_indices[1]] = 4.0
+    relation_signal[..., attention.impulse_output_indices[0]] = 6.0
+    relation_signal[..., attention.impulse_output_indices[1]] = 8.0
+
+    ((node_values * node_signal).sum() + (relation_values * relation_signal).sum()).backward()
+
+    assert node_values.grad is not None
+    assert relation_values.grad is not None
+    torch.testing.assert_close(node_values.grad, node_signal, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(relation_values.grad, relation_signal, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(node_source.grad, 2.0 * node_signal, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(
+        relation_source.grad,
+        2.0 * relation_signal,
+        rtol=0.0,
+        atol=0.0,
+    )
+    diagnostics = attention.output_gradient_diagnostics()
+    for name in ("node", "collision", "force", "impulse"):
+        prefix = f"attention_{name}_output_backprop_gradient"
+        assert diagnostics[f"{prefix}_local_clip_enabled"] == 0.0
+        assert diagnostics[f"{prefix}_invocation_count"] == 0.0
+        assert diagnostics[f"{prefix}_norm_pre_clip"] == 0.0
 
 
 def test_attention_typed_output_hooks_bound_aggregate_recursive_gradient() -> None:
@@ -1537,6 +1604,14 @@ def test_state_roi_can_transition_to_state_relation_roi_without_opening_node_dyn
     model = OnlineWorldModel.from_config(config)
     set_closed_loop_trainable_scope(model, scope="state_roi")
     assert not any(parameter.requires_grad for parameter in model.dynamics.parameters())
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+    assert attention.zero_output_bypass_eligible()
+    assert all(
+        torch.count_nonzero(parameter) == 0
+        for decoder in (attention.node_decoder, attention.relation_decoder)
+        for parameter in decoder.parameters()
+    )
     set_closed_loop_trainable_scope(model, scope="state_relation_roi")
     assert any(
         parameter.requires_grad
@@ -1546,11 +1621,8 @@ def test_state_roi_can_transition_to_state_relation_roi_without_opening_node_dyn
         parameter.requires_grad
         for parameter in model.dynamics.interactions.node_network.parameters()
     )
-    assert model.dynamics.attention_interactions is not None
-    assert not any(
-        parameter.requires_grad
-        for parameter in model.dynamics.attention_interactions.node_decoder.parameters()
-    )
+    assert not attention.zero_output_bypass_eligible()
+    assert not any(parameter.requires_grad for parameter in attention.node_decoder.parameters())
 
 
 def test_scope_owned_event_weight_omits_early_gradient_and_admits_exact_late_weight() -> None:
@@ -2767,6 +2839,57 @@ def test_validation_aggregates_every_loader_batch_by_episode_count(
     output = capsys.readouterr().out
     assert "batches=1/2 episodes=2/?" in output
     assert "batches=2/2 episodes=3/?" in output
+
+
+def test_training_update_progress_atomically_records_stage_and_known_timings(
+    tmp_path,
+) -> None:
+    progress_path = tmp_path / "training_progress.json"
+
+    _write_training_update_progress(
+        progress_path,
+        stage="backward",
+        completed_updates=7,
+        target_updates=80,
+        attempted_update=8,
+        data_draw_step=9,
+        elapsed_seconds=123.0,
+        phase="closed_loop_rgb",
+        active_scope="state_roi",
+        no_gradient_attempt=1,
+        stage_seconds={"data": 2.0, "forward": 11.5},
+        last_completed_stage_seconds={
+            "data": 1.0,
+            "forward": 10.0,
+            "backward": 8.0,
+            "optimizer": 0.5,
+        },
+        last_completed_update_seconds=20.0,
+    )
+
+    progress = json.loads(progress_path.read_text(encoding="utf-8"))
+    assert progress == {
+        "active_scope": "state_roi",
+        "attempted_update": 8,
+        "completed_updates": 7,
+        "data_draw_step": 9,
+        "data_seconds": 2.0,
+        "elapsed_seconds": 123.0,
+        "forward_seconds": 11.5,
+        "last_completed_backward_seconds": 8.0,
+        "last_completed_data_seconds": 1.0,
+        "last_completed_forward_seconds": 10.0,
+        "last_completed_optimizer_seconds": 0.5,
+        "last_completed_update_seconds": 20.0,
+        "no_gradient_attempt": 1,
+        "phase": "closed_loop_rgb",
+        "pid": progress["pid"],
+        "progress_kind": "optimizer_update",
+        "stage": "backward",
+        "state": "training_running",
+        "target_updates": 80,
+        "updated_utc": progress["updated_utc"],
+    }
 
 
 def test_anchor_batching_keeps_episode_scenario_and_seed_attribution(

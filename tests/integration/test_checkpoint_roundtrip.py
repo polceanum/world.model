@@ -783,6 +783,32 @@ def test_training_resume_binds_scope_owned_event_weights_with_legacy_empty_defau
         validate_training_resume_config(legacy_payload, changed)
 
 
+def test_training_resume_binds_prior_future_correction_with_legacy_true_default() -> None:
+    config = _small_config()
+    checkpoint_config = config.to_dict()
+    checkpoint_config["training"].pop("closed_loop_prior_future_correction_enabled")
+    legacy_payload = {
+        "config": checkpoint_config,
+        "simulator_version": SIMULATOR_VERSION,
+    }
+
+    validate_training_resume_config(legacy_payload, config)
+
+    changed = replace(
+        config,
+        training=replace(
+            config.training,
+            closed_loop_prior_future_correction_enabled=False,
+        ),
+    )
+    changed.validate()
+    with pytest.raises(
+        ValueError,
+        match=r"training\.closed_loop_prior_future_correction_enabled",
+    ):
+        validate_training_resume_config(legacy_payload, changed)
+
+
 @pytest.mark.parametrize(
     ("field_name", "value"),
     [

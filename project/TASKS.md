@@ -1,5 +1,72 @@
 # Tasks
 
+## Objective ownership and measured execution — specification 1.50
+
+- [x] Detach and clone the prior plus detach the modality cache for the
+  auxiliary-only fast-ROI supervision forward. Preserve the live prepared
+  propagation, live runtime cache, and complete causal ingest/posterior graph.
+- [x] Resolve scope-specific event weight before trajectory construction and
+  omit pair-event auxiliaries/BCE from the objective graph when the effective
+  weight is exactly zero; retain detached physical event metrics.
+- [x] Add protocol-bound
+  `training.closed_loop_prior_future_correction_enabled`, normalize legacy
+  checkpoints to `true`, and retain `true` in the grounded accuracy profile.
+  Keep `false` available only for matched throughput/ablation work while
+  preserving current correction and posterior rollouts.
+- [x] Bypass a finite exact-zero typed attention decoder only when no trainable
+  semantic output can consume a gradient. Fail open for trainable decoders in
+  grad mode, nonzero decoders, and training dropout; bind eligibility to
+  parameter version/ownership and grad mode.
+- [x] Register typed-output clipping hooks only for attention-owned semantic
+  outputs and omit functional node-activity bookkeeping when neither a
+  trainable node output nor configured objective owns it.
+- [x] Emit atomic per-update `data`/`forward`/`backward`/`optimizer` progress
+  and timings without increasing sparse metric cadence. Make the read-only
+  monitor reject a running heartbeat from a PID inconsistent with the held
+  trainer lock.
+- [x] Benchmark matched production windows on CPU and active-Aqua MPS. Record
+  the ephemeral `~3.5--3.9x` recursive-compute CPU advantage honestly; retain
+  the user-provided custom PyTorch build unchanged.
+- [x] Reject the `0.05 s` learned-effect hold as the grounded default: its late
+  CPU compute gain was only about `1.16x` and it is not forward-identical.
+  Preserve exact learned-effect cadence (`null`).
+- [x] Set only the grounded profile's closed-loop optimization device to CPU;
+  retain requested MPS measurement/evaluation support and the explicit global-
+  detector CPU-on-MPS workaround.
+- [x] Complete the repaired fixed 32-seed CPU step-zero diagnostic at
+  `runs/20260821-050232-repaired-cpu-validation-32/qualification.json` in
+  `261.963382 s`; retain its score `0.2654622904` as disabled-path execution
+  evidence only.
+- [x] Measure the retained hinge on the exact same CPU `state_roi` window:
+  enabled versus disabled recursive compute is `16.940 s` versus `15.316 s`
+  (`~10.6%` overhead), or `32.360 s` versus `30.411 s` including data
+  (`~6.4%`). Keep it enabled for accuracy.
+- [x] Run the combined focused regression gate: `489 passed, 3 expected non-
+  Aqua MPS-context skips in 57.50s`.
+- [x] Run an end-to-end eight-update CPU trainer smoke at
+  `runs/20260821-050816-repaired-hybrid-trainer-smoke-8`: all 64 episode draws
+  and eight balanced updates applied finitely, live progress worked, and the
+  terminal state is complete. This run explicitly disabled the future-
+  correction hinge and is technical ablation evidence only.
+- [ ] Exercise the retained prior-versus-posterior future-correction hinge in
+  real multi-update training under the fresh sustained configuration before
+  making any accuracy or convergence claim; do not generalize learning
+  behavior from the one-update timing or disabled smoke.
+- [x] Run the full repository suite, Ruff lint/format, compileall, version
+  regression, and final diff check after the complete source/docs are frozen:
+  `1013 passed, 16 skipped in 405.36s`; both Ruff gates, compileall, and diff
+  checks pass, with 217 files already formatted.
+- [ ] Commit and push the coherent specification-1.50 repair to `main` before
+  starting a sustained source-sensitive run.
+- [ ] Launch a fresh timestamped 9,216-update campaign from the protected
+  weights under the committed hybrid execution protocol. Monitor repeated
+  fixed selectors; do not reuse the manually interrupted specification-1.49
+  run or claim convergence from training loss.
+- [ ] Promote only after the declared fixed-validation plateau and disjoint
+  validation/test/OOD checks pass every scenario, axis, horizon, velocity,
+  lifecycle, identity, event, uncertainty, support, finite-state, and latency
+  guardrail.
+
 ## Validation throughput and dynamics synchronization — specification 1.49
 
 - [x] Move repeated elapsed-time validation out of analytic, modal, and

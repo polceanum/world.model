@@ -682,6 +682,33 @@ class _StaticRolloutDynamics:
         ).validate()
 
 
+class _DifferentiableEventRolloutDynamics(_StaticRolloutDynamics):
+    def __init__(self) -> None:
+        super().__init__()
+        self.event_logit = torch.tensor(0.25, requires_grad=True)
+
+    def rollout(
+        self,
+        belief: Any,
+        query_seconds: list[float] | tuple[float, ...],
+        *,
+        return_events: bool,
+        return_auxiliary: bool,
+    ) -> BeliefTrajectory:
+        trajectory = super().rollout(
+            belief,
+            query_seconds,
+            return_events=return_events,
+            return_auxiliary=return_auxiliary,
+        )
+        if trajectory.event_logits is None:
+            return trajectory
+        return replace(
+            trajectory,
+            event_logits=trajectory.event_logits + self.event_logit,
+        ).validate()
+
+
 def _rollout_batch(*, externally_actuated: Tensor) -> dict[str, Any]:
     batch, frames, objects = externally_actuated.shape
     return {
@@ -701,6 +728,81 @@ def _rollout_batch(*, externally_actuated: Tensor) -> dict[str, Any]:
             "externally_actuated": externally_actuated,
         },
     }
+
+
+def test_zero_effective_event_weight_omits_bce_graph_but_keeps_physical_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _single_horizon_config()
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            closed_loop_event_loss_weights={"state_roi": 0.0},
+        ),
+    )
+    config.validate()
+    weights, _ = training_loop._closed_loop_loss_weights_for_scope(
+        config,
+        active_trainable_scope="state_roi",
+    )
+    assert weights["event"] == 0.0
+
+    batch = _rollout_batch(externally_actuated=torch.zeros(1, 2, 2, dtype=torch.bool))
+    batch["events"]["collision"][:, 1].fill_(True)
+    belief = _active_belief(
+        positions=torch.zeros(1, 2, 3),
+        age_steps=torch.full((1, 2), 5, dtype=torch.int64),
+    )
+    belief.objects.position.requires_grad_()
+    indices = torch.tensor([[0, 1]], dtype=torch.int64)
+    matched = torch.ones(1, 2, dtype=torch.bool)
+
+    event_owned_dynamics = _DifferentiableEventRolloutDynamics()
+    event_owned = _rollout_loss_result(
+        SimpleNamespace(dynamics=event_owned_dynamics),
+        belief,
+        batch,
+        config,
+        frame_index=0,
+        indices=indices,
+        matched=matched,
+        compute_event_loss=True,
+    )
+
+    def unexpected_event_bce(*_args: Any, **_kwargs: Any) -> Tensor:
+        raise AssertionError("zero-weight event objective constructed a BCE graph")
+
+    monkeypatch.setattr(
+        training_loop,
+        "balanced_binary_cross_entropy",
+        unexpected_event_bce,
+    )
+    suppressed_dynamics = _DifferentiableEventRolloutDynamics()
+    suppressed = _rollout_loss_result(
+        SimpleNamespace(dynamics=suppressed_dynamics),
+        belief,
+        batch,
+        config,
+        frame_index=0,
+        indices=indices,
+        matched=matched,
+        compute_event_loss=weights["event"] != 0.0,
+    )
+
+    assert "event_collision" in event_owned.losses
+    assert not any(name.startswith("event_collision") for name in suppressed.losses)
+    assert event_owned.positions is not None and suppressed.positions is not None
+    assert event_owned.velocities is not None and suppressed.velocities is not None
+    torch.testing.assert_close(event_owned.positions, suppressed.positions)
+    torch.testing.assert_close(event_owned.velocities, suppressed.velocities)
+    assert event_owned.physical_metrics == suppressed.physical_metrics
+
+    event_owned.losses["event_collision"].backward()
+    assert event_owned_dynamics.event_logit.grad is not None
+    assert event_owned_dynamics.event_logit.grad.abs().item() > 0.0
+    sum(suppressed.losses.values()).backward()
+    assert suppressed_dynamics.event_logit.grad is None
 
 
 def test_unseen_actuation_censors_the_coupled_scene_but_keeps_distribution_nll() -> None:
@@ -1195,17 +1297,7 @@ def test_axis_guardrail_blocks_hidden_regression_despite_better_score() -> None:
     }
 
 
-def test_prior_and_posterior_correction_rollouts_use_identical_query_partitions(
-    monkeypatch: Any,
-) -> None:
-    # This test isolates rollout graph/partition reuse from target-bootstrap
-    # localization. The randomly initialized RGB model is not expected to
-    # satisfy the production 0.5 m supervision gate.
-    monkeypatch.setattr(
-        training_loop,
-        "_PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M",
-        10.0,
-    )
+def _prior_future_correction_test_config() -> OrpheusConfig:
     config = load_config("configs/tiny_overfit.yaml")
     config = replace(
         config,
@@ -1241,6 +1333,21 @@ def test_prior_and_posterior_correction_rollouts_use_identical_query_partitions(
         ),
     )
     config.validate()
+    return config
+
+
+def test_prior_and_posterior_correction_rollouts_use_identical_query_partitions(
+    monkeypatch: Any,
+) -> None:
+    # This test isolates rollout graph/partition reuse from target-bootstrap
+    # localization. The randomly initialized RGB model is not expected to
+    # satisfy the production 0.5 m supervision gate.
+    monkeypatch.setattr(
+        training_loop,
+        "_PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M",
+        10.0,
+    )
+    config = _prior_future_correction_test_config()
     batch = collate_episodes([generate_episode(config, seed=9)])
     model = OnlineWorldModel.from_config(config, device="cpu")
     original_rollout = model.dynamics.rollout
@@ -1330,3 +1437,110 @@ def test_prior_and_posterior_correction_rollouts_use_identical_query_partitions(
     assert any(
         parameter.grad is not None for parameter in model.parameters() if parameter.requires_grad
     )
+
+
+def test_disabling_prior_future_correction_removes_only_the_extra_rollout_and_losses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        training_loop,
+        "_PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M",
+        10.0,
+    )
+    enabled_config = _prior_future_correction_test_config()
+    disabled_config = replace(
+        enabled_config,
+        training=replace(
+            enabled_config.training,
+            closed_loop_prior_future_correction_enabled=False,
+        ),
+    )
+    disabled_config.validate()
+    batch = collate_episodes([generate_episode(enabled_config, seed=9)])
+
+    torch.manual_seed(321)
+    enabled_model = OnlineWorldModel.from_config(enabled_config, device="cpu")
+    disabled_model = OnlineWorldModel.from_config(disabled_config, device="cpu")
+    disabled_model.load_state_dict(enabled_model.state_dict())
+    enabled_calls: list[bool] = []
+    disabled_calls: list[bool] = []
+
+    def record_rollouts(model: OnlineWorldModel, calls: list[bool]) -> None:
+        original_rollout = model.dynamics.rollout
+
+        def recording_rollout(
+            belief: Any,
+            query_seconds: Any,
+            *,
+            return_events: bool,
+            return_auxiliary: bool,
+            **kwargs: Any,
+        ) -> BeliefTrajectory:
+            calls.append(return_events)
+            return original_rollout(
+                belief,
+                query_seconds,
+                return_events=return_events,
+                return_auxiliary=return_auxiliary,
+                **kwargs,
+            )
+
+        monkeypatch.setattr(model.dynamics, "rollout", recording_rollout)
+
+    record_rollouts(enabled_model, enabled_calls)
+    record_rollouts(disabled_model, disabled_calls)
+    common = {
+        "window_steps": 4,
+        "apply_perturbations": False,
+        "include_measurement_supervision": False,
+        "rollout_anchors_per_window": 2,
+    }
+    torch.manual_seed(987)
+    enabled = run_closed_loop_batch(enabled_model, batch, enabled_config, **common)
+    torch.manual_seed(987)
+    disabled = run_closed_loop_batch(disabled_model, batch, disabled_config, **common)
+
+    assert enabled_calls.count(False) == 1
+    assert enabled_calls.count(True) == 2
+    assert disabled_calls.count(False) == 0
+    assert disabled_calls.count(True) == 2
+    assert enabled.metrics["prior_future_correction_rollout_enabled"] == 1.0
+    assert disabled.metrics["prior_future_correction_rollout_enabled"] == 0.0
+
+    def is_future_correction_loss_detail(name: str) -> bool:
+        return name in {"correction_future", "correction_future_velocity"} or name.startswith(
+            ("correction_future@", "correction_future_velocity@")
+        )
+
+    assert any(is_future_correction_loss_detail(name) for name in enabled.metrics)
+    assert not any(is_future_correction_loss_detail(name) for name in disabled.metrics)
+
+    comparable_details = {
+        name
+        for name in disabled.metrics
+        if name in enabled.metrics
+        and name.startswith(
+            (
+                "rollout_position",
+                "rollout_velocity",
+                "event_collision",
+                "correction_current",
+            )
+        )
+    }
+    assert comparable_details
+    for name in comparable_details:
+        assert disabled.metrics[name] == pytest.approx(enabled.metrics[name], abs=1.0e-7)
+    for name, value in disabled.loss_terms.items():
+        if name.startswith("rollout_") or name == "event":
+            torch.testing.assert_close(value, enabled.loss_terms[name])
+
+    enabled_physical = {
+        name: value for name, value in enabled.metrics.items() if name.startswith("physical_")
+    }
+    disabled_physical = {
+        name: value for name, value in disabled.metrics.items() if name.startswith("physical_")
+    }
+    assert enabled_physical.keys() == disabled_physical.keys()
+    for name, value in disabled_physical.items():
+        assert value == pytest.approx(enabled_physical[name], nan_ok=True)

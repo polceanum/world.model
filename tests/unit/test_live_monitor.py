@@ -130,6 +130,80 @@ def test_training_snapshot_shows_progress_robust_loss_trend_and_validation(tmp_p
     assert "2.000s 0.51 m" in rendered
 
 
+def test_live_update_heartbeat_overrides_sparse_metrics_not_stale_validation(
+    tmp_path,
+) -> None:
+    run = tmp_path / "runs" / "20260815-015000-live-update"
+    _write_json(run / "training_state.json", {"state": "running"})
+    _write_metrics(
+        run / "metrics.jsonl",
+        [{"step": 4, "split": "train", "loss_total": 2.0}],
+    )
+    _write_json(
+        run / "training_progress.json",
+        {
+            "state": "training_running",
+            "stage": "forward",
+            "phase": "closed_loop_rgb",
+            "completed_updates": 7,
+            "target_updates": 80,
+            "attempted_update": 8,
+            "data_draw_step": 9,
+            "data_seconds": 1.25,
+            "last_completed_update_seconds": 12.5,
+            "pid": 12345,
+        },
+    )
+    lock = _hold_training_lock(run)
+    try:
+        snapshot = live_monitor.build_snapshot(run)
+    finally:
+        lock.close()
+
+    assert snapshot["status"] == "TRAINING"
+    assert snapshot["status_detail"] == "closed_loop_rgb:forward"
+    assert snapshot["training"]["step"] == 7
+    assert snapshot["training"]["metrics_step"] == 4
+    assert snapshot["training_progress"]["stage"] == "forward"
+    assert snapshot["validation_progress"] is None
+    rendered = live_monitor.render_snapshot(snapshot)
+    assert "7/80" in rendered
+    assert "stage     forward · update 8/80 · draw 9" in rendered
+    assert "timing    data 1.25s · last update 12.5s" in rendered
+    assert "validate" not in rendered
+
+
+def test_stale_validation_pid_cannot_override_live_training_lock(tmp_path) -> None:
+    run = tmp_path / "runs" / "20260815-015500-stale-validation"
+    _write_json(run / "training_state.json", {"state": "running"})
+    _write_metrics(
+        run / "metrics.jsonl",
+        [{"step": 4, "split": "train", "loss_total": 2.0}],
+    )
+    _write_json(
+        run / "training_progress.json",
+        {
+            "state": "validation_running",
+            "split": "validation-old-process",
+            "completed_episodes": 1,
+            "total_episodes": 8,
+            "pid": 54321,
+        },
+    )
+    lock = _hold_training_lock(run)
+    try:
+        snapshot = live_monitor.build_snapshot(run)
+    finally:
+        lock.close()
+
+    assert snapshot["status"] == "TRAINING"
+    assert snapshot["training"]["step"] == 4
+    assert snapshot["training_progress"] is None
+    assert snapshot["validation_progress"] is None
+    assert "ignored stale training/validation progress from a different PID" in snapshot["warnings"]
+    assert "validate" not in live_monitor.render_snapshot(snapshot)
+
+
 def test_failure_and_nonfinite_metrics_take_precedence_over_live_lock(tmp_path) -> None:
     run = tmp_path / "20260815-020000-failed"
     _write_json(run / "training_state.json", {"state": "running"})

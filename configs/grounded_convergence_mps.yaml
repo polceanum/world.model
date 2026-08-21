@@ -6,7 +6,11 @@ project:
 
 device:
   preference: mps
-  closed_loop_preference: mps
+  # The custom Intel/Radeon MPS build remains the supported measurement and
+  # evaluation backend.  Matched recursive forward/backward benchmarks are
+  # ~3.5--3.9x faster on host CPU, so keep causal optimisation there rather
+  # than spending several extra weeks in MPS autograd.
+  closed_loop_preference: cpu
   global_detector_cpu_on_mps: true
   cuda_amp: false
   mps_float32: true
@@ -161,6 +165,10 @@ training:
   weight_decay: 0.0001
   tbptt_steps: 4
   rollout_anchors_per_window: 1
+  # Preserve the explicit prior-versus-posterior future-improvement hinge for
+  # the accuracy campaign.  It is a real correction objective; the protocol
+  # switch exists for matched throughput/ablation studies only.
+  closed_loop_prior_future_correction_enabled: true
   minimum_rollout_age_steps: 3
   validation_rollout_anchors_per_episode: 8
   validation_rollout_anchor_batch_size: 8

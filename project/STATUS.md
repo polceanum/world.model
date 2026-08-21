@@ -1,5 +1,166 @@
 # Project status
 
+## Specification 1.50 objective-ownership and measured-execution repair — 2026-08-21
+
+The first specification-1.49 sustained launch proved that the model was finite
+and updating, but also exposed avoidable graph ownership and execution cost.
+The direct active-Aqua MPS run at
+`runs/20260821-021758-grounded-convergence-spec149-mps-direct` completed the
+full `32/32` step-zero fixed manifest in `5165.944729` seconds. Its selector
+score was `0.2654857751`, current position/velocity RMSE was
+`0.158108893 m`/`0.832764645 m/s`, collision F1 was `0.282387191`, target
+coverage/precision was `0.899`/`0.940130719`, and position RMSE over
+`0.10/0.25/0.50/0.75/1.00 s` was
+`0.178493954/0.206312247/0.243093228/0.284225941/0.323381373 m`. It then
+completed eight balanced causal updates in about `1699` seconds
+(`~212.37 s/update`). Update eight was finite and supported: total loss
+`2.165857792`, raw gradient norm `2.563869`, final applied norm `1.007402`, no
+skipped draw, and all eight scenario families present. The run was manually
+interrupted during update nine and truthfully records `KeyboardInterrupt`; it
+is execution evidence, not convergence or a promotable trained checkpoint.
+
+The post-run graph audit found and repaired four concrete issues:
+
+- fast-ROI auxiliary supervision now receives a detached cloned prior and a
+  detached modality cache. The ordinary prepared propagation and runtime cache
+  remain live for association, innovation, correction, identification, and
+  posterior physical losses, so the change removes only the unowned auxiliary
+  route into updater/identifier/dynamics;
+- an exact-zero typed attention decoder bypasses its million-parameter token/
+  Transformer path when no trainable semantic output owns a gradient. Grad
+  mode fails open for a trainable decoder, nonzero outputs and training dropout
+  execute, cache eligibility follows parameter versions and grad mode, and
+  typed-output hooks cannot clip upstream gradients when attention has no
+  semantic owner;
+- a zero effective event weight is resolved before pair-event auxiliaries and
+  collision BCE are built. Detached physical event counts remain available;
+  and
+- `training.closed_loop_prior_future_correction_enabled` makes the extra prior
+  future-correction rollout explicit protocol. Legacy/default behavior is
+  `true`, and the grounded accuracy profile retains `true`: explicit prior-
+  versus-posterior future improvement is a real correction hinge. `false`
+  remains available for matched throughput/ablation work and omits only that
+  prior rollout and its future-correction terms while retaining current
+  correction and every ordinary posterior rollout.
+
+Training now atomically updates `training_progress.json` at `data`, `forward`,
+`backward`, and `optimizer` stages with PID, update/draw/retry counters and
+stage timings. `monitor.py` renders this live state without turning it into a
+loss metric and ignores a running heartbeat whose PID does not match the held
+trainer lock.
+
+A same-window ephemeral benchmark (no durable report; not selection evidence)
+measured the repaired `state_roi` exact-cadence update as:
+
+```text
+                         data       forward      backward     total
+CPU                   15.0944 s      8.7278 s      6.5886 s   30.4108 s
+active-Aqua MPS       15.9260 s     39.0066 s     20.5332 s   75.4657 s
+recursive compute                    CPU 15.3164 s; MPS 59.5398 s (~3.89x)
+```
+
+After the accuracy decision, a matched exact-cadence CPU `state_roi` update
+measured the retained hinge directly:
+
+```text
+                         data       forward      backward     total
+hinge enabled          15.421 s     10.224 s       6.716 s    32.360 s
+hinge disabled         15.094 s      8.728 s       6.589 s    30.411 s
+```
+
+The enabled/disabled losses were `1.63256955`/`1.63257563` and raw gradient
+norms were `1.405975`/`1.406119`. Thus the real prior-versus-posterior hinge
+adds about `10.6%` recursive compute or `6.4%` total time including data in
+this ephemeral same-window benchmark. That modest cost supports retaining the
+accuracy objective; equal one-batch losses are not an accuracy comparison.
+
+In the later `state_relation_roi` scope, CPU exact-cadence recursive compute
+was `21.9536 s`; holding learned effects for `0.05 s` reduced it to
+`18.8781 s` (about a `1.16x` speedup) but changed forward semantics. Active-
+Aqua MPS at `0.05 s` took `66.0832 s` of recursive compute, about `3.50x` the
+CPU time. The grounded profile therefore keeps MPS as its requested
+measurement/evaluation backend, sets the protocol-bound closed-loop device to
+CPU, and retains exact learned-effect cadence (`null`). The existing custom
+PyTorch build is unchanged.
+
+The repaired fixed-manifest CPU diagnostic completed with the future-
+correction hinge explicitly disabled at
+`runs/20260821-050232-repaired-cpu-validation-32/qualification.json`:
+
+```text
+episodes / elapsed / rate:     32 / 261.963382 s / 0.122154 episode/s
+selection score:               0.2654622904
+current position / velocity:   0.1580636715 m / 0.8310918938 m/s
+collision F1:                  0.2765647744
+target coverage / precision:   0.899 / 0.9401307190
+position RMSE 0.10--1.00 s:    0.1784515305 / 0.2062988703 /
+                               0.2430885895 / 0.2841244138 /
+                               0.3234116180 m
+checkpoint step / device:      0 / CPU
+```
+
+This is an RGB-only, same 32-seed/scenario, step-zero execution and accuracy
+diagnostic for the disabled ablation. It shows that path remains finite and
+close to the prior baseline; it is not evidence for removing the accuracy
+hinge, cross-device bitwise parity, a trained improvement, checkpoint
+promotion, or convergence.
+
+The disabled-path trainer smoke then completed at
+`runs/20260821-050816-repaired-hybrid-trainer-smoke-8`. It applied all eight
+balanced `state_roi` optimizer updates over 64 episode draws on CPU, with no
+skipped draw, a finite terminal update (`loss_total: 1.885127425`, raw/final
+gradient norm `1.438456579`/`1.009797215`), and process maximum RSS
+`1,984,192,512` bytes. The complete run took `323.564960 s`, including the
+eight-episode step-zero and terminal validations. Its durable
+`training_state.json` is `completed`, `last.pt` and validation-step checkpoints
+exist, and every metric row explicitly records
+`prior_future_correction_rollout_enabled: 0.0`. The eight-episode selector
+moved only from `0.2385321174` to `0.2385274237`; the protected incumbent
+remained best. This is a technical trainer/progress/finite-update smoke on a
+small manifest, not an accuracy result and not the sustained campaign's
+retained-hinge protocol.
+
+Verification completed in the unchanged `orpheus` environment is:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q \
+  tests/unit/test_fast_roi_supervision.py \
+  tests/unit/test_hybrid_dynamics.py \
+  tests/unit/test_training_objective_regressions.py \
+  tests/unit/test_training_schedule.py \
+  tests/unit/test_live_monitor.py \
+  tests/unit/test_config.py \
+  tests/integration/test_checkpoint_roundtrip.py \
+  tests/integration/test_prepared_propagation.py \
+  tests/unit/test_prepared_closed_loop.py
+# 489 passed, 3 expected non-Aqua MPS-context skips in 57.50s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output \
+  -n orpheus pytest -q
+# 1013 passed, 16 skipped in 405.36s
+
+PYTHONDONTWRITEBYTECODE=1 conda run -n orpheus ruff check .
+# passed
+
+PYTHONDONTWRITEBYTECODE=1 conda run -n orpheus ruff format --check .
+# 217 files already formatted
+
+# compileall over world_model, tests, and executable entry points
+# passed
+
+git diff --check
+# passed after project-memory synchronization
+```
+
+The host is the user's Intel i9 MacBook Pro, Python runs only through conda
+environment `orpheus`, and PyTorch remains the user-provided custom
+`2.9.0a0+gitcbe1a35` build with MPS built and available. Pending work is
+commit/push and then a fresh source-frozen retained-hinge 9,216-update
+campaign. The full repository suite, Ruff lint/format, compileall, and diff
+gates pass. No specification-1.50 checkpoint has trained under the retained
+accuracy protocol yet. Event accuracy and full long-horizon promotion remain
+unresolved; do not infer either from the disabled-path diagnostics.
+
 ## Specification 1.49 validation-throughput qualification — 2026-08-21
 
 The frozen specification-1.49 implementation removes redundant accelerator

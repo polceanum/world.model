@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.49
+**Version:** 1.50
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization and validation-anchor batching amendment 21 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -7356,6 +7356,128 @@ a throughput diagnostic only. Neither it nor the paired qualification ran an
 optimizer update. This amendment makes no training, prediction-accuracy,
 checkpoint-promotion, or convergence claim; the long grounded campaign and
 its repeated fixed validation remain outstanding.
+
+---
+
+# Part XLII — Objective ownership and measured execution amendment
+
+## 231. Prior-conditioned measurement auxiliaries stop at perception inputs
+
+Section 186 applies to the complete autograd graph, not only parameter
+`requires_grad` declarations. A fast-ROI measurement auxiliary may consume a
+predicted prior and modality cache as conditioning, but both inputs are
+detached for that auxiliary-only forward. The auxiliary prior is also cloned
+so its diagnostic execution cannot alias persistent belief storage. This
+prevents RGB geometry, existence, colour, likelihood, or world-position
+supervision from reaching the updater, identifier, dynamics, or an earlier
+runtime cache through the prior-conditioning path.
+
+The ordinary online ingest remains unchanged: it consumes the one prepared
+live propagation and the live runtime cache, then association, innovation,
+correction, lifecycle, identification, and posterior-rollout objectives retain
+their causal gradient paths. Detaching the auxiliary is therefore gradient
+ownership, not detaching `WorldBelief`, replacing the runtime loop, or making
+the ROI independent of its physical prior.
+
+Objective graph construction follows the same ownership rule. Resolve the
+active trainable scope and its effective event weight before requesting pair-
+event rollout auxiliaries or building collision BCE. An exact zero effective
+weight omits that objective graph entirely while retaining physical event
+prediction and detached confusion/count metrics. Multiplying an already-built
+unowned graph by zero is not equivalent.
+
+`training.closed_loop_prior_future_correction_enabled` separately controls the
+extra prior rollout used only by future correction-improvement supervision.
+`true` is the historical and legacy-checkpoint default and remains enabled in
+the grounded accuracy campaign: explicit prior-versus-posterior future
+improvement is a core correction hinge, not expendable diagnostic work. Setting
+the flag to `false` is a matched throughput/ablation protocol that omits that
+prior rollout and every future-correction loss term while preserving current
+correction, ordinary posterior ingestion, posterior future rollouts, state,
+uncertainty, lifecycle, parameter, and event objectives. A disabled-path smoke
+qualifies only that ablation's execution and cannot authorize removing the
+accuracy objective. The flag is resolved configuration, objective protocol,
+validation-protocol evidence, and exact-resume semantics; changing it requires
+a new weights-only campaign.
+
+On the current host, a matched exact-cadence `state_roi` one-update diagnostic
+measured `data/forward/backward/total` as
+`15.421/10.224/6.716/32.360` seconds with the hinge enabled, versus
+`15.094/8.728/6.589/30.411` seconds disabled. Retaining the objective costs
+about `10.6%` in recursive compute and `6.4%` including data, which is modest
+relative to its direct accuracy role. This ephemeral timing is protocol-choice
+evidence only; it is not a prediction improvement or convergence result.
+
+## 232. Exact-zero attention is an executable identity, not recursive work
+
+A typed attention residual whose complete node and relation decoders are
+finite exact zero has an exact structured identity when no trainable semantic
+output owner can consume a gradient. In that state the dynamics path returns
+the original typed structured interaction directly and does not tokenize the
+belief, execute attention/SwiGLU blocks, manufacture zero tensors, register
+typed-output gradient hooks, or accumulate unused functional-node records.
+Returning the original typed object preserves every structured value, alias,
+auxiliary, and upstream gradient path exactly.
+
+The bypass fails open whenever executing the attention stack could change
+learning or forward semantics:
+
+- with autograd enabled, any trainable decoder executes even at exact-zero
+  initialization so its first gradient can make the residual learnable;
+- a nonzero decoder always executes, including when frozen, because it may
+  contribute forward state or transmit gradients to a trainable shared stack
+  or input;
+- configured training dropout executes so RNG continuation remains exact; and
+- eligibility is invalidated by decoder parameter identity, tensor version,
+  `requires_grad`, or grad-mode changes.
+
+Under `torch.no_grad()` or inference, an exact-zero decoder may bypass even
+when its parameters are declared trainable because no update can be consumed.
+Typed-output clipping hooks are registered only when that semantic output has
+a trainable attention owner. A frozen attention output may remain
+differentiable with respect to the live belief; it must never clip an updater,
+perception, or dynamics gradient merely because an old attention cap remains
+configured. Functional node-activity bookkeeping is likewise enabled only
+when a configured objective or trainable node output owns it.
+
+## 233. Every long optimizer update has an atomic live stage heartbeat
+
+Sparse metrics remain the source for losses and physical trends, but they are
+not sufficient to distinguish a long healthy update from a stalled process.
+During causal training, `training_progress.json` is atomically overwritten at
+the `data`, `forward`, `backward`, and `optimizer` boundaries. It records the
+trainer PID, completed and attempted update, target, absolute data-draw index,
+retry count, phase/scope, elapsed time, accumulated stage timings, the last
+completed update timings, and whether the optimizer update was applied.
+
+This heartbeat is operational state, not checkpoint-selection evidence and
+not an additional metrics stream. The read-only monitor may treat it as live
+training progress only while the exclusive trainer lock is held and its PID is
+compatible with the lock owner. A running heartbeat from another PID is
+ignored and surfaced as stale evidence rather than overriding the active run.
+Validation and terminal progress retain their existing atomic state contracts.
+
+## 234. Phase devices follow measured end-to-end throughput
+
+MPS availability does not imply that every workload is faster on MPS. Device
+selection remains explicit resolved protocol and may differ between RGB
+measurement/evaluation and recursive closed-loop optimization as permitted by
+section 171. On the current Intel i9 host and user-provided custom PyTorch
+`2.9.0a0+gitcbe1a35` build, matched production-window diagnostics found the
+recursive forward/backward portion approximately `3.5--3.9x` faster on CPU
+than active-Aqua MPS. The grounded profile therefore retains
+`device.preference: mps` for supported measurement/evaluation execution and
+sets `device.closed_loop_preference: cpu` for causal optimization. This does
+not change model weights, tensor contracts, RGB-only semantics, or the
+user-provided PyTorch installation.
+
+The same diagnostic found that holding learned relation proposals for `0.05`
+seconds reduced late-scope recursive compute by only about `16%` and was not
+forward-identical. The grounded campaign therefore keeps
+`learned_effect_interval_seconds: null`, preserving exact per-microstep learned
+execution until a complete paired accuracy/latency gate justifies a semantic
+change. Throughput diagnostics authorize device/cadence protocol choices only;
+they do not constitute accuracy promotion or convergence evidence.
 
 ---
 

@@ -627,6 +627,7 @@ def build_snapshot(
     training = _metric_summary(rows, target_steps)
     if training["step"] is None:
         training["step"] = _integer(state.get("completed_steps"))
+    progress_state = str(training_progress.get("state") or "").lower()
 
     lock_active = _training_lock_held(run_directory / ".training.lock")
     lock_pid: int | None = None
@@ -634,6 +635,31 @@ def build_snapshot(
     if lock_path.is_file():
         with contextlib.suppress(OSError, ValueError):
             lock_pid = int(lock_path.read_text(encoding="utf-8").strip())
+    training_progress_pid = _integer(training_progress.get("pid"))
+    progress_matches_active_lock = bool(
+        lock_active
+        and (lock_pid is None or training_progress_pid is None or training_progress_pid == lock_pid)
+    )
+    active_progress_state = progress_state if progress_matches_active_lock else ""
+    stale_progress_pid_mismatch = bool(
+        lock_active
+        and lock_pid is not None
+        and training_progress_pid is not None
+        and training_progress_pid != lock_pid
+        and progress_state in {"training_running", "validation_running"}
+    )
+    if active_progress_state == "training_running":
+        # Metrics intentionally remain sparse. The atomic progress heartbeat
+        # is authoritative only for live update/stage counters, never losses.
+        training["metrics_step"] = training.get("step")
+        completed_updates = _integer(training_progress.get("completed_updates"))
+        progress_target = _integer(training_progress.get("target_updates"))
+        if completed_updates is not None:
+            training["step"] = completed_updates
+        if progress_target is not None:
+            training["target_steps"] = progress_target
+        if training_progress.get("phase"):
+            training["phase"] = training_progress["phase"]
     progress_pid = _integer(evaluation_progress.get("pid"))
     if progress_pid is None:
         progress_pid = _integer(training_progress.get("pid"))
@@ -700,9 +726,14 @@ def build_snapshot(
         status = "FAILED"
         status_detail = str(supervisor.get("error_type") or supervisor_status)
     elif lock_active:
-        if training_progress.get("state") == "validation_running":
+        if active_progress_state == "validation_running":
             status = "VALIDATING"
             status_detail = str(training_progress.get("split") or "validation")
+        elif active_progress_state == "training_running":
+            status = "TRAINING"
+            phase = str(training_progress.get("phase") or "training")
+            stage = str(training_progress.get("stage") or "?")
+            status_detail = f"{phase}:{stage}"
         else:
             status = "TRAINING"
             status_detail = str(training.get("phase") or state_name or "running")
@@ -764,6 +795,8 @@ def build_snapshot(
         warnings.append("recorded evaluation process is not alive")
     if state_name in {"starting", "running"} and not lock_active:
         warnings.append("authoritative running state has no held trainer lock")
+    if stale_progress_pid_mismatch:
+        warnings.append("ignored stale training/validation progress from a different PID")
     if failure:
         message = failure.get("message")
         if message:
@@ -834,7 +867,20 @@ def build_snapshot(
         },
         "device": device,
         "training": training,
-        "validation_progress": training_progress or None,
+        "training_progress": (
+            training_progress if active_progress_state == "training_running" else None
+        ),
+        "validation_progress": (
+            training_progress
+            if (
+                progress_state.startswith("validation_")
+                and (
+                    progress_state != "validation_running"
+                    or active_progress_state == "validation_running"
+                )
+            )
+            else None
+        ),
         "evaluation_progress": evaluation_progress or None,
         "evaluation_result": evaluation_result,
         "checkpoint": checkpoint,
@@ -986,6 +1032,36 @@ def render_snapshot(snapshot: Mapping[str, Any]) -> str:
             if training.get("learning_rate") is not None:
                 loss_line += f" · lr {_format_number(training.get('learning_rate'), digits=3)}"
             lines.append(loss_line)
+
+    training_progress = snapshot.get("training_progress")
+    if (
+        isinstance(training_progress, Mapping)
+        and training_progress.get("state") == "training_running"
+    ):
+        attempted = training_progress.get("attempted_update", "?")
+        target = training_progress.get("target_updates", "?")
+        stage = training_progress.get("stage", "?")
+        pieces = [f"{stage}", f"update {attempted}/{target}"]
+        if training_progress.get("data_draw_step") is not None:
+            pieces.append(f"draw {training_progress['data_draw_step']}")
+        if training_progress.get("no_gradient_attempt"):
+            pieces.append(f"retry {training_progress['no_gradient_attempt']}")
+        lines.append("stage     " + " · ".join(str(piece) for piece in pieces))
+
+        timing_pieces: list[str] = []
+        for timing_stage in ("data", "forward", "backward", "optimizer"):
+            value = _number(training_progress.get(f"{timing_stage}_seconds"))
+            if value is not None:
+                timing_pieces.append(f"{timing_stage} {_format_number(value, digits=3)}s")
+        update_seconds = _number(training_progress.get("update_seconds"))
+        if update_seconds is not None:
+            timing_pieces.append(f"update {_format_number(update_seconds, digits=3)}s")
+        else:
+            last_update = _number(training_progress.get("last_completed_update_seconds"))
+            if last_update is not None:
+                timing_pieces.append(f"last update {_format_number(last_update, digits=3)}s")
+        if timing_pieces:
+            lines.append("timing    " + " · ".join(timing_pieces))
 
     validation_progress = snapshot.get("validation_progress")
     if (

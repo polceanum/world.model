@@ -2635,6 +2635,7 @@ def _rollout_loss_result(
     matched: Tensor,
     *,
     trajectory: BeliefTrajectory | None = None,
+    compute_event_loss: bool = True,
 ) -> _RolloutLossResult:
     total_frames = int(batch["rgb"].shape[1])
     frame_offsets, query_seconds, horizon_weights = _valid_rollout_offsets(
@@ -2660,7 +2661,7 @@ def _rollout_loss_result(
     )
     smooth_event_hazard_enabled = config.model.dynamics.smooth_event_hazard_enabled
     pair_collision_targets: Tensor | None = None
-    if smooth_event_hazard_enabled:
+    if smooth_event_hazard_enabled and compute_event_loss:
         event_targets = batch.get("events")
         pair_collision_targets = (
             event_targets.get("pair_collision") if isinstance(event_targets, Mapping) else None
@@ -2675,12 +2676,13 @@ def _rollout_loss_result(
                 "smooth event-hazard training requires events.pair_collision [B,T,N,N]"
             )
     if trajectory is None:
+        request_pair_event_logits = smooth_event_hazard_enabled and compute_event_loss
         trajectory = model.dynamics.rollout(
             belief,
             event_query_plan.query_seconds,
             return_events=True,
-            return_auxiliary=smooth_event_hazard_enabled,
-            **({"auxiliary_names": ("pair_event_logits",)} if smooth_event_hazard_enabled else {}),
+            return_auxiliary=request_pair_event_logits,
+            **({"auxiliary_names": ("pair_event_logits",)} if request_pair_event_logits else {}),
         )
     else:
         trajectory.validate()
@@ -2704,7 +2706,7 @@ def _rollout_loss_result(
     )
     target_pair_event_logits = (
         event_query_plan.select_target_endpoints(trajectory.auxiliary["pair_event_logits"])
-        if smooth_event_hazard_enabled
+        if smooth_event_hazard_enabled and compute_event_loss
         else None
     )
     position_losses: list[Tensor] = []
@@ -2893,43 +2895,50 @@ def _rollout_loss_result(
             # the same interval, independent of the other forecast horizons.
             event_scores = target_event_logits[:, query_index, :, MotionMode.COLLISION]
             if loss_valid.any():
-                event_loss = balanced_binary_cross_entropy(
-                    event_scores,
-                    event_target,
-                    loss_valid,
-                    maximum_positive_weight=(config.training.collision_positive_weight_max),
-                )
-                if target_pair_event_logits is not None:
-                    assert pair_collision_targets is not None
-                    pair_target = gather_target_pairs(
-                        pair_collision_targets[:, target_index],
-                        indices,
-                    ).to(reference.dtype)
-                    belief_count = loss_valid.shape[1]
-                    unique_pair = torch.triu(
-                        torch.ones(
-                            belief_count,
-                            belief_count,
-                            device=loss_valid.device,
-                            dtype=torch.bool,
-                        ),
-                        diagonal=1,
-                    ).unsqueeze(0)
-                    pair_loss_valid = loss_valid[:, :, None] & loss_valid[:, None, :] & unique_pair
-                    if pair_loss_valid.any():
-                        pair_event_scores = target_pair_event_logits[:, query_index, :, :, 1]
-                        pair_event_loss = balanced_binary_cross_entropy(
-                            pair_event_scores,
-                            pair_target,
-                            pair_loss_valid,
-                            maximum_positive_weight=(config.training.collision_positive_weight_max),
+                if compute_event_loss:
+                    event_loss = balanced_binary_cross_entropy(
+                        event_scores,
+                        event_target,
+                        loss_valid,
+                        maximum_positive_weight=(config.training.collision_positive_weight_max),
+                    )
+                    if target_pair_event_logits is not None:
+                        assert pair_collision_targets is not None
+                        pair_target = gather_target_pairs(
+                            pair_collision_targets[:, target_index],
+                            indices,
+                        ).to(reference.dtype)
+                        belief_count = loss_valid.shape[1]
+                        unique_pair = torch.triu(
+                            torch.ones(
+                                belief_count,
+                                belief_count,
+                                device=loss_valid.device,
+                                dtype=torch.bool,
+                            ),
+                            diagonal=1,
+                        ).unsqueeze(0)
+                        pair_loss_valid = (
+                            loss_valid[:, :, None] & loss_valid[:, None, :] & unique_pair
                         )
-                        # Keep the historical event objective's aggregate scale
-                        # while adding direct relation ownership supervision.
-                        event_loss = 0.5 * (event_loss + pair_event_loss)
-                event_losses.append(event_loss)
-                event_weights.append(horizon_weights[query_index])
-                horizon_losses[rollout_horizon_loss_key("event_collision", seconds)] = event_loss
+                        if pair_loss_valid.any():
+                            pair_event_scores = target_pair_event_logits[:, query_index, :, :, 1]
+                            pair_event_loss = balanced_binary_cross_entropy(
+                                pair_event_scores,
+                                pair_target,
+                                pair_loss_valid,
+                                maximum_positive_weight=(
+                                    config.training.collision_positive_weight_max
+                                ),
+                            )
+                            # Keep the historical event objective's aggregate
+                            # scale while adding direct relation ownership.
+                            event_loss = 0.5 * (event_loss + pair_event_loss)
+                    event_losses.append(event_loss)
+                    event_weights.append(horizon_weights[query_index])
+                    horizon_losses[rollout_horizon_loss_key("event_collision", seconds)] = (
+                        event_loss
+                    )
                 event_prediction = event_scores.detach().sigmoid() >= 0.5
                 event_truth = event_target.detach().bool()
                 confusion = {
@@ -3610,15 +3619,16 @@ def run_closed_loop_batch(
     include_measurement_supervision: bool = True,
     rollout_anchors_per_window: int | None = None,
     validation_rollout_anchor_batch_size: int = 1,
-    compute_future_correction: bool = True,
+    compute_future_correction: bool | None = None,
     active_trainable_scope: str | None = None,
 ) -> TrainingBatchResult:
     """Run one causal RGB-only sequence window through the real runtime.
 
     The belief is never reset to simulator state.  Labels are read only after
     each RGB ingest to compute supervised losses. Validation may disable the
-    extra prior future rollout used only by the correction-improvement guard;
-    current correction and every posterior physical forecast remain measured.
+    extra prior future rollout used only by the correction-improvement guard.
+    ``None`` follows the protocol-bound training configuration. Current
+    correction and every posterior physical forecast remain measured.
     """
 
     if config.runtime.modality != "rgb":
@@ -3627,6 +3637,15 @@ def run_closed_loop_batch(
     if not isinstance(rgb, Tensor) or rgb.ndim != 5:
         raise ValueError("closed-loop batch must contain rgb [B,T,3,H,W]")
     batch_size, total_frames = rgb.shape[:2]
+    if compute_future_correction is None:
+        compute_future_correction = config.training.closed_loop_prior_future_correction_enabled
+    elif not isinstance(compute_future_correction, bool):
+        raise ValueError("compute_future_correction must be boolean or None")
+    loss_weights, event_weight_metrics = _closed_loop_loss_weights_for_scope(
+        config,
+        active_trainable_scope=active_trainable_scope,
+    )
+    compute_event_loss = float(loss_weights["event"]) != 0.0
     if (
         isinstance(validation_rollout_anchor_batch_size, bool)
         or not isinstance(validation_rollout_anchor_batch_size, int)
@@ -3784,8 +3803,23 @@ def run_closed_loop_batch(
                         )
             if include_measurement_supervision:
                 module = model.observation_modules["rgb"]
+                # Fast measurement supervision owns only the RGB perception
+                # branch.  Its projected ROI is conditioned on the live
+                # propagated prior, but that conditioning must remain an
+                # input rather than an auxiliary gradient route back through
+                # the updater, identifier, or dynamics.  Clone as well as
+                # detach so the diagnostic forward cannot alias persistent
+                # belief storage.  A cached ROI feature can carry the same
+                # prior ancestry from an earlier runtime ingest, so present a
+                # detached cache to this auxiliary-only encode too.  The
+                # ordinary ingest below still consumes ``prepared_propagation``
+                # and the live runtime cache unchanged; state and rollout
+                # objectives therefore retain their complete causal graph.
+                auxiliary_prior = prior.detach().clone()
+                runtime_cache = model.state.caches.get(packet.sensor_id)
+                auxiliary_cache = None if runtime_cache is None else runtime_cache.detach()
                 predicted = module.project(
-                    prior,
+                    auxiliary_prior,
                     SensorContext(
                         sensor_id=packet.sensor_id,
                         timestamp=packet.timestamp,
@@ -3796,7 +3830,7 @@ def run_closed_loop_batch(
                     ),
                 )
                 belief_target_indices, belief_matched_slots = target_matcher.match(
-                    prior,
+                    auxiliary_prior,
                     batch["objects"]["position"][:, frame_index],
                     batch["objects"]["active"][:, frame_index].bool(),
                 )
@@ -3813,9 +3847,9 @@ def run_closed_loop_batch(
                 if bool(eligible_slots.any()):
                     fast_measurements, _ = module.encode_measurements(
                         [packet],
-                        prior,
+                        auxiliary_prior,
                         predicted,
-                        model.state.caches.get(packet.sensor_id),
+                        auxiliary_cache,
                     )
                     valid_supervision = eligible_slots & fast_measurements.measurement_mask
                     if bool(valid_supervision.any()):
@@ -4100,6 +4134,7 @@ def run_closed_loop_batch(
                     frame_index,
                     indices,
                     matched,
+                    compute_event_loss=compute_event_loss,
                 )
                 rollout_execution_posterior_call_count += 1
                 for name, value in rollout_result.losses.items():
@@ -4289,10 +4324,6 @@ def run_closed_loop_batch(
     details.update(_attention_node_complexity_details(model))
     details.update(_attention_node_activity_details(model))
     terms = _group_closed_loop_terms(details, reference)
-    loss_weights, event_weight_metrics = _closed_loop_loss_weights_for_scope(
-        config,
-        active_trainable_scope=active_trainable_scope,
-    )
     total = _weighted_closed_loop_total(terms, loss_weights)
     metrics = {name: float(value.detach().cpu()) for name, value in details.items()}
     metrics.update(event_weight_metrics)
@@ -4317,6 +4348,8 @@ def run_closed_loop_batch(
                 rollout_execution_serial_fallback_anchor_count
             ),
             "rollout_execution_posterior_call_count": float(rollout_execution_posterior_call_count),
+            "prior_future_correction_rollout_enabled": float(compute_future_correction),
+            "event_loss_objective_graph_enabled": float(compute_event_loss),
             "rollout_anchor_candidate_count": float(
                 sum(
                     frame_index >= config.training.minimum_rollout_age_steps

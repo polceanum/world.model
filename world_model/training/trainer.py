@@ -3658,6 +3658,98 @@ def _validation_protocol_progress_fields(
     }
 
 
+_TRAINING_UPDATE_STAGES = frozenset({"data", "forward", "backward", "optimizer"})
+
+
+def _write_training_update_progress(
+    path: Path,
+    *,
+    stage: str,
+    completed_updates: int,
+    target_updates: int,
+    attempted_update: int,
+    data_draw_step: int,
+    elapsed_seconds: float,
+    phase: str,
+    active_scope: str | None,
+    no_gradient_attempt: int,
+    stage_seconds: Mapping[str, float] | None = None,
+    update_seconds: float | None = None,
+    last_completed_stage_seconds: Mapping[str, float] | None = None,
+    last_completed_update_seconds: float | None = None,
+    optimizer_update_applied: bool | None = None,
+) -> None:
+    """Atomically expose one causal update's live execution stage.
+
+    Metrics keep their configured sparse cadence.  This small overwrite-only
+    heartbeat exists so a long forward/backward pass is distinguishable from
+    stale validation output and so a monitor can report every completed update
+    without appending another metrics row.
+    """
+
+    if stage not in _TRAINING_UPDATE_STAGES:
+        raise ValueError(f"unknown training update stage: {stage}")
+    for name, value in (
+        ("completed_updates", completed_updates),
+        ("target_updates", target_updates),
+        ("attempted_update", attempted_update),
+        ("data_draw_step", data_draw_step),
+        ("no_gradient_attempt", no_gradient_attempt),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"{name} must be a nonnegative integer")
+    if target_updates <= 0 or attempted_update <= 0 or completed_updates > target_updates:
+        raise ValueError("training update progress counters are inconsistent")
+    if not math.isfinite(elapsed_seconds) or elapsed_seconds < 0.0:
+        raise ValueError("training update elapsed_seconds must be finite and nonnegative")
+
+    def validated_timings(
+        values: Mapping[str, float] | None,
+        *,
+        prefix: str,
+    ) -> dict[str, float]:
+        encoded: dict[str, float] = {}
+        for timing_stage, value in (values or {}).items():
+            if timing_stage not in _TRAINING_UPDATE_STAGES:
+                raise ValueError(f"unknown training timing stage: {timing_stage}")
+            numeric = float(value)
+            if not math.isfinite(numeric) or numeric < 0.0:
+                raise ValueError("training stage timings must be finite and nonnegative")
+            encoded[f"{prefix}{timing_stage}_seconds"] = numeric
+        return encoded
+
+    payload: dict[str, Any] = {
+        "state": "training_running",
+        "progress_kind": "optimizer_update",
+        "updated_utc": datetime.now(timezone.utc).isoformat(),
+        "pid": os.getpid(),
+        "stage": stage,
+        "phase": phase,
+        "active_scope": active_scope,
+        "completed_updates": completed_updates,
+        "target_updates": target_updates,
+        "attempted_update": attempted_update,
+        "data_draw_step": data_draw_step,
+        "no_gradient_attempt": no_gradient_attempt,
+        "elapsed_seconds": float(elapsed_seconds),
+        **validated_timings(stage_seconds, prefix=""),
+        **validated_timings(last_completed_stage_seconds, prefix="last_completed_"),
+    }
+    if update_seconds is not None:
+        if not math.isfinite(update_seconds) or update_seconds < 0.0:
+            raise ValueError("training update_seconds must be finite and nonnegative")
+        payload["update_seconds"] = float(update_seconds)
+    if last_completed_update_seconds is not None:
+        if not math.isfinite(last_completed_update_seconds) or last_completed_update_seconds < 0.0:
+            raise ValueError(
+                "last completed training update seconds must be finite and nonnegative"
+            )
+        payload["last_completed_update_seconds"] = float(last_completed_update_seconds)
+    if optimizer_update_applied is not None:
+        payload["optimizer_update_applied"] = bool(optimizer_update_applied)
+    atomic_write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def _write_validation_progress(
     path: Path,
     *,
@@ -4620,6 +4712,9 @@ def train_from_config(
     logger = MetricsLogger(run_directory / "metrics.jsonl")
     last_metrics: dict[str, float | str] = {}
     started = time.perf_counter()
+    update_progress_path = run_directory / "training_progress.json"
+    last_completed_stage_seconds: dict[str, float] = {}
+    last_completed_update_seconds: float | None = None
 
     def retained_measurement_selector_metrics(
         *,
@@ -5722,21 +5817,92 @@ def train_from_config(
         )
         no_gradient_attempts = 0
         post_step_finite_check_seconds = 0.0
+        update_started = time.perf_counter()
+        update_stage_seconds: dict[str, float] = {}
+        update_phase = (
+            "rgb_pretrain" if step < config.training.rgb_pretrain_steps else "closed_loop_rgb"
+        )
         while True:
+            _write_training_update_progress(
+                update_progress_path,
+                stage="data",
+                completed_updates=step,
+                target_updates=config.training.steps,
+                attempted_update=step + 1,
+                data_draw_step=training_data_draw_step,
+                elapsed_seconds=time.perf_counter() - started,
+                phase=update_phase,
+                active_scope=(
+                    None if step < config.training.rgb_pretrain_steps else active_closed_loop_scope
+                ),
+                no_gradient_attempt=no_gradient_attempts,
+                stage_seconds=update_stage_seconds,
+                last_completed_stage_seconds=last_completed_stage_seconds,
+                last_completed_update_seconds=last_completed_update_seconds,
+            )
+            data_started = time.perf_counter()
             if train_iterator is None:
                 train_iterator = iter(train_loader)
             raw_batch, train_iterator = _next_batch(train_loader, train_iterator)
             training_data_draw_step += 1
             _check_batch_major(raw_batch)
             batch = move_batch_to_device(raw_batch, device)
+            update_stage_seconds["data"] = update_stage_seconds.get("data", 0.0) + (
+                time.perf_counter() - data_started
+            )
+            _write_training_update_progress(
+                update_progress_path,
+                stage="forward",
+                completed_updates=step,
+                target_updates=config.training.steps,
+                attempted_update=step + 1,
+                data_draw_step=training_data_draw_step,
+                elapsed_seconds=time.perf_counter() - started,
+                phase=update_phase,
+                active_scope=(
+                    None if step < config.training.rgb_pretrain_steps else active_closed_loop_scope
+                ),
+                no_gradient_attempt=no_gradient_attempts,
+                stage_seconds=update_stage_seconds,
+                last_completed_stage_seconds=last_completed_stage_seconds,
+                last_completed_update_seconds=last_completed_update_seconds,
+            )
+            forward_started = time.perf_counter()
             optimizer.zero_grad(set_to_none=True)
             attention = model.dynamics.attention_interactions
             if attention is not None:
+                attention_trainable = attention.has_trainable_parameters()
                 attention.configure_output_gradient_clipping(
-                    node=config.training.attention_node_output_grad_clip_norm,
-                    collision=(config.training.attention_collision_output_grad_clip_norm),
-                    force=config.training.attention_force_output_grad_clip_norm,
-                    impulse=config.training.attention_impulse_output_grad_clip_norm,
+                    node=(
+                        config.training.attention_node_output_grad_clip_norm
+                        if attention_trainable
+                        else None
+                    ),
+                    collision=(
+                        config.training.attention_collision_output_grad_clip_norm
+                        if attention_trainable
+                        else None
+                    ),
+                    force=(
+                        config.training.attention_force_output_grad_clip_norm
+                        if attention_trainable
+                        else None
+                    ),
+                    impulse=(
+                        config.training.attention_impulse_output_grad_clip_norm
+                        if attention_trainable
+                        else None
+                    ),
+                )
+                functional_node_objective_enabled = any(
+                    float(config.training.loss_weights.get(name, 0.0)) != 0.0
+                    for name in ("attention_node_activity", "attention_node_drift")
+                )
+                attention.configure_node_activity_tracking(
+                    enabled=(
+                        functional_node_objective_enabled
+                        or attention.node_output_has_trainable_owner()
+                    )
                 )
                 attention.reset_output_gradient_diagnostics()
             if step < config.training.rgb_pretrain_steps:
@@ -5845,6 +6011,27 @@ def train_from_config(
                     causal_fast_support,
                     causal_objective_term_support,
                 ) = _causal_training_support(result)
+            update_stage_seconds["forward"] = update_stage_seconds.get("forward", 0.0) + (
+                time.perf_counter() - forward_started
+            )
+            _write_training_update_progress(
+                update_progress_path,
+                stage="backward",
+                completed_updates=step,
+                target_updates=config.training.steps,
+                attempted_update=step + 1,
+                data_draw_step=training_data_draw_step,
+                elapsed_seconds=time.perf_counter() - started,
+                phase=update_phase,
+                active_scope=(
+                    None if step < config.training.rgb_pretrain_steps else active_closed_loop_scope
+                ),
+                no_gradient_attempt=no_gradient_attempts,
+                stage_seconds=update_stage_seconds,
+                last_completed_stage_seconds=last_completed_stage_seconds,
+                last_completed_update_seconds=last_completed_update_seconds,
+            )
+            backward_started = time.perf_counter()
             if result.total_loss.requires_grad and causal_support_present:
                 result.total_loss.backward()
             restricted_mean_snapshots = _prepare_restricted_updater_mean_update(
@@ -5910,6 +6097,27 @@ def train_from_config(
                     error.diagnostics = failure_diagnostics
                     optimizer.zero_grad(set_to_none=True)
                     raise
+            update_stage_seconds["backward"] = update_stage_seconds.get("backward", 0.0) + (
+                time.perf_counter() - backward_started
+            )
+            _write_training_update_progress(
+                update_progress_path,
+                stage="optimizer",
+                completed_updates=step,
+                target_updates=config.training.steps,
+                attempted_update=step + 1,
+                data_draw_step=training_data_draw_step,
+                elapsed_seconds=time.perf_counter() - started,
+                phase=update_phase,
+                active_scope=(
+                    None if step < config.training.rgb_pretrain_steps else active_closed_loop_scope
+                ),
+                no_gradient_attempt=no_gradient_attempts,
+                stage_seconds=update_stage_seconds,
+                last_completed_stage_seconds=last_completed_stage_seconds,
+                last_completed_update_seconds=last_completed_update_seconds,
+            )
+            optimizer_started = time.perf_counter()
             if _has_effective_gradient(effective_gradient_norm, config):
                 optimizer.step()
                 _restore_restricted_updater_mean_update(
@@ -5928,9 +6136,41 @@ def train_from_config(
                     raise FloatingPointError(f"{error} after optimiser step {step}") from error
                 post_step_finite_check_seconds = time.perf_counter() - finite_check_started
                 support_collapse_rollback_at_checkpoint = False
+                update_stage_seconds["optimizer"] = update_stage_seconds.get(
+                    "optimizer",
+                    0.0,
+                ) + (time.perf_counter() - optimizer_started)
+                completed_update_seconds = time.perf_counter() - update_started
+                _write_training_update_progress(
+                    update_progress_path,
+                    stage="optimizer",
+                    completed_updates=step + 1,
+                    target_updates=config.training.steps,
+                    attempted_update=step + 1,
+                    data_draw_step=training_data_draw_step,
+                    elapsed_seconds=time.perf_counter() - started,
+                    phase=update_phase,
+                    active_scope=(
+                        None
+                        if step < config.training.rgb_pretrain_steps
+                        else active_closed_loop_scope
+                    ),
+                    no_gradient_attempt=no_gradient_attempts,
+                    stage_seconds=update_stage_seconds,
+                    update_seconds=completed_update_seconds,
+                    last_completed_stage_seconds=last_completed_stage_seconds,
+                    last_completed_update_seconds=last_completed_update_seconds,
+                    optimizer_update_applied=True,
+                )
+                last_completed_stage_seconds = dict(update_stage_seconds)
+                last_completed_update_seconds = completed_update_seconds
                 break
 
             optimizer.zero_grad(set_to_none=True)
+            update_stage_seconds["optimizer"] = update_stage_seconds.get(
+                "optimizer",
+                0.0,
+            ) + (time.perf_counter() - optimizer_started)
             if step < config.training.rgb_pretrain_steps:
                 raise RuntimeError(
                     "RGB measurement pretraining produced no effective gradient "
