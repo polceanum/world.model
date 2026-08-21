@@ -7,16 +7,43 @@ import torch.nn.functional as F
 from torch import Tensor
 
 
-def masked_mean(value: Tensor, mask: Tensor) -> Tensor:
+def masked_mean(
+    value: Tensor,
+    mask: Tensor,
+    *,
+    batch_macro: bool = False,
+) -> Tensor:
     expanded = mask
     while expanded.ndim < value.ndim:
         expanded = expanded.unsqueeze(-1)
     expanded = expanded.expand_as(value)
+    if batch_macro:
+        if value.ndim == 0:
+            raise ValueError("batch-macro masked mean requires a batch dimension")
+        flat_value = value.reshape(value.shape[0], -1)
+        flat_mask = expanded.reshape(value.shape[0], -1)
+        row_count = flat_mask.sum(dim=-1)
+        supported_row = row_count > 0
+        if not supported_row.any():
+            return value.sum() * 0
+        row_sum = torch.where(flat_mask, flat_value, torch.zeros_like(flat_value)).sum(dim=-1)
+        row_mean = row_sum / row_count.clamp_min(1).to(value.dtype)
+        return row_mean.masked_select(supported_row).mean()
     return value.masked_select(expanded).mean() if expanded.any() else value.sum() * 0
 
 
-def masked_huber(prediction: Tensor, target: Tensor, mask: Tensor) -> Tensor:
-    return masked_mean(F.smooth_l1_loss(prediction, target, reduction="none"), mask)
+def masked_huber(
+    prediction: Tensor,
+    target: Tensor,
+    mask: Tensor,
+    *,
+    batch_macro: bool = False,
+) -> Tensor:
+    return masked_mean(
+        F.smooth_l1_loss(prediction, target, reduction="none"),
+        mask,
+        batch_macro=batch_macro,
+    )
 
 
 def gaussian_nll(
@@ -26,6 +53,7 @@ def gaussian_nll(
     mask: Tensor,
     *,
     detach_mean_error: bool = False,
+    batch_macro: bool = False,
 ) -> Tensor:
     log_variance = log_variance.clamp(-12.0, 8.0)
     squared_error = (mean - target).square()
@@ -36,7 +64,25 @@ def gaussian_nll(
         # stopped.
         squared_error = squared_error.detach()
     term = 0.5 * (squared_error * (-log_variance).exp() + log_variance)
-    return masked_mean(term, mask)
+    return masked_mean(term, mask, batch_macro=batch_macro)
+
+
+def correction_error(
+    prediction: Tensor,
+    target: Tensor,
+    *,
+    axiswise: bool = False,
+) -> Tensor:
+    """Return legacy vector error or absolute per-coordinate correction error."""
+
+    if prediction.shape != target.shape:
+        raise ValueError("correction prediction and target must have matching shapes")
+    if prediction.ndim == 0:
+        raise ValueError("correction error requires a coordinate dimension")
+    difference = prediction - target
+    if axiswise:
+        return difference.abs()
+    return torch.linalg.vector_norm(difference, dim=-1)
 
 
 def posterior_improvement_hinge(
@@ -45,6 +91,7 @@ def posterior_improvement_hinge(
     mask: Tensor,
     *,
     margin: float = 0.0,
+    batch_macro: bool = False,
 ) -> Tensor:
     """Penalise corrections that fail to improve on the incoming prior.
 
@@ -61,6 +108,7 @@ def posterior_improvement_hinge(
     return masked_mean(
         F.relu(posterior_error - prior_error.detach() + float(margin)),
         mask,
+        batch_macro=batch_macro,
     )
 
 

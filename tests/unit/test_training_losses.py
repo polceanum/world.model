@@ -5,6 +5,8 @@ import torch
 
 from world_model.training.losses import (
     balanced_binary_cross_entropy,
+    correction_error,
+    masked_mean,
     posterior_improvement_hinge,
 )
 
@@ -36,6 +38,125 @@ def test_posterior_improvement_hinge_validates_inputs() -> None:
             torch.ones(1, dtype=torch.bool),
             margin=-0.1,
         )
+
+
+def test_batch_macro_masked_mean_equalizes_unequal_row_support_and_gradients() -> None:
+    value = torch.tensor(
+        [
+            [10.0, 100.0, 100.0, 100.0],
+            [2.0, 2.0, 2.0, 2.0],
+            [1000.0, 1000.0, 1000.0, 1000.0],
+        ],
+        requires_grad=True,
+    )
+    mask = torch.tensor(
+        [
+            [True, False, False, False],
+            [True, True, True, True],
+            [False, False, False, False],
+        ]
+    )
+
+    pooled = masked_mean(value, mask)
+    macro = masked_mean(value, mask, batch_macro=True)
+
+    torch.testing.assert_close(pooled, torch.tensor(18.0 / 5.0))
+    torch.testing.assert_close(macro, torch.tensor(6.0))
+    macro.backward()
+    torch.testing.assert_close(
+        value.grad,
+        torch.tensor(
+            [
+                [0.5, 0.0, 0.0, 0.0],
+                [0.125, 0.125, 0.125, 0.125],
+                [0.0, 0.0, 0.0, 0.0],
+            ]
+        ),
+    )
+
+
+def test_legacy_masked_mean_false_is_bit_and_gradient_identical() -> None:
+    mask = torch.tensor([[True, False, True], [True, True, False]])
+    implicit_value = torch.tensor([[1.0, 7.0, 3.0], [5.0, 9.0, 11.0]], requires_grad=True)
+    explicit_value = implicit_value.detach().clone().requires_grad_()
+
+    implicit = masked_mean(implicit_value, mask)
+    explicit = masked_mean(explicit_value, mask, batch_macro=False)
+    implicit.backward()
+    explicit.backward()
+
+    assert torch.equal(implicit, explicit)
+    assert torch.equal(implicit_value.grad, explicit_value.grad)
+
+
+def test_legacy_correction_error_is_bit_and_gradient_identical_to_vector_norm() -> None:
+    target = torch.tensor([[[0.5, -0.25, 1.0]]])
+    implicit_prediction = torch.tensor([[[2.0, -1.0, 4.0]]], requires_grad=True)
+    explicit_prediction = implicit_prediction.detach().clone().requires_grad_()
+
+    implicit = correction_error(implicit_prediction, target)
+    explicit = torch.linalg.vector_norm(explicit_prediction - target, dim=-1)
+    implicit.sum().backward()
+    explicit.sum().backward()
+
+    assert torch.equal(implicit, explicit)
+    assert torch.equal(implicit_prediction.grad, explicit_prediction.grad)
+
+
+def test_batch_macro_correction_hinge_omits_unsupported_rows() -> None:
+    posterior = torch.tensor(
+        [[4.0, 100.0, 100.0, 100.0], [2.0, 2.0, 2.0, 2.0], [50.0] * 4],
+        requires_grad=True,
+    )
+    prior = torch.zeros_like(posterior)
+    mask = torch.tensor(
+        [
+            [True, False, False, False],
+            [True, True, True, True],
+            [False, False, False, False],
+        ]
+    )
+
+    pooled = posterior_improvement_hinge(posterior, prior, mask)
+    macro = posterior_improvement_hinge(
+        posterior,
+        prior,
+        mask,
+        batch_macro=True,
+    )
+
+    torch.testing.assert_close(pooled, torch.tensor(12.0 / 5.0))
+    torch.testing.assert_close(macro, torch.tensor(3.0))
+    macro.backward()
+    assert torch.count_nonzero(posterior.grad[2]) == 0
+
+
+def test_axiswise_error_exposes_xz_regression_hidden_by_y_improvement() -> None:
+    target = torch.zeros(1, 1, 3)
+    prior = torch.tensor([[[1.0, 3.0, 1.0]]], requires_grad=True)
+    posterior = torch.tensor([[[2.0, 0.0, 2.0]]], requires_grad=True)
+    object_support = torch.ones(1, 1, dtype=torch.bool)
+    coordinate_support = object_support.unsqueeze(-1).expand_as(posterior)
+
+    legacy = posterior_improvement_hinge(
+        correction_error(posterior, target),
+        correction_error(prior, target),
+        object_support,
+    )
+    axiswise = posterior_improvement_hinge(
+        correction_error(posterior, target, axiswise=True),
+        correction_error(prior, target, axiswise=True),
+        coordinate_support,
+    )
+
+    torch.testing.assert_close(legacy, torch.tensor(0.0))
+    torch.testing.assert_close(axiswise, torch.tensor(2.0 / 3.0))
+    axiswise.backward()
+    torch.testing.assert_close(
+        posterior.grad,
+        torch.tensor([[[1.0 / 3.0, 0.0, 1.0 / 3.0]]]),
+    )
+    assert prior.grad is None
 
 
 def test_balanced_binary_cross_entropy_upweights_rare_positive_events() -> None:

@@ -8,8 +8,11 @@ import os
 import random
 import re
 import subprocess
-from collections.abc import Mapping
+import tempfile
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from copy import deepcopy
+from dataclasses import dataclass
 from numbers import Real
 from pathlib import Path
 from typing import Any
@@ -178,6 +181,8 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
     ("training", "validation_rollout_anchors_per_episode"): None,
     ("training", "validation_rollout_anchor_batch_size"): 1,
     ("training", "closed_loop_prior_future_correction_enabled"): True,
+    ("training", "closed_loop_batch_macro_physical_losses_enabled"): False,
+    ("training", "closed_loop_axiswise_correction_hinge_enabled"): False,
     ("training", "closed_loop_event_loss_weights"): {},
     ("training", "loss_weights", "rollout_nll"): 0.0,
     ("device", "closed_loop_preference"): "same",
@@ -210,6 +215,54 @@ _IDENTITY_ATTENTION_BLOCK_OUTPUTS = frozenset(
         "feed_forward.output.weight",
     }
 )
+
+
+@dataclass(frozen=True)
+class CapturedCheckpoint:
+    """One immutable byte snapshot and the identity of the opened source."""
+
+    source_path: Path
+    snapshot_path: Path
+    sha256: str
+    byte_count: int
+
+
+@contextmanager
+def capture_checkpoint_snapshot(path: str | Path) -> Iterator[CapturedCheckpoint]:
+    """Copy and hash one opened checkpoint before any payload is loaded.
+
+    A training or evaluation pathname can be replaced while a process is
+    starting.  Every consumer in one operation must therefore load this
+    private read-only snapshot rather than reopen the mutable source path.
+    """
+
+    source = Path(path).expanduser().resolve()
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix="orpheus-checkpoint-",
+        suffix=".pt",
+    )
+    snapshot = Path(temporary_name)
+    digest = hashlib.sha256()
+    byte_count = 0
+    try:
+        with os.fdopen(descriptor, "wb") as output_handle, source.open("rb") as input_handle:
+            while chunk := input_handle.read(1024 * 1024):
+                output_handle.write(chunk)
+                digest.update(chunk)
+                byte_count += len(chunk)
+            output_handle.flush()
+            os.fsync(output_handle.fileno())
+        if byte_count == 0:
+            raise ValueError(f"checkpoint is empty: {source}")
+        snapshot.chmod(0o400)
+        yield CapturedCheckpoint(
+            source_path=source,
+            snapshot_path=snapshot,
+            sha256=digest.hexdigest(),
+            byte_count=byte_count,
+        )
+    finally:
+        snapshot.unlink(missing_ok=True)
 
 
 def _is_runtime_source_path(path: Path) -> bool:
@@ -321,6 +374,12 @@ def _model_checkpoint_semantics(value: object) -> object:
         # residual path. Missing is therefore exactly legacy False, not the
         # semantics selected by a newer training profile.
         normalized_filter.setdefault("innovation_anchored_correction", False)
+        # Source-axis provenance did not constrain historical learned filter
+        # residuals. Missing therefore means the exact legacy False semantic.
+        normalized_filter.setdefault(
+            "learned_correction_independent_axis_support",
+            False,
+        )
         model["filter"] = normalized_filter
     association = model.get("association")
     if isinstance(association, Mapping):
@@ -578,6 +637,161 @@ def validate_training_resume_config(
         )
 
 
+def validate_exact_resume_state(
+    payload: Mapping[str, Any],
+    *,
+    require_optimizer_state: bool = True,
+) -> None:
+    """Require a complete finite optimizer/RNG continuation payload."""
+
+    artifact_metadata = payload.get("artifact_metadata")
+    artifact_role = (
+        artifact_metadata.get("role") if isinstance(artifact_metadata, Mapping) else None
+    )
+    metrics = payload.get("metrics")
+    checkpoint_state_role = (
+        metrics.get("checkpoint_state_role") if isinstance(metrics, Mapping) else None
+    )
+    if "weight_only_initializer" in {artifact_role, checkpoint_state_role}:
+        raise ValueError(
+            "weight-only initializer checkpoints cannot be exactly resumed; use --initialize-from"
+        )
+    if require_optimizer_state and payload.get("optimizer_state") is None:
+        raise ValueError(
+            "exact resume requires checkpoint optimizer state; use --initialize-from "
+            "for a weights-only transfer"
+        )
+    if payload.get("scheduler_state") is not None:
+        raise ValueError(
+            "exact resume checkpoint contains scheduler state, but the configured "
+            "trainer has no scheduler; use --initialize-from for a weights-only transfer"
+        )
+    if not require_optimizer_state:
+        return
+    _validate_checkpoint_payload_integrity(payload)
+    _validate_checkpoint_rng_state(payload)
+
+
+def _validate_optimizer_state_structure(value: object) -> None:
+    """Reject malformed optimizer payloads before any destination is mutated."""
+
+    if not isinstance(value, Mapping):
+        raise ValueError("checkpoint optimizer_state must be a mapping")
+    state = value.get("state")
+    parameter_groups = value.get("param_groups")
+    if not isinstance(state, Mapping):
+        raise ValueError("checkpoint optimizer_state.state must be a mapping")
+    if not isinstance(parameter_groups, list) or not parameter_groups:
+        raise ValueError("checkpoint optimizer_state.param_groups must be a nonempty list")
+    declared_parameter_ids: list[int] = []
+    for index, group in enumerate(parameter_groups):
+        if not isinstance(group, Mapping):
+            raise ValueError(f"checkpoint optimizer parameter group {index} must be a mapping")
+        parameters = group.get("params")
+        if not isinstance(parameters, list) or not parameters:
+            raise ValueError(f"checkpoint optimizer parameter group {index} must name parameters")
+        for parameter_id in parameters:
+            if (
+                isinstance(parameter_id, bool)
+                or not isinstance(parameter_id, int)
+                or parameter_id < 0
+            ):
+                raise ValueError(
+                    f"checkpoint optimizer parameter group {index} has an invalid parameter ID"
+                )
+            declared_parameter_ids.append(parameter_id)
+    if len(declared_parameter_ids) != len(set(declared_parameter_ids)):
+        raise ValueError("checkpoint optimizer parameter IDs must be globally unique")
+    declared = set(declared_parameter_ids)
+    for parameter_id in state:
+        if (
+            isinstance(parameter_id, bool)
+            or not isinstance(parameter_id, int)
+            or parameter_id not in declared
+        ):
+            raise ValueError("checkpoint optimizer state key does not name a declared parameter ID")
+
+
+def _validate_rng_tensor(value: object, *, name: str) -> Tensor:
+    if (
+        not isinstance(value, Tensor)
+        or value.dtype != torch.uint8
+        or value.ndim != 1
+        or value.numel() == 0
+    ):
+        raise ValueError(f"checkpoint RNG state {name} must be a nonempty uint8 vector")
+    return value
+
+
+def _validate_checkpoint_rng_state(payload: Mapping[str, Any]) -> None:
+    """Validate complete RNG state without changing process-global generators."""
+
+    rng = payload.get("rng")
+    if not isinstance(rng, Mapping):
+        raise ValueError("exact resume requires checkpoint RNG state")
+    required = {"python", "numpy", "torch_cpu", "torch_cuda", "torch_mps"}
+    missing = required - set(rng)
+    if missing:
+        raise ValueError(f"exact resume checkpoint RNG state is missing fields: {sorted(missing)}")
+
+    try:
+        random.Random().setstate(rng["python"])
+    except (TypeError, ValueError) as error:
+        raise ValueError("checkpoint Python RNG state is invalid") from error
+    try:
+        np.random.RandomState().set_state(rng["numpy"])
+    except (TypeError, ValueError) as error:
+        raise ValueError("checkpoint NumPy RNG state is invalid") from error
+
+    torch_cpu = _validate_rng_tensor(rng["torch_cpu"], name="torch_cpu")
+    try:
+        torch.Generator(device="cpu").set_state(torch_cpu.cpu())
+    except RuntimeError as error:
+        raise ValueError("checkpoint CPU Torch RNG state is invalid") from error
+
+    torch_cuda = rng["torch_cuda"]
+    if torch_cuda is not None:
+        if not isinstance(torch_cuda, (list, tuple)):
+            raise ValueError("checkpoint CUDA RNG state must be a sequence or null")
+        for index, state in enumerate(torch_cuda):
+            _validate_rng_tensor(state, name=f"torch_cuda[{index}]")
+        if torch.cuda.is_available():
+            device_count = torch.cuda.device_count()
+            if len(torch_cuda) != device_count:
+                raise ValueError(
+                    "checkpoint CUDA RNG state device count does not match this runtime "
+                    f"({len(torch_cuda)} != {device_count})"
+                )
+            for index, state in enumerate(torch_cuda):
+                try:
+                    torch.Generator(device=f"cuda:{index}").set_state(state.cpu())
+                except (RuntimeError, ValueError) as error:
+                    raise ValueError(
+                        f"checkpoint CUDA RNG state torch_cuda[{index}] is invalid"
+                    ) from error
+    torch_mps = rng["torch_mps"]
+    if torch_mps is not None:
+        torch_mps = _validate_rng_tensor(torch_mps, name="torch_mps")
+        mps_backend = getattr(torch.backends, "mps", None)
+        if mps_backend is not None and mps_backend.is_available():
+            try:
+                torch.Generator(device="mps").set_state(torch_mps.cpu())
+            except (RuntimeError, ValueError) as error:
+                raise ValueError("checkpoint MPS RNG state is invalid") from error
+
+    stored_device = payload.get("device")
+    if not isinstance(stored_device, str) or not stored_device:
+        raise ValueError("exact resume checkpoint device must be a nonempty string")
+    try:
+        device_type = torch.device(stored_device).type
+    except (RuntimeError, TypeError) as error:
+        raise ValueError("exact resume checkpoint device is invalid") from error
+    if device_type == "cuda" and not torch_cuda:
+        raise ValueError("CUDA exact resume requires checkpoint CUDA RNG state")
+    if device_type == "mps" and torch_mps is None:
+        raise ValueError("MPS exact resume requires checkpoint MPS RNG state")
+
+
 def capture_git_metadata(root: Path) -> dict[str, Any]:
     """Capture immutable source provenance for one running process."""
 
@@ -680,6 +894,7 @@ def checkpoint_payload(
     metrics: Mapping[str, Any],
     device: str,
     source_provenance: Mapping[str, Any] | None = None,
+    artifact_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a complete local checkpoint payload."""
 
@@ -712,6 +927,8 @@ def checkpoint_payload(
             else capture_git_metadata(root)
         ),
     }
+    if artifact_metadata is not None:
+        payload["artifact_metadata"] = deepcopy(dict(artifact_metadata))
     _assert_finite_tensor_tree(payload["model_state"], root="model_state")
     if payload["optimizer_state"] is not None:
         _assert_finite_tensor_tree(
@@ -803,6 +1020,317 @@ def _assert_valid_optimizer_steps(value: Any, *, root: str) -> None:
         raise AssertionError("invalid optimizer step group did not identify its counter")
 
 
+def _validate_checkpoint_payload_integrity(payload: Mapping[str, Any]) -> None:
+    """Validate serialized tensor/state structure before loading any destination."""
+
+    required = {
+        "model_state",
+        "step",
+        "config",
+        "specification_version",
+        "simulator_version",
+    }
+    missing = required - set(payload)
+    if missing:
+        raise ValueError(f"Checkpoint is missing fields: {sorted(missing)}")
+    model_state = payload.get("model_state")
+    if not isinstance(model_state, Mapping) or not model_state:
+        raise ValueError("checkpoint model_state must be a nonempty mapping")
+    _assert_finite_tensor_tree(model_state, root="model_state")
+    optimizer_state = payload.get("optimizer_state")
+    if optimizer_state is not None:
+        _validate_optimizer_state_structure(optimizer_state)
+        _assert_finite_tensor_tree(
+            optimizer_state,
+            root="optimizer_state",
+        )
+        _assert_valid_optimizer_steps(
+            optimizer_state,
+            root="optimizer_state",
+        )
+    scheduler_state = payload.get("scheduler_state")
+    if scheduler_state is not None:
+        if not isinstance(scheduler_state, Mapping):
+            raise ValueError("checkpoint scheduler_state must be a mapping or null")
+        _assert_finite_tensor_tree(
+            scheduler_state,
+            root="scheduler_state",
+        )
+
+
+def _validate_loaded_optimizer_state(optimizer: torch.optim.Optimizer) -> None:
+    """Prove loaded Adam-family moments are usable by their destination tensors."""
+
+    if not isinstance(optimizer, (torch.optim.Adam, torch.optim.AdamW)):
+        return
+    parameter_options = {
+        parameter: group for group in optimizer.param_groups for parameter in group["params"]
+    }
+    for parameter, state in optimizer.state.items():
+        if not isinstance(parameter, Tensor) or not isinstance(state, Mapping):
+            raise ValueError("loaded optimizer state has an invalid parameter mapping")
+        if not state:
+            continue
+        options = parameter_options.get(parameter, {})
+        step = state.get("step")
+        if not isinstance(step, Tensor) or step.ndim != 0:
+            raise ValueError("loaded optimizer state step must be a scalar Tensor")
+        fused = bool(options.get("fused", False))
+        capturable = bool(options.get("capturable", False))
+        expected_step_dtype = (
+            torch.float32 if fused or torch.get_default_dtype() != torch.float64 else torch.float64
+        )
+        expected_step_device = parameter.device if capturable or fused else torch.device("cpu")
+        if step.dtype != expected_step_dtype or step.device != expected_step_device:
+            raise ValueError(
+                "loaded optimizer state step is incompatible with its destination "
+                f"parameter (dtype={step.dtype}, device={step.device}; expected "
+                f"dtype={expected_step_dtype}, device={expected_step_device})"
+            )
+        if step.requires_grad:
+            raise ValueError("loaded optimizer state step must not require gradients")
+        required_moments = ["exp_avg", "exp_avg_sq"]
+        if bool(options.get("amsgrad", False)):
+            required_moments.append("max_exp_avg_sq")
+        for name in required_moments:
+            moment = state.get(name)
+            if not isinstance(moment, Tensor):
+                raise ValueError(f"loaded optimizer state is missing tensor {name!r}")
+            if moment.shape != parameter.shape:
+                raise ValueError(
+                    f"loaded optimizer moment {name!r} shape {tuple(moment.shape)} does not "
+                    f"match destination parameter shape {tuple(parameter.shape)}"
+                )
+            if moment.device != parameter.device:
+                raise ValueError(
+                    f"loaded optimizer moment {name!r} device {moment.device} does not "
+                    f"match destination parameter device {parameter.device}"
+                )
+            if moment.dtype != parameter.dtype:
+                raise ValueError(
+                    f"loaded optimizer moment {name!r} dtype {moment.dtype} does not "
+                    f"match destination parameter dtype {parameter.dtype}"
+                )
+
+
+def _validate_adam_state_payload_for_destination(
+    value: Mapping[str, Any],
+    parameter_bindings: Mapping[int, tuple[Tensor, Mapping[str, Any]]],
+) -> None:
+    """Bind every serialized Adam state entry to its declared destination."""
+
+    state = value["state"]
+    assert isinstance(state, Mapping)
+    for parameter_id, parameter_state in state.items():
+        if not isinstance(parameter_state, Mapping):
+            raise ValueError("checkpoint optimizer parameter state must be a mapping")
+        if not parameter_state:
+            continue
+        parameter, group = parameter_bindings[parameter_id]
+        step = parameter_state.get("step")
+        if not isinstance(step, Tensor) or step.ndim != 0:
+            raise ValueError(
+                "checkpoint optimizer nonempty parameter state must contain a scalar Tensor 'step'"
+            )
+        expected_step_dtype = (
+            torch.float32
+            if bool(group.get("fused", False)) or torch.get_default_dtype() != torch.float64
+            else torch.float64
+        )
+        if step.dtype != expected_step_dtype:
+            raise ValueError(
+                "checkpoint optimizer step dtype is incompatible with the configured "
+                f"destination optimizer ({step.dtype} != {expected_step_dtype})"
+            )
+        if not bool(group.get("capturable", False) or group.get("fused", False)) and (
+            step.device.type != "cpu"
+        ):
+            raise ValueError("checkpoint optimizer non-capturable step must be stored on CPU")
+        if step.requires_grad:
+            raise ValueError("checkpoint optimizer step must not require gradients")
+        required_moments = ["exp_avg", "exp_avg_sq"]
+        if bool(group.get("amsgrad", False)):
+            required_moments.append("max_exp_avg_sq")
+        for name in required_moments:
+            moment = parameter_state.get(name)
+            if not isinstance(moment, Tensor):
+                raise ValueError(
+                    f"checkpoint optimizer nonempty parameter state is missing tensor {name!r}"
+                )
+            if moment.shape != parameter.shape:
+                raise ValueError(
+                    f"checkpoint optimizer moment {name!r} shape {tuple(moment.shape)} does "
+                    f"not match destination parameter shape {tuple(parameter.shape)}"
+                )
+
+
+def _validate_disposable_adam_next_step(optimizer: torch.optim.Optimizer) -> None:
+    """Run one deterministic update on a deep copy, never the live optimizer."""
+
+    if not isinstance(optimizer, (torch.optim.Adam, torch.optim.AdamW)):
+        return
+    validation_optimizer = deepcopy(optimizer)
+    validation_optimizer.zero_grad(set_to_none=True)
+    try:
+        for group in validation_optimizer.param_groups:
+            parameters = list(group["params"])
+            stateful_parameters = [
+                parameter for parameter in parameters if validation_optimizer.state.get(parameter)
+            ]
+            for parameter in stateful_parameters or parameters[:1]:
+                parameter.grad = torch.zeros_like(
+                    parameter,
+                    memory_format=torch.preserve_format,
+                )
+        validation_optimizer.step()
+        for group in validation_optimizer.param_groups:
+            for parameter in group["params"]:
+                if not bool(torch.isfinite(parameter).all()):
+                    raise FloatingPointError(
+                        "disposable optimizer update produced a nonfinite parameter"
+                    )
+        _assert_finite_tensor_tree(
+            validation_optimizer.state_dict(),
+            root="disposable_optimizer_state",
+        )
+    except Exception as error:
+        raise ValueError(
+            "loaded optimizer state cannot perform a safe disposable next step"
+        ) from error
+
+
+def _validate_optimizer_state_for_destination(
+    value: Mapping[str, Any],
+    optimizer: torch.optim.Optimizer,
+) -> None:
+    """Require exact destination group cardinality and option schema."""
+
+    checkpoint_groups = value["param_groups"]
+    assert isinstance(checkpoint_groups, list)
+    if len(checkpoint_groups) != len(optimizer.param_groups):
+        raise ValueError(
+            "checkpoint optimizer has a different number of parameter groups "
+            f"({len(checkpoint_groups)} != {len(optimizer.param_groups)})"
+        )
+    parameter_bindings: dict[int, tuple[Tensor, Mapping[str, Any]]] = {}
+    for index, (checkpoint_group, destination_group) in enumerate(
+        zip(checkpoint_groups, optimizer.param_groups, strict=True)
+    ):
+        assert isinstance(checkpoint_group, Mapping)
+        checkpoint_schema = set(checkpoint_group) - {"params"}
+        destination_schema = set(destination_group) - {"params"}
+        if checkpoint_schema != destination_schema:
+            raise ValueError(
+                f"checkpoint optimizer parameter group {index} schema does not match "
+                "the configured destination optimizer"
+            )
+        if isinstance(optimizer, (torch.optim.Adam, torch.optim.AdamW)):
+            _validate_adamw_group_options(
+                checkpoint_group,
+                destination_group,
+                group_index=index,
+            )
+        checkpoint_parameters = checkpoint_group["params"]
+        assert isinstance(checkpoint_parameters, list)
+        if len(checkpoint_parameters) != len(destination_group["params"]):
+            raise ValueError(
+                f"checkpoint optimizer parameter group {index} has a different "
+                "parameter cardinality than the configured destination optimizer"
+            )
+        parameter_bindings.update(
+            {
+                parameter_id: (parameter, checkpoint_group)
+                for parameter_id, parameter in zip(
+                    checkpoint_parameters,
+                    destination_group["params"],
+                    strict=True,
+                )
+            }
+        )
+    if isinstance(optimizer, (torch.optim.Adam, torch.optim.AdamW)):
+        _validate_adam_state_payload_for_destination(value, parameter_bindings)
+
+
+def _finite_real_optimizer_option(value: object, *, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise ValueError(f"checkpoint optimizer option {name} must be a finite real number")
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError(f"checkpoint optimizer option {name} must be finite")
+    return result
+
+
+def _validate_adamw_group_options(
+    checkpoint_group: Mapping[str, Any],
+    destination_group: Mapping[str, Any],
+    *,
+    group_index: int,
+) -> None:
+    """Validate AdamW option domains and immutable destination semantics."""
+
+    prefix = f"param_groups[{group_index}]"
+    learning_rate = _finite_real_optimizer_option(
+        checkpoint_group["lr"],
+        name=f"{prefix}.lr",
+    )
+    if type(checkpoint_group["lr"]) is not type(destination_group["lr"]):
+        raise ValueError(
+            f"checkpoint optimizer option {prefix}.lr type does not match "
+            "the configured destination optimizer"
+        )
+    if learning_rate < 0.0:
+        raise ValueError(f"checkpoint optimizer option {prefix}.lr must be nonnegative")
+    betas = checkpoint_group["betas"]
+    if not isinstance(betas, (list, tuple)) or len(betas) != 2:
+        raise ValueError(f"checkpoint optimizer option {prefix}.betas must contain two values")
+    for beta_index, beta in enumerate(betas):
+        beta_value = _finite_real_optimizer_option(
+            beta,
+            name=f"{prefix}.betas[{beta_index}]",
+        )
+        if not 0.0 <= beta_value < 1.0:
+            raise ValueError(
+                f"checkpoint optimizer option {prefix}.betas[{beta_index}] must lie in [0, 1)"
+            )
+    epsilon = _finite_real_optimizer_option(
+        checkpoint_group["eps"],
+        name=f"{prefix}.eps",
+    )
+    if epsilon <= 0.0:
+        raise ValueError(f"checkpoint optimizer option {prefix}.eps must be positive")
+    weight_decay = _finite_real_optimizer_option(
+        checkpoint_group["weight_decay"],
+        name=f"{prefix}.weight_decay",
+    )
+    if weight_decay < 0.0:
+        raise ValueError(f"checkpoint optimizer option {prefix}.weight_decay must be nonnegative")
+    optional_boolean_options = {"foreach", "fused"}
+    for name in (
+        "amsgrad",
+        "maximize",
+        "foreach",
+        "capturable",
+        "differentiable",
+        "fused",
+        "decoupled_weight_decay",
+    ):
+        value = checkpoint_group[name]
+        if name in optional_boolean_options and value is None:
+            pass
+        elif not isinstance(value, bool):
+            raise ValueError(f"checkpoint optimizer option {prefix}.{name} must be boolean")
+    for name in set(destination_group) - {"params", "lr"}:
+        checkpoint_value = checkpoint_group[name]
+        destination_value = destination_group[name]
+        if type(checkpoint_value) is not type(destination_value) or (
+            checkpoint_value != destination_value
+        ):
+            raise ValueError(
+                f"checkpoint optimizer option {prefix}.{name} does not match "
+                "the configured destination optimizer"
+            )
+
+
 def save_checkpoint(
     path: str | Path,
     *,
@@ -814,6 +1342,7 @@ def save_checkpoint(
     metrics: Mapping[str, Any] | None = None,
     device: str = "cpu",
     source_provenance: Mapping[str, Any] | None = None,
+    artifact_metadata: Mapping[str, Any] | None = None,
 ) -> Path:
     """Atomically save a trusted-local checkpoint."""
 
@@ -830,6 +1359,7 @@ def save_checkpoint(
             metrics=metrics or {},
             device=device,
             source_provenance=source_provenance,
+            artifact_metadata=artifact_metadata,
         ),
         temporary,
     )
@@ -853,63 +1383,77 @@ def load_checkpoint(
     if not source.is_file():
         raise FileNotFoundError(f"Checkpoint not found: {source}")
     payload = torch.load(source, map_location=map_location, weights_only=False)
-    required = {
-        "model_state",
-        "step",
-        "config",
-        "specification_version",
-        "simulator_version",
-    }
-    missing = required - set(payload)
-    if missing:
-        raise ValueError(f"Checkpoint is missing fields: {sorted(missing)}")
-    _assert_finite_tensor_tree(payload["model_state"], root="model_state")
-    if payload.get("optimizer_state") is not None:
-        _assert_finite_tensor_tree(
-            payload["optimizer_state"],
-            root="optimizer_state",
-        )
-        _assert_valid_optimizer_steps(
-            payload["optimizer_state"],
-            root="optimizer_state",
-        )
-    if payload.get("scheduler_state") is not None:
-        _assert_finite_tensor_tree(
-            payload["scheduler_state"],
-            root="scheduler_state",
-        )
+    if not isinstance(payload, Mapping):
+        raise ValueError("checkpoint payload must be a mapping")
+    return load_checkpoint_payload(
+        payload,
+        model=model,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        restore_rng=restore_rng,
+        expected_config=expected_config,
+    )
+
+
+def load_checkpoint_payload(
+    payload: Mapping[str, Any],
+    *,
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer | None = None,
+    scheduler: Any = None,
+    restore_rng: bool = False,
+    expected_config: OrpheusConfig | None = None,
+) -> dict[str, Any]:
+    """Load one already-captured checkpoint payload without reopening its path."""
+
+    _validate_checkpoint_payload_integrity(payload)
     if expected_config is not None:
         validate_checkpoint_config(payload, expected_config)
+    if restore_rng:
+        _validate_checkpoint_rng_state(payload)
+    optimizer_state = payload.get("optimizer_state")
+    if optimizer is not None and isinstance(optimizer_state, Mapping):
+        _validate_optimizer_state_for_destination(optimizer_state, optimizer)
     model.load_state_dict(payload["model_state"])
-    if optimizer is not None and payload.get("optimizer_state") is not None:
-        optimizer.load_state_dict(payload["optimizer_state"])
+    if optimizer is not None and optimizer_state is not None:
+        optimizer.load_state_dict(optimizer_state)
+        _validate_loaded_optimizer_state(optimizer)
+        _validate_disposable_adam_next_step(optimizer)
     if scheduler is not None and payload.get("scheduler_state") is not None:
         scheduler.load_state_dict(payload["scheduler_state"])
-    if restore_rng and "rng" in payload:
-        rng = payload["rng"]
-        random.setstate(rng["python"])
-        np.random.set_state(rng["numpy"])
-        # ``map_location`` follows model placement, but PyTorch's default RNG
-        # is always a CPU generator and rejects an MPS/CUDA ByteTensor.
-        torch.set_rng_state(rng["torch_cpu"].cpu())
-        if torch.cuda.is_available() and rng.get("torch_cuda") is not None:
-            torch.cuda.set_rng_state_all([state.cpu() for state in rng["torch_cuda"]])
-        mps = getattr(torch, "mps", None)
-        mps_backend = getattr(torch.backends, "mps", None)
-        if (
-            mps is not None
-            and mps_backend is not None
-            and hasattr(mps, "set_rng_state")
-            and rng.get("torch_mps") is not None
-        ):
-            try:
-                mps.set_rng_state(rng["torch_mps"].cpu())
-            except RuntimeError:
-                # Loading an MPS checkpoint for CPU-only evaluation should not
-                # fail merely because its accelerator RNG cannot be restored.
-                if mps_backend.is_available():
-                    raise
-    return payload
+    if restore_rng:
+        restore_checkpoint_rng_state(payload)
+    return payload if isinstance(payload, dict) else dict(payload)
+
+
+def restore_checkpoint_rng_state(payload: Mapping[str, Any]) -> None:
+    """Restore one already-validated exact-resume RNG payload exactly once."""
+
+    _validate_checkpoint_rng_state(payload)
+    rng = payload["rng"]
+    assert isinstance(rng, Mapping)
+    random.setstate(rng["python"])
+    np.random.set_state(rng["numpy"])
+    # ``map_location`` follows model placement, but PyTorch's default RNG is
+    # always a CPU generator and rejects an MPS/CUDA ByteTensor.
+    torch.set_rng_state(rng["torch_cpu"].cpu())
+    if torch.cuda.is_available() and rng.get("torch_cuda") is not None:
+        torch.cuda.set_rng_state_all([state.cpu() for state in rng["torch_cuda"]])
+    mps = getattr(torch, "mps", None)
+    mps_backend = getattr(torch.backends, "mps", None)
+    if (
+        mps is not None
+        and mps_backend is not None
+        and hasattr(mps, "set_rng_state")
+        and rng.get("torch_mps") is not None
+    ):
+        try:
+            mps.set_rng_state(rng["torch_mps"].cpu())
+        except RuntimeError:
+            # Loading an MPS checkpoint for CPU-only evaluation should not
+            # fail merely because its accelerator RNG cannot be restored.
+            if mps_backend.is_available():
+                raise
 
 
 def _identity_attention_depth_growth_state(

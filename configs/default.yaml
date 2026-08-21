@@ -103,6 +103,7 @@ model:
     min_log_variance: -12.0
     max_log_variance: 8.0
     learned_residual_scale: 0.15
+    learned_correction_independent_axis_support: false
     missed_variance_growth: 0.08
   association:
     geometry_weight: 1.0
@@ -165,6 +166,8 @@ training:
   joint_collision_long_horizon_sampling: true
   minimum_rollout_age_steps: 0
   closed_loop_prior_future_correction_enabled: true
+  closed_loop_batch_macro_physical_losses_enabled: false
+  closed_loop_axiswise_correction_hinge_enabled: false
   validation_rollout_anchors_per_episode: null
   validation_rollout_anchor_batch_size: 1
   collision_positive_weight_max: 10.0

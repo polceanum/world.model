@@ -21,7 +21,16 @@ def test_training_lock_rejects_concurrent_owner(tmp_path) -> None:
 
 
 def test_fresh_cli_failure_persists_terminal_diagnostic(tmp_path, monkeypatch) -> None:
+    ownership_proof_seen = False
+
     def fail_training(*_args, **_kwargs):
+        nonlocal ownership_proof_seen
+        lock_handle = _kwargs.get("_run_lock_handle")
+        assert lock_handle is not None
+        assert not lock_handle.closed
+        assert str(lock_handle.name).endswith("/.training.lock")
+        assert _kwargs.get("_cli_claimed_empty_run_directory") is True
+        ownership_proof_seen = True
         raise RuntimeError("deliberate initialization failure")
 
     monkeypatch.setattr(
@@ -44,6 +53,7 @@ def test_fresh_cli_failure_persists_terminal_diagnostic(tmp_path, monkeypatch) -
     with pytest.raises(RuntimeError, match="deliberate initialization failure"):
         train.main()
 
+    assert ownership_proof_seen
     run_directories = list((tmp_path / "runs").glob("*-failure-state"))
     assert len(run_directories) == 1
     state = json.loads((run_directories[0] / "training_state.json").read_text(encoding="utf-8"))

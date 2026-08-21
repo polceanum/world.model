@@ -252,6 +252,10 @@ class FilterConfig:
     # False preserves checkpoints trained before specification 1.19. New
     # protocols should opt into evidence-anchored, component-masked updates.
     innovation_anchored_correction: bool = False
+    # False preserves the exact pre-provenance learned correction. New
+    # protocols may bind learned position and position-derived velocity
+    # mean/variance updates to independently observed world axes.
+    learned_correction_independent_axis_support: bool = False
     missed_variance_growth: float = 0.08
 
 
@@ -436,6 +440,13 @@ class TrainingConfig:
     # it retains current-correction and posterior-rollout supervision while
     # omitting the extra prior rollout and every future-correction loss term.
     closed_loop_prior_future_correction_enabled: bool = True
+    # False is the exact historical object/coordinate-pooled objective. New
+    # protocols may normalize supported physical losses within each batch row
+    # before averaging rows so object-rich scenarios cannot dominate.
+    closed_loop_batch_macro_physical_losses_enabled: bool = False
+    # False preserves vector-norm correction non-regression. New protocols may
+    # require non-regression independently on each supported coordinate.
+    closed_loop_axiswise_correction_hinge_enabled: bool = False
     # Trend validation still ingests and scores every current frame, but may
     # use a deterministic spread of forecast anchors. Full promotion
     # evaluation remains a separate, larger manifest.
@@ -1156,6 +1167,12 @@ class OrpheusConfig:
             raise ValueError(f"Unsupported device preference {self.device.preference!r}")
         if not isinstance(self.device.global_detector_cpu_on_mps, bool):
             raise ValueError("device.global_detector_cpu_on_mps must be boolean")
+        for field_name in (
+            "innovation_anchored_correction",
+            "learned_correction_independent_axis_support",
+        ):
+            if not isinstance(getattr(self.model.filter, field_name), bool):
+                raise ValueError(f"model.filter.{field_name} must be boolean")
         if self.device.closed_loop_preference not in {
             "same",
             "auto",
@@ -1317,6 +1334,7 @@ class OrpheusConfig:
             "attention_node_z",
             "dynamics",
             "updater",
+            "updater_state_heads",
             "updater_mean",
             "updater_mean_y",
             "fast_roi",
@@ -1331,7 +1349,7 @@ class OrpheusConfig:
                 "training.closed_loop_trainable_scope must be "
                 "'all', 'attention', 'attention_relation', 'attention_node_x', "
                 "'attention_node_y', 'attention_node_z', 'dynamics', "
-                "'updater', 'updater_mean', "
+                "'updater', 'updater_state_heads', 'updater_mean', "
                 "'updater_mean_y', 'fast_roi', "
                 "'state_dynamics', 'state_roi', 'state_relation_roi', "
                 "'state_dynamics_fast_roi', or 'state_dynamics_roi'"
@@ -1518,6 +1536,12 @@ class OrpheusConfig:
             bool,
         ):
             raise ValueError("training.closed_loop_prior_future_correction_enabled must be boolean")
+        for field_name in (
+            "closed_loop_batch_macro_physical_losses_enabled",
+            "closed_loop_axiswise_correction_hinge_enabled",
+        ):
+            if not isinstance(getattr(self.training, field_name), bool):
+                raise ValueError(f"training.{field_name} must be boolean")
         if (
             self.training.validation_rollout_anchors_per_episode is not None
             and self.training.validation_rollout_anchors_per_episode <= 0

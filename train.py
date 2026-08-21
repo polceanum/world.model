@@ -213,6 +213,8 @@ def main() -> int:
             run_name=effective_run_name,
             resume_path=args.resume,
             initialize_from_path=args.initialize_from,
+            _run_lock_handle=training_lock,
+            _cli_claimed_empty_run_directory=starts_new_directory,
         )
     except BaseException as error:
         failure = {

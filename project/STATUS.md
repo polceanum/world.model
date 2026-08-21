@@ -1,5 +1,149 @@
 # Project status
 
+## Specification 1.52 axis-gated updater-head repair — pre-launch 2026-08-21
+
+The narrow specification-1.52 source repair is implemented in the isolated
+qualification tree. No retained two-update smoke, fixed-32 evaluation, long
+paired campaign, model promotion, plateau, or convergence result exists yet.
+Deployment remains the protected step-zero incumbent.
+
+The repair adds three opt-in, exact-resume-bound semantics whose defaults are
+all `false`:
+
+- `model.filter.learned_correction_independent_axis_support` gates learned
+  mean and log-variance contributions on position and position-derived
+  velocity coordinates by the original typed measurement's independent-world-
+  axis provenance. The `MeasurementSet` mask is authoritative; a derived
+  innovation cannot widen support, missing support on source-bound ROI rows
+  fails closed, and historical global/unbound measurements retain all-axis
+  compatibility. Analytic Kalman fusion is unchanged.
+- `training.closed_loop_batch_macro_physical_losses_enabled` normalizes
+  supported elements per batch row before averaging supported rows for current
+  state, detached-mean Gaussian NLL, rollout, and correction objectives. With
+  one row from each of eight scenarios, object/support count no longer sets a
+  scenario's gradient weight.
+- `training.closed_loop_axiswise_correction_hinge_enabled` applies absolute
+  coordinatewise posterior-versus-prior hinges, preventing y improvement from
+  hiding x/z regression while preserving the fixed configured-horizon
+  denominator.
+
+The new `updater_state_heads` scope exposes exactly six parameter tensors: the
+weight and bias of the learned corrector's mean, variance, and gate heads.
+The modality embedding, shared representation, mode/existence/visibility
+sibling heads, all other updater state, dynamics, identifier, and RGB modules
+remain frozen. The repair profile also removes unowned measurement, event,
+existence, and parameter objectives. A functional AdamW regression protects
+both frozen tensors/optimizer ownership and the sibling outputs from shared-
+trunk leakage.
+
+Real single-batch gradient attribution used the deterministic eight-scenario
+balanced draw and the exact protected-step-zero plus complete-step-512-updater
+composition (model-state SHA-256
+`88f2df4d8a2621e8907497298a6d264015714a961102a83d1f65cd9f4474318b`).
+The provisional aggregate correction weight `0.1` contributed only `0.1704%`
+of the total physical updater gradient. Its correction-magnitude component is
+the analytic Kalman position-correction norm, not a learned-residual norm; its
+gradient was predominantly variance-head and had cosine `-0.80133` against
+the other physical aggregate. The pre-smoke profile now uses explicit
+position/velocity/regularization weights `7.0/2.0/0.0`. On the measured
+vectors this predicts `12.4455%` correction/total, total norm `0.0713825`,
+cosine `-0.00433`, and no clipping. This attribution is diagnostic evidence,
+not a successful multi-update smoke or accuracy result.
+
+The provenance-safe initializer path is implemented but not yet materialized
+as a durable production artifact. The composition contract binds the protected
+specification-1.44 base (`0ba00e72...`, model `1354bdfc...`), equal
+specification-1.50 step-zero witness (`b84e5299...`), complete step-512 updater
+donor (`f8f1704c...`, model `1942c2c9...`), source config, and source run
+ancestry. It selects `23` updater tensors/`126164` elements, changes `21`/
+`125971`, and requires output model hash `88f2df4d...`. Every input is captured
+once into immutable bytes and checked for hash, byte count, step, model,
+protocol, config, and ancestry before strict target loading. Output is
+non-overwriting, read-only, weights-only, provenance-bearing, and explicitly
+invalid for exact resume. A YAML boolean `donor_weight` is rejected rather
+than accepted as numeric `1.0`. Production source is now frozen at the final
+post-provenance source/artifact-integrity boundary, but no durable production
+initializer has been materialized.
+
+### Final exact-resume artifact-integrity gate
+
+Exact resume now captures the primary checkpoint once into immutable bytes
+and uses that single capture for hash, load, validation, and any branched
+publication. Required measurement/rollout selectors and accepted numbered
+validation history are likewise captured once each. The complete set is
+preflighted before trainer-owned resolved config, metadata, history, selector,
+or checkpoint publication; the CLI's required starting/running lifecycle state
+is the explicit section-177 exception. In-place continuation additionally
+rechecks the source
+`checkpoints/last.pt` hash and byte count immediately before the publication
+boundary.
+
+Preflight now rejects incomplete/nonfinite model, optimizer, scheduler, or RNG
+state; config, specification/simulator/validation-protocol, executable-source,
+phase-device, step/handoff/final-validation, dynamic-learning-rate, and data-
+counter mismatch; or invalid linked evidence. AdamW validation binds globally
+unique serialized IDs to the exact destination groups, requires group schema
+and cardinality, destination-equal static options, schedule-valid dynamic LR,
+correct scalar steps and moment shape/dtype/device, and proves a finite next
+step on a disposable deep copy. RNG validation uses private generators and
+does not mutate global state. One deferred global RNG restore occurs only
+after the final source/ownership gate. Continuing-resume and weights-only
+initializer payloads are released once their live state and provenance have
+been extracted.
+
+Every mutating exact-resume call owns the destination's non-blocking `flock`
+for the invocation lifetime. The CLI passes its open inode-bound handle into
+the trainer; direct API calls self-acquire the same ownership. Any explicit
+`run_name` is a branch, even when it equals the source name. Branches
+atomically require an absent/empty destination, resolve a timestamped name
+once, and recheck the exact invocation-owned entry set after preflight. Failed
+cleanup never unlinks a lock path after another owner has won its inode.
+
+Recorded artifact-integrity evidence is:
+
+- the full checkpoint/trainer files: `128 passed`, `1` expected MPS-only skip;
+- a post-format ownership/entrypoint selection: `15 passed`;
+- the complete entrypoint file: `7 passed`;
+- the initializer materializer file, including boolean-weight rejection:
+  `3 passed`;
+- active-Aqua custom Torch `2.9.0a0+gitcbe1a35`, with MPS built and available:
+  invalid-MPS-RNG pre-publication rejection plus exact MPS RNG restoration both
+  passed (`2 passed`, `0 skipped in 2.86s`);
+- the final focused source/version selection: `6 passed`;
+- the authoritative version contract: `1 passed in 0.78s`;
+- whole-tree Ruff check: passed; Ruff format check: `221 files already
+  formatted`;
+- isolated compileall over `world_model`, `tests`, `train.py`, `evaluate.py`,
+  `monitor.py`, and `scripts`: passed;
+- final independent review: PASS, no blockers; and
+- `git diff --check`: clean.
+
+The exact final full-suite command was:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output -n orpheus pytest -q
+```
+
+It passed `1163` tests with `17` skipped in `461.37s` (`0:07:41`).
+
+This completes the frozen-source repository and artifact-integrity gate. It is
+not a model/trainer smoke, fixed-manifest evaluation, metric, promotion,
+plateau, or convergence result.
+
+The paired causal contract is fixed. Treatment and control share initializer,
+seed and draw identities, scenario balance, devices, runtime axis gate,
+`updater_state_heads` ownership, objective weights, optimizer, schedule,
+cadence, and manifests. Treatment enables macro physical reductions and
+axiswise hinges; control disables only those two switches. Gate-off versus
+gate-on is a separate zero-update forward ablation, not the training control.
+The next retained gate is a deterministic two-update pair proving exact draw
+parity, six-tensor/Adam ownership, frozen and sibling exactness, finite
+gradients, and cadence behavior. Common fixed-32 step-zero evidence follows.
+Both long arms are configured for `3072` updates with selectors every `512`
+and must reach at least `512` and `1024` absent a truthful integrity/nonfinite
+stop. Long training, paired latency, and disjoint RGB-only
+validation/test/OOD remain pending despite the complete source gate above.
+
 ## Specification 1.51 comprehensive promotion evidence — 2026-08-21
 
 The isolated specification-1.51 implementation is review-complete with no

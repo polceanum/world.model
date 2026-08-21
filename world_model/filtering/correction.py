@@ -39,6 +39,7 @@ class BeliefUpdaterConfig:
     learned_residual_scale: float = 0.1
     enable_learned_corrector: bool = True
     innovation_anchored_correction: bool = False
+    learned_correction_independent_axis_support: bool = False
     velocity_from_position_coupling: float = 0.5
     velocity_from_position_variance_scale: float = 2.0
     maximum_velocity_from_position_delta: float = 6.0
@@ -116,6 +117,69 @@ class BeliefUpdater(nn.Module):
             ambiguous,
             confidence.new_full((), self.config.ambiguous_confidence),
             confidence.new_ones(()),
+        )
+
+    @staticmethod
+    def _position_causal_axis_support(
+        measured: MeasurementSet,
+        innovation: InnovationSet,
+        association: AssociationResult,
+        batch_index: Tensor,
+        pair_index: Tensor,
+    ) -> Tensor:
+        """Select independent world axes, failing closed for bound ROI rows."""
+
+        # The original typed measurement is authoritative.  An InnovationSet
+        # is a derived pair view and a stale/custom producer must not be able
+        # to widen support beyond the provenance carried by MeasurementSet.
+        independent_axis = measured.auxiliary.get("world_position_independent_axis_mask")
+        if independent_axis is not None:
+            if (
+                independent_axis.shape != (*measured.values.shape[:2], 3)
+                or independent_axis.dtype != torch.bool
+            ):
+                raise ValueError("measured world-position independence must be boolean [B,M,3]")
+            measurement_index = association.measurement_indices[batch_index, pair_index]
+            return independent_axis[batch_index, measurement_index]
+
+        source_bound = innovation.auxiliary.get("measured_source_bound")
+        if source_bound is not None:
+            if (
+                source_bound.shape != association.pair_mask.shape
+                or source_bound.dtype != torch.bool
+            ):
+                raise ValueError("measured source-bound mask must be boolean [B,P]")
+            selected_source_bound = source_bound[batch_index, pair_index]
+        else:
+            selected_source_bound = torch.zeros(
+                (batch_index.numel(),),
+                dtype=torch.bool,
+                device=batch_index.device,
+            )
+
+        source_fields_present = (
+            measured.source_belief_indices is not None or measured.source_object_ids is not None
+        )
+        if source_fields_present:
+            if measured.source_belief_indices is None or measured.source_object_ids is None:
+                raise ValueError(
+                    "source-conditioned measurements require both source identity fields"
+                )
+            # Valid rows in a source-conditioned MeasurementSet are bound by
+            # contract. Consult the measurement directly as well as the copied
+            # innovation bit so missing producer metadata cannot open support.
+            selected_source_bound = torch.ones_like(selected_source_bound)
+
+        if source_bound is not None or source_fields_present:
+            return ~selected_source_bound.unsqueeze(-1).expand(-1, 3)
+
+        # Global/unbound observations predate explicit provenance. They remain
+        # compatible with all world axes; a source-conditioned ROI is marked
+        # separately by build_innovation and therefore takes the branch above.
+        return torch.ones(
+            (batch_index.numel(), 3),
+            dtype=torch.bool,
+            device=batch_index.device,
         )
 
     @staticmethod
@@ -234,6 +298,21 @@ class BeliefUpdater(nn.Module):
         correction_evidence = packed.new_zeros((batch_index.numel(), packed.shape[-1]))
         correction_confidence = packed.new_zeros(correction_evidence.shape)
         position_slice = packing["position"]
+        learned_state_support: Tensor | None = None
+        position_causal_axis_support: Tensor | None = None
+        if self.config.learned_correction_independent_axis_support:
+            position_causal_axis_support = self._position_causal_axis_support(
+                measured,
+                innovation,
+                association,
+                batch_index,
+                pair_index,
+            )
+            learned_state_support = torch.ones_like(
+                correction_confidence,
+                dtype=torch.bool,
+            )
+            learned_state_support[..., position_slice] = position_causal_axis_support
         prior_position = packed[batch_index, belief_index, position_slice]
         prior_position_lv = log_variance[batch_index, belief_index, position_slice]
         position_standard_deviation = (
@@ -322,6 +401,9 @@ class BeliefUpdater(nn.Module):
                 -1
             ) * velocity_supported.to(confidence.dtype)
         elif "velocity_from_position" in measured.supported_state_fields:
+            if learned_state_support is not None:
+                assert position_causal_axis_support is not None
+                learned_state_support[..., velocity_slice] = position_causal_axis_support
             elapsed = elapsed_by_batch[batch_index]
             valid_elapsed = elapsed > self.config.minimum_velocity_dt
             safe_elapsed = elapsed.clamp_min(self.config.minimum_velocity_dt)
@@ -437,6 +519,10 @@ class BeliefUpdater(nn.Module):
                 # Preserve exact historical checkpoint semantics unless the
                 # corrected protocol is selected explicitly in configuration.
                 learned_state_factor = confidence_full
+            if learned_state_support is not None:
+                learned_state_factor = learned_state_factor * learned_state_support.to(
+                    learned_state_factor.dtype
+                )
             learned_delta = (
                 learned.state_gate
                 * learned.mean_delta
@@ -453,6 +539,8 @@ class BeliefUpdater(nn.Module):
                 if self.config.innovation_anchored_correction
                 else confidence_full
             )
+            if learned_state_support is not None:
+                variance_factor = variance_factor * learned_state_support.to(variance_factor.dtype)
             updated_lv[batch_index, belief_index] = (
                 updated_lv[batch_index, belief_index] + variance_factor * learned.log_variance_delta
             ).clamp(

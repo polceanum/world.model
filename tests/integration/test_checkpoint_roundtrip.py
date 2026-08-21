@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -9,14 +12,17 @@ from pathlib import Path
 import pytest
 import torch
 
+import world_model.training.trainer as training_trainer
 from world_model.datasets import SyntheticSphereDataset, collate_episodes
 from world_model.runtime import OnlineWorldModel
 from world_model.training.checkpointing import (
+    capture_checkpoint_snapshot,
     checkpoint_payload,
     load_checkpoint,
     load_model_weights,
     save_checkpoint,
     validate_checkpoint_config,
+    validate_exact_resume_state,
     validate_training_resume_config,
 )
 from world_model.training.loop import (
@@ -26,6 +32,7 @@ from world_model.training.loop import (
 from world_model.training.trainer import (
     _ROLLOUT_SELECTION_METRIC_VERSION,
     _validation_protocol_checkpoint_metrics,
+    closed_loop_learning_rate_at_update,
     train_from_config,
 )
 from world_model.utils.config import load_config
@@ -642,6 +649,53 @@ def test_checkpoint_copies_passed_source_provenance() -> None:
     assert payload["rng"]["torch_mps"] is None
 
 
+def test_checkpoint_copies_artifact_metadata_and_marks_weight_only_resume_boundary() -> None:
+    config = _small_config()
+    artifact_metadata = {
+        "role": "weight_only_initializer",
+        "composition": {"module_prefixes": ["updater"]},
+    }
+    payload = checkpoint_payload(
+        model=torch.nn.Linear(1, 1),
+        optimizer=None,
+        scheduler=None,
+        config=config,
+        step=0,
+        metrics={"checkpoint_state_role": "weight_only_initializer"},
+        device="cpu",
+        artifact_metadata=artifact_metadata,
+    )
+
+    artifact_metadata["composition"]["module_prefixes"].append("identifier")
+    assert payload["artifact_metadata"] == {
+        "role": "weight_only_initializer",
+        "composition": {"module_prefixes": ["updater"]},
+    }
+    with pytest.raises(ValueError, match="cannot be exactly resumed.*--initialize-from"):
+        validate_exact_resume_state(payload)
+
+    ordinary_weight_only = dict(payload)
+    ordinary_weight_only["artifact_metadata"] = {"role": "diagnostic"}
+    ordinary_weight_only["metrics"] = {}
+    with pytest.raises(ValueError, match="requires checkpoint optimizer state"):
+        validate_exact_resume_state(ordinary_weight_only)
+
+
+def test_public_checkpoint_snapshot_hashes_the_same_immutable_byte_read(tmp_path: Path) -> None:
+    source = tmp_path / "last.pt"
+    original = b"first checkpoint bytes"
+    source.write_bytes(original)
+
+    with capture_checkpoint_snapshot(source) as captured:
+        source.write_bytes(b"replacement checkpoint bytes")
+        assert captured.source_path == source.resolve()
+        assert captured.sha256 == hashlib.sha256(original).hexdigest()
+        assert captured.byte_count == len(original)
+        assert captured.snapshot_path.read_bytes() == original
+        snapshot_path = captured.snapshot_path
+    assert not snapshot_path.exists()
+
+
 def test_training_resume_allows_only_non_numerical_operational_changes() -> None:
     config = _small_config()
     payload = {
@@ -708,6 +762,36 @@ def test_training_resume_binds_state_roi_scope_and_late_transition() -> None:
         training=replace(
             state_roi.training,
             closed_loop_trainable_scope="state_dynamics_roi",
+        ),
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"incompatible fields:.*training\.closed_loop_trainable_scope",
+    ):
+        validate_training_resume_config(payload, changed)
+
+
+def test_training_resume_binds_updater_state_heads_scope() -> None:
+    source = _small_config()
+    updater_state_heads = replace(
+        source,
+        training=replace(
+            source.training,
+            closed_loop_trainable_scope="updater_state_heads",
+        ),
+    )
+    updater_state_heads.validate()
+    payload = {
+        "config": updater_state_heads.to_dict(),
+        "simulator_version": SIMULATOR_VERSION,
+    }
+
+    validate_training_resume_config(payload, updater_state_heads)
+    changed = replace(
+        updater_state_heads,
+        training=replace(
+            updater_state_heads.training,
+            closed_loop_trainable_scope="updater",
         ),
     )
     with pytest.raises(
@@ -809,6 +893,40 @@ def test_training_resume_binds_prior_future_correction_with_legacy_true_default(
     with pytest.raises(
         ValueError,
         match=r"training\.closed_loop_prior_future_correction_enabled",
+    ):
+        validate_training_resume_config(legacy_payload, changed)
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "closed_loop_batch_macro_physical_losses_enabled",
+        "closed_loop_axiswise_correction_hinge_enabled",
+    ],
+)
+def test_training_resume_binds_physical_objective_repairs_with_legacy_false_default(
+    field_name: str,
+) -> None:
+    config = _small_config()
+    checkpoint_config = config.to_dict()
+    checkpoint_config["training"].pop(field_name)
+    legacy_payload = {
+        "config": checkpoint_config,
+        "simulator_version": SIMULATOR_VERSION,
+    }
+
+    validate_training_resume_config(legacy_payload, config)
+    changed = replace(
+        config,
+        training=replace(
+            config.training,
+            **{field_name: True},
+        ),
+    )
+    changed.validate()
+    with pytest.raises(
+        ValueError,
+        match=rf"training\.{field_name}",
     ):
         validate_training_resume_config(legacy_payload, changed)
 
@@ -1015,6 +1133,348 @@ def test_trainer_rejects_inexact_resume_before_overwriting_run_metadata(
     assert not (run_directory / "run_metadata.json").exists()
 
 
+def test_trainer_rejects_weight_only_initializer_as_exact_resume(tmp_path: Path) -> None:
+    config = _small_config()
+    run_directory = tmp_path / "weight-only-initializer"
+    checkpoint = save_checkpoint(
+        run_directory / "checkpoints" / "last.pt",
+        model=torch.nn.Linear(1, 1),
+        optimizer=None,
+        config=config,
+        step=0,
+        metrics={"checkpoint_state_role": "weight_only_initializer"},
+        artifact_metadata={"role": "weight_only_initializer"},
+        device="cpu",
+    )
+
+    with pytest.raises(ValueError, match="cannot be exactly resumed.*--initialize-from"):
+        train_from_config(
+            config,
+            resume_path=checkpoint,
+            device_info=select_device("cpu"),
+        )
+
+    assert not (run_directory / "run_metadata.json").exists()
+
+
+def test_trainer_rejects_missing_optimizer_state_as_exact_resume(tmp_path: Path) -> None:
+    config = _small_config()
+    run_directory = tmp_path / "missing-optimizer-state"
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    checkpoint = save_checkpoint(
+        run_directory / "checkpoints" / "last.pt",
+        model=model,
+        optimizer=None,
+        config=config,
+        step=1,
+        metrics={
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
+            **_validation_protocol_checkpoint_metrics(config),
+        },
+        device="cpu",
+    )
+
+    with pytest.raises(ValueError, match="requires checkpoint optimizer state.*--initialize-from"):
+        train_from_config(
+            config,
+            resume_path=checkpoint,
+            device_info=select_device("cpu"),
+        )
+
+    assert not (run_directory / "run_metadata.json").exists()
+
+
+@pytest.mark.parametrize("missing_field", [None, "python", "numpy", "torch_cpu"])
+def test_trainer_rejects_incomplete_rng_state_before_overwriting_metadata(
+    tmp_path: Path,
+    missing_field: str | None,
+) -> None:
+    config = _small_config()
+    run_directory = tmp_path / f"missing-rng-{missing_field or 'mapping'}"
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate)
+    checkpoint = save_checkpoint(
+        run_directory / "checkpoints" / "last.pt",
+        model=model,
+        optimizer=optimizer,
+        config=config,
+        step=1,
+        metrics={
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
+            **_validation_protocol_checkpoint_metrics(config),
+        },
+        device="cpu",
+    )
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    if missing_field is None:
+        payload.pop("rng")
+    else:
+        payload["rng"].pop(missing_field)
+    torch.save(payload, checkpoint)
+    resolved_path = run_directory / "config.resolved.yaml"
+    resolved_path.write_text("sentinel: original\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="checkpoint RNG state"):
+        train_from_config(
+            config,
+            resume_path=checkpoint,
+            device_info=select_device("cpu"),
+        )
+
+    assert resolved_path.read_text(encoding="utf-8") == "sentinel: original\n"
+    assert not (run_directory / "run_metadata.json").exists()
+
+
+def test_trainer_rejects_nonfinite_optimizer_state_before_overwriting_metadata(
+    tmp_path: Path,
+) -> None:
+    config = _small_config()
+    run_directory = tmp_path / "nonfinite-optimizer-state"
+    model = torch.nn.Linear(1, 1)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate)
+    for parameter in model.parameters():
+        parameter.grad = torch.ones_like(parameter)
+    optimizer.step()
+    checkpoint = save_checkpoint(
+        run_directory / "checkpoints" / "last.pt",
+        model=model,
+        optimizer=optimizer,
+        config=config,
+        step=1,
+        device="cpu",
+    )
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    first_state = next(iter(payload["optimizer_state"]["state"].values()))
+    first_state["exp_avg"].reshape(-1)[0] = float("nan")
+    torch.save(payload, checkpoint)
+    resolved_path = run_directory / "config.resolved.yaml"
+    resolved_path.write_text("sentinel: original\n", encoding="utf-8")
+
+    with pytest.raises(FloatingPointError, match="optimizer_state.*NaN or Inf"):
+        train_from_config(
+            config,
+            resume_path=checkpoint,
+            device_info=select_device("cpu"),
+        )
+
+    assert resolved_path.read_text(encoding="utf-8") == "sentinel: original\n"
+    assert not (run_directory / "run_metadata.json").exists()
+
+
+def _save_destination_compatible_resume_checkpoint(
+    run_directory: Path,
+    config,
+    *,
+    populate_optimizer: bool = False,
+) -> Path:
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+    )
+    if config.training.rgb_pretrain_steps < 1:
+        optimizer.param_groups[0]["lr"] = closed_loop_learning_rate_at_update(
+            config,
+            causal_update_index=0,
+        )
+    if populate_optimizer:
+        for parameter in model.parameters():
+            parameter.grad = torch.ones_like(parameter)
+        optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
+    return save_checkpoint(
+        run_directory / "checkpoints" / "last.pt",
+        model=model,
+        optimizer=optimizer,
+        config=config,
+        step=1,
+        metrics={
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
+            **_validation_protocol_checkpoint_metrics(config),
+        },
+        device="cpu",
+    )
+
+
+@pytest.mark.parametrize(
+    ("corruption", "expected_error"),
+    [
+        ("model_shape", "size mismatch"),
+        ("optimizer_group_count", "different number of parameter groups"),
+        ("optimizer_group_schema", "parameter group 0 schema"),
+        ("optimizer_betas", "betas must contain two values"),
+        ("optimizer_duplicate_id", "parameter IDs must be globally unique"),
+        ("optimizer_orphan_state", "does not name a declared parameter ID"),
+        ("optimizer_moment_shape", "optimizer moment.*shape"),
+        ("optimizer_missing_step", "must contain a scalar Tensor 'step'"),
+        ("optimizer_python_step", "must contain a scalar Tensor 'step'"),
+        ("scheduler_state", "configured trainer has no scheduler"),
+    ],
+)
+def test_resume_rejects_destination_incompatible_state_before_artifacts(
+    tmp_path: Path,
+    corruption: str,
+    expected_error: str,
+) -> None:
+    config = _small_config()
+    run_directory = tmp_path / f"incompatible-{corruption}"
+    checkpoint = _save_destination_compatible_resume_checkpoint(
+        run_directory,
+        config,
+        populate_optimizer=corruption
+        in {
+            "optimizer_moment_shape",
+            "optimizer_missing_step",
+            "optimizer_python_step",
+        },
+    )
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    if corruption == "model_shape":
+        first_name = next(iter(payload["model_state"]))
+        payload["model_state"][first_name] = torch.zeros(1)
+    elif corruption == "optimizer_group_count":
+        extra_group = deepcopy(payload["optimizer_state"]["param_groups"][0])
+        parameter_ids = payload["optimizer_state"]["param_groups"][0]["params"]
+        offset = max(parameter_ids) + 1
+        extra_group["params"] = [offset + index for index in range(len(parameter_ids))]
+        payload["optimizer_state"]["param_groups"].append(extra_group)
+    elif corruption == "optimizer_group_schema":
+        payload["optimizer_state"]["param_groups"][0].pop("lr")
+    elif corruption == "optimizer_betas":
+        payload["optimizer_state"]["param_groups"][0]["betas"] = (0.9,)
+        disposable_model = OnlineWorldModel.from_config(config, device="cpu")
+        disposable_optimizer = torch.optim.AdamW(
+            disposable_model.parameters(),
+            lr=config.training.learning_rate,
+            weight_decay=config.training.weight_decay,
+        )
+        # PyTorch accepts this malformed group at load time and fails only on
+        # the next update; exact-resume preflight must reject it sooner.
+        disposable_optimizer.load_state_dict(payload["optimizer_state"])
+        for parameter in disposable_model.parameters():
+            parameter.grad = torch.ones_like(parameter)
+        with pytest.raises((IndexError, RuntimeError, ValueError)):
+            disposable_optimizer.step()
+    elif corruption == "optimizer_duplicate_id":
+        parameters = payload["optimizer_state"]["param_groups"][0]["params"]
+        parameters[1] = parameters[0]
+    elif corruption == "optimizer_orphan_state":
+        payload["optimizer_state"]["state"][999_999] = {}
+    elif corruption == "optimizer_moment_shape":
+        first_state = next(iter(payload["optimizer_state"]["state"].values()))
+        first_state["exp_avg"] = torch.zeros(1)
+    elif corruption == "optimizer_missing_step":
+        first_state = next(iter(payload["optimizer_state"]["state"].values()))
+        first_state.pop("step")
+    elif corruption == "optimizer_python_step":
+        first_state = next(iter(payload["optimizer_state"]["state"].values()))
+        first_state["step"] = float(first_state["step"].item())
+    elif corruption == "scheduler_state":
+        payload["scheduler_state"] = {"last_epoch": 1}
+    else:
+        raise AssertionError(f"unknown corruption: {corruption}")
+    torch.save(payload, checkpoint)
+    resolved_path = run_directory / "config.resolved.yaml"
+    resolved_path.write_text("sentinel: original\n", encoding="utf-8")
+
+    with pytest.raises((RuntimeError, ValueError), match=expected_error):
+        train_from_config(
+            config,
+            resume_path=checkpoint,
+            device_info=select_device("cpu"),
+        )
+
+    assert resolved_path.read_text(encoding="utf-8") == "sentinel: original\n"
+    assert not (run_directory / "run_metadata.json").exists()
+
+
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(),
+    reason="MPS private-generator state validation requires an available backend",
+)
+def test_resume_rejects_invalid_mps_rng_before_artifacts(tmp_path: Path) -> None:
+    config = _small_config()
+    run_directory = tmp_path / "invalid-mps-rng"
+    checkpoint = _save_destination_compatible_resume_checkpoint(run_directory, config)
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    payload["rng"]["torch_mps"] = torch.zeros(1, dtype=torch.uint8)
+    torch.save(payload, checkpoint)
+    resolved_path = run_directory / "config.resolved.yaml"
+    resolved_path.write_text("sentinel: original\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="MPS RNG state is invalid"):
+        train_from_config(
+            config,
+            resume_path=checkpoint,
+            device_info=select_device("cpu"),
+        )
+
+    assert resolved_path.read_text(encoding="utf-8") == "sentinel: original\n"
+    assert not (run_directory / "run_metadata.json").exists()
+
+
+def test_exact_resume_validates_cuda_rng_device_count_without_global_restore(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _small_config()
+    checkpoint = _save_destination_compatible_resume_checkpoint(tmp_path / "cuda-count", config)
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    payload["rng"]["torch_cuda"] = [payload["rng"]["torch_cpu"].clone()]
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+
+    with pytest.raises(ValueError, match="CUDA RNG state device count"):
+        validate_exact_resume_state(payload)
+
+
+@pytest.mark.parametrize(
+    ("backend", "expected_error"),
+    [("cuda", r"torch_cuda\[0\] is invalid"), ("mps", "MPS RNG state is invalid")],
+)
+def test_exact_resume_uses_private_generator_to_reject_backend_rng_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    backend: str,
+    expected_error: str,
+) -> None:
+    config = _small_config()
+    checkpoint = _save_destination_compatible_resume_checkpoint(
+        tmp_path / f"invalid-{backend}-generator-state",
+        config,
+    )
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    state = payload["rng"]["torch_cpu"].clone()
+    if backend == "cuda":
+        payload["rng"]["torch_cuda"] = [state]
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
+    else:
+        payload["rng"]["torch_mps"] = state
+        monkeypatch.setattr(torch.backends.mps, "is_available", lambda: True)
+
+    real_generator = torch.Generator
+
+    class RejectingGenerator:
+        def set_state(self, _state):
+            raise RuntimeError("rejected test state")
+
+    def private_generator(*args, **kwargs):
+        device = kwargs.get("device", args[0] if args else "cpu")
+        if str(device).startswith(backend):
+            return RejectingGenerator()
+        return real_generator(*args, **kwargs)
+
+    cpu_rng_before = torch.get_rng_state().clone()
+    monkeypatch.setattr(torch, "Generator", private_generator)
+
+    with pytest.raises(ValueError, match=expected_error):
+        validate_exact_resume_state(payload)
+
+    torch.testing.assert_close(torch.get_rng_state(), cpu_rng_before, rtol=0, atol=0)
+
+
 def test_trainer_rejects_prior_simulator_exact_resume_before_writing_metadata(
     tmp_path,
 ) -> None:
@@ -1085,10 +1545,12 @@ def test_trainer_rejects_checkpoint_from_different_execution_device(
 ) -> None:
     config = _small_config()
     run_directory = tmp_path / "device-mismatch"
+    model = torch.nn.Linear(1, 1)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate)
     checkpoint = save_checkpoint(
         run_directory / "checkpoints" / "last.pt",
-        model=torch.nn.Linear(1, 1),
-        optimizer=None,
+        model=model,
+        optimizer=optimizer,
         config=config,
         step=1,
         metrics={
@@ -1129,11 +1591,20 @@ def test_already_complete_resume_does_not_rewrite_historical_device_checkpoint(
         ),
     )
     model = OnlineWorldModel.from_config(config, device="cpu")
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+    )
+    optimizer.param_groups[0]["lr"] = closed_loop_learning_rate_at_update(
+        config,
+        causal_update_index=0,
+    )
     run_directory = tmp_path / "completed"
     checkpoint = save_checkpoint(
         run_directory / "checkpoints" / "last.pt",
         model=model,
-        optimizer=None,
+        optimizer=optimizer,
         config=config,
         step=1,
         metrics={
@@ -1191,11 +1662,20 @@ def test_already_complete_resume_to_new_run_writes_truthful_no_op_summary(
         ),
     )
     model = OnlineWorldModel.from_config(config, device="cpu")
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+    )
+    optimizer.param_groups[0]["lr"] = closed_loop_learning_rate_at_update(
+        config,
+        causal_update_index=0,
+    )
     source_run = tmp_path / "source-completed"
     checkpoint = save_checkpoint(
         source_run / "checkpoints" / "last.pt",
         model=model,
-        optimizer=None,
+        optimizer=optimizer,
         config=config,
         step=1,
         metrics={
@@ -1232,6 +1712,471 @@ def test_already_complete_resume_to_new_run_writes_truthful_no_op_summary(
     assert destination["device"] == "mps"
     assert Path(result["last_checkpoint"]).read_bytes() == checkpoint_bytes
     assert source_summary.read_bytes() == source_summary_bytes
+
+
+def test_branched_resume_rejects_occupied_destination_without_mutation(
+    tmp_path: Path,
+) -> None:
+    config = _small_config()
+    config = replace(
+        config,
+        project=replace(config.project, output_dir=str(tmp_path / "runs")),
+        device=replace(config.device, preference="cpu", closed_loop_preference="same"),
+        training=replace(config.training, steps=1, rgb_pretrain_steps=0),
+    )
+    checkpoint = _save_destination_compatible_resume_checkpoint(
+        tmp_path / "source-run",
+        config,
+    )
+    run_name = "20260821-120000-occupied-branch"
+    destination = tmp_path / "runs" / run_name
+    (destination / "checkpoints").mkdir(parents=True)
+    sentinels = {
+        destination / "metrics.jsonl": b'{"evidence":"metrics"}\n',
+        destination / "checkpoints" / "foreign.pt": b"foreign checkpoint evidence",
+        destination / "config.resolved.yaml": b"sentinel: config\n",
+        destination / "run_metadata.json": b'{"evidence":"metadata"}\n',
+        destination / "training_progress.json": b'{"evidence":"progress"}\n',
+        destination / "training_state.json": b'{"state":"stale"}\n',
+        destination / "train_summary.json": b'{"evidence":"summary"}\n',
+        destination / ".training.lock": b"stale lock evidence\n",
+        destination / "unknown-campaign-evidence.bin": b"unknown evidence",
+    }
+    for path, content in sentinels.items():
+        path.write_bytes(content)
+
+    with pytest.raises(
+        FileExistsError,
+        match="branched exact-resume destination must be absent or empty",
+    ):
+        train_from_config(
+            config,
+            run_name=run_name,
+            resume_path=checkpoint,
+            device_info=select_device("cpu"),
+        )
+
+    assert {path: path.read_bytes() for path in sentinels} == sentinels
+    assert not (destination / "checkpoints" / "last.pt").exists()
+
+
+def test_explicit_source_run_name_is_still_an_occupied_branch(tmp_path: Path) -> None:
+    config = _small_config()
+    config = replace(
+        config,
+        project=replace(config.project, output_dir=str(tmp_path / "runs")),
+        device=replace(config.device, preference="cpu", closed_loop_preference="same"),
+        training=replace(config.training, steps=1, rgb_pretrain_steps=0),
+    )
+    source_run = tmp_path / "runs" / "20260821-120000-source-run"
+    checkpoint = _save_destination_compatible_resume_checkpoint(source_run, config)
+    sentinels = {
+        checkpoint: checkpoint.read_bytes(),
+        source_run / "config.resolved.yaml": b"sentinel: source config\n",
+        source_run / "metrics.jsonl": b'{"evidence":"source metrics"}\n',
+    }
+    for path, content in tuple(sentinels.items())[1:]:
+        path.write_bytes(content)
+
+    with pytest.raises(
+        FileExistsError,
+        match="branched exact-resume destination must be absent or empty",
+    ):
+        train_from_config(
+            config,
+            run_name=source_run.name,
+            resume_path=checkpoint,
+            device_info=select_device("cpu"),
+        )
+
+    assert {path: path.read_bytes() for path in sentinels} == sentinels
+
+
+def test_branched_resume_reuses_one_timestamped_destination_resolution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _small_config()
+    config = replace(
+        config,
+        project=replace(config.project, output_dir=str(tmp_path / "runs")),
+        device=replace(config.device, preference="cpu", closed_loop_preference="same"),
+        training=replace(config.training, steps=1, rgb_pretrain_steps=0),
+    )
+    checkpoint = _save_destination_compatible_resume_checkpoint(
+        tmp_path / "source-run",
+        config,
+    )
+    run_name = "empty-branch-clock-boundary"
+    resolution_count = 0
+
+    def timestamp_crossing(path: str | Path) -> Path:
+        nonlocal resolution_count
+        target = Path(path)
+        if target.name.startswith("20260821-"):
+            return target
+        resolution_count += 1
+        return target.with_name(f"20260821-12000{resolution_count}-{target.name}")
+
+    monkeypatch.setattr(
+        training_trainer,
+        "timestamped_artifact_path",
+        timestamp_crossing,
+    )
+    destination = tmp_path / "runs" / f"20260821-120001-{run_name}"
+    destination.mkdir(parents=True)
+
+    result = train_from_config(
+        config,
+        run_name=run_name,
+        resume_path=checkpoint,
+        device_info=select_device("cpu"),
+    )
+
+    assert Path(result["run_directory"]) == destination
+    assert resolution_count == 1
+    assert Path(result["last_checkpoint"]).is_file()
+    assert (destination / ".training.lock").read_text(encoding="utf-8") == (f"{os.getpid()}\n")
+
+
+def test_direct_lock_creator_does_not_unlink_inode_when_flock_is_lost(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_directory = tmp_path / "lock-race"
+    run_directory.mkdir()
+
+    def lose_lock(_descriptor: int, _operation: int) -> None:
+        raise BlockingIOError("another opener won the lock")
+
+    monkeypatch.setattr(training_trainer.fcntl, "flock", lose_lock)
+
+    with pytest.raises(BlockingIOError, match="another opener won"):
+        training_trainer._acquire_direct_resume_lock(
+            run_directory,
+            require_empty_destination=False,
+        )
+
+    # The winner may still hold this inode. Unlinking it would let a third
+    # writer create and lock a different inode concurrently.
+    assert (run_directory / ".training.lock").is_file()
+
+
+def test_public_in_place_resume_rejects_an_existing_direct_lock_without_mutation(
+    tmp_path: Path,
+) -> None:
+    config = _small_config()
+    config = replace(
+        config,
+        device=replace(config.device, preference="cpu", closed_loop_preference="same"),
+        training=replace(config.training, steps=2, rgb_pretrain_steps=0),
+    )
+    source_run = tmp_path / "locked-in-place-source"
+    checkpoint = _save_destination_compatible_resume_checkpoint(source_run, config)
+    sentinels = {
+        checkpoint: checkpoint.read_bytes(),
+        source_run / "config.resolved.yaml": b"sentinel: locked config\n",
+        source_run / "metrics.jsonl": b'{"evidence":"locked metrics"}\n',
+    }
+    for path, content in tuple(sentinels.items())[1:]:
+        path.write_bytes(content)
+    claim = training_trainer._acquire_direct_resume_lock(
+        source_run,
+        require_empty_destination=False,
+    )
+    try:
+        with pytest.raises(BlockingIOError):
+            train_from_config(
+                config,
+                resume_path=checkpoint,
+                device_info=select_device("cpu"),
+            )
+        assert {path: path.read_bytes() for path in sentinels} == sentinels
+    finally:
+        training_trainer._restore_failed_direct_lock_claim(claim)
+        claim.handle.close()
+
+
+def test_branched_resume_rechecks_owned_destination_after_preflight(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _small_config()
+    config = replace(
+        config,
+        project=replace(config.project, output_dir=str(tmp_path / "runs")),
+        device=replace(config.device, preference="cpu", closed_loop_preference="same"),
+        training=replace(config.training, steps=1, rgb_pretrain_steps=0),
+    )
+    checkpoint = _save_destination_compatible_resume_checkpoint(
+        tmp_path / "source-run",
+        config,
+    )
+    run_name = "20260821-120002-raced-branch"
+    destination = tmp_path / "runs" / run_name
+    sentinel = destination / "concurrent-sentinel.bin"
+    sentinel_bytes = b"concurrent evidence must remain authoritative"
+    real_validate = training_trainer.validate_exact_resume_state
+
+    def add_evidence_after_early_destination_check(
+        payload: Mapping[str, object],
+        *,
+        require_optimizer_state: bool = True,
+    ) -> None:
+        real_validate(payload, require_optimizer_state=require_optimizer_state)
+        sentinel.write_bytes(sentinel_bytes)
+
+    monkeypatch.setattr(
+        training_trainer,
+        "validate_exact_resume_state",
+        add_evidence_after_early_destination_check,
+    )
+
+    with pytest.raises(
+        FileExistsError,
+        match="owned branched exact-resume destination contains unexpected entries",
+    ):
+        train_from_config(
+            config,
+            run_name=run_name,
+            resume_path=checkpoint,
+            device_info=select_device("cpu"),
+        )
+
+    assert sentinel.read_bytes() == sentinel_bytes
+    assert {entry.name for entry in destination.iterdir()} == {sentinel.name}
+
+
+def test_exact_resume_reuses_one_snapshot_when_source_is_replaced_after_preflight(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _small_config()
+    config = replace(
+        config,
+        project=replace(config.project, output_dir=str(tmp_path / "runs")),
+        device=replace(
+            config.device,
+            preference="cpu",
+            closed_loop_preference="same",
+        ),
+        training=replace(
+            config.training,
+            steps=1,
+            rgb_pretrain_steps=0,
+        ),
+    )
+    original_model = OnlineWorldModel.from_config(config, device="cpu")
+    original_optimizer = torch.optim.AdamW(
+        original_model.parameters(),
+        lr=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+    )
+    original_optimizer.param_groups[0]["lr"] = closed_loop_learning_rate_at_update(
+        config,
+        causal_update_index=0,
+    )
+    source_run = tmp_path / "mutable-source"
+    checkpoint = save_checkpoint(
+        source_run / "checkpoints" / "last.pt",
+        model=original_model,
+        optimizer=original_optimizer,
+        config=config,
+        step=1,
+        metrics={
+            "loss_total": 3.5,
+            "measurement_handoff_completed": 1.0,
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
+            **_validation_protocol_checkpoint_metrics(config),
+        },
+        device="cpu",
+    )
+    original_bytes = checkpoint.read_bytes()
+
+    replacement_model = OnlineWorldModel.from_config(config, device="cpu")
+    replacement_model.load_state_dict(original_model.state_dict())
+    with torch.no_grad():
+        next(replacement_model.parameters()).reshape(-1)[0].add_(0.125)
+    replacement_optimizer = torch.optim.AdamW(
+        replacement_model.parameters(),
+        lr=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+    )
+    replacement_optimizer.param_groups[0]["lr"] = closed_loop_learning_rate_at_update(
+        config,
+        causal_update_index=0,
+    )
+    replacement = save_checkpoint(
+        tmp_path / "replacement.pt",
+        model=replacement_model,
+        optimizer=replacement_optimizer,
+        config=config,
+        step=1,
+        metrics={
+            "loss_total": 99.0,
+            "measurement_handoff_completed": 1.0,
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
+            **_validation_protocol_checkpoint_metrics(config),
+        },
+        device="cpu",
+    )
+    replacement_bytes = replacement.read_bytes()
+    real_validate = training_trainer.validate_exact_resume_state
+    source_replaced = False
+
+    def replace_source_after_preflight(
+        payload: Mapping[str, object],
+        *,
+        require_optimizer_state: bool = True,
+    ) -> None:
+        nonlocal source_replaced
+        real_validate(
+            payload,
+            require_optimizer_state=require_optimizer_state,
+        )
+        if not source_replaced:
+            checkpoint.write_bytes(replacement_bytes)
+            source_replaced = True
+
+    monkeypatch.setattr(
+        training_trainer,
+        "validate_exact_resume_state",
+        replace_source_after_preflight,
+    )
+
+    result = train_from_config(
+        config,
+        run_name="immutable-resume-copy",
+        resume_path=checkpoint,
+        device_info=select_device("cpu"),
+    )
+
+    assert source_replaced
+    assert checkpoint.read_bytes() == replacement_bytes
+    assert Path(result["last_checkpoint"]).read_bytes() == original_bytes
+    assert result["last_metrics"]["loss_total"] == 3.5
+
+
+def test_in_place_no_op_resume_rejects_source_replacement_without_overwrite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _small_config()
+    config = replace(
+        config,
+        device=replace(config.device, preference="cpu", closed_loop_preference="same"),
+        training=replace(config.training, steps=1, rgb_pretrain_steps=0),
+    )
+    source_run = tmp_path / "in-place-source"
+    checkpoint = _save_destination_compatible_resume_checkpoint(source_run, config)
+    original_payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    original_payload["metrics"].update(
+        {
+            "measurement_handoff_completed": 1.0,
+            "loss_total": 3.5,
+        }
+    )
+    torch.save(original_payload, checkpoint)
+
+    replacement_payload = deepcopy(original_payload)
+    replacement_payload["metrics"]["loss_total"] = 99.0
+    replacement_path = tmp_path / "replacement.pt"
+    torch.save(replacement_payload, replacement_path)
+    replacement_bytes = replacement_path.read_bytes()
+    resolved_path = source_run / "config.resolved.yaml"
+    resolved_path.write_text("sentinel: original\n", encoding="utf-8")
+    real_validate = training_trainer.validate_exact_resume_state
+    source_replaced = False
+
+    def replace_source_after_preflight(
+        payload: Mapping[str, object],
+        *,
+        require_optimizer_state: bool = True,
+    ) -> None:
+        nonlocal source_replaced
+        real_validate(payload, require_optimizer_state=require_optimizer_state)
+        if not source_replaced:
+            checkpoint.write_bytes(replacement_bytes)
+            source_replaced = True
+
+    monkeypatch.setattr(
+        training_trainer,
+        "validate_exact_resume_state",
+        replace_source_after_preflight,
+    )
+
+    with pytest.raises(ValueError, match="changed after immutable capture"):
+        train_from_config(
+            config,
+            resume_path=checkpoint,
+            device_info=select_device("cpu"),
+        )
+
+    assert source_replaced
+    assert checkpoint.read_bytes() == replacement_bytes
+    assert resolved_path.read_text(encoding="utf-8") == "sentinel: original\n"
+    assert not (source_run / "run_metadata.json").exists()
+
+
+def test_in_place_continuing_resume_rejects_source_replacement_before_publication(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _small_config()
+    config = replace(
+        config,
+        device=replace(config.device, preference="cpu", closed_loop_preference="same"),
+        training=replace(config.training, steps=2, rgb_pretrain_steps=0),
+    )
+    source_run = tmp_path / "in-place-continuing-source"
+    checkpoint = _save_destination_compatible_resume_checkpoint(source_run, config)
+    original_payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    original_payload["metrics"]["measurement_handoff_completed"] = 1.0
+    torch.save(original_payload, checkpoint)
+
+    replacement_payload = deepcopy(original_payload)
+    replacement_payload["metrics"]["loss_total"] = 99.0
+    replacement_path = tmp_path / "continuing-replacement.pt"
+    torch.save(replacement_payload, replacement_path)
+    replacement_bytes = replacement_path.read_bytes()
+    sentinels = {
+        source_run / "config.resolved.yaml": b"sentinel: original config\n",
+        source_run / "run_metadata.json": b'{"evidence":"original metadata"}\n',
+        source_run / "metrics.jsonl": b'{"evidence":"original metrics"}\n',
+        source_run / "training_progress.json": b'{"evidence":"original progress"}\n',
+    }
+    for path, content in sentinels.items():
+        path.write_bytes(content)
+    real_validate = training_trainer.validate_exact_resume_state
+    source_replaced = False
+
+    def replace_source_after_preflight(
+        payload: Mapping[str, object],
+        *,
+        require_optimizer_state: bool = True,
+    ) -> None:
+        nonlocal source_replaced
+        real_validate(payload, require_optimizer_state=require_optimizer_state)
+        if not source_replaced:
+            checkpoint.write_bytes(replacement_bytes)
+            source_replaced = True
+
+    monkeypatch.setattr(
+        training_trainer,
+        "validate_exact_resume_state",
+        replace_source_after_preflight,
+    )
+
+    with pytest.raises(ValueError, match="changed after immutable capture"):
+        train_from_config(
+            config,
+            resume_path=checkpoint,
+            device_info=select_device("cpu"),
+        )
+
+    assert source_replaced
+    assert checkpoint.read_bytes() == replacement_bytes
+    assert {path: path.read_bytes() for path in sentinels} == sentinels
 
 
 @pytest.mark.skipif(
@@ -1399,6 +2344,30 @@ def test_innovation_anchored_correction_is_semantic_with_legacy_false() -> None:
             filter=replace(
                 config.model.filter,
                 innovation_anchored_correction=True,
+            ),
+        ),
+    )
+    corrected.validate()
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(legacy_payload, corrected)
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(payload, corrected)
+
+
+def test_learned_correction_axis_support_is_semantic_with_legacy_false() -> None:
+    config = _small_config()
+    payload = {"config": config.to_dict()}
+    legacy_payload = deepcopy(payload)
+    legacy_payload["config"]["model"]["filter"].pop("learned_correction_independent_axis_support")
+
+    validate_checkpoint_config(legacy_payload, config)
+    corrected = replace(
+        config,
+        model=replace(
+            config.model,
+            filter=replace(
+                config.model.filter,
+                learned_correction_independent_axis_support=True,
             ),
         ),
     )

@@ -2,6 +2,85 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-21 specification 1.52 axis-gated updater-head repair (pre-launch)
+
+- Added opt-in independent-world-axis support for learned correction. The
+  original typed measurement mask now gates learned mean/log-variance deltas
+  on position and position-derived velocity coordinates; derived innovations
+  cannot widen support, source-bound missing provenance fails closed, and
+  global/unbound legacy observations retain all-axis compatibility. Analytic
+  Kalman fusion and the default-false historical path are unchanged.
+- Added the `updater_state_heads` scope, exposing exactly the mean, variance,
+  and gate head weight/bias tensors. The shared corrector trunk, modality
+  embedding, mode/existence/visibility siblings, and every other module remain
+  frozen. Added regression coverage for optimizer ownership, frozen tensor
+  exactness, and unchanged sibling outputs across AdamW.
+- Added exact-resume-bound, default-false batch-macro physical loss reduction
+  and axiswise correction hinges. Supported values are normalized per row
+  before supported-row averaging, and per-coordinate posterior-versus-prior
+  hinges prevent one axis from canceling another while retaining the fixed
+  configured-horizon denominator.
+- Split correction weighting into explicit position, velocity, and
+  regularization components. A real deterministic balanced eight-scenario
+  attribution batch showed aggregate `0.1` supplied only `0.1704%` of total
+  physical updater gradient. The analytic-correction magnitude regularizer
+  opposed the other physical gradient at cosine `-0.80133`; the pre-smoke
+  profile uses `7.0/2.0/0.0`, predicted at `12.4455%` correction/total,
+  `0.0713825` total norm, cosine `-0.00433`, and no clipping.
+- Added a provenance-bound weights-only initializer materializer and explicit
+  protected-base/equal-step-zero-witness/step-512-donor composition contract.
+  It captures immutable source bytes, verifies hashes, byte counts, steps,
+  model/config/protocol/ancestry identity and allowed transfer, strict-loads
+  the target, and emits only non-overwriting read-only artifacts that exact
+  resume rejects. The contract selects `23` updater tensors/`126164` elements,
+  changes `21`/`125971`, and requires model hash `88f2df4d...`. YAML boolean
+  `donor_weight` is rejected rather than coerced to numeric `1.0`.
+- Hardened exact resume into one immutable preflight/publication transaction.
+  The primary checkpoint and every required selector/accepted numbered-
+  history artifact are captured once. Complete model/optimizer/scheduler/RNG,
+  config/protocol/source/device, phase/counter, and linked-artifact validation
+  now precedes trainer publication apart from the required CLI lifecycle
+  state; in-place source identity is rechecked at the final boundary, but a
+  path reopen can never replace the captured load/copy input.
+- Made AdamW continuation destination-strict: globally unique serialized IDs,
+  exact group schema/cardinality, destination-equal static options, schedule-
+  valid dynamic LR, owned scalar steps, required finite moments with matching
+  shape/dtype/device, and a disposable finite next-step proof. RNG validation
+  uses private generators; the one global restore is deferred until preflight
+  passes. Resume and initialize-from payloads are released after use.
+- Required lifetime run ownership for every mutating exact resume. The CLI
+  passes an inode-bound `flock` handle and the direct API self-acquires one.
+  Any explicit run name is a branch; branches atomically require absent/empty
+  destinations, resolve a timestamp once, and recheck their exact owned entry
+  set after preflight. Lost-lock cleanup cannot unlink a winner inode.
+- Closed the focused artifact-integrity gate: checkpoint/trainer
+  `128 passed`, `1` expected MPS-only skip; post-format ownership/entrypoint
+  `15 passed`; entrypoint `7 passed`; materializer `3 passed`; Ruff format/
+  check and diff check clean. On active-Aqua custom Torch
+  `2.9.0a0+gitcbe1a35`, MPS built/available, invalid-MPS-RNG pre-publication
+  rejection and exact restoration passed `2` tests with `0` skipped in
+  `2.86s`.
+- Completed the final post-provenance frozen-source gate with exact command
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output -n
+  orpheus pytest -q`: `1163 passed, 17 skipped in 461.37s (0:07:41)`.
+  Whole-tree Ruff check passed, Ruff format check reported `221 files already
+  formatted`, isolated compileall over `world_model`, `tests`, `train.py`,
+  `evaluate.py`, `monitor.py`, and `scripts` passed, the focused final source/
+  version selection passed `6`, the version contract passed `1` in `0.78s`,
+  and diff check was clean. Final independent review returned PASS with no
+  blockers.
+- Fixed the paired protocol before launch. Both arms keep the axis gate enabled
+  and share initializer, draw order, devices, six-tensor scope, objective
+  weights, optimizer, schedule, cadence, and manifests. Treatment enables
+  macro reduction and axiswise hinges; control disables only those two
+  switches. Gate-off is a separate zero-update forward ablation.
+- This entry records implemented source and measured attribution only. Durable
+  initializer materialization, the gate-on/off ablation, retained two-update
+  paired smoke, common fixed-32 step-zero evidence, `3072`-update paired
+  training, latency, disjoint RGB-only validation/test/OOD, promotion, and
+  convergence are all pending. The completed repository/artifact gate above
+  is not a model/trainer smoke or model evidence.
+
 ### 2026-08-21 specification 1.51 final closure
 
 - Canonicalized pooled Gaussian NLL and sharpness from the exact x/y/z

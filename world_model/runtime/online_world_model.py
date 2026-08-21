@@ -440,6 +440,9 @@ class OnlineWorldModel(nn.Module):
                 maximum_log_variance=filter_config.max_log_variance,
                 learned_residual_scale=filter_config.learned_residual_scale,
                 innovation_anchored_correction=(filter_config.innovation_anchored_correction),
+                learned_correction_independent_axis_support=(
+                    filter_config.learned_correction_independent_axis_support
+                ),
                 missed_fast_variance_increment=(filter_config.missed_variance_growth),
                 observed_confidence_threshold=(association_config.minimum_measurement_confidence),
             ),

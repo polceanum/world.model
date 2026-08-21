@@ -20,6 +20,7 @@ from world_model.simulator import generate_episode
 from world_model.training.loop import (
     TrainingBatchResult,
     _belief_state_losses,
+    _correction_non_regression_loss,
     _current_correction_objective_support,
     _future_predictable_mask,
     _group_closed_loop_terms,
@@ -82,6 +83,35 @@ def _active_belief(
     objects.position.copy_(positions)
     objects.age_steps.copy_(age_steps)
     return replace(belief, objects=objects)
+
+
+def _unequal_support_physical_case() -> tuple[Any, Tensor, Tensor, Tensor, Tensor, Tensor]:
+    position = torch.full((3, 4, 3), 100.0)
+    position[0, 0] = 2.0
+    position[1] = 1.0
+    position = position.requires_grad_()
+    velocity = position.detach().clone().requires_grad_()
+    belief = _active_belief(
+        positions=position.detach(),
+        age_steps=torch.full((3, 4), 5, dtype=torch.int64),
+    )
+    log_variance = torch.zeros_like(belief.objects.fast_log_variance, requires_grad=True)
+    belief = belief.replace(
+        objects=belief.objects.replace(
+            position=position,
+            velocity=velocity,
+            fast_log_variance=log_variance,
+        )
+    )
+    matched = torch.tensor(
+        [
+            [True, False, False, False],
+            [True, True, True, True],
+            [False, False, False, False],
+        ]
+    )
+    indices = torch.arange(4, dtype=torch.int64).unsqueeze(0).expand(3, -1)
+    return belief, position, velocity, log_variance, indices, matched
 
 
 def test_gather_target_pairs_aligns_both_axes_and_zeros_unmatched_slots() -> None:
@@ -595,6 +625,109 @@ def test_velocity_correction_support_requires_a_surviving_incoming_prior() -> No
     assert support.tolist() == [[False, True]]
 
 
+def test_loop_axiswise_correction_hinge_prevents_cross_axis_cancellation() -> None:
+    legacy_config = _single_horizon_config()
+    axiswise_config = replace(
+        legacy_config,
+        training=replace(
+            legacy_config.training,
+            closed_loop_axiswise_correction_hinge_enabled=True,
+        ),
+    )
+    target = torch.zeros(1, 1, 3)
+    prior = torch.tensor([[[1.0, 3.0, 1.0]]], requires_grad=True)
+    posterior = torch.tensor([[[2.0, 0.0, 2.0]]], requires_grad=True)
+    support = torch.ones(1, 1, dtype=torch.bool)
+
+    legacy = _correction_non_regression_loss(
+        posterior,
+        prior,
+        target,
+        support,
+        legacy_config,
+    )
+    axiswise = _correction_non_regression_loss(
+        posterior,
+        prior,
+        target,
+        support,
+        axiswise_config,
+    )
+    x_only = _correction_non_regression_loss(
+        posterior,
+        prior,
+        target,
+        support,
+        axiswise_config,
+        coordinate_support=torch.tensor([[[True, False, False]]]),
+    )
+
+    torch.testing.assert_close(legacy, torch.tensor(0.0))
+    torch.testing.assert_close(axiswise, torch.tensor(2.0 / 3.0))
+    torch.testing.assert_close(x_only, torch.tensor(1.0))
+    axiswise.backward()
+    torch.testing.assert_close(
+        posterior.grad,
+        torch.tensor([[[1.0 / 3.0, 0.0, 1.0 / 3.0]]]),
+    )
+    assert prior.grad is None
+
+
+def test_current_physical_losses_are_batch_macro_and_omit_unsupported_rows() -> None:
+    belief, position, _, log_variance, indices, matched = _unequal_support_physical_case()
+    batch = {
+        "objects": {
+            "active": matched[:, None],
+            "position": torch.zeros(3, 1, 4, 3),
+            "velocity": torch.zeros(3, 1, 4, 3),
+            "drag": torch.zeros(3, 1, 4, 1),
+            "restitution": torch.zeros(3, 1, 4, 1),
+        }
+    }
+    legacy_config = _single_horizon_config()
+    macro_config = replace(
+        legacy_config,
+        training=replace(
+            legacy_config.training,
+            closed_loop_batch_macro_physical_losses_enabled=True,
+        ),
+    )
+    velocity_support = matched.unsqueeze(-1).expand_as(belief.objects.velocity)
+
+    legacy, _, _ = _belief_state_losses(
+        belief,
+        batch,
+        legacy_config,
+        frame_index=0,
+        indices=indices,
+        matched=matched,
+        velocity_axis_support=velocity_support,
+    )
+    macro, _, _ = _belief_state_losses(
+        belief,
+        batch,
+        macro_config,
+        frame_index=0,
+        indices=indices,
+        matched=matched,
+        velocity_axis_support=velocity_support,
+    )
+
+    torch.testing.assert_close(legacy["state_position"], torch.tensor(0.7))
+    torch.testing.assert_close(legacy["state_velocity"], torch.tensor(0.7))
+    torch.testing.assert_close(legacy["uncertainty_position_nll"], torch.tensor(0.8))
+    torch.testing.assert_close(macro["state_position"], torch.tensor(1.0))
+    torch.testing.assert_close(macro["state_velocity"], torch.tensor(1.0))
+    torch.testing.assert_close(macro["uncertainty_position_nll"], torch.tensor(1.25))
+
+    macro["state_position"].backward(retain_graph=True)
+    torch.testing.assert_close(position.grad[0, 0], torch.full((3,), 1.0 / 6.0))
+    torch.testing.assert_close(position.grad[1], torch.full((4, 3), 1.0 / 24.0))
+    assert torch.count_nonzero(position.grad[2]) == 0
+    macro["uncertainty_position_nll"].backward()
+    assert torch.count_nonzero(log_variance.grad[2]) == 0
+
+
 def test_existence_belief_supervises_only_causally_active_predictions() -> None:
     belief = BeliefFactory(max_objects=2).create(batch_size=1)
     existence_logit = torch.zeros((1, 2), requires_grad=True)
@@ -754,6 +887,62 @@ def _rollout_batch(*, externally_actuated: Tensor) -> dict[str, Any]:
             "externally_actuated": externally_actuated,
         },
     }
+
+
+def test_rollout_physical_losses_are_batch_macro_with_detached_mean_nll() -> None:
+    belief, position, velocity, log_variance, indices, matched = _unequal_support_physical_case()
+    batch = _rollout_batch(
+        externally_actuated=torch.zeros(3, 2, 4, dtype=torch.bool),
+    )
+    legacy_config = _single_horizon_config()
+    macro_config = replace(
+        legacy_config,
+        training=replace(
+            legacy_config.training,
+            closed_loop_batch_macro_physical_losses_enabled=True,
+        ),
+    )
+
+    legacy = _rollout_loss_result(
+        SimpleNamespace(dynamics=_StaticRolloutDynamics()),
+        belief,
+        batch,
+        legacy_config,
+        frame_index=0,
+        indices=indices,
+        matched=matched,
+    )
+    macro = _rollout_loss_result(
+        SimpleNamespace(dynamics=_StaticRolloutDynamics()),
+        belief,
+        batch,
+        macro_config,
+        frame_index=0,
+        indices=indices,
+        matched=matched,
+    )
+
+    torch.testing.assert_close(legacy.losses["rollout_position"], torch.tensor(0.7))
+    torch.testing.assert_close(legacy.losses["rollout_velocity"], torch.tensor(0.7))
+    torch.testing.assert_close(legacy.losses["rollout_position_nll"], torch.tensor(0.8))
+    torch.testing.assert_close(macro.losses["rollout_position"], torch.tensor(1.0))
+    torch.testing.assert_close(macro.losses["rollout_velocity"], torch.tensor(1.0))
+    torch.testing.assert_close(macro.losses["rollout_position_nll"], torch.tensor(1.25))
+    for axis in ("x", "y", "z"):
+        torch.testing.assert_close(macro.losses[f"rollout_position_{axis}"], torch.tensor(1.0))
+
+    (
+        macro.losses["rollout_position"]
+        + macro.losses["rollout_velocity"]
+        + macro.losses["rollout_position_nll"]
+    ).backward()
+    torch.testing.assert_close(position.grad[0, 0], torch.full((3,), 1.0 / 6.0))
+    torch.testing.assert_close(position.grad[1], torch.full((4, 3), 1.0 / 24.0))
+    torch.testing.assert_close(velocity.grad[0, 0], torch.full((3,), 1.0 / 6.0))
+    torch.testing.assert_close(velocity.grad[1], torch.full((4, 3), 1.0 / 24.0))
+    assert torch.count_nonzero(position.grad[2]) == 0
+    assert torch.count_nonzero(velocity.grad[2]) == 0
+    assert torch.count_nonzero(log_variance.grad[2]) == 0
 
 
 def test_zero_effective_event_weight_omits_bce_graph_but_keeps_physical_metrics(
@@ -1176,6 +1365,61 @@ def test_velocity_correction_is_a_distinct_weightable_objective() -> None:
         ),
         torch.tensor(16.0),
     )
+
+
+def test_repair_correction_weights_apply_7_2_and_omit_zero_regularization_graph() -> None:
+    position = torch.tensor(2.0, requires_grad=True)
+    velocity = torch.tensor(3.0, requires_grad=True)
+    # A disabled term must be absent from the graph rather than multiplied by
+    # zero: zero times a nonfinite value would still poison the scalar loss.
+    regularization = torch.tensor(float("nan"), requires_grad=True)
+    terms = _group_closed_loop_terms(
+        {
+            "correction_current": position,
+            "correction_current_velocity": velocity,
+            "correction_magnitude": regularization,
+        },
+        torch.zeros(()),
+    )
+
+    total = _weighted_closed_loop_total(
+        terms,
+        {
+            "correction_position": 7.0,
+            "correction_velocity": 2.0,
+            "correction_regularization": 0.0,
+        },
+    )
+
+    torch.testing.assert_close(total, torch.tensor(20.0))
+    total.backward()
+    torch.testing.assert_close(position.grad, torch.tensor(7.0))
+    torch.testing.assert_close(velocity.grad, torch.tensor(2.0))
+    assert regularization.grad is None
+
+
+def test_legacy_correction_aggregate_weight_remains_exact() -> None:
+    position = torch.tensor(2.0, requires_grad=True)
+    velocity = torch.tensor(3.0, requires_grad=True)
+    regularization = torch.tensor(7.0, requires_grad=True)
+    terms = _group_closed_loop_terms(
+        {
+            "correction_current": position,
+            "correction_current_velocity": velocity,
+            "correction_magnitude": regularization,
+        },
+        torch.zeros(()),
+    )
+
+    total = _weighted_closed_loop_total(terms, {"correction": 0.5})
+    expected = terms["correction"] * 0.5
+
+    assert torch.equal(total, expected)
+    total.backward()
+    expected_gradient = torch.tensor(1.0 / 6.0)
+    torch.testing.assert_close(position.grad, expected_gradient)
+    torch.testing.assert_close(velocity.grad, expected_gradient)
+    torch.testing.assert_close(regularization.grad, expected_gradient)
 
 
 def _additive_result(scale: float) -> TrainingBatchResult:

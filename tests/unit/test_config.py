@@ -7,6 +7,7 @@ import torch
 from world_model.datasets.splits import SPLIT_SEED_RANGES
 from world_model.dynamics import DynamicsModel
 from world_model.observations.rgb.structured_centres import structured_disc_centres
+from world_model.runtime import OnlineWorldModel
 from world_model.simulator.physics import PhysicsConfig
 from world_model.utils.config import load_config, save_resolved_config
 
@@ -45,6 +46,32 @@ def test_innovation_anchored_correction_is_explicit_protocol_semantics() -> None
 
     assert not legacy.model.filter.innovation_anchored_correction
     assert corrected.model.filter.innovation_anchored_correction
+
+
+def test_learned_correction_axis_support_is_explicit_legacy_false_semantics() -> None:
+    legacy = load_config(CONFIG_DIR / "toy_smoke.yaml")
+    corrected = load_config(
+        CONFIG_DIR / "toy_smoke.yaml",
+        overrides=["model.filter.learned_correction_independent_axis_support=true"],
+    )
+
+    assert not legacy.model.filter.learned_correction_independent_axis_support
+    assert corrected.model.filter.learned_correction_independent_axis_support
+    assert OnlineWorldModel.from_config(
+        corrected
+    ).updater.config.learned_correction_independent_axis_support
+
+
+@pytest.mark.parametrize("value", ["1", "0", "null", "not-a-boolean"])
+def test_learned_correction_axis_support_requires_boolean(value: str) -> None:
+    with pytest.raises(
+        ValueError,
+        match="model.filter.learned_correction_independent_axis_support must be boolean",
+    ):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=[f"model.filter.learned_correction_independent_axis_support={value}"],
+        )
 
 
 def test_dotted_override_is_typed(tmp_path: Path) -> None:
@@ -370,6 +397,65 @@ def test_closed_loop_trainable_scope_is_explicit() -> None:
     )
     assert relation_config.training.closed_loop_trainable_scope == "attention_relation"
 
+    state_updater_config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=["training.closed_loop_trainable_scope=updater_state_heads"],
+    )
+    assert state_updater_config.training.closed_loop_trainable_scope == "updater_state_heads"
+
+
+def test_updater_state_heads_scope_roundtrips_as_typed_configuration(tmp_path: Path) -> None:
+    config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=["training.closed_loop_trainable_scope=updater_state_heads"],
+    )
+    resolved_path = tmp_path / "updater-state-resolved.yaml"
+
+    save_resolved_config(config, resolved_path)
+    restored = load_config(resolved_path)
+
+    assert restored.training.closed_loop_trainable_scope == "updater_state_heads"
+    assert restored.to_dict() == config.to_dict()
+
+
+def test_axis_gated_updater_repair_profile_binds_the_paired_protocol() -> None:
+    repaired = load_config(CONFIG_DIR / "axis_gated_updater_repair_cpu.yaml")
+    control = load_config(
+        CONFIG_DIR / "axis_gated_updater_repair_cpu.yaml",
+        overrides=[
+            "training.closed_loop_batch_macro_physical_losses_enabled=false",
+            "training.closed_loop_axiswise_correction_hinge_enabled=false",
+        ],
+    )
+
+    assert repaired.training.closed_loop_trainable_scope == "updater_state_heads"
+    assert repaired.training.closed_loop_late_trainable_scope is None
+    assert repaired.training.closed_loop_scope_transition_steps is None
+    assert repaired.training.steps == 3072
+    assert repaired.training.train_episodes == 3072 * 8
+    assert repaired.training.closed_loop_learning_rate_warmup_steps == 256
+    assert repaired.training.closed_loop_learning_rate_cosine_decay_steps == 2304
+    assert repaired.training.eval_every == 512
+    assert repaired.training.validation_episodes == 32
+    assert repaired.training.horizon_weights == (1.0,) * 5
+    assert repaired.training.closed_loop_event_loss_weights == {"updater_state_heads": 0.0}
+    assert "correction" not in repaired.training.loss_weights
+    assert repaired.training.loss_weights["correction_position"] == 7.0
+    assert repaired.training.loss_weights["correction_velocity"] == 2.0
+    assert repaired.training.loss_weights["correction_regularization"] == 0.0
+    assert repaired.model.filter.learned_correction_independent_axis_support
+    assert repaired.training.closed_loop_batch_macro_physical_losses_enabled
+    assert repaired.training.closed_loop_axiswise_correction_hinge_enabled
+    assert not control.training.closed_loop_batch_macro_physical_losses_enabled
+    assert not control.training.closed_loop_axiswise_correction_hinge_enabled
+    repaired_dict = repaired.to_dict()
+    control_dict = control.to_dict()
+    repaired_dict["training"].pop("closed_loop_batch_macro_physical_losses_enabled")
+    repaired_dict["training"].pop("closed_loop_axiswise_correction_hinge_enabled")
+    control_dict["training"].pop("closed_loop_batch_macro_physical_losses_enabled")
+    control_dict["training"].pop("closed_loop_axiswise_correction_hinge_enabled")
+    assert control_dict == repaired_dict
+
 
 def test_state_roi_scope_roundtrips_as_typed_configuration(tmp_path: Path) -> None:
     config = load_config(
@@ -457,6 +543,48 @@ def test_prior_future_correction_rollout_is_legacy_true_and_roundtrips(
     assert legacy.training.closed_loop_prior_future_correction_enabled
     assert not restored.training.closed_loop_prior_future_correction_enabled
     assert restored.to_dict() == disabled.to_dict()
+
+
+def test_closed_loop_physical_objective_repairs_are_legacy_false_and_roundtrip(
+    tmp_path: Path,
+) -> None:
+    legacy = load_config(CONFIG_DIR / "tiny_overfit.yaml")
+    repaired = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=[
+            "training.closed_loop_batch_macro_physical_losses_enabled=true",
+            "training.closed_loop_axiswise_correction_hinge_enabled=true",
+        ],
+    )
+    resolved_path = tmp_path / "macro-axiswise-objective.yaml"
+
+    save_resolved_config(repaired, resolved_path)
+    restored = load_config(resolved_path)
+
+    assert not legacy.training.closed_loop_batch_macro_physical_losses_enabled
+    assert not legacy.training.closed_loop_axiswise_correction_hinge_enabled
+    assert restored.training.closed_loop_batch_macro_physical_losses_enabled
+    assert restored.training.closed_loop_axiswise_correction_hinge_enabled
+    assert restored.to_dict() == repaired.to_dict()
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "closed_loop_batch_macro_physical_losses_enabled",
+        "closed_loop_axiswise_correction_hinge_enabled",
+    ],
+)
+@pytest.mark.parametrize("value", ["0", "1", "null", "not-a-boolean"])
+def test_closed_loop_physical_objective_repairs_require_boolean(
+    field_name: str,
+    value: str,
+) -> None:
+    with pytest.raises((TypeError, ValueError), match=f"{field_name}|boolean"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.{field_name}={value}"],
+        )
 
 
 @pytest.mark.parametrize("value", ["0", "1", "null", "not-a-boolean"])

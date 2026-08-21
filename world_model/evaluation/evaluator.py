@@ -8,7 +8,6 @@ import json
 import math
 import os
 import statistics
-import tempfile
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
@@ -45,7 +44,16 @@ from world_model.evaluation.velocity_metrics import (
 from world_model.identification import ParameterUpdateDiagnostics
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator.sphere_world import SphereWorldConfig
-from world_model.training.checkpointing import capture_git_metadata, load_checkpoint
+from world_model.training.checkpointing import (
+    CapturedCheckpoint as _CapturedCheckpoint,
+)
+from world_model.training.checkpointing import (
+    capture_checkpoint_snapshot as _capture_checkpoint_snapshot,
+)
+from world_model.training.checkpointing import (
+    capture_git_metadata,
+    load_checkpoint,
+)
 from world_model.training.event_windows import (
     ObservationWindowQueryPlan,
     observation_window_query_plan,
@@ -955,54 +963,6 @@ class _ScenarioEvaluationAccumulator:
             )
         prefix = f"scenario_{scenario}_"
         return {f"{prefix}{name}": value for name, value in local.items()}
-
-
-@dataclass(frozen=True)
-class _CapturedCheckpoint:
-    """One immutable byte snapshot shared by every evaluation runtime."""
-
-    source_path: Path
-    snapshot_path: Path
-    sha256: str
-    byte_count: int
-
-
-@contextlib.contextmanager
-def _capture_checkpoint_snapshot(path: Path):
-    """Copy and hash one opened checkpoint before loading any model runtime.
-
-    Evaluation often targets a mutable ``last.pt`` symlink or pathname while a
-    trainer is running.  Both the clean primary runtime and the independent
-    recovery runtime must therefore load this private immutable byte snapshot,
-    never reopen the mutable source pathname.
-    """
-
-    source = path.expanduser().resolve()
-    descriptor, temporary_name = tempfile.mkstemp(prefix="orpheus-eval-", suffix=".pt")
-    snapshot = Path(temporary_name)
-    digest = hashlib.sha256()
-    byte_count = 0
-    try:
-        with os.fdopen(descriptor, "wb") as output_handle, source.open("rb") as input_handle:
-            while chunk := input_handle.read(1024 * 1024):
-                output_handle.write(chunk)
-                digest.update(chunk)
-                byte_count += len(chunk)
-            output_handle.flush()
-            os.fsync(output_handle.fileno())
-        if byte_count == 0:
-            raise ValueError(f"checkpoint is empty: {source}")
-        snapshot.chmod(0o400)
-        yield _CapturedCheckpoint(
-            source_path=source,
-            snapshot_path=snapshot,
-            sha256=digest.hexdigest(),
-            byte_count=byte_count,
-        )
-    finally:
-        # The private snapshot contains user model weights.  Remove it on both
-        # success and failure; published reports retain only its digest.
-        snapshot.unlink(missing_ok=True)
 
 
 def _canonical_sha256(value: Mapping[str, Any]) -> str:

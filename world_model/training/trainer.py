@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import gc
 import hashlib
 import json
@@ -10,16 +11,17 @@ import os
 import random
 import re
 import resource
-import shutil
 import sys
+import tempfile
 import time
 from collections.abc import Iterator, Mapping
 from contextlib import suppress
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from numbers import Real
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 import torch
 from torch import Tensor
@@ -35,11 +37,14 @@ from world_model.simulator.sphere_world import SphereWorldConfig
 from world_model.training.checkpointing import (
     _assert_finite_tensor_tree,
     _assert_valid_optimizer_steps,
+    capture_checkpoint_snapshot,
     capture_git_metadata,
-    load_checkpoint,
+    load_checkpoint_payload,
     load_model_weights,
+    restore_checkpoint_rng_state,
     save_checkpoint,
     validate_checkpoint_config,
+    validate_exact_resume_state,
     validate_training_resume_config,
 )
 from world_model.training.logging import MetricsLogger
@@ -2672,26 +2677,94 @@ def _model_state_hash(model_state: Mapping[str, Any]) -> str:
     return digest.hexdigest()
 
 
+def _atomic_write_checkpoint_bytes(destination: Path, content: bytes) -> None:
+    """Publish captured checkpoint bytes without reopening their mutable source."""
+
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+        dir=destination.parent,
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _assert_checkpoint_path_identity(
+    path: Path,
+    *,
+    expected_sha256: str,
+    expected_byte_count: int,
+) -> None:
+    """Fail safely when an in-place exact-resume checkpoint changed."""
+
+    try:
+        with capture_checkpoint_snapshot(path) as current:
+            unchanged = (
+                current.sha256 == expected_sha256 and current.byte_count == expected_byte_count
+            )
+    except (FileNotFoundError, OSError, ValueError) as error:
+        raise ValueError(
+            "in-place exact-resume checkpoint changed after immutable capture"
+        ) from error
+    if not unchanged:
+        raise ValueError("in-place exact-resume checkpoint changed after immutable capture")
+
+
+@dataclass(frozen=True)
+class _CapturedArtifactPublication:
+    destination: Path
+    content: bytes
+
+
+def _capture_checkpoint_payload_and_bytes(path: Path) -> tuple[Mapping[str, Any], bytes]:
+    """Capture one path once and bind deserialization to its exact bytes."""
+
+    with capture_checkpoint_snapshot(path) as captured:
+        payload = torch.load(
+            captured.snapshot_path,
+            map_location="cpu",
+            weights_only=False,
+        )
+        content = captured.snapshot_path.read_bytes()
+        if (
+            len(content) != captured.byte_count
+            or hashlib.sha256(content).hexdigest() != captured.sha256
+        ):
+            raise RuntimeError("captured checkpoint identity changed unexpectedly")
+    if not isinstance(payload, Mapping):
+        raise ValueError("checkpoint payload must be a mapping")
+    return payload, content
+
+
+def _publish_captured_artifacts(
+    publications: tuple[_CapturedArtifactPublication, ...],
+) -> None:
+    for publication in publications:
+        _atomic_write_checkpoint_bytes(publication.destination, publication.content)
+
+
 def _current_model_state_hash(model: OnlineWorldModel) -> str:
     return _model_state_hash(model.state_dict())
 
 
-def _verified_measurement_checkpoint(
-    path: Path,
+def _verified_measurement_payload(
+    payload: Mapping[str, Any],
     config: OrpheusConfig,
     *,
     expected_model_state_hash: str | None,
     expected_step: int | None,
     expected_device: str | torch.device | None = None,
 ) -> tuple[_MeasurementSelectionMetrics, str, int] | None:
-    """Verify that a measurement selector names the weights it actually stores."""
+    """Verify measurement-selector semantics from an immutable payload."""
 
-    if not path.is_file():
-        return None
     try:
-        payload = torch.load(path, map_location="cpu", weights_only=False)
-        if not isinstance(payload, Mapping):
-            return None
         metrics = payload.get("metrics")
         model_state = payload.get("model_state")
         if not isinstance(metrics, Mapping) or not isinstance(model_state, Mapping):
@@ -2733,15 +2806,50 @@ def _verified_measurement_checkpoint(
     return selection, model_state_hash, checkpoint_step
 
 
-def _preserve_resume_measurement_checkpoint(
+def _verified_measurement_checkpoint(
+    path: Path,
+    config: OrpheusConfig,
+    *,
+    expected_model_state_hash: str | None,
+    expected_step: int | None,
+    expected_device: str | torch.device | None = None,
+) -> tuple[_MeasurementSelectionMetrics, str, int] | None:
+    """Verify that a measurement selector names the weights it actually stores."""
+
+    if not path.is_file():
+        return None
+    try:
+        payload = torch.load(path, map_location="cpu", weights_only=False)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None
+    if not isinstance(payload, Mapping):
+        return None
+    return _verified_measurement_payload(
+        payload,
+        config,
+        expected_model_state_hash=expected_model_state_hash,
+        expected_step=expected_step,
+        expected_device=expected_device,
+    )
+
+
+def _preflight_resume_measurement_checkpoint(
     resume_path: str | Path,
     destination: Path,
     config: OrpheusConfig,
     *,
     resume_metrics: Mapping[str, Any],
     expected_device: str | torch.device | None = None,
-) -> tuple[_MeasurementSelectionMetrics, str, int] | None:
-    """Copy a linked RGB selector only after metric/tensor verification."""
+    captured_resume_payload: Mapping[str, Any] | None = None,
+    captured_resume_bytes: bytes | None = None,
+) -> (
+    tuple[
+        tuple[_MeasurementSelectionMetrics, str, int],
+        _CapturedArtifactPublication | None,
+    ]
+    | None
+):
+    """Dry-validate and capture a linked RGB selector without publication."""
 
     expected_hash = resume_metrics.get("best_measurement_model_state_hash")
     expected_step_value = resume_metrics.get("best_measurement_checkpoint_step")
@@ -2758,8 +2866,21 @@ def _preserve_resume_measurement_checkpoint(
     source = (
         resumed.parent / "best_measurement.pt" if resumed.parent.name == "checkpoints" else resumed
     )
-    verified = _verified_measurement_checkpoint(
-        source,
+    source_is_resume = source == resumed
+    if source_is_resume and captured_resume_payload is not None:
+        if captured_resume_bytes is None:
+            raise AssertionError("captured resume selector bytes are unavailable")
+        source_payload = captured_resume_payload
+        source_content = captured_resume_bytes
+    else:
+        if not source.is_file():
+            return None
+        try:
+            source_payload, source_content = _capture_checkpoint_payload_and_bytes(source)
+        except (OSError, RuntimeError, TypeError, ValueError):
+            return None
+    verified = _verified_measurement_payload(
+        source_payload,
         config,
         expected_model_state_hash=expected_hash,
         expected_step=expected_step,
@@ -2767,23 +2888,45 @@ def _preserve_resume_measurement_checkpoint(
     )
     if verified is None:
         return None
-    if source != destination.resolve():
-        shutil.copy2(source, destination)
-        copied = _verified_measurement_checkpoint(
-            destination,
-            config,
-            expected_model_state_hash=expected_hash,
-            expected_step=expected_step,
-            expected_device=expected_device,
-        )
-        if copied is None:
-            return None
-        verified = copied
+    publication = (
+        None
+        if source == destination.resolve()
+        else _CapturedArtifactPublication(destination=destination, content=source_content)
+    )
+    return verified, publication
+
+
+def _preserve_resume_measurement_checkpoint(
+    resume_path: str | Path,
+    destination: Path,
+    config: OrpheusConfig,
+    *,
+    resume_metrics: Mapping[str, Any],
+    expected_device: str | torch.device | None = None,
+    captured_resume_payload: Mapping[str, Any] | None = None,
+    captured_resume_bytes: bytes | None = None,
+) -> tuple[_MeasurementSelectionMetrics, str, int] | None:
+    """Copy a linked RGB selector only after immutable preflight verification."""
+
+    preflight = _preflight_resume_measurement_checkpoint(
+        resume_path,
+        destination,
+        config,
+        resume_metrics=resume_metrics,
+        expected_device=expected_device,
+        captured_resume_payload=captured_resume_payload,
+        captured_resume_bytes=captured_resume_bytes,
+    )
+    if preflight is None:
+        return None
+    verified, publication = preflight
+    if publication is not None:
+        _publish_captured_artifacts((publication,))
     return verified
 
 
-def _verified_selector_checkpoint(
-    path: Path,
+def _verified_selector_payload(
+    payload: Mapping[str, Any],
     config: OrpheusConfig,
     *,
     prefix: str,
@@ -2791,14 +2934,9 @@ def _verified_selector_checkpoint(
     expected_step: int | None,
     expected_device: str | torch.device | None = None,
 ) -> tuple[_RolloutSelectionMetrics, str, int] | None:
-    """Verify that selector metadata and the checkpoint's actual weights agree."""
+    """Verify rollout-selector semantics from an immutable payload."""
 
-    if not path.is_file():
-        return None
     try:
-        payload = torch.load(path, map_location="cpu", weights_only=False)
-        if not isinstance(payload, Mapping):
-            return None
         metrics = payload.get("metrics")
         model_state = payload.get("model_state")
         if not isinstance(metrics, Mapping) or not isinstance(model_state, Mapping):
@@ -2859,7 +2997,36 @@ def _verified_selector_checkpoint(
     return selection, model_state_hash, checkpoint_step
 
 
-def _preserve_resume_selector_checkpoint(
+def _verified_selector_checkpoint(
+    path: Path,
+    config: OrpheusConfig,
+    *,
+    prefix: str,
+    expected_model_state_hash: str | None,
+    expected_step: int | None,
+    expected_device: str | torch.device | None = None,
+) -> tuple[_RolloutSelectionMetrics, str, int] | None:
+    """Verify that selector metadata and the checkpoint's actual weights agree."""
+
+    if not path.is_file():
+        return None
+    try:
+        payload = torch.load(path, map_location="cpu", weights_only=False)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None
+    if not isinstance(payload, Mapping):
+        return None
+    return _verified_selector_payload(
+        payload,
+        config,
+        prefix=prefix,
+        expected_model_state_hash=expected_model_state_hash,
+        expected_step=expected_step,
+        expected_device=expected_device,
+    )
+
+
+def _preflight_resume_selector_checkpoint(
     resume_path: str | Path,
     destination: Path,
     config: OrpheusConfig,
@@ -2867,8 +3034,16 @@ def _preserve_resume_selector_checkpoint(
     prefix: str,
     resume_metrics: Mapping[str, Any],
     expected_device: str | torch.device | None = None,
-) -> tuple[_RolloutSelectionMetrics, str, int] | None:
-    """Copy a linked selector checkpoint only after weights/provenance verification."""
+    captured_resume_payload: Mapping[str, Any] | None = None,
+    captured_resume_bytes: bytes | None = None,
+) -> (
+    tuple[
+        tuple[_RolloutSelectionMetrics, str, int],
+        _CapturedArtifactPublication | None,
+    ]
+    | None
+):
+    """Dry-validate and capture a rollout selector without publication."""
 
     expected_hash = resume_metrics.get(f"{prefix}_model_state_hash")
     expected_step_value = resume_metrics.get(f"{prefix}_checkpoint_step")
@@ -2883,8 +3058,21 @@ def _preserve_resume_selector_checkpoint(
         return None
     resumed = Path(resume_path).expanduser().resolve()
     source = resumed.parent / f"{prefix}.pt" if resumed.parent.name == "checkpoints" else resumed
-    verified = _verified_selector_checkpoint(
-        source,
+    source_is_resume = source == resumed
+    if source_is_resume and captured_resume_payload is not None:
+        if captured_resume_bytes is None:
+            raise AssertionError("captured resume selector bytes are unavailable")
+        source_payload = captured_resume_payload
+        source_content = captured_resume_bytes
+    else:
+        if not source.is_file():
+            return None
+        try:
+            source_payload, source_content = _capture_checkpoint_payload_and_bytes(source)
+        except (OSError, RuntimeError, TypeError, ValueError):
+            return None
+    verified = _verified_selector_payload(
+        source_payload,
         config,
         prefix=prefix,
         expected_model_state_hash=expected_hash,
@@ -2893,41 +3081,62 @@ def _preserve_resume_selector_checkpoint(
     )
     if verified is None:
         return None
-    if source != destination.resolve():
-        shutil.copy2(source, destination)
-        copied = _verified_selector_checkpoint(
-            destination,
-            config,
-            prefix=prefix,
-            expected_model_state_hash=expected_hash,
-            expected_step=expected_step,
-            expected_device=expected_device,
-        )
-        if copied is None:
-            return None
-        verified = copied
+    publication = (
+        None
+        if source == destination.resolve()
+        else _CapturedArtifactPublication(destination=destination, content=source_content)
+    )
+    return verified, publication
+
+
+def _preserve_resume_selector_checkpoint(
+    resume_path: str | Path,
+    destination: Path,
+    config: OrpheusConfig,
+    *,
+    prefix: str,
+    resume_metrics: Mapping[str, Any],
+    expected_device: str | torch.device | None = None,
+    captured_resume_payload: Mapping[str, Any] | None = None,
+    captured_resume_bytes: bytes | None = None,
+) -> tuple[_RolloutSelectionMetrics, str, int] | None:
+    """Copy a linked selector after immutable preflight verification."""
+
+    preflight = _preflight_resume_selector_checkpoint(
+        resume_path,
+        destination,
+        config,
+        prefix=prefix,
+        resume_metrics=resume_metrics,
+        expected_device=expected_device,
+        captured_resume_payload=captured_resume_payload,
+        captured_resume_bytes=captured_resume_bytes,
+    )
+    if preflight is None:
+        return None
+    verified, publication = preflight
+    if publication is not None:
+        _publish_captured_artifacts((publication,))
     return verified
 
 
-def _verified_accepted_validation_checkpoint(
-    path: Path,
+def _verified_accepted_validation_payload(
+    payload: Mapping[str, Any],
+    filename: str,
     config: OrpheusConfig,
     *,
     maximum_step: int,
     expected_device: str | torch.device | None = None,
 ) -> tuple[int, str] | None:
-    """Verify an accepted numbered checkpoint before retaining its history."""
+    """Verify accepted numbered-checkpoint evidence from immutable bytes."""
 
-    match = _NUMBERED_VALIDATION_CHECKPOINT.fullmatch(path.name)
-    if match is None or not path.is_file():
+    match = _NUMBERED_VALIDATION_CHECKPOINT.fullmatch(filename)
+    if match is None:
         return None
     filename_step = int(match.group(1))
     if filename_step > maximum_step:
         return None
     try:
-        payload = torch.load(path, map_location="cpu", weights_only=False)
-        if not isinstance(payload, Mapping):
-            return None
         checkpoint_step = _finite_nonnegative_integer(
             payload.get("step"),
             name="step",
@@ -2978,37 +3187,74 @@ def _verified_accepted_validation_checkpoint(
     return checkpoint_step, model_state_hash
 
 
-def _preserve_resume_validation_history(
+def _verified_accepted_validation_checkpoint(
+    path: Path,
+    config: OrpheusConfig,
+    *,
+    maximum_step: int,
+    expected_device: str | torch.device | None = None,
+) -> tuple[int, str] | None:
+    """Verify an accepted numbered checkpoint before retaining its history."""
+
+    if not path.is_file():
+        return None
+    try:
+        payload, _ = _capture_checkpoint_payload_and_bytes(path)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None
+    return _verified_accepted_validation_payload(
+        payload,
+        path.name,
+        config,
+        maximum_step=maximum_step,
+        expected_device=expected_device,
+    )
+
+
+@dataclass(frozen=True)
+class _ValidationHistoryPreflight:
+    preserved_paths: tuple[Path, ...] = ()
+    publications: tuple[_CapturedArtifactPublication, ...] = ()
+
+
+def _preflight_resume_validation_history(
     resume_path: str | Path,
     destination_directory: Path,
     config: OrpheusConfig,
     *,
     resume_step: int,
     expected_device: str | torch.device | None = None,
-) -> tuple[Path, ...]:
-    """Copy tensor-verified accepted numbered history into a branched run."""
+    captured_resume_payload: Mapping[str, Any] | None = None,
+    captured_resume_bytes: bytes | None = None,
+) -> _ValidationHistoryPreflight:
+    """Dry-validate and capture accepted numbered history without mutation."""
 
     resumed = Path(resume_path).expanduser().resolve()
     source_directory = resumed.parent if resumed.parent.name == "checkpoints" else None
     if source_directory is None:
-        return ()
+        return _ValidationHistoryPreflight()
     destination_directory = destination_directory.resolve()
-    if source_directory == destination_directory:
-        return tuple(
-            path
-            for path in sorted(destination_directory.glob("validation_step_*.pt"))
-            if _verified_accepted_validation_checkpoint(
-                path,
-                config,
-                maximum_step=resume_step,
-                expected_device=expected_device,
-            )
-            is not None
-        )
+    sources = set(source_directory.glob("validation_step_*.pt"))
+    if _NUMBERED_VALIDATION_CHECKPOINT.fullmatch(resumed.name):
+        sources.add(resumed)
     preserved: list[Path] = []
-    for source in sorted(source_directory.glob("validation_step_*.pt")):
-        verified = _verified_accepted_validation_checkpoint(
-            source,
+    publications: list[_CapturedArtifactPublication] = []
+    for source in sorted(sources):
+        if source == resumed and captured_resume_payload is not None:
+            if captured_resume_bytes is None:
+                raise AssertionError("captured resume checkpoint bytes are unavailable")
+            source_payload = captured_resume_payload
+            source_content = captured_resume_bytes
+        else:
+            if not source.is_file():
+                continue
+            try:
+                source_payload, source_content = _capture_checkpoint_payload_and_bytes(source)
+            except (OSError, RuntimeError, TypeError, ValueError):
+                continue
+        verified = _verified_accepted_validation_payload(
+            source_payload,
+            source.name,
             config,
             maximum_step=resume_step,
             expected_device=expected_device,
@@ -3016,32 +3262,66 @@ def _preserve_resume_validation_history(
         if verified is None:
             continue
         destination = destination_directory / source.name
+        if source.resolve() == destination:
+            preserved.append(destination)
+            continue
         if destination.exists():
-            copied = _verified_accepted_validation_checkpoint(
-                destination,
+            try:
+                destination_payload, _ = _capture_checkpoint_payload_and_bytes(destination)
+            except (OSError, RuntimeError, TypeError, ValueError) as error:
+                raise ValueError(
+                    "branched run contains an unreadable numbered validation "
+                    f"checkpoint: {destination}"
+                ) from error
+            destination_verified = _verified_accepted_validation_payload(
+                destination_payload,
+                destination.name,
                 config,
                 maximum_step=resume_step,
                 expected_device=expected_device,
             )
-            if copied != verified:
+            if destination_verified != verified:
                 raise ValueError(
                     "branched run contains a conflicting numbered validation "
                     f"checkpoint: {destination}"
                 )
         else:
-            shutil.copy2(source, destination)
-            copied = _verified_accepted_validation_checkpoint(
-                destination,
-                config,
-                maximum_step=resume_step,
-                expected_device=expected_device,
-            )
-            if copied != verified:
-                raise RuntimeError(
-                    f"copied numbered validation checkpoint failed verification: {destination}"
+            publications.append(
+                _CapturedArtifactPublication(
+                    destination=destination,
+                    content=source_content,
                 )
+            )
         preserved.append(destination)
-    return tuple(preserved)
+    return _ValidationHistoryPreflight(
+        preserved_paths=tuple(preserved),
+        publications=tuple(publications),
+    )
+
+
+def _preserve_resume_validation_history(
+    resume_path: str | Path,
+    destination_directory: Path,
+    config: OrpheusConfig,
+    *,
+    resume_step: int,
+    expected_device: str | torch.device | None = None,
+    captured_resume_payload: Mapping[str, Any] | None = None,
+    captured_resume_bytes: bytes | None = None,
+) -> tuple[Path, ...]:
+    """Copy immutable, tensor-verified numbered history into a branched run."""
+
+    preflight = _preflight_resume_validation_history(
+        resume_path,
+        destination_directory,
+        config,
+        resume_step=resume_step,
+        expected_device=expected_device,
+        captured_resume_payload=captured_resume_payload,
+        captured_resume_bytes=captured_resume_bytes,
+    )
+    _publish_captured_artifacts(preflight.publications)
+    return preflight.preserved_paths
 
 
 def _fresh_causal_optimizer_state(
@@ -3103,6 +3383,202 @@ def _resolve_run_directory(
             "and cannot begin with punctuation"
         )
     return _output_root(config) / selected
+
+
+def _verify_live_run_lock(handle: TextIO | None, lock_path: Path) -> bool:
+    """Bind an entrypoint ownership claim to the exact live locked inode."""
+
+    if handle is None:
+        return False
+    try:
+        descriptor = handle.fileno()
+        opened = os.fstat(descriptor)
+        current = lock_path.stat()
+        if (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino):
+            raise ValueError("run lock handle does not own the configured run lock path")
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (BlockingIOError, OSError, ValueError) as error:
+        raise ValueError("run lock ownership proof is invalid") from error
+    return True
+
+
+@dataclass
+class _DirectRunLockClaim:
+    handle: TextIO
+    path: Path
+    created_lock: bool
+    created_directory: bool
+    original_content: bytes | None = None
+    lock_acquired: bool = False
+
+
+def _restore_failed_direct_lock_claim(claim: _DirectRunLockClaim) -> None:
+    """Restore only the exact lock inode owned by this failed invocation."""
+
+    if not claim.lock_acquired:
+        return
+    try:
+        opened = os.fstat(claim.handle.fileno())
+        current = claim.path.stat()
+        if (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino):
+            return
+        if claim.created_lock:
+            claim.path.unlink()
+        elif claim.original_content is not None:
+            descriptor = claim.handle.fileno()
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            os.ftruncate(descriptor, 0)
+            os.write(descriptor, claim.original_content)
+            os.fsync(descriptor)
+    except OSError:
+        pass
+
+
+def _acquire_direct_resume_lock(
+    run_directory: Path,
+    *,
+    require_empty_destination: bool,
+) -> _DirectRunLockClaim:
+    """Acquire a lifetime lock, atomically claiming an absent/empty branch."""
+
+    created_directory = False
+    if require_empty_destination:
+        run_directory.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            run_directory.mkdir(exist_ok=False)
+            created_directory = True
+        except FileExistsError:
+            if not run_directory.is_dir() or any(run_directory.iterdir()):
+                raise FileExistsError(
+                    "branched exact-resume destination must be absent or empty"
+                ) from None
+    elif not run_directory.is_dir():
+        raise FileNotFoundError(f"in-place exact-resume run directory is missing: {run_directory}")
+
+    lock_path = run_directory / ".training.lock"
+    created_lock = False
+    try:
+        descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
+        created_lock = True
+    except FileExistsError:
+        if require_empty_destination:
+            if created_directory:
+                with suppress(OSError):
+                    run_directory.rmdir()
+            raise FileExistsError(
+                "branched exact-resume destination was claimed concurrently"
+            ) from None
+        descriptor = os.open(lock_path, os.O_RDWR)
+    handle = os.fdopen(descriptor, "a+", encoding="utf-8")
+    claim = _DirectRunLockClaim(
+        handle=handle,
+        path=lock_path,
+        created_lock=created_lock,
+        created_directory=created_directory,
+    )
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        claim.lock_acquired = True
+        opened = os.fstat(descriptor)
+        current = lock_path.stat()
+        if (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino):
+            raise RuntimeError("run lock path changed while ownership was acquired")
+        if not created_lock:
+            claim.original_content = os.pread(descriptor, opened.st_size, 0)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        os.ftruncate(descriptor, 0)
+        os.write(descriptor, f"{os.getpid()}\n".encode())
+        os.fsync(descriptor)
+        if require_empty_destination and {entry.name for entry in run_directory.iterdir()} != {
+            ".training.lock"
+        }:
+            raise FileExistsError(
+                "branched exact-resume destination gained evidence while being claimed"
+            )
+    except BaseException:
+        _restore_failed_direct_lock_claim(claim)
+        handle.close()
+        if created_directory:
+            with suppress(OSError):
+                run_directory.rmdir()
+        raise
+    return claim
+
+
+def _validate_cli_claimed_destination_state(
+    run_directory: Path,
+    *,
+    resume_source: Path,
+) -> None:
+    """Allow only entrypoint state created after an exclusive empty-dir claim."""
+
+    entries = {entry.name for entry in run_directory.iterdir()}
+    expected_entries = {".training.lock", "training_state.json"}
+    if entries != expected_entries:
+        raise FileExistsError(
+            "claimed-empty branched exact-resume destination contains unexpected entries: "
+            + ", ".join(sorted(entries - expected_entries or entries))
+        )
+    state_path = run_directory / "training_state.json"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise FileExistsError(
+            "claimed-empty branched exact-resume destination has invalid entrypoint state"
+        ) from error
+    stored_resume = state.get("resume") if isinstance(state, Mapping) else None
+    if (
+        not isinstance(state, Mapping)
+        or state.get("state") not in {"starting", "running"}
+        or state.get("run_directory") != str(run_directory)
+        or not isinstance(stored_resume, str)
+        or Path(stored_resume).expanduser().resolve() != resume_source
+    ):
+        raise FileExistsError(
+            "claimed-empty branched exact-resume destination state does not match this invocation"
+        )
+
+
+def _validate_branched_resume_destination(
+    run_directory: Path,
+    *,
+    resume_source: Path,
+    last_path: Path,
+    in_place_exact_resume: bool,
+    live_run_lock_owned: bool,
+    owned_entry_names: frozenset[str] | None,
+) -> None:
+    """Reject mixing an exact-resume branch with any pre-existing evidence."""
+
+    if in_place_exact_resume:
+        if resume_source != last_path.resolve():
+            raise AssertionError("in-place resume source is not the destination last checkpoint")
+        return
+    if not run_directory.exists():
+        return
+    if not run_directory.is_dir():
+        raise FileExistsError(
+            f"branched exact-resume destination is not a directory: {run_directory}"
+        )
+    entries = {entry.name for entry in run_directory.iterdir()}
+    if not entries and owned_entry_names is None:
+        return
+    if live_run_lock_owned and owned_entry_names is not None:
+        if entries != set(owned_entry_names):
+            raise FileExistsError(
+                "owned branched exact-resume destination contains unexpected entries: "
+                + ", ".join(sorted(entries - set(owned_entry_names) or entries))
+            )
+        if "training_state.json" in owned_entry_names:
+            _validate_cli_claimed_destination_state(
+                run_directory,
+                resume_source=resume_source,
+            )
+        return
+    raise FileExistsError(
+        "branched exact-resume destination must be absent or empty; found existing entries: "
+        + ", ".join(sorted(entries))
+    )
 
 
 def _next_batch(
@@ -3844,6 +4320,19 @@ def set_closed_loop_trainable_scope(
         model.updater.requires_grad_(True)
         _freeze_disconnected_training_heads(model)
         return
+    if scope == "updater_state_heads":
+        corrector = model.updater.learned_corrector
+        if corrector is None:
+            raise ValueError("updater_state_heads scope requires the learned fast corrector")
+        # Keep the shared representation frozen.  Its output also feeds the
+        # mode, existence, and visibility heads, so adapting it would change
+        # those sibling semantics even though their parameters are frozen.
+        # The three typed state heads are the complete functional ownership
+        # boundary for this repair phase.
+        corrector.mean_head.requires_grad_(True)
+        corrector.variance_head.requires_grad_(True)
+        corrector.gate_head.requires_grad_(True)
+        return
     if scope in {"updater_mean", "updater_mean_y"}:
         corrector = model.updater.learned_corrector
         if corrector is None:
@@ -3899,7 +4388,8 @@ def set_closed_loop_trainable_scope(
         "closed-loop trainable scope must be 'all', 'attention', "
         "'attention_relation', 'attention_node_x', 'attention_node_y', "
         "'attention_node_z', 'dynamics', 'updater', "
-        "'updater_mean', 'updater_mean_y', 'fast_roi', 'state_dynamics', "
+        "'updater_state_heads', 'updater_mean', 'updater_mean_y', 'fast_roi', "
+        "'state_dynamics', "
         "'state_roi', 'state_relation_roi', 'state_dynamics_fast_roi', or "
         "'state_dynamics_roi'"
     )
@@ -4847,6 +5337,17 @@ def _write_run_metadata(
         "resume_path": resolved_resume_path,
         "resume_history": resume_history,
         "initialize_from_path": preserved_initialization_path,
+        "initialization_checkpoint_sha256": existing.get("initialization_checkpoint_sha256"),
+        "initialization_checkpoint_byte_count": existing.get(
+            "initialization_checkpoint_byte_count"
+        ),
+        "initialization_checkpoint_model_state_hash": existing.get(
+            "initialization_checkpoint_model_state_hash"
+        ),
+        "initialization_loaded_model_state_hash": existing.get(
+            "initialization_loaded_model_state_hash"
+        ),
+        "initialization_artifact_metadata": existing.get("initialization_artifact_metadata"),
         "initialization_transform": existing.get("initialization_transform"),
         "source_provenance": initial_source_provenance,
         "initial_source_provenance": initial_source_provenance,
@@ -4873,11 +5374,14 @@ def _validate_exact_resume_source(
 
     stored_source = payload.get("git")
     if not isinstance(stored_source, Mapping):
-        return
+        raise ValueError(
+            "checkpoint executable source provenance is unavailable; "
+            "use --initialize-from when exact source identity cannot be proven"
+        )
     stored_runtime_fingerprint = stored_source.get("runtime_source_fingerprint")
     current_runtime_fingerprint = current_source.get("runtime_source_fingerprint")
-    if isinstance(stored_runtime_fingerprint, str):
-        if not isinstance(current_runtime_fingerprint, str):
+    if isinstance(stored_runtime_fingerprint, str) and stored_runtime_fingerprint:
+        if not (isinstance(current_runtime_fingerprint, str) and current_runtime_fingerprint):
             raise ValueError(
                 "current executable source fingerprint is unavailable; "
                 "use --initialize-from when exact source identity cannot be proven"
@@ -4892,7 +5396,12 @@ def _validate_exact_resume_source(
         return
     stored_fingerprint = stored_source.get("worktree_fingerprint")
     current_fingerprint = current_source.get("worktree_fingerprint")
-    if isinstance(stored_fingerprint, str) and isinstance(current_fingerprint, str):
+    if isinstance(stored_fingerprint, str) and stored_fingerprint:
+        if not (isinstance(current_fingerprint, str) and current_fingerprint):
+            raise ValueError(
+                "current source worktree fingerprint is unavailable; "
+                "use --initialize-from when exact source identity cannot be proven"
+            )
         if stored_fingerprint != current_fingerprint:
             raise ValueError(
                 "checkpoint source worktree differs from this exact resume; "
@@ -4901,7 +5410,12 @@ def _validate_exact_resume_source(
         return
     stored_commit = stored_source.get("commit")
     current_commit = current_source.get("commit")
-    if isinstance(stored_commit, str) and isinstance(current_commit, str):
+    if isinstance(stored_commit, str) and stored_commit:
+        if not (isinstance(current_commit, str) and current_commit):
+            raise ValueError(
+                "current source commit is unavailable; "
+                "use --initialize-from when exact source identity cannot be proven"
+            )
         if stored_commit != current_commit:
             raise ValueError(
                 "checkpoint source commit differs from this exact resume; "
@@ -4912,6 +5426,11 @@ def _validate_exact_resume_source(
                 "legacy dirty source cannot be proven identical for exact resume; "
                 "use --initialize-from"
             )
+        return
+    raise ValueError(
+        "checkpoint executable source provenance is unusable; "
+        "use --initialize-from when exact source identity cannot be proven"
+    )
 
 
 def _expected_resume_checkpoint_devices(
@@ -4981,6 +5500,282 @@ def _resume_requires_final_validation(
         payload.get("step"),
         name="step",
     ) == int(config.training.steps)
+
+
+@dataclass(frozen=True)
+class _ResumeStatePreflight:
+    start_step: int
+    metrics: Mapping[str, Any]
+    best_rollout_validated: bool
+    best_measurement_validated: bool
+    incomplete_reference_comparison_required: bool
+    reference_rollout: tuple[_RolloutSelectionMetrics, str, int] | None
+    best_rollout: tuple[_RolloutSelectionMetrics, str, int] | None
+    best_measurement: tuple[_MeasurementSelectionMetrics, str, int] | None
+    measurement_handoff_completed: bool
+    training_data_draw_step: int
+    skipped_no_gradient_batches: int
+    selector_publications: tuple[_CapturedArtifactPublication, ...]
+    validation_history: _ValidationHistoryPreflight
+
+
+def _validate_resume_optimizer_learning_rate(
+    payload: Mapping[str, Any],
+    config: OrpheusConfig,
+    *,
+    start_step: int,
+) -> None:
+    """Bind the saved dynamic AdamW LR to the completed-update schedule."""
+
+    optimizer_state = payload.get("optimizer_state")
+    if not isinstance(optimizer_state, Mapping):
+        raise ValueError("exact resume requires checkpoint optimizer state")
+    parameter_groups = optimizer_state.get("param_groups")
+    state = optimizer_state.get("state")
+    if not isinstance(parameter_groups, list) or not isinstance(state, Mapping):
+        raise ValueError("checkpoint optimizer state is malformed")
+    if start_step <= config.training.rgb_pretrain_steps:
+        expected_learning_rate = float(config.training.learning_rate)
+    else:
+        expected_learning_rate = closed_loop_learning_rate_at_update(
+            config,
+            causal_update_index=start_step - config.training.rgb_pretrain_steps - 1,
+        )
+    allowed = {expected_learning_rate}
+    if start_step >= config.training.rgb_pretrain_steps and not state:
+        # A support-collapse rollback deliberately clears Adam moments and
+        # restores the causal phase maximum before persisting the safe model.
+        # The same empty-state representation is valid at the exact handoff
+        # boundary, before the first causal update has run.
+        allowed.add(
+            float(config.training.learning_rate * config.training.closed_loop_learning_rate_scale)
+        )
+    for index, group in enumerate(parameter_groups):
+        assert isinstance(group, Mapping)
+        learning_rate = group.get("lr")
+        if not isinstance(learning_rate, float) or learning_rate not in allowed:
+            raise ValueError(
+                "checkpoint optimizer dynamic learning rate does not match the "
+                f"exact-resume schedule at parameter group {index}"
+            )
+
+
+def _preflight_exact_resume_state(
+    payload: Mapping[str, Any],
+    checkpoint_bytes: bytes,
+    *,
+    resume_path: str | Path,
+    config: OrpheusConfig,
+    checkpoint_directory: Path,
+    best_rollout_path: Path,
+    reference_rollout_path: Path,
+    best_measurement_path: Path,
+    measurement_device: str | torch.device,
+    closed_loop_device: str | torch.device,
+) -> _ResumeStatePreflight:
+    """Dry-parse every exact-resume scalar and linked artifact before writes."""
+
+    start_step = _finite_nonnegative_integer(payload.get("step"), name="step")
+    if start_step > config.training.steps:
+        raise ValueError(
+            "checkpoint step exceeds configured training.steps "
+            f"({start_step} > {config.training.steps})"
+        )
+    _validate_resume_optimizer_learning_rate(payload, config, start_step=start_step)
+    raw_metrics = payload.get("metrics", {})
+    resume_metrics = dict(raw_metrics) if isinstance(raw_metrics, Mapping) else {}
+    training_data_draw_step = _finite_nonnegative_integer(
+        resume_metrics.get("training_data_draw_step", start_step),
+        name="training_data_draw_step",
+    )
+    skipped_no_gradient_batches = _finite_nonnegative_integer(
+        resume_metrics.get("skipped_no_gradient_batches", 0.0),
+        name="skipped_no_gradient_batches",
+    )
+    expected_data_draw_step = start_step + skipped_no_gradient_batches
+    if training_data_draw_step != expected_data_draw_step:
+        raise ValueError(
+            "checkpoint data-progress invariant failed: training_data_draw_step "
+            "must equal optimizer step plus skipped_no_gradient_batches "
+            f"({training_data_draw_step} != {start_step} + "
+            f"{skipped_no_gradient_batches})"
+        )
+
+    best_rollout_validated = _binary_checkpoint_marker(
+        resume_metrics.get("best_rollout_validated", 0.0),
+        name="best_rollout_validated",
+    )
+    rollout_reference_validated = _binary_checkpoint_marker(
+        resume_metrics.get(
+            "rollout_reference_validated",
+            float(best_rollout_validated),
+        ),
+        name="rollout_reference_validated",
+    )
+    incomplete_reference_comparison_required = False
+    incomplete_reference_marker = resume_metrics.get("incomplete_reference_comparison_required")
+    if incomplete_reference_marker is not None:
+        incomplete_reference_comparison_required = _binary_checkpoint_marker(
+            incomplete_reference_marker,
+            name="incomplete_reference_comparison_required",
+        )
+    elif not rollout_reference_validated:
+        stored_selection_support = resume_metrics.get("selection_metric_supported")
+        if stored_selection_support is not None:
+            incomplete_reference_comparison_required = not _binary_checkpoint_marker(
+                stored_selection_support,
+                name="selection_metric_supported",
+            )
+    if incomplete_reference_comparison_required and (
+        rollout_reference_validated or best_rollout_validated
+    ):
+        raise ValueError(
+            "exact resume cannot require an incomplete reference comparison "
+            "while declaring a validated rollout reference or incumbent"
+        )
+    best_measurement_validated = _binary_checkpoint_marker(
+        resume_metrics.get("best_measurement_validated", 0.0),
+        name="best_measurement_validated",
+    )
+
+    selector_publications: list[_CapturedArtifactPublication] = []
+    preserved_reference: tuple[_RolloutSelectionMetrics, str, int] | None = None
+    if rollout_reference_validated:
+        reference_preflight = _preflight_resume_selector_checkpoint(
+            resume_path,
+            reference_rollout_path,
+            config,
+            prefix="reference_rollout",
+            resume_metrics=resume_metrics,
+            expected_device=closed_loop_device,
+            captured_resume_payload=payload,
+            captured_resume_bytes=checkpoint_bytes,
+        )
+        if reference_preflight is None:
+            linked_reference_format = (
+                float(resume_metrics.get("rollout_selection_metric_version", -1.0))
+                == _ROLLOUT_SELECTION_METRIC_VERSION
+                and isinstance(
+                    resume_metrics.get("reference_rollout_model_state_hash"),
+                    str,
+                )
+                and resume_metrics.get("reference_rollout_checkpoint_step") is not None
+            )
+            if linked_reference_format or best_rollout_validated:
+                raise ValueError(
+                    "exact resume declared a linked rollout reference, but "
+                    "reference_rollout.pt is missing or failed protocol/tensor verification"
+                )
+            rollout_reference_validated = False
+        else:
+            preserved_reference, publication = reference_preflight
+            if publication is not None:
+                selector_publications.append(publication)
+
+    preserved_best: tuple[_RolloutSelectionMetrics, str, int] | None = None
+    if best_rollout_validated:
+        if not rollout_reference_validated or preserved_reference is None:
+            raise ValueError(
+                "exact resume declares a best rollout without a verified fixed rollout reference"
+            )
+        best_preflight = _preflight_resume_selector_checkpoint(
+            resume_path,
+            best_rollout_path,
+            config,
+            prefix="best_rollout",
+            resume_metrics=resume_metrics,
+            expected_device=closed_loop_device,
+            captured_resume_payload=payload,
+            captured_resume_bytes=checkpoint_bytes,
+        )
+        if best_preflight is None:
+            linked_best_format = (
+                float(resume_metrics.get("rollout_selection_metric_version", -1.0))
+                == _ROLLOUT_SELECTION_METRIC_VERSION
+                and isinstance(resume_metrics.get("best_rollout_model_state_hash"), str)
+                and resume_metrics.get("best_rollout_checkpoint_step") is not None
+            )
+            if linked_best_format:
+                raise ValueError(
+                    "exact resume declared a linked rollout incumbent, but best_rollout.pt "
+                    "is missing or failed protocol/tensor verification"
+                )
+            best_rollout_validated = False
+        else:
+            preserved_best, publication = best_preflight
+            if publication is not None:
+                selector_publications.append(publication)
+
+    stored_handoff_completed = resume_metrics.get("measurement_handoff_completed")
+    measurement_handoff_completed = config.training.rgb_pretrain_steps == 0
+    if stored_handoff_completed is not None:
+        measurement_handoff_completed = _binary_checkpoint_marker(
+            stored_handoff_completed,
+            name="measurement_handoff_completed",
+        )
+    elif (
+        preserved_best is not None
+        and config.training.rgb_pretrain_steps > 0
+        and start_step <= config.training.rgb_pretrain_steps
+    ):
+        measurement_handoff_completed = False
+
+    preserved_measurement: tuple[_MeasurementSelectionMetrics, str, int] | None = None
+    if best_measurement_validated:
+        measurement_preflight = _preflight_resume_measurement_checkpoint(
+            resume_path,
+            best_measurement_path,
+            config,
+            resume_metrics=resume_metrics,
+            expected_device=measurement_device,
+            captured_resume_payload=payload,
+            captured_resume_bytes=checkpoint_bytes,
+        )
+        if measurement_preflight is None:
+            linked_measurement_format = (
+                float(resume_metrics.get("measurement_selection_metric_version", -1.0))
+                == _MEASUREMENT_SELECTION_METRIC_VERSION
+                and isinstance(
+                    resume_metrics.get("best_measurement_model_state_hash"),
+                    str,
+                )
+                and resume_metrics.get("best_measurement_checkpoint_step") is not None
+            )
+            if linked_measurement_format:
+                raise ValueError(
+                    "exact resume declared a linked measurement selector artifact, but "
+                    "best_measurement.pt is missing or failed protocol/tensor verification"
+                )
+            best_measurement_validated = False
+        else:
+            preserved_measurement, publication = measurement_preflight
+            if publication is not None:
+                selector_publications.append(publication)
+
+    validation_history = _preflight_resume_validation_history(
+        resume_path,
+        checkpoint_directory,
+        config,
+        resume_step=start_step,
+        expected_device=closed_loop_device,
+        captured_resume_payload=payload,
+        captured_resume_bytes=checkpoint_bytes,
+    )
+    return _ResumeStatePreflight(
+        start_step=start_step,
+        metrics=resume_metrics,
+        best_rollout_validated=best_rollout_validated,
+        best_measurement_validated=best_measurement_validated,
+        incomplete_reference_comparison_required=(incomplete_reference_comparison_required),
+        reference_rollout=preserved_reference,
+        best_rollout=preserved_best,
+        best_measurement=preserved_measurement,
+        measurement_handoff_completed=measurement_handoff_completed,
+        training_data_draw_step=training_data_draw_step,
+        skipped_no_gradient_batches=skipped_no_gradient_batches,
+        selector_publications=tuple(selector_publications),
+        validation_history=validation_history,
+    )
 
 
 def _resolve_training_devices(
@@ -5064,6 +5859,71 @@ def train_from_config(
     resume_path: str | Path | None = None,
     initialize_from_path: str | Path | None = None,
     device_info: DeviceInfo | None = None,
+    _run_lock_handle: TextIO | None = None,
+    _cli_claimed_empty_run_directory: bool = False,
+) -> dict[str, Any]:
+    """Own every direct exact-resume destination for the invocation lifetime."""
+
+    if _run_lock_handle is not None or resume_path is None:
+        return _train_from_config_owned(
+            config,
+            run_name=run_name,
+            resume_path=resume_path,
+            initialize_from_path=initialize_from_path,
+            device_info=device_info,
+            _run_lock_handle=_run_lock_handle,
+            _cli_claimed_empty_run_directory=_cli_claimed_empty_run_directory,
+        )
+    if initialize_from_path is not None:
+        raise ValueError("--resume and --initialize-from are mutually exclusive")
+    run_directory = _resolve_run_directory(
+        config,
+        run_name=run_name,
+        resume_path=resume_path,
+    )
+    resume_source = Path(resume_path).expanduser().resolve()
+    in_place = (
+        run_name is None and resume_source == (run_directory / "checkpoints" / "last.pt").resolve()
+    )
+    claim = _acquire_direct_resume_lock(
+        run_directory,
+        require_empty_destination=not in_place,
+    )
+    completed = False
+    try:
+        result = _train_from_config_owned(
+            config,
+            # Reuse the one resolved timestamped name. Re-resolving an
+            # unprefixed label after a UTC-second boundary could otherwise
+            # lock one directory and publish into another.
+            run_name=run_directory.name if run_name is not None else None,
+            resume_path=resume_path,
+            initialize_from_path=initialize_from_path,
+            device_info=device_info,
+            _run_lock_handle=claim.handle,
+            _owned_destination_entries=(frozenset({".training.lock"}) if not in_place else None),
+        )
+        completed = True
+        return result
+    finally:
+        if not completed:
+            _restore_failed_direct_lock_claim(claim)
+        claim.handle.close()
+        if not completed and claim.created_directory:
+            with suppress(OSError):
+                run_directory.rmdir()
+
+
+def _train_from_config_owned(
+    config: OrpheusConfig,
+    *,
+    run_name: str | None = None,
+    resume_path: str | Path | None = None,
+    initialize_from_path: str | Path | None = None,
+    device_info: DeviceInfo | None = None,
+    _run_lock_handle: TextIO | None = None,
+    _cli_claimed_empty_run_directory: bool = False,
+    _owned_destination_entries: frozenset[str] | None = None,
 ) -> dict[str, Any]:
     """Train RGB measurements, then the causal RGB-only online loop.
 
@@ -5091,9 +5951,52 @@ def train_from_config(
         run_name=run_name,
         resume_path=resume_path,
     )
+    checkpoint_directory = run_directory / "checkpoints"
+    best_rollout_path = checkpoint_directory / "best_rollout.pt"
+    reference_rollout_path = checkpoint_directory / "reference_rollout.pt"
+    best_measurement_path = checkpoint_directory / "best_measurement.pt"
+    last_path = checkpoint_directory / "last.pt"
+    resolved_config_path = run_directory / "config.resolved.yaml"
+    live_run_lock_owned = _verify_live_run_lock(
+        _run_lock_handle,
+        run_directory / ".training.lock",
+    )
+    if _cli_claimed_empty_run_directory and not live_run_lock_owned:
+        raise ValueError("a claimed-empty run directory requires a live run lock")
+    if _owned_destination_entries is not None and not live_run_lock_owned:
+        raise ValueError("owned destination entries require a live run lock")
+    owned_destination_entries = _owned_destination_entries
+    if _cli_claimed_empty_run_directory:
+        cli_entries = frozenset({".training.lock", "training_state.json"})
+        if owned_destination_entries not in {None, cli_entries}:
+            raise ValueError("CLI destination ownership entries are inconsistent")
+        owned_destination_entries = cli_entries
+    resume_source: Path | None = None
+    in_place_exact_resume = False
     resume_step_hint: int | None = None
     resume_config_payload: Mapping[str, Any] | None = None
+    resume_preflight_state: _ResumeStatePreflight | None = None
+    resume_checkpoint_bytes: bytes | None = None
+    resume_checkpoint_sha256: str | None = None
+    resume_checkpoint_byte_count: int | None = None
+    resume_checkpoint_device: str | None = None
     final_validation_recovery_pending = False
+
+    def assert_captured_in_place_resume_identity() -> None:
+        if not in_place_exact_resume:
+            return
+        if (
+            resume_source is None
+            or resume_checkpoint_sha256 is None
+            or resume_checkpoint_byte_count is None
+        ):
+            raise AssertionError("captured resume checkpoint identity is unavailable")
+        _assert_checkpoint_path_identity(
+            resume_source,
+            expected_sha256=resume_checkpoint_sha256,
+            expected_byte_count=resume_checkpoint_byte_count,
+        )
+
     if resume_path is not None:
         # Reject an accidental curriculum/data/objective change before
         # overwriting any metadata in the existing run directory.  The later
@@ -5102,15 +6005,36 @@ def train_from_config(
         resume_source = Path(resume_path).expanduser().resolve()
         if not resume_source.is_file():
             raise FileNotFoundError(f"Checkpoint not found: {resume_source}")
-        resume_config_payload = torch.load(
-            resume_source,
-            map_location="cpu",
-            weights_only=False,
+        in_place_exact_resume = run_name is None and resume_source == last_path.resolve()
+        if not live_run_lock_owned:
+            raise RuntimeError("exact resume requires a lifetime run lock")
+        _validate_branched_resume_destination(
+            run_directory,
+            resume_source=resume_source,
+            last_path=last_path,
+            in_place_exact_resume=in_place_exact_resume,
+            live_run_lock_owned=live_run_lock_owned,
+            owned_entry_names=owned_destination_entries,
         )
+        with capture_checkpoint_snapshot(resume_source) as captured_resume:
+            resume_config_payload = torch.load(
+                captured_resume.snapshot_path,
+                map_location="cpu",
+                weights_only=False,
+            )
+            resume_checkpoint_bytes = captured_resume.snapshot_path.read_bytes()
+            if (
+                len(resume_checkpoint_bytes) != captured_resume.byte_count
+                or hashlib.sha256(resume_checkpoint_bytes).hexdigest() != captured_resume.sha256
+            ):
+                raise RuntimeError("captured resume checkpoint identity changed unexpectedly")
+            resume_checkpoint_sha256 = captured_resume.sha256
+            resume_checkpoint_byte_count = captured_resume.byte_count
         if not isinstance(resume_config_payload, Mapping):
             raise ValueError("checkpoint payload must be a mapping")
         validate_checkpoint_config(resume_config_payload, config)
         validate_training_resume_config(resume_config_payload, config)
+        validate_exact_resume_state(resume_config_payload)
         if not _rollout_validation_protocol_is_compatible(
             resume_config_payload,
             config,
@@ -5126,6 +6050,10 @@ def train_from_config(
         resume_step_hint = _finite_nonnegative_integer(
             resume_config_payload.get("step"),
             name="step",
+        )
+        stored_resume_device = resume_config_payload.get("device")
+        resume_checkpoint_device = (
+            stored_resume_device if isinstance(stored_resume_device, str) else None
         )
         final_validation_recovery_pending = _resume_requires_final_validation(
             resume_config_payload,
@@ -5158,6 +6086,54 @@ def train_from_config(
                 f"expected one of [{expected_devices}]); use "
                 "--initialize-from for a device/backend transfer"
             )
+
+    # Build the exact destinations and restore all potentially fallible model,
+    # optimizer, and RNG state before creating or copying any run artifacts.
+    # Validation-loader construction remains before model initialization, as in
+    # the historical resume order; the one RNG restore then establishes the
+    # continuation stream consumed by training.
+    validation_loader = _make_loader(
+        config,
+        split="validation",
+        episodes=config.training.validation_episodes,
+        shuffle=False,
+        batch_size_override=1,
+    )
+    model = OnlineWorldModel.from_config(config, device=device)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+    )
+    if resume_config_payload is not None:
+        load_checkpoint_payload(
+            resume_config_payload,
+            model=model,
+            optimizer=optimizer,
+            # Load storage on CPU and let ``load_state_dict`` place tensors
+            # against their owning parameters. This matters for the hybrid
+            # MPS-backbone/CPU-detector optimizer: PyTorch deliberately leaves
+            # non-capturable Adam scalar step counters on the map device.
+            restore_rng=False,
+            expected_config=config,
+        )
+        if resume_checkpoint_bytes is None:
+            raise AssertionError("captured resume checkpoint bytes are unavailable")
+        resume_preflight_state = _preflight_exact_resume_state(
+            resume_config_payload,
+            resume_checkpoint_bytes,
+            resume_path=resume_source,
+            config=config,
+            checkpoint_directory=checkpoint_directory,
+            best_rollout_path=best_rollout_path,
+            reference_rollout_path=reference_rollout_path,
+            best_measurement_path=best_measurement_path,
+            measurement_device=measurement_device,
+            closed_loop_device=closed_loop_device,
+        )
+        loaded_step = resume_preflight_state.start_step
+        if loaded_step != resume_step_hint:
+            raise ValueError("captured exact-resume checkpoint step changed during preflight")
     if run_directory.exists() and resume_path is None:
         occupied = any(
             (run_directory / name).exists()
@@ -5167,22 +6143,47 @@ def train_from_config(
             raise FileExistsError(
                 f"run directory already contains training artefacts: {run_directory}"
             )
-    checkpoint_directory = run_directory / "checkpoints"
+    if resume_config_payload is not None:
+        if resume_source is None:
+            raise AssertionError("exact resume source is unavailable")
+        _validate_branched_resume_destination(
+            run_directory,
+            resume_source=resume_source,
+            last_path=last_path,
+            in_place_exact_resume=in_place_exact_resume,
+            live_run_lock_owned=live_run_lock_owned,
+            owned_entry_names=owned_destination_entries,
+        )
+        # This is the final fallible ownership gate before the one global RNG
+        # restore and any checkpoint/history/config publication. CLI and
+        # direct API invocations both retain the verified lifetime lock for
+        # the remainder of training.
+        assert_captured_in_place_resume_identity()
+        restore_checkpoint_rng_state(resume_config_payload)
+        resume_config_payload = None
+        retain_bytes_for_branched_no_op = (
+            loaded_step == config.training.steps
+            and not final_validation_recovery_pending
+            and not in_place_exact_resume
+        )
+        if not retain_bytes_for_branched_no_op:
+            resume_checkpoint_bytes = None
+        gc.collect()
     checkpoint_directory.mkdir(parents=True, exist_ok=True)
     preserved_validation_history: tuple[Path, ...] = ()
-    if resume_path is not None and resume_step_hint is not None:
-        preserved_validation_history = _preserve_resume_validation_history(
-            resume_path,
-            checkpoint_directory,
-            config,
-            resume_step=resume_step_hint,
-            expected_device=closed_loop_device,
+    if resume_preflight_state is not None:
+        _publish_captured_artifacts(
+            resume_preflight_state.validation_history.publications
+            + resume_preflight_state.selector_publications
         )
-    best_rollout_path = checkpoint_directory / "best_rollout.pt"
-    reference_rollout_path = checkpoint_directory / "reference_rollout.pt"
-    best_measurement_path = checkpoint_directory / "best_measurement.pt"
-    last_path = checkpoint_directory / "last.pt"
-    resolved_config_path = run_directory / "config.resolved.yaml"
+        preserved_validation_history = resume_preflight_state.validation_history.preserved_paths
+        resume_preflight_state = replace(
+            resume_preflight_state,
+            selector_publications=(),
+            validation_history=_ValidationHistoryPreflight(
+                preserved_paths=preserved_validation_history,
+            ),
+        )
     save_resolved_config(config, resolved_config_path)
     run_metadata = _write_run_metadata(
         run_directory / "run_metadata.json",
@@ -5196,14 +6197,6 @@ def train_from_config(
         source_provenance=source_provenance,
     )
 
-    validation_loader = _make_loader(
-        config,
-        split="validation",
-        episodes=config.training.validation_episodes,
-        shuffle=False,
-        batch_size_override=1,
-    )
-    model = OnlineWorldModel.from_config(config, device=device)
     initialized_from_value = run_metadata.get("initialize_from_path")
     initialized_from = (
         str(initialized_from_value) if isinstance(initialized_from_value, str) else None
@@ -5212,19 +6205,48 @@ def train_from_config(
         source = Path(initialize_from_path).expanduser().resolve()
         if not source.is_file():
             raise FileNotFoundError(f"Initialization checkpoint not found: {source}")
-        initialization_payload = load_model_weights(
-            source,
-            model=model,
-            allowed_missing_prefixes=(
-                ("dynamics.attention_interactions.",)
-                if config.model.dynamics.attention_residual_enabled
-                else ()
-            ),
-            architecture_growth_config=config,
+        with capture_checkpoint_snapshot(source) as captured_initialization:
+            initialization_payload = load_model_weights(
+                captured_initialization.snapshot_path,
+                model=model,
+                allowed_missing_prefixes=(
+                    ("dynamics.attention_interactions.",)
+                    if config.model.dynamics.attention_residual_enabled
+                    else ()
+                ),
+                architecture_growth_config=config,
+            )
+            initialization_model_state = initialization_payload.get("model_state")
+            if not isinstance(initialization_model_state, Mapping):
+                raise ValueError("initialization checkpoint model_state must be a mapping")
+            initialization_checkpoint_model_state_hash = _model_state_hash(
+                initialization_model_state
+            )
+            initialization_checkpoint_sha256 = captured_initialization.sha256
+            initialization_checkpoint_byte_count = captured_initialization.byte_count
+        stored_artifact_metadata = initialization_payload.get("artifact_metadata")
+        initialization_artifact_metadata = (
+            deepcopy(dict(stored_artifact_metadata))
+            if isinstance(stored_artifact_metadata, Mapping)
+            else None
         )
-        identity_grown_blocks = initialization_payload.get(
-            "identity_grown_attention_blocks",
-            (),
+        identity_grown_blocks = tuple(
+            initialization_payload.get("identity_grown_attention_blocks", ())
+        )
+        del initialization_model_state
+        del stored_artifact_metadata
+        del initialization_payload
+        gc.collect()
+        run_metadata.update(
+            {
+                "initialization_checkpoint_sha256": initialization_checkpoint_sha256,
+                "initialization_checkpoint_byte_count": initialization_checkpoint_byte_count,
+                "initialization_checkpoint_model_state_hash": (
+                    initialization_checkpoint_model_state_hash
+                ),
+                "initialization_loaded_model_state_hash": _current_model_state_hash(model),
+                "initialization_artifact_metadata": initialization_artifact_metadata,
+            }
         )
         if identity_grown_blocks:
             run_metadata["initialization_transform"] = {
@@ -5232,18 +6254,13 @@ def train_from_config(
                 "source_checkpoint": str(source),
                 "appended_blocks": list(identity_grown_blocks),
             }
-            atomic_write_text(
-                run_directory / "run_metadata.json",
-                json.dumps(run_metadata, indent=2, sort_keys=True) + "\n",
-            )
+        atomic_write_text(
+            run_directory / "run_metadata.json",
+            json.dumps(run_metadata, indent=2, sort_keys=True) + "\n",
+        )
         initialized_from = str(source)
     model_parameter_count = sum(parameter.numel() for parameter in model.parameters())
     model.train()
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=config.training.learning_rate,
-        weight_decay=config.training.weight_decay,
-    )
     start_step = 0
     best_rollout = math.inf
     best_rollout_selection: _RolloutSelectionMetrics | None = None
@@ -5264,224 +6281,63 @@ def train_from_config(
     skipped_no_gradient_batches = 0
     support_collapse_rollback_at_checkpoint = False
     incomplete_reference_comparison_required = False
-    if resume_path is not None:
-        payload = load_checkpoint(
-            resume_path,
-            model=model,
-            optimizer=optimizer,
-            # Load storage on CPU and let ``load_state_dict`` place tensors
-            # against their owning parameters. This matters for the hybrid
-            # MPS-backbone/CPU-detector optimizer: PyTorch deliberately leaves
-            # non-capturable Adam scalar step counters on the map device.
-            map_location="cpu",
-            restore_rng=True,
-            expected_config=config,
+    if resume_preflight_state is not None:
+        start_step = resume_preflight_state.start_step
+        resume_metrics = resume_preflight_state.metrics
+        best_rollout_validated = resume_preflight_state.best_rollout_validated
+        best_measurement_validated = resume_preflight_state.best_measurement_validated
+        incomplete_reference_comparison_required = (
+            resume_preflight_state.incomplete_reference_comparison_required
         )
-        start_step = _finite_nonnegative_integer(payload.get("step"), name="step")
-        raw_resume_metrics = payload.get("metrics", {})
-        if isinstance(raw_resume_metrics, Mapping):
-            resume_metrics = raw_resume_metrics
-        best_rollout_validated = _binary_checkpoint_marker(
-            resume_metrics.get("best_rollout_validated", 0.0),
-            name="best_rollout_validated",
-        )
-        rollout_reference_validated = _binary_checkpoint_marker(
-            resume_metrics.get(
-                "rollout_reference_validated",
-                float(best_rollout_validated),
-            ),
-            name="rollout_reference_validated",
-        )
-        incomplete_reference_marker = resume_metrics.get("incomplete_reference_comparison_required")
-        if incomplete_reference_marker is not None:
-            incomplete_reference_comparison_required = _binary_checkpoint_marker(
-                incomplete_reference_marker,
-                name="incomplete_reference_comparison_required",
-            )
-        elif not rollout_reference_validated:
-            # Compatibility for a current-protocol unsupported numbered
-            # checkpoint written before the durable marker existed.  The
-            # explicit zero support result is enough to prove that the next
-            # supported validation must establish a fixed reference without
-            # promoting itself.
-            stored_selection_support = resume_metrics.get("selection_metric_supported")
-            if stored_selection_support is not None:
-                incomplete_reference_comparison_required = not _binary_checkpoint_marker(
-                    stored_selection_support,
-                    name="selection_metric_supported",
-                )
-        if incomplete_reference_comparison_required and (
-            rollout_reference_validated or best_rollout_validated
-        ):
-            raise ValueError(
-                "exact resume cannot require an incomplete reference comparison "
-                "while declaring a validated rollout reference or incumbent"
-            )
-        best_measurement_validated = _binary_checkpoint_marker(
-            resume_metrics.get("best_measurement_validated", 0.0),
-            name="best_measurement_validated",
-        )
-        preserved_reference: tuple[_RolloutSelectionMetrics, str, int] | None = None
-        if rollout_reference_validated:
-            preserved_reference = _preserve_resume_selector_checkpoint(
-                resume_path,
-                reference_rollout_path,
-                config,
-                prefix="reference_rollout",
-                resume_metrics=resume_metrics,
-                expected_device=closed_loop_device,
-            )
-            if preserved_reference is None:
-                linked_reference_format = (
-                    float(
-                        resume_metrics.get(
-                            "rollout_selection_metric_version",
-                            -1.0,
-                        )
-                    )
-                    == _ROLLOUT_SELECTION_METRIC_VERSION
-                    and isinstance(
-                        resume_metrics.get("reference_rollout_model_state_hash"),
-                        str,
-                    )
-                    and resume_metrics.get("reference_rollout_checkpoint_step") is not None
-                )
-                if linked_reference_format or best_rollout_validated:
-                    raise ValueError(
-                        "exact resume declared a linked rollout reference, but "
-                        "reference_rollout.pt is missing or failed "
-                        "protocol/tensor verification"
-                    )
-                rollout_reference_validated = False
-            else:
-                (
-                    reference_rollout_selection,
-                    reference_rollout_model_state_hash,
-                    reference_rollout_step,
-                ) = preserved_reference
-        if best_rollout_validated:
-            if not rollout_reference_validated or preserved_reference is None:
-                raise ValueError(
-                    "exact resume declares a best rollout without a verified "
-                    "fixed rollout reference"
-                )
-            preserved_best = _preserve_resume_selector_checkpoint(
-                resume_path,
-                best_rollout_path,
-                config,
-                prefix="best_rollout",
-                resume_metrics=resume_metrics,
-                expected_device=closed_loop_device,
-            )
-            if preserved_best is None:
-                linked_best_format = (
-                    float(
-                        resume_metrics.get(
-                            "rollout_selection_metric_version",
-                            -1.0,
-                        )
-                    )
-                    == _ROLLOUT_SELECTION_METRIC_VERSION
-                    and isinstance(
-                        resume_metrics.get("best_rollout_model_state_hash"),
-                        str,
-                    )
-                    and resume_metrics.get("best_rollout_checkpoint_step") is not None
-                )
-                if linked_best_format:
-                    raise ValueError(
-                        "exact resume declared a linked rollout incumbent, but "
-                        "best_rollout.pt is missing or failed protocol/tensor "
-                        "verification"
-                    )
-                best_rollout_validated = False
-            else:
-                (
-                    best_rollout_selection,
-                    best_rollout_model_state_hash,
-                    best_rollout_step,
-                ) = preserved_best
-                best_rollout = best_rollout_selection.score
-        stored_handoff_completed = resume_metrics.get("measurement_handoff_completed")
-        if stored_handoff_completed is not None:
-            measurement_handoff_completed = _binary_checkpoint_marker(
-                stored_handoff_completed,
-                name="measurement_handoff_completed",
-            )
-        elif (
-            best_rollout_selection is not None
-            and config.training.rgb_pretrain_steps > 0
-            and start_step <= config.training.rgb_pretrain_steps
-        ):
-            # Migration for initialized runs checkpointed before this explicit
-            # flag existed. Their retained selector proves an imported
-            # reference, and the boundary has not yet been crossed.
-            measurement_handoff_completed = False
-        if best_measurement_validated:
-            restored_measurement = _preserve_resume_measurement_checkpoint(
-                resume_path,
-                best_measurement_path,
-                config,
-                resume_metrics=resume_metrics,
-                expected_device=measurement_device,
-            )
-            if restored_measurement is None:
-                linked_measurement_format = (
-                    float(
-                        resume_metrics.get(
-                            "measurement_selection_metric_version",
-                            -1.0,
-                        )
-                    )
-                    == _MEASUREMENT_SELECTION_METRIC_VERSION
-                    and isinstance(
-                        resume_metrics.get("best_measurement_model_state_hash"),
-                        str,
-                    )
-                    and resume_metrics.get("best_measurement_checkpoint_step") is not None
-                )
-                if linked_measurement_format:
-                    raise ValueError(
-                        "exact resume declared a linked measurement selector "
-                        "artifact, but best_measurement.pt is missing or failed "
-                        "protocol/tensor verification"
-                    )
-                # Older checkpoints used MAE alone and did not prove that their
-                # proposals crossed the runtime lifecycle gate. Keep them
-                # loadable, but require a new broad validation before calling
-                # one the best measurement checkpoint.
-                best_measurement_validated = False
-            else:
-                (
-                    best_measurement_selection,
-                    best_measurement_model_state_hash,
-                    best_measurement_step,
-                ) = restored_measurement
+        if resume_preflight_state.reference_rollout is not None:
+            (
+                reference_rollout_selection,
+                reference_rollout_model_state_hash,
+                reference_rollout_step,
+            ) = resume_preflight_state.reference_rollout
+        if resume_preflight_state.best_rollout is not None:
+            (
+                best_rollout_selection,
+                best_rollout_model_state_hash,
+                best_rollout_step,
+            ) = resume_preflight_state.best_rollout
+            best_rollout = best_rollout_selection.score
+        if resume_preflight_state.best_measurement is not None:
+            (
+                best_measurement_selection,
+                best_measurement_model_state_hash,
+                best_measurement_step,
+            ) = resume_preflight_state.best_measurement
+        measurement_handoff_completed = resume_preflight_state.measurement_handoff_completed
+        training_data_draw_step = resume_preflight_state.training_data_draw_step
+        skipped_no_gradient_batches = resume_preflight_state.skipped_no_gradient_batches
         resumed_from = str(Path(resume_path).expanduser().resolve())
-        training_data_draw_step = _finite_nonnegative_integer(
-            resume_metrics.get("training_data_draw_step", start_step),
-            name="training_data_draw_step",
-        )
-        skipped_no_gradient_batches = _finite_nonnegative_integer(
-            resume_metrics.get("skipped_no_gradient_batches", 0.0),
-            name="skipped_no_gradient_batches",
-        )
-        expected_data_draw_step = start_step + skipped_no_gradient_batches
-        if training_data_draw_step != expected_data_draw_step:
-            raise ValueError(
-                "checkpoint data-progress invariant failed: "
-                "training_data_draw_step must equal optimizer step plus "
-                "skipped_no_gradient_batches "
-                f"({training_data_draw_step} != {start_step} + "
-                f"{skipped_no_gradient_batches})"
-            )
-        if start_step > config.training.steps:
-            raise ValueError(
-                "checkpoint step exceeds configured training.steps "
-                f"({start_step} > {config.training.steps})"
-            )
+        resume_preflight_state = None
+        gc.collect()
+    elif resume_path is not None:
+        raise AssertionError("exact resume preflight state is unavailable")
     else:
         training_data_draw_step = start_step
+
+    def save_last_checkpoint(
+        *,
+        step: int,
+        metrics: Mapping[str, Any],
+    ) -> Path:
+        """Publish last.pt while the exact-resume lifetime lock remains held."""
+
+        if resume_path is not None and not live_run_lock_owned:
+            raise RuntimeError("exact-resume last checkpoint publication lost its run lock")
+        return save_checkpoint(
+            last_path,
+            model=model,
+            optimizer=optimizer,
+            config=config,
+            step=step,
+            metrics=metrics,
+            device=str(device),
+            source_provenance=source_provenance,
+        )
 
     logger = MetricsLogger(run_directory / "metrics.jsonl")
     last_metrics: dict[str, float | str] = {}
@@ -6765,6 +7621,9 @@ def train_from_config(
                 result.metrics["closed_loop_scope_updater_only"] = float(
                     active_closed_loop_scope == "updater"
                 )
+                result.metrics["closed_loop_scope_updater_state_heads_only"] = float(
+                    active_closed_loop_scope == "updater_state_heads"
+                )
                 result.metrics["closed_loop_scope_updater_mean_only"] = float(
                     active_closed_loop_scope == "updater_mean"
                 )
@@ -7057,15 +7916,9 @@ def train_from_config(
             }
             prevalidation_metrics.update(retained_selector_metrics())
             prevalidation_metrics["final_validation_completed"] = 0.0
-            save_checkpoint(
-                last_path,
-                model=model,
-                optimizer=optimizer,
-                config=config,
+            save_last_checkpoint(
                 step=completed_step,
                 metrics=prevalidation_metrics,
-                device=str(device),
-                source_provenance=source_provenance,
             )
         if should_validate:
             if completed_step > config.training.rgb_pretrain_steps:
@@ -7105,15 +7958,9 @@ def train_from_config(
             checkpoint_metrics.update(retained_selector_metrics())
             if completed_step == config.training.steps and should_validate:
                 checkpoint_metrics["final_validation_completed"] = 1.0
-            save_checkpoint(
-                last_path,
-                model=model,
-                optimizer=optimizer,
-                config=config,
+            save_last_checkpoint(
                 step=completed_step,
                 metrics=checkpoint_metrics,
-                device=str(device),
-                source_provenance=source_provenance,
             )
 
     final_validation_recovered = False
@@ -7165,15 +8012,9 @@ def train_from_config(
                 "final_validation_loss_total": float(final_validation.total_loss.detach().cpu()),
             }
         )
-        save_checkpoint(
-            last_path,
-            model=model,
-            optimizer=optimizer,
-            config=config,
+        save_last_checkpoint(
             step=start_step,
             metrics=recovery_checkpoint_metrics,
-            device=str(device),
-            source_provenance=source_provenance,
         )
         final_validation_recovered = True
 
@@ -7190,20 +8031,25 @@ def train_from_config(
         # and make a later extension fail exact-resume validation.
         if resume_path is None:
             selection_metrics = retained_selector_metrics()
-            save_checkpoint(
-                last_path,
-                model=model,
-                optimizer=optimizer,
-                config=config,
+            save_last_checkpoint(
                 step=start_step,
                 metrics=selection_metrics,
-                device=str(device),
-                source_provenance=source_provenance,
             )
         elif not final_validation_recovered:
             resume_source = Path(resume_path).expanduser().resolve()
             if resume_source != last_path.resolve():
-                shutil.copy2(resume_source, last_path)
+                if resume_checkpoint_bytes is None:
+                    raise AssertionError("exact resume bytes were not captured")
+                _atomic_write_checkpoint_bytes(last_path, resume_checkpoint_bytes)
+                resume_checkpoint_bytes = None
+            else:
+                if resume_checkpoint_sha256 is None or resume_checkpoint_byte_count is None:
+                    raise AssertionError("captured resume checkpoint identity is unavailable")
+                _assert_checkpoint_path_identity(
+                    resume_source,
+                    expected_sha256=resume_checkpoint_sha256,
+                    expected_byte_count=resume_checkpoint_byte_count,
+                )
 
     elapsed = time.perf_counter() - started
     verified_best_rollout = (
@@ -7413,8 +8259,8 @@ def train_from_config(
             config.training.closed_loop_learning_rate_minimum_scale
         ),
         "device": (
-            str(resume_config_payload.get("device", device))
-            if no_op_exact_resume and resume_config_payload is not None
+            resume_checkpoint_device
+            if no_op_exact_resume and resume_checkpoint_device is not None
             else str(device)
         ),
         "measurement_device": str(measurement_device),
@@ -7441,6 +8287,14 @@ def train_from_config(
             resume_source.parent.name == "checkpoints"
             and resume_source.parent.parent == run_directory
         )
+        if no_op_exact_resume and resume_source == last_path.resolve():
+            if resume_checkpoint_sha256 is None or resume_checkpoint_byte_count is None:
+                raise AssertionError("captured resume checkpoint identity is unavailable")
+            _assert_checkpoint_path_identity(
+                resume_source,
+                expected_sha256=resume_checkpoint_sha256,
+                expected_byte_count=resume_checkpoint_byte_count,
+            )
     if no_op_exact_resume and same_run_resume and summary_path.is_file():
         # A completed run's summary is scientific evidence for the invocation
         # that performed its optimiser updates. A later no-op inspection may

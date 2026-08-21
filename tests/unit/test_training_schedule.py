@@ -1227,6 +1227,68 @@ def test_updater_scope_isolates_correction_recovery() -> None:
     )
 
 
+def test_updater_state_heads_scope_has_exact_functional_tensor_boundary() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+
+    set_closed_loop_trainable_scope(model, scope="updater_state_heads")
+
+    trainable = {name for name, parameter in model.named_parameters() if parameter.requires_grad}
+    assert trainable == {
+        "updater.learned_corrector.mean_head.weight",
+        "updater.learned_corrector.mean_head.bias",
+        "updater.learned_corrector.variance_head.weight",
+        "updater.learned_corrector.variance_head.bias",
+        "updater.learned_corrector.gate_head.weight",
+        "updater.learned_corrector.gate_head.bias",
+    }
+
+
+def test_updater_state_heads_adamw_step_cannot_mutate_frozen_siblings() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+    set_closed_loop_trainable_scope(model, scope="updater_state_heads")
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.01, weight_decay=0.01)
+    before = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
+    corrector = model.updater.learned_corrector
+    assert corrector is not None
+    batch = 3
+    corrector_inputs = {
+        "prior_fast_state": torch.zeros(batch, corrector.fast_state_dim),
+        "prior_log_variance": torch.zeros(batch, corrector.fast_state_dim),
+        "whitened_innovation": torch.ones(batch, corrector.fast_state_dim),
+        "association_cost": torch.zeros(batch),
+        "ambiguity": torch.zeros(batch, dtype=torch.bool),
+        "visibility": torch.ones(batch),
+        "elapsed_time": torch.full((batch,), 0.05),
+        "motion_mode_logits": torch.zeros(batch, corrector.num_motion_modes),
+        "modality_index": torch.zeros(batch, dtype=torch.int64),
+    }
+    with torch.no_grad():
+        output_before = corrector(**corrector_inputs)
+
+    for parameter in model.parameters():
+        if parameter.requires_grad:
+            parameter.grad = torch.ones_like(parameter)
+    optimizer.step()
+    with torch.no_grad():
+        output_after = corrector(**corrector_inputs)
+
+    for name, parameter in model.named_parameters():
+        if parameter.requires_grad:
+            assert not torch.equal(parameter, before[name]), name
+            assert parameter in optimizer.state, name
+        else:
+            torch.testing.assert_close(parameter, before[name], rtol=0.0, atol=0.0)
+            assert parameter not in optimizer.state, name
+    # The selected state heads move, but the frozen shared representation
+    # cannot indirectly alter mode, existence, or visibility semantics.
+    assert not torch.equal(output_after.mean_delta, output_before.mean_delta)
+    assert not torch.equal(output_after.log_variance_delta, output_before.log_variance_delta)
+    assert not torch.equal(output_after.state_gate, output_before.state_gate)
+    assert torch.equal(output_after.mode_logit_delta, output_before.mode_logit_delta)
+    assert torch.equal(output_after.existence_delta, output_before.existence_delta)
+    assert torch.equal(output_after.visibility_delta, output_before.visibility_delta)
+
+
 def test_updater_mean_scope_isolates_semantically_reset_gain_head() -> None:
     model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
 
@@ -1637,6 +1699,7 @@ def test_scope_owned_event_weight_omits_early_gradient_and_admits_exact_late_wei
             source.training,
             closed_loop_event_loss_weights={
                 "state_roi": 0.0,
+                "updater_state_heads": 0.0,
                 "state_relation_roi": 0.05,
             },
         ),
@@ -1669,6 +1732,18 @@ def test_scope_owned_event_weight_omits_early_gradient_and_admits_exact_late_wei
         early_state.grad,
         torch.tensor(config.training.loss_weights["state_position"]),
     )
+
+    head_weights, head_metrics = _closed_loop_loss_weights_for_scope(
+        config,
+        active_trainable_scope="updater_state_heads",
+    )
+    assert head_weights["event"] == 0.0
+    assert head_metrics == {
+        "effective_event_loss_weight": 0.0,
+        "event_loss_scope_override_active": 1.0,
+        "event_loss_legacy_weight_active": 0.0,
+        "event_loss_suppressed_no_trainable_owner": 1.0,
+    }
 
     late_weights, late_metrics = _closed_loop_loss_weights_for_scope(
         config,
@@ -1966,6 +2041,33 @@ def test_event_loss_uses_fixed_global_horizon_denominator() -> None:
     expected = torch.tensor((1.0 * 3.0 + 1.5 * 6.0) / 4.5)
     torch.testing.assert_close(balanced["event_collision"], expected)
     torch.testing.assert_close(terms["event"], expected)
+
+
+def test_axiswise_correction_hinges_keep_fixed_configured_horizon_denominator() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["training.closed_loop_axiswise_correction_hinge_enabled=true"],
+    )
+    details = {
+        "correction_future": torch.tensor(99.0),
+        "correction_future_velocity": torch.tensor(88.0),
+        rollout_horizon_loss_key("correction_future", 0.1): torch.tensor(3.0),
+        rollout_horizon_loss_key("correction_future", 0.25): torch.tensor(6.0),
+        rollout_horizon_loss_key("correction_future_velocity", 0.1): torch.tensor(2.0),
+    }
+
+    balanced = _globally_weight_horizon_details(details, config, torch.zeros(()))
+
+    torch.testing.assert_close(
+        balanced["correction_future"],
+        torch.tensor((1.0 * 3.0 + 1.5 * 6.0) / 4.5),
+    )
+    # Missing velocity horizons contribute no numerator but retain the same
+    # complete configured denominator rather than renormalizing short support.
+    torch.testing.assert_close(
+        balanced["correction_future_velocity"],
+        torch.tensor((1.0 * 2.0) / 4.5),
+    )
 
 
 def test_legacy_axis_horizon_normalization_remains_explicitly_available() -> None:

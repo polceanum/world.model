@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import weakref
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 import torch
 
+import world_model.training.trainer as training_trainer
 from world_model.datasets import make_seed_manifest
 from world_model.runtime import OnlineWorldModel
 from world_model.training.checkpointing import save_checkpoint
@@ -38,6 +41,7 @@ from world_model.training.trainer import (
     _validation_support_evidence,
     _verified_measurement_checkpoint,
     _verified_selector_checkpoint,
+    closed_loop_learning_rate_at_update,
     train_from_config,
 )
 from world_model.utils.config import OrpheusConfig, load_config
@@ -478,7 +482,11 @@ def test_branched_resume_preserves_only_verified_accepted_numbered_history(
 ) -> None:
     config = load_config("configs/tiny_overfit.yaml")
     model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+    )
     source = tmp_path / "source" / "checkpoints"
     destination = tmp_path / "branch" / "checkpoints"
     source.mkdir(parents=True)
@@ -557,6 +565,45 @@ def test_branched_resume_preserves_only_verified_accepted_numbered_history(
     assert not (destination / "validation_step_000005.pt").exists()
     assert not (destination / "validation_step_000004.pt").exists()
     assert not (destination / "validation_step_000009.pt").exists()
+
+
+def test_numbered_primary_resume_history_uses_captured_bytes_after_replacement(
+    tmp_path: Path,
+) -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+    )
+    source = save_checkpoint(
+        tmp_path / "source" / "checkpoints" / "validation_step_000003.pt",
+        model=model,
+        optimizer=optimizer,
+        config=config,
+        step=3,
+        metrics=_selector_checkpoint_metrics(model, config, step=3),
+        device="cpu",
+    )
+    captured_payload = torch.load(source, map_location="cpu", weights_only=False)
+    captured_bytes = source.read_bytes()
+    source.write_bytes(b"mutable numbered-checkpoint replacement")
+    destination = tmp_path / "branch" / "checkpoints"
+    destination.mkdir(parents=True)
+
+    preserved = _preserve_resume_validation_history(
+        source,
+        destination,
+        config,
+        resume_step=3,
+        expected_device="cpu",
+        captured_resume_payload=captured_payload,
+        captured_resume_bytes=captured_bytes,
+    )
+
+    assert [path.name for path in preserved] == ["validation_step_000003.pt"]
+    assert preserved[0].read_bytes() == captured_bytes
 
 
 def test_validation_protocol_allows_only_training_step_extension() -> None:
@@ -764,6 +811,47 @@ def test_resume_preserves_only_a_real_linked_incumbent(tmp_path) -> None:
         )
         is None
     )
+    captured_payload = torch.load(best_path, map_location="cpu", weights_only=False)
+    captured_bytes = best_path.read_bytes()
+    best_path.write_bytes(b"mutable selector replacement")
+    captured_destination = tmp_path / "captured-run" / "checkpoints" / "best_rollout.pt"
+    captured_destination.parent.mkdir(parents=True)
+    captured_preserved = _preserve_resume_selector_checkpoint(
+        best_path,
+        captured_destination,
+        config,
+        prefix="best_rollout",
+        resume_metrics=metrics,
+        captured_resume_payload=captured_payload,
+        captured_resume_bytes=captured_bytes,
+    )
+    assert captured_preserved is not None
+    assert captured_destination.read_bytes() == captured_bytes
+    best_path.write_bytes(captured_bytes)
+    reference_path = source_checkpoints / "reference_rollout.pt"
+    reference_path.write_bytes(captured_bytes)
+    captured_reference_payload = torch.load(
+        reference_path,
+        map_location="cpu",
+        weights_only=False,
+    )
+    reference_bytes = reference_path.read_bytes()
+    reference_path.write_bytes(b"mutable reference selector replacement")
+    reference_destination = (
+        tmp_path / "captured-reference-run" / "checkpoints" / "reference_rollout.pt"
+    )
+    reference_destination.parent.mkdir(parents=True)
+    reference_preserved = _preserve_resume_selector_checkpoint(
+        reference_path,
+        reference_destination,
+        config,
+        prefix="reference_rollout",
+        resume_metrics=metrics,
+        captured_resume_payload=captured_reference_payload,
+        captured_resume_bytes=reference_bytes,
+    )
+    assert reference_preserved is not None
+    assert reference_destination.read_bytes() == reference_bytes
     wrong_link = dict(metrics)
     wrong_link["best_rollout_model_state_hash"] = "0" * 64
     assert (
@@ -929,6 +1017,32 @@ def test_causal_phase_clears_adam_moments_and_sets_phase_hyperparameters() -> No
     assert optimizer.param_groups[0]["weight_decay"] == 1.0e-4
 
 
+def test_exact_resume_accepts_fresh_causal_optimizer_at_handoff_boundary() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            rgb_pretrain_steps=2,
+            closed_loop_learning_rate_scale=0.25,
+        ),
+    )
+    causal_learning_rate = (
+        config.training.learning_rate * config.training.closed_loop_learning_rate_scale
+    )
+
+    training_trainer._validate_resume_optimizer_learning_rate(
+        {
+            "optimizer_state": {
+                "state": {},
+                "param_groups": [{"lr": float(causal_learning_rate)}],
+            }
+        },
+        config,
+        start_step=config.training.rgb_pretrain_steps,
+    )
+
+
 def test_causal_only_plan_does_not_resolve_unused_mps(
     monkeypatch,
 ) -> None:
@@ -1015,6 +1129,26 @@ def test_exact_resume_uses_runtime_source_before_whole_worktree() -> None:
                 "dirty": False,
                 "worktree_fingerprint": "new-whole-tree",
                 "runtime_source_fingerprint": "changed-runtime",
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "stored_source",
+    [None, {}, {"runtime_source_fingerprint": ""}, {"commit": 123}],
+)
+def test_exact_resume_rejects_missing_or_unusable_source_provenance(
+    stored_source: object,
+) -> None:
+    payload = {} if stored_source is None else {"git": stored_source}
+
+    with pytest.raises(ValueError, match="source provenance"):
+        _validate_exact_resume_source(
+            payload,
+            {
+                "commit": "abc123",
+                "dirty": False,
+                "runtime_source_fingerprint": "current-runtime",
             },
         )
 
@@ -1128,6 +1262,23 @@ def test_resume_copies_only_tensor_verified_measurement_selector(tmp_path) -> No
         expected_step=7,
         expected_device="cpu",
     )
+    captured_payload = torch.load(best_path, map_location="cpu", weights_only=False)
+    captured_bytes = best_path.read_bytes()
+    best_path.write_bytes(b"mutable measurement selector replacement")
+    captured_destination = tmp_path / "captured-run" / "checkpoints" / "best_measurement.pt"
+    captured_destination.parent.mkdir(parents=True)
+    captured_preserved = _preserve_resume_measurement_checkpoint(
+        best_path,
+        captured_destination,
+        config,
+        resume_metrics=metrics,
+        expected_device="cpu",
+        captured_resume_payload=captured_payload,
+        captured_resume_bytes=captured_bytes,
+    )
+    assert captured_preserved is not None
+    assert captured_destination.read_bytes() == captured_bytes
+    best_path.write_bytes(captured_bytes)
     tampered = torch.load(best_path, map_location="cpu", weights_only=False)
     tampered["metrics"]["best_measurement_model_state_hash"] = "0" * 64
     torch.save(tampered, best_path)
@@ -1180,10 +1331,19 @@ def test_exact_resume_fails_loudly_when_linked_measurement_artifact_is_missing(
     )
     assert selection is not None
     model_hash = _current_model_state_hash(model)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+    )
+    optimizer.param_groups[0]["lr"] = closed_loop_learning_rate_at_update(
+        config,
+        causal_update_index=0,
+    )
     checkpoint = save_checkpoint(
         tmp_path / "missing-selector" / "checkpoints" / "last.pt",
         model=model,
-        optimizer=None,
+        optimizer=optimizer,
         config=config,
         step=1,
         metrics={
@@ -1199,8 +1359,14 @@ def test_exact_resume_fails_loudly_when_linked_measurement_artifact_is_missing(
         device="cpu",
     )
 
+    branch = Path(config.project.output_dir) / "missing-measurement-branch"
     with pytest.raises(ValueError, match="best_measurement.pt is missing"):
-        train_from_config(config, resume_path=checkpoint)
+        train_from_config(
+            config,
+            run_name=branch.name,
+            resume_path=checkpoint,
+        )
+    assert not branch.exists()
 
 
 def test_exact_resume_fails_loudly_when_linked_rollout_artifact_is_missing(
@@ -1225,18 +1391,245 @@ def test_exact_resume_fails_loudly_when_linked_rollout_artifact_is_missing(
     metrics = _selector_checkpoint_metrics(model, config, step=0)
     metrics["rollout_selection_metric_version"] = _ROLLOUT_SELECTION_METRIC_VERSION
     metrics["measurement_handoff_completed"] = 1.0
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+    )
+    optimizer.param_groups[0]["lr"] = closed_loop_learning_rate_at_update(
+        config,
+        causal_update_index=0,
+    )
     checkpoint = save_checkpoint(
         tmp_path / "missing-rollout-selectors" / "checkpoints" / "last.pt",
         model=model,
-        optimizer=None,
+        optimizer=optimizer,
         config=config,
         step=1,
         metrics=metrics,
         device="cpu",
     )
 
+    branch = Path(config.project.output_dir) / "missing-rollout-branch"
     with pytest.raises(ValueError, match="reference_rollout.pt is missing"):
-        train_from_config(config, resume_path=checkpoint)
+        train_from_config(
+            config,
+            run_name=branch.name,
+            resume_path=checkpoint,
+        )
+    assert not branch.exists()
+
+
+def test_continuing_resume_releases_deserialized_cpu_payload_before_update(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        project=replace(source.project, output_dir=str(tmp_path / "runs")),
+        device=replace(source.device, preference="cpu", closed_loop_preference="same"),
+        training=replace(
+            source.training,
+            steps=2,
+            rgb_pretrain_steps=0,
+            train_episodes=2,
+            validation_episodes=1,
+            batch_size=1,
+            eval_every=0,
+            checkpoint_every=1,
+            log_every=1,
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+    )
+    optimizer.param_groups[0]["lr"] = closed_loop_learning_rate_at_update(
+        config,
+        causal_update_index=0,
+    )
+    checkpoint = save_checkpoint(
+        tmp_path / "source" / "checkpoints" / "last.pt",
+        model=model,
+        optimizer=optimizer,
+        config=config,
+        step=1,
+        metrics={
+            "measurement_handoff_completed": 1.0,
+            "training_data_draw_step": 1.0,
+            "skipped_no_gradient_batches": 0.0,
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
+            **_validation_protocol_checkpoint_metrics(config),
+        },
+        device="cpu",
+    )
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    payload["release_probe"] = torch.ones(1024)
+    torch.save(payload, checkpoint)
+    del payload
+
+    probe_reference: weakref.ReferenceType[torch.Tensor] | None = None
+    real_load = training_trainer.load_checkpoint_payload
+    real_restore_rng = training_trainer.restore_checkpoint_rng_state
+    restore_rng_calls = 0
+
+    def tracking_load(payload, **kwargs):
+        nonlocal probe_reference
+        probe_reference = weakref.ref(payload["release_probe"])
+        return real_load(payload, **kwargs)
+
+    def tracking_restore_rng(payload):
+        nonlocal restore_rng_calls
+        restore_rng_calls += 1
+        return real_restore_rng(payload)
+
+    def fake_validation(
+        _model,
+        _loader,
+        _config,
+        *,
+        device,
+        closed_loop,
+        **_progress,
+    ) -> TrainingBatchResult:
+        assert device == torch.device("cpu")
+        assert closed_loop
+        return TrainingBatchResult(
+            total_loss=torch.tensor(0.4),
+            loss_terms={"rollout": torch.tensor(0.4)},
+            metrics=_physical_metrics(config),
+            phase="closed_loop_rgb",
+        )
+
+    def fake_closed_loop(model, _batch, _config, **_kwargs) -> TrainingBatchResult:
+        assert probe_reference is not None
+        assert probe_reference() is None
+        parameter = next(parameter for parameter in model.parameters() if parameter.requires_grad)
+        loss = parameter.reshape(-1)[0] + 10.0
+        return TrainingBatchResult(
+            total_loss=loss,
+            loss_terms={"state": loss},
+            metrics={"matched_object_frames": 1.0},
+            phase="closed_loop_rgb",
+        )
+
+    monkeypatch.setattr(training_trainer, "load_checkpoint_payload", tracking_load)
+    monkeypatch.setattr(
+        training_trainer,
+        "restore_checkpoint_rng_state",
+        tracking_restore_rng,
+    )
+    monkeypatch.setattr(training_trainer, "_validation_loader_result", fake_validation)
+    monkeypatch.setattr(training_trainer, "run_closed_loop_batch", fake_closed_loop)
+
+    result = train_from_config(
+        config,
+        run_name="released-resume-payload",
+        resume_path=checkpoint,
+        device_info=select_device("cpu"),
+    )
+
+    assert result["completed_steps"] == 2
+    assert probe_reference is not None
+    assert probe_reference() is None
+    assert restore_rng_calls == 1
+
+
+def test_initializer_releases_deserialized_payload_before_validation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        project=replace(source.project, output_dir=str(tmp_path / "runs")),
+        device=replace(source.device, preference="cpu", closed_loop_preference="same"),
+        training=replace(
+            source.training,
+            steps=1,
+            rgb_pretrain_steps=0,
+            train_episodes=1,
+            validation_episodes=1,
+            batch_size=1,
+            eval_every=0,
+            checkpoint_every=1,
+            log_every=1,
+        ),
+    )
+    initializer_model = OnlineWorldModel.from_config(config, device="cpu")
+    initializer = save_checkpoint(
+        tmp_path / "initializer.pt",
+        model=initializer_model,
+        optimizer=None,
+        config=config,
+        step=0,
+        metrics={"checkpoint_state_role": "weight_only_initializer"},
+        artifact_metadata={"role": "weight_only_initializer"},
+        device="cpu",
+    )
+    payload = torch.load(initializer, map_location="cpu", weights_only=False)
+    payload["release_probe"] = torch.ones(1024)
+    torch.save(payload, initializer)
+    del payload
+
+    probe_reference: weakref.ReferenceType[torch.Tensor] | None = None
+    real_load = training_trainer.load_model_weights
+
+    def tracking_load(*args, **kwargs):
+        nonlocal probe_reference
+        loaded = real_load(*args, **kwargs)
+        probe = loaded.get("release_probe")
+        if isinstance(probe, torch.Tensor):
+            probe_reference = weakref.ref(probe)
+        return loaded
+
+    def fake_validation(
+        _model,
+        _loader,
+        _config,
+        *,
+        device,
+        closed_loop,
+        **_progress,
+    ) -> TrainingBatchResult:
+        assert probe_reference is not None
+        assert probe_reference() is None
+        assert device == torch.device("cpu")
+        assert closed_loop
+        return TrainingBatchResult(
+            total_loss=torch.tensor(0.4),
+            loss_terms={"rollout": torch.tensor(0.4)},
+            metrics=_physical_metrics(config),
+            phase="closed_loop_rgb",
+        )
+
+    def fake_closed_loop(model, _batch, _config, **_kwargs) -> TrainingBatchResult:
+        parameter = next(parameter for parameter in model.parameters() if parameter.requires_grad)
+        loss = parameter.reshape(-1)[0] + 10.0
+        return TrainingBatchResult(
+            total_loss=loss,
+            loss_terms={"state": loss},
+            metrics={"matched_object_frames": 1.0},
+            phase="closed_loop_rgb",
+        )
+
+    monkeypatch.setattr(training_trainer, "load_model_weights", tracking_load)
+    monkeypatch.setattr(training_trainer, "_validation_loader_result", fake_validation)
+    monkeypatch.setattr(training_trainer, "run_closed_loop_batch", fake_closed_loop)
+
+    result = train_from_config(
+        config,
+        run_name="released-initializer-payload",
+        initialize_from_path=initializer,
+        device_info=select_device("cpu"),
+    )
+
+    assert result["completed_steps"] == 1
+    assert probe_reference is not None
+    assert probe_reference() is None
 
 
 def test_in_place_resume_requires_the_exact_last_checkpoint(tmp_path) -> None:
@@ -1313,7 +1706,13 @@ def test_pending_final_validation_recovers_without_optimizer_update(
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
     )
+    if rgb_pretrain_steps == 0:
+        optimizer.param_groups[0]["lr"] = closed_loop_learning_rate_at_update(
+            config,
+            causal_update_index=0,
+        )
     checkpoint = save_checkpoint(
         tmp_path / f"pending-{expected_phase}" / "checkpoints" / "last.pt",
         model=model,
@@ -2023,6 +2422,10 @@ def test_imported_unsupported_reference_continues_without_repeated_validation(
         config=config,
         step=0,
         device="cpu",
+        artifact_metadata={
+            "role": "weight_only_initializer",
+            "composition": {"fixture": True},
+        },
     )
     validation_calls = 0
 
@@ -2077,6 +2480,29 @@ def test_imported_unsupported_reference_continues_without_repeated_validation(
         run_name="imported-unsupported",
         initialize_from_path=initialize_from,
     )
+    initialization_metadata = json.loads(
+        (Path(result["run_directory"]) / "run_metadata.json").read_text(encoding="utf-8")
+    )
+    expected_initialization_hash = _current_model_state_hash(initial_model)
+    assert (
+        initialization_metadata["initialization_checkpoint_sha256"]
+        == hashlib.sha256(initialize_from.read_bytes()).hexdigest()
+    )
+    assert initialization_metadata["initialization_checkpoint_byte_count"] == (
+        initialize_from.stat().st_size
+    )
+    assert (
+        initialization_metadata["initialization_checkpoint_model_state_hash"]
+        == expected_initialization_hash
+    )
+    assert (
+        initialization_metadata["initialization_loaded_model_state_hash"]
+        == expected_initialization_hash
+    )
+    assert initialization_metadata["initialization_artifact_metadata"] == {
+        "role": "weight_only_initializer",
+        "composition": {"fixture": True},
+    }
     records = [
         json.loads(line)
         for line in Path(result["metrics_jsonl"]).read_text(encoding="utf-8").splitlines()
@@ -2242,7 +2668,11 @@ def test_exact_resume_preserves_reference_without_deployable_incumbent(
         training=replace(source_config.training, steps=2),
     )
     model = OnlineWorldModel.from_config(source_config, device=torch.device("cpu"))
-    optimizer = torch.optim.AdamW(model.parameters(), lr=source_config.training.learning_rate)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=source_config.training.learning_rate,
+        weight_decay=source_config.training.weight_decay,
+    )
     reference_selection = _rollout_selection_metrics(
         _physical_metrics(source_config),
         source_config,
@@ -2300,6 +2730,10 @@ def test_exact_resume_preserves_reference_without_deployable_incumbent(
         "skipped_no_gradient_batches": 0.0,
         "final_validation_completed": 1.0,
     }
+    optimizer.param_groups[0]["lr"] = closed_loop_learning_rate_at_update(
+        source_config,
+        causal_update_index=0,
+    )
     resume = save_checkpoint(
         checkpoint_directory / "last.pt",
         model=model,
@@ -2724,6 +3158,7 @@ def test_terminal_support_collapse_checkpoint_truthfully_contains_restored_incum
 )
 def test_exact_resume_rejects_corrupt_data_progress_counters(
     tmp_path,
+    monkeypatch,
     data_draw_step,
     skipped,
 ) -> None:
@@ -2744,7 +3179,15 @@ def test_exact_resume_rejects_corrupt_data_progress_counters(
         ),
     )
     model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+    )
+    optimizer.param_groups[0]["lr"] = closed_loop_learning_rate_at_update(
+        config,
+        causal_update_index=0,
+    )
     checkpoint = save_checkpoint(
         tmp_path / "counter-source" / "checkpoints" / "last.pt",
         model=model,
@@ -2760,9 +3203,34 @@ def test_exact_resume_rejects_corrupt_data_progress_counters(
         },
         device="cpu",
     )
+    real_model_factory = training_trainer.OnlineWorldModel.from_config
+
+    def rng_neutral_model_factory(*args, **kwargs):
+        state = torch.get_rng_state()
+        try:
+            return real_model_factory(*args, **kwargs)
+        finally:
+            torch.set_rng_state(state)
+
+    monkeypatch.setattr(training_trainer, "seed_everything", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        training_trainer.OnlineWorldModel,
+        "from_config",
+        rng_neutral_model_factory,
+    )
+    torch.manual_seed(91_827)
+    rng_before = torch.get_rng_state().clone()
+    branch = Path(config.project.output_dir) / f"corrupt-counter-{data_draw_step}-{skipped}"
 
     with pytest.raises(ValueError, match="finite nonnegative integer|data-progress invariant"):
-        train_from_config(config, resume_path=checkpoint)
+        train_from_config(
+            config,
+            run_name=branch.name,
+            resume_path=checkpoint,
+        )
+
+    assert not branch.exists()
+    torch.testing.assert_close(torch.get_rng_state(), rng_before, rtol=0, atol=0)
 
 
 @pytest.mark.parametrize("mismatch", ["metric_version", "protocol_hash"])
@@ -2796,10 +3264,11 @@ def test_exact_resume_rejects_protocol_mismatch_for_reference_only_checkpoint(
         metrics["rollout_selection_metric_version"] = _ROLLOUT_SELECTION_METRIC_VERSION - 1.0
     else:
         metrics["rollout_validation_protocol_hash"] = "obsolete-protocol"
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate)
     checkpoint = save_checkpoint(
         tmp_path / mismatch / "checkpoints" / "last.pt",
         model=model,
-        optimizer=None,
+        optimizer=optimizer,
         config=config,
         step=1,
         metrics=metrics,

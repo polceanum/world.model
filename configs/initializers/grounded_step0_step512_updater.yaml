@@ -1,0 +1,63 @@
+schema_version: checkpoint_initializer_composition_v1
+role: weight_only_initializer
+
+# The protected spec-1.44 incumbent and the spec-1.50 campaign step zero have
+# identical tensor states.  Keeping both identities proves the protected
+# ancestry while the witness binds the donor's exact resolved configuration.
+sources:
+  protected_base:
+    path: runs/20260814-101500-attention-node-z-recovery-512/checkpoints/best_rollout.pt
+    sha256: 0ba00e72adeffcf746268d875d623f153ec56814439fce030a8666d7704ca455
+    byte_count: 12344955
+    step: 0
+    model_state_sha256: 1354bdfca1cef965c0cd907ea8c157c0fd82169e64f24da656eb42dd1a96df91
+    specification_version: "1.44"
+    simulator_version: sphere_world_v4
+  compatibility_witness:
+    path: runs/20260821-052948-grounded-convergence-spec150-hybrid/checkpoints/validation_step_000000.pt
+    sha256: b84e5299de4bed0ce487a7b26e8f01f521f82e8f6e51483eb34ac55f31f37cbf
+    byte_count: 12348939
+    step: 0
+    model_state_sha256: 1354bdfca1cef965c0cd907ea8c157c0fd82169e64f24da656eb42dd1a96df91
+    specification_version: "1.50"
+    simulator_version: sphere_world_v6
+  donor:
+    path: runs/20260821-052948-grounded-convergence-spec150-hybrid/checkpoints/validation_step_000512.pt
+    sha256: f8f1704c2552ea51a7626729140608203918c909cfc258d63158c347bef4eb86
+    byte_count: 21977243
+    step: 512
+    model_state_sha256: 1942c2c912531fb08bcd7ec026bb84e4931c1f2000524dedd2dcd384a02b666d
+    specification_version: "1.50"
+    simulator_version: sphere_world_v6
+
+source_config:
+  path: runs/20260821-052948-grounded-convergence-spec150-hybrid/config.resolved.yaml
+  sha256: 2d407ec17e7a5937bdc2f3dc771e5281db66f9ca9ccb377884821ef692aa4bba
+
+source_run_metadata:
+  path: runs/20260821-052948-grounded-convergence-spec150-hybrid/run_metadata.json
+  sha256: 0cac1cf7d6843f74627157e3912ceeec0df3af0d020ef03d47d0b89cc4bed669
+
+module_prefixes:
+  - updater
+donor_weight: 1.0
+
+expected:
+  selected_tensor_count: 23
+  selected_element_count: 126164
+  changed_tensor_count: 21
+  changed_element_count: 125971
+  model_state_sha256: 88f2df4d8a2621e8907497298a6d264015714a961102a83d1f65cd9f4474318b
+
+# Model/simulator/runtime/data semantics stay fixed except for the explicit
+# evidence gate.  Training owns the new objective and schedule, while project
+# and device entries are operational run controls.
+target_transfer:
+  allowed_difference_prefixes:
+    - project.name
+    - project.output_dir
+    - device.preference
+    - training
+    - model.filter.learned_correction_independent_axis_support
+  required_values:
+    model.filter.learned_correction_independent_axis_support: true

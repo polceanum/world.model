@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import replace
 
 import pytest
@@ -26,6 +27,7 @@ from world_model.observations import (
     PredictedMeasurements,
     SensorContext,
 )
+from world_model.observations.rgb import RGBObservationModule
 from world_model.observations.state import StateObservationModule
 
 
@@ -278,6 +280,445 @@ def _force_nonzero_learned_fast_outputs(updater: BeliefUpdater) -> None:
         corrector.variance_head.bias.fill_(1.0)
         corrector.gate_head.weight.zero_()
         corrector.gate_head.bias.fill_(8.0)
+
+
+def _source_bound_position_measurement(
+    measured: MeasurementSet,
+    *,
+    independent_axis_mask: torch.Tensor | None,
+) -> MeasurementSet:
+    auxiliary = dict(measured.auxiliary)
+    if independent_axis_mask is None:
+        auxiliary.pop("world_position_independent_axis_mask", None)
+    else:
+        auxiliary["world_position_independent_axis_mask"] = independent_axis_mask
+    return replace(
+        measured,
+        auxiliary=auxiliary,
+        source_belief_indices=torch.tensor([[0]]),
+        source_object_ids=torch.tensor([[3]]),
+    )
+
+
+def _all_axis_position_measurement(measured: MeasurementSet) -> MeasurementSet:
+    values = torch.ones_like(measured.values)
+    return replace(
+        measured,
+        values=values,
+        auxiliary={
+            **measured.auxiliary,
+            "world_position": values,
+        },
+    )
+
+
+def _analytic_position_posterior(
+    belief: object,
+    measured: MeasurementSet,
+    predicted: PredictedMeasurements,
+    association: AssociationResult,
+    innovation: object,
+) -> object:
+    return BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(enable_learned_corrector=False),
+    ).correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+    )
+
+
+def test_independent_axis_support_false_preserves_exact_legacy_bits() -> None:
+    belief, global_measured, predicted, association = _rgb_position_update_case()
+    global_measured = _all_axis_position_measurement(global_measured)
+    source_measured = _source_bound_position_measurement(
+        global_measured,
+        independent_axis_mask=torch.zeros((1, 1, 3), dtype=torch.bool),
+    )
+    global_innovation = build_innovation(
+        measured=global_measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    source_innovation = build_innovation(
+        measured=source_measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(
+            innovation_anchored_correction=True,
+            learned_correction_independent_axis_support=False,
+            learned_residual_scale=0.5,
+        ),
+    )
+    _force_nonzero_learned_fast_outputs(updater)
+
+    global_posterior = updater.correct(
+        prior=belief,
+        measured=global_measured,
+        predicted=predicted,
+        association=association,
+        innovation=global_innovation,
+        dt=1.0,
+    )
+    source_posterior = updater.correct(
+        prior=belief,
+        measured=source_measured,
+        predicted=predicted,
+        association=association,
+        innovation=source_innovation,
+        dt=1.0,
+    )
+
+    assert torch.equal(source_posterior.objects.position, global_posterior.objects.position)
+    assert torch.equal(source_posterior.objects.velocity, global_posterior.objects.velocity)
+    assert torch.equal(
+        source_posterior.objects.fast_log_variance,
+        global_posterior.objects.fast_log_variance,
+    )
+
+
+def test_rotated_no_depth_fast_roi_has_only_analytic_state_correction() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    measured = _all_axis_position_measurement(measured)
+    x_angle, y_angle, z_angle = 0.5, 0.4, 0.3
+    cx, sx = math.cos(x_angle), math.sin(x_angle)
+    cy, sy = math.cos(y_angle), math.sin(y_angle)
+    cz, sz = math.cos(z_angle), math.sin(z_angle)
+    world_from_camera = torch.eye(4).unsqueeze(0)
+    world_from_camera[0, :3, :3] = torch.tensor(
+        [
+            [cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx],
+            [sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx],
+            [-sy, cy * sx, cy * cx],
+        ]
+    )
+    # A structured fast centre observes camera x/y but copies depth. Under a
+    # generic camera rotation every world coordinate depends on copied depth.
+    independent_axis_mask = RGBObservationModule._world_axis_independence(
+        torch.tensor([[[True, True, False]]]),
+        world_from_camera,
+    )
+    assert not independent_axis_mask.any()
+    measured = _source_bound_position_measurement(
+        measured,
+        independent_axis_mask=independent_axis_mask,
+    )
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    analytic = _analytic_position_posterior(
+        belief,
+        measured,
+        predicted,
+        association,
+        innovation,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(
+            innovation_anchored_correction=True,
+            learned_correction_independent_axis_support=True,
+            learned_residual_scale=0.5,
+        ),
+    )
+    _force_nonzero_learned_fast_outputs(updater)
+
+    posterior = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+    )
+
+    assert not torch.equal(analytic.objects.position, belief.objects.position)
+    assert not torch.equal(analytic.objects.velocity, belief.objects.velocity)
+    assert torch.equal(posterior.objects.position, analytic.objects.position)
+    assert torch.equal(posterior.objects.velocity, analytic.objects.velocity)
+    assert torch.equal(
+        posterior.objects.fast_log_variance,
+        analytic.objects.fast_log_variance,
+    )
+
+
+def test_independent_axis_support_maps_to_position_derived_velocity_and_variance() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    measured = _source_bound_position_measurement(
+        _all_axis_position_measurement(measured),
+        independent_axis_mask=torch.tensor([[[True, False, True]]]),
+    )
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    analytic = _analytic_position_posterior(
+        belief,
+        measured,
+        predicted,
+        association,
+        innovation,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(
+            innovation_anchored_correction=True,
+            learned_correction_independent_axis_support=True,
+            learned_residual_scale=0.5,
+        ),
+    )
+    _force_nonzero_learned_fast_outputs(updater)
+
+    posterior = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+    )
+
+    expected_axis_support = torch.tensor([True, False, True])
+    assert torch.equal(
+        (posterior.objects.position - analytic.objects.position)[0, 0] != 0,
+        expected_axis_support,
+    )
+    assert torch.equal(
+        (posterior.objects.velocity - analytic.objects.velocity)[0, 0] != 0,
+        expected_axis_support,
+    )
+    assert torch.equal(
+        (
+            posterior.objects.fast_log_variance[..., :6]
+            - analytic.objects.fast_log_variance[..., :6]
+        )[0, 0]
+        != 0,
+        expected_axis_support.repeat(2),
+    )
+
+
+def test_source_bound_missing_axis_provenance_fails_closed() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    measured = _source_bound_position_measurement(
+        _all_axis_position_measurement(measured),
+        independent_axis_mask=None,
+    )
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    # The MeasurementSet source binding remains authoritative even if a custom
+    # or stale innovation producer omits its copied source-bound marker.
+    innovation.auxiliary.pop("measured_source_bound")
+    analytic = _analytic_position_posterior(
+        belief,
+        measured,
+        predicted,
+        association,
+        innovation,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(
+            innovation_anchored_correction=True,
+            learned_correction_independent_axis_support=True,
+            learned_residual_scale=0.5,
+        ),
+    )
+    _force_nonzero_learned_fast_outputs(updater)
+
+    posterior = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+    )
+
+    assert torch.equal(posterior.objects.position, analytic.objects.position)
+    assert torch.equal(posterior.objects.velocity, analytic.objects.velocity)
+    assert torch.equal(
+        posterior.objects.fast_log_variance,
+        analytic.objects.fast_log_variance,
+    )
+
+
+def test_stale_innovation_axis_mask_cannot_widen_measurement_support() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    measured = _source_bound_position_measurement(
+        _all_axis_position_measurement(measured),
+        independent_axis_mask=torch.zeros((1, 1, 3), dtype=torch.bool),
+    )
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    innovation.auxiliary["measured_world_position_independent_axis_mask"] = torch.ones(
+        (1, 1, 3),
+        dtype=torch.bool,
+    )
+    analytic = _analytic_position_posterior(
+        belief,
+        measured,
+        predicted,
+        association,
+        innovation,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(
+            innovation_anchored_correction=True,
+            learned_correction_independent_axis_support=True,
+            learned_residual_scale=0.5,
+        ),
+    )
+    _force_nonzero_learned_fast_outputs(updater)
+
+    posterior = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+    )
+
+    assert torch.equal(posterior.objects.position, analytic.objects.position)
+    assert torch.equal(posterior.objects.velocity, analytic.objects.velocity)
+    assert torch.equal(posterior.objects.fast_log_variance, analytic.objects.fast_log_variance)
+
+
+def test_unbound_global_legacy_measurement_retains_all_axis_trainability() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    measured = _all_axis_position_measurement(measured)
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    analytic = _analytic_position_posterior(
+        belief,
+        measured,
+        predicted,
+        association,
+        innovation,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(
+            innovation_anchored_correction=True,
+            learned_correction_independent_axis_support=True,
+            learned_residual_scale=0.5,
+        ),
+    )
+    _force_nonzero_learned_fast_outputs(updater)
+
+    posterior = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+    )
+
+    assert torch.all(posterior.objects.position > analytic.objects.position)
+    assert torch.all(posterior.objects.velocity > analytic.objects.velocity)
+    assert torch.all(
+        posterior.objects.fast_log_variance[..., :6] > analytic.objects.fast_log_variance[..., :6]
+    )
+    loss = (
+        posterior.objects.position.sum()
+        + posterior.objects.velocity.sum()
+        + posterior.objects.fast_log_variance[..., :6].sum()
+    )
+    loss.backward()
+    corrector = updater.learned_corrector
+    assert corrector is not None
+    for head in (corrector.mean_head, corrector.variance_head, corrector.gate_head):
+        assert head.bias.grad is not None
+        assert torch.count_nonzero(head.bias.grad[:6]) == 6
+
+
+def test_zero_independent_axis_support_has_exact_zero_state_corrector_gradients() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    measured = _source_bound_position_measurement(
+        _all_axis_position_measurement(measured),
+        independent_axis_mask=torch.zeros((1, 1, 3), dtype=torch.bool),
+    )
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(
+            innovation_anchored_correction=True,
+            learned_correction_independent_axis_support=True,
+        ),
+    )
+    corrector = updater.learned_corrector
+    assert corrector is not None
+    with torch.no_grad():
+        for head in (corrector.mean_head, corrector.variance_head, corrector.gate_head):
+            head.weight.fill_(0.01)
+            head.bias.fill_(0.5)
+
+    posterior = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+    )
+    (
+        posterior.objects.position.sum()
+        + posterior.objects.velocity.sum()
+        + posterior.objects.fast_log_variance[..., :6].sum()
+    ).backward()
+
+    state_prefixes = (
+        "modality_embedding.",
+        "network.",
+        "mean_head.",
+        "variance_head.",
+        "gate_head.",
+    )
+    for name, parameter in corrector.named_parameters():
+        if name.startswith(state_prefixes):
+            assert parameter.grad is not None, name
+            assert torch.count_nonzero(parameter.grad) == 0, name
 
 
 def test_innovation_anchored_corrector_is_axis_local_and_support_masked() -> None:

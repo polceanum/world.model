@@ -1,5 +1,148 @@
 # Design decisions
 
+## ADR-159 — Treat exact resume as an immutable transaction under lifetime ownership
+
+- **Date:** 2026-08-21
+- **Status:** accepted and implemented; artifact-integrity gate only
+- **Context:** Exact continuation already bound configuration, protocol,
+  optimizer/RNG/data state, executable source, devices, and linked selectors,
+  but those checks were not yet one publication transaction. Reopening a
+  mutable primary or linked checkpoint could validate one inode's bytes and
+  later load or copy another. Some malformed AdamW groups/moments could load
+  and fail only on the next update; validating accelerator RNG by restoring it
+  would perturb the process before the whole preflight passed. A direct API
+  resume did not own the run lock for its complete lifetime, and a named
+  branch could encounter occupied evidence, a timestamp-resolution boundary,
+  or a replaced lock inode between early validation and publication.
+- **Decision:** Capture the primary resume checkpoint once as immutable
+  read-only bytes and use that capture for hashing, loading, validation, and
+  branch publication. Independently capture each required selector and
+  accepted numbered-history artifact once, fully validate the complete set,
+  and stage only the captured bytes. A later source-path open may verify the
+  captured in-place hash/byte identity, but may not become a replacement load
+  or copy input. Apart from the required CLI lifecycle state, before any
+  trainer continuation artifact is published require complete finite model/
+  optimizer/scheduler structure, resolved config, specification/simulator/
+  validation protocol, executable source, phase device, step/schedule/
+  handoff/final-validation markers, and optimizer/data/skipped-draw counters.
+
+  Require unique optimizer parameter IDs, exact destination group count,
+  schema, and cardinality, valid group domains, destination-equal static AdamW
+  options, a dynamic learning rate matching the saved completed-update
+  schedule, correctly owned scalar steps and required finite moments with the
+  destination tensor's shape/dtype/device, and a finite disposable next step
+  on a deep-copied optimizer. Validate Python, NumPy, CPU Torch, and applicable
+  CUDA/MPS RNG state through private generators. Restore global RNG exactly
+  once only after the final ownership/source-identity gate. Release the
+  deserialized resume payload before the first continuing update and release
+  a weights-only initializer payload after loading/provenance extraction.
+
+  Hold one non-blocking per-run `flock` for every mutating exact-resume
+  invocation. The CLI passes its live inode-bound lock handle to the trainer;
+  a direct API call self-acquires equivalent lifetime ownership. Treat every
+  explicit `run_name` as a branch, including the source name. Atomically
+  require its destination to be absent or empty, resolve a timestamped name
+  once, and recheck the exact invocation-owned entry set after preflight.
+  Recheck in-place `last.pt` hash/bytes before publication. Failed acquisition
+  cleanup may unlink or restore only the exact inode still owned by the caller,
+  never the winner inode after a lost lock race.
+- **Alternatives considered:** reopen source paths as replacement load/copy
+  inputs after validation; rely on `Optimizer.load_state_dict` to discover
+  malformed state during live training; restore RNG early and attempt rollback
+  on failure; let the CLI lock only its entrypoint artifacts while direct
+  callers remain unlocked; merge a branch into a nonempty destination; resolve
+  the timestamp separately for locking and publication; unlink any lock
+  pathname created during a lost acquisition attempt.
+- **Consequences:** Exact resume now fails before publication when any primary,
+  linked, continuation-state, destination-ownership, or in-place-source
+  identity is unproven. Focused checkpoint/trainer qualification passed
+  `128` tests with `1` expected MPS-only skip; post-format ownership/entrypoint
+  qualification passed `15` tests and the complete entrypoint file passed
+  `7`. Ruff format/check and the diff gate are clean. The initializer
+  materializer also rejects boolean `donor_weight` and its focused file passed
+  `3` tests. On active-Aqua custom Torch `2.9.0a0+gitcbe1a35`, with MPS built
+  and available, invalid-MPS-RNG rejection before artifact publication and
+  exact MPS RNG restoration passed `2` tests with no skip in `2.86s`.
+
+  The final post-provenance command `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=.
+  conda run --no-capture-output -n orpheus pytest -q` passed `1163` tests with
+  `17` skipped in `461.37s` (`0:07:41`). Whole-tree Ruff check, Ruff format
+  check (`221 files already formatted`), isolated compileall over runtime,
+  tests, entrypoints, monitor, and scripts, focused final source/version
+  selection (`6 passed`), authoritative version contract (`1 passed in
+  0.78s`), and diff check all passed. Independent review returned PASS with no
+  blockers. This closes source and artifact integrity only: no model/trainer
+  smoke, metric improvement, promotion, plateau, or convergence is claimed.
+
+## ADR-158 — Gate learned correction by provenance and train only typed state heads
+
+- **Date:** 2026-08-21
+- **Status:** accepted and implemented; pre-launch evidence only, no model promoted
+- **Context:** The complete step-512 updater composition improved pooled x/y
+  position and velocity but retained a serious z regression, and continued
+  broad updater training worsened fixed-selector failures `65 -> 118` by step
+  1024. The broad `updater_state` candidate boundary was also functionally
+  unsafe: its shared corrector representation feeds mode, existence, and
+  visibility siblings, so moving that trunk could alter them despite frozen
+  sibling parameters. A real deterministic eight-scenario gradient probe then
+  showed that the provisional aggregate correction weight `0.1` contributed
+  only `0.1704%` of the physical updater gradient. Its magnitude regularizer
+  measures the analytic Kalman correction rather than the learned residual and
+  opposed the other physical aggregate at cosine `-0.80133`.
+- **Decision:** Add default-false, exact-resume-bound independent-axis support
+  for the learned corrector. Treat the original typed `MeasurementSet`
+  `world_position_independent_axis_mask` as authoritative; gate learned mean
+  and log-variance deltas for position and position-derived velocity by that
+  mask, prevent a derived innovation from widening it, fail closed for
+  source-bound rows without provenance, and preserve legacy global/unbound
+  all-axis compatibility. Do not alter analytic Kalman fusion. Train only the
+  mean-head, variance-head, and gate-head weight/bias tensors under
+  `updater_state_heads`; freeze the shared trunk and all sibling heads.
+
+  Add default-false batch-macro physical reductions that average supported
+  elements within each row and then supported rows, plus default-false
+  coordinatewise correction hinges that prevent cross-axis cancellation.
+  Use explicit provisional correction weights
+  `position/velocity/regularization = 7.0/2.0/0.0`; on the measured vectors
+  these predict `12.4455%` correction/total, total norm `0.0713825`, cosine
+  `-0.00433`, and no clipping. The deterministic two-update smoke, not the
+  single attribution batch, decides whether these weights remain fixed.
+
+  Compose the complete step-512 updater into the protected equal step-zero
+  base through a weights-only, provenance-bound materializer. Capture every
+  source once into immutable bytes; validate checkpoint SHA/bytes/step/model,
+  source config/run ancestry, compatibility witness, allowed target transfer,
+  and strict target load. Require `23` selected tensors/`126164` elements,
+  `21` changed/`125971`, and output model hash `88f2df4d...`. Emit only a
+  read-only non-overwriting artifact with no optimizer/scheduler state and
+  reject it categorically as exact resume.
+
+  The paired training contrast changes exactly two semantics. Both arms keep
+  the axis gate on and share initializer, draws, devices, six-tensor scope,
+  weights, optimizer, schedule, cadence, and validation manifests. Treatment
+  enables batch-macro reduction and axiswise hinges; control disables only
+  those switches. Gate-off is a separate zero-update forward ablation. After
+  the two-update and common fixed-32 step-zero gates, run both arms for the
+  configured `3072` updates with selectors every `512`, reaching at least 512
+  and 1024 absent an integrity/nonfinite stop.
+- **Alternatives considered:** continue the healthy but physically worsening
+  79-tensor updater; adapt the shared corrector trunk while freezing only its
+  sibling heads; expose only the mean head and leave uncertainty/gating unable
+  to co-adapt; let vector error on one axis compensate another; weight every
+  supported object equally across unequal scenario rows; retain the adverse
+  analytic-correction regularizer; compare treatment against a gate-off
+  control and thereby confound runtime support with objective reduction.
+- **Consequences:** Specification 1.52 is a narrow causal repair that preserves
+  RGB-only `WorldBelief`, analytic+learned+event composition,
+  heterogeneous/local applicability, and protected-incumbent semantics.
+  Existing disabled paths remain exact by default. The production initializer
+  has not yet been materialized, and the gate-on/off ablation, deterministic
+  paired two-update smoke, common fixed-32 step-zero replay, long paired
+  campaign, paired latency, disjoint test/OOD, and promotion gates remain
+  pending. The complete frozen-source gate is closed under ADR-159, but no
+  specification-1.52 model result or convergence claim follows from this
+  decision.
+
 ## ADR-157 — Close specification 1.51 and repair updater state by axis
 
 - **Date:** 2026-08-21

@@ -32,6 +32,7 @@ from world_model.runtime import OnlineWorldModel, PreparedPropagation
 from world_model.training.event_windows import observation_window_query_plan
 from world_model.training.losses import (
     balanced_binary_cross_entropy,
+    correction_error,
     gaussian_nll,
     masked_huber,
     posterior_improvement_hinge,
@@ -2945,7 +2946,13 @@ def _belief_state_losses(
         )
     aligned_position = gather_target_slots(target_position, indices)
     aligned_velocity = gather_target_slots(target_objects["velocity"][:, frame_index], indices)
-    state_position = masked_huber(objects.position, aligned_position, matched)
+    batch_macro = config.training.closed_loop_batch_macro_physical_losses_enabled
+    state_position = masked_huber(
+        objects.position,
+        aligned_position,
+        matched,
+        batch_macro=batch_macro,
+    )
     if velocity_axis_support is None:
         velocity_axis_support = _state_velocity_objective_axis_support(
             belief,
@@ -2964,6 +2971,7 @@ def _belief_state_losses(
         objects.fast_log_variance[..., :3],
         matched,
         detach_mean_error=True,
+        batch_macro=batch_macro,
     )
     # Inactive factory padding is not a causal prediction.  Its zero logits
     # previously contributed BCE(0, 0) on every empty frame, creating a
@@ -3014,6 +3022,7 @@ def _belief_state_losses(
             objects.velocity,
             aligned_velocity,
             velocity_axis_support,
+            batch_macro=batch_macro,
         )
     if drag_observable.any():
         losses["parameter_drag"] = masked_huber(
@@ -3072,6 +3081,46 @@ def _current_correction_objective_support(
         & belief.objects.active.bool()
         & prior_belief.objects.active.bool()
         & (belief.objects.age_steps > 0)
+    )
+
+
+def _correction_non_regression_loss(
+    posterior: Tensor,
+    prior: Tensor,
+    target: Tensor,
+    object_support: Tensor,
+    config: OrpheusConfig,
+    *,
+    coordinate_support: Tensor | None = None,
+) -> Tensor:
+    """Apply the configured vector or coordinate-wise correction hinge."""
+
+    if posterior.shape != prior.shape or posterior.shape != target.shape:
+        raise ValueError("correction states and target must have matching shapes")
+    if object_support.shape != posterior.shape[:-1] or object_support.dtype is not torch.bool:
+        raise ValueError("correction object support must be boolean [B,N]")
+    if config.training.closed_loop_axiswise_correction_hinge_enabled:
+        posterior_error = correction_error(posterior, target, axiswise=True)
+        prior_error = correction_error(prior, target, axiswise=True)
+        if coordinate_support is None:
+            support = object_support.unsqueeze(-1).expand_as(posterior_error)
+        else:
+            if (
+                coordinate_support.shape != posterior.shape
+                or coordinate_support.dtype is not torch.bool
+            ):
+                raise ValueError("correction coordinate support must be boolean [B,N,C]")
+            support = coordinate_support & object_support.unsqueeze(-1)
+    else:
+        # Preserve the exact historical vector-norm objective and object mask.
+        posterior_error = correction_error(posterior, target)
+        prior_error = correction_error(prior, target)
+        support = object_support
+    return posterior_improvement_hinge(
+        posterior_error,
+        prior_error,
+        support,
+        batch_macro=config.training.closed_loop_batch_macro_physical_losses_enabled,
     )
 
 
@@ -3289,6 +3338,7 @@ def _rollout_loss_result(
     event_losses: list[Tensor] = []
     event_weights: list[float] = []
     physical_metrics: dict[str, float] = {}
+    batch_macro = config.training.closed_loop_batch_macro_physical_losses_enabled
     for query_index, frame_offset in enumerate(frame_offsets):
         target_index = frame_index + frame_offset
         future_active = (
@@ -3326,11 +3376,13 @@ def _rollout_loss_result(
             target_positions[:, query_index],
             target_position,
             loss_valid,
+            batch_macro=batch_macro,
         )
         velocity_loss = masked_huber(
             target_velocities[:, query_index],
             target_velocity,
             loss_valid,
+            batch_macro=batch_macro,
         )
         position_nll = gaussian_nll(
             target_positions[:, query_index],
@@ -3340,6 +3392,7 @@ def _rollout_loss_result(
             # its outcome still teaches the predictive distribution to widen.
             valid,
             detach_mean_error=True,
+            batch_macro=batch_macro,
         )
         seconds = query_seconds[query_index]
         # Do not represent an unsupported horizon as a zero-valued training
@@ -3357,6 +3410,7 @@ def _rollout_loss_result(
                     target_positions[:, query_index, :, axis_index],
                     target_position[:, :, axis_index],
                     loss_valid,
+                    batch_macro=batch_macro,
                 )
                 position_axis_losses[axis_name].append(axis_loss)
                 horizon_losses[
@@ -3992,8 +4046,21 @@ def _closed_loop_loss_weights_for_scope(
         else legacy_event_weight
     )
     weights["event"] = effective_event_weight
+    scopes_without_direct_event_owner = {
+        "attention_node_x",
+        "attention_node_y",
+        "attention_node_z",
+        "fast_roi",
+        "state_roi",
+        "updater",
+        "updater_state_heads",
+        "updater_mean",
+        "updater_mean_y",
+    }
     suppressed_without_owner = (
-        override_active and active_trainable_scope == "state_roi" and effective_event_weight == 0.0
+        override_active
+        and active_trainable_scope in scopes_without_direct_event_owner
+        and effective_event_weight == 0.0
     )
     diagnostics = {
         "effective_event_loss_weight": effective_event_weight,
@@ -4725,21 +4792,21 @@ def run_closed_loop_batch(
                 prior_belief,
                 matched,
             )
-            prior_current_error = torch.linalg.vector_norm(
-                prior_belief.objects.position - aligned_position,
-                dim=-1,
+            prior_current_error = correction_error(
+                prior_belief.objects.position,
+                aligned_position,
             )
-            posterior_current_error = torch.linalg.vector_norm(
-                belief.objects.position - aligned_position,
-                dim=-1,
+            posterior_current_error = correction_error(
+                belief.objects.position,
+                aligned_position,
             )
-            prior_current_velocity_error = torch.linalg.vector_norm(
-                prior_belief.objects.velocity - aligned_velocity,
-                dim=-1,
+            prior_current_velocity_error = correction_error(
+                prior_belief.objects.velocity,
+                aligned_velocity,
             )
-            posterior_current_velocity_error = torch.linalg.vector_norm(
-                belief.objects.velocity - aligned_velocity,
-                dim=-1,
+            posterior_current_velocity_error = correction_error(
+                belief.objects.velocity,
+                aligned_velocity,
             )
             if correction_valid.any():
                 current_velocity_correction_supported_object_count += int(
@@ -4747,18 +4814,23 @@ def run_closed_loop_batch(
                 )
                 add(
                     "correction_current",
-                    posterior_improvement_hinge(
-                        posterior_current_error,
-                        prior_current_error,
+                    _correction_non_regression_loss(
+                        belief.objects.position,
+                        prior_belief.objects.position,
+                        aligned_position,
                         correction_valid,
+                        config,
                     ),
                 )
                 add(
                     "correction_current_velocity",
-                    posterior_improvement_hinge(
-                        posterior_current_velocity_error,
-                        prior_current_velocity_error,
+                    _correction_non_regression_loss(
+                        belief.objects.velocity,
+                        prior_belief.objects.velocity,
+                        aligned_velocity,
                         correction_valid,
+                        config,
+                        coordinate_support=velocity_axis_support,
                     ),
                 )
                 current_correction_improvements.append(
@@ -4851,20 +4923,22 @@ def run_closed_loop_batch(
                     future_velocity_correction_supported_object_horizon_count += int(
                         valid.sum().detach().cpu()
                     )
-                    prior_error = torch.linalg.vector_norm(
-                        prior_rollout_positions[:, query_index] - target_position,
-                        dim=-1,
+                    prior_error = correction_error(
+                        prior_rollout_positions[:, query_index],
+                        target_position,
                     )
-                    posterior_error = torch.linalg.vector_norm(
-                        rollout_result.positions[:, query_index] - target_position,
-                        dim=-1,
+                    posterior_error = correction_error(
+                        rollout_result.positions[:, query_index],
+                        target_position,
                     )
                     deltas.append((prior_error - posterior_error).masked_select(valid).mean())
                     correction_losses.append(
-                        posterior_improvement_hinge(
-                            posterior_error,
-                            prior_error,
+                        _correction_non_regression_loss(
+                            rollout_result.positions[:, query_index],
+                            prior_rollout_positions[:, query_index],
+                            target_position,
                             valid,
+                            config,
                         )
                     )
                     add(
@@ -4874,13 +4948,13 @@ def run_closed_loop_batch(
                         ),
                         correction_losses[-1],
                     )
-                    prior_velocity_error = torch.linalg.vector_norm(
-                        prior_rollout_velocities[:, query_index] - target_velocity,
-                        dim=-1,
+                    prior_velocity_error = correction_error(
+                        prior_rollout_velocities[:, query_index],
+                        target_velocity,
                     )
-                    posterior_velocity_error = torch.linalg.vector_norm(
-                        rollout_result.velocities[:, query_index] - target_velocity,
-                        dim=-1,
+                    posterior_velocity_error = correction_error(
+                        rollout_result.velocities[:, query_index],
+                        target_velocity,
                     )
                     velocity_deltas.append(
                         (prior_velocity_error - posterior_velocity_error)
@@ -4888,10 +4962,12 @@ def run_closed_loop_batch(
                         .mean()
                     )
                     velocity_correction_losses.append(
-                        posterior_improvement_hinge(
-                            posterior_velocity_error,
-                            prior_velocity_error,
+                        _correction_non_regression_loss(
+                            rollout_result.velocities[:, query_index],
+                            prior_rollout_velocities[:, query_index],
+                            target_velocity,
                             valid,
+                            config,
                         )
                     )
                     add(

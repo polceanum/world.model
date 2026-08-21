@@ -1,5 +1,89 @@
 # Tasks
 
+## Axis-gated updater-head repair — specification 1.52 pre-launch
+
+- [x] Add opt-in independent-world-axis support for learned correction while
+  preserving exact legacy defaults and the analytic Kalman path. Make the
+  original `MeasurementSet.auxiliary["world_position_independent_axis_mask"]`
+  authoritative; reject stale/forged innovation widening, fail closed for a
+  source-bound row without provenance, and retain historical global/unbound
+  all-axis compatibility.
+- [x] Add the `updater_state_heads` functional ownership boundary. Expose only
+  mean/variance/gate weight+bias (six tensors), freeze the shared trunk and
+  mode/existence/visibility siblings, and cover frozen parameter, optimizer,
+  and sibling-output exactness across AdamW.
+- [x] Add default-false batch-macro physical reductions and default-false
+  axiswise correction hinges. Normalize within each supported row before row
+  averaging; keep unsupported rows omitted and the configured full-horizon
+  denominator fixed.
+- [x] Separate correction position, velocity, and regularization weights.
+  Record real balanced-batch attribution: aggregate `0.1` contributed only
+  `0.1704%`; the analytic-correction regularizer had cosine `-0.80133` against
+  other physical gradients; provisional `7.0/2.0/0.0` predicts `12.4455%`,
+  near-orthogonal aggregate interaction, and no clipping.
+- [x] Implement immutable, provenance-bound materialization for the protected
+  step-zero plus complete step-512-updater composition. Validate source bytes,
+  checkpoint/model/config/ancestry identities, selected `23` tensors/
+  `126164` elements, changed `21`/`125971`, and output model hash
+  `88f2df4d...`; emit a read-only weights-only artifact that exact resume must
+  reject. Reject YAML boolean `donor_weight` as distinct from numeric `1.0`.
+- [x] Make exact resume one immutable preflight transaction. Capture the
+  primary and every required selector/history artifact once; validate complete
+  finite model/optimizer/scheduler/RNG plus config/protocol/source/device/
+  step/schedule/data counters before publication; strictly bind AdamW IDs,
+  groups, static options, dynamic LR, steps, and moments to the destination;
+  and prove a disposable finite next step.
+- [x] Defer the single global RNG restore until the complete preflight and
+  final ownership/source-identity recheck pass. Release continuing-resume and
+  weights-only-initializer payloads after state/provenance extraction.
+- [x] Hold one inode-verified lifetime `flock` across every mutating exact-
+  resume call. Pass the CLI handle into the trainer, self-acquire for direct
+  API calls, atomically require absent/empty branches, treat every explicit
+  run name as a branch, resolve its timestamp once, recheck owned entries after
+  preflight, and never unlink a winner's lock inode during failed cleanup.
+- [x] Close the focused artifact-integrity gate: checkpoint/trainer files
+  `128 passed` with `1` expected MPS-only skip; post-format ownership/
+  entrypoint `15 passed`; entrypoint file `7 passed`; materializer `3 passed`;
+  active-Aqua invalid-MPS-RNG rejection and exact restore `2 passed`, `0`
+  skipped in `2.86s`. These are focused artifact checks, not a model/trainer
+  smoke.
+- [x] Define the exact paired causal contrast: both arms retain the runtime
+  axis gate and all common initialization/data/device/scope/weight/optimizer/
+  schedule/cadence/manifest semantics; treatment enables macro reduction and
+  axiswise hinges while control disables only those two switches. Keep the
+  gate-off comparison as a separate zero-update forward ablation.
+- [x] Freeze the specification-1.52 production source at the final post-
+  provenance repository/artifact-integrity boundary. Do not reinterpret this
+  as a model/trainer smoke or metric result.
+- [ ] Materialize one durable initializer from the frozen source. Verify its
+  checkpoint SHA/bytes, expected model hash, copied metadata, read-only
+  outputs, and rejection as exact resume. No production initializer exists
+  yet.
+- [ ] Run the deterministic gate-on/gate-off zero-update forward ablation and
+  the retained two-update treatment/control smoke. Require identical draw
+  identities, exactly six trainable tensors and Adam moments, frozen/sibling
+  exactness, finite gradients/losses, no unintended clipping, and coherent
+  cadence variation before freezing the `7.0/2.0/0.0` weights.
+- [ ] Establish common rich fixed-32 step-zero evidence from the immutable
+  initializer. Do not reuse older metrics as if they had the repaired runtime
+  semantics.
+- [ ] Run both sequential long arms under the fixed contract for `3072`
+  updates with selectors every `512`. Require both selectors `512` and `1024`
+  unless integrity/nonfinite failure forces a truthful stop; continue long
+  enough for a stable causal difference rather than selecting on smoke noise.
+- [x] Run the exact final frozen-source gate:
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output -n
+  orpheus pytest -q` reported `1163 passed, 17 skipped in 461.37s (0:07:41)`.
+  Whole-tree Ruff check passed; format check reported `221 files already
+  formatted`; compileall over `world_model`, `tests`, `train.py`,
+  `evaluate.py`, `monitor.py`, and `scripts` passed; the final source/version
+  selection passed `6`; the version contract passed `1` in `0.78s`; diff
+  check was clean; and independent review returned PASS with no blockers.
+- [ ] Apply the complete version-7/version-16 physical selector, real paired
+  active-Aqua latency, and disjoint RGB-only validation/test/OOD gates to any
+  eligible candidate. Keep the protected step-zero incumbent deployed and
+  claim neither promotion, plateau, nor convergence until every gate passes.
+
 ## Comprehensive promotion evidence — specification 1.51
 
 - [x] Advance the fixed physical selector to metric version `7`, rollout
@@ -91,20 +175,20 @@
   update-1024 selector, audit exact updater/optimizer ownership, and pause it.
   Reject the result: failures worsen `65 -> 118` and score, position, x, z,
   lifecycle, coverage, and precision regress despite a healthy optimizer.
-- [ ] Implement a narrow axis-gated updater-state repair initialized
-  weights-only from the protected base. Preserve RGB-only truth, causal
-  analytic+learned+event dynamics, local applicability/model selection, and
-  protected-incumbent semantics.
-- [ ] Run repaired and unchanged paired arms through at least step 512 and
-  step 1024, then extend only a surviving arm through a bounded multi-selector
-  qualification long enough for robust differences before comprehensive
-  fixed-32, latency, and disjoint gates.
+- [x] Implement the narrow axis-gated updater-head repair as specification
+  1.52 while preserving RGB-only truth, causal analytic+learned+event
+  dynamics, local applicability/model selection, and protected-incumbent
+  semantics. Durable initializer materialization and retained smoke remain
+  separate pending gates above.
+- [ ] Run the exact specification-1.52 treatment/control pair through at least
+  step 512 and step 1024, then complete the declared long paired protocol
+  before comprehensive fixed-32, latency, and disjoint gates.
 - [ ] Run the real paired 32-seed active-Aqua MPS promotion replay on one
   immutable candidate/reference pair. Require complete physical and all three
   `<=1.10x` latency guardrails; retain a physical-only result as unpromoted if
   timing is missing or adverse.
 - [ ] Qualify any promising candidate after weights-only transfer on fresh
-  version-1.51 fixed evidence, then run disjoint RGB-only validation, test,
+  version-1.52 fixed evidence, then run disjoint RGB-only validation, test,
   and OOD scenario/object/camera/parameter/event/recovery gates.
 - [ ] Claim comprehensive convergence only after a declared optimization
   plateau and the physical, paired-latency, disjoint, test, and OOD gates all

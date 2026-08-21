@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.51
+**Version:** 1.52
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, and fail-closed convergence-semantics amendments 21 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, and exact-resume snapshot/publication ownership hardening amendments 21 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -7809,6 +7809,200 @@ step-512 and step-1024 selectors; extend only a surviving arm through a
 bounded multi-selector qualification before fixed-32 version-7/version-16,
 paired latency, and disjoint RGB-only test/OOD gates. Do not infer convergence
 from healthy optimization or a favorable pooled score.
+
+## 241. Specification-1.52 axis-gated updater-head repair and pre-launch contract
+
+Specification 1.52 implements the narrow repair authorized by section 240
+without changing the analytic physical update, the RGB-only truth boundary,
+or the protected-incumbent selector. This is a source and protocol amendment
+before retained training evidence. It is not a successful smoke, fixed-
+manifest result, promotion, plateau, or convergence claim.
+
+The opt-in
+`model.filter.learned_correction_independent_axis_support` contract makes the
+original typed `MeasurementSet` provenance authoritative. When enabled,
+`world_position_independent_axis_mask` gates the learned corrector's mean and
+log-variance contributions on each position coordinate and on velocity
+coordinates derived from that position evidence. A copied or custom
+`InnovationSet` cannot widen the mask. A source-bound ROI row with absent
+independent-axis provenance fails closed to no learned position-derived
+coordinate support; a historical global/unbound observation without source
+identity retains all-axis compatibility. Direct analytic Kalman position and
+velocity fusion is unchanged. The flag defaults to `false`, and historical
+configuration/checkpoint normalization therefore preserves exact legacy
+behavior unless the repaired protocol selects it explicitly.
+
+The new `updater_state_heads` training scope exposes exactly these six tensors:
+
+- `updater.learned_corrector.mean_head.weight` and `.bias`;
+- `updater.learned_corrector.variance_head.weight` and `.bias`; and
+- `updater.learned_corrector.gate_head.weight` and `.bias`.
+
+The modality embedding, shared corrector representation, and the mode,
+existence, and visibility sibling heads remain frozen. Freezing only sibling
+parameters is insufficient because adapting the shared trunk would change
+their outputs; the shared representation is therefore outside the functional
+ownership boundary. An AdamW regression must prove that a state-head update
+cannot change frozen parameters, optimizer state for frozen tensors, or the
+three sibling outputs. Event, existence, parameter, and measurement losses
+have explicit zero ownership in this repair phase.
+
+`training.closed_loop_batch_macro_physical_losses_enabled` first normalizes
+supported elements within each batch row and then averages only supported
+rows. In the scenario-balanced eight-row campaign, this prevents an episode
+or scenario with more matched objects or coordinates from dominating current
+position, supported current velocity, detached-mean current Gaussian NLL,
+rollout position/velocity/NLL, or correction hinges. Unsupported rows remain
+omitted rather than represented by differentiable zeros.
+`training.closed_loop_axiswise_correction_hinge_enabled` replaces vector-norm
+non-regression with absolute per-coordinate posterior-versus-prior hinges, so
+an improvement on y cannot cancel an x or z regression. The configured full-
+horizon denominator remains fixed. Both switches default to `false` for exact
+historical semantics.
+
+A real deterministic balanced eight-scenario CPU batch was attributed against
+the exact protected-step-zero plus complete step-512-updater composition,
+whose model-state SHA-256 is
+`88f2df4d8a2621e8907497298a6d264015714a961102a83d1f65cd9f4474318b`.
+The provisional aggregate correction weight `0.1` divided equally over the
+position hinge, velocity hinge, and correction-magnitude term supplied only
+`0.1704%` of the total physical updater gradient norm. The magnitude term is
+the analytic Kalman position-correction norm, not a learned-residual norm; its
+gradient was concentrated in the variance head and opposed the other physical
+gradient with cosine `-0.80133`. The pre-smoke profile therefore uses explicit
+weights `correction_position=7.0`, `correction_velocity=2.0`, and
+`correction_regularization=0.0`. On the measured vectors this predicts a
+`12.4455%` correction-to-total norm ratio, total norm `0.0713825`, cosine
+`-0.00433` against the other physical aggregate, and no clipping. These are
+single-batch attribution predictions, not retained optimization or accuracy
+evidence; the weights remain subject to the deterministic two-update smoke.
+
+The weights-only initializer is governed by
+`checkpoint_initializer_composition_v1`. Its protected base is the exact
+specification-1.44 step-zero artifact (checkpoint SHA-256 `0ba00e72...`, model
+SHA-256 `1354bdfc...`); the specification-1.50 step-zero compatibility witness
+has checkpoint SHA-256 `b84e5299...` and the same model state; and the complete
+step-512 updater donor has checkpoint SHA-256 `f8f1704c...` and model SHA-256
+`1942c2c9...`. Composition selects `23` updater tensors/`126164` elements,
+changes `21` tensors/`125971` elements, and must produce model SHA-256
+`88f2df4d...`. The materializer captures each source once into immutable
+bytes, verifies path confinement, SHA-256, byte count, step, model hash,
+simulator/specification identity, source config, run ancestry, and allowed
+target-config differences, then strict-loads the composed state. Its output is
+non-overwriting and read-only, carries deep-copied composition metadata, has
+no optimizer or scheduler state, and is categorically invalid for exact
+resume. `donor_weight` is the exact numeric value `1.0`; a YAML boolean is not
+a numeric donor weight even though Python's type hierarchy treats booleans as
+integers. The production artifact must be materialized only after the source
+is frozen; no durable initializer output exists at this pre-launch boundary.
+
+The paired experiment has one exact causal contrast. Treatment and control
+must share the same materialized initializer, seed, scenario-balanced draw
+order, devices, `updater_state_heads` scope, runtime independent-axis gate,
+loss weights, optimizer, schedule, cadence, and validation manifests.
+Treatment enables batch-macro physical losses and axiswise correction hinges;
+control disables only those two switches. A separate zero-update gate-on/
+gate-off forward ablation measures the runtime semantic delta and is not the
+training control. Before either long arm, run a deterministic two-update pair
+and require identical draw identities, exactly the six allowed trainable
+tensors and their Adam moments, exact frozen state and sibling outputs, finite
+losses/gradients, and coherent cadence variation. Then establish common
+fixed-32 step-zero evidence. Each retained arm is configured for `3072`
+updates with fixed selectors every `512` updates; both must reach at least
+selectors `512` and `1024` unless an integrity or nonfinite failure requires a
+truthful stop. Do not interpret a short-run difference as plateau evidence.
+
+At this amendment boundary, the two-update paired smoke, gate-on/gate-off
+zero-update ablation, materialized initializer, fixed-32 step-zero comparison,
+long paired training, real paired latency, and disjoint RGB-only
+validation/test/OOD qualification are all pending. The complete frozen-source
+implementation gate is closed under section 242, but it is not a model smoke
+or metric result. The protected step-zero incumbent remains deployed, and no
+specification-1.52 checkpoint is promoted.
+
+## 242. Exact-resume snapshot, publication, and run-ownership contract
+
+Exact resume is one fail-closed transaction over immutable input evidence and
+one exclusively owned destination. The CLI lifecycle state required by
+section 177 is intentionally published before trainer entry. Before the
+trainer publishes its own resolved config, run metadata, selector/history
+artifact, checkpoint, or continuation evidence, it must:
+
+- capture the primary checkpoint exactly once into private read-only bytes and
+  derive its SHA-256, byte count, deserialization, compatibility checks, and
+  any branch publication from that capture. A later source-path open may verify
+  that the in-place identity is unchanged, but must never replace the captured
+  bytes as the load or copy input;
+- capture every required measurement/rollout selector and accepted numbered
+  validation-history artifact once, validate the complete linked set, and
+  stage only those captured bytes for later atomic publication;
+- validate the complete finite model, optimizer, and scheduler structure;
+  resolved configuration, specification/simulator/validation protocol,
+  launch-time executable source, phase device, step and dynamic learning rate,
+  handoff/final-validation markers, and optimizer/data-draw/skipped-draw
+  counters; and
+- validate Python, NumPy, CPU Torch, and applicable CUDA/MPS RNG state on
+  private generator objects without changing process-global RNG.
+
+Adam/AdamW continuation requires globally unique serialized parameter IDs,
+exact destination group count/schema/cardinality, valid and destination-equal
+static group options, a dynamic learning rate bound to the saved completed-
+update schedule, state entries owned by declared destination parameters,
+scalar step tensors with the required dtype/device, and every required finite
+moment with the destination parameter's shape, dtype, and device. A deep-
+copied optimizer must then complete one finite disposable next step. This
+proof must not mutate the live model or optimizer.
+
+After model/optimizer loading and linked-artifact preflight, the trainer
+rechecks branch ownership and, for an in-place resume, the captured source
+checkpoint identity. Only then may it restore process-global RNG, exactly
+once, and atomically publish the already captured artifacts. A continuing
+resume releases the deserialized checkpoint payload before its first update;
+weights-only initialization likewise releases its deserialized payload after
+model loading and provenance extraction. Captured primary bytes may remain
+only as long as required to publish an unchanged branched no-op checkpoint.
+
+Every exact-resume invocation that can mutate a run holds one non-blocking
+per-run `flock` for the complete invocation. The CLI claims the run directory,
+opens the lock inode, and passes that live inode-bound handle into the trainer;
+the public direct API self-acquires the same lifetime ownership when no handle
+is supplied. At acquisition, the trainer verifies that the open descriptor and
+lock path name the same device/inode and that the descriptor holds the
+exclusive lock, then keeps that verified handle open through the invocation.
+This excludes cooperating writers for the lifetime of publication; cleanup
+rechecks inode identity before it may unlink or restore a lock path.
+
+Supplying any explicit `run_name`, including the source run's own name, is a
+branched resume. A branch destination must be absent or empty when it is
+atomically claimed. An unprefixed requested label resolves to one timestamped
+directory exactly once; lock acquisition, preflight, and publication reuse
+that resolved path. Immediately before the publication boundary, the trainer
+requires the exact entry set created by this invocation and rejects any
+concurrent or pre-existing evidence without overwriting it. In-place resume
+must similarly recheck that `checkpoints/last.pt` still has the captured hash
+and byte count. Failed lock acquisition or cleanup may remove/restore a lock
+file only when the caller still owns that exact inode; it must never unlink a
+winner's inode after losing the lock race.
+
+Focused artifact-integrity qualification passed the complete checkpoint and
+trainer gate (`128 passed`, `1` expected MPS-only skip), a post-format
+ownership/entrypoint gate (`15 passed`), the complete entrypoint file
+(`7 passed`), and the initializer materializer file (`3 passed`). On
+active-Aqua custom Torch `2.9.0a0+gitcbe1a35` with MPS built and available,
+invalid-MPS-RNG rejection before publication and exact MPS RNG restoration
+both passed (`2 passed`, `0 skipped in 2.86s`).
+
+The final post-provenance frozen-source command
+`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output -n
+orpheus pytest -q` passed `1163` tests with `17` skipped in `461.37s`
+(`0:07:41`). Whole-tree Ruff check passed; Ruff format check reported `221`
+files already formatted; isolated compileall over `world_model`, `tests`,
+`train.py`, `evaluate.py`, `monitor.py`, and `scripts` passed; the focused final
+source/version selection passed `6` tests; the authoritative version contract
+passed `1` test in `0.78s`; and `git diff --check` was clean. A final
+independent review returned PASS with no blockers. These results close source
+and artifact integrity only. They are not a model/trainer smoke, fixed-
+manifest metric, promotion, plateau, or convergence claim.
 
 ---
 
