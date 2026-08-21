@@ -51,7 +51,6 @@ def _write_report(
         "config": str(config_path),
         "run_directory": str(run_directory),
         **decision.to_dict(),
-        "converged": decision.status == "plateau",
         "limit_hit": decision.status == "limit_hit",
     }
     atomic_write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")

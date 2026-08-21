@@ -51,6 +51,7 @@ from world_model.training.event_windows import (
     observation_window_query_plan,
 )
 from world_model.training.loop import (
+    _match_positions_to_targets,
     future_predictable_mask,
     future_scene_predictable_mask,
     gather_target_slots,
@@ -69,14 +70,58 @@ from world_model.utils.version import SIMULATOR_VERSION, SPECIFICATION_VERSION
 _IDENTIFIER_PARAMETERS = ("mass", "restitution", "drag", "friction", "radius")
 _CURRENT_DETECTION_DISTANCE_THRESHOLD_M = 0.5
 _EVALUATION_PROTOCOL_SCHEMA_VERSION = "held_out_rgb_online_v2"
-_EVALUATION_METRIC_SCHEMA_VERSION = "held_out_rgb_metrics_v2"
-_PER_SCENARIO_METRIC_SCHEMA = "clean_primary_additive_support_diagnostic_v2"
+_EVALUATION_METRIC_SCHEMA_VERSION = "held_out_rgb_metrics_v3"
+_PER_SCENARIO_METRIC_SCHEMA = "clean_primary_additive_support_diagnostic_v3"
+_RECOVERY_ONLY_METRIC_NAMES = frozenset(
+    {
+        "perturbation_prior_position_error_m",
+        "perturbation_posterior_position_error_m",
+        "perturbation_correction_improvement_m",
+        "perturbation_correction_improvement_fraction",
+        "perturbation_positive_correction_rate",
+        "perturbation_evaluated_object_horizons",
+        "injected_perturbation_batch_updates",
+        "recovery_probe_evaluated_episodes",
+        "recovery_probe_nonfinite_output_count",
+        "recovery_probe_post_observation_std_contraction_mean_m",
+        "post_observation_std_contraction_mean_m",
+    }
+)
+_PRIMARY_PHYSICAL_LATENCY_NAME_SUBSTRING = "latency"
 _RUNTIME_HYPOTHESIS_CANDIDATES = (
     "learned",
     "constant_velocity",
     "damped_constant_velocity",
     "ballistic_contact",
 )
+
+
+def _primary_physical_metrics_hash_exclusion_declaration() -> dict[str, object]:
+    """Describe every final-report metric excluded from the primary digest."""
+
+    return {
+        "latency_metric_name_substring": _PRIMARY_PHYSICAL_LATENCY_NAME_SUBSTRING,
+        "recovery_only_metric_names": sorted(_RECOVERY_ONLY_METRIC_NAMES),
+    }
+
+
+def _primary_physical_metrics(
+    metrics: Mapping[str, float | None],
+) -> dict[str, float | None]:
+    """Return the exact clean-primary metric scope covered by its digest.
+
+    Recovery-probe metrics are appended to the public report only after the
+    clean primary digest is frozen.  Keeping this derivation explicit lets a
+    verifier reconstruct that same scope from the final report without either
+    admitting timing data or accidentally requiring the later probe fields.
+    """
+
+    return {
+        name: value
+        for name, value in metrics.items()
+        if _PRIMARY_PHYSICAL_LATENCY_NAME_SUBSTRING not in name
+        and name not in _RECOVERY_ONLY_METRIC_NAMES
+    }
 
 
 def enable_runtime_hypothesis_pool(
@@ -157,6 +202,10 @@ class _ErrorAccumulator:
                     f"{prefix}_position_{label}_mae_m": (
                         self.axis_absolute_sum[axis] / count if count else None
                     ),
+                    f"{prefix}_position_{label}_sse": self.axis_squared_sum[axis],
+                    f"{prefix}_position_{label}_absolute_error_sum_m": (
+                        self.axis_absolute_sum[axis]
+                    ),
                     f"{prefix}_position_{label}_count": float(count),
                 }
             )
@@ -165,6 +214,8 @@ class _ErrorAccumulator:
                 {
                     f"{prefix}_position_rmse_m": None,
                     f"{prefix}_position_mae_m": None,
+                    f"{prefix}_position_sse": self.squared_sum,
+                    f"{prefix}_position_absolute_error_sum_m": self.absolute_sum,
                     f"{prefix}_position_coordinate_count": 0.0,
                 }
             )
@@ -173,6 +224,8 @@ class _ErrorAccumulator:
             {
                 f"{prefix}_position_rmse_m": math.sqrt(self.squared_sum / self.count),
                 f"{prefix}_position_mae_m": self.absolute_sum / self.count,
+                f"{prefix}_position_sse": self.squared_sum,
+                f"{prefix}_position_absolute_error_sum_m": self.absolute_sum,
                 f"{prefix}_position_coordinate_count": float(self.count),
             }
         )
@@ -459,6 +512,8 @@ class _BinaryAccumulator:
 class _CalibrationAccumulator:
     error: list[Tensor] = field(default_factory=list)
     standard_deviation: list[Tensor] = field(default_factory=list)
+    axis_error: list[list[Tensor]] = field(default_factory=lambda: [[], [], []])
+    axis_standard_deviation: list[list[Tensor]] = field(default_factory=lambda: [[], [], []])
 
     def update(
         self,
@@ -476,20 +531,37 @@ class _CalibrationAccumulator:
         if error.numel() > 0:
             self.error.append(error.detach().float().cpu())
             self.standard_deviation.append(standard_deviation.detach().float().cpu())
+        if mean.ndim == mask.ndim + 1 and mean.shape[-1] == 3:
+            for axis in range(3):
+                axis_error = (mean[..., axis] - target[..., axis]).masked_select(mask)
+                axis_std = (0.5 * log_variance[..., axis].clamp(-12.0, 8.0)).exp()
+                axis_std = axis_std.masked_select(mask)
+                if axis_error.numel() > 0:
+                    self.axis_error[axis].append(axis_error.detach().float().cpu())
+                    self.axis_standard_deviation[axis].append(axis_std.detach().float().cpu())
 
-    def metrics(self) -> dict[str, float | None]:
-        if not self.error:
+    @staticmethod
+    def _metrics_from_values(
+        error_values: list[Tensor],
+        standard_deviation_values: list[Tensor],
+        *,
+        prefix: str,
+    ) -> dict[str, float | None]:
+        if not error_values:
             return {
-                "forecast_gaussian_nll": None,
-                "forecast_sharpness_std": None,
-                "forecast_calibration_coordinate_count": 0.0,
-                "forecast_coverage_50": None,
-                "forecast_coverage_80": None,
-                "forecast_coverage_90": None,
-                "forecast_coverage_95": None,
+                f"{prefix}_gaussian_nll": None,
+                f"{prefix}_gaussian_nll_sum": 0.0,
+                f"{prefix}_sharpness_std": None,
+                f"{prefix}_sharpness_std_sum": 0.0,
+                f"{prefix}_calibration_coordinate_count": 0.0,
+                f"{prefix}_coverage_50": None,
+                f"{prefix}_coverage_80": None,
+                f"{prefix}_coverage_90": None,
+                f"{prefix}_calibration_error90": None,
+                f"{prefix}_coverage_95": None,
             }
-        error = torch.cat(self.error)
-        std = torch.cat(self.standard_deviation).clamp_min(1.0e-8)
+        error = torch.cat(error_values)
+        std = torch.cat(standard_deviation_values).clamp_min(1.0e-8)
         variance = std.square()
         nll = 0.5 * (error.square() / variance + variance.log() + math.log(2.0 * math.pi))
         z = error.abs() / std
@@ -500,12 +572,40 @@ class _CalibrationAccumulator:
             95: 1.95996398,
         }
         metrics: dict[str, float | None] = {
-            "forecast_gaussian_nll": float(nll.mean()),
-            "forecast_sharpness_std": float(std.mean()),
-            "forecast_calibration_coordinate_count": float(error.numel()),
+            f"{prefix}_gaussian_nll": float(nll.mean()),
+            f"{prefix}_gaussian_nll_sum": float(nll.sum()),
+            f"{prefix}_sharpness_std": float(std.mean()),
+            f"{prefix}_sharpness_std_sum": float(std.sum()),
+            f"{prefix}_calibration_coordinate_count": float(error.numel()),
         }
         for level, quantile in quantiles.items():
-            metrics[f"forecast_coverage_{level}"] = float((z <= quantile).float().mean())
+            metrics[f"{prefix}_coverage_{level}"] = float((z <= quantile).float().mean())
+        coverage90 = metrics[f"{prefix}_coverage_90"]
+        if coverage90 is None:
+            raise AssertionError("supported calibration metrics must include 90% coverage")
+        metrics[f"{prefix}_calibration_error90"] = abs(coverage90 - 0.90)
+        return metrics
+
+    def metrics(
+        self,
+        prefix: str = "forecast",
+        *,
+        include_axes: bool = False,
+    ) -> dict[str, float | None]:
+        metrics = self._metrics_from_values(
+            self.error,
+            self.standard_deviation,
+            prefix=prefix,
+        )
+        if include_axes:
+            for axis, label in enumerate(("x", "y", "z")):
+                metrics.update(
+                    self._metrics_from_values(
+                        self.axis_error[axis],
+                        self.axis_standard_deviation[axis],
+                        prefix=f"{prefix}_{label}",
+                    )
+                )
         return metrics
 
 
@@ -670,6 +770,54 @@ class _TrackingAccumulator:
 
 
 @dataclass
+class _ForecastIdentityAccumulator:
+    """Distance-gated identity consistency against the anchor mapping."""
+
+    mismatches: int = 0
+    associations: int = 0
+    eligible: int = 0
+
+    def update(
+        self,
+        anchor_target_ids: Tensor,
+        forecast_target_ids: Tensor,
+        eligible_mask: Tensor,
+        association_mask: Tensor,
+    ) -> None:
+        if anchor_target_ids.shape != forecast_target_ids.shape:
+            raise ValueError("forecast identity inputs must share shape [B,N]")
+        if (
+            eligible_mask.shape != anchor_target_ids.shape
+            or association_mask.shape != anchor_target_ids.shape
+            or eligible_mask.dtype is not torch.bool
+            or association_mask.dtype is not torch.bool
+        ):
+            raise ValueError("forecast identity masks must be boolean [B,N]")
+        eligible = eligible_mask & (anchor_target_ids >= 0)
+        associated = association_mask & (anchor_target_ids >= 0) & (forecast_target_ids >= 0)
+        if bool((associated & ~eligible).any()):
+            raise ValueError("forecast identity associations must be a subset of eligibility")
+        self.eligible += int(eligible.sum().detach().cpu())
+        self.associations += int(associated.sum().detach().cpu())
+        self.mismatches += int(
+            ((anchor_target_ids != forecast_target_ids) & associated).sum().detach().cpu()
+        )
+
+    def metrics(self, prefix: str) -> dict[str, float | None]:
+        return {
+            f"{prefix}_eligible_count": float(self.eligible),
+            f"{prefix}_mismatch_count": float(self.mismatches),
+            f"{prefix}_association_count": float(self.associations),
+            f"{prefix}_association_coverage": (
+                self.associations / self.eligible if self.eligible else None
+            ),
+            f"{prefix}_mismatch_rate": (
+                self.mismatches / self.associations if self.associations else None
+            ),
+        }
+
+
+@dataclass
 class _ScenarioEvaluationAccumulator:
     """Additive clean-pass metrics for one declared simulator scenario.
 
@@ -684,10 +832,15 @@ class _ScenarioEvaluationAccumulator:
     current_velocity: MaskedVelocityErrorAccumulator = field(
         default_factory=MaskedVelocityErrorAccumulator
     )
+    current_calibration: _CalibrationAccumulator = field(default_factory=_CalibrationAccumulator)
     forecast_position: dict[str, _ErrorAccumulator] = field(default_factory=dict)
     forecast_velocity: dict[str, MaskedVelocityErrorAccumulator] = field(default_factory=dict)
     collision_events: _BinaryAccumulator = field(default_factory=_BinaryAccumulator)
     collision_events_by_horizon: dict[str, _BinaryAccumulator] = field(default_factory=dict)
+    calibration_by_horizon: dict[str, _CalibrationAccumulator] = field(default_factory=dict)
+    forecast_identity_by_horizon: dict[str, _ForecastIdentityAccumulator] = field(
+        default_factory=dict
+    )
     tracking: _TrackingAccumulator = field(default_factory=_TrackingAccumulator)
     target_object_frames: int = 0
     predicted_object_frames: int = 0
@@ -743,6 +896,12 @@ class _ScenarioEvaluationAccumulator:
         }
         local.update(self.current_position.metrics("posterior_current"))
         local.update(self.current_velocity.metrics("posterior_current"))
+        local.update(
+            self.current_calibration.metrics(
+                "posterior_current_position",
+                include_axes=True,
+            )
+        )
         local.update(self.tracking.metrics())
         local.update(self.collision_events.metrics("collision"))
         for horizon in horizons:
@@ -757,6 +916,18 @@ class _ScenarioEvaluationAccumulator:
                 self.collision_events_by_horizon.get(horizon, _BinaryAccumulator()).metrics(
                     f"collision@{horizon}"
                 )
+            )
+            local.update(
+                self.calibration_by_horizon.get(
+                    horizon,
+                    _CalibrationAccumulator(),
+                ).metrics(f"model@{horizon}_position", include_axes=True)
+            )
+            local.update(
+                self.forecast_identity_by_horizon.get(
+                    horizon,
+                    _ForecastIdentityAccumulator(),
+                ).metrics(f"forecast_identity@{horizon}")
             )
             target_count = self.forecast_target_count.get(horizon, 0)
             tracked_count = self.forecast_tracked_count.get(horizon, 0)
@@ -1449,7 +1620,10 @@ def _evaluate_checkpoint_impl(
     forecast_velocity_errors: dict[str, MaskedVelocityErrorAccumulator] = {}
     events = _BinaryAccumulator()
     events_by_horizon: dict[str, _BinaryAccumulator] = {}
+    current_calibration = _CalibrationAccumulator()
     calibration = _CalibrationAccumulator()
+    calibration_by_horizon: dict[str, _CalibrationAccumulator] = {}
+    forecast_identity_by_horizon: dict[str, _ForecastIdentityAccumulator] = {}
     collision_conditioned_forecasts = CollisionConditionedForecastAccumulator()
     parameters = _ParameterAccumulator()
     directional_parameters = OnlineParameterUpdateAccumulator()
@@ -1710,6 +1884,12 @@ def _evaluate_checkpoint_impl(
                     aligned_velocity,
                     distance_gated_matched,
                 )
+                current_calibration.update(
+                    belief.objects.position,
+                    belief.objects.fast_log_variance[..., :3],
+                    aligned_position,
+                    distance_gated_matched,
+                )
                 if ordinary_velocity_prior is not None and last_measurements is not None:
                     same_persistent_slot = (
                         ordinary_velocity_prior.objects.active
@@ -1756,6 +1936,12 @@ def _evaluate_checkpoint_impl(
                     scenario_metrics.current_velocity.update(
                         belief.objects.velocity,
                         aligned_velocity,
+                        scenario_distance_gated_matched,
+                    )
+                    scenario_metrics.current_calibration.update(
+                        belief.objects.position,
+                        belief.objects.fast_log_variance[..., :3],
+                        aligned_position,
                         scenario_distance_gated_matched,
                     )
                     scenario_metrics.tracking.update(
@@ -2251,6 +2437,56 @@ def _evaluate_checkpoint_impl(
                             future_target,
                             common_valid,
                         )
+                        calibration_by_horizon.setdefault(
+                            horizon,
+                            _CalibrationAccumulator(),
+                        ).update(
+                            model_positions[:, query_index],
+                            model_log_variance[:, query_index, :, :3],
+                            future_target,
+                            common_valid,
+                        )
+                        forecast_target_indices, forecast_matched = _match_positions_to_targets(
+                            model_positions[:, query_index],
+                            model_active_mask[:, query_index].bool(),
+                            batch["objects"]["position"][:, target_frame],
+                            batch["objects"]["active"][:, target_frame].bool(),
+                        )
+                        forecast_aligned_position = gather_target_slots(
+                            batch["objects"]["position"][:, target_frame],
+                            forecast_target_indices,
+                        )
+                        forecast_distance_gated = _distance_gate_matches(
+                            model_positions[:, query_index],
+                            forecast_aligned_position,
+                            forecast_matched,
+                            threshold_m=_CURRENT_DETECTION_DISTANCE_THRESHOLD_M,
+                        )
+                        anchor_target_ids = gather_target_slots(
+                            batch["objects"]["id"][:, frame_index],
+                            target_indices,
+                        )
+                        forecast_target_ids = gather_target_slots(
+                            batch["objects"]["id"][:, target_frame],
+                            forecast_target_indices,
+                        )
+                        forecast_identity_eligible = (
+                            distance_gated_matched
+                            & common_valid
+                            & model_active_mask[:, query_index].bool()
+                        )
+                        forecast_identity_associated = (
+                            forecast_identity_eligible & forecast_distance_gated
+                        )
+                        forecast_identity_by_horizon.setdefault(
+                            horizon,
+                            _ForecastIdentityAccumulator(),
+                        ).update(
+                            anchor_target_ids,
+                            forecast_target_ids,
+                            forecast_identity_eligible,
+                            forecast_identity_associated,
+                        )
                         collision_class_masks = collision_class_masks_for_forecast_window(
                             batch["events"],
                             anchor_frame=frame_index,
@@ -2329,6 +2565,24 @@ def _evaluate_checkpoint_impl(
                                 model_velocities[:, query_index],
                                 future_target_velocity,
                                 scenario_point_valid,
+                            )
+                            scenario_metrics.calibration_by_horizon.setdefault(
+                                horizon,
+                                _CalibrationAccumulator(),
+                            ).update(
+                                model_positions[:, query_index],
+                                model_log_variance[:, query_index, :, :3],
+                                future_target,
+                                scenario_common_valid,
+                            )
+                            scenario_metrics.forecast_identity_by_horizon.setdefault(
+                                horizon,
+                                _ForecastIdentityAccumulator(),
+                            ).update(
+                                anchor_target_ids,
+                                forecast_target_ids,
+                                forecast_identity_eligible & object_mask,
+                                forecast_identity_associated & object_mask,
                             )
                             scenario_metrics._increment(
                                 scenario_metrics.forecast_target_count,
@@ -2426,6 +2680,12 @@ def _evaluate_checkpoint_impl(
     metrics: dict[str, Any] = {}
     metrics.update(current_error.metrics("posterior_current"))
     metrics.update(current_velocity_error.metrics("posterior_current"))
+    metrics.update(
+        current_calibration.metrics(
+            "posterior_current_position",
+            include_axes=True,
+        )
+    )
     metrics.update(ordinary_velocity_correction.metrics())
     metrics.update(temporal_velocity_measurements.metrics())
     for (method, horizon), accumulator in sorted(forecast_errors.items()):
@@ -2436,6 +2696,18 @@ def _evaluate_checkpoint_impl(
                 horizon,
                 MaskedVelocityErrorAccumulator(),
             ).metrics(f"model@{horizon}")
+        )
+        metrics.update(
+            calibration_by_horizon.get(
+                horizon,
+                _CalibrationAccumulator(),
+            ).metrics(f"model@{horizon}_position", include_axes=True)
+        )
+        metrics.update(
+            forecast_identity_by_horizon.get(
+                horizon,
+                _ForecastIdentityAccumulator(),
+            ).metrics(f"forecast_identity@{horizon}")
         )
     metrics.update(collision_conditioned_forecasts.metrics())
     metrics.update(events.metrics("collision"))
@@ -2563,8 +2835,14 @@ def _evaluate_checkpoint_impl(
     metrics.update(
         {
             "rgb_global_update_latency_mean_ms": _mean_or_none(global_latencies),
+            "rgb_global_update_latency_sum_ms": float(sum(global_latencies)),
+            "rgb_global_update_latency_sample_count": float(len(global_latencies)),
             "rgb_fast_update_latency_mean_ms": _mean_or_none(fast_latencies),
+            "rgb_fast_update_latency_sum_ms": float(sum(fast_latencies)),
+            "rgb_fast_update_latency_sample_count": float(len(fast_latencies)),
             "future_rollout_latency_mean_ms": _mean_or_none(rollout_latencies),
+            "future_rollout_latency_sum_ms": float(sum(rollout_latencies)),
+            "future_rollout_latency_sample_count": float(len(rollout_latencies)),
             "visible_position_std_mean_m": _mean_or_none(uncertainty_visible),
             "occluded_position_std_mean_m": _mean_or_none(uncertainty_occluded),
             "nonfinite_output_count": float(nonfinite_outputs),
@@ -2582,9 +2860,7 @@ def _evaluate_checkpoint_impl(
     # Freeze a canonical digest before the optional probe executes. Recovery
     # metrics are appended under a disjoint schema and cannot overwrite the
     # clean primary measurements represented by this digest.
-    primary_physical_metrics = {
-        name: value for name, value in metrics.items() if "latency" not in name
-    }
+    primary_physical_metrics = _primary_physical_metrics(metrics)
     _require_finite_metrics(primary_physical_metrics)
     primary_physical_metrics_sha256 = hashlib.sha256(
         json.dumps(
@@ -2759,7 +3035,6 @@ def _evaluate_checkpoint_impl(
         "per_scenario_metrics_schema": _PER_SCENARIO_METRIC_SCHEMA,
         "per_scenario_metrics_status": "diagnostic_only_not_checkpoint_promotion_complete",
         "per_scenario_metrics_known_omissions": [
-            "calibration",
             "nonfinite_evidence",
             "physical_baselines",
             "configured_support_floor_markers",
@@ -2783,6 +3058,7 @@ def _evaluate_checkpoint_impl(
         ],
         "split": split,
         "episodes": evaluated_episodes,
+        "batches": len(loader),
         "device": str(device),
         "precision": resolved_device.precision,
         "rgb_only": True,
@@ -2806,7 +3082,13 @@ def _evaluate_checkpoint_impl(
         "primary_posterior_trace_frame_count": primary_posterior_trace.frame_count,
         "primary_posterior_trace_schema": "world_belief_tensor_fields_v1",
         "primary_physical_metrics_sha256": primary_physical_metrics_sha256,
-        "primary_physical_metrics_hash_excludes": ["latency metrics"],
+        "primary_physical_metrics_hashed_keys": sorted(primary_physical_metrics),
+        "primary_physical_metrics_scope": (
+            "clean_primary_metrics_before_isolated_recovery_probe_append"
+        ),
+        "primary_physical_metrics_hash_excludes": (
+            _primary_physical_metrics_hash_exclusion_declaration()
+        ),
         "recovery_probe_enabled": config.evaluation.recovery_probe_enabled,
         "recovery_probe_runtime_isolation": (
             "independent_runtime_shared_immutable_checkpoint_snapshot_clean_prefix_replay"
@@ -2850,7 +3132,18 @@ def _evaluate_checkpoint_impl(
         ),
         "current_detection_distance_threshold_m": (_CURRENT_DETECTION_DISTANCE_THRESHOLD_M),
         "identity_metric_match_source": "distance_gated_current_detection",
+        "forecast_identity_metric_match_source": (
+            "distance_gated_anchor_persistent_target_mapping_compared_with_"
+            "distance_gated_forecast_hungarian_target_assignment_per_horizon"
+        ),
         "current_velocity_metric_match_source": "distance_gated_current_detection",
+        "velocity_metric_additive_evidence": (
+            "pooled_and_xyz_sse_coordinate_counts_current_and_each_horizon"
+        ),
+        "uncertainty_metric_additive_evidence": (
+            "gaussian_nll_sharpness_sums_and_coordinate_counts_pooled_and_xyz_"
+            "current_and_each_horizon"
+        ),
         "ordinary_velocity_correction_scope": (
             "timestamp_advanced_prior_to_posterior_nonperturbed_fresh_observation_"
             "same_persistent_slot_and_distance_gated_current_detection"

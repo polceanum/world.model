@@ -29,11 +29,13 @@ from world_model.training.loop import (
 )
 from world_model.training.trainer import (
     _ROLLOUT_SELECTION_METRIC_VERSION,
+    _aggregate_physical_validation_metrics,
     _assert_interaction_gradient_retention,
     _attention_gradient_diagnostics,
     _causal_training_support,
     _clip_training_gradients,
     _closed_loop_trainable_scope_for_step,
+    _core_causal_trajectory_episode_supported,
     _finite_nonnegative_integer,
     _gradient_clip_diagnostics,
     _handoff_training_support_failures,
@@ -44,11 +46,13 @@ from world_model.training.trainer import (
     _prepare_restricted_attention_node_update,
     _prepare_restricted_updater_mean_update,
     _restore_restricted_updater_mean_update,
+    _rollout_selection_guardrail_failures,
     _rollout_selection_improves,
     _rollout_selection_is_compatible,
     _rollout_selection_metrics,
     _rollout_selection_passes_guardrails,
     _selection_scenario_slugs,
+    _validate_validation_support_schema,
     _validation_loader_result,
     _validation_protocol_checkpoint_metrics,
     _validation_step,
@@ -2044,6 +2048,107 @@ def test_rollout_anchor_limit_rejects_nonpositive_values() -> None:
         )
 
 
+def _complete_additive_physical_evidence(
+    metrics: dict[str, float],
+    *,
+    suffixes: tuple[str, ...] = ("0.100s", "0.250s", "0.500s"),
+) -> None:
+    current_coordinate_count = metrics["physical_state_position_coordinate_count"]
+    metrics.setdefault("physical_state_position_coverage90_hit_count", current_coordinate_count)
+    metrics.setdefault(
+        "physical_state_position_coverage90_coordinate_count", current_coordinate_count
+    )
+    metrics.setdefault("physical_state_position_gaussian_nll_sum", 0.1 * current_coordinate_count)
+    metrics.setdefault("physical_state_position_sharpness_std_sum", current_coordinate_count)
+    metrics.setdefault(
+        "physical_state_position_calibration_coordinate_count", current_coordinate_count
+    )
+    for axis in ("x", "y", "z"):
+        metrics.setdefault(
+            f"physical_state_velocity_{axis}_sse",
+            metrics["physical_state_velocity_sse"] / 3.0,
+        )
+        axis_count = metrics[f"physical_state_position_{axis}_coordinate_count"]
+        metrics.setdefault(f"physical_state_velocity_{axis}_coordinate_count", axis_count)
+        metrics.setdefault(f"physical_state_position_{axis}_gaussian_nll_sum", 0.1 * axis_count)
+        metrics.setdefault(f"physical_state_position_{axis}_sharpness_std_sum", axis_count)
+        metrics.setdefault(
+            f"physical_state_position_{axis}_calibration_coordinate_count",
+            axis_count,
+        )
+    for suffix in suffixes:
+        position_sse = metrics[f"physical_rollout_position@{suffix}_sse"]
+        coordinate_count = metrics[f"physical_rollout_position@{suffix}_coordinate_count"]
+        metrics.setdefault(f"physical_rollout_velocity@{suffix}_sse", position_sse)
+        metrics.setdefault(
+            f"physical_rollout_velocity@{suffix}_coordinate_count",
+            coordinate_count,
+        )
+        calibration_count = metrics[
+            f"physical_rollout_position_coverage90@{suffix}_coordinate_count"
+        ]
+        metrics.setdefault(
+            f"physical_rollout_position@{suffix}_gaussian_nll_sum",
+            0.1 * calibration_count,
+        )
+        metrics.setdefault(
+            f"physical_rollout_position@{suffix}_sharpness_std_sum",
+            calibration_count,
+        )
+        metrics.setdefault(
+            f"physical_rollout_position@{suffix}_calibration_coordinate_count",
+            calibration_count,
+        )
+        for axis in ("x", "y", "z"):
+            axis_sse = metrics[f"physical_rollout_position_{axis}@{suffix}_sse"]
+            axis_count = metrics[f"physical_rollout_position_{axis}@{suffix}_coordinate_count"]
+            metrics.setdefault(f"physical_rollout_velocity_{axis}@{suffix}_sse", axis_sse)
+            metrics.setdefault(
+                f"physical_rollout_velocity_{axis}@{suffix}_coordinate_count",
+                axis_count,
+            )
+            axis_calibration_count = calibration_count / 3.0
+            metrics.setdefault(
+                f"physical_rollout_position_{axis}@{suffix}_gaussian_nll_sum",
+                0.1 * axis_calibration_count,
+            )
+            metrics.setdefault(
+                f"physical_rollout_position_{axis}@{suffix}_sharpness_std_sum",
+                axis_calibration_count,
+            )
+            metrics.setdefault(
+                f"physical_rollout_position_{axis}@{suffix}_calibration_coordinate_count",
+                axis_calibration_count,
+            )
+        metrics.setdefault(f"physical_forecast_identity_mismatch_count@{suffix}", 0.0)
+        metrics.setdefault(f"physical_forecast_identity_association_count@{suffix}", 1.0)
+        metrics.setdefault(
+            f"physical_forecast_identity_eligible_count@{suffix}",
+            metrics[f"physical_forecast_identity_association_count@{suffix}"],
+        )
+        divisor = float(len(suffixes))
+        metrics.setdefault(
+            f"physical_collision_true_positive_count@{suffix}",
+            metrics.get("physical_collision_true_positive_count", divisor) / divisor,
+        )
+        metrics.setdefault(
+            f"physical_collision_false_positive_count@{suffix}",
+            metrics.get("physical_collision_false_positive_count", 0.0) / divisor,
+        )
+        metrics.setdefault(
+            f"physical_collision_false_negative_count@{suffix}",
+            metrics.get("physical_collision_false_negative_count", 0.0) / divisor,
+        )
+        metrics.setdefault(
+            f"physical_collision_true_negative_count@{suffix}",
+            metrics.get("physical_collision_true_negative_count", divisor) / divisor,
+        )
+    metrics.setdefault(
+        "physical_collision_true_negative_count",
+        sum(metrics[f"physical_collision_true_negative_count@{suffix}"] for suffix in suffixes),
+    )
+
+
 def test_additive_physical_metrics_convert_to_selection_metrics() -> None:
     config = load_config("configs/tiny_overfit.yaml")
     additive = {
@@ -2089,12 +2194,13 @@ def test_additive_physical_metrics_convert_to_selection_metrics() -> None:
         for axis in ("x", "y", "z"):
             additive[f"physical_rollout_position_{axis}@{suffix}_sse"] = horizon_sse / 3.0
             additive[f"physical_rollout_position_{axis}@{suffix}_coordinate_count"] = 1.0
-        additive[f"physical_rollout_position_coverage90@{suffix}_hit_count"] = 3.0
-        additive[f"physical_rollout_position_coverage90@{suffix}_coordinate_count"] = 3.0
+        additive[f"physical_rollout_position_coverage90@{suffix}_hit_count"] = 85.0 / 3.0
+        additive[f"physical_rollout_position_coverage90@{suffix}_coordinate_count"] = 100.0 / 3.0
         additive[f"physical_forecast_tracked_count@{suffix}"] = 10.0
         additive[f"physical_forecast_predictable_target_count@{suffix}"] = 10.0
         additive[f"physical_rollout_predictable_target_count@{suffix}"] = 1.0
         additive[f"physical_rollout_censored_external_actuation_count@{suffix}"] = 0.0
+    _complete_additive_physical_evidence(additive)
 
     metrics = physical_validation_metrics(additive, config)
 
@@ -2111,6 +2217,32 @@ def test_additive_physical_metrics_convert_to_selection_metrics() -> None:
     assert metrics["validation_forecast_target_coverage@0.250s"] == pytest.approx(0.7)
     assert metrics["validation_position_rmse@0.500s"] == pytest.approx(3.0)
     assert metrics["validation_forecast_target_coverage@0.500s"] == pytest.approx(0.6)
+    assert metrics["validation_current_position_coverage90"] == pytest.approx(1.0)
+    assert metrics["validation_current_position_gaussian_nll"] == pytest.approx(0.1)
+    assert metrics["validation_current_position_sharpness_std"] == pytest.approx(1.0)
+    for axis in ("x", "y", "z"):
+        assert metrics[f"validation_velocity_rmse_{axis}_mps"] == pytest.approx(3.0)
+        assert metrics[f"validation_current_position_gaussian_nll_{axis}"] == pytest.approx(0.1)
+        assert metrics[f"validation_current_position_sharpness_std_{axis}"] == pytest.approx(1.0)
+    for suffix, expected_rmse in (
+        ("0.100s", 1.0),
+        ("0.250s", 2.0),
+        ("0.500s", 3.0),
+    ):
+        assert metrics[f"validation_velocity_rmse@{suffix}"] == pytest.approx(expected_rmse)
+        assert metrics[f"validation_collision_f1@{suffix}"] == pytest.approx(2.0 / 3.0)
+        assert metrics[f"validation_forecast_identity_association_coverage@{suffix}"] == 1.0
+        assert metrics[f"validation_forecast_identity_mismatch_rate@{suffix}"] == 0.0
+        assert metrics[f"validation_position_coverage90@{suffix}"] == pytest.approx(0.85)
+        assert metrics[f"validation_position_gaussian_nll@{suffix}"] == pytest.approx(0.1)
+        assert metrics[f"validation_position_sharpness_std@{suffix}"] == pytest.approx(1.0)
+        for axis in ("x", "y", "z"):
+            assert metrics[f"validation_velocity_rmse_{axis}@{suffix}"] == pytest.approx(
+                expected_rmse
+            )
+            assert metrics[f"validation_position_gaussian_nll_{axis}@{suffix}"] == pytest.approx(
+                0.1
+            )
 
 
 def test_physical_selection_distance_gate_matches_evaluator_threshold() -> None:
@@ -2354,6 +2486,9 @@ def _physical_selection_metrics(
         "validation_collision_f1": collision_f1,
         "validation_id_switch_rate": id_switch_rate,
         "validation_position_coverage90": position_coverage90,
+        "validation_current_position_coverage90": position_coverage90,
+        "validation_current_position_gaussian_nll": 0.1,
+        "validation_current_position_sharpness_std": 1.0,
         "validation_position_rmse@0.100s": horizons[0],
         "validation_position_rmse@0.250s": horizons[1],
         "validation_position_rmse@0.500s": horizons[2],
@@ -2361,11 +2496,26 @@ def _physical_selection_metrics(
         "validation_forecast_target_coverage@0.250s": forecast_coverage[1],
         "validation_forecast_target_coverage@0.500s": forecast_coverage[2],
     }
+    for suffix in ("0.100s", "0.250s", "0.500s"):
+        metrics[f"validation_velocity_rmse@{suffix}"] = velocity
+        metrics[f"validation_collision_f1@{suffix}"] = collision_f1
+        metrics[f"validation_forecast_identity_association_coverage@{suffix}"] = 1.0
+        metrics[f"validation_forecast_identity_mismatch_rate@{suffix}"] = id_switch_rate
+        metrics[f"validation_position_coverage90@{suffix}"] = position_coverage90
+        metrics[f"validation_position_gaussian_nll@{suffix}"] = 0.1
+        metrics[f"validation_position_sharpness_std@{suffix}"] = 1.0
     for axis in ("x", "y", "z"):
         metrics[f"validation_position_rmse_{axis}_m"] = position
+        metrics[f"validation_velocity_rmse_{axis}_mps"] = velocity
+        metrics[f"validation_current_position_gaussian_nll_{axis}"] = 0.1
+        metrics[f"validation_current_position_sharpness_std_{axis}"] = 1.0
         metrics[f"validation_position_rmse_{axis}@0.100s"] = horizons[0]
         metrics[f"validation_position_rmse_{axis}@0.250s"] = horizons[1]
         metrics[f"validation_position_rmse_{axis}@0.500s"] = horizons[2]
+        for suffix in ("0.100s", "0.250s", "0.500s"):
+            metrics[f"validation_velocity_rmse_{axis}@{suffix}"] = velocity
+            metrics[f"validation_position_gaussian_nll_{axis}@{suffix}"] = 0.1
+            metrics[f"validation_position_sharpness_std_{axis}@{suffix}"] = 1.0
     return metrics
 
 
@@ -2466,6 +2616,99 @@ def test_rollout_selection_accepts_score_gain_within_guardrails() -> None:
     )
 
     assert _rollout_selection_improves(candidate, incumbent)
+
+
+@pytest.mark.parametrize(
+    ("metric_name", "regressed_value", "expected_failure"),
+    [
+        ("validation_velocity_rmse_x@0.500s", 0.817, "velocity_rmse_x@0.500s"),
+        ("validation_collision_f1@0.500s", 0.58, "collision_f1@0.500s"),
+        (
+            "validation_forecast_identity_mismatch_rate@0.500s",
+            0.016,
+            "forecast_identity_mismatch_rate@0.500s",
+        ),
+        (
+            "validation_position_coverage90@0.500s",
+            0.879,
+            "position_calibration_error90@0.500s",
+        ),
+        (
+            "validation_position_gaussian_nll_x@0.500s",
+            0.121,
+            "position_gaussian_nll_x@0.500s",
+        ),
+    ],
+)
+def test_rollout_selection_rejects_one_regressed_horizon_cell(
+    metric_name: str,
+    regressed_value: float,
+    expected_failure: str,
+) -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    reference = _rollout_selection_metrics(_physical_selection_metrics(), config)
+    candidate_metrics = _physical_selection_metrics(horizons=(0.30, 0.20, 0.10))
+    candidate_metrics[metric_name] = regressed_value
+    candidate = _rollout_selection_metrics(candidate_metrics, config)
+
+    assert candidate.score < reference.score
+    failures = _rollout_selection_guardrail_failures(candidate, reference)
+    assert expected_failure in {str(failure["metric"]) for failure in failures}
+    assert not _rollout_selection_improves(candidate, reference)
+
+
+def test_rollout_selection_recurses_new_velocity_guardrail_through_scenarios() -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        simulator=replace(
+            source.simulator,
+            scenario_mixture=("baseline", "elastic_pairs"),
+        ),
+    )
+    reference_metrics = _physical_selection_metrics()
+    pooled_candidate = _physical_selection_metrics(horizons=(0.30, 0.20, 0.10))
+    regressed_scenario = _physical_selection_metrics()
+    regressed_scenario["validation_velocity_rmse_x@0.500s"] = 0.817
+    reference = _rollout_selection_metrics(
+        _with_scenario_selection_metrics(reference_metrics, config),
+        config,
+        require_scenarios=True,
+    )
+    candidate = _rollout_selection_metrics(
+        _with_scenario_selection_metrics(
+            pooled_candidate,
+            config,
+            scenario_metrics={"elastic_pairs": regressed_scenario},
+        ),
+        config,
+        require_scenarios=True,
+    )
+
+    failures = _rollout_selection_guardrail_failures(candidate, reference)
+    assert "scenario_elastic_pairs_velocity_rmse_x@0.500s" in {
+        str(failure["metric"]) for failure in failures
+    }
+    assert not _rollout_selection_improves(candidate, reference)
+
+
+def test_acceptable_coverage_cannot_hide_worse_gaussian_likelihood() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    reference = _rollout_selection_metrics(_physical_selection_metrics(), config)
+    candidate_metrics = _physical_selection_metrics(
+        position_coverage90=0.9,
+        horizons=(0.30, 0.20, 0.10),
+    )
+    candidate_metrics["validation_position_gaussian_nll@0.500s"] = 0.121
+    candidate = _rollout_selection_metrics(candidate_metrics, config)
+
+    assert candidate.horizon_position_calibration_error90["0.500s"] == 0.0
+    assert candidate.score < reference.score
+    assert "position_gaussian_nll@0.500s" in {
+        str(failure["metric"])
+        for failure in _rollout_selection_guardrail_failures(candidate, reference)
+    }
+    assert not _rollout_selection_improves(candidate, reference)
 
 
 def test_rollout_selection_rejects_aggregate_gain_with_unsupported_scenario() -> None:
@@ -2603,6 +2846,11 @@ def test_rollout_selection_requires_complete_finite_physical_metrics() -> None:
     with pytest.raises(FloatingPointError, match="must all be finite"):
         _rollout_selection_metrics(nonfinite, config)
 
+    missing_horizon_axis = _physical_selection_metrics()
+    del missing_horizon_axis["validation_velocity_rmse_x@0.500s"]
+    with pytest.raises(RuntimeError, match="validation_velocity_rmse_x@0.500s"):
+        _rollout_selection_metrics(missing_horizon_axis, config)
+
 
 def test_legacy_rollout_score_is_not_reused_after_objective_fix() -> None:
     config = load_config("configs/tiny_overfit.yaml")
@@ -2698,8 +2946,8 @@ def _result(value: float) -> TrainingBatchResult:
         "physical_distance_gated_matched_object_frames": 1.0,
         "physical_distance_gated_identity_switches": 0.0,
         "physical_distance_gated_object_frame_associations": 1.0,
-        "physical_position_coverage90_hit_count": 1.0,
-        "physical_position_coverage90_coordinate_count": 1.0,
+        "physical_position_coverage90_hit_count": 9.0,
+        "physical_position_coverage90_coordinate_count": 9.0,
         "physical_collision_true_positive_count": 1.0,
         "physical_collision_false_positive_count": 0.0,
         "physical_collision_false_negative_count": 0.0,
@@ -2718,12 +2966,212 @@ def _result(value: float) -> TrainingBatchResult:
         physical_metrics[f"physical_forecast_predictable_target_count@{suffix}"] = 1.0
         physical_metrics[f"physical_rollout_predictable_target_count@{suffix}"] = 1.0
         physical_metrics[f"physical_rollout_censored_external_actuation_count@{suffix}"] = 0.0
+    _complete_additive_physical_evidence(physical_metrics)
     return TrainingBatchResult(
         total_loss=scalar,
         loss_terms={"rollout": scalar},
         metrics={"value": value, **physical_metrics},
         phase="closed_loop_rgb",
     )
+
+
+_FIXED32_HORIZONS = ("0.100s", "0.250s", "0.500s", "0.750s", "1.000s")
+
+
+def _fixed32_support_config():
+    source = load_config("configs/tiny_all_scenarios.yaml")
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            validation_episodes=32,
+            validation_minimum_predictable_target_count_per_scenario_horizon=4,
+            validation_minimum_matched_target_count_per_scenario_horizon=2,
+            validation_minimum_supported_episodes_per_scenario=2,
+        ),
+    )
+    config.validate()
+    return config
+
+
+def _recompute_pooled_event_counts(metrics: dict[str, float]) -> None:
+    for kind in ("true_positive", "false_positive", "false_negative", "true_negative"):
+        metrics[f"physical_collision_{kind}_count"] = sum(
+            metrics[f"physical_collision_{kind}_count@{suffix}"] for suffix in _FIXED32_HORIZONS
+        )
+
+
+def _fixed32_rich_episode_result(seed: int) -> TrainingBatchResult:
+    result = _result(1.0)
+    metrics = dict(result.metrics)
+    for suffix in ("0.750s", "1.000s"):
+        metrics.update(
+            {
+                name.replace("@0.500s", f"@{suffix}"): value
+                for name, value in tuple(metrics.items())
+                if "@0.500s" in name
+            }
+        )
+    metrics["physical_position_coverage90_hit_count"] = sum(
+        metrics[f"physical_rollout_position_coverage90@{suffix}_hit_count"]
+        for suffix in _FIXED32_HORIZONS
+    )
+    metrics["physical_position_coverage90_coordinate_count"] = sum(
+        metrics[f"physical_rollout_position_coverage90@{suffix}_coordinate_count"]
+        for suffix in _FIXED32_HORIZONS
+    )
+    for suffix in _FIXED32_HORIZONS:
+        metrics[f"physical_collision_true_positive_count@{suffix}"] = 1.0
+        metrics[f"physical_collision_false_positive_count@{suffix}"] = 0.0
+        metrics[f"physical_collision_false_negative_count@{suffix}"] = 0.0
+        metrics[f"physical_collision_true_negative_count@{suffix}"] = 1.0
+
+    # Reproduce the real elastic fixed-manifest shape: every episode lacks a
+    # positive collision label at at least one horizon, while the four pooled
+    # episodes jointly contain both event classes at every horizon.
+    elastic_missing_horizon = {
+        100002: "0.250s",
+        100010: "0.500s",
+        100018: "0.100s",
+        100026: "0.750s",
+    }.get(seed)
+    if elastic_missing_horizon is not None:
+        metrics[f"physical_collision_true_positive_count@{elastic_missing_horizon}"] = 0.0
+        metrics[f"physical_collision_false_negative_count@{elastic_missing_horizon}"] = 0.0
+    _recompute_pooled_event_counts(metrics)
+    return replace(result, metrics=metrics)
+
+
+def test_fixed32_core_episode_support_retains_all_rich_scenario_slices(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _fixed32_support_config()
+    scenarios = tuple(config.simulator.scenario_mixture)
+
+    def fake_validation(
+        model: object,
+        batch: dict[str, object],
+        validation_config: object,
+        *,
+        closed_loop: bool,
+    ) -> TrainingBatchResult:
+        del model
+        assert validation_config is config
+        assert closed_loop
+        seed = int(batch["seed"].item())  # type: ignore[union-attr]
+        return _fixed32_rich_episode_result(seed)
+
+    monkeypatch.setattr(
+        "world_model.training.trainer._validation_step",
+        fake_validation,
+    )
+    loader = [
+        {
+            "rgb": torch.ones((1, 3, 3, 8, 8)),
+            "timestamps": torch.zeros((1, 3)),
+            "seed": torch.tensor([seed]),
+            "metadata": {"scenario": [scenarios[seed % len(scenarios)]]},
+        }
+        for seed in range(100000, 100032)
+    ]
+
+    result = _validation_loader_result(
+        _ModeOnlyModel(),  # type: ignore[arg-type]
+        loader,  # type: ignore[arg-type]
+        config,
+        device=torch.device("cpu"),
+        closed_loop=True,
+    )
+
+    assert (
+        sum(
+            result.metrics[f"seed_{seed}_selection_metric_supported"]
+            for seed in range(100000, 100032)
+        )
+        == 32.0
+    )
+    for scenario in _selection_scenario_slugs(config):
+        assert result.metrics[f"scenario_{scenario}_supported_episode_count"] == 4.0
+        assert result.metrics[f"scenario_{scenario}_selection_metric_supported"] == 1.0
+        assert f"scenario_{scenario}_validation_collision_f1@1.000s" in result.metrics
+        assert (
+            f"scenario_{scenario}_validation_forecast_identity_mismatch_rate@1.000s"
+            in result.metrics
+        )
+    elastic_seeds = (100002, 100010, 100018, 100026)
+    assert all(
+        any(
+            episode.metrics[f"physical_collision_true_positive_count@{suffix}"]
+            + episode.metrics[f"physical_collision_false_negative_count@{suffix}"]
+            == 0.0
+            for suffix in _FIXED32_HORIZONS
+        )
+        for episode in (_fixed32_rich_episode_result(seed) for seed in elastic_seeds)
+    )
+    assert _validate_validation_support_schema(result.metrics, config) == 1.0
+    selector = _rollout_selection_metrics(result.metrics, config, require_scenarios=True)
+    assert len(selector.scenario_slices) == 8
+    assert all(selection is not None for selection in selector.scenario_slices.values())
+
+
+@pytest.mark.parametrize("missing_support", ("event_positive_class", "forecast_identity"))
+def test_scenario_rich_support_remains_fail_closed_after_core_episode_support(
+    missing_support: str,
+) -> None:
+    config = _fixed32_support_config()
+    results = [_fixed32_rich_episode_result(seed) for seed in (100002, 100010, 100018, 100026)]
+    for result in results:
+        if missing_support == "event_positive_class":
+            result.metrics["physical_collision_true_positive_count@0.100s"] = 0.0
+            result.metrics["physical_collision_false_negative_count@0.100s"] = 0.0
+            _recompute_pooled_event_counts(result.metrics)
+        else:
+            result.metrics["physical_forecast_identity_association_count@0.100s"] = 0.0
+            result.metrics["physical_forecast_identity_mismatch_count@0.100s"] = 0.0
+        assert _core_causal_trajectory_episode_supported(result, config)
+
+    aggregate = _aggregate_physical_validation_metrics(
+        results,
+        config,
+        minimum_predictable_target_count=(
+            config.training.validation_minimum_predictable_target_count_per_scenario_horizon
+        ),
+        minimum_matched_target_count=(
+            config.training.validation_minimum_matched_target_count_per_scenario_horizon
+        ),
+    )
+
+    assert aggregate["selection_metric_supported"] == 0.0
+    assert not any(name.startswith("validation_") for name in aggregate)
+
+
+def test_core_episode_support_rejects_missing_rich_additive_schema() -> None:
+    config = _fixed32_support_config()
+    result = _fixed32_rich_episode_result(100002)
+    del result.metrics["physical_forecast_identity_eligible_count@0.100s"]
+
+    with pytest.raises(RuntimeError, match="physical_forecast_identity_eligible_count@0.100s"):
+        _core_causal_trajectory_episode_supported(result, config)
+
+
+@pytest.mark.parametrize(
+    "metric_name",
+    [
+        "physical_state_velocity_x_sse",
+        "physical_rollout_velocity_x@0.500s_sse",
+        "physical_rollout_position_x@0.500s_gaussian_nll_sum",
+        "physical_rollout_position_x@0.500s_calibration_coordinate_count",
+    ],
+)
+def test_additive_physical_axis_partitions_must_match_pooled_evidence(
+    metric_name: str,
+) -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    evidence = dict(_result(1.0).metrics)
+    evidence[metric_name] += 1.0
+
+    with pytest.raises(ValueError, match="does not equal its x/y/z"):
+        physical_validation_metrics(evidence, config)
 
 
 def test_closed_loop_validation_uses_the_full_episode(

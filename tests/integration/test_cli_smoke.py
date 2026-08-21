@@ -314,7 +314,7 @@ def test_train_resume_and_evaluate_cli_rgb_only(tmp_path):
     assert "forecast_predictable_target_count@0.050s" in report["metrics"]
     assert report["metrics"]["forecast_censored_tracked_count@0.050s"] == 0.0
     assert report["metadata"]["per_scenario_metrics_schema"] == (
-        "clean_primary_additive_support_diagnostic_v2"
+        "clean_primary_additive_support_diagnostic_v3"
     )
     assert report["metadata"]["per_scenario_metrics_status"] == (
         "diagnostic_only_not_checkpoint_promotion_complete"

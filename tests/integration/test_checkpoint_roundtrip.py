@@ -23,7 +23,11 @@ from world_model.training.loop import (
     move_batch_to_device,
     pretrain_rgb_measurements,
 )
-from world_model.training.trainer import train_from_config
+from world_model.training.trainer import (
+    _ROLLOUT_SELECTION_METRIC_VERSION,
+    _validation_protocol_checkpoint_metrics,
+    train_from_config,
+)
 from world_model.utils.config import load_config
 from world_model.utils.device import select_device
 from world_model.utils.version import SIMULATOR_VERSION, SPECIFICATION_VERSION
@@ -1087,6 +1091,10 @@ def test_trainer_rejects_checkpoint_from_different_execution_device(
         optimizer=None,
         config=config,
         step=1,
+        metrics={
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
+            **_validation_protocol_checkpoint_metrics(config),
+        },
         device="mps",
     )
 
@@ -1128,7 +1136,11 @@ def test_already_complete_resume_does_not_rewrite_historical_device_checkpoint(
         optimizer=None,
         config=config,
         step=1,
-        metrics={"measurement_handoff_completed": 1.0},
+        metrics={
+            "measurement_handoff_completed": 1.0,
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
+            **_validation_protocol_checkpoint_metrics(config),
+        },
         device="mps",
     )
     original_bytes = checkpoint.read_bytes()
@@ -1189,6 +1201,8 @@ def test_already_complete_resume_to_new_run_writes_truthful_no_op_summary(
         metrics={
             "loss_total": 3.5,
             "measurement_handoff_completed": 1.0,
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
+            **_validation_protocol_checkpoint_metrics(config),
         },
         device="mps",
     )

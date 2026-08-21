@@ -139,6 +139,10 @@ def test_four_consecutive_rejections_with_subthreshold_gain_are_a_plateau() -> N
     )
 
     assert decision.status == "plateau"
+    assert decision.optimization_plateau_reached
+    assert decision.trainer_stop_recommended
+    assert not decision.comprehensive_promotion_eligible
+    assert not decision.converged
     assert decision.plateau_primary_gain is not None
     assert decision.plateau_primary_gain < 0.01
     assert decision.plateau_candidate_accepted == (False, False, False, False)
@@ -274,6 +278,40 @@ def test_plateau_at_hard_limit_is_still_reported_as_plateau() -> None:
 
     assert decision.status == "plateau"
     assert decision.next_total_steps is None
+
+
+def test_plateau_report_stops_optimization_without_claiming_full_convergence(
+    tmp_path,
+) -> None:
+    decision = _decision(
+        _inspection(
+            16384,
+            [
+                (0, 0.80, True),
+                (14336, 0.6800, True),
+                (14848, 0.6790, False),
+                (15360, 0.6780, False),
+                (15872, 0.6770, False),
+                (16384, 0.6760, False),
+            ],
+        )
+    )
+    report_path = tmp_path / "convergence_report.json"
+
+    supervise_convergence._write_report(
+        report_path,
+        decision,
+        config_path=tmp_path / "config.yaml",
+        run_directory=tmp_path / "run",
+    )
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["status"] == "plateau"
+    assert report["optimization_plateau_reached"] is True
+    assert report["trainer_stop_recommended"] is True
+    assert report["latency_guardrail_supported"] is False
+    assert report["comprehensive_promotion_eligible"] is False
+    assert report["converged"] is False
 
 
 def test_minimum_causal_coverage_must_finish_before_a_decision() -> None:
@@ -646,6 +684,9 @@ def _physical_metrics(config: OrpheusConfig, *, scale: float):
         "validation_collision_f1": 0.6,
         "validation_id_switch_rate": 0.0,
         "validation_position_coverage90": 0.9,
+        "validation_current_position_coverage90": 0.9,
+        "validation_current_position_gaussian_nll": 0.1,
+        "validation_current_position_sharpness_std": 1.0,
         "physical_state_position_sse": position_rmse**2 * 300.0,
         "physical_state_position_coordinate_count": 300.0,
         "physical_state_velocity_sse": 0.8**2 * 300.0,
@@ -657,21 +698,47 @@ def _physical_metrics(config: OrpheusConfig, *, scale: float):
         "physical_distance_gated_object_frame_associations": 100.0,
         "physical_position_coverage90_hit_count": 270.0,
         "physical_position_coverage90_coordinate_count": 300.0,
+        "physical_state_position_coverage90_hit_count": 270.0,
+        "physical_state_position_coverage90_coordinate_count": 300.0,
+        "physical_state_position_gaussian_nll_sum": 30.0,
+        "physical_state_position_sharpness_std_sum": 300.0,
+        "physical_state_position_calibration_coordinate_count": 300.0,
         "physical_collision_true_positive_count": 3.0,
         "physical_collision_false_positive_count": 2.0,
         "physical_collision_false_negative_count": 2.0,
     }
     for axis in ("x", "y", "z"):
         metrics[f"validation_position_rmse_{axis}_m"] = position_rmse
+        metrics[f"validation_velocity_rmse_{axis}_mps"] = 0.8
+        metrics[f"validation_current_position_gaussian_nll_{axis}"] = 0.1
+        metrics[f"validation_current_position_sharpness_std_{axis}"] = 1.0
         metrics[f"physical_state_position_{axis}_sse"] = position_rmse**2 * 100.0
         metrics[f"physical_state_position_{axis}_coordinate_count"] = 100.0
-    for index, (suffix, _) in enumerate(_selection_horizon_keys(config)):
+        metrics[f"physical_state_velocity_{axis}_sse"] = 0.8**2 * 100.0
+        metrics[f"physical_state_velocity_{axis}_coordinate_count"] = 100.0
+        metrics[f"physical_state_position_{axis}_gaussian_nll_sum"] = 10.0
+        metrics[f"physical_state_position_{axis}_sharpness_std_sum"] = 100.0
+        metrics[f"physical_state_position_{axis}_calibration_coordinate_count"] = 100.0
+    horizon_entries = tuple(_selection_horizon_keys(config))
+    for index, (suffix, _) in enumerate(horizon_entries):
         horizon_rmse = scale * (0.4 - 0.05 * index)
         metrics[f"validation_position_rmse@{suffix}"] = horizon_rmse
         metrics[f"validation_forecast_target_coverage@{suffix}"] = 0.9
+        metrics[f"validation_velocity_rmse@{suffix}"] = 0.8
+        metrics[f"validation_collision_f1@{suffix}"] = 0.6
+        metrics[f"validation_forecast_identity_association_coverage@{suffix}"] = 1.0
+        metrics[f"validation_forecast_identity_mismatch_rate@{suffix}"] = 0.0
+        metrics[f"validation_position_coverage90@{suffix}"] = 0.9
+        metrics[f"validation_position_gaussian_nll@{suffix}"] = 0.1
+        metrics[f"validation_position_sharpness_std@{suffix}"] = 1.0
         metrics[f"physical_rollout_position@{suffix}_sse"] = horizon_rmse**2 * 30.0
         metrics[f"physical_forecast_predictable_target_count@{suffix}"] = 10.0
         metrics[f"physical_rollout_position@{suffix}_coordinate_count"] = 30.0
+        metrics[f"physical_rollout_velocity@{suffix}_sse"] = 0.8**2 * 30.0
+        metrics[f"physical_rollout_velocity@{suffix}_coordinate_count"] = 30.0
+        metrics[f"physical_rollout_position@{suffix}_gaussian_nll_sum"] = 3.0
+        metrics[f"physical_rollout_position@{suffix}_sharpness_std_sum"] = 30.0
+        metrics[f"physical_rollout_position@{suffix}_calibration_coordinate_count"] = 30.0
         metrics[f"physical_rollout_position_coverage90@{suffix}_hit_count"] = 27.0
         metrics[f"physical_rollout_position_coverage90@{suffix}_coordinate_count"] = 30.0
         metrics[f"physical_forecast_active_count@{suffix}"] = 9.0
@@ -679,10 +746,34 @@ def _physical_metrics(config: OrpheusConfig, *, scale: float):
         metrics[f"physical_forecast_target_count@{suffix}"] = 10.0
         metrics[f"physical_rollout_predictable_target_count@{suffix}"] = 10.0
         metrics[f"physical_rollout_censored_external_actuation_count@{suffix}"] = 0.0
+        metrics[f"physical_forecast_identity_mismatch_count@{suffix}"] = 0.0
+        metrics[f"physical_forecast_identity_eligible_count@{suffix}"] = 9.0
+        metrics[f"physical_forecast_identity_association_count@{suffix}"] = 9.0
+        metrics[f"physical_collision_true_positive_count@{suffix}"] = 3.0
+        metrics[f"physical_collision_false_positive_count@{suffix}"] = 2.0
+        metrics[f"physical_collision_false_negative_count@{suffix}"] = 2.0
+        metrics[f"physical_collision_true_negative_count@{suffix}"] = 3.0
         for axis in ("x", "y", "z"):
             metrics[f"validation_position_rmse_{axis}@{suffix}"] = horizon_rmse
+            metrics[f"validation_velocity_rmse_{axis}@{suffix}"] = 0.8
+            metrics[f"validation_position_gaussian_nll_{axis}@{suffix}"] = 0.1
+            metrics[f"validation_position_sharpness_std_{axis}@{suffix}"] = 1.0
             metrics[f"physical_rollout_position_{axis}@{suffix}_sse"] = horizon_rmse**2 * 10.0
             metrics[f"physical_rollout_position_{axis}@{suffix}_coordinate_count"] = 10.0
+            metrics[f"physical_rollout_velocity_{axis}@{suffix}_sse"] = 0.8**2 * 10.0
+            metrics[f"physical_rollout_velocity_{axis}@{suffix}_coordinate_count"] = 10.0
+            metrics[f"physical_rollout_position_{axis}@{suffix}_gaussian_nll_sum"] = 1.0
+            metrics[f"physical_rollout_position_{axis}@{suffix}_sharpness_std_sum"] = 10.0
+            metrics[f"physical_rollout_position_{axis}@{suffix}_calibration_coordinate_count"] = (
+                10.0
+            )
+    horizon_count = float(len(horizon_entries))
+    metrics["physical_position_coverage90_hit_count"] = 27.0 * horizon_count
+    metrics["physical_position_coverage90_coordinate_count"] = 30.0 * horizon_count
+    metrics["physical_collision_true_positive_count"] = 3.0 * horizon_count
+    metrics["physical_collision_false_positive_count"] = 2.0 * horizon_count
+    metrics["physical_collision_false_negative_count"] = 2.0 * horizon_count
+    metrics["physical_collision_true_negative_count"] = 3.0 * horizon_count
     base = dict(metrics)
     manifest = make_seed_manifest("validation", config.training.validation_episodes)
     scenario_slugs = _selection_scenario_slugs(config)
@@ -732,6 +823,10 @@ def _selector_metrics(
     )
     return {
         **_physical_metrics(config, scale=candidate_scale),
+        "latency_guardrail_supported": 0.0,
+        "latency_guardrail_passed": 0.0,
+        "comprehensive_promotion_eligible": 0.0,
+        "selection_scope": "fixed_physical_incumbent_not_comprehensive_promotion",
         "selection_accepted": float(accepted),
         "selection_training_support_required": 1.0,
         "selection_training_support_passed": 1.0,
@@ -839,6 +934,9 @@ def test_completed_campaign_requires_linked_numbered_selector_provenance(tmp_pat
 
     assert inspection.completed_steps == 12288
     assert inspection.best_step == 11776
+    assert not inspection.latency_guardrail_supported
+    assert not inspection.latency_guardrail_passed
+    assert not inspection.comprehensive_promotion_eligible
     assert [item.step for item in inspection.accepted_validations] == [0, 11776]
     assert [item.step for item in inspection.validation_candidates] == [0, 11264, 11776]
     assert inspection.validation_candidates[1].accepted is False
@@ -852,4 +950,17 @@ def test_completed_campaign_rejects_tampered_numbered_tensor_hash(tmp_path) -> N
     torch.save(payload, path)
 
     with pytest.raises(ValueError, match="tensor hash mismatch"):
+        inspect_completed_campaign(run, config)
+
+
+def test_completed_campaign_rejects_comprehensive_claim_without_latency_gate(
+    tmp_path,
+) -> None:
+    run, config = _write_completed_campaign(tmp_path)
+    last_path = run / "checkpoints" / "last.pt"
+    payload = torch.load(last_path, map_location="cpu", weights_only=False)
+    payload["metrics"]["comprehensive_promotion_eligible"] = 1.0
+    torch.save(payload, last_path)
+
+    with pytest.raises(ValueError, match="requires a passed paired latency"):
         inspect_completed_campaign(run, config)

@@ -86,6 +86,10 @@ class MaskedVelocityErrorAccumulator:
                     f"{prefix}_velocity_{label}_mae_mps": (
                         self.axis_absolute_sum[axis] / count if count else None
                     ),
+                    f"{prefix}_velocity_{label}_sse": self.axis_squared_sum[axis],
+                    f"{prefix}_velocity_{label}_absolute_error_sum_mps": (
+                        self.axis_absolute_sum[axis]
+                    ),
                     f"{prefix}_velocity_{label}_count": float(count),
                 }
             )
@@ -94,6 +98,8 @@ class MaskedVelocityErrorAccumulator:
                 {
                     f"{prefix}_velocity_rmse_mps": None,
                     f"{prefix}_velocity_mae_mps": None,
+                    f"{prefix}_velocity_sse": self.squared_sum,
+                    f"{prefix}_velocity_absolute_error_sum_mps": self.absolute_sum,
                     f"{prefix}_velocity_coordinate_count": 0.0,
                     f"{prefix}_velocity_object_frame_count": 0.0,
                 }
@@ -103,6 +109,8 @@ class MaskedVelocityErrorAccumulator:
             {
                 f"{prefix}_velocity_rmse_mps": math.sqrt(self.squared_sum / self.coordinate_count),
                 f"{prefix}_velocity_mae_mps": self.absolute_sum / self.coordinate_count,
+                f"{prefix}_velocity_sse": self.squared_sum,
+                f"{prefix}_velocity_absolute_error_sum_mps": self.absolute_sum,
                 f"{prefix}_velocity_coordinate_count": float(self.coordinate_count),
                 f"{prefix}_velocity_object_frame_count": float(self.object_frame_count),
             }

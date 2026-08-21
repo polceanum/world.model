@@ -46,11 +46,17 @@ def test_current_velocity_error_is_coordinate_wise_under_exact_mask() -> None:
     metrics = accumulator.metrics("posterior_current")
     assert metrics["posterior_current_velocity_rmse_mps"] == pytest.approx(math.sqrt(14.0 / 3.0))
     assert metrics["posterior_current_velocity_mae_mps"] == pytest.approx(2.0)
+    assert metrics["posterior_current_velocity_sse"] == pytest.approx(14.0)
+    assert metrics["posterior_current_velocity_absolute_error_sum_mps"] == pytest.approx(6.0)
     assert metrics["posterior_current_velocity_coordinate_count"] == 3.0
     assert metrics["posterior_current_velocity_object_frame_count"] == 1.0
     assert metrics["posterior_current_velocity_x_rmse_mps"] == 1.0
     assert metrics["posterior_current_velocity_y_rmse_mps"] == 2.0
     assert metrics["posterior_current_velocity_z_rmse_mps"] == 3.0
+    assert metrics["posterior_current_velocity_x_sse"] == pytest.approx(1.0)
+    assert metrics["posterior_current_velocity_y_sse"] == pytest.approx(4.0)
+    assert metrics["posterior_current_velocity_z_sse"] == pytest.approx(9.0)
+    assert metrics["posterior_current_velocity_y_absolute_error_sum_mps"] == pytest.approx(2.0)
     assert metrics["posterior_current_velocity_x_count"] == 1.0
 
 

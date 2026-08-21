@@ -197,6 +197,43 @@ def test_recovery_probe_cannot_change_primary_metrics_or_posterior_trace(tmp_pat
         if name not in _RECOVERY_METRICS and "latency" not in name
     }
     assert clean_primary == probed_primary
+    expected_hashed_keys = sorted(clean_primary)
+    expected_primary_hash = hashlib.sha256(
+        json.dumps(
+            clean_primary,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    expected_hash_exclusions = {
+        "latency_metric_name_substring": "latency",
+        "recovery_only_metric_names": sorted(_RECOVERY_METRICS),
+    }
+    for metadata in (clean_metadata, probed_metadata):
+        assert metadata["primary_physical_metrics_hashed_keys"] == expected_hashed_keys
+        assert metadata["primary_physical_metrics_scope"] == (
+            "clean_primary_metrics_before_isolated_recovery_probe_append"
+        )
+        assert metadata["primary_physical_metrics_hash_excludes"] == expected_hash_exclusions
+        assert metadata["primary_physical_metrics_sha256"] == expected_primary_hash
+    assert "posterior_current_velocity_sse" in clean["metrics"]
+    for axis in ("x", "y", "z"):
+        assert f"posterior_current_velocity_{axis}_sse" in clean["metrics"]
+        assert f"posterior_current_position_{axis}_gaussian_nll_sum" in clean["metrics"]
+    for horizon in clean_metadata["per_scenario_metrics_horizons"]:
+        assert f"model@{horizon}_velocity_sse" in clean["metrics"]
+        assert f"collision@{horizon}_true_positive_count" in clean["metrics"]
+        assert f"model@{horizon}_position_gaussian_nll_sum" in clean["metrics"]
+        assert f"model@{horizon}_position_calibration_error90" in clean["metrics"]
+        assert f"forecast_identity@{horizon}_association_count" in clean["metrics"]
+        for axis in ("x", "y", "z"):
+            assert f"model@{horizon}_velocity_{axis}_sse" in clean["metrics"]
+            assert f"model@{horizon}_position_{axis}_gaussian_nll_sum" in clean["metrics"]
+    for prefix in ("rgb_global_update", "rgb_fast_update", "future_rollout"):
+        count = clean["metrics"][f"{prefix}_latency_sample_count"]
+        assert count >= 0.0
+        assert f"{prefix}_latency_sum_ms" in clean["metrics"]
     assert clean["metrics"]["injected_perturbation_batch_updates"] == 0.0
     assert clean["metrics"]["recovery_probe_evaluated_episodes"] == 0.0
     assert probed["metrics"]["injected_perturbation_batch_updates"] == 1.0

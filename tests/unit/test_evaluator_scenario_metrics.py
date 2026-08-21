@@ -8,7 +8,9 @@ import torch
 
 from world_model.evaluation.evaluator import (
     _BinaryAccumulator,
+    _CalibrationAccumulator,
     _ErrorAccumulator,
+    _ForecastIdentityAccumulator,
     _ScenarioEvaluationAccumulator,
 )
 from world_model.evaluation.reports import write_evaluation_report
@@ -27,6 +29,12 @@ def test_scenario_metrics_preserve_axis_event_identity_and_horizon_support() -> 
     )
     accumulator.current_velocity.update(
         torch.tensor([[[3.0, 4.0, 5.0], [99.0, 99.0, 99.0]]]),
+        zero,
+        object_mask,
+    )
+    accumulator.current_calibration.update(
+        torch.tensor([[[1.0, 2.0, 3.0], [99.0, 99.0, 99.0]]]),
+        torch.zeros_like(zero),
         zero,
         object_mask,
     )
@@ -65,6 +73,26 @@ def test_scenario_metrics_preserve_axis_event_identity_and_horizon_support() -> 
         zero,
         object_mask,
     )
+    accumulator.calibration_by_horizon[horizon] = _CalibrationAccumulator()
+    accumulator.calibration_by_horizon[horizon].update(
+        torch.tensor([[[1.0, 0.0, 0.0], [0.0, 0.0, 0.0]]]),
+        torch.zeros_like(zero),
+        zero,
+        object_mask,
+    )
+    accumulator.forecast_identity_by_horizon[horizon] = _ForecastIdentityAccumulator()
+    accumulator.forecast_identity_by_horizon[horizon].update(
+        torch.tensor([[11, -1]]),
+        torch.tensor([[12, -1]]),
+        object_mask,
+        object_mask,
+    )
+    accumulator.forecast_identity_by_horizon[horizon].update(
+        torch.tensor([[11, 77]]),
+        torch.tensor([[11, 88]]),
+        object_mask,
+        object_mask,
+    )
     event_logits = torch.tensor([[10.0, -10.0]])
     event_target = torch.tensor([[True, True]])
     event_mask = torch.tensor([[True, True]])
@@ -95,7 +123,18 @@ def test_scenario_metrics_preserve_axis_event_identity_and_horizon_support() -> 
     assert metrics[f"{prefix}posterior_current_velocity_rmse_mps"] == pytest.approx(
         math.sqrt(50.0 / 3.0)
     )
+    assert metrics[f"{prefix}posterior_current_velocity_sse"] == pytest.approx(50.0)
+    assert metrics[f"{prefix}posterior_current_velocity_x_sse"] == pytest.approx(9.0)
     assert metrics[f"{prefix}posterior_current_velocity_z_count"] == 1.0
+    expected_current_nll_sum = 0.5 * (14.0 + 3.0 * math.log(2.0 * math.pi))
+    assert metrics[f"{prefix}posterior_current_position_gaussian_nll_sum"] == pytest.approx(
+        expected_current_nll_sum
+    )
+    assert metrics[f"{prefix}posterior_current_position_sharpness_std_sum"] == 3.0
+    assert metrics[f"{prefix}posterior_current_position_calibration_coordinate_count"] == 3.0
+    assert metrics[f"{prefix}posterior_current_position_x_gaussian_nll_sum"] == pytest.approx(
+        0.5 * (1.0 + math.log(2.0 * math.pi))
+    )
     assert metrics[f"{prefix}current_assignment_target_coverage"] == pytest.approx(0.6)
     assert metrics[f"{prefix}current_detection_precision@0.500m"] == pytest.approx(0.5)
     assert metrics[f"{prefix}distance_gated_identity_switches"] == 1.0
@@ -107,6 +146,19 @@ def test_scenario_metrics_preserve_axis_event_identity_and_horizon_support() -> 
     assert metrics[f"{prefix}model@{horizon}_velocity_rmse_mps"] == pytest.approx(
         math.sqrt(4.0 / 3.0)
     )
+    assert metrics[f"{prefix}model@{horizon}_velocity_sse"] == pytest.approx(4.0)
+    assert metrics[f"{prefix}model@{horizon}_velocity_y_sse"] == pytest.approx(4.0)
+    assert metrics[f"{prefix}model@{horizon}_position_gaussian_nll_sum"] == pytest.approx(
+        0.5 * (1.0 + 3.0 * math.log(2.0 * math.pi))
+    )
+    assert metrics[f"{prefix}model@{horizon}_position_calibration_coordinate_count"] == 3.0
+    assert metrics[f"{prefix}model@{horizon}_position_coverage_90"] == 1.0
+    assert metrics[f"{prefix}model@{horizon}_position_calibration_error90"] == pytest.approx(0.1)
+    assert metrics[f"{prefix}forecast_identity@{horizon}_mismatch_count"] == 1.0
+    assert metrics[f"{prefix}forecast_identity@{horizon}_eligible_count"] == 2.0
+    assert metrics[f"{prefix}forecast_identity@{horizon}_association_count"] == 2.0
+    assert metrics[f"{prefix}forecast_identity@{horizon}_association_coverage"] == 1.0
+    assert metrics[f"{prefix}forecast_identity@{horizon}_mismatch_rate"] == 0.5
     assert metrics[f"{prefix}collision@{horizon}_true_positive_count"] == 1.0
     assert metrics[f"{prefix}collision@{horizon}_false_negative_count"] == 1.0
     assert metrics[f"{prefix}collision@{horizon}_f1"] == pytest.approx(2.0 / 3.0)
@@ -116,6 +168,12 @@ def test_scenario_metrics_preserve_axis_event_identity_and_horizon_support() -> 
     assert metrics[f"{prefix}forecast_evaluated_object_horizons@{horizon}"] == 1.0
     assert metrics[f"{prefix}model@0.250s_position_rmse_m"] is None
     assert metrics[f"{prefix}model@0.250s_position_coordinate_count"] == 0.0
+    assert metrics[f"{prefix}model@0.250s_position_gaussian_nll_sum"] == 0.0
+    assert metrics[f"{prefix}model@0.250s_position_calibration_error90"] is None
+    assert metrics[f"{prefix}forecast_identity@0.250s_association_count"] == 0.0
+    assert metrics[f"{prefix}forecast_identity@0.250s_eligible_count"] == 0.0
+    assert metrics[f"{prefix}forecast_identity@0.250s_association_coverage"] is None
+    assert metrics[f"{prefix}forecast_identity@0.250s_mismatch_rate"] is None
     assert metrics[f"{prefix}collision@0.250s_evaluated"] == 0.0
 
 
@@ -123,7 +181,7 @@ def test_scenario_metrics_are_persisted_in_json_and_markdown(tmp_path) -> None:
     metric_name = "scenario_baseline_model@1.000s_position_rmse_m"
     json_path, markdown_path = write_evaluation_report(
         tmp_path,
-        metadata={"per_scenario_metrics_schema": "clean_primary_additive_support_diagnostic_v2"},
+        metadata={"per_scenario_metrics_schema": "clean_primary_additive_support_diagnostic_v3"},
         metrics={metric_name: 0.125},
         limitations=[],
     )

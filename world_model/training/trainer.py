@@ -14,6 +14,7 @@ import shutil
 import sys
 import time
 from collections.abc import Iterator, Mapping
+from contextlib import suppress
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from numbers import Real
@@ -67,11 +68,11 @@ from world_model.utils.version import SIMULATOR_VERSION
 _SAFE_RUN_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _NUMBERED_VALIDATION_CHECKPOINT = re.compile(r"validation_step_(\d+)\.pt$")
 _ROLLOUT_SELECTION_MIN_DELTA = 1.0e-5
-_ROLLOUT_SELECTION_METRIC_VERSION = 6.0
+_ROLLOUT_SELECTION_METRIC_VERSION = 7.0
 _ROLLOUT_SELECTION_RELATIVE_GUARDRAIL = 0.02
 _ROLLOUT_SELECTION_COVERAGE_TOLERANCE = 0.005
 _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE = 0.02
-_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 15
+_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 16
 _NOMINAL_POSITION_COVERAGE = 0.90
 _MEASUREMENT_SELECTION_MIN_DELTA = 1.0e-5
 _MEASUREMENT_SELECTION_METRIC_VERSION = 5.0
@@ -92,6 +93,20 @@ _PHYSICAL_ADDITIVE_EXACT_METRICS = frozenset(
         "physical_distance_gated_object_frame_associations",
     }
 )
+
+
+def _trainer_unpaired_latency_evidence() -> dict[str, float | str]:
+    """Mark trainer selection as non-comprehensive without a paired timing control."""
+
+    return {
+        "latency_guardrail_supported": 0.0,
+        "latency_guardrail_passed": 0.0,
+        "latency_guardrail_promotion_eligible": 0.0,
+        "comprehensive_promotion_eligible": 0.0,
+        "selection_scope": "fixed_physical_incumbent_not_comprehensive_promotion",
+    }
+
+
 _MEASUREMENT_ADDITIVE_METRICS = frozenset(
     {
         "rgb_runtime_birth_true_positive_count_at_0_5m",
@@ -129,10 +144,17 @@ def _is_additive_physical_metric(name: str) -> bool:
 
     return name.startswith("physical_") and (
         name.endswith("_sse")
+        or name.endswith("_sum")
         or name.endswith("_count")
         or "_count@" in name
         or name in _PHYSICAL_ADDITIVE_EXACT_METRICS
     )
+
+
+def _is_signed_additive_physical_metric(name: str) -> bool:
+    """Whether an exact additive sum may validly be negative."""
+
+    return name.startswith("physical_") and name.endswith("_gaussian_nll_sum")
 
 
 _CAUSAL_TRAJECTORY_LOSS_TERMS = frozenset(
@@ -469,10 +491,28 @@ class _RolloutSelectionMetrics:
     id_switch_rate: float
     position_coverage90: float
     position_calibration_error90: float
+    current_position_coverage90: float
+    current_position_calibration_error90: float
+    current_position_gaussian_nll: float
+    current_position_sharpness_std: float
     horizon_position_rmse_m: dict[str, float]
     horizon_forecast_target_coverage: dict[str, float]
+    horizon_velocity_rmse_mps: dict[str, float]
+    horizon_collision_f1: dict[str, float]
+    horizon_forecast_identity_association_coverage: dict[str, float]
+    horizon_forecast_identity_mismatch_rate: dict[str, float]
+    horizon_position_coverage90: dict[str, float]
+    horizon_position_calibration_error90: dict[str, float]
+    horizon_position_gaussian_nll: dict[str, float]
+    horizon_position_sharpness_std: dict[str, float]
     axis_position_rmse_m: dict[str, float] = field(default_factory=dict)
+    axis_velocity_rmse_mps: dict[str, float] = field(default_factory=dict)
     horizon_axis_position_rmse_m: dict[str, dict[str, float]] = field(default_factory=dict)
+    horizon_axis_velocity_rmse_mps: dict[str, dict[str, float]] = field(default_factory=dict)
+    current_axis_position_gaussian_nll: dict[str, float] = field(default_factory=dict)
+    current_axis_position_sharpness_std: dict[str, float] = field(default_factory=dict)
+    horizon_axis_position_gaussian_nll: dict[str, dict[str, float]] = field(default_factory=dict)
+    horizon_axis_position_sharpness_std: dict[str, dict[str, float]] = field(default_factory=dict)
     # Every declared scenario is represented explicitly. ``None`` means that
     # the fixed validation slice had no complete physical forecast support and
     # therefore cannot authorize promotion.
@@ -489,6 +529,12 @@ class _RolloutSelectionMetrics:
             "validation_id_switch_rate": self.id_switch_rate,
             "validation_position_coverage90": self.position_coverage90,
             "validation_position_calibration_error90": self.position_calibration_error90,
+            "validation_current_position_coverage90": self.current_position_coverage90,
+            "validation_current_position_calibration_error90": (
+                self.current_position_calibration_error90
+            ),
+            "validation_current_position_gaussian_nll": self.current_position_gaussian_nll,
+            "validation_current_position_sharpness_std": self.current_position_sharpness_std,
             **{
                 f"validation_position_rmse@{suffix}": value
                 for suffix, value in self.horizon_position_rmse_m.items()
@@ -498,12 +544,71 @@ class _RolloutSelectionMetrics:
                 for suffix, value in self.horizon_forecast_target_coverage.items()
             },
             **{
+                f"validation_velocity_rmse@{suffix}": value
+                for suffix, value in self.horizon_velocity_rmse_mps.items()
+            },
+            **{
+                f"validation_collision_f1@{suffix}": value
+                for suffix, value in self.horizon_collision_f1.items()
+            },
+            **{
+                f"validation_forecast_identity_association_coverage@{suffix}": value
+                for suffix, value in self.horizon_forecast_identity_association_coverage.items()
+            },
+            **{
+                f"validation_forecast_identity_mismatch_rate@{suffix}": value
+                for suffix, value in self.horizon_forecast_identity_mismatch_rate.items()
+            },
+            **{
+                f"validation_position_coverage90@{suffix}": value
+                for suffix, value in self.horizon_position_coverage90.items()
+            },
+            **{
+                f"validation_position_calibration_error90@{suffix}": value
+                for suffix, value in self.horizon_position_calibration_error90.items()
+            },
+            **{
+                f"validation_position_gaussian_nll@{suffix}": value
+                for suffix, value in self.horizon_position_gaussian_nll.items()
+            },
+            **{
+                f"validation_position_sharpness_std@{suffix}": value
+                for suffix, value in self.horizon_position_sharpness_std.items()
+            },
+            **{
                 f"validation_position_rmse_{axis}_m": value
                 for axis, value in self.axis_position_rmse_m.items()
             },
             **{
                 f"validation_position_rmse_{axis}@{suffix}": value
                 for axis, horizons in self.horizon_axis_position_rmse_m.items()
+                for suffix, value in horizons.items()
+            },
+            **{
+                f"validation_velocity_rmse_{axis}_mps": value
+                for axis, value in self.axis_velocity_rmse_mps.items()
+            },
+            **{
+                f"validation_velocity_rmse_{axis}@{suffix}": value
+                for axis, horizons in self.horizon_axis_velocity_rmse_mps.items()
+                for suffix, value in horizons.items()
+            },
+            **{
+                f"validation_current_position_gaussian_nll_{axis}": value
+                for axis, value in self.current_axis_position_gaussian_nll.items()
+            },
+            **{
+                f"validation_current_position_sharpness_std_{axis}": value
+                for axis, value in self.current_axis_position_sharpness_std.items()
+            },
+            **{
+                f"validation_position_gaussian_nll_{axis}@{suffix}": value
+                for axis, horizons in self.horizon_axis_position_gaussian_nll.items()
+                for suffix, value in horizons.items()
+            },
+            **{
+                f"validation_position_sharpness_std_{axis}@{suffix}": value
+                for axis, horizons in self.horizon_axis_position_sharpness_std.items()
                 for suffix, value in horizons.items()
             },
         }
@@ -533,6 +638,12 @@ class _RolloutSelectionMetrics:
             f"{prefix}_id_switch_rate": self.id_switch_rate,
             f"{prefix}_position_coverage90": self.position_coverage90,
             f"{prefix}_position_calibration_error90": self.position_calibration_error90,
+            f"{prefix}_current_position_coverage90": self.current_position_coverage90,
+            f"{prefix}_current_position_calibration_error90": (
+                self.current_position_calibration_error90
+            ),
+            f"{prefix}_current_position_gaussian_nll": self.current_position_gaussian_nll,
+            f"{prefix}_current_position_sharpness_std": self.current_position_sharpness_std,
             **{
                 f"{prefix}_position_rmse@{suffix}": value
                 for suffix, value in self.horizon_position_rmse_m.items()
@@ -542,12 +653,71 @@ class _RolloutSelectionMetrics:
                 for suffix, value in self.horizon_forecast_target_coverage.items()
             },
             **{
+                f"{prefix}_velocity_rmse@{suffix}": value
+                for suffix, value in self.horizon_velocity_rmse_mps.items()
+            },
+            **{
+                f"{prefix}_collision_f1@{suffix}": value
+                for suffix, value in self.horizon_collision_f1.items()
+            },
+            **{
+                f"{prefix}_forecast_identity_association_coverage@{suffix}": value
+                for suffix, value in self.horizon_forecast_identity_association_coverage.items()
+            },
+            **{
+                f"{prefix}_forecast_identity_mismatch_rate@{suffix}": value
+                for suffix, value in self.horizon_forecast_identity_mismatch_rate.items()
+            },
+            **{
+                f"{prefix}_position_coverage90@{suffix}": value
+                for suffix, value in self.horizon_position_coverage90.items()
+            },
+            **{
+                f"{prefix}_position_calibration_error90@{suffix}": value
+                for suffix, value in self.horizon_position_calibration_error90.items()
+            },
+            **{
+                f"{prefix}_position_gaussian_nll@{suffix}": value
+                for suffix, value in self.horizon_position_gaussian_nll.items()
+            },
+            **{
+                f"{prefix}_position_sharpness_std@{suffix}": value
+                for suffix, value in self.horizon_position_sharpness_std.items()
+            },
+            **{
                 f"{prefix}_position_rmse_{axis}_m": value
                 for axis, value in self.axis_position_rmse_m.items()
             },
             **{
                 f"{prefix}_position_rmse_{axis}@{suffix}": value
                 for axis, horizons in self.horizon_axis_position_rmse_m.items()
+                for suffix, value in horizons.items()
+            },
+            **{
+                f"{prefix}_velocity_rmse_{axis}_mps": value
+                for axis, value in self.axis_velocity_rmse_mps.items()
+            },
+            **{
+                f"{prefix}_velocity_rmse_{axis}@{suffix}": value
+                for axis, horizons in self.horizon_axis_velocity_rmse_mps.items()
+                for suffix, value in horizons.items()
+            },
+            **{
+                f"{prefix}_current_position_gaussian_nll_{axis}": value
+                for axis, value in self.current_axis_position_gaussian_nll.items()
+            },
+            **{
+                f"{prefix}_current_position_sharpness_std_{axis}": value
+                for axis, value in self.current_axis_position_sharpness_std.items()
+            },
+            **{
+                f"{prefix}_position_gaussian_nll_{axis}@{suffix}": value
+                for axis, horizons in self.horizon_axis_position_gaussian_nll.items()
+                for suffix, value in horizons.items()
+            },
+            **{
+                f"{prefix}_position_sharpness_std_{axis}@{suffix}": value
+                for axis, horizons in self.horizon_axis_position_sharpness_std.items()
                 for suffix, value in horizons.items()
             },
         }
@@ -884,7 +1054,11 @@ def _validation_support_evidence(metrics: Mapping[str, Any]) -> dict[str, float]
         if not additive and not selection_support_marker and not scenario_episode_count:
             continue
         numeric = float(value)
-        if not math.isfinite(numeric) or numeric < 0:
+        signed_additive = _is_signed_additive_physical_metric(name) or (
+            scenario_physical_name is not None
+            and _is_signed_additive_physical_metric(scenario_physical_name)
+        )
+        if not math.isfinite(numeric) or (numeric < 0 and not signed_additive):
             raise ValueError(f"validation support evidence {name!r} must be finite/nonnegative")
         evidence[name] = numeric
     return evidence
@@ -915,11 +1089,155 @@ def _validate_validation_support_schema(
         return value
 
     def validate_horizon_support(prefix: str, *, supported: float) -> None:
+        current_position_count = count(f"{prefix}physical_state_position_coordinate_count")
+        current_velocity_count = count(f"{prefix}physical_state_velocity_coordinate_count")
+        if current_position_count != current_velocity_count:
+            raise ValueError(
+                f"validation slice {prefix!r} current position/velocity support differs"
+            )
+        current_axis_position_count = 0.0
+        current_axis_velocity_count = 0.0
+        current_axis_calibration_count = 0.0
+        for axis in ("x", "y", "z"):
+            axis_position_count = count(f"{prefix}physical_state_position_{axis}_coordinate_count")
+            axis_velocity_count = count(f"{prefix}physical_state_velocity_{axis}_coordinate_count")
+            axis_calibration_count = count(
+                f"{prefix}physical_state_position_{axis}_calibration_coordinate_count"
+            )
+            if axis_position_count != axis_velocity_count:
+                raise ValueError(
+                    f"validation slice {prefix!r} current {axis}-axis position/velocity "
+                    "support differs"
+                )
+            if axis_calibration_count != axis_position_count:
+                raise ValueError(
+                    f"validation slice {prefix!r} current {axis}-axis calibration/position "
+                    "support differs"
+                )
+            current_axis_position_count += axis_position_count
+            current_axis_velocity_count += axis_velocity_count
+            current_axis_calibration_count += axis_calibration_count
+        current_calibration_count = count(
+            f"{prefix}physical_state_position_calibration_coordinate_count"
+        )
+        current_coverage_count = count(
+            f"{prefix}physical_state_position_coverage90_coordinate_count"
+        )
+        if not (
+            current_position_count
+            == current_axis_position_count
+            == current_axis_velocity_count
+            == current_axis_calibration_count
+            == current_calibration_count
+            == current_coverage_count
+        ):
+            raise ValueError(
+                f"validation slice {prefix!r} current axis/uncertainty support partitions differ"
+            )
+        pooled_coverage_hits = count(f"{prefix}physical_position_coverage90_hit_count")
+        pooled_coverage_count = count(f"{prefix}physical_position_coverage90_coordinate_count")
+        horizon_coverage_hits = 0.0
+        horizon_coverage_count = 0.0
+        pooled_confusion = {
+            kind: count(f"{prefix}physical_collision_{kind}_count")
+            for kind in (
+                "true_positive",
+                "false_positive",
+                "false_negative",
+                "true_negative",
+            )
+        }
+        horizon_confusion = {kind: 0.0 for kind in pooled_confusion}
         for suffix, _ in _selection_horizon_keys(config):
             predictable_key = f"{prefix}physical_forecast_predictable_target_count@{suffix}"
             coordinate_key = f"{prefix}physical_rollout_position@{suffix}_coordinate_count"
+            velocity_coordinate_key = f"{prefix}physical_rollout_velocity@{suffix}_coordinate_count"
+            calibration_coordinate_key = (
+                f"{prefix}physical_rollout_position@{suffix}_calibration_coordinate_count"
+            )
+            identity_association_key = (
+                f"{prefix}physical_forecast_identity_association_count@{suffix}"
+            )
+            identity_eligible_key = f"{prefix}physical_forecast_identity_eligible_count@{suffix}"
+            identity_mismatch_key = f"{prefix}physical_forecast_identity_mismatch_count@{suffix}"
             predictable_count = count(predictable_key)
             coordinate_count = count(coordinate_key)
+            velocity_coordinate_count = count(velocity_coordinate_key)
+            calibration_coordinate_count = count(calibration_coordinate_key)
+            coverage_hit_count = count(
+                f"{prefix}physical_rollout_position_coverage90@{suffix}_hit_count"
+            )
+            coverage_coordinate_count = count(
+                f"{prefix}physical_rollout_position_coverage90@{suffix}_coordinate_count"
+            )
+            forecast_active_count = count(f"{prefix}physical_forecast_active_count@{suffix}")
+            identity_eligible_count = count(identity_eligible_key)
+            identity_association_count = count(identity_association_key)
+            identity_mismatch_count = count(identity_mismatch_key)
+            axis_position_count = 0.0
+            axis_velocity_count = 0.0
+            axis_calibration_count = 0.0
+            for axis in ("x", "y", "z"):
+                axis_position_count += count(
+                    f"{prefix}physical_rollout_position_{axis}@{suffix}_coordinate_count"
+                )
+                axis_velocity_count += count(
+                    f"{prefix}physical_rollout_velocity_{axis}@{suffix}_coordinate_count"
+                )
+                axis_calibration_count += count(
+                    f"{prefix}physical_rollout_position_{axis}@{suffix}_"
+                    "calibration_coordinate_count"
+                )
+            if not (
+                coordinate_count == velocity_coordinate_count == axis_position_count
+                and axis_velocity_count == coordinate_count
+            ):
+                raise ValueError(
+                    f"validation slice {prefix!r} position/velocity support differs at {suffix}"
+                )
+            if not (
+                calibration_coordinate_count == coverage_coordinate_count == axis_calibration_count
+            ):
+                raise ValueError(
+                    f"validation slice {prefix!r} calibration/coverage support differs at {suffix}"
+                )
+            if coverage_hit_count > coverage_coordinate_count:
+                raise ValueError(
+                    f"validation slice {prefix!r} coverage hits exceed support at {suffix}"
+                )
+            if not (
+                identity_mismatch_count
+                <= identity_association_count
+                <= identity_eligible_count
+                <= forecast_active_count
+            ):
+                raise ValueError(
+                    f"validation slice {prefix!r} forecast identity counts are inconsistent "
+                    f"at {suffix}"
+                )
+            horizon_coverage_hits += coverage_hit_count
+            horizon_coverage_count += coverage_coordinate_count
+            event_true_positive = count(f"{prefix}physical_collision_true_positive_count@{suffix}")
+            event_false_positive = count(
+                f"{prefix}physical_collision_false_positive_count@{suffix}"
+            )
+            event_false_negative = count(
+                f"{prefix}physical_collision_false_negative_count@{suffix}"
+            )
+            event_true_negative = count(f"{prefix}physical_collision_true_negative_count@{suffix}")
+            for kind, value in (
+                ("true_positive", event_true_positive),
+                ("false_positive", event_false_positive),
+                ("false_negative", event_false_negative),
+                ("true_negative", event_true_negative),
+            ):
+                horizon_confusion[kind] += value
+            event_evaluated_count = (
+                event_true_positive
+                + event_false_positive
+                + event_false_negative
+                + event_true_negative
+            )
             if supported == 1.0 and (
                 predictable_count
                 < config.training.validation_minimum_predictable_target_count_per_scenario_horizon
@@ -936,6 +1254,49 @@ def _validate_validation_support_schema(
                     f"supported validation slice {prefix!r} has "
                     f"{coordinate_count:g} matched coordinates at {suffix}"
                 )
+            if supported == 1.0 and velocity_coordinate_count < required_coordinates:
+                raise ValueError(
+                    f"supported validation slice {prefix!r} has "
+                    f"{velocity_coordinate_count:g} matched velocity coordinates at {suffix}"
+                )
+            if supported == 1.0 and calibration_coordinate_count < required_coordinates:
+                raise ValueError(
+                    f"supported validation slice {prefix!r} has "
+                    f"{calibration_coordinate_count:g} calibration coordinates at {suffix}"
+                )
+            if supported == 1.0 and identity_eligible_count <= 0:
+                raise ValueError(
+                    f"supported validation slice {prefix!r} has no forecast identity "
+                    f"eligibility at {suffix}"
+                )
+            if supported == 1.0 and identity_association_count <= 0:
+                raise ValueError(
+                    f"supported validation slice {prefix!r} has no forecast identity "
+                    f"associations at {suffix}"
+                )
+            if supported == 1.0 and event_evaluated_count <= 0:
+                raise ValueError(
+                    f"supported validation slice {prefix!r} has no event evidence at {suffix}"
+                )
+            if supported == 1.0 and event_true_positive + event_false_negative <= 0:
+                raise ValueError(
+                    f"supported validation slice {prefix!r} has no positive collision "
+                    f"labels at {suffix}"
+                )
+            if supported == 1.0 and event_false_positive + event_true_negative <= 0:
+                raise ValueError(
+                    f"supported validation slice {prefix!r} has no negative collision "
+                    f"labels at {suffix}"
+                )
+        if (
+            pooled_coverage_hits != horizon_coverage_hits
+            or pooled_coverage_count != horizon_coverage_count
+        ):
+            raise ValueError(f"validation slice {prefix!r} pooled coverage does not equal horizons")
+        if pooled_confusion != horizon_confusion:
+            raise ValueError(
+                f"validation slice {prefix!r} pooled collision confusion does not equal horizons"
+            )
 
     manifest = make_seed_manifest("validation", config.training.validation_episodes)
     scenario_slugs = _selection_scenario_slugs(config)
@@ -988,6 +1349,56 @@ def _validate_validation_support_schema(
                 f"declared scenario {scenario!r} claims support below its episode floor"
             )
 
+    pooled_additive_names = {name for name in metrics if _is_additive_physical_metric(name)}
+    scenario_additive_names: set[str] = set()
+    for scenario in scenario_slugs:
+        marker = f"scenario_{scenario}_physical_"
+        for name in metrics:
+            if name.startswith(marker):
+                physical_name = "physical_" + name.split(marker, 1)[1]
+                if _is_additive_physical_metric(physical_name):
+                    scenario_additive_names.add(physical_name)
+    if scenario_additive_names != pooled_additive_names:
+        missing_scenario = sorted(pooled_additive_names - scenario_additive_names)
+        missing_pooled = sorted(scenario_additive_names - pooled_additive_names)
+        raise ValueError(
+            "pooled/scenario additive validation fields differ: "
+            f"missing scenario fields={missing_scenario}, missing pooled fields={missing_pooled}"
+        )
+    for physical_name in sorted(pooled_additive_names):
+        pooled_value = float(metrics[physical_name])
+        scenario_values: list[float] = []
+        for scenario in scenario_slugs:
+            scenario_name = f"scenario_{scenario}_{physical_name}"
+            if scenario_name not in metrics:
+                raise RuntimeError(
+                    "closed-loop validation did not report required pooled/scenario "
+                    f"partition field {scenario_name!r}"
+                )
+            scenario_values.append(float(metrics[scenario_name]))
+        scenario_total = math.fsum(scenario_values)
+        count_metric = (
+            physical_name.endswith("_count")
+            or "_count@" in physical_name
+            or physical_name in _PHYSICAL_ADDITIVE_EXACT_METRICS
+        )
+        if count_metric:
+            if scenario_total != pooled_value:
+                raise ValueError(
+                    "pooled additive validation count does not equal scenario partition: "
+                    f"{physical_name}={pooled_value:g}, scenarios={scenario_total:g}"
+                )
+        elif not math.isclose(
+            scenario_total,
+            pooled_value,
+            rel_tol=1.0e-9,
+            abs_tol=1.0e-7,
+        ):
+            raise ValueError(
+                "pooled additive validation value does not equal scenario partition: "
+                f"{physical_name}={pooled_value:g}, scenarios={scenario_total:g}"
+            )
+
     return pooled_support
 
 
@@ -1007,6 +1418,9 @@ def _rollout_selection_metrics(
         "collision_f1": "validation_collision_f1",
         "id_switch_rate": "validation_id_switch_rate",
         "position_coverage90": "validation_position_coverage90",
+        "current_position_coverage90": "validation_current_position_coverage90",
+        "current_position_gaussian_nll": "validation_current_position_gaussian_nll",
+        "current_position_sharpness_std": "validation_current_position_sharpness_std",
     }
     missing = [metric_key for metric_key in required.values() if metric_key not in metrics]
     horizon_values: dict[str, float] = {}
@@ -1021,28 +1435,58 @@ def _rollout_selection_metrics(
         horizon_values[suffix] = value
         weighted_values.append(value)
         weights.append(weight)
-    horizon_coverage_values: dict[str, float] = {}
-    for suffix, _ in _selection_horizon_keys(config):
-        metric_key = f"validation_forecast_target_coverage@{suffix}"
-        if metric_key not in metrics:
-            missing.append(metric_key)
-            continue
-        horizon_coverage_values[suffix] = float(metrics[metric_key])
-    axis_values: dict[str, float] = {}
-    horizon_axis_values: dict[str, dict[str, float]] = {}
-    for axis in ("x", "y", "z"):
-        axis_key = f"validation_position_rmse_{axis}_m"
-        if axis_key not in metrics:
-            missing.append(axis_key)
-            continue
-        axis_values[axis] = float(metrics[axis_key])
-        horizon_axis_values[axis] = {}
+
+    def horizon_mapping(metric_stem: str) -> dict[str, float]:
+        values: dict[str, float] = {}
         for suffix, _ in _selection_horizon_keys(config):
-            metric_key = f"validation_position_rmse_{axis}@{suffix}"
+            metric_key = f"{metric_stem}@{suffix}"
             if metric_key not in metrics:
                 missing.append(metric_key)
             else:
-                horizon_axis_values[axis][suffix] = float(metrics[metric_key])
+                values[suffix] = float(metrics[metric_key])
+        return values
+
+    horizon_coverage_values = horizon_mapping("validation_forecast_target_coverage")
+    horizon_velocity_values = horizon_mapping("validation_velocity_rmse")
+    horizon_collision_values = horizon_mapping("validation_collision_f1")
+    horizon_identity_coverage_values = horizon_mapping(
+        "validation_forecast_identity_association_coverage"
+    )
+    horizon_identity_values = horizon_mapping("validation_forecast_identity_mismatch_rate")
+    horizon_position_coverage_values = horizon_mapping("validation_position_coverage90")
+    horizon_position_nll_values = horizon_mapping("validation_position_gaussian_nll")
+    horizon_position_sharpness_values = horizon_mapping("validation_position_sharpness_std")
+    axis_values: dict[str, float] = {}
+    axis_velocity_values: dict[str, float] = {}
+    current_axis_nll_values: dict[str, float] = {}
+    current_axis_sharpness_values: dict[str, float] = {}
+    horizon_axis_values: dict[str, dict[str, float]] = {}
+    horizon_axis_velocity_values: dict[str, dict[str, float]] = {}
+    horizon_axis_nll_values: dict[str, dict[str, float]] = {}
+    horizon_axis_sharpness_values: dict[str, dict[str, float]] = {}
+    for axis in ("x", "y", "z"):
+        for destination, metric_key in (
+            (axis_values, f"validation_position_rmse_{axis}_m"),
+            (axis_velocity_values, f"validation_velocity_rmse_{axis}_mps"),
+            (
+                current_axis_nll_values,
+                f"validation_current_position_gaussian_nll_{axis}",
+            ),
+            (
+                current_axis_sharpness_values,
+                f"validation_current_position_sharpness_std_{axis}",
+            ),
+        ):
+            if metric_key not in metrics:
+                missing.append(metric_key)
+            else:
+                destination[axis] = float(metrics[metric_key])
+        horizon_axis_values[axis] = horizon_mapping(f"validation_position_rmse_{axis}")
+        horizon_axis_velocity_values[axis] = horizon_mapping(f"validation_velocity_rmse_{axis}")
+        horizon_axis_nll_values[axis] = horizon_mapping(f"validation_position_gaussian_nll_{axis}")
+        horizon_axis_sharpness_values[axis] = horizon_mapping(
+            f"validation_position_sharpness_std_{axis}"
+        )
     if missing:
         raise RuntimeError(
             "closed-loop validation did not report broad selection metrics: "
@@ -1054,17 +1498,41 @@ def _rollout_selection_metrics(
         *values.values(),
         *horizon_values.values(),
         *horizon_coverage_values.values(),
+        *horizon_velocity_values.values(),
+        *horizon_collision_values.values(),
+        *horizon_identity_coverage_values.values(),
+        *horizon_identity_values.values(),
+        *horizon_position_coverage_values.values(),
+        *horizon_position_nll_values.values(),
+        *horizon_position_sharpness_values.values(),
         *axis_values.values(),
+        *axis_velocity_values.values(),
+        *current_axis_nll_values.values(),
+        *current_axis_sharpness_values.values(),
         *(value for horizons in horizon_axis_values.values() for value in horizons.values()),
+        *(
+            value
+            for horizons in horizon_axis_velocity_values.values()
+            for value in horizons.values()
+        ),
+        *(value for horizons in horizon_axis_nll_values.values() for value in horizons.values()),
+        *(
+            value
+            for horizons in horizon_axis_sharpness_values.values()
+            for value in horizons.values()
+        ),
     ]
     if any(not math.isfinite(value) for value in finite_values):
         raise FloatingPointError("closed-loop broad selection metrics must all be finite")
     if values["position_rmse_m"] < 0 or values["velocity_rmse_mps"] < 0:
         raise ValueError("physical validation RMSE metrics must be nonnegative")
-    if any(value < 0 for value in horizon_values.values()):
+    if any(value < 0 for value in (*horizon_values.values(), *horizon_velocity_values.values())):
         raise ValueError("per-horizon validation RMSE metrics must be nonnegative")
-    if any(value < 0 for value in axis_values.values()) or any(
-        value < 0 for horizons in horizon_axis_values.values() for value in horizons.values()
+    if any(value < 0 for value in (*axis_values.values(), *axis_velocity_values.values())) or any(
+        value < 0
+        for horizon_group in (horizon_axis_values, horizon_axis_velocity_values)
+        for horizons in horizon_group.values()
+        for value in horizons.values()
     ):
         raise ValueError("per-axis validation RMSE metrics must be nonnegative")
     for name in (
@@ -1073,11 +1541,30 @@ def _rollout_selection_metrics(
         "collision_f1",
         "id_switch_rate",
         "position_coverage90",
+        "current_position_coverage90",
     ):
         if not 0.0 <= values[name] <= 1.0:
             raise ValueError(f"validation {name} must lie in [0, 1]")
-    if any(not 0.0 <= value <= 1.0 for value in horizon_coverage_values.values()):
-        raise ValueError("per-horizon forecast target coverage must lie in [0, 1]")
+    bounded_horizon_groups = {
+        "forecast target coverage": horizon_coverage_values,
+        "collision F1": horizon_collision_values,
+        "forecast identity association coverage": horizon_identity_coverage_values,
+        "forecast identity mismatch rate": horizon_identity_values,
+        "position coverage90": horizon_position_coverage_values,
+    }
+    for name, horizon_group in bounded_horizon_groups.items():
+        if any(not 0.0 <= value <= 1.0 for value in horizon_group.values()):
+            raise ValueError(f"per-horizon validation {name} must lie in [0, 1]")
+    if values["current_position_sharpness_std"] < 0 or any(
+        value < 0
+        for horizon_group in (
+            horizon_position_sharpness_values,
+            current_axis_sharpness_values,
+            *horizon_axis_sharpness_values.values(),
+        )
+        for value in horizon_group.values()
+    ):
+        raise ValueError("validation sharpness metrics must be nonnegative")
     weight_total = sum(weights)
     if not math.isfinite(weight_total) or weight_total <= 0:
         raise ValueError("checkpoint-selection horizon weights must sum to a positive value")
@@ -1097,10 +1584,33 @@ def _rollout_selection_metrics(
         position_calibration_error90=abs(
             values["position_coverage90"] - _NOMINAL_POSITION_COVERAGE
         ),
+        current_position_coverage90=values["current_position_coverage90"],
+        current_position_calibration_error90=abs(
+            values["current_position_coverage90"] - _NOMINAL_POSITION_COVERAGE
+        ),
+        current_position_gaussian_nll=values["current_position_gaussian_nll"],
+        current_position_sharpness_std=values["current_position_sharpness_std"],
         horizon_position_rmse_m=horizon_values,
         horizon_forecast_target_coverage=horizon_coverage_values,
+        horizon_velocity_rmse_mps=horizon_velocity_values,
+        horizon_collision_f1=horizon_collision_values,
+        horizon_forecast_identity_association_coverage=(horizon_identity_coverage_values),
+        horizon_forecast_identity_mismatch_rate=horizon_identity_values,
+        horizon_position_coverage90=horizon_position_coverage_values,
+        horizon_position_calibration_error90={
+            suffix: abs(value - _NOMINAL_POSITION_COVERAGE)
+            for suffix, value in horizon_position_coverage_values.items()
+        },
+        horizon_position_gaussian_nll=horizon_position_nll_values,
+        horizon_position_sharpness_std=horizon_position_sharpness_values,
         axis_position_rmse_m=axis_values,
+        axis_velocity_rmse_mps=axis_velocity_values,
         horizon_axis_position_rmse_m=horizon_axis_values,
+        horizon_axis_velocity_rmse_mps=horizon_axis_velocity_values,
+        current_axis_position_gaussian_nll=current_axis_nll_values,
+        current_axis_position_sharpness_std=current_axis_sharpness_values,
+        horizon_axis_position_gaussian_nll=horizon_axis_nll_values,
+        horizon_axis_position_sharpness_std=horizon_axis_sharpness_values,
     )
     if not require_scenarios:
         return selection
@@ -1158,34 +1668,72 @@ def _rollout_selection_from_checkpoint(
         "validation_collision_f1": f"{prefix}_collision_f1",
         "validation_id_switch_rate": f"{prefix}_id_switch_rate",
         "validation_position_coverage90": f"{prefix}_position_coverage90",
+        "validation_current_position_coverage90": f"{prefix}_current_position_coverage90",
+        "validation_current_position_gaussian_nll": (f"{prefix}_current_position_gaussian_nll"),
+        "validation_current_position_sharpness_std": (f"{prefix}_current_position_sharpness_std"),
     }
     for output_key, checkpoint_key in aliases.items():
         if checkpoint_key not in metrics:
             return None
         translated[output_key] = float(metrics[checkpoint_key])
     for suffix, _ in _selection_horizon_keys(config):
-        checkpoint_key = f"{prefix}_position_rmse@{suffix}"
-        if checkpoint_key not in metrics:
-            return None
-        translated[f"validation_position_rmse@{suffix}"] = float(metrics[checkpoint_key])
-        coverage_key = f"{prefix}_forecast_target_coverage@{suffix}"
-        if coverage_key not in metrics:
-            return None
-        translated[f"validation_forecast_target_coverage@{suffix}"] = float(metrics[coverage_key])
-    axis_checkpoint_keys = [f"{prefix}_position_rmse_{axis}_m" for axis in ("x", "y", "z")]
-    if not all(key in metrics for key in axis_checkpoint_keys):
-        return None
-    for axis, checkpoint_key in zip(
-        ("x", "y", "z"),
-        axis_checkpoint_keys,
-        strict=True,
-    ):
-        translated[f"validation_position_rmse_{axis}_m"] = float(metrics[checkpoint_key])
-        for suffix, _ in _selection_horizon_keys(config):
-            horizon_key = f"{prefix}_position_rmse_{axis}@{suffix}"
-            if horizon_key not in metrics:
+        for output_stem, checkpoint_stem in (
+            ("validation_position_rmse", f"{prefix}_position_rmse"),
+            ("validation_forecast_target_coverage", f"{prefix}_forecast_target_coverage"),
+            ("validation_velocity_rmse", f"{prefix}_velocity_rmse"),
+            ("validation_collision_f1", f"{prefix}_collision_f1"),
+            (
+                "validation_forecast_identity_association_coverage",
+                f"{prefix}_forecast_identity_association_coverage",
+            ),
+            (
+                "validation_forecast_identity_mismatch_rate",
+                f"{prefix}_forecast_identity_mismatch_rate",
+            ),
+            ("validation_position_coverage90", f"{prefix}_position_coverage90"),
+            ("validation_position_gaussian_nll", f"{prefix}_position_gaussian_nll"),
+            ("validation_position_sharpness_std", f"{prefix}_position_sharpness_std"),
+        ):
+            checkpoint_key = f"{checkpoint_stem}@{suffix}"
+            if checkpoint_key not in metrics:
                 return None
-            translated[f"validation_position_rmse_{axis}@{suffix}"] = float(metrics[horizon_key])
+            translated[f"{output_stem}@{suffix}"] = float(metrics[checkpoint_key])
+    for axis in ("x", "y", "z"):
+        for output_key, checkpoint_key in (
+            (f"validation_position_rmse_{axis}_m", f"{prefix}_position_rmse_{axis}_m"),
+            (
+                f"validation_velocity_rmse_{axis}_mps",
+                f"{prefix}_velocity_rmse_{axis}_mps",
+            ),
+            (
+                f"validation_current_position_gaussian_nll_{axis}",
+                f"{prefix}_current_position_gaussian_nll_{axis}",
+            ),
+            (
+                f"validation_current_position_sharpness_std_{axis}",
+                f"{prefix}_current_position_sharpness_std_{axis}",
+            ),
+        ):
+            if checkpoint_key not in metrics:
+                return None
+            translated[output_key] = float(metrics[checkpoint_key])
+        for suffix, _ in _selection_horizon_keys(config):
+            for output_stem, checkpoint_stem in (
+                (f"validation_position_rmse_{axis}", f"{prefix}_position_rmse_{axis}"),
+                (f"validation_velocity_rmse_{axis}", f"{prefix}_velocity_rmse_{axis}"),
+                (
+                    f"validation_position_gaussian_nll_{axis}",
+                    f"{prefix}_position_gaussian_nll_{axis}",
+                ),
+                (
+                    f"validation_position_sharpness_std_{axis}",
+                    f"{prefix}_position_sharpness_std_{axis}",
+                ),
+            ):
+                horizon_key = f"{checkpoint_stem}@{suffix}"
+                if horizon_key not in metrics:
+                    return None
+                translated[f"{output_stem}@{suffix}"] = float(metrics[horizon_key])
     restored = _rollout_selection_metrics(translated, config)
     stored_score = metrics.get(f"{prefix}_selection_score")
     if stored_score is None or not math.isclose(
@@ -1372,6 +1920,28 @@ def _rollout_selection_guardrail_failures(
         reference.position_calibration_error90,
         (reference.position_calibration_error90 + _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE),
     )
+    maximum(
+        "current_position_calibration_error90",
+        candidate.current_position_calibration_error90,
+        reference.current_position_calibration_error90,
+        (
+            reference.current_position_calibration_error90
+            + _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE
+        ),
+    )
+    maximum(
+        "current_position_gaussian_nll",
+        candidate.current_position_gaussian_nll,
+        reference.current_position_gaussian_nll,
+        (reference.current_position_gaussian_nll + _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE),
+    )
+    for axis, reference_value in reference.current_axis_position_gaussian_nll.items():
+        maximum(
+            f"current_position_gaussian_nll_{axis}",
+            candidate.current_axis_position_gaussian_nll[axis],
+            reference_value,
+            reference_value + _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE,
+        )
     if reference.axis_position_rmse_m:
         if set(candidate.axis_position_rmse_m) != set(reference.axis_position_rmse_m):
             failures.append(
@@ -1418,6 +1988,48 @@ def _rollout_selection_guardrail_failures(
                         reference_value,
                         reference_value * maximum_ratio,
                     )
+    if set(candidate.axis_velocity_rmse_mps) != set(reference.axis_velocity_rmse_mps):
+        failures.append(
+            {
+                "metric": "axis_velocity_rmse_schema",
+                "direction": "required",
+                "candidate": float(len(candidate.axis_velocity_rmse_mps)),
+                "reference": float(len(reference.axis_velocity_rmse_mps)),
+                "limit": float(len(reference.axis_velocity_rmse_mps)),
+                "delta": float(
+                    len(candidate.axis_velocity_rmse_mps) - len(reference.axis_velocity_rmse_mps)
+                ),
+            }
+        )
+    else:
+        for axis, reference_value in reference.axis_velocity_rmse_mps.items():
+            maximum(
+                f"velocity_rmse_{axis}_mps",
+                candidate.axis_velocity_rmse_mps[axis],
+                reference_value,
+                reference_value * maximum_ratio,
+            )
+        for axis, reference_horizons in reference.horizon_axis_velocity_rmse_mps.items():
+            candidate_horizons = candidate.horizon_axis_velocity_rmse_mps.get(axis, {})
+            if set(candidate_horizons) != set(reference_horizons):
+                failures.append(
+                    {
+                        "metric": f"horizon_axis_velocity_rmse_{axis}_schema",
+                        "direction": "required",
+                        "candidate": float(len(candidate_horizons)),
+                        "reference": float(len(reference_horizons)),
+                        "limit": float(len(reference_horizons)),
+                        "delta": float(len(candidate_horizons) - len(reference_horizons)),
+                    }
+                )
+                continue
+            for suffix, reference_value in reference_horizons.items():
+                maximum(
+                    f"velocity_rmse_{axis}@{suffix}",
+                    candidate_horizons[suffix],
+                    reference_value,
+                    reference_value * maximum_ratio,
+                )
     for suffix, reference_value in reference.horizon_position_rmse_m.items():
         maximum(
             f"position_rmse@{suffix}",
@@ -1432,6 +2044,69 @@ def _rollout_selection_guardrail_failures(
             reference_value,
             reference_value - _ROLLOUT_SELECTION_COVERAGE_TOLERANCE,
         )
+    for suffix, reference_value in reference.horizon_velocity_rmse_mps.items():
+        maximum(
+            f"velocity_rmse@{suffix}",
+            candidate.horizon_velocity_rmse_mps[suffix],
+            reference_value,
+            reference_value * maximum_ratio,
+        )
+    for suffix, reference_value in reference.horizon_collision_f1.items():
+        minimum(
+            f"collision_f1@{suffix}",
+            candidate.horizon_collision_f1[suffix],
+            reference_value,
+            reference_value * minimum_ratio,
+        )
+    for suffix, reference_value in reference.horizon_forecast_identity_association_coverage.items():
+        minimum(
+            f"forecast_identity_association_coverage@{suffix}",
+            candidate.horizon_forecast_identity_association_coverage[suffix],
+            reference_value,
+            reference_value - _ROLLOUT_SELECTION_COVERAGE_TOLERANCE,
+        )
+    for suffix, reference_value in reference.horizon_forecast_identity_mismatch_rate.items():
+        maximum(
+            f"forecast_identity_mismatch_rate@{suffix}",
+            candidate.horizon_forecast_identity_mismatch_rate[suffix],
+            reference_value,
+            reference_value + _ROLLOUT_SELECTION_COVERAGE_TOLERANCE,
+        )
+    for suffix, reference_value in reference.horizon_position_calibration_error90.items():
+        maximum(
+            f"position_calibration_error90@{suffix}",
+            candidate.horizon_position_calibration_error90[suffix],
+            reference_value,
+            reference_value + _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE,
+        )
+    for suffix, reference_value in reference.horizon_position_gaussian_nll.items():
+        maximum(
+            f"position_gaussian_nll@{suffix}",
+            candidate.horizon_position_gaussian_nll[suffix],
+            reference_value,
+            reference_value + _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE,
+        )
+    for axis, reference_horizons in reference.horizon_axis_position_gaussian_nll.items():
+        candidate_horizons = candidate.horizon_axis_position_gaussian_nll.get(axis, {})
+        if set(candidate_horizons) != set(reference_horizons):
+            failures.append(
+                {
+                    "metric": f"horizon_axis_position_gaussian_nll_{axis}_schema",
+                    "direction": "required",
+                    "candidate": float(len(candidate_horizons)),
+                    "reference": float(len(reference_horizons)),
+                    "limit": float(len(reference_horizons)),
+                    "delta": float(len(candidate_horizons) - len(reference_horizons)),
+                }
+            )
+            continue
+        for suffix, reference_value in reference_horizons.items():
+            maximum(
+                f"position_gaussian_nll_{axis}@{suffix}",
+                candidate_horizons[suffix],
+                reference_value,
+                reference_value + _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE,
+            )
     if set(candidate.scenario_slices) != set(reference.scenario_slices):
         failures.append(
             {
@@ -1964,6 +2639,7 @@ def _rollout_validation_checkpoint_metrics(
         "reference_rollout_model_state_hash": reference_model_state_hash,
         "reference_rollout_checkpoint_step": float(reference_step),
         "rollout_reference_validated": 1.0,
+        **_trainer_unpaired_latency_evidence(),
     }
     if best_measurement is not None:
         metrics.update(best_measurement.checkpoint_metrics())
@@ -3543,6 +4219,7 @@ def _validation_step(
                     config.training.validation_rollout_anchor_batch_size
                 ),
                 compute_future_correction=False,
+                collect_promotion_metrics=True,
             )
         else:
             total_frames = int(batch["rgb"].shape[1])
@@ -3579,6 +4256,90 @@ def _validation_step(
     return result
 
 
+def _summed_additive_physical_metrics(
+    results: list[TrainingBatchResult],
+) -> dict[str, float]:
+    """Sum and validate the raw physical evidence emitted by result batches."""
+
+    additive: dict[str, float] = {}
+    for result in results:
+        for name, value in result.metrics.items():
+            if _is_additive_physical_metric(name):
+                numeric = float(value)
+                if not math.isfinite(numeric) or (
+                    numeric < 0 and not _is_signed_additive_physical_metric(name)
+                ):
+                    raise ValueError(f"additive physical validation metric {name!r} is invalid")
+                additive[name] = additive.get(name, 0.0) + numeric
+    return additive
+
+
+def _core_causal_trajectory_episode_supported(
+    result: TrainingBatchResult,
+    config: OrpheusConfig,
+    *,
+    minimum_predictable_target_count: int = 1,
+    minimum_matched_target_count: int = 1,
+) -> bool:
+    """Return whether one episode supports the core causal trajectory metric.
+
+    The per-episode count protects each scenario from being represented by one
+    unusually dense trajectory.  It is deliberately narrower than the rich
+    pooled/scenario selector: a finite, structurally complete episode must
+    support current position/velocity and every configured position/velocity
+    forecast floor, but it need not contain both collision classes or a
+    forecast-identity association at every horizon.  Those sparse guardrail
+    dimensions remain mandatory after episodes are pooled by scenario.
+
+    Calling the unchanged rich converter first validates the complete raw
+    additive schema and all of its partition/count invariants.  Only
+    ``PhysicalMetricSupportError`` is deferred to the explicit core support
+    checks below; missing, nonfinite, or contradictory evidence still raises.
+    """
+
+    for name, value in (
+        ("minimum_predictable_target_count", minimum_predictable_target_count),
+        ("minimum_matched_target_count", minimum_matched_target_count),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    additive = _summed_additive_physical_metrics([result])
+    with suppress(PhysicalMetricSupportError):
+        physical_validation_metrics(additive, config)
+    # Rich event-class, identity, calibration, or trajectory support may be
+    # sparse within one episode.  The complete schema has already been
+    # validated; distinguish core trajectory support explicitly below.
+
+    def count(name: str) -> float:
+        if name not in additive:
+            raise RuntimeError(f"missing additive physical validation metric {name!r}")
+        value = float(additive[name])
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"additive physical validation metric {name!r} is invalid")
+        return value
+
+    required_coordinates = 3 * minimum_matched_target_count
+    for stem in ("physical_state_position", "physical_state_velocity"):
+        if count(f"{stem}_coordinate_count") < required_coordinates:
+            return False
+        for axis in ("x", "y", "z"):
+            if count(f"{stem}_{axis}_coordinate_count") < minimum_matched_target_count:
+                return False
+    for suffix, _ in _selection_horizon_keys(config):
+        if (
+            count(f"physical_forecast_predictable_target_count@{suffix}")
+            < minimum_predictable_target_count
+        ):
+            return False
+        for stem in ("physical_rollout_position", "physical_rollout_velocity"):
+            if count(f"{stem}@{suffix}_coordinate_count") < required_coordinates:
+                return False
+            for axis in ("x", "y", "z"):
+                if count(f"{stem}_{axis}@{suffix}_coordinate_count") < minimum_matched_target_count:
+                    return False
+    return True
+
+
 def _aggregate_physical_validation_metrics(
     results: list[TrainingBatchResult],
     config: OrpheusConfig,
@@ -3594,14 +4355,7 @@ def _aggregate_physical_validation_metrics(
     ):
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
             raise ValueError(f"{name} must be a positive integer")
-    additive: dict[str, float] = {}
-    for result in results:
-        for name, value in result.metrics.items():
-            if _is_additive_physical_metric(name):
-                numeric = float(value)
-                if not math.isfinite(numeric) or numeric < 0:
-                    raise ValueError(f"additive physical validation metric {name!r} is invalid")
-                additive[name] = additive.get(name, 0.0) + numeric
+    additive = _summed_additive_physical_metrics(results)
     # Preserve the exact split totals as well as ratios derived from them.
     # Averaging per-batch ``*_count`` diagnostics produces fractional values
     # and makes checkpoint audit trails misleading even when the ratios happen
@@ -3932,6 +4686,13 @@ def _validation_loader_result(
                 config,
             )
         )
+        aggregate.metrics.update(
+            {
+                name: float(value)
+                for name, value in _trainer_unpaired_latency_evidence().items()
+                if isinstance(value, float)
+            }
+        )
         aggregate.metrics["validation_attribution_available"] = float(
             attribution_available and len(scenarios) == len(results)
         )
@@ -3954,10 +4715,10 @@ def _validation_loader_result(
                 )
                 supported_episode_count = sum(
                     float(
-                        _aggregate_physical_validation_metrics(
-                            [scenario_result],
+                        _core_causal_trajectory_episode_supported(
+                            scenario_result,
                             config,
-                        )["selection_metric_supported"]
+                        )
                     )
                     for scenario_result in scenario_results
                 )
@@ -3987,7 +4748,12 @@ def _validation_loader_result(
                     [result],
                     config,
                 )
-                seed_supported = float(derived["selection_metric_supported"])
+                seed_supported = float(
+                    _core_causal_trajectory_episode_supported(
+                        result,
+                        config,
+                    )
+                )
                 aggregate.metrics[f"seed_{seed}_selection_metric_supported"] = seed_supported
                 if seed_supported == 0.0:
                     continue
@@ -4345,6 +5111,14 @@ def train_from_config(
             raise ValueError("checkpoint payload must be a mapping")
         validate_checkpoint_config(resume_config_payload, config)
         validate_training_resume_config(resume_config_payload, config)
+        if not _rollout_validation_protocol_is_compatible(
+            resume_config_payload,
+            config,
+        ):
+            raise ValueError(
+                "exact resume rollout validation protocol/metric schema mismatch; "
+                "use --initialize-from for weights-only transfer"
+            )
         _validate_exact_resume_source(
             resume_config_payload,
             source_provenance,
@@ -4792,6 +5566,7 @@ def train_from_config(
                 }
             ]
             checkpoint_metrics: dict[str, Any] = {
+                **_trainer_unpaired_latency_evidence(),
                 "validation_total_loss": float(validation.total_loss.detach().cpu()),
                 **_validation_support_evidence(validation.metrics),
                 "validation_rollout_loss": float(
@@ -4990,6 +5765,7 @@ def train_from_config(
         ]
         if best_rollout_selection is None and first_incumbent_rejection_reasons:
             checkpoint_metrics: dict[str, Any] = {
+                **_trainer_unpaired_latency_evidence(),
                 "validation_total_loss": float(validation.total_loss.detach().cpu()),
                 **_validation_support_evidence(validation.metrics),
                 "validation_rollout_loss": float(

@@ -1,5 +1,177 @@
 # Design decisions
 
+## ADR-157 — Close specification 1.51 and repair updater state by axis
+
+- **Date:** 2026-08-21
+- **Status:** accepted; implementation gated, no model promoted
+- **Context:** Rich evidence exposed two implementation-boundary issues and a
+  real learning failure. Independently reducing pooled float32 Gaussian NLL
+  disagreed with its signed x/y/z components in heavy-light scenes. Requiring
+  every individual episode to contain rare collision and identity cases would
+  also discard valid causal episodes even when the fixed manifest and every
+  scenario are richly supported. After those evidence fixes, the step-512
+  shadow score still improves `9.31%` but has `237` rich failures. The
+  unchanged campaign then worsens from `65` to `118` legacy failures at step
+  1024 despite exact ownership, finite Adam state, and healthy updates.
+- **Decision:** Derive canonical pooled NLL/sharpness with `math.fsum` from the
+  per-axis sufficient statistics; do not widen tolerance. Require complete
+  current and horizon-axis position/velocity support per episode, but enforce
+  rare-event, calibration, and forecast-identity support after exact scenario
+  and manifest pooling. Retain the real `32/32` episode and `8/8` scenario
+  support evidence. Reject both trained checkpoints and keep deployment at the
+  protected step-zero incumbent. Pause the unchanged campaign after step 1024.
+  Next, test only a narrow axis-gated updater-state repair from protected-base
+  weights against an unchanged paired control through at least selectors 512
+  and 1024, extending a survivor through a bounded multi-selector
+  qualification long enough for differences to matter.
+- **Alternatives considered:** widen Gaussian validator tolerances; require
+  both event classes and identity association in each episode; promote the
+  favorable pooled step-512 score; continue the healthy optimizer despite
+  worsening physical selectors; roll back broad tensor groups; change the
+  analytic/event loop or `WorldBelief` truth contract.
+- **Consequences:** Specification 1.51 closes with final candidate runtime/
+  worktree fingerprints `6247e913…`/`1836ecc3…`, `1080 passed, 16 skipped`,
+  Ruff/format (`219` files), compileall, and diff gates. Fresh final parity is
+  under `/private/tmp/orpheus-spec151-final-parity.x8PY0e`; strict
+  qualification/supplemental SHA-256 values are `2ce77b69…`/`3793c659…`, and
+  the exact checkpoint remains `61ad6691…`. The step-512 rich report SHA is
+  `345792e6…`; its overlapping family counts are `61` velocity-axis, `13`
+  pooled velocity, `67` NLL, `8` calibration, `15` event, and `11` identity.
+  Neither it nor step 1024 is promoted or converged. Any repair must preserve
+  RGB-only `WorldBelief`, the short-step analytic+learned+event loop,
+  heterogeneous/local applicability and model selection, and protected-
+  incumbent semantics; it still requires version-7/version-16 fixed-32,
+  paired latency, and disjoint RGB-only test/OOD qualification.
+
+## ADR-156 — Distinguish optimization plateau from comprehensive convergence
+
+- **Date:** 2026-08-21
+- **Status:** accepted and implemented; real paired MPS/disjoint gates pending
+- **Context:** The convergence campaign can legitimately stop after four
+  comparable fixed selectors establish the declared physical optimization
+  plateau. That stopping fact does not establish paired runtime cost, disjoint
+  generalization, or deployment promotion. Previously the monitor rendered a
+  plateau as `CONVERGED`, while trainer selectors had no matched latency
+  control and therefore could not support that stronger claim.
+- **Decision:** Parse latency support, latency pass, and comprehensive
+  eligibility as explicit fail-closed binary evidence. A latency pass without
+  support and comprehensive eligibility without a latency pass are invalid.
+  Record a real physical plateau independently from comprehensive promotion.
+  Render `OPTIMIZATION PLATEAU` when training has plateaued but the external
+  comprehensive gate is absent, and reserve `CONVERGED` for the combination
+  of plateau plus comprehensive eligibility. Keep disjoint validation, test,
+  and OOD evidence as additional required promotion gates.
+- **Alternatives considered:** keep using plateau and convergence as synonyms;
+  infer latency success from missing fields; prevent a plateau from stopping
+  training until external evaluation happens; let the monitor deserialize
+  checkpoints or synthesize promotion evidence.
+- **Consequences:** A source-frozen optimization campaign can stop truthfully
+  without overstating deployment readiness. Missing external evidence becomes
+  an explicit outstanding gate rather than accidental success. Focused
+  convergence/monitor tests pass, but no current run is comprehensively
+  converged.
+
+## ADR-155 — Require immutable, fully bound external promotion replay
+
+- **Date:** 2026-08-21
+- **Status:** accepted, implemented, and adversarially reviewed
+- **Context:** A mutable checkpoint or report can change between hashing,
+  loading, parsing, and comparison. A timing report from a different source,
+  config, seed order, intervention, device, or checkpoint is not a paired
+  promotion control even if its filenames look plausible. Stored physical
+  digests are also insufficient when their key/exclusion scope is not itself
+  validated.
+- **Decision:** Capture each checkpoint once into immutable bytes and use that
+  exact snapshot for SHA-256, byte count, deserialization, model-state
+  validation, and replay. Capture each latency/evaluation JSON once for hash
+  and parse. Bind reports to current runtime source, resolved config,
+  simulator/resolved scenarios, selector/rollout/evaluator schemas, standard
+  validation seeds and scenario order, horizons, device/precision, checkpoint
+  identity, posterior trace, RGB-only finite clean pass, and disabled oracle,
+  perturbation, recovery, and runtime-pool interventions. Reset Python, NumPy,
+  CPU Torch, and MPS RNG per arm. Recompute the canonical primary physical
+  key set/hash and pooled-versus-scenario partition. Reject any mismatch or
+  incomplete support.
+- **Alternatives considered:** hash and load a live file in separate reads;
+  trust paths, timestamps, or stored hashes; validate only checkpoint tensor
+  hashes; accept approximately similar manifests; mix recovery metrics into
+  the primary physical digest; permit a missing binding as a warning.
+- **Consequences:** Promotion evidence is resistant to time-of-check/time-of-
+  use replacement and cross-protocol report reuse. The reviewed pre-version
+  snapshot remains preserved for provenance. Earlier post-version parity under
+  `/private/tmp/orpheus-spec151-parity-postversion-Rmaj0N` compares clone/
+  reference runtime fingerprints `957a5277…`/`0d8499cf…`. Qualification SHA is
+  `2ce77b69470a54ae65b74130dbda021c32cf96b022c335dbfe33d954ee85cd9`,
+  supplemental SHA is
+  `77281d1e8e69cfe40a76744805c7962cf3d538cd7ec5466a46c9eaef64548dfc`,
+  and protocol SHA is
+  `714436f02442ad3ad82d9b17d5772993a4f67b09e52a5cdb776c21427380991c`.
+  The `740491`-byte checkpoint remains exact at SHA-256
+  `61ad6691148bf4c070a9a63adf6f7be243ed1e1f9b612b8cdbb80ce342855475`.
+  The only expected transitions are specification `1.50 -> 1.51` and
+  evaluator metric/per-scenario schema `v2 -> v3`; numerical parity counts are
+  unchanged. The first full repository run exposed five stale integration
+  fixtures rather than a production defect: three exact-resume fixtures lacked
+  canonical selector-v7/rollout-v16 checkpoint metrics, and two direct
+  validation tests did not opt into promotion-metric collection. Test-only
+  repairs retained the fail-closed production contract. The related gate
+  passed `275` tests, affected files passed `67` tests, and the clean full suite
+  passed `1075` tests with `16` skips in `459.98s`; lint, formatting of all
+  `219` files, compileall, diff, and post-version parity gates also passed. A
+  new real paired 32-seed MPS run remains necessary. ADR-157 records the final
+  frozen gate and parity rerun that supersede these intermediate counts.
+
+## ADR-154 — Promote only from comprehensive physical evidence plus paired cost
+
+- **Date:** 2026-08-21
+- **Status:** accepted and implemented; no candidate promoted
+- **Context:** The specification-1.50 step-512 candidate demonstrates why the
+  old pooled selector is not enough. It improves score by `9.31%`, improves
+  current state, every pooled position horizon, every pooled axis/horizon
+  position slice, all pooled velocity horizons, and aggregate lifecycle/event/
+  calibration measurements, yet still has `65` material scenario/axis
+  failures. The main concentrations are damped-contact z/event/coverage,
+  heavy-light current-x/identity, camera x/z, and late collision F1. A model
+  with that tradeoff is useful optimization evidence but unsafe to promote.
+- **Decision:** Advance the physical selector to metric version `7`, rollout
+  protocol `16`, evaluator metric schema `held_out_rgb_metrics_v3`, and
+  per-scenario schema `clean_primary_additive_support_diagnostic_v3`. Require
+  current and every-horizon position/velocity pooled+x/y/z, per-horizon event
+  confusion/F1, current/horizon pooled+x/y/z NLL/sharpness/calibration, and
+  forecast identity association coverage/mismatch. Require identical additive
+  pooled/scenario schemas and exact partition reconstruction. Keep collection
+  validation-only. Separately report physical and comprehensive eligibility;
+  comprehensive promotion additionally requires matched global/fast/rollout
+  latency ratios no greater than `1.10`.
+- **Alternatives considered:** promote from the improved scalar score; inspect
+  only pooled axes; use one pooled velocity/event/uncertainty/identity number;
+  run a second rollout per scenario; treat trainer wall time as paired latency;
+  weaken the threshold for a promising early candidate.
+- **Consequences:** The step-512 candidate is retained at SHA-256
+  `f8f1704c2552ea51a7626729140608203918c909cfc258d63158c347bef4eb86`
+  but does not replace the protected incumbent. Version-6/version-15
+  checkpoints cannot exact-resume into the expanded version-7/version-16
+  evidence contract. The active source-frozen run was allowed to reach update
+  1024 under its original protocol, while fresh comprehensive qualification
+  uses a weights-only transfer. Old/new parity proves `309` trainer metrics plus `9`
+  losses and `1025` evaluator non-latency metrics remain exact; `182`/`577`
+  evidence fields are additive. No accuracy, latency, or convergence promotion
+  is claimed.
+  A fixed-32 perception-group rollback was subsequently evaluated against the
+  same protected endpoints and also rejected. Its selector `0.2450779860`
+  improves on step zero `0.2654622904` but regresses from step 512
+  `0.2407574176`; failures fall `65 -> 52`, yet `45` remain, `7` new failures
+  appear, and `38/52` are z-related. It repairs all six heavy-light failures,
+  but camera retains `13` and adds two coverage failures, while damped-contact
+  collision F1 `0.15385` is below step zero `0.24390`. The immutable diagnostic
+  binds manifest, step-zero, step-512, composed-state, and raw-metrics SHA-256
+  values `e27bdf2d...`, `b84e5299...`, `f8f1704c...`, `f7699a67...`, and
+  `a057439a...`. This rules out blind group rollback/interpolation as a
+  promotion path. The source-frozen run subsequently worsened to `118`
+  failures at update 1024 and was paused. ADR-157 narrows the next experiment
+  to an axis-gated updater-state repair plus a long paired qualification under
+  this comprehensive gate.
+
 ## ADR-153 — Run grounded recursive optimization on the measured faster CPU
 
 - **Date:** 2026-08-21

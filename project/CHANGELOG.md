@@ -2,6 +2,157 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-21 specification 1.51 final closure
+
+- Canonicalized pooled Gaussian NLL and sharpness from the exact x/y/z
+  sufficient statistics with `math.fsum`. This repairs the real heavy-light
+  signed-axis cancellation (`-1.5968445539` independently reduced versus
+  `-1.5968467593` canonical) without widening validator tolerance.
+- Split core per-episode causal support from rich pooled/scenario selection
+  support. Episodes retain complete current and configured horizon-axis
+  position/velocity floors; rare collision classes, calibration, and forecast
+  identity remain fail-closed after scenario/manifest pooling. The real
+  fixed-32 run retains `32/32` supported episodes and `8/8` supported scenario
+  families, four episodes each.
+- Completed the exact frozen repository gate at unchanged candidate runtime/
+  worktree fingerprints
+  `6247e913c41dc150e0f2fb66fa86b42a1a504083dd16110ba0a682e07af579a5`
+  and `1836ecc3e2c0e32aeac2deb7afedc85237e480850000a39e77a1d9088b3d15f8`:
+  `1080 passed, 16 skipped in 424.71s`, Ruff check, Ruff format (`219` files),
+  isolated-cache compileall, and diff check all pass.
+- Completed fresh main-`a4549f3` versus current-clone parity under
+  `/private/tmp/orpheus-spec151-final-parity.x8PY0e`, comparing reference/
+  candidate runtimes `0d8499cf...`/`6247e913...`. Strict qualification SHA is
+  `2ce77b69470a54ae65b74130dbda021c32cf96b022c335dbfe33d954ee85cd9`;
+  fresh supplemental SHA is
+  `3793c659fdb1de15d0f2792e8e58da66a3f9b82ad268a1e00c902eb9c87b86d0`.
+  The exact 740491-byte checkpoint SHA is
+  `61ad6691148bf4c070a9a63adf6f7be243ed1e1f9b612b8cdbb80ce342855475`.
+  Canonical hashes for trainer metrics, total-plus-nine-losses, trainer
+  posterior, final runtime, model state, evaluator metrics, evaluator
+  posterior, and new primary-physical metrics are `2a64b016...`,
+  `54eef069...`, `409fa9aa...`, `b53db3c4...`, `6ae10cbd...`, `04ca4ab9...`,
+  `06c416d8...`, and `49bd23fd...`. All `309` common trainer metrics, `9`
+  losses, and `1025` common evaluator non-latency metrics remain exact; absent
+  latency fails closed with `physical=true`, `comprehensive=false`.
+- Replayed the step-512 candidate under the rich version-1.51 shadow contract.
+  Selector score improves `0.2654622895 -> 0.2407574475`, but `237` rich
+  guardrails fail. Overlapping family counts are `61` velocity-axis, `13`
+  pooled velocity, `67` Gaussian NLL, `8` calibration, `15` event-horizon,
+  and `11` identity; they are not disjoint. Report SHA is
+  `345792e657246f86f9e74013837cdbc18b37298c84d9f907b860521834f2f362`.
+  Physical and comprehensive promotion both remain false.
+- Paused the unchanged specification-1.50 campaign after its numbered
+  step-1024 checkpoint. Exactly the intended `79` updater tensors changed,
+  Adam reached step `1024`, frozen state/event head remained exact, attention
+  decoders remained zero, and all parameters/moments were finite. Despite
+  healthy optimization, failures worsened `65 -> 118`; score, current
+  position, x, z, identity/lifecycle, coverage, and precision worsened from
+  step 512. Deployment remains step zero and no convergence is claimed.
+- Set the next experiment to a narrow axis-gated updater-state repair from
+  protected-base weights, paired against an unchanged control through at
+  least selectors 512 and 1024 and extended only if it survives. Preserve
+  RGB-only `WorldBelief`, the causal short-step analytic+learned+event loop,
+  heterogeneous/local applicability and model selection, and protected-
+  incumbent semantics; require long version-7/version-16, paired-latency, and
+  disjoint RGB-only qualification before promotion.
+
+### 2026-08-21 comprehensive promotion evidence and immutable replay
+
+- Advanced the authoritative contract to specification 1.51, physical
+  selector metric version `7`, rollout protocol version `16`, held-out
+  evaluator metric schema `held_out_rgb_metrics_v3`, and per-scenario schema
+  `clean_primary_additive_support_diagnostic_v3`.
+- Expanded fixed validation to current and every-horizon velocity x/y/z,
+  per-horizon event confusion/F1, current/horizon pooled+x/y/z uncertainty
+  NLL/sharpness/calibration, and per-horizon forecast identity eligibility,
+  association coverage, and mismatch. The richer evidence is validation-only
+  and does not add optimizer-time model work.
+- Required every declared scenario to retain the same additive physical schema
+  as the pooled report and reconstruct it exactly (with narrow tolerance only
+  for floating sums). Missing support/classes/associations, schema mismatch,
+  contradictory derived metrics, or nonfinite evidence now fails closed.
+- Separated `physical_promotion_eligible` from
+  `comprehensive_promotion_eligible`. Trainer selectors explicitly lack
+  paired latency and cannot claim comprehensive promotion. The external replay
+  requires the complete physical gate plus candidate/reference latency ratios
+  `<=1.10` for RGB global update, RGB fast update, and future rollout;
+  `promotion_eligible` aliases only the comprehensive result.
+- Hardened replay against mutable evidence. Checkpoint hash, byte count, load,
+  and model-state validation use one immutable byte snapshot; JSON reports are
+  likewise read/hash/parsed once. Reports are bound to exact runtime source,
+  config, simulator/scenarios, seeds/order, horizons, schemas, checkpoint,
+  device/precision, RGB-only clean pass, posterior trace, and disabled
+  interventions. RNG resets independently per arm.
+- Shared one canonical primary-physical metric selector and explicit hashed
+  key/scope/exclusion declaration across evaluator and replay. Latency and
+  isolated recovery evidence are deliberately outside the deterministic
+  digest, whose keys/hash and pooled/scenario partition are recomputed.
+- Split optimization plateau from comprehensive convergence. The supervisor
+  rejects contradictory eligibility markers and the read-only monitor now
+  displays `OPTIMIZATION PLATEAU` until external comprehensive evidence passes;
+  only then may it display `CONVERGED`.
+- Completed adversarial review with no remaining merge blocker and retained
+  the reviewed pre-version snapshot for provenance. Earlier post-version parity
+  under `/private/tmp/orpheus-spec151-parity-postversion-Rmaj0N` compares
+  clone/reference runtime fingerprints `957a5277…`/`0d8499cf…`; it preserves
+  all `309` common trainer metrics, all `9` losses, all `1025` common evaluator
+  non-latency metrics, posterior/final runtime/model hashes, and the exact
+  `740491`-byte checkpoint while adding `182`/`577` evidence fields.
+  Qualification SHA is
+  `2ce77b69470a54ae65b74130dbda021c32cf96b022c335dbfe33d954ee85cd9`,
+  supplemental SHA is
+  `77281d1e8e69cfe40a76744805c7962cf3d538cd7ec5466a46c9eaef64548dfc`,
+  and protocol SHA is
+  `714436f02442ad3ad82d9b17d5772993a4f67b09e52a5cdb776c21427380991c`.
+  Only specification `1.50 -> 1.51` and evaluator metric/per-scenario schema
+  `v2 -> v3` transition as expected; numerical counts are unchanged.
+- Recorded the active specification-1.50 step-512 result without
+  reinterpretation: pooled score improves `9.31%` and all pooled position/
+  velocity horizons improve, but `65` scenario/axis guardrails fail. The
+  candidate remains rejected and preserved at SHA-256
+  `f8f1704c2552ea51a7626729140608203918c909cfc258d63158c347bef4eb86`;
+  the protected incumbent is unchanged. The source-frozen run was then allowed
+  to reach update 1024; the final closure above records its rejection and pause.
+- Completed the fixed-32 perception-group rollback diagnostic at
+  `/private/tmp/orpheus-step512-ablation-screen/fixed32-perception` and rejected
+  it as non-promotable. Its selector `0.2450779860` is better than step zero
+  `0.2654622904` but worse than step 512 `0.2407574176`; pooled position and
+  x/y/z are `0.135859` and `0.088311/0.108927/0.188968 m` (z remains `+4.08%`),
+  velocity is `0.750510 m/s`, collision F1 is `0.31989`, identity switch rate
+  is `0.000542`, coverage/precision is `0.9075/0.94976`, and coverage90 is
+  `0.86516`. Failures improve `65 -> 52`, but `45` remain, `20` resolve, `7`
+  are new, and `38/52` are z-related; all six heavy-light failures repair,
+  camera retains `13` and adds two coverage failures, and damped-contact
+  collision F1 `0.15385` remains below step zero `0.24390`.
+- Bound that rollback evidence to validation-manifest, step-zero, step-512,
+  composed-state, and raw-metrics SHA-256 values
+  `e27bdf2dffb5f36545bc7cbae5d88514fb9537cd5fa07cd26276ccefd41b46be`,
+  `b84e5299de4bed0ce487a7b26e8f01f521f82e8f6e51483eb34ac55f31f37cbf`,
+  `f8f1704c2552ea51a7626729140608203918c909cfc258d63158c347bef4eb86`,
+  `f7699a67a69d207a51eac0c78d6989d1fb2252341418f55c29bc366ab4aff5ab`,
+  and `a057439a41ea976b802236687374b9b01fc77ef67b7f9d5adf7cd3b48429d4be`.
+  No rollback/interpolation promotion follows. The source-frozen run later
+  reached and failed update 1024; the final closure narrows the repair to an
+  axis-gated updater-state experiment.
+- The changed suite is `304 passed in 96.19s`; the focused final hash/replay
+  repair gate is `34 passed in 6.94s`; Ruff and diff checks pass. A real paired
+  32-seed active-Aqua MPS latency run and disjoint validation/test/OOD gates
+  remain outstanding, so no comprehensive promotion or convergence is
+  claimed.
+- The first full repository run exposed five stale integration-fixture gaps:
+  three exact-resume fixtures lacked canonical selector-v7/rollout-v16
+  checkpoint metrics, and two direct-validation tests omitted
+  `collect_promotion_metrics=True`. They were repaired test-only without
+  weakening production. The related gate passed `275` tests and the directly
+  affected files passed `67` tests.
+- The intermediate clean full command
+  `PYTHONDONTWRITEBYTECODE=1 conda run -n orpheus pytest -q` passed `1075`
+  tests with `16` skipped in `459.98s`. Ruff check passed, Ruff format confirmed
+  all `219` files already formatted, compileall passed, diff check passed, and
+  post-version parity passed. The repository gate is complete; commit and push
+  remain pending.
+
 ### 2026-08-21 objective ownership, zero-output execution, and live training progress
 
 - Advanced the authoritative contract to specification 1.50. Fast-ROI

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import math
-from dataclasses import replace
+from dataclasses import fields, is_dataclass, replace
 from types import SimpleNamespace
 from typing import Any
 
@@ -36,6 +38,7 @@ from world_model.training.loop import (
 from world_model.training.losses import gaussian_nll
 from world_model.training.trainer import (
     _aggregate_physical_validation_metrics,
+    _current_model_state_hash,
     _mean_batch_results,
     _measurement_selection_from_checkpoint,
     _measurement_selection_guardrail_failures,
@@ -709,6 +712,29 @@ class _DifferentiableEventRolloutDynamics(_StaticRolloutDynamics):
         ).validate()
 
 
+class _FixedPositionRolloutDynamics(_StaticRolloutDynamics):
+    def __init__(self, positions: Tensor) -> None:
+        super().__init__()
+        self.positions = positions
+
+    def rollout(
+        self,
+        belief: Any,
+        query_seconds: list[float] | tuple[float, ...],
+        *,
+        return_events: bool,
+        return_auxiliary: bool,
+    ) -> BeliefTrajectory:
+        trajectory = super().rollout(
+            belief,
+            query_seconds,
+            return_events=return_events,
+            return_auxiliary=return_auxiliary,
+        )
+        positions = self.positions[:, None].expand_as(trajectory.positions)
+        return replace(trajectory, positions=positions).validate()
+
+
 def _rollout_batch(*, externally_actuated: Tensor) -> dict[str, Any]:
     batch, frames, objects = externally_actuated.shape
     return {
@@ -853,12 +879,108 @@ def test_unseen_actuation_censors_the_coupled_scene_but_keeps_distribution_nll()
         == 6.0
     )
     assert result.physical_metrics["physical_rollout_position@0.050s_coordinate_count"] == 0.0
+    expected_nll_per_coordinate = 0.5 * (4.0 + math.log(2.0 * math.pi))
+    assert result.physical_metrics[
+        "physical_rollout_position@0.050s_gaussian_nll_sum"
+    ] == pytest.approx(6.0 * expected_nll_per_coordinate)
+    assert result.physical_metrics[
+        "physical_rollout_position@0.050s_sharpness_std_sum"
+    ] == pytest.approx(6.0)
+    assert (
+        result.physical_metrics["physical_rollout_position@0.050s_calibration_coordinate_count"]
+        == 6.0
+    )
+    for axis in ("x", "y", "z"):
+        assert result.physical_metrics[
+            f"physical_rollout_position_{axis}@0.050s_gaussian_nll_sum"
+        ] == pytest.approx(2.0 * expected_nll_per_coordinate)
+        assert (
+            result.physical_metrics[
+                f"physical_rollout_position_{axis}@0.050s_calibration_coordinate_count"
+            ]
+            == 2.0
+        )
+        assert (
+            result.physical_metrics[f"physical_rollout_velocity_{axis}@0.050s_coordinate_count"]
+            == 0.0
+        )
+    for metric_suffix in (
+        "gaussian_nll_sum",
+        "sharpness_std_sum",
+        "calibration_coordinate_count",
+    ):
+        assert result.physical_metrics[
+            f"physical_rollout_position@0.050s_{metric_suffix}"
+        ] == math.fsum(
+            result.physical_metrics[f"physical_rollout_position_{axis}@0.050s_{metric_suffix}"]
+            for axis in ("x", "y", "z")
+        )
 
     result.losses["rollout_position_nll"].backward()
     assert belief.objects.position.grad is None
     assert log_variance.grad is not None
     # Gradient descent therefore increases variance for the hidden outcome.
     assert log_variance.grad.item() < 0.0
+
+
+def test_rollout_velocity_axes_emit_exact_additive_evidence() -> None:
+    config = _single_horizon_config()
+    batch = _rollout_batch(externally_actuated=torch.zeros(1, 2, 2, dtype=torch.bool))
+    batch["objects"]["velocity"][:, 1] = torch.tensor([[[1.0, 2.0, 3.0], [-1.0, -2.0, -3.0]]])
+    belief = _active_belief(
+        positions=torch.zeros(1, 2, 3),
+        age_steps=torch.full((1, 2), 5, dtype=torch.int64),
+    )
+
+    result = _rollout_loss_result(
+        SimpleNamespace(dynamics=_StaticRolloutDynamics()),
+        belief,
+        batch,
+        config,
+        frame_index=0,
+        indices=torch.tensor([[0, 1]], dtype=torch.int64),
+        matched=torch.ones(1, 2, dtype=torch.bool),
+    )
+
+    assert result.physical_metrics["physical_rollout_velocity@0.050s_sse"] == pytest.approx(28.0)
+    assert result.physical_metrics["physical_rollout_velocity@0.050s_coordinate_count"] == 6.0
+    for axis, expected_sse in zip(("x", "y", "z"), (2.0, 8.0, 18.0), strict=True):
+        assert result.physical_metrics[
+            f"physical_rollout_velocity_{axis}@0.050s_sse"
+        ] == pytest.approx(expected_sse)
+        assert (
+            result.physical_metrics[f"physical_rollout_velocity_{axis}@0.050s_coordinate_count"]
+            == 2.0
+        )
+
+
+def test_forecast_identity_requires_distance_gated_anchor_mapping() -> None:
+    config = _single_horizon_config()
+    batch = _rollout_batch(externally_actuated=torch.zeros(1, 2, 2, dtype=torch.bool))
+    target_positions = torch.tensor([[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]]])
+    batch["objects"]["position"][:, 0] = target_positions
+    batch["objects"]["position"][:, 1] = target_positions
+    batch["objects"]["id"] = torch.tensor([[[11, 22], [11, 22]]], dtype=torch.int64)
+    belief = _active_belief(
+        # Slot zero retains a training-only mapping but is too far from its
+        # anchor target to establish a trustworthy persistent identity.
+        positions=torch.tensor([[[1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]]),
+        age_steps=torch.full((1, 2), 5, dtype=torch.int64),
+    )
+
+    result = _rollout_loss_result(
+        SimpleNamespace(dynamics=_FixedPositionRolloutDynamics(target_positions)),
+        belief,
+        batch,
+        config,
+        frame_index=0,
+        indices=torch.tensor([[0, 1]], dtype=torch.int64),
+        matched=torch.ones(1, 2, dtype=torch.bool),
+        collect_promotion_metrics=True,
+    )
+
+    assert result.physical_metrics["physical_forecast_identity_association_count@0.050s"] == 1.0
+    assert result.physical_metrics["physical_forecast_identity_mismatch_count@0.050s"] == 0.0
 
 
 def test_scene_predictability_censors_only_batches_with_unseen_actuation() -> None:
@@ -971,6 +1093,28 @@ def test_frozen_global_measurement_is_diagnostic_only_with_fast_roi_scope() -> N
         + result.metrics["state_velocity_objective_excluded_coordinate_count"]
         == result.metrics["physical_state_velocity_coordinate_count"]
     )
+    assert result.metrics["physical_state_velocity_sse"] == pytest.approx(
+        sum(result.metrics[f"physical_state_velocity_{axis}_sse"] for axis in ("x", "y", "z"))
+    )
+    assert result.metrics["physical_state_velocity_coordinate_count"] == sum(
+        result.metrics[f"physical_state_velocity_{axis}_coordinate_count"]
+        for axis in ("x", "y", "z")
+    )
+    for axis in ("x", "y", "z"):
+        axis_count = result.metrics[f"physical_state_velocity_{axis}_coordinate_count"]
+        if axis_count > 0:
+            assert result.metrics[f"physical_state_velocity_{axis}_rmse_mps"] == pytest.approx(
+                math.sqrt(result.metrics[f"physical_state_velocity_{axis}_sse"] / axis_count)
+            )
+    for metric_suffix in (
+        "gaussian_nll_sum",
+        "sharpness_std_sum",
+        "calibration_coordinate_count",
+    ):
+        assert result.metrics[f"physical_state_position_{metric_suffix}"] == math.fsum(
+            result.metrics[f"physical_state_position_{axis}_{metric_suffix}"]
+            for axis in ("x", "y", "z")
+        )
     torch.testing.assert_close(
         result.loss_terms["measurement"].detach(),
         torch.tensor(result.metrics["measurement_fast"])
@@ -1046,6 +1190,11 @@ def _additive_result(scale: float) -> TrainingBatchResult:
         "physical_state_position_z_coordinate_count": 1.0 * scale,
         "physical_state_velocity_sse": 3.0 * scale,
         "physical_state_velocity_coordinate_count": 3.0 * scale,
+        "physical_state_position_coverage90_hit_count": 3.0 * scale,
+        "physical_state_position_coverage90_coordinate_count": 3.0 * scale,
+        "physical_state_position_gaussian_nll_sum": 0.3 * scale,
+        "physical_state_position_sharpness_std_sum": 3.0 * scale,
+        "physical_state_position_calibration_coordinate_count": 3.0 * scale,
         "physical_distance_gated_matched_object_frames": 1.0 * scale,
         "physical_distance_gated_target_object_frames": 1.0 * scale,
         "physical_distance_gated_predicted_object_frames": 1.0 * scale,
@@ -1054,9 +1203,10 @@ def _additive_result(scale: float) -> TrainingBatchResult:
         "physical_predicted_object_frames": 2.0 * scale,
         "physical_position_coverage90_hit_count": 12.0 * scale,
         "physical_position_coverage90_coordinate_count": 15.0 * scale,
-        "physical_collision_true_positive_count": 1.0 * scale,
+        "physical_collision_true_positive_count": 2.0 * scale,
         "physical_collision_false_positive_count": 0.0,
         "physical_collision_false_negative_count": 0.0,
+        "physical_collision_true_negative_count": 1.0 * scale,
         "physical_rollout_position@0.050s_sse": 3.0 * scale,
         "physical_rollout_position@0.050s_coordinate_count": 3.0 * scale,
         "physical_rollout_position_x@0.050s_sse": 1.0 * scale,
@@ -1073,14 +1223,81 @@ def _additive_result(scale: float) -> TrainingBatchResult:
         "physical_forecast_predictable_target_count@0.050s": 1.0 * scale,
         "physical_rollout_predictable_target_count@0.050s": 1.0 * scale,
         "physical_collision_true_positive_count@0.050s": 2.0 * scale,
+        "physical_collision_false_positive_count@0.050s": 0.0,
+        "physical_collision_false_negative_count@0.050s": 0.0,
+        "physical_collision_true_negative_count@0.050s": 1.0 * scale,
+        "physical_forecast_identity_mismatch_count@0.050s": 0.0,
+        "physical_forecast_identity_eligible_count@0.050s": 1.0 * scale,
+        "physical_forecast_identity_association_count@0.050s": 1.0 * scale,
+        "physical_rollout_velocity@0.050s_sse": 3.0 * scale,
+        "physical_rollout_velocity@0.050s_coordinate_count": 3.0 * scale,
+        "physical_rollout_position@0.050s_gaussian_nll_sum": 1.5 * scale,
+        "physical_rollout_position@0.050s_sharpness_std_sum": 15.0 * scale,
+        "physical_rollout_position@0.050s_calibration_coordinate_count": 15.0 * scale,
         "physical_rollout_censored_external_actuation_count@0.050s": (4.0 * scale),
     }
+    for axis in ("x", "y", "z"):
+        metrics[f"physical_state_velocity_{axis}_sse"] = 1.0 * scale
+        metrics[f"physical_state_velocity_{axis}_coordinate_count"] = 1.0 * scale
+        metrics[f"physical_state_position_{axis}_gaussian_nll_sum"] = 0.1 * scale
+        metrics[f"physical_state_position_{axis}_sharpness_std_sum"] = 1.0 * scale
+        metrics[f"physical_state_position_{axis}_calibration_coordinate_count"] = 1.0 * scale
+        metrics[f"physical_rollout_velocity_{axis}@0.050s_sse"] = 1.0 * scale
+        metrics[f"physical_rollout_velocity_{axis}@0.050s_coordinate_count"] = 1.0 * scale
+        metrics[f"physical_rollout_position_{axis}@0.050s_gaussian_nll_sum"] = 0.5 * scale
+        metrics[f"physical_rollout_position_{axis}@0.050s_sharpness_std_sum"] = 5.0 * scale
+        metrics[f"physical_rollout_position_{axis}@0.050s_calibration_coordinate_count"] = (
+            5.0 * scale
+        )
     return TrainingBatchResult(
         total_loss=torch.zeros(()),
         loss_terms={},
         metrics=metrics,
         phase="closed_loop_rgb",
     )
+
+
+def test_gaussian_calibration_canonicalization_handles_heavy_light_cancellation() -> None:
+    config = _single_horizon_config()
+    metrics = dict(_additive_result(1.0).metrics)
+    prefix = "physical_rollout_position@0.050s"
+    axis_nll = {
+        "x": 1.0278450846672058,
+        "y": -28.043119430541992,
+        "z": 25.41842758655548,
+    }
+    # This was the independently reduced pooled float32 value from the real
+    # heavy-light seeds 100007/100015/100023/100031. Cancellation makes it
+    # fail the invariant even though the underlying masks are identical.
+    metrics[f"{prefix}_gaussian_nll_sum"] = -1.5968445539474487
+    for axis, value in axis_nll.items():
+        metrics[f"physical_rollout_position_{axis}@0.050s_gaussian_nll_sum"] = value
+        metrics[f"physical_rollout_position_{axis}@0.050s_sharpness_std_sum"] = 77.0
+        metrics[f"physical_rollout_position_{axis}@0.050s_calibration_coordinate_count"] = 77.0
+    metrics[f"{prefix}_sharpness_std_sum"] = 231.0
+    metrics[f"{prefix}_calibration_coordinate_count"] = 231.0
+    metrics["physical_rollout_position_coverage90@0.050s_hit_count"] = 200.0
+    metrics["physical_rollout_position_coverage90@0.050s_coordinate_count"] = 231.0
+    metrics["physical_position_coverage90_hit_count"] = 200.0
+    metrics["physical_position_coverage90_coordinate_count"] = 231.0
+
+    # Exercise the producer's exact canonical write without recomputing or
+    # weakening any scalar/axis sufficient statistic.
+    training_loop._write_pooled_gaussian_calibration_from_axes(metrics, prefix=prefix)
+
+    assert metrics[f"{prefix}_gaussian_nll_sum"] == -1.5968467593193054
+    assert metrics[f"{prefix}_calibration_coordinate_count"] == 231.0
+    training_loop.physical_validation_metrics(metrics, config)
+
+    corrupted_pooled = dict(metrics)
+    corrupted_pooled[f"{prefix}_gaussian_nll_sum"] += 1.0e-3
+    with pytest.raises(ValueError, match="x/y/z Gaussian NLL sum partition"):
+        training_loop.physical_validation_metrics(corrupted_pooled, config)
+
+    corrupted_axis = dict(metrics)
+    corrupted_axis["physical_rollout_position_x@0.050s_gaussian_nll_sum"] += 1.0e-3
+    with pytest.raises(ValueError, match="x/y/z Gaussian NLL sum partition"):
+        training_loop.physical_validation_metrics(corrupted_axis, config)
 
 
 def test_physical_count_aggregation_preserves_exact_horizon_totals() -> None:
@@ -1095,10 +1312,31 @@ def test_physical_count_aggregation_preserves_exact_horizon_totals() -> None:
     assert aggregate["physical_predicted_object_frames"] == 6.0
 
 
+def test_complete_additive_selector_evidence_is_scaling_invariant() -> None:
+    config = _single_horizon_config()
+    unit = _aggregate_physical_validation_metrics([_additive_result(1.0)], config)
+    scaled = _aggregate_physical_validation_metrics([_additive_result(7.0)], config)
+
+    assert unit["selection_metric_supported"] == 1.0
+    assert scaled["selection_metric_supported"] == 1.0
+    unit_derived = {name: value for name, value in unit.items() if name.startswith("validation_")}
+    scaled_derived = {
+        name: value for name, value in scaled.items() if name.startswith("validation_")
+    }
+    assert scaled_derived == pytest.approx(unit_derived)
+
+
 def test_physical_validation_records_zero_horizon_support_without_fabricated_rmse() -> None:
     unsupported = _additive_result(1.0)
     unsupported.metrics["physical_rollout_position@0.050s_sse"] = 0.0
     unsupported.metrics["physical_rollout_position@0.050s_coordinate_count"] = 0.0
+    unsupported.metrics["physical_rollout_velocity@0.050s_sse"] = 0.0
+    unsupported.metrics["physical_rollout_velocity@0.050s_coordinate_count"] = 0.0
+    for axis in ("x", "y", "z"):
+        unsupported.metrics[f"physical_rollout_position_{axis}@0.050s_sse"] = 0.0
+        unsupported.metrics[f"physical_rollout_position_{axis}@0.050s_coordinate_count"] = 0.0
+        unsupported.metrics[f"physical_rollout_velocity_{axis}@0.050s_sse"] = 0.0
+        unsupported.metrics[f"physical_rollout_velocity_{axis}@0.050s_coordinate_count"] = 0.0
 
     aggregate = _aggregate_physical_validation_metrics(
         [unsupported],
@@ -1165,12 +1403,28 @@ def _selection_metrics(*, horizon: float, axis_x: float) -> dict[str, float]:
         "validation_collision_f1": 0.6,
         "validation_id_switch_rate": 0.0,
         "validation_position_coverage90": 0.9,
+        "validation_current_position_coverage90": 0.9,
+        "validation_current_position_gaussian_nll": 0.1,
+        "validation_current_position_sharpness_std": 1.0,
         "validation_position_rmse@0.050s": horizon,
         "validation_forecast_target_coverage@0.050s": 0.9,
+        "validation_velocity_rmse@0.050s": 1.0,
+        "validation_collision_f1@0.050s": 0.6,
+        "validation_forecast_identity_association_coverage@0.050s": 1.0,
+        "validation_forecast_identity_mismatch_rate@0.050s": 0.0,
+        "validation_position_coverage90@0.050s": 0.9,
+        "validation_position_gaussian_nll@0.050s": 0.1,
+        "validation_position_sharpness_std@0.050s": 1.0,
     }
     for axis, value in (("x", axis_x), ("y", 0.5), ("z", 0.5)):
         metrics[f"validation_position_rmse_{axis}_m"] = value
         metrics[f"validation_position_rmse_{axis}@0.050s"] = value
+        metrics[f"validation_velocity_rmse_{axis}_mps"] = 1.0
+        metrics[f"validation_velocity_rmse_{axis}@0.050s"] = 1.0
+        metrics[f"validation_current_position_gaussian_nll_{axis}"] = 0.1
+        metrics[f"validation_current_position_sharpness_std_{axis}"] = 1.0
+        metrics[f"validation_position_gaussian_nll_{axis}@0.050s"] = 0.1
+        metrics[f"validation_position_sharpness_std_{axis}@0.050s"] = 1.0
     return metrics
 
 
@@ -1334,6 +1588,152 @@ def _prior_future_correction_test_config() -> OrpheusConfig:
     )
     config.validate()
     return config
+
+
+def _deterministic_runtime_state_hash(value: Any) -> str:
+    """Hash a tensor/dataclass runtime tree without serializing live graph ownership."""
+
+    digest = hashlib.sha256()
+
+    def update(item: Any) -> None:
+        digest.update(type(item).__qualname__.encode("utf-8"))
+        digest.update(b"\0")
+        if isinstance(item, Tensor):
+            tensor = item.detach().cpu().clone().contiguous()
+            digest.update(str(tensor.dtype).encode("utf-8"))
+            digest.update(str(tuple(tensor.shape)).encode("utf-8"))
+            digest.update(tensor.numpy().tobytes())
+        elif is_dataclass(item) and not isinstance(item, type):
+            for field in fields(item):
+                digest.update(field.name.encode("utf-8"))
+                update(getattr(item, field.name))
+        elif isinstance(item, dict):
+            for key in sorted(item, key=repr):
+                update(key)
+                update(item[key])
+        elif isinstance(item, (tuple, list)):
+            for child in item:
+                update(child)
+        else:
+            digest.update(repr(item).encode("utf-8"))
+        digest.update(b"\xff")
+
+    update(value)
+    return digest.hexdigest()
+
+
+def test_promotion_identity_collection_is_validation_only_and_runtime_exact(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    """New promotion evidence must be observational, never an optimizer hot path."""
+
+    config = _prior_future_correction_test_config()
+    batch = collate_episodes([generate_episode(config, seed=9)])
+    torch.manual_seed(421)
+    training_model = OnlineWorldModel.from_config(config, device="cpu")
+    validation_model = OnlineWorldModel.from_config(config, device="cpu")
+    validation_model.load_state_dict(training_model.state_dict())
+    training_model.train()
+    validation_model.train()
+
+    assignment_calls = 0
+    original_match = training_loop._match_positions_to_targets
+
+    def counted_match(*args: Any, **kwargs: Any) -> Any:
+        nonlocal assignment_calls
+        assignment_calls += 1
+        return original_match(*args, **kwargs)
+
+    monkeypatch.setattr(training_loop, "_match_positions_to_targets", counted_match)
+
+    def run_and_trace(
+        model: OnlineWorldModel,
+        *,
+        collect_promotion_metrics: bool,
+    ) -> tuple[TrainingBatchResult, list[str], str, str]:
+        trace: list[str] = []
+        original_ingest = model.ingest
+
+        def recording_ingest(*args: Any, **kwargs: Any) -> Any:
+            posterior = original_ingest(*args, **kwargs)
+            trace.append(_deterministic_runtime_state_hash(posterior))
+            return posterior
+
+        monkeypatch.setattr(model, "ingest", recording_ingest)
+        torch.manual_seed(987)
+        result = run_closed_loop_batch(
+            model,
+            batch,
+            config,
+            window_steps=4,
+            apply_perturbations=False,
+            include_measurement_supervision=False,
+            rollout_anchors_per_window=2,
+            collect_promotion_metrics=collect_promotion_metrics,
+        )
+        return (
+            result,
+            trace,
+            _deterministic_runtime_state_hash(model.state),
+            _current_model_state_hash(model),
+        )
+
+    training_result, training_trace, training_runtime_hash, training_model_hash = run_and_trace(
+        training_model,
+        collect_promotion_metrics=False,
+    )
+    assert assignment_calls == 0
+    validation_result, validation_trace, validation_runtime_hash, validation_model_hash = (
+        run_and_trace(
+            validation_model,
+            collect_promotion_metrics=True,
+        )
+    )
+    assert assignment_calls > 0
+
+    assert not any(
+        name.startswith("physical_forecast_identity_") for name in training_result.metrics
+    )
+    assert any(name.startswith("physical_forecast_identity_") for name in validation_result.metrics)
+    common_additive_names = {
+        name
+        for name in training_result.metrics
+        if name.startswith("physical_") and name in validation_result.metrics
+    }
+    assert common_additive_names
+    for name in common_additive_names:
+        assert training_result.metrics[name] == pytest.approx(
+            validation_result.metrics[name],
+            nan_ok=True,
+        )
+    assert training_result.loss_terms.keys() == validation_result.loss_terms.keys()
+    for name, value in training_result.loss_terms.items():
+        torch.testing.assert_close(value, validation_result.loss_terms[name])
+    assert training_trace == validation_trace
+    assert training_runtime_hash == validation_runtime_hash
+    assert training_model_hash == validation_model_hash
+
+    parity_artifact = {
+        "schema": "promotion_metric_collection_runtime_parity_v1",
+        "training_assignment_calls": 0,
+        "validation_assignment_calls": assignment_calls,
+        "posterior_trace_sha256": training_trace,
+        "final_runtime_sha256": training_runtime_hash,
+        "checkpoint_model_state_sha256": training_model_hash,
+        "common_additive_metric_count": len(common_additive_names),
+        "new_validation_evidence": sorted(
+            name
+            for name in validation_result.metrics
+            if name.startswith("physical_forecast_identity_")
+        ),
+    }
+    artifact_path = tmp_path / "promotion_metric_collection_parity.json"
+    artifact_path.write_text(
+        json.dumps(parity_artifact, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    assert json.loads(artifact_path.read_text(encoding="utf-8")) == parity_artifact
 
 
 def test_prior_and_posterior_correction_rollouts_use_identical_query_partitions(

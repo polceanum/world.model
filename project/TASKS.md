@@ -1,5 +1,116 @@
 # Tasks
 
+## Comprehensive promotion evidence — specification 1.51
+
+- [x] Advance the fixed physical selector to metric version `7`, rollout
+  protocol `16`, held-out evaluator metric schema
+  `held_out_rgb_metrics_v3`, and per-scenario schema
+  `clean_primary_additive_support_diagnostic_v3`.
+- [x] Persist current and every-horizon velocity x/y/z evidence alongside
+  position, and require all finite pooled/scenario selector fields rather than
+  allowing a pooled score to hide an axis or horizon regression.
+- [x] Add per-horizon event confusion/F1, current/horizon pooled+x/y/z
+  uncertainty NLL/sharpness/calibration evidence, and forecast identity
+  eligible/associated/mismatch counts with distance-gated association
+  coverage.
+- [x] Make per-axis Gaussian sufficient statistics the single canonical
+  producer for pooled NLL/sharpness. Prove the real heavy-light signed-NLL
+  cancellation is repaired without widening fail-closed tolerances.
+- [x] Separate core per-episode causal support from rich pooled/scenario
+  rare-event, calibration, and identity support. Preserve strict rich support
+  while proving the real fixed-32 manifest retains `32/32` episodes and `8/8`
+  scenario families.
+- [x] Require every scenario to expose the same additive physical schema as
+  the pooled result and prove that all scenario counts/sums reconstruct pooled
+  evidence; fail closed on missing support, classes, associations, fields, or
+  contradictory derived metrics.
+- [x] Keep rich metric collection validation-only so optimizer-time forward/
+  backward execution is unchanged. Prove old/new trainer and evaluator
+  physical outputs, posterior traces, final runtime, model state, and
+  checkpoint bytes remain exact.
+- [x] Separate `physical_promotion_eligible` from
+  `comprehensive_promotion_eligible`. Keep trainer selectors explicitly
+  unpaired/non-comprehensive and make the compatibility
+  `promotion_eligible` field an alias only of the comprehensive decision.
+- [x] Add a fail-closed paired latency gate over RGB global update, RGB fast
+  update, and future rollout; require complete mean/sum/count evidence and
+  candidate/reference ratios no greater than `1.10` on the same device and
+  precision.
+- [x] Make replay checkpoint and JSON evidence immutable one-read snapshots.
+  Bind exact source/config/protocol/simulator/scenarios/seeds/order/horizons/
+  device/precision/RGB/intervention/posterior/physical-digest evidence before
+  applying promotion guardrails.
+- [x] Share one canonical primary-physical metric selector and explicit
+  exclusion declaration across evaluator and replay. Recompute hashed keys,
+  digest, and pooled/scenario partitions rather than trusting stored claims.
+- [x] Reset Python, NumPy, CPU Torch, and MPS RNG independently for each replay
+  arm so candidate/reference ordering cannot alter physical evidence.
+- [x] Fail exact resume across selector `6 -> 7` or rollout protocol
+  `15 -> 16`; preserve old artifacts as historical evidence and require
+  weights-only initialization for fresh qualification.
+- [x] Separate an optimization plateau from comprehensive convergence in the
+  convergence supervisor and read-only monitor. Display
+  `OPTIMIZATION PLATEAU` until the paired comprehensive gate passes.
+- [x] Complete final adversarial review with no merge blocker. Preserve the
+  earlier parity artifacts for provenance, then pass the final frozen parity
+  between candidate/reference runtimes `6247e913…`/`0d8499cf…` under
+  `/private/tmp/orpheus-spec151-final-parity.x8PY0e`. Record qualification SHA
+  `2ce77b69…`, fresh supplemental SHA `3793c659…`, and exact 740491-byte
+  checkpoint SHA `61ad6691…`; preserve all common metrics/losses/posteriors/
+  model/checkpoint hashes and fail closed when latency is absent.
+- [x] Pass the changed-suite gate (`304 passed in 96.19s`), focused final
+  hash/replay repair gate (`34 passed in 6.94s`), Ruff, and diff checks.
+- [x] Repair the five gaps exposed by the first full repository run using
+  test-fixture changes only: add canonical selector-v7/rollout-v16 checkpoint
+  metrics to three exact-resume fixtures and request
+  `collect_promotion_metrics=True` in two direct-validation tests. Preserve the
+  fail-closed production contract unchanged; pass the related `275`-test gate
+  and the `67` tests in directly affected files.
+- [x] Complete the final frozen repository gate at unchanged runtime/worktree
+  fingerprints `6247e913…`/`1836ecc3…`: `1080 passed, 16 skipped in 424.71s`;
+  Ruff check passed, Ruff format confirmed `219` files already formatted,
+  isolated-cache compileall passed, final parity passed, and diff check passed.
+- [x] Advance `PROJECT_SPEC.md`, package specification version, status, tasks,
+  design decisions, and changelog consistently to `1.51`.
+- [x] Record and reject the active specification-1.50 step-512 candidate:
+  strong pooled/current/horizon/velocity gains coexist with `65` scenario/
+  axis guardrail failures; retain its numbered checkpoint and protected
+  incumbent without claiming promotion.
+- [x] Replay step 512 under the rich version-1.51 fixed-32 shadow contract.
+  Preserve the `9.31%` score gain but reject `237` rich failures, including the
+  overlapping `61` velocity-axis, `13` pooled-velocity, `67` NLL, `8`
+  calibration, `15` event-horizon, and `11` identity family counts. Claim
+  neither physical nor comprehensive promotion.
+- [x] Complete and reject the fixed-32 perception-group rollback diagnostic.
+  Its selector `0.2450779860` is between step zero `0.2654622904` and step 512
+  `0.2407574176`; failures improve `65 -> 52`, but `45` persist, `7` are new,
+  and `38/52` are z-related. Bind the result to manifest/checkpoint/composed/
+  raw-metrics SHA-256 values `e27bdf2d...`, `b84e5299...`, `f8f1704c...`,
+  `f7699a67...`, and `a057439a...`; do not promote rollback or interpolation.
+- [x] Let the source-frozen specification-1.50 trajectory reach its declared
+  update-1024 selector, audit exact updater/optimizer ownership, and pause it.
+  Reject the result: failures worsen `65 -> 118` and score, position, x, z,
+  lifecycle, coverage, and precision regress despite a healthy optimizer.
+- [ ] Implement a narrow axis-gated updater-state repair initialized
+  weights-only from the protected base. Preserve RGB-only truth, causal
+  analytic+learned+event dynamics, local applicability/model selection, and
+  protected-incumbent semantics.
+- [ ] Run repaired and unchanged paired arms through at least step 512 and
+  step 1024, then extend only a surviving arm through a bounded multi-selector
+  qualification long enough for robust differences before comprehensive
+  fixed-32, latency, and disjoint gates.
+- [ ] Run the real paired 32-seed active-Aqua MPS promotion replay on one
+  immutable candidate/reference pair. Require complete physical and all three
+  `<=1.10x` latency guardrails; retain a physical-only result as unpromoted if
+  timing is missing or adverse.
+- [ ] Qualify any promising candidate after weights-only transfer on fresh
+  version-1.51 fixed evidence, then run disjoint RGB-only validation, test,
+  and OOD scenario/object/camera/parameter/event/recovery gates.
+- [ ] Claim comprehensive convergence only after a declared optimization
+  plateau and the physical, paired-latency, disjoint, test, and OOD gates all
+  pass. No such claim exists at this boundary.
+- [ ] Commit and push the fully gated specification-1.51 source and memory.
+
 ## Objective ownership and measured execution — specification 1.50
 
 - [x] Detach and clone the prior plus detach the modality cache for the

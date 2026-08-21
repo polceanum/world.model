@@ -1018,6 +1018,7 @@ def test_bounded_rollout_anchors_reuse_posterior_and_emit_physical_metrics(
     )
     config = _closed_loop_config()
     batch = collate_episodes([generate_episode(config, seed=7)])
+    torch.manual_seed(1)
     model = OnlineWorldModel.from_config(config, device="cpu")
     original_rollout = model.dynamics.rollout
     rollout_calls = 0
@@ -1036,6 +1037,7 @@ def test_bounded_rollout_anchors_reuse_posterior_and_emit_physical_metrics(
         apply_perturbations=False,
         include_measurement_supervision=False,
         rollout_anchors_per_window=2,
+        collect_promotion_metrics=True,
     )
 
     # Eligible anchors are frames 0..2, so the deterministic bound selects
@@ -1056,7 +1058,7 @@ def test_bounded_rollout_anchors_reuse_posterior_and_emit_physical_metrics(
     assert "physical_distance_gated_matched_object_frames" in result.metrics
     assert "physical_distance_gated_identity_switches" in result.metrics
     validation = physical_validation_metrics(result.metrics, config)
-    assert set(validation) == {
+    expected_validation_metrics = {
         "validation_position_rmse_m",
         "validation_velocity_rmse_mps",
         "validation_target_coverage",
@@ -1064,15 +1066,33 @@ def test_bounded_rollout_anchors_reuse_posterior_and_emit_physical_metrics(
         "validation_collision_f1",
         "validation_id_switch_rate",
         "validation_position_coverage90",
+        "validation_current_position_coverage90",
+        "validation_current_position_gaussian_nll",
+        "validation_current_position_sharpness_std",
         "validation_position_rmse@0.050s",
+        "validation_velocity_rmse@0.050s",
         "validation_forecast_target_coverage@0.050s",
-        "validation_position_rmse_x_m",
-        "validation_position_rmse_y_m",
-        "validation_position_rmse_z_m",
-        "validation_position_rmse_x@0.050s",
-        "validation_position_rmse_y@0.050s",
-        "validation_position_rmse_z@0.050s",
+        "validation_forecast_identity_mismatch_rate@0.050s",
+        "validation_forecast_identity_association_coverage@0.050s",
+        "validation_position_coverage90@0.050s",
+        "validation_position_gaussian_nll@0.050s",
+        "validation_position_sharpness_std@0.050s",
+        "validation_collision_f1@0.050s",
     }
+    for axis_name in ("x", "y", "z"):
+        expected_validation_metrics.update(
+            {
+                f"validation_position_rmse_{axis_name}_m",
+                f"validation_velocity_rmse_{axis_name}_mps",
+                f"validation_current_position_gaussian_nll_{axis_name}",
+                f"validation_current_position_sharpness_std_{axis_name}",
+                f"validation_position_rmse_{axis_name}@0.050s",
+                f"validation_velocity_rmse_{axis_name}@0.050s",
+                f"validation_position_gaussian_nll_{axis_name}@0.050s",
+                f"validation_position_sharpness_std_{axis_name}@0.050s",
+            }
+        )
+    assert set(validation) == expected_validation_metrics
 
 
 def test_validation_can_skip_prior_future_rollouts_without_losing_physical_metrics(
@@ -1087,6 +1107,7 @@ def test_validation_can_skip_prior_future_rollouts_without_losing_physical_metri
     )
     config = _closed_loop_config()
     batch = collate_episodes([generate_episode(config, seed=7)])
+    torch.manual_seed(1)
     model = OnlineWorldModel.from_config(config, device="cpu")
     original_rollout = model.dynamics.rollout
     rollout_calls = 0
@@ -1106,6 +1127,7 @@ def test_validation_can_skip_prior_future_rollouts_without_losing_physical_metri
         include_measurement_supervision=False,
         rollout_anchors_per_window=2,
         compute_future_correction=False,
+        collect_promotion_metrics=True,
     )
 
     assert rollout_calls == 2

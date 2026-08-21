@@ -16,6 +16,7 @@ from world_model.training.trainer import (
     _current_model_state_hash,
     _expected_resume_checkpoint_devices,
     _fresh_causal_optimizer_state,
+    _is_additive_physical_metric,
     _measurement_selection_metrics,
     _measurement_validation_protocol_hash,
     _model_state_hash,
@@ -32,6 +33,7 @@ from world_model.training.trainer import (
     _selection_horizon_keys,
     _selection_scenario_slugs,
     _validate_exact_resume_source,
+    _validate_validation_support_schema,
     _validation_protocol_checkpoint_metrics,
     _validation_support_evidence,
     _verified_measurement_checkpoint,
@@ -71,6 +73,96 @@ def test_checkpoint_support_evidence_keeps_per_seed_support_markers() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("metric", "replacement", "error"),
+    [
+        (
+            "physical_state_velocity_coordinate_count",
+            301.0,
+            "current position/velocity support differs",
+        ),
+        (
+            "physical_rollout_velocity@0.100s_coordinate_count",
+            31.0,
+            "position/velocity support differs",
+        ),
+        (
+            "physical_rollout_position@0.100s_calibration_coordinate_count",
+            31.0,
+            "calibration/coverage support differs",
+        ),
+        (
+            "physical_position_coverage90_coordinate_count",
+            91.0,
+            "pooled coverage does not equal horizons",
+        ),
+        (
+            "physical_collision_true_positive_count",
+            10.0,
+            "pooled collision confusion does not equal horizons",
+        ),
+        (
+            "physical_forecast_identity_eligible_count@0.100s",
+            91.0,
+            "forecast identity counts are inconsistent",
+        ),
+        (
+            "physical_forecast_identity_association_count@0.100s",
+            91.0,
+            "forecast identity counts are inconsistent",
+        ),
+        (
+            "physical_forecast_identity_mismatch_count@0.100s",
+            91.0,
+            "forecast identity counts are inconsistent",
+        ),
+    ],
+)
+def test_validation_support_schema_rejects_contradictory_additive_counts(
+    metric: str,
+    replacement: float,
+    error: str,
+) -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    metrics = _physical_metrics(config)
+    metrics[metric] = replacement
+
+    with pytest.raises(ValueError, match=error):
+        _validate_validation_support_schema(metrics, config)
+
+
+def test_validation_support_schema_recurses_count_guards_through_scenarios() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    metrics = _physical_metrics(config)
+    scenario = _selection_scenario_slugs(config)[0]
+    metrics[f"scenario_{scenario}_physical_forecast_identity_association_count@0.100s"] = 91.0
+
+    with pytest.raises(ValueError, match="forecast identity counts are inconsistent"):
+        _validate_validation_support_schema(metrics, config)
+
+
+def test_validation_support_schema_rejects_coherent_scenario_partition_drift() -> None:
+    config = load_config("configs/tiny_all_scenarios.yaml")
+    metrics = _physical_metrics(config)
+    scenarios = _selection_scenario_slugs(config)
+    for name in tuple(metrics):
+        if _is_additive_physical_metric(name):
+            metrics[name] *= len(scenarios)
+    _validate_validation_support_schema(metrics, config)
+
+    changed_scenario = scenarios[0]
+    prefix = f"scenario_{changed_scenario}_"
+    for name in tuple(metrics):
+        if not name.startswith(prefix):
+            continue
+        physical_name = name.removeprefix(prefix)
+        if _is_additive_physical_metric(physical_name):
+            metrics[name] *= 2.0
+
+    with pytest.raises(ValueError, match="does not equal scenario partition"):
+        _validate_validation_support_schema(metrics, config)
+
+
 def test_rejected_equal_weight_candidate_still_reports_incumbent_tensor_linkage() -> None:
     config = load_config("configs/tiny_overfit.yaml")
     selection = _rollout_selection_metrics(_physical_metrics(config), config)
@@ -102,6 +194,11 @@ def test_rejected_equal_weight_candidate_still_reports_incumbent_tensor_linkage(
     assert metrics["selection_accepted"] == 0.0
     assert metrics["checkpoint_contains_best_rollout_weights"] == 1.0
     assert metrics["checkpoint_contains_reference_rollout_weights"] == 0.0
+    assert metrics["latency_guardrail_supported"] == 0.0
+    assert metrics["latency_guardrail_passed"] == 0.0
+    assert metrics["latency_guardrail_promotion_eligible"] == 0.0
+    assert metrics["comprehensive_promotion_eligible"] == 0.0
+    assert metrics["selection_scope"] == "fixed_physical_incumbent_not_comprehensive_promotion"
 
 
 def _physical_metrics(
@@ -128,6 +225,9 @@ def _physical_metrics(
         "validation_collision_f1": 0.6,
         "validation_id_switch_rate": 0.01,
         "validation_position_coverage90": position_coverage90,
+        "validation_current_position_coverage90": position_coverage90,
+        "validation_current_position_gaussian_nll": 0.1,
+        "validation_current_position_sharpness_std": 1.0,
         "physical_state_position_sse": 0.4**2 * 300.0,
         "physical_state_position_coordinate_count": 300.0,
         "physical_state_velocity_sse": velocity**2 * 300.0,
@@ -139,34 +239,86 @@ def _physical_metrics(
         "physical_distance_gated_object_frame_associations": 100.0,
         "physical_position_coverage90_hit_count": position_coverage90 * 300.0,
         "physical_position_coverage90_coordinate_count": 300.0,
+        "physical_state_position_coverage90_hit_count": position_coverage90 * 300.0,
+        "physical_state_position_coverage90_coordinate_count": 300.0,
+        "physical_state_position_gaussian_nll_sum": 30.0,
+        "physical_state_position_sharpness_std_sum": 300.0,
+        "physical_state_position_calibration_coordinate_count": 300.0,
         "physical_collision_true_positive_count": 3.0,
         "physical_collision_false_positive_count": 2.0,
         "physical_collision_false_negative_count": 2.0,
     }
     for axis in ("x", "y", "z"):
         metrics[f"validation_position_rmse_{axis}_m"] = 0.4
+        metrics[f"validation_velocity_rmse_{axis}_mps"] = velocity
+        metrics[f"validation_current_position_gaussian_nll_{axis}"] = 0.1
+        metrics[f"validation_current_position_sharpness_std_{axis}"] = 1.0
         metrics[f"physical_state_position_{axis}_sse"] = 0.4**2 * 100.0
         metrics[f"physical_state_position_{axis}_coordinate_count"] = 100.0
-    for index, (suffix, _) in enumerate(_selection_horizon_keys(config)):
+        metrics[f"physical_state_velocity_{axis}_sse"] = velocity**2 * 100.0
+        metrics[f"physical_state_velocity_{axis}_coordinate_count"] = 100.0
+        metrics[f"physical_state_position_{axis}_gaussian_nll_sum"] = 10.0
+        metrics[f"physical_state_position_{axis}_sharpness_std_sum"] = 100.0
+        metrics[f"physical_state_position_{axis}_calibration_coordinate_count"] = 100.0
+    horizon_entries = tuple(_selection_horizon_keys(config))
+    for index, (suffix, _) in enumerate(horizon_entries):
         horizon_rmse = score_scale * (0.4 - index * 0.1)
         metrics[f"validation_position_rmse@{suffix}"] = horizon_rmse
         metrics[f"validation_forecast_target_coverage@{suffix}"] = forecast_coverage
+        metrics[f"validation_velocity_rmse@{suffix}"] = velocity
+        metrics[f"validation_collision_f1@{suffix}"] = 0.6
+        metrics[f"validation_forecast_identity_association_coverage@{suffix}"] = 1.0
+        metrics[f"validation_forecast_identity_mismatch_rate@{suffix}"] = 0.0
+        metrics[f"validation_position_coverage90@{suffix}"] = position_coverage90
+        metrics[f"validation_position_gaussian_nll@{suffix}"] = 0.1
+        metrics[f"validation_position_sharpness_std@{suffix}"] = 1.0
         metrics[f"physical_rollout_position@{suffix}_sse"] = horizon_rmse**2 * 30.0
         metrics[f"physical_forecast_predictable_target_count@{suffix}"] = 10.0
         metrics[f"physical_rollout_position@{suffix}_coordinate_count"] = 30.0
+        metrics[f"physical_rollout_velocity@{suffix}_sse"] = velocity**2 * 30.0
+        metrics[f"physical_rollout_velocity@{suffix}_coordinate_count"] = 30.0
+        metrics[f"physical_rollout_position@{suffix}_gaussian_nll_sum"] = 3.0
+        metrics[f"physical_rollout_position@{suffix}_sharpness_std_sum"] = 30.0
+        metrics[f"physical_rollout_position@{suffix}_calibration_coordinate_count"] = 30.0
         metrics[f"physical_rollout_position_coverage90@{suffix}_hit_count"] = (
             position_coverage90 * 30.0
         )
         metrics[f"physical_rollout_position_coverage90@{suffix}_coordinate_count"] = 30.0
-        metrics[f"physical_forecast_active_count@{suffix}"] = forecast_coverage * 10.0
-        metrics[f"physical_forecast_tracked_count@{suffix}"] = 10.0
-        metrics[f"physical_forecast_target_count@{suffix}"] = 10.0
-        metrics[f"physical_rollout_predictable_target_count@{suffix}"] = 10.0
+        metrics[f"physical_forecast_active_count@{suffix}"] = forecast_coverage * 100.0
+        metrics[f"physical_forecast_tracked_count@{suffix}"] = 100.0
+        metrics[f"physical_forecast_target_count@{suffix}"] = 100.0
+        metrics[f"physical_rollout_predictable_target_count@{suffix}"] = 100.0
         metrics[f"physical_rollout_censored_external_actuation_count@{suffix}"] = 0.0
+        metrics[f"physical_forecast_identity_mismatch_count@{suffix}"] = 0.0
+        metrics[f"physical_forecast_identity_eligible_count@{suffix}"] = forecast_coverage * 100.0
+        metrics[f"physical_forecast_identity_association_count@{suffix}"] = (
+            forecast_coverage * 100.0
+        )
+        metrics[f"physical_collision_true_positive_count@{suffix}"] = 3.0
+        metrics[f"physical_collision_false_positive_count@{suffix}"] = 2.0
+        metrics[f"physical_collision_false_negative_count@{suffix}"] = 2.0
+        metrics[f"physical_collision_true_negative_count@{suffix}"] = 3.0
         for axis in ("x", "y", "z"):
             metrics[f"validation_position_rmse_{axis}@{suffix}"] = horizon_rmse
+            metrics[f"validation_velocity_rmse_{axis}@{suffix}"] = velocity
+            metrics[f"validation_position_gaussian_nll_{axis}@{suffix}"] = 0.1
+            metrics[f"validation_position_sharpness_std_{axis}@{suffix}"] = 1.0
             metrics[f"physical_rollout_position_{axis}@{suffix}_sse"] = horizon_rmse**2 * 10.0
             metrics[f"physical_rollout_position_{axis}@{suffix}_coordinate_count"] = 10.0
+            metrics[f"physical_rollout_velocity_{axis}@{suffix}_sse"] = velocity**2 * 10.0
+            metrics[f"physical_rollout_velocity_{axis}@{suffix}_coordinate_count"] = 10.0
+            metrics[f"physical_rollout_position_{axis}@{suffix}_gaussian_nll_sum"] = 1.0
+            metrics[f"physical_rollout_position_{axis}@{suffix}_sharpness_std_sum"] = 10.0
+            metrics[f"physical_rollout_position_{axis}@{suffix}_calibration_coordinate_count"] = (
+                10.0
+            )
+    horizon_count = float(len(horizon_entries))
+    metrics["physical_position_coverage90_hit_count"] = position_coverage90 * 30.0 * horizon_count
+    metrics["physical_position_coverage90_coordinate_count"] = 30.0 * horizon_count
+    metrics["physical_collision_true_positive_count"] = 3.0 * horizon_count
+    metrics["physical_collision_false_positive_count"] = 2.0 * horizon_count
+    metrics["physical_collision_false_negative_count"] = 2.0 * horizon_count
+    metrics["physical_collision_true_negative_count"] = 3.0 * horizon_count
     base = dict(metrics)
     manifest = make_seed_manifest("validation", config.training.validation_episodes)
     scenario_slugs = _selection_scenario_slugs(config)
@@ -186,6 +338,106 @@ def _physical_metrics(
     for seed in manifest.seeds:
         metrics[f"seed_{seed}_selection_metric_supported"] = 1.0
     return metrics
+
+
+def _complete_unsupported_horizon_schema(
+    metrics: dict[str, float],
+    config: OrpheusConfig,
+    scenario: str,
+) -> None:
+    """Keep zero-support selector fixtures structurally complete."""
+
+    prefixes = ("", f"scenario_{scenario}_")
+    for prefix in prefixes:
+        for name in (
+            "physical_state_position_coordinate_count",
+            "physical_state_velocity_coordinate_count",
+            "physical_state_position_coverage90_coordinate_count",
+            "physical_state_position_calibration_coordinate_count",
+            "physical_position_coverage90_hit_count",
+            "physical_position_coverage90_coordinate_count",
+        ):
+            metrics.setdefault(f"{prefix}{name}", 0.0)
+        for axis in ("x", "y", "z"):
+            for name in (
+                f"physical_state_position_{axis}_coordinate_count",
+                f"physical_state_velocity_{axis}_coordinate_count",
+                f"physical_state_position_{axis}_calibration_coordinate_count",
+            ):
+                metrics.setdefault(f"{prefix}{name}", 0.0)
+        for kind in (
+            "true_positive",
+            "false_positive",
+            "false_negative",
+            "true_negative",
+        ):
+            metrics.setdefault(f"{prefix}physical_collision_{kind}_count", 0.0)
+    for suffix, _ in _selection_horizon_keys(config):
+        for prefix in prefixes:
+            metrics.setdefault(
+                f"{prefix}physical_forecast_predictable_target_count@{suffix}",
+                0.0,
+            )
+            metrics.setdefault(
+                f"{prefix}physical_rollout_position@{suffix}_coordinate_count",
+                0.0,
+            )
+            metrics.setdefault(
+                f"{prefix}physical_rollout_velocity@{suffix}_coordinate_count",
+                0.0,
+            )
+            metrics.setdefault(
+                f"{prefix}physical_rollout_position@{suffix}_calibration_coordinate_count",
+                0.0,
+            )
+            metrics.setdefault(
+                f"{prefix}physical_rollout_position_coverage90@{suffix}_hit_count",
+                0.0,
+            )
+            metrics.setdefault(
+                f"{prefix}physical_rollout_position_coverage90@{suffix}_coordinate_count",
+                0.0,
+            )
+            metrics.setdefault(
+                f"{prefix}physical_forecast_active_count@{suffix}",
+                0.0,
+            )
+            metrics.setdefault(
+                f"{prefix}physical_forecast_identity_association_count@{suffix}",
+                0.0,
+            )
+            metrics.setdefault(
+                f"{prefix}physical_forecast_identity_eligible_count@{suffix}",
+                0.0,
+            )
+            metrics.setdefault(
+                f"{prefix}physical_forecast_identity_mismatch_count@{suffix}",
+                0.0,
+            )
+            for axis in ("x", "y", "z"):
+                metrics.setdefault(
+                    f"{prefix}physical_rollout_position_{axis}@{suffix}_coordinate_count",
+                    0.0,
+                )
+                metrics.setdefault(
+                    f"{prefix}physical_rollout_velocity_{axis}@{suffix}_coordinate_count",
+                    0.0,
+                )
+                metrics.setdefault(
+                    f"{prefix}physical_rollout_position_{axis}@{suffix}_"
+                    "calibration_coordinate_count",
+                    0.0,
+                )
+            for kind in (
+                "true_positive",
+                "false_positive",
+                "false_negative",
+                "true_negative",
+            ):
+                metrics.setdefault(
+                    f"{prefix}physical_collision_{kind}_count@{suffix}",
+                    0.0,
+                )
 
 
 def _selector_checkpoint_metrics(
@@ -572,6 +824,33 @@ def test_selector_verification_requires_axis_metadata_and_raw_consistency(
         )
         is None
     )
+
+    for contradictory_metric in (
+        "best_rollout_velocity_rmse_x@0.500s",
+        "best_rollout_position_gaussian_nll_x@0.500s",
+    ):
+        contradictory_new_evidence = dict(metrics)
+        contradictory_new_evidence[contradictory_metric] = (
+            float(contradictory_new_evidence[contradictory_metric]) + 0.25
+        )
+        save_checkpoint(
+            checkpoint,
+            model=model,
+            optimizer=optimizer,
+            config=config,
+            step=7,
+            metrics=contradictory_new_evidence,  # type: ignore[arg-type]
+        )
+        assert (
+            _verified_selector_checkpoint(
+                checkpoint,
+                config,
+                prefix="best_rollout",
+                expected_model_state_hash=model_hash,
+                expected_step=7,
+            )
+            is None
+        )
     save_checkpoint(
         checkpoint,
         model=model,
@@ -910,6 +1189,8 @@ def test_exact_resume_fails_loudly_when_linked_measurement_artifact_is_missing(
         metrics={
             "best_measurement_validated": 1.0,
             **selection.checkpoint_metrics(),
+            **_validation_protocol_checkpoint_metrics(config),
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
             "measurement_validation_protocol_hash": (_measurement_validation_protocol_hash(config)),
             "best_measurement_model_state_hash": model_hash,
             "best_measurement_checkpoint_step": 0.0,
@@ -1043,6 +1324,8 @@ def test_pending_final_validation_recovers_without_optimizer_update(
             "loss_total": 2.5,
             "measurement_handoff_completed": float(rgb_pretrain_steps == 0),
             "final_validation_completed": 0.0,
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
+            **_validation_protocol_checkpoint_metrics(config),
         },
         device="cpu",
     )
@@ -1422,15 +1705,7 @@ def test_pooled_unsupported_reference_is_diagnostic_not_validated_provenance(
             f"scenario_{scenario}_minimum_supported_episode_count": 1.0,
             "seed_100000_selection_metric_supported": 0.0,
         }
-        for suffix, _ in _selection_horizon_keys(config):
-            metrics[f"physical_forecast_predictable_target_count@{suffix}"] = 0.0
-            metrics[f"physical_rollout_position@{suffix}_coordinate_count"] = 0.0
-            metrics[f"scenario_{scenario}_physical_forecast_predictable_target_count@{suffix}"] = (
-                0.0
-            )
-            metrics[f"scenario_{scenario}_physical_rollout_position@{suffix}_coordinate_count"] = (
-                0.0
-            )
+        _complete_unsupported_horizon_schema(metrics, config, scenario)
         return TrainingBatchResult(
             total_loss=torch.tensor(0.1),
             loss_terms={"rollout": torch.tensor(0.1)},
@@ -1545,6 +1820,7 @@ def test_first_supported_after_pooled_failure_only_reestablishes_reference(
                 metrics[
                     f"scenario_{scenario}_physical_rollout_position@{suffix}_coordinate_count"
                 ] = 0.0
+            _complete_unsupported_horizon_schema(metrics, config, scenario)
         elif validation_calls == 2:
             metrics = _physical_metrics(config, score_scale=1.0)
         else:
@@ -1659,6 +1935,7 @@ def test_branched_resume_retains_incomplete_reference_comparison_requirement(
                 metrics[
                     f"scenario_{scenario}_physical_rollout_position@{suffix}_coordinate_count"
                 ] = 0.0
+            _complete_unsupported_horizon_schema(metrics, config, scenario)
         return TrainingBatchResult(
             total_loss=torch.tensor(0.4),
             loss_terms={"rollout": torch.tensor(0.4)},
@@ -2478,9 +2755,59 @@ def test_exact_resume_rejects_corrupt_data_progress_counters(
             "measurement_handoff_completed": 1.0,
             "training_data_draw_step": data_draw_step,
             "skipped_no_gradient_batches": skipped,
+            **_validation_protocol_checkpoint_metrics(config),
+            "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
         },
         device="cpu",
     )
 
     with pytest.raises(ValueError, match="finite nonnegative integer|data-progress invariant"):
+        train_from_config(config, resume_path=checkpoint)
+
+
+@pytest.mark.parametrize("mismatch", ["metric_version", "protocol_hash"])
+def test_exact_resume_rejects_protocol_mismatch_for_reference_only_checkpoint(
+    tmp_path: Path,
+    mismatch: str,
+) -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        project=replace(source.project, output_dir=str(tmp_path / "runs")),
+        device=replace(source.device, preference="cpu", closed_loop_preference="same"),
+        training=replace(
+            source.training,
+            steps=2,
+            rgb_pretrain_steps=0,
+            validation_episodes=1,
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device=torch.device("cpu"))
+    metrics: dict[str, object] = {
+        "best_rollout_validated": 0.0,
+        "rollout_reference_validated": 1.0,
+        "measurement_handoff_completed": 1.0,
+        "training_data_draw_step": 1.0,
+        "skipped_no_gradient_batches": 0.0,
+        "rollout_selection_metric_version": _ROLLOUT_SELECTION_METRIC_VERSION,
+        **_validation_protocol_checkpoint_metrics(config),
+    }
+    if mismatch == "metric_version":
+        metrics["rollout_selection_metric_version"] = _ROLLOUT_SELECTION_METRIC_VERSION - 1.0
+    else:
+        metrics["rollout_validation_protocol_hash"] = "obsolete-protocol"
+    checkpoint = save_checkpoint(
+        tmp_path / mismatch / "checkpoints" / "last.pt",
+        model=model,
+        optimizer=None,
+        config=config,
+        step=1,
+        metrics=metrics,
+        device="cpu",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="exact resume rollout validation protocol/metric schema mismatch",
+    ):
         train_from_config(config, resume_path=checkpoint)

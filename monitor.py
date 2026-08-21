@@ -56,7 +56,9 @@ FAILED_SUPERVISOR_STATES = frozenset(
 ACTIVE_SUPERVISOR_STATES = frozenset(
     {"extension_starting", "extension_running", "segment_running", "running"}
 )
-TERMINAL_STATUSES = frozenset({"COMPLETED", "CONVERGED", "FAILED", "LIMIT HIT"})
+TERMINAL_STATUSES = frozenset(
+    {"COMPLETED", "CONVERGED", "OPTIMIZATION PLATEAU", "FAILED", "LIMIT HIT"}
+)
 TERMINAL_EVALUATION_STAGES = frozenset({"completed", "failed", "interrupted"})
 
 
@@ -756,10 +758,22 @@ def build_snapshot(
         status = "COMPLETED"
         status_detail = "evaluation report"
     elif convergence_status == "plateau":
-        status = "CONVERGED"
-        status_detail = str(
-            convergence_report.get("reason") or supervisor.get("reason") or "plateau"
+        convergence_evidence = convergence_report if convergence_report else supervisor
+        comprehensive_promotion_eligible = (
+            convergence_evidence.get("comprehensive_promotion_eligible") is True
         )
+        comprehensively_converged = convergence_evidence.get("converged") is True
+        if comprehensive_promotion_eligible and comprehensively_converged:
+            status = "CONVERGED"
+            status_detail = str(
+                convergence_report.get("reason")
+                or supervisor.get("reason")
+                or "comprehensive promotion gate passed"
+            )
+        else:
+            status = "OPTIMIZATION PLATEAU"
+            reason = str(convergence_report.get("reason") or supervisor.get("reason") or "plateau")
+            status_detail = f"{reason}; comprehensive promotion not eligible"
     elif convergence_status == "limit_hit":
         status = "LIMIT HIT"
         status_detail = str(
@@ -809,6 +823,10 @@ def build_snapshot(
         warnings.append(str(evaluation_progress["message"]))
     if status == "LIMIT HIT":
         warnings.append("convergence campaign reached its configured limit without plateau")
+    elif status == "OPTIMIZATION PLATEAU":
+        warnings.append(
+            "optimization plateau stopped training, but comprehensive promotion is not eligible"
+        )
 
     validation = training.get("validation")
     if isinstance(validation, Mapping):
@@ -1156,7 +1174,11 @@ def render_snapshot(snapshot: Mapping[str, Any]) -> str:
             )
 
     convergence = snapshot.get("convergence")
-    if isinstance(convergence, Mapping) and status in {"CONVERGED", "LIMIT HIT"}:
+    if isinstance(convergence, Mapping) and status in {
+        "CONVERGED",
+        "OPTIMIZATION PLATEAU",
+        "LIMIT HIT",
+    }:
         completed_steps = convergence.get("completed_steps")
         best_step = convergence.get("best_step")
         pieces = []

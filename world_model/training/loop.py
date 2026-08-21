@@ -163,6 +163,161 @@ def _add_gaussian_coverage_metrics(
     metrics[f"{prefix}_coordinate_count"] = float(expanded.sum().cpu())
 
 
+def _add_gaussian_calibration_metrics(
+    metrics: dict[str, float],
+    *,
+    prefix: str,
+    mean: Tensor,
+    target: Tensor,
+    log_variance: Tensor,
+    mask: Tensor,
+) -> None:
+    """Add detached Gaussian NLL/sharpness sufficient statistics.
+
+    These are validation diagnostics only. Persisting sums and coordinate
+    counts lets the fixed-manifest selector pool episodes and scenario slices
+    exactly instead of averaging already-derived NLL or sharpness values.
+    """
+
+    if mean.shape != target.shape or mean.shape != log_variance.shape:
+        raise ValueError("calibration mean, target, and log variance shapes must match")
+    expanded = mask
+    while expanded.ndim < mean.ndim:
+        expanded = expanded.unsqueeze(-1)
+    expanded = expanded.expand_as(mean)
+    error = (mean - target).detach().masked_select(expanded).float()
+    selected_log_variance = log_variance.detach().clamp(-12.0, 8.0).masked_select(expanded).float()
+    if error.numel() == 0:
+        metrics[f"{prefix}_gaussian_nll_sum"] = 0.0
+        metrics[f"{prefix}_sharpness_std_sum"] = 0.0
+        metrics[f"{prefix}_calibration_coordinate_count"] = 0.0
+        return
+    variance = selected_log_variance.exp()
+    gaussian_nll = 0.5 * (
+        error.square() / variance + selected_log_variance + math.log(2.0 * math.pi)
+    )
+    metrics[f"{prefix}_gaussian_nll_sum"] = float(gaussian_nll.sum().cpu())
+    metrics[f"{prefix}_sharpness_std_sum"] = float((0.5 * selected_log_variance).exp().sum().cpu())
+    metrics[f"{prefix}_calibration_coordinate_count"] = float(error.numel())
+
+
+def _write_pooled_gaussian_calibration_from_axes(
+    metrics: dict[str, float],
+    *,
+    prefix: str,
+) -> None:
+    """Write one canonical pooled calibration sum from emitted axes.
+
+    The pooled and axis reductions describe the same detached coordinates.
+    Reducing the pooled float32 tensor independently can nevertheless differ
+    from the sum of three axis reductions, especially when signed Gaussian NLL
+    values cancel.  Emit the axis sufficient statistics once and derive the
+    pooled values with ``math.fsum`` so the persisted additive partition is
+    exact without widening the fail-closed validator tolerance.
+    """
+
+    if "@" in prefix:
+        base, horizon = prefix.split("@", 1)
+        axis_prefixes = tuple(f"{base}_{axis_name}@{horizon}" for axis_name in ("x", "y", "z"))
+    else:
+        axis_prefixes = tuple(f"{prefix}_{axis_name}" for axis_name in ("x", "y", "z"))
+    for metric_suffix in (
+        "gaussian_nll_sum",
+        "sharpness_std_sum",
+        "calibration_coordinate_count",
+    ):
+        metrics[f"{prefix}_{metric_suffix}"] = math.fsum(
+            metrics[f"{axis_prefix}_{metric_suffix}"] for axis_prefix in axis_prefixes
+        )
+
+
+def _write_axis_partitioned_gaussian_calibration_metrics(
+    metrics: dict[str, float],
+    *,
+    prefix: str,
+    mean: Tensor,
+    target: Tensor,
+    log_variance: Tensor,
+    mask: Tensor,
+) -> None:
+    """Emit x/y/z calibration statistics and their canonical pooled sum."""
+
+    if mean.shape != target.shape or mean.shape != log_variance.shape:
+        raise ValueError("calibration mean, target, and log variance shapes must match")
+    if mean.ndim < 1 or mean.shape[-1] != 3:
+        raise ValueError("axis-partitioned calibration tensors must end in x/y/z")
+    if "@" in prefix:
+        base, horizon = prefix.split("@", 1)
+        axis_prefixes = tuple(f"{base}_{axis_name}@{horizon}" for axis_name in ("x", "y", "z"))
+    else:
+        axis_prefixes = tuple(f"{prefix}_{axis_name}" for axis_name in ("x", "y", "z"))
+    for axis_index, axis_prefix in enumerate(axis_prefixes):
+        _add_gaussian_calibration_metrics(
+            metrics,
+            prefix=axis_prefix,
+            mean=mean[..., axis_index],
+            target=target[..., axis_index],
+            log_variance=log_variance[..., axis_index],
+            mask=mask,
+        )
+    _write_pooled_gaussian_calibration_from_axes(metrics, prefix=prefix)
+
+
+def _match_positions_to_targets(
+    prediction_position: Tensor,
+    prediction_active: Tensor,
+    target_position: Tensor,
+    target_active: Tensor,
+) -> tuple[Tensor, Tensor]:
+    """Hungarian-match arbitrary predicted positions to simulator targets.
+
+    This evaluation-only helper is also used for forecast identity evidence;
+    it never changes the runtime belief or rollout.
+    """
+
+    if prediction_position.ndim != 3 or prediction_position.shape[-1] != 3:
+        raise ValueError("prediction_position must have shape [B,N,3]")
+    if prediction_active.shape != prediction_position.shape[:2]:
+        raise ValueError("prediction_active must have shape [B,N]")
+    if target_position.ndim != 3 or target_position.shape[0] != prediction_position.shape[0]:
+        raise ValueError("target_position must have shape [B,M,3]")
+    if target_active.shape != target_position.shape[:2]:
+        raise ValueError("target_active must have shape [B,M]")
+    if prediction_active.dtype is not torch.bool or target_active.dtype is not torch.bool:
+        raise TypeError("prediction and target active masks must be torch.bool")
+    batch, prediction_count = prediction_active.shape
+    indices = torch.full(
+        (batch, prediction_count),
+        -1,
+        device=prediction_position.device,
+        dtype=torch.int64,
+    )
+    matched = torch.zeros(
+        (batch, prediction_count),
+        device=prediction_position.device,
+        dtype=torch.bool,
+    )
+    for batch_index in range(batch):
+        prediction_slots = torch.nonzero(prediction_active[batch_index], as_tuple=False).flatten()
+        target_slots = torch.nonzero(target_active[batch_index], as_tuple=False).flatten()
+        if prediction_slots.numel() == 0 or target_slots.numel() == 0:
+            continue
+        cost = torch.cdist(
+            prediction_position[batch_index, prediction_slots].detach().cpu(),
+            target_position[batch_index, target_slots].detach().cpu(),
+        )
+        rows, columns = linear_sum_assignment(np.asarray(cost))
+        selected_predictions = prediction_slots[
+            torch.as_tensor(rows, device=prediction_slots.device, dtype=torch.int64)
+        ]
+        selected_targets = target_slots[
+            torch.as_tensor(columns, device=target_slots.device, dtype=torch.int64)
+        ]
+        indices[batch_index, selected_predictions] = selected_targets
+        matched[batch_index, selected_predictions] = True
+    return indices, matched
+
+
 def _f1_from_confusion(
     true_positive: float,
     false_positive: float,
@@ -210,11 +365,11 @@ def physical_validation_metrics(
     reported metric is a ratio of matching sums.
     """
 
-    def required(name: str) -> float:
+    def required(name: str, *, signed: bool = False) -> float:
         if name not in additive_metrics:
             raise RuntimeError(f"missing additive physical validation metric {name!r}")
         value = float(additive_metrics[name])
-        if not math.isfinite(value) or value < 0:
+        if not math.isfinite(value) or (value < 0 and not signed):
             raise ValueError(f"additive physical validation metric {name!r} is invalid")
         return value
 
@@ -234,6 +389,20 @@ def physical_validation_metrics(
             return 0.0
         return min(1.0, max(0.0, numerator / denominator))
 
+    def supported_mean(
+        sum_name: str,
+        count_name: str,
+        *,
+        signed: bool = False,
+    ) -> float:
+        total = required(sum_name, signed=signed)
+        count = required(count_name)
+        if count <= 0:
+            raise PhysicalMetricSupportError(
+                f"physical validation metric {count_name!r} has no support"
+            )
+        return total / count
+
     required_names = {
         "physical_state_position_sse",
         "physical_state_position_coordinate_count",
@@ -246,15 +415,26 @@ def physical_validation_metrics(
         "physical_distance_gated_object_frame_associations",
         "physical_position_coverage90_hit_count",
         "physical_position_coverage90_coordinate_count",
+        "physical_state_position_coverage90_hit_count",
+        "physical_state_position_coverage90_coordinate_count",
+        "physical_state_position_gaussian_nll_sum",
+        "physical_state_position_sharpness_std_sum",
+        "physical_state_position_calibration_coordinate_count",
         "physical_collision_true_positive_count",
         "physical_collision_false_positive_count",
         "physical_collision_false_negative_count",
+        "physical_collision_true_negative_count",
     }
     for axis_name in ("x", "y", "z"):
         required_names.update(
             {
                 f"physical_state_position_{axis_name}_sse",
                 f"physical_state_position_{axis_name}_coordinate_count",
+                f"physical_state_velocity_{axis_name}_sse",
+                f"physical_state_velocity_{axis_name}_coordinate_count",
+                f"physical_state_position_{axis_name}_gaussian_nll_sum",
+                f"physical_state_position_{axis_name}_sharpness_std_sum",
+                f"physical_state_position_{axis_name}_calibration_coordinate_count",
             }
         )
     seen_offsets: set[int] = set()
@@ -270,14 +450,26 @@ def physical_validation_metrics(
             {
                 f"physical_rollout_position{physical_suffix}_sse",
                 f"physical_rollout_position{physical_suffix}_coordinate_count",
+                f"physical_rollout_velocity{physical_suffix}_sse",
+                f"physical_rollout_velocity{physical_suffix}_coordinate_count",
                 f"physical_rollout_position_coverage90{physical_suffix}_hit_count",
                 f"physical_rollout_position_coverage90{physical_suffix}_coordinate_count",
+                f"physical_rollout_position{physical_suffix}_gaussian_nll_sum",
+                f"physical_rollout_position{physical_suffix}_sharpness_std_sum",
+                f"physical_rollout_position{physical_suffix}_calibration_coordinate_count",
                 f"physical_forecast_active_count{physical_suffix}",
                 f"physical_forecast_tracked_count{physical_suffix}",
                 f"physical_forecast_target_count{physical_suffix}",
                 f"physical_forecast_predictable_target_count{physical_suffix}",
                 f"physical_rollout_predictable_target_count{physical_suffix}",
                 f"physical_rollout_censored_external_actuation_count{physical_suffix}",
+                f"physical_forecast_identity_eligible_count{physical_suffix}",
+                f"physical_forecast_identity_mismatch_count{physical_suffix}",
+                f"physical_forecast_identity_association_count{physical_suffix}",
+                f"physical_collision_true_positive_count{physical_suffix}",
+                f"physical_collision_false_positive_count{physical_suffix}",
+                f"physical_collision_false_negative_count{physical_suffix}",
+                f"physical_collision_true_negative_count{physical_suffix}",
             }
         )
         for axis_name in ("x", "y", "z"):
@@ -285,12 +477,162 @@ def physical_validation_metrics(
                 {
                     f"physical_rollout_position_{axis_name}{physical_suffix}_sse",
                     (f"physical_rollout_position_{axis_name}{physical_suffix}_coordinate_count"),
+                    f"physical_rollout_velocity_{axis_name}{physical_suffix}_sse",
+                    (f"physical_rollout_velocity_{axis_name}{physical_suffix}_coordinate_count"),
+                    (f"physical_rollout_position_{axis_name}{physical_suffix}_gaussian_nll_sum"),
+                    (f"physical_rollout_position_{axis_name}{physical_suffix}_sharpness_std_sum"),
+                    (
+                        f"physical_rollout_position_{axis_name}{physical_suffix}_"
+                        "calibration_coordinate_count"
+                    ),
                 }
             )
     # Validate the complete schema before deciding that any zero denominator is
     # ordinary insufficient support. Otherwise an early zero can hide missing
     # or corrupt metrics later in the mapping.
-    validated = {name: required(name) for name in sorted(required_names)}
+    validated = {
+        name: required(
+            name,
+            signed=name.endswith("_gaussian_nll_sum"),
+        )
+        for name in sorted(required_names)
+    }
+
+    def require_axis_partition(
+        aggregate_name: str,
+        axis_names: tuple[str, ...],
+        *,
+        quantity: str,
+    ) -> None:
+        """Reject internally contradictory additive evidence.
+
+        Aggregate and axis statistics are emitted from the same masked tensor.
+        Persisting both makes every derived axis/horizon score independently
+        reproducible, but only if a checkpoint cannot substitute unrelated
+        axis sums while retaining a plausible pooled value.  A small relative
+        tolerance allows the different floating-point reduction orders used by
+        the aggregate and three scalar reductions; support counts remain exact.
+        """
+
+        aggregate = validated[aggregate_name]
+        axis_total = sum(validated[name] for name in axis_names)
+        relative_tolerance = 0.0 if quantity == "count" else 1.0e-6
+        absolute_tolerance = 1.0e-9 if quantity == "count" else 1.0e-7
+        if not math.isclose(
+            aggregate,
+            axis_total,
+            rel_tol=relative_tolerance,
+            abs_tol=absolute_tolerance,
+        ):
+            raise ValueError(
+                f"additive physical validation metric {aggregate_name!r} does not "
+                f"equal its x/y/z {quantity} partition"
+            )
+
+    for stem in ("physical_state_position", "physical_state_velocity"):
+        require_axis_partition(
+            f"{stem}_sse",
+            tuple(f"{stem}_{axis_name}_sse" for axis_name in ("x", "y", "z")),
+            quantity="SSE",
+        )
+        require_axis_partition(
+            f"{stem}_coordinate_count",
+            tuple(f"{stem}_{axis_name}_coordinate_count" for axis_name in ("x", "y", "z")),
+            quantity="count",
+        )
+    if (
+        validated["physical_state_position_coordinate_count"]
+        != validated["physical_state_velocity_coordinate_count"]
+    ):
+        raise ValueError("current position and velocity evidence must use identical support")
+    for axis_name in ("x", "y", "z"):
+        if (
+            validated[f"physical_state_position_{axis_name}_coordinate_count"]
+            != validated[f"physical_state_velocity_{axis_name}_coordinate_count"]
+        ):
+            raise ValueError(
+                f"current position and velocity {axis_name}-axis evidence must use identical support"
+            )
+    current_position_count = validated["physical_state_position_coordinate_count"]
+    for count_name in (
+        "physical_state_position_coverage90_coordinate_count",
+        "physical_state_position_calibration_coordinate_count",
+    ):
+        if validated[count_name] != current_position_count:
+            raise ValueError(
+                f"current uncertainty evidence {count_name!r} must use current position support"
+            )
+    for physical_suffix in physical_suffixes:
+        for stem in (
+            f"physical_rollout_position{physical_suffix}",
+            f"physical_rollout_velocity{physical_suffix}",
+        ):
+            base, suffix = stem.split("@", 1)
+            suffix = f"@{suffix}"
+            require_axis_partition(
+                f"{stem}_sse",
+                tuple(f"{base}_{axis_name}{suffix}_sse" for axis_name in ("x", "y", "z")),
+                quantity="SSE",
+            )
+            require_axis_partition(
+                f"{stem}_coordinate_count",
+                tuple(
+                    f"{base}_{axis_name}{suffix}_coordinate_count" for axis_name in ("x", "y", "z")
+                ),
+                quantity="count",
+            )
+        position_count = validated[f"physical_rollout_position{physical_suffix}_coordinate_count"]
+        velocity_count = validated[f"physical_rollout_velocity{physical_suffix}_coordinate_count"]
+        if position_count != velocity_count:
+            raise ValueError(
+                f"rollout position and velocity evidence at {physical_suffix} must use identical support"
+            )
+        for axis_name in ("x", "y", "z"):
+            if (
+                validated[
+                    f"physical_rollout_position_{axis_name}{physical_suffix}_coordinate_count"
+                ]
+                != validated[
+                    f"physical_rollout_velocity_{axis_name}{physical_suffix}_coordinate_count"
+                ]
+            ):
+                raise ValueError(
+                    f"rollout position and velocity {axis_name}-axis evidence at "
+                    f"{physical_suffix} must use identical support"
+                )
+        calibration_count = validated[
+            f"physical_rollout_position{physical_suffix}_calibration_coordinate_count"
+        ]
+        coverage_count = validated[
+            f"physical_rollout_position_coverage90{physical_suffix}_coordinate_count"
+        ]
+        if coverage_count != calibration_count:
+            raise ValueError(
+                f"rollout coverage and likelihood at {physical_suffix} must use identical support"
+            )
+
+    calibration_stems = ["physical_state_position"]
+    calibration_stems.extend(
+        f"physical_rollout_position{physical_suffix}" for physical_suffix in physical_suffixes
+    )
+    for stem in calibration_stems:
+        if "@" in stem:
+            base, suffix = stem.split("@", 1)
+            suffix = f"@{suffix}"
+        else:
+            base, suffix = stem, ""
+        for metric_suffix, quantity in (
+            ("gaussian_nll_sum", "Gaussian NLL sum"),
+            ("sharpness_std_sum", "sharpness sum"),
+            ("calibration_coordinate_count", "count"),
+        ):
+            require_axis_partition(
+                f"{stem}_{metric_suffix}",
+                tuple(
+                    f"{base}_{axis_name}{suffix}_{metric_suffix}" for axis_name in ("x", "y", "z")
+                ),
+                quantity=quantity,
+            )
 
     squared_error_pairs = [
         (
@@ -311,6 +653,13 @@ def physical_validation_metrics(
     )
     squared_error_pairs.extend(
         (
+            f"physical_state_velocity_{axis_name}_sse",
+            f"physical_state_velocity_{axis_name}_coordinate_count",
+        )
+        for axis_name in ("x", "y", "z")
+    )
+    squared_error_pairs.extend(
+        (
             f"physical_rollout_position{physical_suffix}_sse",
             f"physical_rollout_position{physical_suffix}_coordinate_count",
         )
@@ -324,11 +673,70 @@ def physical_validation_metrics(
         for physical_suffix in physical_suffixes
         for axis_name in ("x", "y", "z")
     )
+    squared_error_pairs.extend(
+        (
+            f"physical_rollout_velocity{physical_suffix}_sse",
+            f"physical_rollout_velocity{physical_suffix}_coordinate_count",
+        )
+        for physical_suffix in physical_suffixes
+    )
+    squared_error_pairs.extend(
+        (
+            f"physical_rollout_velocity_{axis_name}{physical_suffix}_sse",
+            f"physical_rollout_velocity_{axis_name}{physical_suffix}_coordinate_count",
+        )
+        for physical_suffix in physical_suffixes
+        for axis_name in ("x", "y", "z")
+    )
     for sse_name, count_name in squared_error_pairs:
         if validated[count_name] == 0.0 and validated[sse_name] != 0.0:
             raise ValueError(
                 f"additive physical validation metric {sse_name!r} must be "
                 f"zero when {count_name!r} has no support"
+            )
+
+    calibration_triplets = [
+        (
+            "physical_state_position_gaussian_nll_sum",
+            "physical_state_position_sharpness_std_sum",
+            "physical_state_position_calibration_coordinate_count",
+        ),
+        *[
+            (
+                f"physical_state_position_{axis_name}_gaussian_nll_sum",
+                f"physical_state_position_{axis_name}_sharpness_std_sum",
+                f"physical_state_position_{axis_name}_calibration_coordinate_count",
+            )
+            for axis_name in ("x", "y", "z")
+        ],
+        *[
+            (
+                f"physical_rollout_position{physical_suffix}_gaussian_nll_sum",
+                f"physical_rollout_position{physical_suffix}_sharpness_std_sum",
+                f"physical_rollout_position{physical_suffix}_calibration_coordinate_count",
+            )
+            for physical_suffix in physical_suffixes
+        ],
+        *[
+            (
+                f"physical_rollout_position_{axis_name}{physical_suffix}_gaussian_nll_sum",
+                f"physical_rollout_position_{axis_name}{physical_suffix}_sharpness_std_sum",
+                (
+                    f"physical_rollout_position_{axis_name}{physical_suffix}_"
+                    "calibration_coordinate_count"
+                ),
+            )
+            for physical_suffix in physical_suffixes
+            for axis_name in ("x", "y", "z")
+        ],
+    ]
+    for nll_name, sharpness_name, count_name in calibration_triplets:
+        if validated[count_name] == 0.0 and (
+            validated[nll_name] != 0.0 or validated[sharpness_name] != 0.0
+        ):
+            raise ValueError(
+                f"calibration sums {nll_name!r}/{sharpness_name!r} must be zero "
+                f"when {count_name!r} has no support"
             )
 
     bounded_count_pairs = [
@@ -347,6 +755,10 @@ def physical_validation_metrics(
         (
             "physical_position_coverage90_hit_count",
             "physical_position_coverage90_coordinate_count",
+        ),
+        (
+            "physical_state_position_coverage90_hit_count",
+            "physical_state_position_coverage90_coordinate_count",
         ),
     ]
     for physical_suffix in physical_suffixes:
@@ -376,6 +788,18 @@ def physical_validation_metrics(
                     f"physical_rollout_position_coverage90{physical_suffix}_hit_count",
                     (f"physical_rollout_position_coverage90{physical_suffix}_coordinate_count"),
                 ),
+                (
+                    f"physical_forecast_identity_eligible_count{physical_suffix}",
+                    f"physical_forecast_active_count{physical_suffix}",
+                ),
+                (
+                    f"physical_forecast_identity_association_count{physical_suffix}",
+                    f"physical_forecast_identity_eligible_count{physical_suffix}",
+                ),
+                (
+                    f"physical_forecast_identity_mismatch_count{physical_suffix}",
+                    f"physical_forecast_identity_association_count{physical_suffix}",
+                ),
             ]
         )
     for numerator_name, denominator_name in bounded_count_pairs:
@@ -383,6 +807,35 @@ def physical_validation_metrics(
             raise ValueError(
                 f"additive physical validation metric {numerator_name!r} "
                 f"exceeds denominator {denominator_name!r}"
+            )
+
+    pooled_coverage_hits = sum(
+        validated[f"physical_rollout_position_coverage90{suffix}_hit_count"]
+        for suffix in physical_suffixes
+    )
+    pooled_coverage_count = sum(
+        validated[f"physical_rollout_position_coverage90{suffix}_coordinate_count"]
+        for suffix in physical_suffixes
+    )
+    if (
+        validated["physical_position_coverage90_hit_count"] != pooled_coverage_hits
+        or validated["physical_position_coverage90_coordinate_count"] != pooled_coverage_count
+    ):
+        raise ValueError("pooled rollout coverage evidence must equal the horizon partition")
+    for confusion_name in (
+        "true_positive",
+        "false_positive",
+        "false_negative",
+        "true_negative",
+    ):
+        pooled_name = f"physical_collision_{confusion_name}_count"
+        horizon_total = sum(
+            validated[f"physical_collision_{confusion_name}_count{suffix}"]
+            for suffix in physical_suffixes
+        )
+        if validated[pooled_name] != horizon_total:
+            raise ValueError(
+                f"pooled collision {confusion_name} evidence must equal the horizon partition"
             )
 
     output = {
@@ -410,6 +863,19 @@ def physical_validation_metrics(
             "physical_position_coverage90_hit_count",
             "physical_position_coverage90_coordinate_count",
         ),
+        "validation_current_position_coverage90": bounded_ratio(
+            "physical_state_position_coverage90_hit_count",
+            "physical_state_position_coverage90_coordinate_count",
+        ),
+        "validation_current_position_gaussian_nll": supported_mean(
+            "physical_state_position_gaussian_nll_sum",
+            "physical_state_position_calibration_coordinate_count",
+            signed=True,
+        ),
+        "validation_current_position_sharpness_std": supported_mean(
+            "physical_state_position_sharpness_std_sum",
+            "physical_state_position_calibration_coordinate_count",
+        ),
     }
     for axis_name in ("x", "y", "z"):
         axis_sse = f"physical_state_position_{axis_name}_sse"
@@ -417,6 +883,19 @@ def physical_validation_metrics(
         output[f"validation_position_rmse_{axis_name}_m"] = rmse(
             axis_sse,
             axis_count,
+        )
+        output[f"validation_velocity_rmse_{axis_name}_mps"] = rmse(
+            f"physical_state_velocity_{axis_name}_sse",
+            f"physical_state_velocity_{axis_name}_coordinate_count",
+        )
+        output[f"validation_current_position_gaussian_nll_{axis_name}"] = supported_mean(
+            f"physical_state_position_{axis_name}_gaussian_nll_sum",
+            f"physical_state_position_{axis_name}_calibration_coordinate_count",
+            signed=True,
+        )
+        output[f"validation_current_position_sharpness_std_{axis_name}"] = supported_mean(
+            f"physical_state_position_{axis_name}_sharpness_std_sum",
+            f"physical_state_position_{axis_name}_calibration_coordinate_count",
         )
     true_positive = required("physical_collision_true_positive_count")
     false_positive = required("physical_collision_false_positive_count")
@@ -437,10 +916,99 @@ def physical_validation_metrics(
             output[f"validation_position_rmse_{axis_name}{physical_suffix}"] = rmse(
                 axis_sse, axis_count
             )
+            output[f"validation_velocity_rmse_{axis_name}{physical_suffix}"] = rmse(
+                f"physical_rollout_velocity_{axis_name}{physical_suffix}_sse",
+                f"physical_rollout_velocity_{axis_name}{physical_suffix}_coordinate_count",
+            )
+            output[f"validation_position_gaussian_nll_{axis_name}{physical_suffix}"] = (
+                supported_mean(
+                    f"physical_rollout_position_{axis_name}{physical_suffix}_gaussian_nll_sum",
+                    (
+                        f"physical_rollout_position_{axis_name}{physical_suffix}_"
+                        "calibration_coordinate_count"
+                    ),
+                    signed=True,
+                )
+            )
+            output[f"validation_position_sharpness_std_{axis_name}{physical_suffix}"] = (
+                supported_mean(
+                    f"physical_rollout_position_{axis_name}{physical_suffix}_sharpness_std_sum",
+                    (
+                        f"physical_rollout_position_{axis_name}{physical_suffix}_"
+                        "calibration_coordinate_count"
+                    ),
+                )
+            )
+        output[f"validation_velocity_rmse{physical_suffix}"] = rmse(
+            f"physical_rollout_velocity{physical_suffix}_sse",
+            f"physical_rollout_velocity{physical_suffix}_coordinate_count",
+        )
         output[f"validation_forecast_target_coverage{physical_suffix}"] = bounded_ratio(
             f"physical_forecast_active_count{physical_suffix}",
             f"physical_forecast_target_count{physical_suffix}",
         )
+        output[f"validation_forecast_identity_mismatch_rate{physical_suffix}"] = bounded_ratio(
+            f"physical_forecast_identity_mismatch_count{physical_suffix}",
+            f"physical_forecast_identity_association_count{physical_suffix}",
+        )
+        output[f"validation_forecast_identity_association_coverage{physical_suffix}"] = (
+            bounded_ratio(
+                f"physical_forecast_identity_association_count{physical_suffix}",
+                f"physical_forecast_identity_eligible_count{physical_suffix}",
+            )
+        )
+        output[f"validation_position_coverage90{physical_suffix}"] = bounded_ratio(
+            f"physical_rollout_position_coverage90{physical_suffix}_hit_count",
+            f"physical_rollout_position_coverage90{physical_suffix}_coordinate_count",
+        )
+        output[f"validation_position_gaussian_nll{physical_suffix}"] = supported_mean(
+            f"physical_rollout_position{physical_suffix}_gaussian_nll_sum",
+            f"physical_rollout_position{physical_suffix}_calibration_coordinate_count",
+            signed=True,
+        )
+        output[f"validation_position_sharpness_std{physical_suffix}"] = supported_mean(
+            f"physical_rollout_position{physical_suffix}_sharpness_std_sum",
+            f"physical_rollout_position{physical_suffix}_calibration_coordinate_count",
+        )
+        horizon_true_positive = required(f"physical_collision_true_positive_count{physical_suffix}")
+        horizon_false_positive = required(
+            f"physical_collision_false_positive_count{physical_suffix}"
+        )
+        horizon_false_negative = required(
+            f"physical_collision_false_negative_count{physical_suffix}"
+        )
+        horizon_true_negative = required(f"physical_collision_true_negative_count{physical_suffix}")
+        if (
+            horizon_true_positive
+            + horizon_false_positive
+            + horizon_false_negative
+            + horizon_true_negative
+            <= 0
+        ):
+            raise PhysicalMetricSupportError(
+                f"collision validation at {physical_suffix} has no evaluated support"
+            )
+        if horizon_true_positive + horizon_false_negative <= 0:
+            raise PhysicalMetricSupportError(
+                f"collision validation at {physical_suffix} has no positive-label support"
+            )
+        if horizon_false_positive + horizon_true_negative <= 0:
+            raise PhysicalMetricSupportError(
+                f"collision validation at {physical_suffix} has no negative-label support"
+            )
+        output[f"validation_collision_f1{physical_suffix}"] = _f1_from_confusion(
+            horizon_true_positive,
+            horizon_false_positive,
+            horizon_false_negative,
+        )[0]
+        if required(f"physical_forecast_identity_eligible_count{physical_suffix}") <= 0:
+            raise PhysicalMetricSupportError(
+                f"forecast identity validation at {physical_suffix} has no eligible support"
+            )
+        if required(f"physical_forecast_identity_association_count{physical_suffix}") <= 0:
+            raise PhysicalMetricSupportError(
+                f"forecast identity validation at {physical_suffix} has no support"
+            )
     return output
 
 
@@ -1643,23 +2211,18 @@ def match_belief_to_targets(
     """Hungarian-match active belief objects to current simulator slots."""
 
     objects = belief.objects
-    batch, belief_count = objects.active.shape
-    if target_position.ndim != 3 or target_position.shape[0] != batch:
+    if target_position.ndim != 3 or target_position.shape[0] != belief.batch_size:
         raise ValueError("target_position must have shape [B,N,3]")
     if target_active.shape != target_position.shape[:2]:
         raise ValueError("target_active must have shape [B,N]")
     indices = torch.full(
-        (batch, belief_count),
+        objects.active.shape,
         -1,
-        device=objects.position.device,
+        device=belief.device,
         dtype=torch.int64,
     )
-    matched = torch.zeros(
-        (batch, belief_count),
-        device=objects.position.device,
-        dtype=torch.bool,
-    )
-    for batch_index in range(batch):
+    matched = torch.zeros_like(objects.active)
+    for batch_index in range(belief.batch_size):
         belief_slots = torch.nonzero(objects.active[batch_index], as_tuple=False).flatten()
         target_slots = torch.nonzero(target_active[batch_index], as_tuple=False).flatten()
         if belief_slots.numel() == 0 or target_slots.numel() == 0:
@@ -1670,10 +2233,10 @@ def match_belief_to_targets(
         )
         rows, columns = linear_sum_assignment(np.asarray(cost))
         selected_beliefs = belief_slots[
-            torch.as_tensor(rows, device=belief_slots.device, dtype=torch.int64)
+            torch.as_tensor(rows, device=belief.device, dtype=torch.int64)
         ]
         selected_targets = target_slots[
-            torch.as_tensor(columns, device=target_slots.device, dtype=torch.int64)
+            torch.as_tensor(columns, device=belief.device, dtype=torch.int64)
         ]
         indices[batch_index, selected_beliefs] = selected_targets
         matched[batch_index, selected_beliefs] = True
@@ -2636,7 +3199,10 @@ def _rollout_loss_result(
     *,
     trajectory: BeliefTrajectory | None = None,
     compute_event_loss: bool = True,
+    collect_promotion_metrics: bool = False,
 ) -> _RolloutLossResult:
+    if not isinstance(collect_promotion_metrics, bool):
+        raise TypeError("collect_promotion_metrics must be bool")
     total_frames = int(batch["rgb"].shape[1])
     frame_offsets, query_seconds, horizon_weights = _valid_rollout_offsets(
         config,
@@ -2838,6 +3404,22 @@ def _rollout_loss_result(
             target=target_velocity,
             mask=point_valid,
         )
+        for axis_index, axis_name in enumerate(("x", "y", "z")):
+            _add_squared_error_metrics(
+                physical_metrics,
+                prefix=f"physical_rollout_velocity_{axis_name}{horizon_suffix}",
+                prediction=target_velocities[:, query_index, :, axis_index],
+                target=target_velocity[:, :, axis_index],
+                mask=point_valid,
+            )
+        _write_axis_partitioned_gaussian_calibration_metrics(
+            physical_metrics,
+            prefix=f"physical_rollout_position{horizon_suffix}",
+            mean=target_positions[:, query_index],
+            target=target_position,
+            log_variance=target_position_log_variance[:, query_index],
+            mask=valid,
+        )
         _add_squared_error_metrics(
             physical_metrics,
             prefix=f"physical_rollout_mature_position{horizon_suffix}",
@@ -2873,6 +3455,65 @@ def _rollout_loss_result(
         physical_metrics[f"physical_rollout_censored_external_actuation_count{horizon_suffix}"] = (
             float((valid & ~predictable).sum().detach().cpu())
         )
+        target_ids = batch["objects"].get("id")
+        if collect_promotion_metrics:
+            physical_metrics[f"physical_forecast_identity_eligible_count{horizon_suffix}"] = 0.0
+            physical_metrics[f"physical_forecast_identity_association_count{horizon_suffix}"] = 0.0
+            physical_metrics[f"physical_forecast_identity_mismatch_count{horizon_suffix}"] = 0.0
+        if collect_promotion_metrics and isinstance(target_ids, Tensor):
+            anchor_aligned_position = gather_target_slots(
+                batch["objects"]["position"][:, frame_index],
+                indices,
+            )
+            anchor_distance_gated = _distance_gate_physical_matches(
+                belief.objects.position,
+                anchor_aligned_position,
+                matched,
+            )
+            forecast_target_indices, forecast_matched = _match_positions_to_targets(
+                target_positions[:, query_index],
+                target_active_mask[:, query_index].bool(),
+                batch["objects"]["position"][:, target_index],
+                batch["objects"]["active"][:, target_index].bool(),
+            )
+            forecast_aligned_position = gather_target_slots(
+                batch["objects"]["position"][:, target_index],
+                forecast_target_indices,
+            )
+            forecast_distance_gated = _distance_gate_physical_matches(
+                target_positions[:, query_index],
+                forecast_aligned_position,
+                forecast_matched,
+            )
+            anchor_target_ids = gather_target_slots(
+                target_ids[:, frame_index],
+                indices,
+            )
+            forecast_target_ids = gather_target_slots(
+                target_ids[:, target_index],
+                forecast_target_indices,
+            )
+            identity_eligible = (
+                anchor_distance_gated
+                & future_active
+                & target_active_mask[:, query_index].bool()
+                & (anchor_target_ids >= 0)
+            )
+            identity_associated = (
+                identity_eligible & forecast_distance_gated & (forecast_target_ids >= 0)
+            )
+            physical_metrics[f"physical_forecast_identity_eligible_count{horizon_suffix}"] = float(
+                identity_eligible.sum().detach().cpu()
+            )
+            physical_metrics[f"physical_forecast_identity_association_count{horizon_suffix}"] = (
+                float(identity_associated.sum().detach().cpu())
+            )
+            physical_metrics[f"physical_forecast_identity_mismatch_count{horizon_suffix}"] = float(
+                ((anchor_target_ids != forecast_target_ids) & identity_associated)
+                .sum()
+                .detach()
+                .cpu()
+            )
         for confusion_name in (
             "true_positive",
             "false_positive",
@@ -2999,6 +3640,8 @@ def _batched_validation_rollout_loss_results(
     anchors: list[_DeferredValidationRollout],
     batch: Mapping[str, Any],
     config: OrpheusConfig,
+    *,
+    collect_promotion_metrics: bool,
 ) -> _ValidationRolloutExecution:
     """Evaluate one anchor-major validation chunk with exact serial scoring.
 
@@ -3022,6 +3665,7 @@ def _batched_validation_rollout_loss_results(
                     anchor.frame_index,
                     anchor.indices,
                     anchor.matched,
+                    collect_promotion_metrics=collect_promotion_metrics,
                 )
             ],
             batched_anchor_count=0,
@@ -3054,6 +3698,7 @@ def _batched_validation_rollout_loss_results(
                 group,
                 batch,
                 config,
+                collect_promotion_metrics=collect_promotion_metrics,
             )
             grouped_results.extend(execution.results)
             batched_anchor_count += execution.batched_anchor_count
@@ -3135,6 +3780,7 @@ def _batched_validation_rollout_loss_results(
                 anchor.indices,
                 anchor.matched,
                 trajectory=anchor_trajectory,
+                collect_promotion_metrics=collect_promotion_metrics,
             )
         )
         batch_cursor = batch_stop
@@ -3621,6 +4267,7 @@ def run_closed_loop_batch(
     validation_rollout_anchor_batch_size: int = 1,
     compute_future_correction: bool | None = None,
     active_trainable_scope: str | None = None,
+    collect_promotion_metrics: bool = False,
 ) -> TrainingBatchResult:
     """Run one causal RGB-only sequence window through the real runtime.
 
@@ -3641,6 +4288,8 @@ def run_closed_loop_batch(
         compute_future_correction = config.training.closed_loop_prior_future_correction_enabled
     elif not isinstance(compute_future_correction, bool):
         raise ValueError("compute_future_correction must be boolean or None")
+    if not isinstance(collect_promotion_metrics, bool):
+        raise ValueError("collect_promotion_metrics must be boolean")
     loss_weights, event_weight_metrics = _closed_loop_loss_weights_for_scope(
         config,
         active_trainable_scope=active_trainable_scope,
@@ -4006,9 +4655,25 @@ def run_closed_loop_batch(
             target=aligned_velocity,
             mask=matched,
         )
+        for axis_index, axis_name in enumerate(("x", "y", "z")):
+            _add_squared_error_metrics(
+                state_physical,
+                prefix=f"physical_state_velocity_{axis_name}",
+                prediction=belief.objects.velocity[..., axis_index],
+                target=aligned_velocity[..., axis_index],
+                mask=matched,
+            )
         _add_gaussian_coverage_metrics(
             state_physical,
             prefix="physical_state_position_coverage90",
+            mean=belief.objects.position,
+            target=aligned_position,
+            log_variance=belief.objects.fast_log_variance[..., :3],
+            mask=matched,
+        )
+        _write_axis_partitioned_gaussian_calibration_metrics(
+            state_physical,
+            prefix="physical_state_position",
             mean=belief.objects.position,
             target=aligned_position,
             log_variance=belief.objects.fast_log_variance[..., :3],
@@ -4135,6 +4800,7 @@ def run_closed_loop_batch(
                     indices,
                     matched,
                     compute_event_loss=compute_event_loss,
+                    collect_promotion_metrics=collect_promotion_metrics,
                 )
                 rollout_execution_posterior_call_count += 1
                 for name, value in rollout_result.losses.items():
@@ -4294,6 +4960,7 @@ def run_closed_loop_batch(
             chunk,
             batch,
             config,
+            collect_promotion_metrics=collect_promotion_metrics,
         )
         rollout_execution_batched_anchor_count += execution.batched_anchor_count
         rollout_execution_serial_fallback_anchor_count += execution.serial_fallback_anchor_count
@@ -4350,6 +5017,7 @@ def run_closed_loop_batch(
             "rollout_execution_posterior_call_count": float(rollout_execution_posterior_call_count),
             "prior_future_correction_rollout_enabled": float(compute_future_correction),
             "event_loss_objective_graph_enabled": float(compute_event_loss),
+            "promotion_metric_collection_enabled": float(collect_promotion_metrics),
             "rollout_anchor_candidate_count": float(
                 sum(
                     frame_index >= config.training.minimum_rollout_age_steps
@@ -4447,6 +5115,16 @@ def run_closed_loop_batch(
         if state_velocity_count
         else math.nan
     )
+    for axis_name in ("x", "y", "z"):
+        axis_count = metrics.get(
+            f"physical_state_velocity_{axis_name}_coordinate_count",
+            0.0,
+        )
+        metrics[f"physical_state_velocity_{axis_name}_rmse_mps"] = (
+            math.sqrt(metrics[f"physical_state_velocity_{axis_name}_sse"] / axis_count)
+            if axis_count
+            else math.nan
+        )
     collision_true_positive = sum(
         value
         for name, value in physical_metrics.items()
@@ -4510,6 +5188,19 @@ def run_closed_loop_batch(
             )
         else:
             metrics[f"physical_rollout_velocity_rmse_mps{horizon_suffix}"] = math.nan
+        for axis_name in ("x", "y", "z"):
+            axis_count = metrics.get(
+                f"physical_rollout_velocity_{axis_name}{horizon_suffix}_coordinate_count",
+                0.0,
+            )
+            metrics[f"physical_rollout_velocity_{axis_name}_rmse_mps{horizon_suffix}"] = (
+                math.sqrt(
+                    metrics[f"physical_rollout_velocity_{axis_name}{horizon_suffix}_sse"]
+                    / axis_count
+                )
+                if axis_count
+                else math.nan
+            )
         target_count = metrics.get(
             f"physical_forecast_target_count{horizon_suffix}",
             0.0,
@@ -4543,6 +5234,20 @@ def run_closed_loop_batch(
         )
         metrics[f"physical_collision_f1_proxy{horizon_suffix}"] = horizon_f1
         metrics[f"physical_collision_f1_denominator{horizon_suffix}"] = horizon_f1_denominator
+        if collect_promotion_metrics:
+            identity_association_count = metrics.get(
+                f"physical_forecast_identity_association_count{horizon_suffix}",
+                0.0,
+            )
+            identity_mismatch_count = metrics.get(
+                f"physical_forecast_identity_mismatch_count{horizon_suffix}",
+                0.0,
+            )
+            metrics[f"physical_forecast_identity_mismatch_rate{horizon_suffix}"] = (
+                identity_mismatch_count / identity_association_count
+                if identity_association_count
+                else math.nan
+            )
     rollout_coverage_hits = sum(
         value
         for name, value in physical_metrics.items()

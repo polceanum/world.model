@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.50
+**Version:** 1.51
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, and fail-closed convergence-semantics amendments 21 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -7478,6 +7478,337 @@ forward-identical. The grounded campaign therefore keeps
 execution until a complete paired accuracy/latency gate justifies a semantic
 change. Throughput diagnostics authorize device/cadence protocol choices only;
 they do not constitute accuracy promotion or convergence evidence.
+
+---
+
+# Part XLIII — Comprehensive promotion evidence and immutable replay amendment
+
+## 235. Physical selection requires complete current, horizon, axis, event, uncertainty, and identity evidence
+
+The fixed RGB-only selector remains a physical-behaviour gate rather than a
+training-loss selector. Its evidence contract advances to rollout-selection
+metric version `7` and rollout-validation protocol version `16`. Standalone
+held-out evaluation advances to metric schema `held_out_rgb_metrics_v3` and
+per-scenario schema `clean_primary_additive_support_diagnostic_v3`.
+
+Every supported pooled slice and every declared scenario slice must now retain
+enough exact additive evidence to reconstruct and guard:
+
+- current and every configured-horizon position and velocity error, pooled and
+  separately for x, y, and z;
+- target coverage and prediction precision, including current and each
+  forecast horizon;
+- collision true-positive, false-positive, false-negative, true-negative, and
+  evaluated counts plus F1 at each horizon, rather than only one pooled event
+  number;
+- current and per-horizon position coverage, nominal-coverage error, Gaussian
+  NLL, and predictive sharpness, pooled and per axis, derived from retained
+  likelihood/sharpness sums and calibration coordinate counts; and
+- forecast identity eligibility, distance-gated association count and
+  coverage, mismatch count, and mismatch rate at every horizon.
+
+Gaussian evidence has one canonical producer. Per-axis negative-log-
+likelihood and sharpness sufficient statistics are emitted once and pooled
+with `math.fsum` from those exact x/y/z sums and counts. An independently
+reduced float32 pooled mean is not authoritative: signed axis NLL terms can
+nearly cancel and make a second reduction disagree beyond the narrow
+validation tolerance. The real heavy-light regression has axis NLL
+`1.0278450847`, `-28.0431194305`, and `25.4184275866`; the prior independent
+pooled reduction was `-1.5968445539`, while the canonical axis-sufficient-
+statistics result is `-1.5968467593`. Canonicalization fixes the producer;
+validator tolerance remains strict.
+
+Forecast identity is evaluated by carrying the persistent target association
+available at the causal anchor and comparing it with an independently
+distance-gated Hungarian assignment of the predicted positions at each future
+target frame. An unassociated future remains visible as missing association
+coverage; it is not silently removed from identity eligibility. These metrics
+are validation-only evidence and add no optimizer-time model forward or
+backward path.
+
+Pooled and scenario evidence are two additive views of the same clean online
+pass. Every additive pooled field must have the same schema as every declared
+scenario partition. Integer/count fields must sum exactly across scenarios;
+floating sums must agree within a narrow declared numerical tolerance. A
+missing field, missing scenario, unsupported horizon, absent positive or
+negative event class, absent identity association, contradictory derived
+metric, or nonfinite value fails selection closed. A favorable pooled score
+cannot compensate for a failed scenario, axis, horizon, event, uncertainty, or
+identity guardrail.
+
+Core per-episode causal support and rich selection support are deliberately
+separate. A core episode must have the complete raw schema, current position
+and velocity support, and every configured position/velocity horizon-axis
+floor. It need not contain both collision classes or an independently
+associated forecast identity in that one episode. Those rare-event,
+calibration, and identity requirements remain mandatory after exact pooling
+by scenario and manifest. This avoids discarding valid causal episodes while
+preserving the fail-closed rich selector. The real fixed-32 replay retains
+`32/32` core-supported episodes and `8/8` rich-supported scenario families,
+with four episodes in each scenario and complete pooled support.
+
+Version-6 selector artifacts and version-15 rollout protocols are not exact-
+resume compatible with this evidence contract. They remain valid historical
+diagnostics under their original semantics. A model transferred to the new
+contract uses weights-only initialization and fresh selector evidence; an
+already running source-frozen version-1.50 campaign may continue under its
+original protocol but its artifacts must not be relabelled as version 7/16.
+
+## 236. Physical eligibility and comprehensive promotion are separate claims
+
+An in-training fixed selector can decide whether a finite candidate is a safe
+physical incumbent under the complete version-7 guardrails. It cannot measure
+a matched wall-clock cost control while holding all execution variables fixed.
+Trainer artifacts therefore mark latency support and comprehensive promotion
+false and identify their scope as
+`fixed_physical_incumbent_not_comprehensive_promotion`.
+
+The external promotion replay reports two independent decisions:
+
+1. `physical_promotion_eligible` requires candidate improvement, candidate and
+   reference support, and every incumbent/fixed-reference pooled, scenario,
+   axis, horizon, velocity, lifecycle, event, calibration, and identity
+   guardrail; and
+2. `comprehensive_promotion_eligible` additionally requires complete paired
+   latency evidence on the same device and precision, with candidate/reference
+   ratios no greater than `1.10` for RGB global update, RGB fast update, and
+   future rollout latency.
+
+Each latency component retains its finite mean, additive elapsed-time sum, and
+positive integral sample count; the mean must agree with sum/count. Missing,
+zero-reference, nonfinite, negative, mismatched, or over-limit timing evidence
+fails the latency gate closed. `promotion_eligible` is only a compatibility
+alias for comprehensive eligibility, never for physical eligibility alone. A
+report may truthfully state `physical_promotion_eligible=true` while
+`comprehensive_promotion_eligible=false` when paired latency is absent; it may
+not call that result promoted.
+
+Wall-clock measurements are deliberately excluded from the deterministic
+primary-physical metric digest. The evaluator publishes the exact hashed key
+list, metric scope, and canonical exclusion declaration, and the replay
+recomputes the digest rather than trusting a stored hash. Recovery-probe fields
+and known recovery summaries are also excluded because the primary pass must
+remain intervention-free and bitwise independent of that isolated probe. The
+exclusion is explicit evidence, not permission to omit a difficult physical
+metric.
+
+## 237. Paired promotion replay binds immutable bytes and the complete execution contract
+
+Promotion replay must be resistant to mutable-checkpoint and mutable-report
+time-of-check/time-of-use races. Each candidate and reference checkpoint is
+opened once into an immutable byte snapshot; the SHA-256 digest, byte count,
+checkpoint deserialization, embedded model-state hash, and replay all refer to
+those same captured bytes. Each external evaluation report is likewise read,
+hashed, and parsed from one byte capture.
+
+Before a latency report can participate in promotion, replay verifies its
+canonical protocol hash and exact binding to:
+
+- the current executable runtime-source fingerprint and complete Git/worktree
+  provenance;
+- resolved configuration and the version-16 validation protocol;
+- simulator version and fully resolved scenario parameters;
+- validation split, the exact standard validation seed manifest, episode
+  count, seed-to-scenario ordering, and batch counts;
+- requested horizons and their observation-grid representation;
+- checkpoint SHA-256 and byte count;
+- device, precision, RGB-only execution, and finite-output evidence;
+- the primary posterior trace and clean-primary physical metric digest; and
+- disabled evaluator perturbation, recovery probe, oracle runtime input, and
+  runtime hypothesis-pool intervention.
+
+The grounded replay contract is the standard validation range beginning at
+seed `100000`, with one online trainer-validation episode per loader batch and
+the same ordered scenario mixture used by the selector. Standalone evaluator
+batching may differ only as explicitly bound in its own protocol; it may not
+change episodes, horizons, posterior semantics, or metric implementation.
+Python, NumPy, CPU Torch, and MPS RNG state are reset for each paired arm so
+evaluation order cannot leak random state from reference to candidate.
+
+The replay independently recomputes selector metrics from additive evidence,
+checks that scenario partitions sum to pooled values, validates every report
+identity field, applies physical guardrails, then applies the paired latency
+gate. Any missing or contradictory binding is an error or truthful rejection,
+not a best-effort promotion. A non-comprehensively-eligible replay exits
+nonzero even when its physical evidence is useful.
+
+## 238. Optimization plateau is not comprehensive convergence
+
+The four-selector plateau rule remains an optimization stopping criterion. It
+does not by itself prove deployable accuracy and cost. Convergence inspection
+must parse `latency_guardrail_supported`, `latency_guardrail_passed`, and
+`comprehensive_promotion_eligible` as explicit fail-closed binary markers. A
+claimed latency pass without support or a comprehensive promotion without a
+latency pass is contradictory evidence and invalid.
+
+The supervisor may stop a source-frozen campaign after its declared physical
+optimization plateau, but it records that state separately from comprehensive
+convergence. The read-only monitor renders `OPTIMIZATION PLATEAU` when the
+training plateau is real but comprehensive eligibility is absent, and renders
+`CONVERGED` only when both the plateau and comprehensive promotion gate pass.
+Missing external latency evidence must never be displayed as success merely
+because the optimizer stopped changing the incumbent.
+
+Disjoint validation, test, and OOD RGB-only qualification remains mandatory
+after an eligible fixed-manifest candidate, including held-out scenario,
+object-count, camera, parameter, event, recovery, uncertainty, identity, and
+long-horizon evidence. The paired validation latency replay does not replace
+those generalization gates.
+
+## 239. Qualification boundary and the first grounded selector result
+
+The reviewed implementation snapshot before version/memory synchronization
+had worktree fingerprint
+`cb0dd4b4939ed1fba454fe33f7cb5722feb29c63073831bc8368d06b08b9002f`
+and runtime-source fingerprint
+`dd3de0d68489e62311fdf53f2d3b2f3720b0303c9c08c38443549127788779d3`.
+Its pre-version parity artifacts remain under
+`/private/tmp/orpheus-spec151-parity-final-20260821T084546Z` for provenance.
+
+An earlier post-version parity compared clone runtime
+`957a5277a266ea009e8500946370a5f2adc7fc26ce8c3a9e83fb6f287c74b05b`
+with source-frozen reference runtime
+`0d8499cf5a9f5ba87fe88f432659d519231942fd8ab923c615cbbfad2fd846da`.
+Those historical artifacts are under
+`/private/tmp/orpheus-spec151-parity-postversion-Rmaj0N`:
+
+- `qualification.json` SHA-256
+  `2ce77b69470a54ae65b74130dbda021c32cf96b022c335dbfe33d954ee85cd9`;
+- supplemental evidence SHA-256
+  `77281d1e8e69cfe40a76744805c7962cf3d538cd7ec5466a46c9eaef64548dfc`;
+  and
+- canonical protocol SHA-256
+  `714436f02442ad3ad82d9b17d5772993a4f67b09e52a5cdb776c21427380991c`.
+
+The trainer comparison preserves all `309` common metrics and all `9` loss
+terms exactly while adding `182` evidence fields. The held-out evaluator
+preserves all `1025` common non-latency metrics exactly while adding `577`
+evidence fields. Posterior traces, final runtime state, model state, and the
+`740491`-byte checkpoint with SHA-256
+`61ad6691148bf4c070a9a63adf6f7be243ed1e1f9b612b8cdbb80ce342855475`
+remain exact. The supplemental audit proves the canonical primary-key/hash/
+exclusion contract and
+the fail-closed result `physical=true`, `comprehensive=false` when latency is
+missing. The only expected old/new metadata transitions are specification
+`1.50 -> 1.51` and evaluator metric/per-scenario schema `v2 -> v3`. The
+changed-suite gate is `304 passed in 96.19 s`; the focused hash-
+repair gate is `34 passed in 6.94 s`; Ruff and diff checks pass. This is
+implementation/parity evidence, not a real paired 32-episode MPS latency gate
+or a model-accuracy promotion.
+
+The source-frozen specification-1.50 grounded campaign at
+`runs/20260821-052948-grounded-convergence-spec150-hybrid` reached its first
+trained fixed selector at update `512`. Against the protected step-zero
+incumbent, the candidate improved horizon-weighted score
+`0.2654622904 -> 0.240757` (`9.31%`), current position
+`0.1580637 -> 0.132546 m`, current velocity
+`0.8310919 -> 0.749308 m/s`, all five pooled position horizons, every pooled
+axis/horizon position slice, and all pooled velocity horizons. Coverage,
+precision, collision F1, and nominal-coverage behavior also improved in the
+pooled aggregate.
+
+The same candidate failed `65` persisted scenario/axis guardrails and was
+correctly rejected. The dominant failures were `35` z-position and `12`
+x-position regressions plus scenario-specific damped-contact z/event/coverage,
+heavy-light current-x/identity, camera x/z, and late collision-F1 failures.
+Global identity switching also worsened while remaining within the older
+global tolerance. Candidate checkpoint
+`validation_step_000512.pt` is retained with whole-file SHA-256
+`f8f1704c2552ea51a7626729140608203918c909cfc258d63158c347bef4eb86`;
+the protected incumbent was not replaced. This is strong aggregate learning
+and useful architecture-diagnosis evidence, but it is neither promotion nor
+convergence. At this intermediate boundary the immutable version-1.50
+optimization trajectory was allowed to reach its next declared selector at
+update `1024`; section 240 records the resulting rejection and pause.
+Version-1.51 evidence must be collected through a fresh weights-only
+qualification rather than exact resume.
+
+No real paired 32-seed MPS latency report, disjoint validation/test/OOD gate,
+or comprehensive convergence claim exists at this amendment boundary.
+
+## 240. Specification-1.51 closure, rich shadow result, and next repair
+
+The final frozen repository gate ran in the unchanged `orpheus` environment
+with custom Torch `2.9.0a0+gitcbe1a35` and available MPS. Candidate runtime-
+source fingerprint
+`6247e913c41dc150e0f2fb66fa86b42a1a504083dd16110ba0a682e07af579a5`
+and worktree fingerprint
+`1836ecc3e2c0e32aeac2deb7afedc85237e480850000a39e77a1d9088b3d15f8`
+were unchanged across the gates. The exact full suite is `1080 passed, 16
+skipped in 424.71s`; Ruff check passes, Ruff format reports all `219` files
+already formatted, compileall passes with an isolated temporary bytecode
+cache, and `git diff --check` passes.
+
+The final fixed tiny-checkpoint parity replay is under
+`/private/tmp/orpheus-spec151-final-parity.x8PY0e`. It compares candidate
+runtime `6247e913...` with main reference runtime `0d8499cf...`. Strict
+qualification SHA-256 is
+`2ce77b69470a54ae65b74130dbda021c32cf96b022c335dbfe33d954ee85cd9`;
+the fresh supplemental SHA-256 is
+`3793c659fdb1de15d0f2792e8e58da66a3f9b82ad268a1e00c902eb9c87b86d0`.
+The replay preserves all `309` common trainer metrics and `9` losses, all
+`1025` common evaluator non-latency metrics, the `16`-frame posterior traces,
+final runtime state, model state, and the exact `740491`-byte checkpoint with
+SHA-256
+`61ad6691148bf4c070a9a63adf6f7be243ed1e1f9b612b8cdbb80ce342855475`.
+The exact shared-output digests are:
+
+- common trainer metrics:
+  `2a64b0162510396af241cfdc19c8c7327da62bc6cbf52bc06bf51e0392048b67`;
+- total plus nine losses:
+  `54eef069f1397f7af4b3fa7592a1b6557c5c26a26061ad92bf6dd8b64803d4d0`;
+- trainer posterior trace:
+  `409fa9aad104804134041e6dccb06d1dda36ab8f9e3b83765155bae16e1ca5f8`;
+- final runtime state:
+  `b53db3c4f51c7747f8f0666b4deb9fa13ce44c10341c787f2d65cd352074ed1d`;
+- model state:
+  `6ae10cbdbe37f13f3ec08202a343b8710d6034e472a96781c19a99b2015c055d`;
+- common evaluator non-latency metrics:
+  `04ca4ab9901996d29c4d6c6dd0acfdad0c15ee66e0576aebd0ad4581a6e914ba`;
+- evaluator posterior trace:
+  `06c416d8af3f4599bb6b46e872c55d793adb9929627f978865624f6b94d69be0`;
+  and
+- new primary-physical metrics:
+  `49bd23fd780960f3d56af3e69b2c14050fe31e21609e3abd83be7ea0f7e58e8e`.
+
+Three absent latency components correctly leave `physical=true`,
+`comprehensive=false`.
+
+The version-1.51 rich fixed-32 shadow replay of the step-512 candidate is
+support-complete (`32/32` episodes and `8/8` scenarios) and improves the
+selector `0.2654622895 -> 0.2407574475` (`9.31%`). It nevertheless has `237`
+rich guardrail failures and is rejected. Overlapping diagnostic-family counts
+are `61` velocity-axis, `13` pooled velocity, `67` Gaussian NLL, `8`
+calibration, `15` event-horizon, and `11` identity failures; they must not be
+summed as disjoint classes. Report SHA-256 is
+`345792e657246f86f9e74013837cdbc18b37298c84d9f907b860521834f2f362`.
+Neither physical nor comprehensive promotion passes, and deployment remains
+the protected step-zero incumbent.
+
+The unchanged source-frozen version-1.50 campaign was paused after its
+numbered step-1024 checkpoint. Its optimizer is healthy: all and only the
+intended `79` updater tensors changed, Adam steps are `1024`, frozen tensors
+and buffers are exact, attention decoders remain exact zero, the event head is
+unchanged, and parameters and moments are finite. That integrity does not make
+the result accurate. Fixed-selector failures worsen `65 -> 118` from step 512
+to 1024; score worsens `0.2407574 -> 0.2618322`, current position
+`0.1325464 -> 0.1838629`, x `0.1031069 -> 0.2239196`, z
+`0.1783838 -> 0.2075144`, identity/lifecycle
+`0.0013598 -> 0.0110931`, and coverage/precision also fall. Velocity, y, and
+collision F1 improve, but cannot compensate for the axis, position, and
+lifecycle regressions. The campaign is paused, deployment stays at step zero,
+and there is no convergence claim.
+
+The next authorized learning work is a narrow axis-gated updater-state repair
+initialized weights-only from the protected base, followed by a long paired
+qualification. The repair must keep RGB-only `WorldBelief` truth, the causal
+short-step analytic-plus-learned-plus-event loop, heterogeneous/local
+applicability and model-selection semantics, and protected-incumbent rules.
+Screen repaired and unchanged control arms through at least the fixed
+step-512 and step-1024 selectors; extend only a surviving arm through a
+bounded multi-selector qualification before fixed-32 version-7/version-16,
+paired latency, and disjoint RGB-only test/OOD gates. Do not infer convergence
+from healthy optimization or a favorable pooled score.
 
 ---
 

@@ -559,7 +559,7 @@ def test_live_evaluation_keeps_stable_context_on_anchor(tmp_path, monkeypatch) -
 
 @pytest.mark.parametrize(
     ("campaign_status", "expected_status"),
-    [("plateau", "CONVERGED"), ("limit_hit", "LIMIT HIT")],
+    [("plateau", "OPTIMIZATION PLATEAU"), ("limit_hit", "LIMIT HIT")],
 )
 def test_convergence_campaign_outcome_is_explicit(
     tmp_path,
@@ -589,6 +589,34 @@ def test_convergence_campaign_outcome_is_explicit(
     )
     if campaign_status == "limit_hit":
         assert any("without plateau" in warning for warning in snapshot["warnings"])
+    else:
+        assert "comprehensive promotion not eligible" in snapshot["status_detail"]
+        assert any("comprehensive promotion" in warning for warning in snapshot["warnings"])
+
+
+def test_comprehensive_plateau_is_rendered_as_converged(tmp_path) -> None:
+    run = tmp_path / "20260815-120000-comprehensive-plateau"
+    _write_json(
+        run / "training_state.json",
+        {"state": "completed", "completed_steps": 1024},
+    )
+    _write_json(
+        run / "convergence_report.json",
+        {
+            "status": "plateau",
+            "reason": "all promotion guardrails passed",
+            "completed_steps": 1024,
+            "best_step": 768,
+            "optimization_plateau_reached": True,
+            "comprehensive_promotion_eligible": True,
+            "converged": True,
+        },
+    )
+
+    snapshot = live_monitor.build_snapshot(run)
+
+    assert snapshot["status"] == "CONVERGED"
+    assert not any("not eligible" in warning for warning in snapshot["warnings"])
 
 
 @pytest.mark.parametrize(

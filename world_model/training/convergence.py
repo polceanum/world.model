@@ -52,6 +52,9 @@ class CampaignInspection:
     best_score: float
     reference_step: int
     validation_candidates: tuple[ValidationCandidate, ...]
+    latency_guardrail_supported: bool = False
+    latency_guardrail_passed: bool = False
+    comprehensive_promotion_eligible: bool = False
 
     @property
     def accepted_validations(self) -> tuple[ValidationCandidate, ...]:
@@ -60,7 +63,13 @@ class CampaignInspection:
 
 @dataclass(frozen=True)
 class ConvergenceDecision:
-    """Whether a completed campaign should receive another causal block."""
+    """Whether a completed campaign should receive another causal block.
+
+    ``status == "plateau"`` is an optimization stopping decision, not by
+    itself a full-system convergence claim.  Deployment promotion additionally
+    requires the separate paired accuracy/cost contract carried by
+    ``comprehensive_promotion_eligible``.
+    """
 
     status: str
     reason: str
@@ -81,9 +90,31 @@ class ConvergenceDecision:
     plateau_primary_gain: float | None
     minimum_relative_gain: float
     maximum_total_steps: int
+    latency_guardrail_supported: bool = False
+    latency_guardrail_passed: bool = False
+    comprehensive_promotion_eligible: bool = False
+
+    @property
+    def optimization_plateau_reached(self) -> bool:
+        return self.status == "plateau"
+
+    @property
+    def trainer_stop_recommended(self) -> bool:
+        return self.status in {"plateau", "limit_hit"}
+
+    @property
+    def converged(self) -> bool:
+        """Legacy full-contract convergence marker, deliberately fail-closed."""
+
+        return self.optimization_plateau_reached and self.comprehensive_promotion_eligible
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            **asdict(self),
+            "optimization_plateau_reached": self.optimization_plateau_reached,
+            "trainer_stop_recommended": self.trainer_stop_recommended,
+            "converged": self.converged,
+        }
 
 
 class CampaignIncompleteError(RuntimeError):
@@ -102,6 +133,18 @@ def _integer_metric(metrics: Mapping[str, Any], key: str) -> int:
     if value is None:
         raise ValueError(f"checkpoint is missing {key}")
     return _finite_nonnegative_integer(value, name=key)
+
+
+def _fail_closed_binary_marker(metrics: Mapping[str, Any], key: str) -> bool:
+    """Read a promotion marker while treating legacy absence as unsupported."""
+
+    value = metrics.get(key)
+    if value is None:
+        return False
+    numeric = float(value)
+    if not math.isfinite(numeric) or numeric not in {0.0, 1.0}:
+        raise ValueError(f"checkpoint has invalid binary promotion marker {key!r}")
+    return numeric == 1.0
 
 
 def _validation_candidate(path: Path, *, protocol_hash: str) -> ValidationCandidate:
@@ -217,6 +260,22 @@ def inspect_completed_campaign(
     protocol_hash = _rollout_validation_protocol_hash(config)
     if last_metrics.get("rollout_validation_protocol_hash") != protocol_hash:
         raise ValueError("resumable checkpoint uses a different validation protocol")
+    latency_guardrail_supported = _fail_closed_binary_marker(
+        last_metrics,
+        "latency_guardrail_supported",
+    )
+    latency_guardrail_passed = _fail_closed_binary_marker(
+        last_metrics,
+        "latency_guardrail_passed",
+    )
+    comprehensive_promotion_eligible = _fail_closed_binary_marker(
+        last_metrics,
+        "comprehensive_promotion_eligible",
+    )
+    if latency_guardrail_passed and not latency_guardrail_supported:
+        raise ValueError("latency guardrail cannot pass without paired support")
+    if comprehensive_promotion_eligible and not latency_guardrail_passed:
+        raise ValueError("comprehensive promotion requires a passed paired latency guardrail")
 
     best_hash = last_metrics.get("best_rollout_model_state_hash")
     reference_hash = last_metrics.get("reference_rollout_model_state_hash")
@@ -281,6 +340,9 @@ def inspect_completed_campaign(
         best_score=best_selection.score,
         reference_step=reference_step,
         validation_candidates=candidates,
+        latency_guardrail_supported=latency_guardrail_supported,
+        latency_guardrail_passed=latency_guardrail_passed,
+        comprehensive_promotion_eligible=comprehensive_promotion_eligible,
     )
 
 
@@ -327,6 +389,9 @@ def decide_continuation(
             plateau_primary_gain=None,
             minimum_relative_gain=minimum_relative_gain,
             maximum_total_steps=maximum_total_steps,
+            latency_guardrail_supported=inspection.latency_guardrail_supported,
+            latency_guardrail_passed=inspection.latency_guardrail_passed,
+            comprehensive_promotion_eligible=inspection.comprehensive_promotion_eligible,
         )
     tail_start = completed - tail_steps
     prior = [item for item in inspection.accepted_validations if item.step <= tail_start]
@@ -391,6 +456,9 @@ def decide_continuation(
         "plateau_primary_gain": plateau_primary_gain,
         "minimum_relative_gain": minimum_relative_gain,
         "maximum_total_steps": maximum_total_steps,
+        "latency_guardrail_supported": inspection.latency_guardrail_supported,
+        "latency_guardrail_passed": inspection.latency_guardrail_passed,
+        "comprehensive_promotion_eligible": inspection.comprehensive_promotion_eligible,
     }
     recent_safe_gain = (
         tail_best is not None

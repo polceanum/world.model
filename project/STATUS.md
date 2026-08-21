@@ -1,5 +1,247 @@
 # Project status
 
+## Specification 1.51 comprehensive promotion evidence — 2026-08-21
+
+The isolated specification-1.51 implementation is review-complete with no
+remaining merge blocker. It does not modify or reinterpret the active
+specification-1.50 trainer. The physical selector advances to metric version
+`7` and rollout protocol version `16`; standalone evaluation advances to
+`held_out_rgb_metrics_v3` and
+`clean_primary_additive_support_diagnostic_v3`.
+
+The fixed validation path now persists and fail-closed validates, pooled and
+for every declared scenario:
+
+- current and every-horizon position and velocity, pooled and x/y/z;
+- per-horizon collision confusion counts/F1;
+- current and every-horizon coverage90, calibration error, Gaussian NLL, and
+  sharpness, pooled and x/y/z, from exact additive sums/counts;
+- per-horizon forecast identity eligibility, distance-gated association
+  coverage, and mismatch rate; and
+- an exact additive scenario partition whose counts and floating sums must
+  reconstruct the pooled evidence.
+
+Canonical pooled Gaussian NLL and sharpness are now derived with `math.fsum`
+from the exact per-axis sufficient statistics, not recomputed through a
+second float32 reduction. This fixes the real heavy-light signed-NLL
+cancellation (`-1.5968445539` independently reduced versus
+`-1.5968467593` canonically) without weakening validator tolerance.
+
+Core per-episode causal support is separate from rich selection support. Each
+episode must retain the full raw schema plus current and every configured
+position/velocity horizon-axis floor. Collision-class, rare-event,
+calibration, and forecast-identity support remain fail-closed after scenario
+and manifest pooling. The real fixed-32 evidence retains `32/32` core episodes
+and `8/8` rich scenario families, four episodes per scenario.
+
+This evidence is validation-only and adds no optimizer-time model work.
+Missing or contradictory support, event classes, identity associations,
+derived metrics, scenario partitions, or nonfinite values reject selection.
+Version-6/version-15 artifacts remain historical and are categorically
+incompatible with exact version-7/version-16 resume; transfer uses
+`--initialize-from`.
+
+Trainer validation now states only physical-incumbent scope: latency support,
+latency pass, and comprehensive eligibility are false absent an external
+matched timing control. `scripts/replay_promotion_mps.py` separately reports
+`physical_promotion_eligible` and `comprehensive_promotion_eligible`.
+Comprehensive promotion requires the complete physical gate plus matched
+candidate/reference global-update, fast-update, and future-rollout latency,
+each no more than `1.10x` reference. Missing, nonfinite, zero-reference,
+inconsistent sum/count, or over-limit latency fails closed. The legacy
+`promotion_eligible` field is only an alias of comprehensive eligibility.
+
+Replay captures each checkpoint once into immutable bytes and uses those same
+bytes for its SHA-256, byte count, load, model-state validation, and replay.
+Latency reports are likewise read, hashed, and parsed from one byte capture.
+The replay binds current runtime source, resolved configuration, simulator and
+scenario parameters, version-16 protocol, standard validation seeds and
+ordering, horizons, device/precision, checkpoint identity, RGB-only clean
+execution, posterior trace, primary physical digest, and disabled oracle/
+perturbation/recovery/runtime-pool interventions. It recomputes the canonical
+primary metric key set/digest and pooled-versus-scenario partition rather than
+trusting stored claims. Python, NumPy, CPU Torch, and MPS RNG are reset for
+each arm.
+
+Convergence semantics are now explicit. A four-selector physical plateau is
+an optimization stopping condition, not comprehensive convergence. The
+supervisor fails closed on missing/contradictory comprehensive markers, and
+`monitor.py` displays `OPTIMIZATION PLATEAU` until paired latency and
+comprehensive promotion pass; only then may it display `CONVERGED`.
+
+The frozen reviewed implementation snapshot before this specification/memory
+version synchronization had:
+
+```text
+worktree fingerprint: cb0dd4b4939ed1fba454fe33f7cb5722feb29c63073831bc8368d06b08b9002f
+runtime fingerprint:  dd3de0d68489e62311fdf53f2d3b2f3720b0303c9c08c38443549127788779d3
+```
+
+The pre-version parity directory
+`/private/tmp/orpheus-spec151-parity-final-20260821T084546Z` remains preserved
+for provenance. An earlier post-version parity compared clone runtime
+`957a5277a266ea009e8500946370a5f2adc7fc26ce8c3a9e83fb6f287c74b05b`
+with source-frozen reference runtime
+`0d8499cf5a9f5ba87fe88f432659d519231942fd8ab923c615cbbfad2fd846da`.
+Its historical artifacts are under
+`/private/tmp/orpheus-spec151-parity-postversion-Rmaj0N`:
+
+```text
+qualification SHA-256: 2ce77b69470a54ae65b74130dbda021c32cf96b022c335dbfe33d954ee85cd9
+supplemental SHA-256:    77281d1e8e69cfe40a76744805c7962cf3d538cd7ec5466a46c9eaef64548dfc
+protocol SHA-256:        714436f02442ad3ad82d9b17d5772993a4f67b09e52a5cdb776c21427380991c
+checkpoint SHA-256:      61ad6691148bf4c070a9a63adf6f7be243ed1e1f9b612b8cdbb80ce342855475
+checkpoint bytes:        740491
+```
+
+Trainer parity preserves `309` common metrics and all `9` losses exactly and
+adds `182` evidence fields. Held-out evaluator parity preserves `1025` common
+non-latency metrics exactly and adds `577` evidence fields. All posterior,
+final-runtime, model-state, and checkpoint hashes are exact. Supplemental
+qualification proves the final primary-key/hash/exclusion contract and that
+missing paired latency yields `physical=true`, `comprehensive=false`. The only
+expected transitions are specification `1.50 -> 1.51` and evaluator metric/
+per-scenario schema `v2 -> v3`; all numerical counts remain unchanged.
+
+Verification completed in the unchanged `orpheus` environment:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q \
+  tests/unit/test_promotion_latency.py \
+  tests/unit/test_replay_promotion_reports.py \
+  tests/unit/test_convergence_supervisor.py \
+  tests/unit/test_evaluator_scenario_metrics.py \
+  tests/unit/test_live_monitor.py \
+  tests/unit/test_training_objective_regressions.py \
+  tests/unit/test_training_schedule.py \
+  tests/unit/test_velocity_evidence_metrics.py \
+  tests/integration/test_cli_smoke.py \
+  tests/integration/test_evaluation_recovery_isolation.py \
+  tests/integration/test_trainer_checkpoint_integrity.py
+# 304 passed in 96.19s
+
+# focused final physical-hash/replay repair gate
+# 34 passed in 6.94s
+
+PYTHONDONTWRITEBYTECODE=1 conda run -n orpheus ruff check .
+# passed
+
+git diff --check
+# passed
+```
+
+The first full repository run correctly exposed five integration-fixture gaps
+against the stricter contract: three exact-resume fixtures lacked canonical
+selector-v7/rollout-v16 checkpoint metrics, and two direct-validation tests did
+not request `collect_promotion_metrics=True`. The repairs were test-only and
+did not weaken or change production behavior. The related regression gate then
+passed `275` tests, and the directly affected test files passed `67` tests.
+
+The intermediate clean repository command
+`PYTHONDONTWRITEBYTECODE=1 conda run -n orpheus pytest -q` passed `1075` tests
+with `16` skipped in `459.98s`. Ruff check passed; Ruff format confirmed all
+`219` files already formatted; compileall, post-version parity, and
+`git diff --check` passed. The repository gate is complete. Commit and push are
+the only remaining source-publication actions; they are not promotion or
+convergence evidence.
+
+The final frozen closure rerun supersedes those intermediate gate counts. Its
+unchanged candidate runtime/worktree fingerprints are
+`6247e913c41dc150e0f2fb66fa86b42a1a504083dd16110ba0a682e07af579a5`
+and `1836ecc3e2c0e32aeac2deb7afedc85237e480850000a39e77a1d9088b3d15f8`.
+The exact full gate is `1080 passed, 16 skipped in 424.71s`; Ruff check,
+Ruff format (`219` files), isolated-cache compileall, and diff check pass.
+Fresh parity under `/private/tmp/orpheus-spec151-final-parity.x8PY0e` compares
+candidate runtime `6247e913...` with reference runtime `0d8499cf...`.
+Qualification/supplemental SHA-256 values are `2ce77b69470a54ae65b74130dbda021c32cf96b022c335dbfe33d954ee85cd9`
+and `3793c659fdb1de15d0f2792e8e58da66a3f9b82ad268a1e00c902eb9c87b86d0`.
+It preserves `309` common trainer metrics, all `9` losses, `1025` common
+evaluator non-latency metrics, posterior traces, runtime/model states, and the
+exact `740491`-byte checkpoint SHA
+`61ad6691148bf4c070a9a63adf6f7be243ed1e1f9b612b8cdbb80ce342855475`.
+The corresponding canonical hashes are trainer metrics `2a64b016...`,
+total-plus-losses `54eef069...`, trainer posterior `409fa9aa...`, runtime
+`b53db3c4...`, model state `6ae10cbd...`, evaluator metrics `04ca4ab9...`,
+evaluator posterior `06c416d8...`, and primary physical `49bd23fd...`.
+Three absent latency components fail closed: `physical=true`,
+`comprehensive=false`.
+
+The active source-frozen campaign remains
+`runs/20260821-052948-grounded-convergence-spec150-hybrid`. At update 512 its
+candidate improved selection score `0.2654622904 -> 0.240757` (`9.31%`),
+current position `0.1580637 -> 0.132546 m`, velocity
+`0.8310919 -> 0.749308 m/s`, all five pooled position horizons, every pooled
+axis/horizon position slice, and all pooled velocity horizons. Coverage,
+precision, aggregate collision F1, and coverage90 also improved.
+
+It was nevertheless correctly rejected with `65` persisted scenario/axis
+guardrail failures: `35` z-position and `12` x-position failures dominate,
+with damped-contact z/event/coverage, heavy-light current-x/identity, camera
+x/z, and late collision-F1 regressions. Global identity switching worsened as
+well. The rejected but useful candidate is preserved at
+`validation_step_000512.pt`, whole-file SHA-256
+`f8f1704c2552ea51a7626729140608203918c909cfc258d63158c347bef4eb86`;
+the protected step-zero incumbent was not replaced. This is strong pooled
+learning plus a clear scenario/axis architecture diagnosis, not promotion or
+convergence. The source-frozen optimization trajectory was allowed to reach
+update 1024 and was then paused as recorded below.
+
+The version-1.51 rich shadow replay is support-complete and improves selector
+score `0.2654622895 -> 0.2407574475`, but rejects the same step-512 weights
+with `237` rich guardrail failures. Overlapping diagnostic-family counts are
+`61` velocity-axis, `13` pooled velocity, `67` Gaussian NLL, `8` calibration,
+`15` event-horizon, and `11` identity failures; these counts are not disjoint.
+Report SHA-256 is
+`345792e657246f86f9e74013837cdbc18b37298c84d9f907b860521834f2f362`.
+Physical and comprehensive promotion both fail; the protected step-zero
+incumbent remains deployed.
+
+The unchanged campaign is paused after its numbered step-1024 checkpoint.
+Optimizer integrity is healthy: exactly the intended `79` updater tensors
+changed, Adam steps are `1024`, frozen tensors/buffers and the event head are
+unchanged, attention decoders remain exact zero, and all parameters and
+moments are finite. Accuracy is adverse. Relative to step 512, failures worsen
+`65 -> 118`, score `0.2407574 -> 0.2618322`, current position
+`0.1325464 -> 0.1838629`, x `0.1031069 -> 0.2239196`, z
+`0.1783838 -> 0.2075144`, and identity/lifecycle
+`0.0013598 -> 0.0110931`; coverage and precision also fall. Velocity, y, and
+collision F1 improve but do not offset those regressions. There is no
+promotion or convergence claim.
+
+The completed fixed-32 perception-group rollback diagnostic at
+`/private/tmp/orpheus-step512-ablation-screen/fixed32-perception` is also
+rejected and non-promotable. Its selector is `0.2450779860`: better than the
+step-zero incumbent's `0.2654622904`, but worse than the complete step-512
+candidate's `0.2407574176`. Pooled current position RMSE is `0.135859 m`, with
+x/y/z RMSE `0.088311/0.108927/0.188968 m`; z is still `+4.08%` worse than
+step zero. Velocity RMSE is `0.750510 m/s`, collision F1 is `0.31989`, identity
+switch rate is `0.000542`, target coverage/precision is `0.9075/0.94976`, and
+coverage90 is `0.86516`. The rollback reduces step-512 guardrail failures
+`65 -> 52`, but `45` remain, `20` resolve, and `7` new failures appear;
+`38/52` are z-related. It repairs all six heavy-light failures, while camera
+retains `13` failures and adds two coverage failures, and damped-contact
+collision F1 `0.15385` remains worse than step zero's `0.24390`.
+
+That diagnostic is bound to validation-manifest SHA-256
+`e27bdf2dffb5f36545bc7cbae5d88514fb9537cd5fa07cd26276ccefd41b46be`,
+step-zero checkpoint SHA-256
+`b84e5299de4bed0ce487a7b26e8f01f521f82e8f6e51483eb34ac55f31f37cbf`,
+step-512 checkpoint SHA-256
+`f8f1704c2552ea51a7626729140608203918c909cfc258d63158c347bef4eb86`,
+composed-state SHA-256
+`f7699a67a69d207a51eac0c78d6989d1fb2252341418f55c29bc366ab4aff5ab`,
+and raw-metrics SHA-256
+`a057439a41ea976b802236687374b9b01fc77ef67b7f9d5adf7cd3b48429d4be`.
+Neither rollback nor interpolation is promoted. The source-frozen run reached
+and failed update 1024 as recorded above.
+
+Next work is a narrow axis-gated updater-state repair initialized weights-only
+from the protected base, paired with an unchanged control through at least the
+step-512 and step-1024 selectors and extended long enough for differences to
+matter only if it survives. Version-7/version-16 fixed-32 evidence, real paired
+latency, and disjoint RGB-only validation/test/OOD remain mandatory. No
+comprehensive promotion or convergence claim exists.
+
 ## Specification 1.50 objective-ownership and measured-execution repair — 2026-08-21
 
 The first specification-1.49 sustained launch proved that the model was finite
