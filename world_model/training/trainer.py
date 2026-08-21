@@ -71,7 +71,7 @@ _ROLLOUT_SELECTION_METRIC_VERSION = 6.0
 _ROLLOUT_SELECTION_RELATIVE_GUARDRAIL = 0.02
 _ROLLOUT_SELECTION_COVERAGE_TOLERANCE = 0.005
 _ROLLOUT_SELECTION_CALIBRATION_ERROR_TOLERANCE = 0.02
-_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 14
+_ROLLOUT_VALIDATION_PROTOCOL_VERSION = 15
 _NOMINAL_POSITION_COVERAGE = 0.90
 _MEASUREMENT_SELECTION_MIN_DELTA = 1.0e-5
 _MEASUREMENT_SELECTION_METRIC_VERSION = 5.0
@@ -735,6 +735,12 @@ def _rollout_validation_protocol_from_mapping(
             # Batch-one validation permits exact per-seed and per-scenario
             # attribution while keeping pooled additive metrics unchanged.
             "validation_batch_size": 1,
+            "validation_rollout_anchor_batch_size": int(
+                training.get("validation_rollout_anchor_batch_size", 1)
+            ),
+            "validation_rollout_anchor_batching_protocol": (
+                "posterior_anchor_major_metadata_subchunks_prefix_terminal_padding_v1"
+            ),
         },
         "validation_seed_manifest": {
             "split": manifest.split,
@@ -3533,6 +3539,9 @@ def _validation_step(
                 apply_perturbations=False,
                 include_measurement_supervision=True,
                 rollout_anchors_per_window=(config.training.validation_rollout_anchors_per_episode),
+                validation_rollout_anchor_batch_size=(
+                    config.training.validation_rollout_anchor_batch_size
+                ),
                 compute_future_correction=False,
             )
         else:

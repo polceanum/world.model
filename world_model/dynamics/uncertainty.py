@@ -102,6 +102,55 @@ class UncertaintyDynamics(nn.Module):
             raise ValueError("uncertainty dt must be scalar or [B]")
         if not torch.isfinite(delta_time).all() or torch.any(delta_time < 0):
             raise ValueError("uncertainty dt must be finite and nonnegative")
+        return self._propagate_validated_dt(
+            objects,
+            delta_time,
+            event_logits=event_logits,
+            interaction_density=interaction_density,
+            residual_acceleration=residual_acceleration,
+            validate_log_variance=True,
+        )
+
+    def _forward_validated_dt(
+        self,
+        objects: ObjectBeliefTensor,
+        dt: Tensor,
+        *,
+        event_logits: Tensor | None = None,
+        interaction_density: Tensor | None = None,
+        residual_acceleration: Tensor | None = None,
+    ) -> UncertaintyOutput:
+        """Propagate using a parent-validated ``[B]`` elapsed-time tensor."""
+
+        if objects.fast_state_dim != self.fast_state_dim:
+            raise ValueError("object fast state does not match uncertainty model")
+        if (
+            dt.shape != (objects.batch_size,)
+            or dt.device != objects.position.device
+            or dt.dtype != objects.position.dtype
+        ):
+            raise ValueError("validated uncertainty dt must match object batch, device, and dtype")
+        return self._propagate_validated_dt(
+            objects,
+            dt,
+            event_logits=event_logits,
+            interaction_density=interaction_density,
+            residual_acceleration=residual_acceleration,
+            validate_log_variance=False,
+        )
+
+    def _propagate_validated_dt(
+        self,
+        objects: ObjectBeliefTensor,
+        delta_time: Tensor,
+        *,
+        event_logits: Tensor | None,
+        interaction_density: Tensor | None,
+        residual_acceleration: Tensor | None,
+        validate_log_variance: bool,
+    ) -> UncertaintyOutput:
+        """Implement uncertainty propagation for normalized ``[B]`` time."""
+
         dt_object = delta_time[:, None]
 
         speed = torch.linalg.vector_norm(objects.velocity, dim=-1)
@@ -153,10 +202,30 @@ class UncertaintyDynamics(nn.Module):
             ),
             dim=-1,
         )
-        log_variance = clamp_log_variance(
-            updated_variance.clamp_min(1e-12).log(),
-            self.log_variance_bounds,
-        )
+        unclamped_log_variance = updated_variance.clamp_min(1e-12).log()
+        if validate_log_variance:
+            # Direct/public uncertainty calls retain the standalone contract:
+            # reject non-finite process-model output before clamping.
+            log_variance = clamp_log_variance(
+                unclamped_log_variance,
+                self.log_variance_bounds,
+            )
+        else:
+            # DynamicsModel validates the complete segment once after all
+            # microsteps. Calling the public helper here would turn this
+            # otherwise tensor-only loop into one MPS host synchronization per
+            # tick. Restore any non-finite input after the finite-value clamp
+            # so +/-Inf cannot be hidden at the parent boundary.
+            finite_log_variance = torch.isfinite(unclamped_log_variance)
+            clamped_log_variance = unclamped_log_variance.clamp(
+                min=self.log_variance_bounds[0],
+                max=self.log_variance_bounds[1],
+            )
+            log_variance = torch.where(
+                finite_log_variance,
+                clamped_log_variance,
+                unclamped_log_variance,
+            )
         log_variance = torch.where(
             objects.active.unsqueeze(-1),
             log_variance,

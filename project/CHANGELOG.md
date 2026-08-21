@@ -2,6 +2,45 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-21 dynamics synchronization and validation-anchor batching
+
+- Advanced the authoritative contract to specification 1.49. Composite
+  dynamics now validates elapsed time once per segment, lets private analytic,
+  modal, and uncertainty paths consume the normalized tensor, and performs one
+  complete finite-output check at the segment boundary. Public child APIs keep
+  their original guards.
+- Added an all-positive dynamics path that avoids redundant object/auxiliary
+  masking while preserving the historical row mask for mixed positive/zero
+  batches. Output, gradient, invalid-time, nonfinite-output, and active-Aqua
+  MPS regressions cover the change.
+- Added validation-only posterior-anchor batching. Online RGB ingestion and
+  persistent runtime state remain batch one; post-ingest anchors use exact
+  query prefixes, terminal-time padding, unchanged serial scoring, and safe
+  metadata subchunk or singleton fallback, including lifecycle flags carried
+  in metadata.
+- Added requested/batched/fallback-anchor and posterior-call diagnostics. The
+  anchor batch size is typed configuration, exact-resume semantics, and part
+  of rollout-validation protocol version 15. Generic and historical behavior
+  remains serial at `1`.
+- Completed the frozen 32-seed active-Aqua MPS qualification. Serial and
+  batched execution took `3760.393956` and `2012.605486` seconds respectively
+  (`1.8684208x`). Across 3141 comparable values there were zero out-of-
+  tolerance numeric, missing, or nonnumeric differences; maximum finite
+  absolute/relative deltas were `7.62939453125e-06` and `6.334555944e-07`, and
+  final runtime-state SHA-256 was identical.
+- All 256 anchors were batched in 32 posterior calls with zero fallback. The
+  grounded profile is therefore promoted to anchor batch size `8`; the default
+  remains `1`. Evidence is under
+  `runs/20260820-234059-validation-anchor-qualification-mps-32/`.
+- Retained
+  `runs/20260820-221902-grounded-convergence-spec148-mps` as a manually
+  interrupted `2/32` serial-throughput diagnostic. Neither it nor the paired
+  qualification trained the model; no accuracy, promotion, or convergence is
+  claimed.
+- Final repository verification is `992 passed, 16 expected non-Aqua MPS-
+  context skips in 396.54s`; compileall, Ruff lint/format, and diff checks pass.
+  The focused active-Aqua custom-MPS regression is `5 passed in 7.86s`.
+
 ### 2026-08-20 production MPS event-hazard numerical repair
 
 - Advanced the authoritative contract to specification 1.48 after the first

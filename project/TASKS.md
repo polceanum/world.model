@@ -1,5 +1,38 @@
 # Tasks
 
+## Validation throughput and dynamics synchronization — specification 1.49
+
+- [x] Move repeated elapsed-time validation out of analytic, modal, and
+  uncertainty microsteps into the composite dynamics segment while preserving
+  complete public guards and one full-output finite boundary check.
+- [x] Add the all-positive dynamics path and preserve exact masking for mixed
+  positive/zero rows; cover output, gradient, invalid-time, nonfinite-output,
+  and active-Aqua MPS behavior.
+- [x] Add validation-only posterior-anchor batching with exact query-prefix
+  slicing, terminal-time padding, unchanged per-anchor scoring, persistent
+  runtime-state parity, and explicit execution diagnostics.
+- [x] Fall back safely across incompatible modality or heterogeneous metadata
+  groups, including lifecycle flags in metadata, instead of weakening
+  `WorldBelief` or failing validation.
+- [x] Keep the generic and legacy default at serial batch size `1`; include the
+  field and batching semantic in exact-resume and rollout-protocol hashing.
+- [x] Retain
+  `runs/20260820-221902-grounded-convergence-spec148-mps` as an interrupted
+  `2/32` serial-throughput diagnostic only; it performed no optimizer update.
+- [x] Complete the exact 32-seed active-Aqua MPS parity/throughput gate at
+  `runs/20260820-234059-validation-anchor-qualification-mps-32`: 3141 values,
+  zero out-of-tolerance/missing/nonnumeric differences, identical final
+  runtime SHA-256, and `1.8684208x` speedup.
+- [x] Verify all 256 grounded anchors used batching in 32 posterior calls with
+  zero serial fallback, then promote only `configs/grounded_convergence_mps.yaml`
+  to anchor batch size `8`.
+- [ ] Launch a fresh timestamped 9,216-update grounded MPS campaign from the
+  protected weights. Complete the full `32/32` step-zero selector before the
+  first optimizer update and monitor all 18 fixed post-update validations.
+- [ ] Evaluate an eligible incumbent on disjoint validation, test, and OOD
+  manifests. Do not claim convergence or accuracy improvement from the
+  throughput qualification.
+
 ## Production MPS event-hazard repair — specification 1.48
 
 - [x] Retain

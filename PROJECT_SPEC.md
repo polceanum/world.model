@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.48
+**Version:** 1.49
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization and validation-anchor batching amendment 21 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -7256,6 +7256,106 @@ campaign relaunch, or convergence evidence. The frozen specification-1.48
 repository gate passes 960 tests with 14 expected non-Aqua MPS-context skips;
 lint, format, compile, and diff checks pass. The 9,216-update campaign must
 start in a fresh timestamped run from that committed source.
+
+---
+
+# Part XLI — Dynamics synchronization and validation-throughput amendment
+
+## 228. Composite dynamics validates elapsed time once per segment
+
+`DynamicsModel` owns normalization and validation of the elapsed-time tensor
+for a complete prediction segment. It accepts only a scalar or one value per
+belief row and rejects every nonfinite or negative value before child dynamics
+execute. Analytic kinematics, stable modal evolution, and uncertainty
+propagation may expose private entry points for this already-normalized
+`[batch]` tensor so the composite model does not repeat a tensor-to-host truth
+reduction on every physical microstep. Their public APIs retain their complete
+independent shape, finiteness, and nonnegativity guards.
+
+Skipping redundant child guards must not weaken numerical integrity. The
+composite boundary validates every floating output in the predicted belief,
+event logits, and requested auxiliary tensors with one segment-level host
+decision. Zero-duration prediction retains the explicit no-event contract and
+is subject to the same complete finite-output check.
+
+When every row advances by a positive duration, the composite model may use an
+all-positive execution path that omits per-field `where` blending and
+auxiliary masking. Mixed positive/zero batches must retain the row mask and
+the historical zero-duration behavior exactly. Output and gradient parity,
+invalid-time rejection, nonfinite child-output rejection, and active-Aqua MPS
+execution are permanent regression contracts for both paths.
+
+## 229. Validation may batch posterior anchors without batching episodes
+
+`training.validation_rollout_anchor_batch_size` controls a validation-only
+execution optimization. The repository-wide and historical default is `1`,
+which preserves serial anchor rollout exactly. A checkpoint whose resolved
+configuration predates the field is interpreted as `1`; changing the value is
+an execution-protocol change, changes the rollout-validation protocol hash,
+and is forbidden for exact resume. Use a fresh run or weights-only
+`--initialize-from` when opting into another value.
+
+The validation loader remains batch one so each seed and scenario keeps exact
+attribution. Normal online RGB ingestion runs through the complete episode in
+timestamp order and remains the sole owner of persistent runtime belief,
+modality caches, temporal histories, lifecycle, and identity. At each selected
+anchor, validation may clone the post-ingest `WorldBelief`, association
+indices, and match support, then evaluate those posterior forecasts in
+anchor-major chunks after the episode has been ingested. It must not
+re-encode history, alter the posterior, or expose future observations.
+
+Anchor query plans must be exact prefixes of the longest plan in their chunk.
+Shorter rows are padded only by repeating their terminal query time; the
+padded suffix is sliced away before the unchanged per-anchor loss, event, and
+physical-metric scorer executes. Beliefs may be concatenated only when active
+modalities and heterogeneous metadata are equal, including tensor-valued
+metadata. Incompatible contiguous metadata groups, including lifecycle flags
+carried in metadata, are subdivided, and a singleton group falls back to the
+exact serial rollout rather than failing validation or weakening the belief
+contract.
+
+Batching is admitted only for `model.eval()` under `torch.no_grad()`, an
+episode-loader batch size of one, unperturbed posterior-only validation, and
+with the training-only future-correction rollout disabled. The current
+implementation rejects multi-rate learned-effect holding because its
+batch-global invalidation path has not been proven anchor-independent.
+Execution metrics report requested anchors, actually batched anchors, serial
+fallback anchors, and posterior rollout calls so metadata fragmentation or a
+silent loss of throughput remains observable.
+
+## 230. The grounded eight-anchor profile passed the fixed MPS gate
+
+The generic default remains serial at `1`. The grounded convergence profile is
+promoted to `validation_rollout_anchor_batch_size: 8` only because the exact
+32-episode validation manifest passed the specification's parity and
+throughput gate on the user-provided custom PyTorch
+`2.9.0a0+gitcbe1a35` build with MPS active.
+
+Using identical checkpoint bytes, seed/scenario order, RGB-only observations,
+eight posterior anchors per episode, horizons, scorer, precision, and frozen
+source, serial validation took `3760.393956` seconds and batched validation
+took `2012.605486` seconds, a `1.8684208x` speedup. The comparison considered
+`3141` values and found zero missing values, zero nonnumeric differences, and
+zero numeric differences outside tolerance. The largest finite absolute
+difference was `7.62939453125e-06` in additive
+`physical_rollout_velocity@0.250s_sse`; the largest finite relative difference
+was `6.334555944e-07`. Final runtime-state SHA-256 digests were identical. All
+`256` requested anchors were batched in `32` posterior rollout calls with zero
+serial fallback.
+
+The durable evidence is:
+
+- `runs/20260820-234059-validation-anchor-qualification-mps-32/serial/qualification.json`;
+- `runs/20260820-234059-validation-anchor-qualification-mps-32/batched/qualification.json`;
+- `runs/20260820-234059-validation-anchor-qualification-mps-32/comparison.json`.
+
+The earlier serial campaign attempt at
+`runs/20260820-221902-grounded-convergence-spec148-mps` was manually
+interrupted after `2/32` initialization-validation episodes and is retained as
+a throughput diagnostic only. Neither it nor the paired qualification ran an
+optimizer update. This amendment makes no training, prediction-accuracy,
+checkpoint-promotion, or convergence claim; the long grounded campaign and
+its repeated fixed validation remain outstanding.
 
 ---
 

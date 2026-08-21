@@ -75,6 +75,60 @@ class AnalyticKinematics(nn.Module):
         if gravity.shape != (objects.batch_size, 3):
             raise ValueError("gravity must have shape [B,3]")
         delta_time = _object_dt(dt, objects.position)
+        return self._integrate_with_object_dt(
+            objects,
+            gravity,
+            delta_time,
+            residual_acceleration=residual_acceleration,
+            external_acceleration=external_acceleration,
+        )
+
+    def _integrate_validated_dt(
+        self,
+        objects: ObjectBeliefTensor,
+        gravity: Tensor,
+        dt: Tensor,
+        *,
+        residual_acceleration: Tensor | None = None,
+        external_acceleration: Tensor | None = None,
+    ) -> ObjectBeliefTensor:
+        """Integrate a parent-validated ``[B]`` elapsed-time tensor.
+
+        This private entry point exists for :class:`DynamicsModel`, which has
+        already checked shape, finiteness, and nonnegativity once for the
+        complete prediction segment.  Avoiding the redundant tensor-to-Python
+        truth reduction here prevents an accelerator synchronization on every
+        analytic microstep.  Public calls continue to use :meth:`integrate`
+        and retain the complete guard.
+        """
+
+        if (
+            dt.shape != (objects.batch_size,)
+            or dt.device != objects.position.device
+            or dt.dtype != objects.position.dtype
+        ):
+            raise ValueError("validated dt must match object batch, device, and dtype")
+        return self._integrate_with_object_dt(
+            objects,
+            gravity,
+            dt[:, None, None],
+            residual_acceleration=residual_acceleration,
+            external_acceleration=external_acceleration,
+        )
+
+    def _integrate_with_object_dt(
+        self,
+        objects: ObjectBeliefTensor,
+        gravity: Tensor,
+        delta_time: Tensor,
+        *,
+        residual_acceleration: Tensor | None,
+        external_acceleration: Tensor | None,
+    ) -> ObjectBeliefTensor:
+        """Implement integration for a normalized ``[B,1,1]`` tensor."""
+
+        if gravity.shape != (objects.batch_size, 3):
+            raise ValueError("gravity must have shape [B,3]")
         acceleration = gravity[:, None, :].expand_as(objects.position)
         for name, value in (
             ("residual_acceleration", residual_acceleration),

@@ -4119,3 +4119,39 @@
   pass. This qualifies only the localized repair and repository integrity.
   Complete `32/32` initialization validation, a campaign relaunch, selector
   behavior, prediction accuracy, and convergence remain unproved.
+
+## ADR-149 — Batch validation anchors only after exact MPS parity
+
+- **Date:** 2026-08-21
+- **Status:** accepted and qualified for the grounded profile
+- **Context:** Specification 1.48 repaired the MPS event hazard, but serial
+  initialization validation remained too expensive: a manually interrupted
+  attempt at `runs/20260820-221902-grounded-convergence-spec148-mps` reached
+  only `2/32` episodes in `1559.189234` seconds. Repeated child-level elapsed-
+  time guards and eight independent posterior rollouts per episode caused
+  avoidable accelerator synchronization and repeated learned-dynamics work.
+- **Decision:** Let `DynamicsModel` validate elapsed time once per segment and
+  retain one complete finite-output boundary; private analytic/modal/
+  uncertainty paths may consume that normalized tensor. Use an all-positive
+  path only when every row advances, retaining exact masks for mixed or zero
+  rows. Add validation-only anchor-major batching behind typed config. Keep
+  episode ingestion and persistent runtime state batch one, pad only repeated
+  terminal query time, slice exact prefixes before scoring, and subdivide or
+  fall back serially when modality or metadata differs, including lifecycle
+  flags carried in metadata.
+  Preserve serial `1` as the generic and legacy default and make the field plus
+  batching semantic exact-resume and validation-protocol state.
+- **Alternatives considered:** reduce the fixed manifest or anchor count;
+  weaken finite checks; batch complete episodes and lose exact attribution;
+  assume metadata is static; enable batching from a CPU smoke; resume an old
+  campaign after changing execution protocol.
+- **Consequences:** On the frozen 32-seed active-Aqua MPS protocol, serial and
+  batched execution took `3760.393956` and `2012.605486` seconds
+  (`1.8684208x`). All 3141 comparable values passed tolerance with no missing
+  or nonnumeric differences; maximum finite absolute/relative deltas were
+  `7.62939453125e-06` and `6.334555944e-07`, and final runtime SHA-256 matched.
+  All 256 anchors batched in 32 calls with zero fallback. The grounded profile
+  may therefore use size `8`; other profiles remain serial unless separately
+  qualified. This is execution qualification only. No optimizer update,
+  prediction-accuracy improvement, checkpoint promotion, or convergence has
+  been demonstrated.

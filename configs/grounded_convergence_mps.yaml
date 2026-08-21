@@ -163,6 +163,7 @@ training:
   rollout_anchors_per_window: 1
   minimum_rollout_age_steps: 3
   validation_rollout_anchors_per_episode: 8
+  validation_rollout_anchor_batch_size: 8
   validation_minimum_predictable_target_count_per_scenario_horizon: 4
   validation_minimum_matched_target_count_per_scenario_horizon: 2
   validation_minimum_supported_episodes_per_scenario: 2

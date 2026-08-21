@@ -68,6 +68,40 @@ class ModalDynamics(nn.Module):
         decay_raw: Tensor,
         dt: float | Tensor,
     ) -> Tensor:
+        self._validate_state_shapes(state, frequency, decay_raw)
+        delta_time = _modal_dt(dt, state)
+        return self._evolve_with_modal_dt(
+            state,
+            frequency,
+            decay_raw,
+            delta_time,
+        )
+
+    def _evolve_validated_dt(
+        self,
+        state: Tensor,
+        frequency: Tensor,
+        decay_raw: Tensor,
+        dt: Tensor,
+    ) -> Tensor:
+        """Evolve using a parent-validated ``[B]`` elapsed-time tensor."""
+
+        self._validate_state_shapes(state, frequency, decay_raw)
+        if dt.shape != (state.shape[0],) or dt.device != state.device or dt.dtype != state.dtype:
+            raise ValueError("validated modal dt must match state batch, device, and dtype")
+        return self._evolve_with_modal_dt(
+            state,
+            frequency,
+            decay_raw,
+            dt[:, None, None, None],
+        )
+
+    def _validate_state_shapes(
+        self,
+        state: Tensor,
+        frequency: Tensor,
+        decay_raw: Tensor,
+    ) -> None:
         if state.ndim != 5 or state.shape[-2] != 2:
             raise ValueError("modal state must have shape [B,N,K,2,Dm]")
         expected = (*state.shape[:3], state.shape[-1])
@@ -75,7 +109,16 @@ class ModalDynamics(nn.Module):
             raise ValueError("frequency/decay must have shape [B,N,K,Dm]")
         if state.shape[-3:] != (self.modal_count, 2, self.modal_dim):
             raise ValueError("modal state does not match configured dimensions")
-        delta_time = _modal_dt(dt, state)
+
+    def _evolve_with_modal_dt(
+        self,
+        state: Tensor,
+        frequency: Tensor,
+        decay_raw: Tensor,
+        delta_time: Tensor,
+    ) -> Tensor:
+        """Implement modal evolution for normalized ``[B,1,1,1]`` time."""
+
         frequency = frequency.clamp(
             min=self.min_frequency,
             max=self.max_frequency,
@@ -109,6 +152,30 @@ class ModalDynamics(nn.Module):
         dt: float | Tensor,
     ) -> tuple[ObjectBeliefTensor, ModalOutput]:
         state = self.evolve(
+            objects.modal_state,
+            objects.modal_frequency,
+            objects.modal_decay_raw,
+            dt,
+        )
+        state = torch.where(
+            objects.active[..., None, None, None],
+            state,
+            objects.modal_state,
+        )
+        output = ModalOutput(
+            state=state,
+            residual_acceleration=self.acceleration(state) * objects.active.unsqueeze(-1),
+        )
+        return replace(objects, modal_state=state), output
+
+    def _forward_validated_dt(
+        self,
+        objects: ObjectBeliefTensor,
+        dt: Tensor,
+    ) -> tuple[ObjectBeliefTensor, ModalOutput]:
+        """Apply modal evolution after parent-level elapsed-time validation."""
+
+        state = self._evolve_validated_dt(
             objects.modal_state,
             objects.modal_frequency,
             objects.modal_decay_raw,

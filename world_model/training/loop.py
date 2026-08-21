@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import random
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any
 
 import numpy as np
@@ -20,7 +20,7 @@ import torch.nn.functional as F
 from scipy.optimize import linear_sum_assignment
 from torch import Tensor
 
-from world_model.belief import MotionMode, WorldBelief
+from world_model.belief import BeliefTrajectory, MotionMode, WorldBelief
 from world_model.observations import (
     MeasurementSet,
     ObservationContext,
@@ -72,6 +72,26 @@ class _RolloutLossResult:
     position_log_variance: Tensor | None
     active_mask: Tensor | None
     physical_metrics: dict[str, float]
+
+
+@dataclass(frozen=True)
+class _DeferredValidationRollout:
+    """Immutable post-ingest anchor used by validation-only rollout batching."""
+
+    frame_index: int
+    belief: WorldBelief
+    indices: Tensor
+    matched: Tensor
+
+
+@dataclass(frozen=True)
+class _ValidationRolloutExecution:
+    """Per-chunk results plus truthful posterior-rollout execution counts."""
+
+    results: list[_RolloutLossResult]
+    batched_anchor_count: int
+    serial_fallback_anchor_count: int
+    rollout_call_count: int
 
 
 def _accumulate_float_metrics(
@@ -2492,6 +2512,119 @@ def _current_correction_objective_support(
     )
 
 
+def _rollout_metadata_equal(left: Any, right: Any) -> bool:
+    """Compare heterogeneous metadata without ambiguous tensor truth values."""
+
+    if isinstance(left, Tensor) or isinstance(right, Tensor):
+        return isinstance(left, Tensor) and isinstance(right, Tensor) and torch.equal(left, right)
+    if isinstance(left, Mapping) or isinstance(right, Mapping):
+        if not isinstance(left, Mapping) or not isinstance(right, Mapping):
+            return False
+        return left.keys() == right.keys() and all(
+            _rollout_metadata_equal(left[name], right[name]) for name in left
+        )
+    if isinstance(left, (tuple, list)) or isinstance(right, (tuple, list)):
+        if type(left) is not type(right) or len(left) != len(right):
+            return False
+        return all(
+            _rollout_metadata_equal(left_item, right_item)
+            for left_item, right_item in zip(left, right, strict=True)
+        )
+    try:
+        equal = left == right
+    except (TypeError, ValueError):
+        return False
+    return bool(equal) if isinstance(equal, bool) else False
+
+
+def _rollout_beliefs_are_batch_compatible(
+    left: WorldBelief,
+    right: WorldBelief,
+) -> bool:
+    return left.active_modalities == right.active_modalities and _rollout_metadata_equal(
+        left.metadata,
+        right.metadata,
+    )
+
+
+def _concatenate_rollout_beliefs(beliefs: list[WorldBelief]) -> WorldBelief:
+    """Concatenate anchor-major belief rows without weakening belief contracts."""
+
+    if not beliefs:
+        raise ValueError("rollout belief concatenation requires at least one belief")
+    first = beliefs[0]
+    for belief in beliefs[1:]:
+        if not _rollout_beliefs_are_batch_compatible(first, belief):
+            raise ValueError("batched rollout anchors must have identical modalities and metadata")
+
+    objects = first.objects.replace(
+        **{
+            item.name: torch.cat(
+                [getattr(belief.objects, item.name) for belief in beliefs],
+                dim=0,
+            )
+            for item in fields(first.objects)
+        }
+    )
+    camera = first.camera.replace(
+        **{
+            item.name: torch.cat(
+                [getattr(belief.camera, item.name) for belief in beliefs],
+                dim=0,
+            )
+            for item in fields(first.camera)
+        }
+    )
+    return first.replace(
+        timestamp=torch.cat([belief.timestamp for belief in beliefs], dim=0),
+        objects=objects,
+        camera=camera,
+        gravity=torch.cat([belief.gravity for belief in beliefs], dim=0),
+        global_code=torch.cat([belief.global_code for belief in beliefs], dim=0),
+        global_log_variance=torch.cat(
+            [belief.global_log_variance for belief in beliefs],
+            dim=0,
+        ),
+        next_object_id=torch.cat([belief.next_object_id for belief in beliefs], dim=0),
+    ).validate()
+
+
+def _slice_rollout_trajectory(
+    trajectory: BeliefTrajectory,
+    *,
+    batch_start: int,
+    batch_stop: int,
+    query_count: int,
+) -> BeliefTrajectory:
+    """Recover one anchor's exact unpadded trajectory from a batched rollout."""
+
+    if not 0 <= batch_start < batch_stop <= trajectory.timestamps.shape[0]:
+        raise ValueError("rollout trajectory batch slice lies outside the trajectory")
+    if not 0 < query_count <= trajectory.timestamps.shape[1]:
+        raise ValueError("rollout trajectory query prefix must be nonempty and in bounds")
+    for name, value in trajectory.auxiliary.items():
+        if value.ndim < 2 or value.shape[:2] != trajectory.timestamps.shape:
+            raise ValueError(f"rollout auxiliary {name} must begin with the trajectory [B,Q] axes")
+    return BeliefTrajectory(
+        timestamps=trajectory.timestamps[batch_start:batch_stop, :query_count],
+        positions=trajectory.positions[batch_start:batch_stop, :query_count],
+        velocities=trajectory.velocities[batch_start:batch_stop, :query_count],
+        orientations=trajectory.orientations[batch_start:batch_stop, :query_count],
+        motion_mode_logits=(trajectory.motion_mode_logits[batch_start:batch_stop, :query_count]),
+        fast_log_variance=(trajectory.fast_log_variance[batch_start:batch_stop, :query_count]),
+        active_mask=trajectory.active_mask[batch_start:batch_stop, :query_count],
+        event_logits=(
+            None
+            if trajectory.event_logits is None
+            else trajectory.event_logits[batch_start:batch_stop, :query_count]
+        ),
+        auxiliary={
+            name: value[batch_start:batch_stop, :query_count]
+            for name, value in trajectory.auxiliary.items()
+        },
+    ).validate()
+
+
 def _rollout_loss_result(
     model: OnlineWorldModel,
     belief: WorldBelief,
@@ -2500,6 +2633,8 @@ def _rollout_loss_result(
     frame_index: int,
     indices: Tensor,
     matched: Tensor,
+    *,
+    trajectory: BeliefTrajectory | None = None,
 ) -> _RolloutLossResult:
     total_frames = int(batch["rgb"].shape[1])
     frame_offsets, query_seconds, horizon_weights = _valid_rollout_offsets(
@@ -2539,13 +2674,23 @@ def _rollout_loss_result(
             raise ValueError(
                 "smooth event-hazard training requires events.pair_collision [B,T,N,N]"
             )
-    trajectory = model.dynamics.rollout(
-        belief,
-        event_query_plan.query_seconds,
-        return_events=True,
-        return_auxiliary=smooth_event_hazard_enabled,
-        **({"auxiliary_names": ("pair_event_logits",)} if smooth_event_hazard_enabled else {}),
-    )
+    if trajectory is None:
+        trajectory = model.dynamics.rollout(
+            belief,
+            event_query_plan.query_seconds,
+            return_events=True,
+            return_auxiliary=smooth_event_hazard_enabled,
+            **({"auxiliary_names": ("pair_event_logits",)} if smooth_event_hazard_enabled else {}),
+        )
+    else:
+        trajectory.validate()
+        if trajectory.timestamps.shape != (
+            belief.batch_size,
+            len(event_query_plan.query_seconds),
+        ):
+            raise ValueError(
+                "precomputed rollout trajectory must match the anchor batch and query plan"
+            )
     target_positions = event_query_plan.select_target_endpoints(trajectory.positions)
     target_velocities = event_query_plan.select_target_endpoints(trajectory.velocities)
     target_position_log_variance = event_query_plan.select_target_endpoints(
@@ -2837,6 +2982,158 @@ def _rollout_loss_result(
         position_log_variance=target_position_log_variance,
         active_mask=target_active_mask,
         physical_metrics=physical_metrics,
+    )
+
+
+def _batched_validation_rollout_loss_results(
+    model: OnlineWorldModel,
+    anchors: list[_DeferredValidationRollout],
+    batch: Mapping[str, Any],
+    config: OrpheusConfig,
+) -> _ValidationRolloutExecution:
+    """Evaluate one anchor-major validation chunk with exact serial scoring.
+
+    Later anchors can support fewer horizons. Their observation-window query
+    plans are exact prefixes of the earliest plan, so their rows are padded by
+    repeating only their terminal query time. The padded suffix is discarded
+    before the unchanged per-anchor scorer sees the trajectory.
+    """
+
+    if not anchors:
+        return _ValidationRolloutExecution([], 0, 0, 0)
+    if len(anchors) == 1:
+        anchor = anchors[0]
+        return _ValidationRolloutExecution(
+            results=[
+                _rollout_loss_result(
+                    model,
+                    anchor.belief,
+                    batch,
+                    config,
+                    anchor.frame_index,
+                    anchor.indices,
+                    anchor.matched,
+                )
+            ],
+            batched_anchor_count=0,
+            serial_fallback_anchor_count=1,
+            rollout_call_count=1,
+        )
+    if config.model.dynamics.learned_effect_interval_seconds is not None:
+        raise ValueError(
+            "validation rollout anchor batching does not support multi-rate learned "
+            "effects; set training.validation_rollout_anchor_batch_size=1"
+        )
+
+    compatible_groups: list[list[_DeferredValidationRollout]] = []
+    for anchor in anchors:
+        if not compatible_groups or not _rollout_beliefs_are_batch_compatible(
+            compatible_groups[-1][0].belief,
+            anchor.belief,
+        ):
+            compatible_groups.append([anchor])
+        else:
+            compatible_groups[-1].append(anchor)
+    if len(compatible_groups) > 1:
+        grouped_results: list[_RolloutLossResult] = []
+        batched_anchor_count = 0
+        serial_fallback_anchor_count = 0
+        rollout_call_count = 0
+        for group in compatible_groups:
+            execution = _batched_validation_rollout_loss_results(
+                model,
+                group,
+                batch,
+                config,
+            )
+            grouped_results.extend(execution.results)
+            batched_anchor_count += execution.batched_anchor_count
+            serial_fallback_anchor_count += execution.serial_fallback_anchor_count
+            rollout_call_count += execution.rollout_call_count
+        return _ValidationRolloutExecution(
+            results=grouped_results,
+            batched_anchor_count=batched_anchor_count,
+            serial_fallback_anchor_count=serial_fallback_anchor_count,
+            rollout_call_count=rollout_call_count,
+        )
+
+    total_frames = int(batch["rgb"].shape[1])
+    plans = []
+    for anchor in anchors:
+        frame_offsets, _, _ = _valid_rollout_offsets(
+            config,
+            anchor.frame_index,
+            total_frames,
+        )
+        if not frame_offsets:
+            raise ValueError("deferred validation rollout anchor has no valid horizon")
+        plans.append(
+            observation_window_query_plan(
+                frame_offsets,
+                frame_rate=config.simulator.frame_rate,
+            )
+        )
+    longest_plan = max(plans, key=lambda plan: len(plan.query_frame_offsets))
+    longest_offsets = longest_plan.query_frame_offsets
+    for plan in plans:
+        query_count = len(plan.query_frame_offsets)
+        if plan.query_frame_offsets != longest_offsets[:query_count]:
+            raise ValueError(
+                "validation rollout anchor query plans must be prefixes before batching"
+            )
+
+    belief = _concatenate_rollout_beliefs([anchor.belief for anchor in anchors])
+    query_count = len(longest_offsets)
+    query_rows: list[Tensor] = []
+    for anchor, plan in zip(anchors, plans, strict=True):
+        padded_seconds = (
+            *plan.query_seconds,
+            *(plan.query_seconds[-1:] * (query_count - len(plan.query_seconds))),
+        )
+        query_rows.append(
+            anchor.belief.timestamp.new_tensor(padded_seconds)
+            .unsqueeze(0)
+            .expand(anchor.belief.batch_size, -1)
+            .clone()
+        )
+    query_times = torch.cat(query_rows, dim=0)
+    smooth_event_hazard_enabled = config.model.dynamics.smooth_event_hazard_enabled
+    trajectory = model.dynamics.rollout(
+        belief,
+        query_times,
+        return_events=True,
+        return_auxiliary=smooth_event_hazard_enabled,
+        **({"auxiliary_names": ("pair_event_logits",)} if smooth_event_hazard_enabled else {}),
+    )
+
+    results: list[_RolloutLossResult] = []
+    batch_cursor = 0
+    for anchor, plan in zip(anchors, plans, strict=True):
+        batch_stop = batch_cursor + anchor.belief.batch_size
+        anchor_trajectory = _slice_rollout_trajectory(
+            trajectory,
+            batch_start=batch_cursor,
+            batch_stop=batch_stop,
+            query_count=len(plan.query_frame_offsets),
+        )
+        results.append(
+            _rollout_loss_result(
+                model,
+                anchor.belief,
+                batch,
+                config,
+                anchor.frame_index,
+                anchor.indices,
+                anchor.matched,
+                trajectory=anchor_trajectory,
+            )
+        )
+        batch_cursor = batch_stop
+    return _ValidationRolloutExecution(
+        results=results,
+        batched_anchor_count=len(anchors),
+        serial_fallback_anchor_count=0,
+        rollout_call_count=1,
     )
 
 
@@ -3312,6 +3609,7 @@ def run_closed_loop_batch(
     apply_perturbations: bool = True,
     include_measurement_supervision: bool = True,
     rollout_anchors_per_window: int | None = None,
+    validation_rollout_anchor_batch_size: int = 1,
     compute_future_correction: bool = True,
     active_trainable_scope: str | None = None,
 ) -> TrainingBatchResult:
@@ -3329,6 +3627,31 @@ def run_closed_loop_batch(
     if not isinstance(rgb, Tensor) or rgb.ndim != 5:
         raise ValueError("closed-loop batch must contain rgb [B,T,3,H,W]")
     batch_size, total_frames = rgb.shape[:2]
+    if (
+        isinstance(validation_rollout_anchor_batch_size, bool)
+        or not isinstance(validation_rollout_anchor_batch_size, int)
+        or validation_rollout_anchor_batch_size <= 0
+    ):
+        raise ValueError("validation_rollout_anchor_batch_size must be a positive integer")
+    batch_validation_rollouts = validation_rollout_anchor_batch_size > 1
+    if batch_validation_rollouts:
+        if model.training or torch.is_grad_enabled():
+            raise ValueError(
+                "validation rollout anchor batching requires model.eval() under torch.no_grad()"
+            )
+        if batch_size != 1:
+            raise ValueError(
+                "validation rollout anchor batching requires episode loader batch size one"
+            )
+        if apply_perturbations or compute_future_correction:
+            raise ValueError(
+                "validation rollout anchor batching requires unperturbed posterior-only validation"
+            )
+        if config.model.dynamics.learned_effect_interval_seconds is not None:
+            raise ValueError(
+                "validation rollout anchor batching does not support multi-rate learned "
+                "effects; set training.validation_rollout_anchor_batch_size=1"
+            )
     if window_steps is None:
         window_steps = min(total_frames - window_start, config.training.tbptt_steps)
     if window_steps <= 0 or window_start < 0:
@@ -3384,6 +3707,10 @@ def run_closed_loop_batch(
     # padding never counts.
     fast_supervised_slots = 0
     physical_metrics: dict[str, float] = {}
+    deferred_validation_rollouts: list[_DeferredValidationRollout] = []
+    rollout_execution_batched_anchor_count = 0
+    rollout_execution_serial_fallback_anchor_count = 0
+    rollout_execution_posterior_call_count = 0
     parameter_supervision_metrics: dict[str, float] = {}
     identity_switches = 0
     object_frame_associations = 0
@@ -3755,21 +4082,32 @@ def run_closed_loop_batch(
                 )
         rollout_result: _RolloutLossResult | None = None
         if score_rollout:
-            rollout_result = _rollout_loss_result(
-                model,
-                belief,
-                batch,
-                config,
-                frame_index,
-                indices,
-                matched,
-            )
-            for name, value in rollout_result.losses.items():
-                add(name, value)
-            _accumulate_float_metrics(
-                physical_metrics,
-                rollout_result.physical_metrics,
-            )
+            if batch_validation_rollouts:
+                deferred_validation_rollouts.append(
+                    _DeferredValidationRollout(
+                        frame_index=frame_index,
+                        belief=belief.clone(),
+                        indices=indices.clone(),
+                        matched=matched.clone(),
+                    )
+                )
+            else:
+                rollout_result = _rollout_loss_result(
+                    model,
+                    belief,
+                    batch,
+                    config,
+                    frame_index,
+                    indices,
+                    matched,
+                )
+                rollout_execution_posterior_call_count += 1
+                for name, value in rollout_result.losses.items():
+                    add(name, value)
+                _accumulate_float_metrics(
+                    physical_metrics,
+                    rollout_result.physical_metrics,
+                )
 
         if (
             prior_rollout is not None
@@ -3908,6 +4246,31 @@ def run_closed_loop_batch(
         ) % config.training.tbptt_steps == 0 and frame_index + 1 < window_stop:
             model.detach_state()
 
+    for chunk_start in range(
+        0,
+        len(deferred_validation_rollouts),
+        validation_rollout_anchor_batch_size,
+    ):
+        chunk = deferred_validation_rollouts[
+            chunk_start : chunk_start + validation_rollout_anchor_batch_size
+        ]
+        execution = _batched_validation_rollout_loss_results(
+            model,
+            chunk,
+            batch,
+            config,
+        )
+        rollout_execution_batched_anchor_count += execution.batched_anchor_count
+        rollout_execution_serial_fallback_anchor_count += execution.serial_fallback_anchor_count
+        rollout_execution_posterior_call_count += execution.rollout_call_count
+        for rollout_result in execution.results:
+            for name, value in rollout_result.losses.items():
+                add(name, value)
+            _accumulate_float_metrics(
+                physical_metrics,
+                rollout_result.physical_metrics,
+            )
+
     reference = rgb
     details = {name: _mean_losses(values, reference) for name, values in detail_lists.items()}
     global_measurement = details.pop("global_measurement", None)
@@ -3946,6 +4309,14 @@ def run_closed_loop_batch(
                 float(max(rollout_anchor_frames)) if rollout_anchor_frames else math.nan
             ),
             "rollout_anchor_count": float(len(rollout_anchor_frames)),
+            "rollout_execution_batch_requested_anchor_count": float(
+                len(deferred_validation_rollouts)
+            ),
+            "rollout_execution_batched_anchor_count": float(rollout_execution_batched_anchor_count),
+            "rollout_execution_serial_fallback_anchor_count": float(
+                rollout_execution_serial_fallback_anchor_count
+            ),
+            "rollout_execution_posterior_call_count": float(rollout_execution_posterior_call_count),
             "rollout_anchor_candidate_count": float(
                 sum(
                     frame_index >= config.training.minimum_rollout_age_steps

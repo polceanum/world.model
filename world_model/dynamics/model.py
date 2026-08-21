@@ -486,9 +486,71 @@ class DynamicsModel(nn.Module):
             value = value.expand(belief.batch_size).clone()
         if value.shape != belief.timestamp.shape:
             raise ValueError("dt must be scalar or shape [B]")
-        if not torch.isfinite(value).all() or torch.any(value < 0):
+        if not torch.logical_and(torch.isfinite(value), value >= 0).all():
             raise ValueError("dt must contain finite nonnegative seconds")
         return value
+
+    @staticmethod
+    def _optional_advance_mask(sub_dt: Tensor) -> Tensor | None:
+        """Return ``None`` when every batch row advances this segment.
+
+        The elapsed tensor has already passed the public finite/nonnegative
+        guard. One segment-level host decision selects the common all-positive
+        path; physical microsteps then remain tensor-only. A tensor mask is
+        retained unchanged for mixed positive/zero batches.
+        """
+
+        advance = sub_dt > 0
+        if advance.all().detach().cpu().item():
+            return None
+        return advance
+
+    @staticmethod
+    def _validate_finite_segment(step: RolloutStep) -> RolloutStep:
+        """Reject non-finite prediction output with one host decision.
+
+        Child dynamics run tensor-only on parent-validated elapsed time.  This
+        boundary reduction preserves fail-fast numerical integrity without
+        synchronizing an accelerator once per child and physical microstep.
+        It includes every floating tensor the composite dynamics returns, so
+        a masked or auxiliary-only failure cannot escape detection.
+        """
+
+        tensors: list[Tensor] = [
+            step.belief.timestamp,
+            step.belief.gravity,
+            step.belief.global_code,
+            step.belief.global_log_variance,
+            step.event_logits,
+        ]
+        tensors.extend(
+            value
+            for item in fields(step.belief.objects)
+            if (value := getattr(step.belief.objects, item.name)).is_floating_point()
+            or value.is_complex()
+        )
+        tensors.extend(
+            value
+            for item in fields(step.belief.camera)
+            if (value := getattr(step.belief.camera, item.name)).is_floating_point()
+            or value.is_complex()
+        )
+        tensors.extend(
+            value
+            for value in step.auxiliary.values()
+            if value.is_floating_point() or value.is_complex()
+        )
+        device = step.belief.device
+        if any(value.device != device for value in tensors):
+            raise ValueError("dynamics segment output spans multiple devices")
+        # The bounded belief/auxiliary tensors are small. Fusing them before
+        # the reduction avoids launching one finite-check kernel per field and
+        # still makes exactly one Python/host decision for the segment.
+        with torch.no_grad():
+            finite = torch.isfinite(torch.cat([value.reshape(-1) for value in tensors])).all()
+        if not finite.detach().cpu().item():
+            raise ValueError("dynamics segment output contains NaN or Inf")
+        return step
 
     def _evaluate_interaction(
         self,
@@ -550,11 +612,12 @@ class DynamicsModel(nn.Module):
         modal_acceleration: Tensor,
         interaction: InteractionOutput,
         applicability: PairApplicability,
+        advance_mask: Tensor | None,
         external_acceleration: Tensor | None = None,
     ) -> RolloutStep:
         objects = belief.objects
         total_residual = modal_acceleration + interaction.residual_acceleration
-        objects = self.analytic(
+        objects = self.analytic._integrate_validated_dt(
             objects,
             belief.gravity,
             dt,
@@ -569,18 +632,17 @@ class DynamicsModel(nn.Module):
         interaction_uncertainty = (
             interaction.interaction_density + interaction.edge_process_noise.sum(dim=-1)
         ).clamp_min(0.0)
-        uncertainty = self.uncertainty(
+        uncertainty = self.uncertainty._forward_validated_dt(
             events.objects,
             dt,
             event_logits=events.event_logits,
             interaction_density=interaction_uncertainty,
             residual_acceleration=total_residual,
         )
-        update_batch = dt > 0
         updated_objects = self._blend_objects(
             belief.objects,
             uncertainty.objects,
-            update_batch,
+            advance_mask,
         )
         updated = replace(
             belief,
@@ -610,23 +672,26 @@ class DynamicsModel(nn.Module):
                 "pair_applicability": applicability.pair,
                 "collision_applicability": applicability.collision,
             },
-            update_batch,
+            advance_mask,
         )
-        for name in ("pair_event_logits", "boundary_event_logits"):
-            value = auxiliary[name]
-            mask = update_batch
-            while mask.ndim < value.ndim:
-                mask = mask.unsqueeze(-1)
-            auxiliary[name] = torch.where(
-                mask,
-                value,
-                value.new_full((), -4.0),
+        if advance_mask is None:
+            event_logits = events.event_logits
+        else:
+            for name in ("pair_event_logits", "boundary_event_logits"):
+                value = auxiliary[name]
+                mask = advance_mask
+                while mask.ndim < value.ndim:
+                    mask = mask.unsqueeze(-1)
+                auxiliary[name] = torch.where(
+                    mask,
+                    value,
+                    value.new_full((), -4.0),
+                )
+            event_logits = torch.where(
+                advance_mask[:, None, None],
+                events.event_logits,
+                belief.objects.motion_mode_logits,
             )
-        event_logits = torch.where(
-            update_batch[:, None, None],
-            events.event_logits,
-            belief.objects.motion_mode_logits,
-        )
         return RolloutStep(
             belief=updated,
             event_logits=event_logits,
@@ -637,8 +702,10 @@ class DynamicsModel(nn.Module):
     def _blend_objects(
         previous: ObjectBeliefTensor,
         updated: ObjectBeliefTensor,
-        update_batch: Tensor,
+        update_batch: Tensor | None,
     ) -> ObjectBeliefTensor:
+        if update_batch is None:
+            return updated
         values: dict[str, Tensor] = {}
         for item in fields(previous):
             old_value = getattr(previous, item.name)
@@ -652,8 +719,10 @@ class DynamicsModel(nn.Module):
     @staticmethod
     def _mask_auxiliary(
         values: dict[str, Tensor],
-        update_batch: Tensor,
+        update_batch: Tensor | None,
     ) -> dict[str, Tensor]:
+        if update_batch is None:
+            return values
         output: dict[str, Tensor] = {}
         for name, value in values.items():
             mask = update_batch
@@ -760,8 +829,9 @@ class DynamicsModel(nn.Module):
         output = belief.clone()
         substeps = _stable_substep_count(elapsed, self.config.max_substep)
         if substeps == 0:
-            return self._zero_step(output)
+            return self._validate_finite_segment(self._zero_step(output))
         sub_dt = elapsed / substeps
+        advance_mask = self._optional_advance_mask(sub_dt)
         result: RolloutStep | None = None
         held_interaction: InteractionOutput | None = None
         learned_effect_stride = self._learned_effect_stride()
@@ -784,7 +854,10 @@ class DynamicsModel(nn.Module):
             # every physical tick.  Only the expensive graph/attention proposal
             # is held.  Keeping this transition outside the held proposal also
             # preserves the exact modal composition contract.
-            modal_objects, modal = self.modal(output.objects, sub_dt)
+            modal_objects, modal = self.modal._forward_validated_dt(
+                output.objects,
+                sub_dt,
+            )
             output = replace(output, objects=modal_objects)
             evaluate_interaction = (
                 held_interaction is None
@@ -827,6 +900,7 @@ class DynamicsModel(nn.Module):
                 modal_acceleration=modal.residual_acceleration,
                 interaction=step_interaction,
                 applicability=applicability,
+                advance_mask=advance_mask,
                 external_acceleration=external_acceleration,
             )
             output = result.belief
@@ -950,10 +1024,12 @@ class DynamicsModel(nn.Module):
                 ),
             }
         )
-        return RolloutStep(
-            belief=final_belief,
-            event_logits=event_logits,
-            auxiliary=auxiliary,
+        return self._validate_finite_segment(
+            RolloutStep(
+                belief=final_belief,
+                event_logits=event_logits,
+                auxiliary=auxiliary,
+            )
         )
 
     def predict(

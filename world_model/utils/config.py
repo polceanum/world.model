@@ -434,6 +434,9 @@ class TrainingConfig:
     # use a deterministic spread of forecast anchors. Full promotion
     # evaluation remains a separate, larger manifest.
     validation_rollout_anchors_per_episode: int | None = None
+    # Validation may batch posterior rollout anchors from one already-ingested
+    # episode. One preserves the historical serial execution exactly.
+    validation_rollout_anchor_batch_size: int = 1
     # A nonzero RMSE denominator alone can make a scenario look supported from
     # one lucky tracked object. Require explicit label-only causal opportunity,
     # matched point support, and multiple independently generated episodes
@@ -1510,6 +1513,14 @@ class OrpheusConfig:
         ):
             raise ValueError(
                 "training.validation_rollout_anchors_per_episode must be positive or null"
+            )
+        if (
+            isinstance(self.training.validation_rollout_anchor_batch_size, bool)
+            or not isinstance(self.training.validation_rollout_anchor_batch_size, int)
+            or self.training.validation_rollout_anchor_batch_size <= 0
+        ):
+            raise ValueError(
+                "training.validation_rollout_anchor_batch_size must be a positive integer"
             )
         if self.training.collision_positive_weight_max < 1:
             raise ValueError("training.collision_positive_weight_max must be at least one")

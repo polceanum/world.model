@@ -1,5 +1,97 @@
 # Project status
 
+## Specification 1.49 validation-throughput qualification — 2026-08-21
+
+The frozen specification-1.49 implementation removes redundant accelerator
+synchronization inside composite dynamics and qualifies validation-only
+posterior-anchor batching. `DynamicsModel` now validates elapsed time once per
+prediction segment, child analytic/modal/uncertainty paths consume that
+already-normalized tensor privately, and one complete segment-boundary finite
+check covers belief, event, and auxiliary outputs. All-positive batches bypass
+per-field masking; mixed positive/zero rows retain the historical masked
+behavior. Public child APIs keep their original independent validation.
+
+Validation continues to ingest one complete RGB episode online in timestamp
+order. Only cloned post-ingest posterior anchors are batched. Shorter query
+plans are terminal-time padded and sliced back to their exact prefix before
+the unchanged scorer runs. Incompatible modality or metadata groups, including
+lifecycle flags carried in metadata, are subdivided, with singleton groups
+using the exact serial fallback.
+Requested, batched, fallback, and posterior-call counts expose the actual path.
+The optimization is restricted to eval/no-grad, batch-one, unperturbed,
+posterior-only validation and rejects multi-rate learned-effect holding.
+
+The repository-wide and historical default remains
+`training.validation_rollout_anchor_batch_size: 1`. A missing legacy field
+resolves to serial `1`. The grounded convergence profile is promoted to `8`
+after the exact active-Aqua MPS gate below. The field and batching semantic are
+part of exact-resume configuration and rollout-validation protocol version 15;
+changing them requires a fresh run or weights-only initialization.
+
+The paired fixed-manifest qualification used identical checkpoint bytes,
+frozen source, RGB-only data, seeds `100000--100031` over the ordered eight-
+scenario mixture, eight anchors per episode, horizons, scorer, precision, and
+the user-provided custom PyTorch `2.9.0a0+gitcbe1a35` build with MPS active:
+
+```text
+serial elapsed:                   3760.393956 s
+batched elapsed:                  2012.605486 s
+speedup:                          1.8684208x
+comparable values:                3141
+out-of-tolerance numeric diffs:   0
+missing values:                   0
+nonnumeric diffs:                 0
+maximum finite absolute delta:    7.62939453125e-06
+  metric: physical_rollout_velocity@0.250s_sse
+maximum finite relative delta:    6.334555944e-07
+final runtime SHA-256 equal:       true
+requested/batched anchors:        256/256
+batched posterior rollout calls:  32
+serial fallback anchors:          0
+```
+
+Durable evidence exists at:
+
+- `runs/20260820-234059-validation-anchor-qualification-mps-32/serial/qualification.json`;
+- `runs/20260820-234059-validation-anchor-qualification-mps-32/batched/qualification.json`;
+- `runs/20260820-234059-validation-anchor-qualification-mps-32/comparison.json`.
+
+The preceding campaign attempt at
+`runs/20260820-221902-grounded-convergence-spec148-mps` used the serial path
+and was manually interrupted during initialization validation after `2/32`
+episodes (`1559.189234` elapsed seconds). Its terminal interruption artifacts
+are retained as a throughput diagnostic, not as a model or backend failure.
+Neither that attempt nor the paired qualification performed an optimizer
+update. No prediction-accuracy improvement, checkpoint promotion, long-run
+training health, or convergence is claimed. The next concrete task is a fresh
+timestamped grounded campaign with the qualified size-eight validation path,
+followed by all predeclared fixed validations and disjoint test/OOD gates.
+
+Post-amendment repository checks in the unchanged `orpheus` environment pass:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q tests/integration/test_checkpoint_roundtrip.py::test_checkpoint_specification_version_matches_authoritative_contract
+# 1 passed in 0.57s
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run -n orpheus pytest -q
+# 992 passed, 16 expected non-Aqua MPS-context skips in 396.54s
+
+PYTHONPYCACHEPREFIX=/private/tmp/orpheus-spec149-pycache PYTHONPATH=. conda run -n orpheus python -m compileall world_model train.py evaluate.py demo.py monitor.py scripts tests
+# passed
+
+PYTHONDONTWRITEBYTECODE=1 conda run -n orpheus ruff check .
+# all checks passed
+
+PYTHONDONTWRITEBYTECODE=1 conda run -n orpheus ruff format --check .
+# 217 files already formatted
+
+launchctl asuser 501 /bin/zsh -lc 'cd /Users/mike/Work/world.model && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/local/Caskroom/miniforge/base/envs/orpheus/bin/python -m pytest -q tests/unit/test_dynamics_dt_fast_path.py::test_composite_dynamics_validated_dt_hot_loop_on_mps tests/unit/test_dynamics_all_positive_fast_path.py::test_all_positive_fast_path_matches_legacy_masks_and_backpropagates_on_mps tests/unit/test_hybrid_dynamics.py::test_mps_zero_tangent_noncollision_boundary_stays_finite tests/unit/test_hybrid_dynamics.py::test_smooth_event_conjunction_and_far_pair_remain_finite_on_mps tests/unit/test_hybrid_dynamics.py::test_smooth_event_hazard_is_finite_and_differentiable_on_mps'
+# 5 passed in 7.86s on active-Aqua MPS
+
+git diff --check
+# passed
+```
+
 ## Specification 1.48 production MPS event-hazard repair — 2026-08-20
 
 The first active-Aqua grounded campaign launched successfully from the frozen

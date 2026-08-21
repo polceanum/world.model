@@ -2680,6 +2680,7 @@ def test_closed_loop_validation_uses_the_full_episode(
             config.training,
             tbptt_steps=3,
             validation_rollout_anchors_per_episode=5,
+            validation_rollout_anchor_batch_size=4,
         ),
     )
     model = _ModeOnlyModel()
@@ -2694,6 +2695,7 @@ def test_closed_loop_validation_uses_the_full_episode(
     assert observed["window_steps"] == 9
     assert observed["apply_perturbations"] is False
     assert observed["rollout_anchors_per_window"] == 5
+    assert observed["validation_rollout_anchor_batch_size"] == 4
     assert model.training
 
 
@@ -2765,6 +2767,60 @@ def test_validation_aggregates_every_loader_batch_by_episode_count(
     output = capsys.readouterr().out
     assert "batches=1/2 episodes=2/?" in output
     assert "batches=2/2 episodes=3/?" in output
+
+
+def test_anchor_batching_keeps_episode_scenario_and_seed_attribution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen_batch_sizes: list[int] = []
+
+    def fake_validation(
+        model: object,
+        batch: dict[str, torch.Tensor],
+        config: object,
+        *,
+        closed_loop: bool,
+    ) -> TrainingBatchResult:
+        del model, config
+        assert closed_loop
+        seen_batch_sizes.append(int(batch["rgb"].shape[0]))
+        return _result(1.0)
+
+    monkeypatch.setattr(
+        "world_model.training.trainer._validation_step",
+        fake_validation,
+    )
+    config = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            validation_rollout_anchor_batch_size=8,
+        ),
+    )
+    loader = [
+        {
+            "rgb": torch.ones((1, 3, 3, 8, 8)),
+            "timestamps": torch.zeros((1, 3)),
+            "seed": torch.tensor([seed]),
+            "metadata": {"scenario": ["baseline"]},
+        }
+        for seed in (100000, 100001)
+    ]
+
+    result = _validation_loader_result(
+        _ModeOnlyModel(),  # type: ignore[arg-type]
+        loader,  # type: ignore[arg-type]
+        config,
+        device=torch.device("cpu"),
+        closed_loop=True,
+    )
+
+    assert seen_batch_sizes == [1, 1]
+    assert result.metrics["validation_attribution_available"] == 1.0
+    assert result.metrics["scenario_baseline_episode_count"] == 2.0
+    assert result.metrics["seed_100000_selection_metric_supported"] == 1.0
+    assert result.metrics["seed_100001_selection_metric_supported"] == 1.0
 
 
 def test_validation_progress_records_interrupted_manifest(
