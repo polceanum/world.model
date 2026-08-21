@@ -5,7 +5,7 @@
 **Status:** Living authoritative specification
 **Version:** 1.52
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, and exact-resume snapshot/publication ownership hardening amendments 21 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -7875,7 +7875,8 @@ weights `correction_position=7.0`, `correction_velocity=2.0`, and
 `12.4455%` correction-to-total norm ratio, total norm `0.0713825`, cosine
 `-0.00433` against the other physical aggregate, and no clipping. These are
 single-batch attribution predictions, not retained optimization or accuracy
-evidence; the weights remain subject to the deterministic two-update smoke.
+evidence. Section 243 records their subsequent deterministic two-update wiring
+exercise, which does not make them accuracy-qualified weights.
 
 The weights-only initializer is governed by
 `checkpoint_initializer_composition_v1`. Its protected base is the exact
@@ -7894,7 +7895,8 @@ no optimizer or scheduler state, and is categorically invalid for exact
 resume. `donor_weight` is the exact numeric value `1.0`; a YAML boolean is not
 a numeric donor weight even though Python's type hierarchy treats booleans as
 integers. The production artifact must be materialized only after the source
-is frozen; no durable initializer output exists at this pre-launch boundary.
+is frozen. No durable initializer existed at this initial pre-launch boundary;
+section 243 records the later immutable materialization.
 
 The paired experiment has one exact causal contrast. Treatment and control
 must share the same materialized initializer, seed, scenario-balanced draw
@@ -7906,19 +7908,21 @@ gate-off forward ablation measures the runtime semantic delta and is not the
 training control. Before either long arm, run a deterministic two-update pair
 and require identical draw identities, exactly the six allowed trainable
 tensors and their Adam moments, exact frozen state and sibling outputs, finite
-losses/gradients, and coherent cadence variation. Then establish common
-fixed-32 step-zero evidence. Each retained arm is configured for `3072`
-updates with fixed selectors every `512` updates; both must reach at least
-selectors `512` and `1024` unless an integrity or nonfinite failure requires a
-truthful stop. Do not interpret a short-run difference as plateau evidence.
+losses/gradients, and coherent cadence variation; section 243 records this
+wiring gate as complete. Section 244 records the retained common fixed-32
+step-zero evidence as complete without a rerun. Each retained arm is
+configured for `3072` updates with fixed selectors every `512` updates; both
+must reach at least selectors `512` and `1024` unless an integrity or nonfinite
+failure requires a truthful stop. Do not interpret a short-run difference as
+plateau evidence.
 
-At this amendment boundary, the two-update paired smoke, gate-on/gate-off
-zero-update ablation, materialized initializer, fixed-32 step-zero comparison,
-long paired training, real paired latency, and disjoint RGB-only
-validation/test/OOD qualification are all pending. The complete frozen-source
-implementation gate is closed under section 242, but it is not a model smoke
-or metric result. The protected step-zero incumbent remains deployed, and no
-specification-1.52 checkpoint is promoted.
+At the initial amendment boundary, every experimental gate was pending.
+Section 243 subsequently closes only immutable initializer materialization and
+the paired two-update wiring smoke; section 244 closes the common rich
+fixed-32 step-zero comparison. The gate-on/gate-off zero-update ablation, long
+paired training, real paired latency, and disjoint RGB-only
+validation/test/OOD qualification remain pending. The protected step-zero
+incumbent remains deployed, and no specification-1.52 checkpoint is promoted.
 
 ## 242. Exact-resume snapshot, publication, and run-ownership contract
 
@@ -8003,6 +8007,89 @@ passed `1` test in `0.78s`; and `git diff --check` was clean. A final
 independent review returned PASS with no blockers. These results close source
 and artifact integrity only. They are not a model/trainer smoke, fixed-
 manifest metric, promotion, plateau, or convergence claim.
+
+## 243. Immutable initializer and paired two-update wiring qualification
+
+The frozen specification-1.52 source was committed and pushed at
+`f08200f44646db6fa84f32de4b5bf538e647f546`. From that source, the production
+weights-only initializer was materialized at
+`/Users/mike/Work/world.model/runs/diagnostic_initializers/20260821-151100-spec152-axis-gated-updater-initializer`.
+Its `initializer.pt` is `12,143,891` bytes with file SHA-256
+`298b660bba574216321f68517ad1aee7403cc5812289279cb9099223c2eea4a5` and
+model-state SHA-256
+`88f2df4d8a2621e8907497298a6d264015714a961102a83d1f65cd9f4474318b`.
+The initializer, resolved config, and manifest are all mode `0444`. The
+manifest proves `23` selected tensors are exact donor values, `21` actually
+changed, and every nonselected tensor is exact protected-base state. This is a
+weights-only artifact and remains invalid for exact resume.
+
+The paired two-update treatment and control completed successfully in
+`20260821-151249-spec152-axis-gated-two-update-treatment` and
+`20260821-151249-spec152-axis-gated-two-update-control`. Their hardened audit
+is `/private/tmp/20260821-151249-orpheus-spec152-two-update-audit.json`, with
+SHA-256 `5ff81f672b55b2915180f5cadefebb331602383d6cb14b5c6c980dc241acb18f`.
+Audit schema `orpheus_spec152_two_update_audit_v2` reports `passed=true` and
+zero failures; the audit script SHA-256 is
+`07f357edddd785bc4b0bfe5f1e6ade77b5f89fd99a1ed1e542c00e331a43acaf`.
+The paired resolved configs differ only in
+`training.closed_loop_batch_macro_physical_losses_enabled` and
+`training.closed_loop_axiswise_correction_hinge_enabled`. Both arms consumed
+the exact same two ordered balanced batches, updated exactly the six declared
+mean/variance/gate head tensors with exactly six Adam owners, preserved all
+`219` frozen tensors/buffers, and recorded no retry or skipped draw.
+
+For treatment, update-one/update-two `loss_total/gradient_norm` was
+`0.8310171366/0.0713825151` and `1.5899894238/0.0575892627`. For control it was
+`0.7718598247/0.0641159415` and `1.8167935610/0.0712272376`. Both used learning
+rates `3.90625e-8` then `7.8125e-8`. Each run completed its terminal
+`32/32` fixed validation. The resulting selector changes were only on the
+order of `1e-8`, below the declared `1e-5` minimum-improvement threshold, so
+both candidates were rejected.
+
+This qualification proves initializer provenance, paired data/config
+identity, six-head optimizer ownership, finite two-update execution, and
+terminal-validation wiring. It is not evidence of accuracy improvement or
+promotion. Section 244 closes the common rich fixed-32 step-zero gate from the
+already retained pre-update artifacts. The separate gate-on/gate-off
+zero-update forward ablation, `3072`-update paired arms, paired latency,
+disjoint RGB-only validation/test/OOD, promotion, plateau, and convergence
+gates remain pending.
+
+## 244. Common rich fixed-32 step-zero equivalence
+
+The retained `validation_step_000000.pt` artifacts from both `151249` arms
+already constitute the required common rich fixed-32 step-zero baseline; no
+evaluation rerun is required. They bind to initializer file SHA-256
+`298b660bba574216321f68517ad1aee7403cc5812289279cb9099223c2eea4a5`,
+initializer model-state SHA-256
+`88f2df4d8a2621e8907497298a6d264015714a961102a83d1f65cd9f4474318b`, clean
+source commit `f08200f44646db6fa84f32de4b5bf538e647f546`, and runtime-source
+fingerprint `75ee1ae6d07124d738ce6a400517f27ab42d23ba0fb09fd4d05c4fc400d6c0e7`.
+
+Both use rollout protocol version `16` with protocol hash
+`dffa53ce82a9a7dee9e7a7b069f665754002b5f40f7ea0488e8f0f5ce7ad6708`,
+selector version `7`, and seed-manifest SHA-256
+`e27bdf2dffb5f36545bc7cbae5d88514fb9537cd5fa07cd26276ccefd41b46be`.
+The manifest is exactly seeds `100000..100031`, four episodes for each of the
+eight declared scenarios. All `32/32` episodes pass core support, every
+scenario has `4/4` rich-support episodes, and the support-schema marker is
+`1.0`.
+
+Across the two arms, `281` pooled-additive, `2248` scenario-additive, `3296`
+scenario, and `2064` per-seed evidence fields are exact. All `129` physical
+validation fields, model state, empty Adam state, scheduler state, and RNG
+state are exact. Outside the two declared objective flags, only objective-loss,
+timing, and RSS diagnostics differ; those fields do not define the physical
+baseline.
+
+The common step-zero selector score is `0.2395286358786779`. Current position
+RMSE is `0.15056456382003996`, velocity RMSE is `0.8118821097143433`,
+association coverage is `0.90425`, precision is `0.9463631606488749`,
+collision F1 is `0.2837465564738292`, identity-switch rate is
+`0.0008092797410304828`, and position coverage90 is
+`0.8435185185185186`. Paired latency support and comprehensive eligibility are
+both false, so this common physical baseline cannot promote either arm. It
+closes only the shared rich fixed-32 step-zero gate.
 
 ---
 

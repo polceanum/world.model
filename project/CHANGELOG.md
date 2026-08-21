@@ -69,17 +69,68 @@
   version selection passed `6`, the version contract passed `1` in `0.78s`,
   and diff check was clean. Final independent review returned PASS with no
   blockers.
+- Committed and pushed the frozen specification-1.52 source as
+  `f08200f44646db6fa84f32de4b5bf538e647f546`, then materialized the immutable
+  initializer under
+  `runs/diagnostic_initializers/20260821-151100-spec152-axis-gated-updater-initializer`.
+  `initializer.pt` is `12,143,891` bytes with file SHA-256 `298b660b...` and
+  model SHA-256 `88f2df4d...`; initializer/config/manifest are mode `0444`.
+  All `23` selected tensors are exact donor values, exactly `21` changed, and
+  every nonselected tensor is exact protected-base state.
+- Completed successful paired two-update runs
+  `20260821-151249-spec152-axis-gated-two-update-treatment` and
+  `20260821-151249-spec152-axis-gated-two-update-control`. Hardened audit
+  `/private/tmp/20260821-151249-orpheus-spec152-two-update-audit.json` has
+  SHA-256 `5ff81f672b55b2915180f5cadefebb331602383d6cb14b5c6c980dc241acb18f`,
+  schema v2, `passed=true`, and zero failures. Its script SHA begins
+  `07f357ed...`.
+- Proved that the paired configs differ only in the batch-macro and axiswise-
+  hinge flags; ordered batches are exact; exactly six mean/variance/gate head
+  tensors and six Adam owners change; `219` frozen tensors/buffers remain
+  exact; and neither arm retries or skips a draw. Treatment per-step
+  loss/gradient was `0.8310171366/0.0713825151`,
+  `1.5899894238/0.0575892627`; control was
+  `0.7718598247/0.0641159415`, `1.8167935610/0.0712272376`. Learning rates
+  match at `3.90625e-8`, `7.8125e-8`.
+- Both arms completed terminal fixed-32 validation. Selector movement was only
+  order `1e-8`, below the `1e-5` minimum improvement, so both candidates were
+  rejected. This is wiring/ownership evidence, not accuracy or promotion.
+  The earlier sandboxed `20260821-151100` treatment reached `0/32` before a
+  DataLoader shared-memory denial and truthful interrupt; the unrestricted
+  successful pair supersedes it operationally.
 - Fixed the paired protocol before launch. Both arms keep the axis gate enabled
   and share initializer, draw order, devices, six-tensor scope, objective
   weights, optimizer, schedule, cadence, and manifests. Treatment enables
   macro reduction and axiswise hinges; control disables only those two
   switches. Gate-off is a separate zero-update forward ablation.
-- This entry records implemented source and measured attribution only. Durable
-  initializer materialization, the gate-on/off ablation, retained two-update
-  paired smoke, common fixed-32 step-zero evidence, `3072`-update paired
-  training, latency, disjoint RGB-only validation/test/OOD, promotion, and
-  convergence are all pending. The completed repository/artifact gate above
-  is not a model/trainer smoke or model evidence.
+- Closed the common rich fixed-32 step-zero gate without a rerun by retaining
+  `validation_step_000000.pt` from both `151249` arms. The pair binds
+  initializer file/model SHA-256
+  `298b660bba574216321f68517ad1aee7403cc5812289279cb9099223c2eea4a5` /
+  `88f2df4d8a2621e8907497298a6d264015714a961102a83d1f65cd9f4474318b`,
+  clean commit `f08200f44646db6fa84f32de4b5bf538e647f546`, runtime fingerprint
+  `75ee1ae6d07124d738ce6a400517f27ab42d23ba0fb09fd4d05c4fc400d6c0e7`,
+  protocol v16 hash `dffa53ce82a9a7dee9e7a7b069f665754002b5f40f7ea0488e8f0f5ce7ad6708`,
+  selector v7, and seed-manifest hash
+  `e27bdf2dffb5f36545bc7cbae5d88514fb9537cd5fa07cd26276ccefd41b46be`.
+  Seeds `100000..100031` cover eight scenarios x four, with `32/32` core,
+  `4/4` rich support per scenario, and support schema `1.0`.
+- Proved exact equality across the arms for `281` pooled-additive, `2248`
+  scenario-additive, `3296` scenario, `2064` seed, and `129` physical-
+  validation fields, plus model, empty Adam, scheduler, and RNG state. Only
+  objective-loss, timing, and RSS diagnostics differ beyond the two declared
+  objective flags. Common score/position RMSE/velocity RMSE/coverage/
+  precision/collision F1/identity-switch rate/position coverage90 are
+  `0.2395286358786779`, `0.15056456382003996`, `0.8118821097143433`,
+  `0.90425`, `0.9463631606488749`, `0.2837465564738292`,
+  `0.0008092797410304828`, and `0.8435185185185186`. Latency support and
+  comprehensive eligibility are false.
+- This entry records implemented source, measured attribution, immutable
+  initializer provenance, paired two-update wiring, and the shared physical
+  step-zero baseline only. The gate-on/off zero-update ablation, `3072`-update
+  paired training, latency, disjoint RGB-only validation/test/OOD, promotion,
+  and convergence remain pending. The completed repository/artifact,
+  two-update, and common-baseline gates are not accuracy evidence.
 
 ### 2026-08-21 specification 1.51 final closure
 

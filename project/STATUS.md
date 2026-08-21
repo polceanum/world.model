@@ -3,9 +3,12 @@
 ## Specification 1.52 axis-gated updater-head repair — pre-launch 2026-08-21
 
 The narrow specification-1.52 source repair is implemented in the isolated
-qualification tree. No retained two-update smoke, fixed-32 evaluation, long
-paired campaign, model promotion, plateau, or convergence result exists yet.
-Deployment remains the protected step-zero incumbent.
+qualification tree, committed/pushed, materialized into an immutable
+initializer, and exercised by a retained paired two-update wiring smoke. No
+gate-on/gate-off zero-update ablation, long paired campaign, model promotion,
+plateau, or convergence result exists yet. The retained pre-update artifacts
+now close the common rich fixed-32 step-zero gate. Deployment remains the
+protected step-zero incumbent.
 
 The repair adds three opt-in, exact-resume-bound semantics whose defaults are
 all `false`:
@@ -50,8 +53,8 @@ vectors this predicts `12.4455%` correction/total, total norm `0.0713825`,
 cosine `-0.00433`, and no clipping. This attribution is diagnostic evidence,
 not a successful multi-update smoke or accuracy result.
 
-The provenance-safe initializer path is implemented but not yet materialized
-as a durable production artifact. The composition contract binds the protected
+The provenance-safe initializer is now materialized as a durable weights-only
+artifact. The composition contract binds the protected
 specification-1.44 base (`0ba00e72...`, model `1354bdfc...`), equal
 specification-1.50 step-zero witness (`b84e5299...`), complete step-512 updater
 donor (`f8f1704c...`, model `1942c2c9...`), source config, and source run
@@ -62,8 +65,8 @@ protocol, config, and ancestry before strict target loading. Output is
 non-overwriting, read-only, weights-only, provenance-bearing, and explicitly
 invalid for exact resume. A YAML boolean `donor_weight` is rejected rather
 than accepted as numeric `1.0`. Production source is now frozen at the final
-post-provenance source/artifact-integrity boundary, but no durable production
-initializer has been materialized.
+post-provenance source/artifact-integrity boundary and committed/pushed as
+`f08200f44646db6fa84f32de4b5bf538e647f546`.
 
 ### Final exact-resume artifact-integrity gate
 
@@ -130,19 +133,109 @@ This completes the frozen-source repository and artifact-integrity gate. It is
 not a model/trainer smoke, fixed-manifest evaluation, metric, promotion,
 plateau, or convergence result.
 
+### Immutable initializer and paired two-update wiring smoke
+
+The committed source was pushed at
+`f08200f44646db6fa84f32de4b5bf538e647f546`. Its durable initializer directory
+is
+`/Users/mike/Work/world.model/runs/diagnostic_initializers/20260821-151100-spec152-axis-gated-updater-initializer`.
+The three files `initializer.pt`, `config.resolved.yaml`, and `manifest.json`
+are all mode `0444`. `initializer.pt` is `12,143,891` bytes, has file SHA-256
+`298b660bba574216321f68517ad1aee7403cc5812289279cb9099223c2eea4a5`, and
+loads model-state SHA-256
+`88f2df4d8a2621e8907497298a6d264015714a961102a83d1f65cd9f4474318b`.
+Composition selected `23` tensors and changed `21`; selected tensors are exact
+donor values and every nonselected tensor is exact protected-base state. The
+artifact remains weights-only and exact-resume-ineligible.
+
+The retained successful runs are:
+
+- `runs/20260821-151249-spec152-axis-gated-two-update-treatment`; and
+- `runs/20260821-151249-spec152-axis-gated-two-update-control`.
+
+The hardened audit at
+`/private/tmp/20260821-151249-orpheus-spec152-two-update-audit.json` has SHA-256
+`5ff81f672b55b2915180f5cadefebb331602383d6cb14b5c6c980dc241acb18f`.
+Schema `orpheus_spec152_two_update_audit_v2` reports `passed=true`,
+`failure_count=0`; its script SHA-256 is
+`07f357edddd785bc4b0bfe5f1e6ade77b5f89fd99a1ed1e542c00e331a43acaf`.
+The paired configs differ only in the batch-macro and axiswise-hinge flags.
+Both arms consumed identical ordered draw IDs `1,2`, scenario order, and
+episode seeds; updated exactly the six mean/variance/gate head tensors with
+six Adam moment owners; preserved `219` frozen tensors/buffers; and recorded
+zero retries and zero skipped draws.
+
+Per-update `loss_total/gradient_norm` was:
+
+- treatment: `0.8310171366/0.0713825151`, then
+  `1.5899894238/0.0575892627`;
+- control: `0.7718598247/0.0641159415`, then
+  `1.8167935610/0.0712272376`.
+
+Both arms used learning rates `3.90625e-8` and `7.8125e-8` and completed
+terminal `32/32` fixed validation. Selector changes were only on the order of
+`1e-8`; both fell below the predeclared `1e-5` minimum improvement and were
+rejected. This is finite paired wiring/ownership evidence, not an accuracy or
+promotion result.
+
+The earlier sandboxed
+`20260821-151100-spec152-axis-gated-two-update-treatment` attempt reached
+`0/32` of its zero-update validation before DataLoader shared-memory access was
+denied, then recorded a truthful interrupt. It is superseded operationally by
+the unrestricted successful treatment/control runs and contributes no model
+evidence.
+
+### Common rich fixed-32 step-zero baseline
+
+No evaluation rerun is needed. The retained
+`checkpoints/validation_step_000000.pt` from both `151249` runs already binds
+the same initializer (file SHA-256
+`298b660bba574216321f68517ad1aee7403cc5812289279cb9099223c2eea4a5`, model
+SHA-256 `88f2df4d8a2621e8907497298a6d264015714a961102a83d1f65cd9f4474318b`),
+clean commit `f08200f44646db6fa84f32de4b5bf538e647f546`, and runtime fingerprint
+`75ee1ae6d07124d738ce6a400517f27ab42d23ba0fb09fd4d05c4fc400d6c0e7`.
+Both use
+rollout protocol `16` with hash
+`dffa53ce82a9a7dee9e7a7b069f665754002b5f40f7ea0488e8f0f5ce7ad6708`,
+selector `7`, and seed-manifest SHA-256
+`e27bdf2dffb5f36545bc7cbae5d88514fb9537cd5fa07cd26276ccefd41b46be`.
+The manifest is seeds `100000..100031`, eight scenarios with four episodes
+each. Core support is `32/32`; every scenario has `4/4` rich-support episodes;
+the support-schema marker is `1.0`.
+
+The two step-zero artifacts are exact across `281` pooled-additive, `2248`
+scenario-additive, `3296` scenario, and `2064` seed evidence fields, plus all
+`129` physical validation fields. Model state, empty Adam state, scheduler,
+and RNG are exact. Outside the declared macro/axiswise config flags, only
+objective-loss, timing, and RSS diagnostics differ.
+
+The shared metrics are:
+
+- selector score: `0.2395286358786779`;
+- current position/velocity RMSE:
+  `0.15056456382003996` / `0.8118821097143433`;
+- association coverage/precision: `0.90425` / `0.9463631606488749`;
+- collision F1: `0.2837465564738292`;
+- identity-switch rate: `0.0008092797410304828`; and
+- position coverage90: `0.8435185185185186`.
+
+Latency support and comprehensive eligibility are false in both artifacts.
+This closes the common rich fixed-32 step-zero physical baseline only; it is
+not latency, promotion, or accuracy evidence for either two-update candidate.
+
 The paired causal contract is fixed. Treatment and control share initializer,
 seed and draw identities, scenario balance, devices, runtime axis gate,
 `updater_state_heads` ownership, objective weights, optimizer, schedule,
 cadence, and manifests. Treatment enables macro physical reductions and
-axiswise hinges; control disables only those two switches. Gate-off versus
-gate-on is a separate zero-update forward ablation, not the training control.
-The next retained gate is a deterministic two-update pair proving exact draw
-parity, six-tensor/Adam ownership, frozen and sibling exactness, finite
-gradients, and cadence behavior. Common fixed-32 step-zero evidence follows.
-Both long arms are configured for `3072` updates with selectors every `512`
-and must reach at least `512` and `1024` absent a truthful integrity/nonfinite
-stop. Long training, paired latency, and disjoint RGB-only
-validation/test/OOD remain pending despite the complete source gate above.
+axiswise hinges; control disables only those two switches. The retained
+two-update wiring gate above passes this structural contract. Gate-off versus
+gate-on remains a separate pending zero-update forward ablation, not the
+training control. The retained common rich fixed-32 step-zero evidence above
+is complete; the terminal fixed-32 records above separately score the two
+post-update wiring candidates. Both long arms are configured for `3072`
+updates with selectors every `512` and must reach at least `512` and `1024`
+absent a truthful integrity/nonfinite stop. Long training, paired latency, and
+disjoint RGB-only validation/test/OOD remain pending.
 
 ## Specification 1.51 comprehensive promotion evidence — 2026-08-21
 

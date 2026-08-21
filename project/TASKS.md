@@ -55,18 +55,44 @@
 - [x] Freeze the specification-1.52 production source at the final post-
   provenance repository/artifact-integrity boundary. Do not reinterpret this
   as a model/trainer smoke or metric result.
-- [ ] Materialize one durable initializer from the frozen source. Verify its
-  checkpoint SHA/bytes, expected model hash, copied metadata, read-only
-  outputs, and rejection as exact resume. No production initializer exists
-  yet.
-- [ ] Run the deterministic gate-on/gate-off zero-update forward ablation and
-  the retained two-update treatment/control smoke. Require identical draw
-  identities, exactly six trainable tensors and Adam moments, frozen/sibling
-  exactness, finite gradients/losses, no unintended clipping, and coherent
-  cadence variation before freezing the `7.0/2.0/0.0` weights.
-- [ ] Establish common rich fixed-32 step-zero evidence from the immutable
-  initializer. Do not reuse older metrics as if they had the repaired runtime
-  semantics.
+- [x] Commit and push the frozen source as
+  `f08200f44646db6fa84f32de4b5bf538e647f546`.
+- [x] Materialize the durable initializer at
+  `runs/diagnostic_initializers/20260821-151100-spec152-axis-gated-updater-initializer`.
+  Verify `initializer.pt` SHA-256 `298b660b...`, model SHA-256
+  `88f2df4d...`, `12,143,891` bytes, three mode-`0444` files, `23` exact-donor
+  selected tensors/`21` changes, exact nonselected base, copied provenance,
+  and rejection as exact resume.
+- [x] Complete the retained two-update treatment/control wiring smoke in the
+  paired `20260821-151249` runs. Hardened audit schema v2 at SHA-256
+  `5ff81f67...` passes with zero failures: identical batches, exactly six
+  changed head tensors and Adam owners, `219` frozen tensors/buffers exact,
+  zero retry/skips, finite two-step losses/gradients, matched learning rates,
+  and terminal `32/32` validation. Both candidates remain rejected below the
+  `1e-5` minimum-improvement threshold; this is not accuracy evidence.
+- [ ] Run the deterministic gate-on/gate-off zero-update forward ablation.
+  Keep it separate from the completed treatment/control smoke and do not use
+  it as the training control.
+- [x] Establish the common rich fixed-32 step-zero baseline from the retained
+  pre-update artifacts in both `20260821-151249` arms; no rerun is required.
+  Bind initializer file/model SHA-256
+  `298b660bba574216321f68517ad1aee7403cc5812289279cb9099223c2eea4a5` /
+  `88f2df4d8a2621e8907497298a6d264015714a961102a83d1f65cd9f4474318b`,
+  clean commit `f08200f44646db6fa84f32de4b5bf538e647f546`, runtime fingerprint
+  `75ee1ae6d07124d738ce6a400517f27ab42d23ba0fb09fd4d05c4fc400d6c0e7`,
+  protocol v16 hash `dffa53ce82a9a7dee9e7a7b069f665754002b5f40f7ea0488e8f0f5ce7ad6708`,
+  selector v7, and seed-manifest hash
+  `e27bdf2dffb5f36545bc7cbae5d88514fb9537cd5fa07cd26276ccefd41b46be`.
+  Seeds `100000..100031` cover eight scenarios x four with `32/32` core and
+  `4/4` rich support per scenario under schema `1.0`. Across arms, all
+  `281` pooled-additive, `2248` scenario-additive, `3296` scenario, `2064`
+  seed, and `129` physical-validation fields plus model/empty Adam/scheduler/
+  RNG state are exact. Shared score/position RMSE/velocity RMSE/coverage/
+  precision/collision F1/identity-switch rate/position coverage90 are
+  `0.2395286358786779`, `0.15056456382003996`, `0.8118821097143433`,
+  `0.90425`, `0.9463631606488749`, `0.2837465564738292`,
+  `0.0008092797410304828`, and `0.8435185185185186`. Latency support and
+  comprehensive eligibility remain false.
 - [ ] Run both sequential long arms under the fixed contract for `3072`
   updates with selectors every `512`. Require both selectors `512` and `1024`
   unless integrity/nonfinite failure forces a truthful stop; continue long

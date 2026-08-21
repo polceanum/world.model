@@ -1,5 +1,101 @@
 # Design decisions
 
+## ADR-161 — Reuse the retained step-zero pair as the common rich baseline
+
+- **Date:** 2026-08-21
+- **Status:** accepted and completed; physical baseline only
+- **Context:** The common rich fixed-32 step-zero gate was still listed as a
+  rerun before the long paired campaign. Both successful `151249` arms already
+  retained `validation_step_000000.pt` before any optimizer update, so another
+  evaluation would add no evidence if those artifacts prove the same source,
+  initializer, manifest, state, and physical fields.
+- **Decision:** Accept the retained pair without rerunning evaluation. Require
+  initializer file/model SHA-256
+  `298b660bba574216321f68517ad1aee7403cc5812289279cb9099223c2eea4a5` /
+  `88f2df4d8a2621e8907497298a6d264015714a961102a83d1f65cd9f4474318b`,
+  clean commit `f08200f44646db6fa84f32de4b5bf538e647f546`, runtime fingerprint
+  `75ee1ae6d07124d738ce6a400517f27ab42d23ba0fb09fd4d05c4fc400d6c0e7`,
+  rollout protocol v16 hash
+  `dffa53ce82a9a7dee9e7a7b069f665754002b5f40f7ea0488e8f0f5ce7ad6708`,
+  selector v7, and seed-manifest hash
+  `e27bdf2dffb5f36545bc7cbae5d88514fb9537cd5fa07cd26276ccefd41b46be`.
+  The manifest must be seeds `100000..100031`, eight scenarios times four,
+  with `32/32` core support, `4/4` rich support in every scenario, and support
+  schema `1.0`.
+
+  Require exact equality across the arms for all `281` pooled-additive,
+  `2248` scenario-additive, `3296` scenario, `2064` seed, and `129` physical-
+  validation fields, plus model state, empty Adam state, scheduler, and RNG.
+  Permit only the two declared objective flags and objective-loss, timing, and
+  RSS diagnostics to differ. Record the common selector score
+  `0.2395286358786779`, position RMSE `0.15056456382003996`, velocity RMSE
+  `0.8118821097143433`, association coverage `0.90425`, precision
+  `0.9463631606488749`, collision F1 `0.2837465564738292`, identity-switch
+  rate `0.0008092797410304828`, and position coverage90
+  `0.8435185185185186`. Both latency support and comprehensive eligibility
+  are false.
+- **Alternatives considered:** rerun an already retained deterministic
+  baseline; average nonidentical arms; ignore field-level equality and compare
+  only the selector score; treat a common baseline as candidate improvement or
+  promotion evidence.
+- **Consequences:** The common rich fixed-32 step-zero gate is complete without
+  a rerun. This establishes a shared physical baseline only. Gate-on/gate-off
+  zero-update ablation, long paired training, paired latency, disjoint RGB-only
+  validation/test/OOD, promotion, plateau, and convergence remain pending.
+
+## ADR-160 — Accept immutable initialization and paired two updates only as wiring evidence
+
+- **Date:** 2026-08-21
+- **Status:** accepted and completed; no candidate promoted
+- **Context:** The final specification-1.52 source/artifact gate closed the
+  implementation, but long-arm launch still required a real immutable
+  initializer and a paired causal wiring check. Starting from an ad hoc
+  composition, letting the two arms consume different batches, or inferring
+  accuracy from two microscopic optimizer updates would invalidate the
+  treatment/control contrast before it began.
+- **Decision:** Pin all pre-smoke evidence to committed and pushed source
+  `f08200f44646db6fa84f32de4b5bf538e647f546`. Accept the initializer only at
+  file SHA-256
+  `298b660bba574216321f68517ad1aee7403cc5812289279cb9099223c2eea4a5`,
+  model-state SHA-256
+  `88f2df4d8a2621e8907497298a6d264015714a961102a83d1f65cd9f4474318b`,
+  `12,143,891` bytes, with initializer/config/manifest mode `0444`, all `23`
+  selected tensors exact donor state, exactly `21` changes, and every
+  nonselected tensor exact protected-base state.
+
+  Accept the paired smoke only through hardened audit
+  `/private/tmp/20260821-151249-orpheus-spec152-two-update-audit.json`, SHA-256
+  `5ff81f672b55b2915180f5cadefebb331602383d6cb14b5c6c980dc241acb18f`,
+  schema `orpheus_spec152_two_update_audit_v2`, with `passed=true` and zero
+  failures. Treatment and control configs may differ only in the batch-macro
+  and axiswise-hinge flags; they must consume identical ordered batches,
+  update exactly six head tensors with six Adam owners, preserve `219` frozen
+  tensors/buffers, and have no retry or skipped draw.
+
+  Record the observed treatment `loss_total/gradient_norm` sequence as
+  `0.8310171366/0.0713825151`, `1.5899894238/0.0575892627`, and control as
+  `0.7718598247/0.0641159415`, `1.8167935610/0.0712272376`, with shared
+  learning rates `3.90625e-8`, `7.8125e-8`. Require terminal `32/32`
+  validation, but retain the declared `1e-5` minimum-improvement threshold.
+  Order-`1e-8` selector changes reject both candidates rather than becoming an
+  accuracy claim.
+- **Alternatives considered:** launch long arms from an unmaterialized or
+  writable composition; treat the shared-memory-denied sandbox attempt as a
+  model failure; compare arms with additional config/data differences; accept
+  tensor names without Adam ownership; lower the minimum-improvement threshold
+  after seeing the two-update results; promote from finite gradients or a
+  favorable sign on one microscopic selector delta.
+- **Consequences:** Immutable initializer materialization and the paired
+  two-update wiring gate are complete. The successful runs are
+  `20260821-151249-spec152-axis-gated-two-update-treatment` and
+  `20260821-151249-spec152-axis-gated-two-update-control`; the earlier
+  sandboxed `20260821-151100` treatment was truthfully interrupted at `0/32`
+  zero-update validation after DataLoader shared-memory denial and is
+  operationally superseded. ADR-161 closes the retained common rich fixed-32
+  step-zero baseline. The separate gate-on/gate-off zero-update ablation, long
+  paired arms, latency, disjoint RGB-only validation/test/OOD, promotion,
+  plateau, and convergence remain pending.
+
 ## ADR-159 — Treat exact resume as an immutable transaction under lifetime ownership
 
 - **Date:** 2026-08-21
@@ -105,8 +201,9 @@
   Use explicit provisional correction weights
   `position/velocity/regularization = 7.0/2.0/0.0`; on the measured vectors
   these predict `12.4455%` correction/total, total norm `0.0713825`, cosine
-  `-0.00433`, and no clipping. The deterministic two-update smoke, not the
-  single attribution batch, decides whether these weights remain fixed.
+  `-0.00433`, and no clipping. ADR-160 records successful two-update wiring
+  under these weights; neither that smoke nor the single attribution batch
+  makes them accuracy-qualified.
 
   Compose the complete step-512 updater into the protected equal step-zero
   base through a weights-only, provenance-bound materializer. Capture every
@@ -122,9 +219,10 @@
   weights, optimizer, schedule, cadence, and validation manifests. Treatment
   enables batch-macro reduction and axiswise hinges; control disables only
   those switches. Gate-off is a separate zero-update forward ablation. After
-  the two-update and common fixed-32 step-zero gates, run both arms for the
-  configured `3072` updates with selectors every `512`, reaching at least 512
-  and 1024 absent an integrity/nonfinite stop.
+  the completed two-update wiring gate and ADR-161 common fixed-32 step-zero
+  baseline, run both arms for the configured `3072` updates with selectors
+  every `512`, reaching at least 512 and 1024 absent an integrity/nonfinite
+  stop.
 - **Alternatives considered:** continue the healthy but physically worsening
   79-tensor updater; adapt the shared corrector trunk while freezing only its
   sibling heads; expose only the mean head and leave uncertainty/gating unable
@@ -135,13 +233,13 @@
 - **Consequences:** Specification 1.52 is a narrow causal repair that preserves
   RGB-only `WorldBelief`, analytic+learned+event composition,
   heterogeneous/local applicability, and protected-incumbent semantics.
-  Existing disabled paths remain exact by default. The production initializer
-  has not yet been materialized, and the gate-on/off ablation, deterministic
-  paired two-update smoke, common fixed-32 step-zero replay, long paired
-  campaign, paired latency, disjoint test/OOD, and promotion gates remain
-  pending. The complete frozen-source gate is closed under ADR-159, but no
-  specification-1.52 model result or convergence claim follows from this
-  decision.
+  Existing disabled paths remain exact by default. ADR-160 closes immutable
+  initializer materialization and the deterministic paired two-update wiring
+  smoke; ADR-161 closes the retained common rich fixed-32 step-zero baseline.
+  The gate-on/off ablation, long paired campaign, paired latency, disjoint
+  test/OOD, and promotion gates remain pending. Neither the complete source
+  gate, the two-update wiring result, nor the common baseline establishes
+  specification-1.52 accuracy or convergence.
 
 ## ADR-157 — Close specification 1.51 and repair updater state by axis
 
