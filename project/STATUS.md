@@ -24,10 +24,11 @@ Implementation commit `1753520` passed a focused compatibility gate of
 passed `56` tests. A real one-episode RGB-only CPU evaluator completed from
 the immutable tiny checkpoint with local applicability and `0.05`-second
 composition, no oracle input, and finite output. Its report is
-`/private/tmp/20260822-212000-spec153-runtime-pool-postversion-e2e/evaluation.json`
+`/private/tmp/20260822-213000-spec153-runtime-pool-clean-e2e/evaluation.json`
 with SHA-256
-`9e80bb5c3715ad3e0b8c7a618c2d2fcc097156039927ec99e35d66bcb7ce1b78`.
-It binds specification `1.53` and runtime-source fingerprint
+`2ded1df22696e664e4936fd4eda6559dcbe2ef118906c70ac2f2ec1e12c85214`.
+It binds clean commit `41d2c092520aeb2c2c6c302466317e5d9c01f8ac`,
+specification `1.53`, and runtime-source fingerprint
 `f3705bf77a924c7754146d21a8ca46508a497f64a84fbe041e31edda4ea1aec5`.
 It emitted exact candidate/fallback/total and regime partitions; this tiny run
 selected learned for every supported x cell and is wiring evidence only.

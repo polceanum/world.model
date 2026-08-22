@@ -8242,10 +8242,10 @@ The implementation gate includes a real one-episode RGB-only CPU evaluator
 run with local applicability and `0.05`-second composition. It completed with
 no oracle input or nonfinite output and emitted exact regime and composition
 partitions. The post-version report is
-`/private/tmp/20260822-212000-spec153-runtime-pool-postversion-e2e/evaluation.json`
+`/private/tmp/20260822-213000-spec153-runtime-pool-clean-e2e/evaluation.json`
 with SHA-256
-`9e80bb5c3715ad3e0b8c7a618c2d2fcc097156039927ec99e35d66bcb7ce1b78`
-and runtime-source fingerprint
+`2ded1df22696e664e4936fd4eda6559dcbe2ef118906c70ac2f2ec1e12c85214`,
+clean commit `41d2c092520aeb2c2c6c302466317e5d9c01f8ac`, and runtime-source fingerprint
 `f3705bf77a924c7754146d21a8ca46508a497f64a84fbe041e31edda4ea1aec5`.
 The focused compatibility gate passed `381` tests with `3`
 expected inactive-Aqua MPS skips; after final edge-case additions, the direct

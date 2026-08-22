@@ -22,7 +22,8 @@
   are unchanged.
 - Passed `381` focused compatibility tests with `3` expected inactive-Aqua
   skips, a final `56`-test direct selection, Ruff/compile/diff checks, and one
-  real finite RGB-only CPU evaluator run. Full repository and matched fixed-32
+  real finite RGB-only CPU evaluator run from clean commit `41d2c092...`.
+  Its report SHA-256 is `2ded1df2...`; full repository and matched fixed-32
   promotion gates remain pending.
 
 ### 2026-08-21 specification 1.52 axis-gated updater-head repair (pre-launch)
