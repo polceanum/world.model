@@ -151,6 +151,14 @@
   have zero perception/interaction gradient. This is a technical checkpoint,
   not accuracy evidence; treatment continues to selectors 512/1024 and the
   control remains unstarted.
+- Repeated the independent immutable-initializer comparison at durable step
+  `256`. Checkpoint `last.pt` is `12,593,239` bytes with SHA-256
+  `200f9aa2313f1d9939420284bbfe43e53c8d0f21616a99edcc004b67429ecaee`.
+  Exactly the six declared mean/variance/gate weight+bias tensors changed and
+  exactly those six own Adam state, every optimizer step is `256`, all other
+  `219` model entries/buffers remain bit-exact, and all model/optimizer values
+  are finite. The audit report SHA-256 is `5de67a36...`; no fixed validation is
+  due until step `512`, so this adds technical continuity only.
 
 ### 2026-08-21 specification 1.51 final closure
 

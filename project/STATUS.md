@@ -265,7 +265,7 @@ forensic limitation is explicit in the report. The completed forward's raw,
 progress, failure, and contract bytes are retained exactly and are the only
 numerical inputs to finalization.
 
-### Active long treatment and step-128 checkpoint
+### Active long treatment and step-128/256 checkpoints
 
 Treatment `runs/20260822-192031-spec152-axis-gated-3072-treatment` is active
 from clean commit `f08200f...`. Its step-zero fixed-32 evidence matches the
@@ -285,6 +285,18 @@ finite and unclipped gradients, zero perception/interaction gradient, causal
 trajectory support `714..1088`, objective-family support `6..10`, and RSS at
 most `1,045,860,352` bytes. This is a technical milestone only. Treatment
 continues toward fixed selectors 512 and 1024; control remains unstarted.
+
+The independently captured step-256 audit also passes. `last.pt` is
+`12,593,239` bytes with SHA-256
+`200f9aa2313f1d9939420284bbfe43e53c8d0f21616a99edcc004b67429ecaee`.
+Against the same immutable initializer, exactly the six declared head tensors
+changed and exactly those six own Adam state at step `256`; the other `219`
+model entries/buffers remain bit-exact and every model/optimizer value is
+finite. The audit script SHA-256 is `622d8721...`; report
+`/private/tmp/20260822-spec152-treatment-step256-audit.json` has SHA-256
+`5de67a367d58a52ef31327c4107af5afa40253e8a02912f8352b2b9e7e6a398e`.
+This is repeated technical continuity only; no trained fixed-manifest accuracy
+result exists before step `512`.
 
 ## Specification 1.51 comprehensive promotion evidence — 2026-08-21
 
