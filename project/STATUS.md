@@ -298,6 +298,29 @@ finite. The audit script SHA-256 is `622d8721...`; report
 This is repeated technical continuity only; no trained fixed-manifest accuracy
 result exists before step `512`.
 
+The first trained fixed-manifest boundary at step `512` is now complete and
+rejected. Candidate selector score is `0.24117312968934632` versus the protected
+step-zero `0.2395286358786779`; current position RMSE is
+`0.15370467101987292 m` versus `0.15056456382003996 m`. Pooled velocity RMSE
+improves `0.8118821097143433 -> 0.7998941257273414 m/s`, collision F1 improves
+`0.2837465564738292 -> 0.29207232267037553`, and coverage/precision/identity
+remain close, but the complete reference gate records `121` physical failures
+plus the failed minimum-improvement reason. Failures comprise `45` position,
+`36` Gaussian-NLL, `15` collision, `12` velocity, `7` identity, and `6`
+calibration checks. They concentrate in glancing impacts (`43`), heavy/light
+impacts (`24`), reference pairs (`14`), and z-axis evidence (`37`).
+
+The immutable numbered checkpoint SHA-256 is
+`8709bae5f0fd4c531a8c09c338d5d1e47b657c1cc6dc386f1cf34b44e5cc75f7`
+(`12,920,555` bytes). Independent audit report
+`/private/tmp/20260822-spec152-treatment-step512-audit.json`, SHA-256
+`22d77dd314b4320f7e3db1c8054c5726f1689887bf5738cbd43da5f2597e1ab7`, proves
+exactly the same six changed/Adam-owned heads at Adam step `512`, `219` frozen
+entries exact, and fully finite model/optimizer state. The protected step-zero
+incumbent remains unchanged. Since this is a behavioral tradeoff with intact
+ownership, support, and numerics, the predeclared diagnostic continues
+unchanged to the hard step-1024 decision; the long control remains unstarted.
+
 ## Specification 1.51 comprehensive promotion evidence — 2026-08-21
 
 The isolated specification-1.51 implementation is review-complete with no

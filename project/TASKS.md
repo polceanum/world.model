@@ -92,7 +92,13 @@
   frozen model entries/buffers, and finite model/optimizer state. This remains
   an ownership/finiteness milestone, not accuracy evidence.
 - [ ] Reach and audit the treatment's fixed-manifest selectors at steps 512
-  and 1024 before authorizing the long control.
+  and 1024 before authorizing the long control. Step 512 is complete and
+  safely rejected: score `0.2411731297` versus protected `0.2395286359`, with
+  `121` physical guardrail failures plus the minimum-improvement failure.
+  Numbered-checkpoint SHA-256 `8709bae5...` and independent audit SHA-256
+  `22d77dd3...` prove exactly six changed/Adam-owned heads at step `512`, 219
+  frozen entries exact, and finite state. Continue unchanged to the declared
+  step-1024 diagnostic; keep the control unstarted.
 - [x] Establish the common rich fixed-32 step-zero baseline from the retained
   pre-update artifacts in both `20260821-151249` arms; no rerun is required.
   Bind initializer file/model SHA-256

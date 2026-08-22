@@ -8186,6 +8186,28 @@ optimizer tensors are finite. The independent report at
 This repeated gate proves ownership continuity only; step `512` remains the
 first trained fixed-manifest scientific decision.
 
+That step-512 decision is now complete and rejected. Candidate selector score
+is `0.24117312968934632` versus protected step-zero
+`0.2395286358786779`; current position RMSE is
+`0.15370467101987292 m` versus `0.15056456382003996 m`. Pooled velocity RMSE
+and collision F1 improve, but the full rich comparison records `121` physical
+reference failures plus the failed minimum-improvement reason. Failure counts
+are position `45`, Gaussian NLL `36`, collision `15`, velocity `12`, identity
+`7`, and calibration `6`; scenario concentration is glancing impacts `43`,
+heavy/light impacts `24`, reference pairs `14`, and baseline `10`, with `37`
+axis-classified z failures.
+
+The immutable numbered checkpoint is `12,920,555` bytes with SHA-256
+`8709bae5f0fd4c531a8c09c338d5d1e47b657c1cc6dc386f1cf34b44e5cc75f7`.
+Independent audit report
+`/private/tmp/20260822-spec152-treatment-step512-audit.json` has SHA-256
+`22d77dd314b4320f7e3db1c8054c5726f1689887bf5738cbd43da5f2597e1ab7` and
+proves exactly six changed/Adam-owned heads at optimizer step `512`, `219`
+unchanged model entries, and finite model/optimizer state. The deployment
+incumbent remains step zero. This behavioral rejection does not satisfy an
+integrity/nonfinite stop, so the declared treatment continues unchanged to the
+hard step-1024 diagnostic; the matched long control remains unauthorized.
+
 ---
 
 # Closing directive

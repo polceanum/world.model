@@ -159,6 +159,16 @@
   `219` model entries/buffers remain bit-exact, and all model/optimizer values
   are finite. The audit report SHA-256 is `5de67a36...`; no fixed validation is
   due until step `512`, so this adds technical continuity only.
+- Completed and rejected the treatment's first trained fixed-32 selector at
+  step `512`. Score regressed `0.2395286359 -> 0.2411731297` and current
+  position RMSE regressed `0.1505645638 -> 0.1537046710 m`, despite improved
+  pooled velocity and collision F1. The rich gate records `121` reference
+  failures plus the minimum-improvement failure, led by position (`45`),
+  Gaussian NLL (`36`), glancing impacts (`43`), heavy/light impacts (`24`),
+  and z-axis evidence (`37`). Immutable checkpoint SHA-256 `8709bae5...` and
+  audit SHA-256 `22d77dd3...` prove exact six-head/Adam ownership, 219 frozen
+  entries, and finite state at step 512. Preserve the step-zero incumbent and
+  continue the diagnostic unchanged to step 1024; do not start the control.
 
 ### 2026-08-21 specification 1.51 final closure
 
