@@ -44,9 +44,9 @@
   Added a comprehensive-suite aggregator that reopens and identity-checks the
   raw evaluator reports, reproduces all four standard/fresh-validation/test/
   OOD decisions, and requires one checkpoint, policy, source, config,
-  environment, and threshold contract. The final affected gate passes `61`
-  tests in `46.35s`; Ruff, compileall, and diff checks pass. The production
-  MPS fixed-32 pair remains pending.
+  environment, and threshold contract. Configs must be Git-tracked. The final
+  affected gate passes `62` tests in `46.39s`; Ruff, compileall, and diff checks
+  pass. The production MPS fixed-32 pair remains pending.
 
 ### 2026-08-21 specification 1.52 axis-gated updater-head repair (pre-launch)
 

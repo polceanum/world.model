@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import platform
+import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -141,6 +142,24 @@ def _canonical_sha256(value: Any) -> str:
         sort_keys=True,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _require_tracked_source_file(repository: Path, path: Path, *, role: str) -> None:
+    try:
+        relative = path.relative_to(repository)
+    except ValueError as error:
+        raise ValueError(f"{role} must be inside the source repository") from error
+    if not path.is_file():
+        raise FileNotFoundError(f"{role} does not exist: {path}")
+    result = subprocess.run(
+        ["git", "-C", str(repository), "ls-files", "--error-unmatch", "--", str(relative)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    tracked = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+    if result.returncode != 0 or relative.as_posix() not in tracked:
+        raise ValueError(f"{role} must be a source-tracked file")
 
 
 def _canonical_json_value(value: Any) -> Any:
@@ -1154,12 +1173,7 @@ def main() -> int:
     else:
         raise ValueError("comparison output must remain outside the source repository")
     config_path = Path(args.config).expanduser().resolve()
-    try:
-        config_path.relative_to(repository)
-    except ValueError as error:
-        raise ValueError(
-            "comparison config must be source-tracked inside the repository"
-        ) from error
+    _require_tracked_source_file(repository, config_path, role="comparison config")
     config = load_config(args.config, overrides=args.set)
     current_source = capture_git_metadata(repository)
     if current_source.get("dirty") is not False:

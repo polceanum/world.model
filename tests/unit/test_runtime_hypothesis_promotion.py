@@ -15,6 +15,7 @@ from scripts.compare_runtime_hypothesis_evaluations import (
     _expected_protocol,
     _expected_runtime_environment,
     _expected_runtime_policy,
+    _require_tracked_source_file,
     _validate_arm,
     compare_evaluation_reports,
     compare_runtime_hypothesis_metrics,
@@ -32,6 +33,19 @@ from world_model.utils.version import SIMULATOR_VERSION, SPECIFICATION_VERSION
 
 HORIZONS = ("0.100s",)
 SCENARIOS = ("baseline",)
+
+
+def test_runtime_hypothesis_promotion_requires_a_tracked_config(tmp_path: Path) -> None:
+    repository = Path(__file__).resolve().parents[2]
+    _require_tracked_source_file(
+        repository,
+        repository / "configs" / "attention_pilot_mps.yaml",
+        role="test config",
+    )
+    untracked = tmp_path / "config.yaml"
+    untracked.write_text("project: {}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="inside the source repository"):
+        _require_tracked_source_file(repository, untracked, role="test config")
 
 
 def _paired_metrics() -> tuple[dict[str, float], dict[str, float]]:

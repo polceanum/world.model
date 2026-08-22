@@ -8287,7 +8287,7 @@ four comprehensive decisions from the same checkpoint and policy.
 Evaluator reports now persist the exact host, Python, Torch, requested/resolved
 device, precision, and accelerator-capability environment needed for a paired
 latency claim; the existing MPS replay verifier binds the same metadata. The
-final affected comparator/evaluator/replay gate passes `61` tests in `46.35s`;
+final affected comparator/evaluator/replay gate passes `62` tests in `46.39s`;
 Ruff format/check, isolated compileall, and `git diff --check` pass. This is
 only implementation qualification. No matched fixed-32 report, latency result,
 runtime-policy promotion, or disjoint-split result has yet been produced.

@@ -24,8 +24,9 @@
 - **Consequences:** Physical, latency, and comprehensive eligibility are
   separate and fail closed. A suite gate reconstructs all four decisions from
   their immutable raw evaluator reports before accepting one checkpoint and
-  policy across standard validation, disjoint fresh validation, test, and OOD.
-  The implementation passes `61` affected tests in `46.35s` plus Ruff,
+  policy across standard validation, disjoint fresh validation, test, and OOD;
+  ignored/untracked in-repository config paths are rejected. The implementation
+  passes `62` affected tests in `46.39s` plus Ruff,
   compileall, and diff checks. No deployment change follows
   until the sequential active-Aqua MPS fixed-32 pair and disjoint RGB-only
   validation/test/OOD gates pass.

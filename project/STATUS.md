@@ -71,9 +71,10 @@ A separate comprehensive-suite gate now consumes exactly the standard-
 validation, fresh-validation, test, and OOD decisions. It captures each
 comparison once, reopens and identity-checks every raw evaluator report,
 reproduces all four pair decisions, and requires one checkpoint, policy,
-source, config, environment, and exact threshold contract. The final combined
-affected gate, including this reconstruction path, passes `61` tests in
-`46.35s`; the earlier `59/44.40s` result is an intermediate pre-aggregator
+source, config, environment, and exact threshold contract. Config paths must
+also be real Git-tracked files, not merely ignored files inside the repository.
+The final combined affected gate passes `62` tests in `46.39s`; the earlier
+`59/44.40s` result is an intermediate pre-aggregator
 gate.
 
 ## Specification 1.52 axis-gated updater-head repair — pre-launch 2026-08-21

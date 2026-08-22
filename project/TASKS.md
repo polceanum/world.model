@@ -33,7 +33,8 @@
   Add a comprehensive-suite aggregator that reconstructs all four pair
   decisions from immutable raw evaluator reports and requires one checkpoint,
   policy, source, config, environment, and threshold contract. The final
-  affected gate passes `61` tests in `46.35s`; Ruff, compileall, and diff
+  Require the resolved config path to be Git-tracked. The final affected gate
+  passes `62` tests in `46.39s`; Ruff, compileall, and diff
   checks pass.
 - [ ] Execute that comparator on a sequential active-Aqua MPS fixed-32 pair
   after the independent specification-1.52 treatment releases the compute

@@ -15,6 +15,7 @@ from scripts.compare_runtime_hypothesis_evaluations import (
     _canonical_sha256,
     _expected_runtime_environment,
     _expected_runtime_policy,
+    _require_tracked_source_file,
     compare_evaluation_reports,
 )
 from world_model.evaluation.seed_protocol import make_evaluation_seed_protocol
@@ -251,10 +252,7 @@ def main() -> int:
     else:
         raise ValueError("promotion-suite output must remain outside the source repository")
     config_path = Path(args.config).expanduser().resolve()
-    try:
-        config_path.relative_to(repository)
-    except ValueError as error:
-        raise ValueError("promotion-suite config must be tracked inside the repository") from error
+    _require_tracked_source_file(repository, config_path, role="promotion-suite config")
     config = load_config(config_path, overrides=args.set)
     current_source = capture_git_metadata(repository)
     if current_source.get("dirty") is not False:
