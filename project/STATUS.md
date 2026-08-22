@@ -1,5 +1,44 @@
 # Project status
 
+## Specification 1.53 regime-local runtime planning — implementation gate 2026-08-22
+
+The opt-in heterogeneous runtime pool now makes applicability local to
+persistent entity, independent world axis, learned interaction regime, and
+exact evidence horizon. It records support count, freshness, RGB
+observability, candidate predictive variance, and confidence margin; lifecycle
+identity changes clear the affected evidence. Candidate capability masks keep
+constant-velocity models in free motion, allow ballistic contact only in free/
+ground/pair regimes, and retain the learned model for collision and every
+unsupported cell. No simulator truth or candidate output classifies regime.
+
+Optional bounded composition recursively advances the learned joint state at
+a configured evidence-horizon step and splices only supported position/
+velocity axes plus their variance. Learned lifecycle, identity, event,
+cross-axis, and unsupported outputs remain authoritative. Nonaligned or mixed
+query grids produce an explicit learned fallback. All seven new runtime
+fields default to disabled/legacy values and are strict and exact-resume-bound;
+the normal runtime and active specification-1.52 treatment are unchanged.
+
+Implementation commit `1753520` passed a focused compatibility gate of
+`381 passed, 3 skipped in 48.29s`; the final direct hypothesis/evaluator set
+passed `56` tests. A real one-episode RGB-only CPU evaluator completed from
+the immutable tiny checkpoint with local applicability and `0.05`-second
+composition, no oracle input, and finite output. Its report is
+`/private/tmp/20260822-212000-spec153-runtime-pool-postversion-e2e/evaluation.json`
+with SHA-256
+`9e80bb5c3715ad3e0b8c7a618c2d2fcc097156039927ec99e35d66bcb7ce1b78`.
+It binds specification `1.53` and runtime-source fingerprint
+`f3705bf77a924c7754146d21a8ca46508a497f64a84fbe041e31edda4ea1aec5`.
+It emitted exact candidate/fallback/total and regime partitions; this tiny run
+selected learned for every supported x cell and is wiring evidence only.
+
+Specification 1.53 is not promoted. A source-frozen matched learned-only
+versus regime-local fixed-32 comparison, paired latency, complete guardrails,
+and disjoint RGB-only validation/test/OOD remain pending. Deployment remains
+the protected learned incumbent. The independent long specification-1.52
+treatment continues from its original frozen source and is not modified by
+this branch.
+
 ## Specification 1.52 axis-gated updater-head repair — pre-launch 2026-08-21
 
 The narrow specification-1.52 source repair is implemented in the isolated

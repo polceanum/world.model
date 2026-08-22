@@ -2,6 +2,29 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-22 specification 1.53 regime-local runtime planning
+
+- Added exact persistent-entity/axis/learned-regime/horizon evidence to the
+  opt-in runtime hypothesis controller, with lifecycle invalidation, combined
+  predictive-plus-RGB measurement uncertainty, and optional robust influence.
+- Added fail-closed support-count, freshness, observability, confidence, and
+  candidate-capability gates. Constant velocity is free-motion-only;
+  ballistic contact supports free/ground/pair; learned remains universal.
+- Added optional bounded short-step composition that retains learned joint
+  lifecycle/event/cross-axis semantics and substitutes only supported local
+  position/velocity/variance. Mixed or nonaligned grids fall back explicitly
+  to learned dynamics.
+- Extended held-out evaluation with exact candidate/fallback/total, regime,
+  grid-fallback, support, age, observability, predictive-variance, and
+  confidence diagnostics plus arithmetic partition validation.
+- Bound seven new strict runtime fields to exact resume with disabled legacy
+  defaults. The active specification-1.52 treatment and deployment default
+  are unchanged.
+- Passed `381` focused compatibility tests with `3` expected inactive-Aqua
+  skips, a final `56`-test direct selection, Ruff/compile/diff checks, and one
+  real finite RGB-only CPU evaluator run. Full repository and matched fixed-32
+  promotion gates remain pending.
+
 ### 2026-08-21 specification 1.52 axis-gated updater-head repair (pre-launch)
 
 - Added opt-in independent-world-axis support for learned correction. The

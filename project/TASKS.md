@@ -1,5 +1,32 @@
 # Tasks
 
+## Regime-local runtime planning — specification 1.53
+
+- [x] Store delayed RGB evidence by persistent entity, independent world axis,
+  learned interaction regime, and exact evidence horizon; reset cells on
+  lifecycle identity change.
+- [x] Fail closed on minimum support, freshness, observability, confidence,
+  candidate capability, and invalid query grids. Report each reason through
+  explicit support/fallback/grid and evidence-quality diagnostics.
+- [x] Score with combined candidate predictive and RGB measurement variance,
+  and bound optional single-observation influence without using simulator
+  truth or hindsight-conditioned evidence.
+- [x] Add bounded short-step recursive composition that preserves learned
+  lifecycle/events/cross-axis state and replaces only supported configured
+  position/velocity axes plus variance.
+- [x] Bind all seven default-disabled runtime semantics to exact resume and
+  preserve legacy behavior when local applicability/composition are off.
+- [x] Pass the focused compatibility gate (`381 passed, 3 skipped`), final
+  direct selection (`56 passed`), Ruff, compileall, diff check, and one real
+  finite RGB-only CPU evaluator run with `0.05`-second composition.
+- [ ] Run the final whole-repository suite and record the post-version runtime
+  fingerprint and evaluator evidence.
+- [ ] Run a source-frozen fixed-32 learned-only versus regime-local paired
+  comparator with full physical, uncertainty, event, identity, support, and
+  paired-latency gates.
+- [ ] Run disjoint RGB-only validation/test/OOD and promote only if every
+  comprehensive gate passes; otherwise preserve the learned runtime default.
+
 ## Axis-gated updater-head repair — specification 1.52 pre-launch
 
 - [x] Add opt-in independent-world-axis support for learned correction while

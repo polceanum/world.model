@@ -1,5 +1,35 @@
 # Design decisions
 
+## ADR-164 — Scope reusable hypothesis evidence by causal regime and compose it boundedly
+
+- **Date:** 2026-08-22
+- **Status:** implemented behind disabled defaults; promotion pending
+- **Context:** The qualified x-only heterogeneous-pool diagnostic established
+  useful local analytic behavior, but the normal runtime controller reused
+  evidence by entity/axis/horizon alone and endpoint-spliced a long forecast.
+  That allowed free-motion evidence to cross into contact/event regimes and
+  did not prove stable recursive use of a local transition.
+- **Decision:** Key evidence by persistent entity, world axis, learned
+  interaction regime, and exact horizon. Require support, freshness, RGB
+  observability, confidence, and candidate capability. Score delayed evidence
+  with predictive plus measurement variance, optionally clamp relative
+  influence, and clear lifecycle-changed cells. Derive regime only from the
+  learned structured path. Add opt-in fixed-grid recursive composition that
+  advances learned joint state at every step and substitutes only supported
+  axis position/velocity/variance. Preserve learned lifecycle, identity,
+  events, cross-axis state, and all unsupported cells; explicitly report
+  learned fallback for nonaligned or mixed grids.
+- **Alternatives considered:** reuse global or entity-axis evidence across all
+  regimes; classify from simulator truth or the candidate being evaluated;
+  endpoint-splice long predictions; permit per-row schedules with batch-wide
+  coupling; replace learned collision/event output with transparent-candidate
+  output; enable the policy by default after a tiny smoke.
+- **Consequences:** The new policy is causal, local, auditable, and bounded,
+  while disabled checkpoints retain historical semantics. Focused tests and a
+  real one-episode RGB-only CPU run establish implementation integrity only.
+  The learned model remains the runtime default until a matched fixed-32,
+  paired-latency, full-guardrail, disjoint RGB-only promotion gate passes.
+
 ## ADR-163 — Require repeated durable ownership gates before treatment accuracy gates
 
 - **Date:** 2026-08-22
