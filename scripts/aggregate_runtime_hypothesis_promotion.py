@@ -78,6 +78,7 @@ def aggregate_comparisons(
     config: OrpheusConfig,
     current_source: Mapping[str, Any],
     expected_device: str = "mps",
+    _raw_capture_sink: list[CapturedReport] | None = None,
 ) -> dict[str, Any]:
     """Validate four complete pair decisions and emit one promotion decision."""
 
@@ -201,6 +202,8 @@ def aggregate_comparisons(
 
     for raw_capture in raw_report_captures:
         raw_capture.assert_path_identity()
+    if _raw_capture_sink is not None:
+        _raw_capture_sink.extend(raw_report_captures)
 
     assert common_checkpoint is not None
     return {
@@ -268,14 +271,18 @@ def main() -> int:
     }
     if len({capture.path for capture in captures.values()}) != len(captures):
         raise ValueError("promotion-suite comparison artifacts must be distinct")
+    raw_captures: list[CapturedReport] = []
     result = aggregate_comparisons(
         captures,
         config=config,
         current_source=current_source,
         expected_device=args.device,
+        _raw_capture_sink=raw_captures,
     )
     for capture in captures.values():
         capture.assert_path_identity()
+    for raw_capture in raw_captures:
+        raw_capture.assert_path_identity()
     if capture_git_metadata(repository) != current_source:
         raise RuntimeError("source provenance changed during promotion-suite aggregation")
     encoded = json.dumps(result, allow_nan=False, indent=2, sort_keys=True) + "\n"
