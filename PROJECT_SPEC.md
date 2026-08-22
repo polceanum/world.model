@@ -8254,7 +8254,10 @@ checks pass. The final whole-repository gate passed `1196` tests with `17`
 expected backend skips in `482.97s` (`0:08:02`); whole-tree Ruff check,
 format check (`221 files already formatted`), isolated compileall, the version
 contract (`1 passed in 0.79s`), and diff check also pass. These are
-implementation and instrumentation results only.
+implementation and instrumentation results only. The actual local/composed
+path also passed a focused active-Aqua MPS RGB regression under custom Torch
+`2.9.0a0+gitcbe1a35` (`1 passed in 16.87s`), including finite output and exact
+candidate/total/regime count partitions.
 Promotion still requires a source-frozen matched learned-only versus
 regime-local fixed-32 comparison, full physical/uncertainty/event/identity
 guardrails, paired latency, and disjoint RGB-only validation/test/OOD evidence.

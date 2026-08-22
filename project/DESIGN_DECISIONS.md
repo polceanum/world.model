@@ -29,7 +29,8 @@
   real one-episode RGB-only CPU run establish implementation integrity only.
   The final repository gate passed `1196` tests with `17` expected backend
   skips in `482.97s`; whole-tree Ruff/format, compileall, version, and diff
-  checks pass.
+  checks pass. A focused active-Aqua MPS RGB regression of the enabled
+  local/composed path passed in `16.87s` with exact count partitions.
   The learned model remains the runtime default until a matched fixed-32,
   paired-latency, full-guardrail, disjoint RGB-only promotion gate passes.
 

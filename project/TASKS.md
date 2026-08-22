@@ -22,6 +22,9 @@
 - [x] Run the final whole-repository suite and record the post-version runtime
   fingerprint and evaluator evidence: `1196 passed, 17 skipped in 482.97s`,
   whole-tree Ruff/format, compileall, version, and diff gates all pass.
+- [x] Exercise the enabled local/composed RGB path on active-Aqua MPS; finite
+  output and exact candidate/total/regime partitions pass (`1` test in
+  `16.87s`).
 - [ ] Run a source-frozen fixed-32 learned-only versus regime-local paired
   comparator with full physical, uncertainty, event, identity, support, and
   paired-latency gates.

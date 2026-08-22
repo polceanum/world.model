@@ -38,6 +38,11 @@ backend skips in `482.97s` (`0:08:02`). Whole-tree Ruff check passed, Ruff
 format check reported `221 files already formatted`, isolated compileall over
 runtime/tests/entrypoints/scripts passed, the authoritative version test
 passed `1` in `0.79s`, and `git diff --check` is clean.
+The new local/composed path then passed a focused active-Aqua MPS RGB smoke
+under custom Torch `2.9.0a0+gitcbe1a35`: `1 passed in 16.87s`, with finite
+forecast tensors and exact candidate/total/regime count partitions. The first
+attempt reached the same finite output and failed only a test fixture's
+incorrect hard-coded eight-slot expectation; the profile correctly has six.
 
 Specification 1.53 is not promoted. A source-frozen matched learned-only
 versus regime-local fixed-32 comparison, paired latency, complete guardrails,

@@ -30,6 +30,9 @@
   compileall, authoritative version test (`1 passed in 0.79s`), and clean diff
   check. This qualifies source integrity, not runtime-pool accuracy or
   promotion.
+- Passed the enabled local/composed RGB runtime path on active-Aqua MPS under
+  custom Torch `2.9.0a0+gitcbe1a35` (`1 passed in 16.87s`), including finite
+  output and exact candidate/total/regime partitions.
 
 ### 2026-08-21 specification 1.52 axis-gated updater-head repair (pre-launch)
 

@@ -83,6 +83,8 @@ def test_opt_in_rgb_hypothesis_pool_is_finite_on_mps() -> None:
             hypothesis_pool_enabled=True,
             hypothesis_evidence_horizons_seconds=(0.05,),
             hypothesis_axis_independent_axes=(0,),
+            hypothesis_local_applicability_enabled=True,
+            hypothesis_composition_step_seconds=0.05,
         ),
     )
     config.validate()
@@ -109,4 +111,18 @@ def test_opt_in_rgb_hypothesis_pool_is_finite_on_mps() -> None:
         )
     assert model.hypothesis_controller is not None
     assert model.hypothesis_controller.pool.last_selection is not None
-    assert torch.isfinite(model.predict([0.1]).positions).all()
+    future = model.predict([0.1])
+    assert torch.isfinite(future.positions).all()
+    choices = future.auxiliary["hypothesis_axis_index"]
+    supported = future.auxiliary["hypothesis_axis_supported"]
+    candidate_steps = future.auxiliary["hypothesis_composed_candidate_step_count"]
+    total_steps = future.auxiliary["hypothesis_composed_total_step_count"]
+    regime_steps = future.auxiliary["hypothesis_composed_regime_step_count"]
+    regimes = future.auxiliary["hypothesis_interaction_regime"]
+    object_count = model.state.belief.objects.max_objects
+    assert choices.shape == supported.shape == total_steps.shape == (1, 1, object_count, 3)
+    assert candidate_steps.shape == (1, 1, object_count, 3, 4)
+    assert regime_steps.shape == (1, 1, object_count, 6)
+    assert regimes.shape == (1, 1, object_count)
+    assert torch.equal(candidate_steps.sum(dim=-1), total_steps)
+    assert torch.equal(regime_steps.sum(dim=-1), total_steps[..., 0])
