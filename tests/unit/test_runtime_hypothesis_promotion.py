@@ -18,13 +18,13 @@ from scripts.compare_runtime_hypothesis_evaluations import (
     compare_evaluation_reports,
     compare_runtime_hypothesis_metrics,
 )
-from world_model.datasets.splits import make_seed_manifest
 from world_model.evaluation.evaluator import (
     _EVALUATION_METRIC_SCHEMA_VERSION,
     _PER_SCENARIO_METRIC_SCHEMA,
     _primary_physical_metrics,
     _primary_physical_metrics_hash_exclusion_declaration,
 )
+from world_model.evaluation.seed_protocol import make_evaluation_seed_protocol
 from world_model.simulator.sphere_world import SphereWorldConfig
 from world_model.utils.config import load_config
 from world_model.utils.version import SIMULATOR_VERSION, SPECIFICATION_VERSION
@@ -266,10 +266,20 @@ def _arm_payload(
     *,
     runtime_pool: bool,
     supplied_metrics: dict[str, float] | None = None,
+    split: str = "validation",
+    seed_protocol: str = "standard",
+    seed_offset: int | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
     config = _validation_config()
     scenarios = list(config.simulator.scenario_mixture)
-    seeds = list(make_seed_manifest("validation", 32).seeds)
+    resolved_seed_protocol = make_evaluation_seed_protocol(
+        name=seed_protocol,
+        split=split,
+        episode_count=32,
+        training_validation_episodes=config.training.validation_episodes,
+        seed_offset=seed_offset,
+    )
+    seeds = list(resolved_seed_protocol.manifest.seeds)
     metrics: dict[str, object] = {
         **({} if supplied_metrics is None else deepcopy(supplied_metrics)),
         "nonfinite_output_count": 0.0,
@@ -295,6 +305,7 @@ def _arm_payload(
         "resolved_evaluation_protocol": _expected_protocol(
             config,
             checkpoint_sha256=checkpoint_sha,
+            resolved_seed_protocol=resolved_seed_protocol,
             runtime_hypothesis_pool=runtime_pool,
         ),
         "simulator_version": SIMULATOR_VERSION,
@@ -306,7 +317,7 @@ def _arm_payload(
                 scenario: asdict(
                     SphereWorldConfig.from_config(config)
                     .for_scenario(scenario)
-                    .for_distribution("in_distribution")
+                    .for_distribution("ood" if split == "ood" else "in_distribution")
                 )
                 for scenario in scenarios
             }
@@ -323,7 +334,7 @@ def _arm_payload(
             f"{value:.3f}s" for value in config.evaluation.horizons_seconds
         ],
         "evaluation_episode_scenarios": [scenarios[int(seed) % len(scenarios)] for seed in seeds],
-        "split": "validation",
+        "split": split,
         "episodes": 32,
         "batches": 4,
         "device": "cpu",
@@ -341,15 +352,7 @@ def _arm_payload(
         "runtime_hypothesis_pool_policy": (
             _expected_runtime_policy(config) if runtime_pool else None
         ),
-        "evaluation_seed_protocol": "standard",
-        "evaluation_seed_role": "standard_validation_evaluation",
-        "evaluation_seed_offset": 0,
-        "evaluation_seed_count": 32,
-        "evaluation_seed_first": seeds[0],
-        "evaluation_seed_last": seeds[-1],
-        "evaluation_episode_seeds": seeds,
-        "evaluation_seed_overlaps_training_validation": True,
-        "evaluation_seed_overlaps_test_range": False,
+        **resolved_seed_protocol.metadata(),
         "primary_posterior_trace_frame_count": 32 * config.simulator.sequence_frames,
         "primary_posterior_trace_schema": "world_belief_tensor_fields_v1",
         "primary_posterior_trace_sha256": "b" * 64,
@@ -391,6 +394,12 @@ def test_runtime_hypothesis_report_validation_binds_complete_policy(tmp_path: Pa
         config=config,
         current_source=source,
         expected_device="cpu",
+        resolved_seed_protocol=make_evaluation_seed_protocol(
+            name="standard",
+            split="validation",
+            episode_count=32,
+            training_validation_episodes=config.training.validation_episodes,
+        ),
         runtime_hypothesis_pool=True,
     )
 
@@ -410,8 +419,75 @@ def test_runtime_hypothesis_report_validation_binds_complete_policy(tmp_path: Pa
             config=config,
             current_source=source,
             expected_device="cpu",
+            resolved_seed_protocol=make_evaluation_seed_protocol(
+                name="standard",
+                split="validation",
+                episode_count=32,
+                training_validation_episodes=config.training.validation_episodes,
+            ),
             runtime_hypothesis_pool=True,
         )
+
+
+@pytest.mark.parametrize(
+    ("split", "seed_protocol", "seed_offset", "expected_first", "expected_role"),
+    [
+        ("validation", "fresh_validation", 32, 100032, "checkpoint_selection_validation"),
+        ("test", "standard", 0, 200000, "standard_test_evaluation"),
+        ("ood", "standard", 0, 300000, "standard_ood_evaluation"),
+    ],
+)
+def test_runtime_hypothesis_report_pair_binds_disjoint_manifests(
+    tmp_path: Path,
+    split: str,
+    seed_protocol: str,
+    seed_offset: int,
+    expected_first: int,
+    expected_role: str,
+) -> None:
+    config = _validation_config()
+    reference_metrics, candidate_metrics = _paired_metrics()
+    reference_metrics = _expand_scenario_metrics(reference_metrics)
+    candidate_metrics = _expand_scenario_metrics(candidate_metrics)
+    for metrics in (reference_metrics, candidate_metrics):
+        for prefix in ("rgb_global_update", "rgb_fast_update", "future_rollout"):
+            metrics[f"{prefix}_latency_mean_ms"] = 2.0
+            metrics[f"{prefix}_latency_sum_ms"] = 8.0
+            metrics[f"{prefix}_latency_sample_count"] = 4.0
+    reference_payload, source = _arm_payload(
+        runtime_pool=False,
+        supplied_metrics=reference_metrics,
+        split=split,
+        seed_protocol=seed_protocol,
+        seed_offset=seed_offset,
+    )
+    candidate_payload, _ = _arm_payload(
+        runtime_pool=True,
+        supplied_metrics=candidate_metrics,
+        split=split,
+        seed_protocol=seed_protocol,
+        seed_offset=seed_offset,
+    )
+    reference_path = tmp_path / f"reference-{split}.json"
+    candidate_path = tmp_path / f"candidate-{split}.json"
+    reference_path.write_text(json.dumps(reference_payload, allow_nan=False), encoding="utf-8")
+    candidate_path.write_text(json.dumps(candidate_payload, allow_nan=False), encoding="utf-8")
+
+    result = compare_evaluation_reports(
+        CapturedReport.capture(reference_path, role="reference"),
+        CapturedReport.capture(candidate_path, role="candidate"),
+        config=config,
+        current_source=source,
+        expected_device="cpu",
+        split=split,
+        seed_protocol=seed_protocol,
+        seed_offset=seed_offset,
+    )
+
+    assert result["passed"] is True
+    assert result["schema_version"] == "runtime_hypothesis_paired_promotion_v2"
+    assert result["protocol"]["seed_manifest"][0] == expected_first
+    assert result["protocol"]["seed_role"] == expected_role
 
 
 def _expand_scenario_metrics(metrics: dict[str, float]) -> dict[str, float]:

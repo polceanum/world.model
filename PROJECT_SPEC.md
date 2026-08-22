@@ -8265,8 +8265,9 @@ guardrails, paired latency, and disjoint RGB-only validation/test/OOD evidence.
 The matched fixed-32 boundary is now executable through
 `scripts/compare_runtime_hypothesis_evaluations.py`. The comparator captures
 each evaluator report once, binds both arms to the same immutable checkpoint,
-clean source, tracked resolved configuration, exact validation seeds and
-scenario mixture, five horizons, MPS/float32 runtime environment, posterior
+clean source, tracked resolved configuration, exact standard-validation or
+disjoint fresh-validation/test/OOD seeds and scenario mixture, five horizons,
+MPS/float32 runtime environment, posterior
 trace, evaluator schemas, and primary-physical digest. The reference must run
 learned-only and the candidate must run the complete configured local/
 composed policy. The candidate must exhibit positive non-learned selection and
@@ -8281,7 +8282,7 @@ Physical, latency, and comprehensive eligibility are recorded separately.
 Evaluator reports now persist the exact host, Python, Torch, requested/resolved
 device, precision, and accelerator-capability environment needed for a paired
 latency claim; the existing MPS replay verifier binds the same metadata. The
-final affected comparator/evaluator/replay gate passes `56` tests in `43.34s`;
+final affected comparator/evaluator/replay gate passes `59` tests in `44.40s`;
 Ruff format/check, isolated compileall, and `git diff --check` pass. This is
 only implementation qualification. No matched fixed-32 report, latency result,
 runtime-policy promotion, or disjoint-split result has yet been produced.

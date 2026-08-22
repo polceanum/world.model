@@ -16,7 +16,6 @@ from typing import Any, Literal
 
 import torch
 
-from world_model.datasets.splits import make_seed_manifest
 from world_model.evaluation.evaluator import (
     _EVALUATION_METRIC_SCHEMA_VERSION,
     _EVALUATION_PROTOCOL_SCHEMA_VERSION,
@@ -25,6 +24,12 @@ from world_model.evaluation.evaluator import (
     _primary_physical_metrics_hash_exclusion_declaration,
 )
 from world_model.evaluation.latency import paired_latency_guardrail
+from world_model.evaluation.seed_protocol import (
+    EVALUATION_SEED_PROTOCOLS,
+    STANDARD_SEED_PROTOCOL,
+    EvaluationSeedProtocol,
+    make_evaluation_seed_protocol,
+)
 from world_model.simulator.sphere_world import SphereWorldConfig
 from world_model.training.checkpointing import capture_git_metadata
 from world_model.utils.config import OrpheusConfig, load_config
@@ -46,7 +51,7 @@ _REGIMES = (
     "externally_actuated",
 )
 _LATENCY_PREFIXES = ("rgb_global_update", "rgb_fast_update", "future_rollout")
-_SCHEMA_VERSION = "runtime_hypothesis_paired_promotion_v1"
+_SCHEMA_VERSION = "runtime_hypothesis_paired_promotion_v2"
 Direction = Literal["lower", "higher", "maximum_ratio"]
 
 
@@ -730,18 +735,18 @@ def _expected_protocol(
     config: OrpheusConfig,
     *,
     checkpoint_sha256: str,
+    resolved_seed_protocol: EvaluationSeedProtocol,
     runtime_hypothesis_pool: bool,
 ) -> dict[str, Any]:
-    manifest = make_seed_manifest("validation", config.evaluation.episodes)
     return {
         "schema_version": _EVALUATION_PROTOCOL_SCHEMA_VERSION,
         "metric_schema_version": _EVALUATION_METRIC_SCHEMA_VERSION,
         "per_scenario_metric_schema": _PER_SCENARIO_METRIC_SCHEMA,
         "checkpoint_sha256": checkpoint_sha256,
         "resolved_config_sha256": _canonical_sha256(config.to_dict()),
-        "split": "validation",
-        "seed_protocol": "standard",
-        "seed_manifest": list(manifest.seeds),
+        "split": resolved_seed_protocol.split,
+        "seed_protocol": resolved_seed_protocol.name,
+        "seed_manifest": list(resolved_seed_protocol.manifest.seeds),
         "horizons_seconds_requested": list(config.evaluation.horizons_seconds),
         "horizons_observation_grid": [
             f"{value:.3f}s" for value in config.evaluation.horizons_seconds
@@ -819,6 +824,7 @@ def _validate_arm(
     config: OrpheusConfig,
     current_source: Mapping[str, Any],
     expected_device: str,
+    resolved_seed_protocol: EvaluationSeedProtocol,
     runtime_hypothesis_pool: bool,
 ) -> ValidatedArm:
     payload = report.payload
@@ -861,13 +867,14 @@ def _validate_arm(
     expected_protocol = _expected_protocol(
         config,
         checkpoint_sha256=checkpoint_sha,
+        resolved_seed_protocol=resolved_seed_protocol,
         runtime_hypothesis_pool=runtime_hypothesis_pool,
     )
     if protocol != expected_protocol:
         raise ValueError(f"{role} resolved protocol does not match the fixed evaluator contract")
     if metadata.get("resolved_evaluation_protocol_sha256") != _canonical_sha256(protocol):
         raise ValueError(f"{role} resolved protocol hash is invalid")
-    manifest = list(make_seed_manifest("validation", 32).seeds)
+    manifest = list(resolved_seed_protocol.manifest.seeds)
     scenarios = list(config.simulator.scenario_mixture)
     episode_scenarios = [scenarios[int(seed) % len(scenarios)] for seed in manifest]
     resolved_scenarios = _canonical_json_value(
@@ -875,7 +882,9 @@ def _validate_arm(
             scenario: asdict(
                 SphereWorldConfig.from_config(config)
                 .for_scenario(scenario)
-                .for_distribution("in_distribution")
+                .for_distribution(
+                    "ood" if resolved_seed_protocol.split == "ood" else "in_distribution"
+                )
             )
             for scenario in scenarios
         }
@@ -900,7 +909,7 @@ def _validate_arm(
             f"{value:.3f}s" for value in config.evaluation.horizons_seconds
         ],
         "evaluation_episode_scenarios": episode_scenarios,
-        "split": "validation",
+        "split": resolved_seed_protocol.split,
         "episodes": 32,
         "batches": math.ceil(32 / min(config.training.batch_size, 32)),
         "device": expected_device,
@@ -915,15 +924,7 @@ def _validate_arm(
         "recovery_probe_enabled": False,
         "evaluation_perturbations_applied": False,
         "runtime_hypothesis_pool_enabled": runtime_hypothesis_pool,
-        "evaluation_seed_protocol": "standard",
-        "evaluation_seed_role": "standard_validation_evaluation",
-        "evaluation_seed_offset": 0,
-        "evaluation_seed_count": 32,
-        "evaluation_seed_first": manifest[0],
-        "evaluation_seed_last": manifest[-1],
-        "evaluation_episode_seeds": manifest,
-        "evaluation_seed_overlaps_training_validation": True,
-        "evaluation_seed_overlaps_test_range": False,
+        **resolved_seed_protocol.metadata(),
         "primary_posterior_trace_frame_count": 32 * config.simulator.sequence_frames,
         "primary_posterior_trace_schema": "world_belief_tensor_fields_v1",
     }
@@ -991,18 +992,29 @@ def compare_evaluation_reports(
     config: OrpheusConfig,
     current_source: Mapping[str, Any],
     expected_device: str = "mps",
+    split: str = "validation",
+    seed_protocol: str = STANDARD_SEED_PROTOCOL,
+    seed_offset: int | None = None,
     absolute_tolerance: float = 1.0e-9,
     relative_tolerance: float = 1.0e-6,
     sharpness_maximum_ratio: float = 1.05,
     latency_maximum_ratio: float = 1.10,
     minimum_pooled_position_improvement_m: float = 1.0e-5,
 ) -> dict[str, Any]:
+    resolved_seed_protocol = make_evaluation_seed_protocol(
+        name=seed_protocol,
+        split=split,
+        episode_count=config.evaluation.episodes,
+        training_validation_episodes=config.training.validation_episodes,
+        seed_offset=seed_offset,
+    )
     reference_arm = _validate_arm(
         reference,
         role="reference",
         config=config,
         current_source=current_source,
         expected_device=expected_device,
+        resolved_seed_protocol=resolved_seed_protocol,
         runtime_hypothesis_pool=False,
     )
     candidate_arm = _validate_arm(
@@ -1011,6 +1023,7 @@ def compare_evaluation_reports(
         config=config,
         current_source=current_source,
         expected_device=expected_device,
+        resolved_seed_protocol=resolved_seed_protocol,
         runtime_hypothesis_pool=True,
     )
     for name in ("checkpoint_sha256", "checkpoint_byte_count", "checkpoint_step"):
@@ -1074,8 +1087,11 @@ def compare_evaluation_reports(
         "source_provenance": dict(current_source),
         "resolved_evaluation_config_sha256": _canonical_sha256(config.to_dict()),
         "protocol": {
-            "split": "validation",
-            "seed_manifest": list(make_seed_manifest("validation", 32).seeds),
+            "split": resolved_seed_protocol.split,
+            "seed_protocol": resolved_seed_protocol.name,
+            "seed_offset": resolved_seed_protocol.seed_offset,
+            "seed_role": resolved_seed_protocol.intended_use,
+            "seed_manifest": list(resolved_seed_protocol.manifest.seeds),
             "scenario_mixture": list(config.simulator.scenario_mixture),
             "horizons": horizons,
             "device": expected_device,
@@ -1105,6 +1121,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--candidate-report", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--device", default="mps", choices=["mps", "cpu", "cuda"])
+    parser.add_argument("--split", default="validation", choices=["validation", "test", "ood"])
+    parser.add_argument(
+        "--seed-protocol",
+        default=STANDARD_SEED_PROTOCOL,
+        choices=EVALUATION_SEED_PROTOCOLS,
+    )
+    parser.add_argument("--seed-offset", type=int)
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     parser.add_argument("--absolute-tolerance", type=float, default=1.0e-9)
     parser.add_argument("--relative-tolerance", type=float, default=1.0e-6)
@@ -1151,6 +1174,9 @@ def main() -> int:
         config=config,
         current_source=current_source,
         expected_device=args.device,
+        split=args.split,
+        seed_protocol=args.seed_protocol,
+        seed_offset=args.seed_offset,
         absolute_tolerance=args.absolute_tolerance,
         relative_tolerance=args.relative_tolerance,
         sharpness_maximum_ratio=args.sharpness_maximum_ratio,

@@ -53,16 +53,17 @@ this branch.
 
 The source-frozen paired comparator is now implemented but has not been run on
 the production fixed-32 MPS pair. It binds one immutable read of each report to
-the same checkpoint, tracked configuration, clean source, exact validation
-manifest/scenarios/horizons, posterior trace, MPS/float32 host/runtime
+the same checkpoint, tracked configuration, clean source, exact standard or
+disjoint fresh-validation/test/OOD manifest, scenarios/horizons, posterior
+trace, MPS/float32 host/runtime
 environment, evaluator schemas, and reconstructable primary-physical digest.
 It requires positive non-learned selection and composed use, exact support and
 current-posterior parity, pooled plus every scenario/horizon position,
 velocity, uncertainty, event, identity, and coverage guardrails, at least
 `1e-5` metres summed pooled position-RMSE improvement, and paired global/fast/
 rollout latency no worse than `1.10x`. Physical, latency, and comprehensive
-eligibility are distinct. The final affected gate passes `56` tests in
-`43.34s`; Ruff format/check, isolated compileall, and diff check pass. The real
+eligibility are distinct. The final affected gate passes `59` tests in
+`44.40s`; Ruff format/check, isolated compileall, and diff check pass. The real
 pair remains deferred while the independent specification-1.52 treatment owns
 the production compute path.
 

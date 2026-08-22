@@ -27,15 +27,16 @@
   `16.87s`).
 - [x] Implement a fail-closed source-frozen fixed-32 learned-only versus
   regime-local comparator with immutable report capture, exact checkpoint/
-  config/source/manifest/runtime binding, full pooled and scenario/horizon
-  physical/uncertainty/event/identity/support gates, positive non-learned
+  config/source/standard-or-disjoint-manifest/runtime binding, full pooled and
+  scenario/horizon physical/uncertainty/event/identity/support gates, positive non-learned
   selection/composition, minimum pooled improvement, and paired latency.
-  The final affected gate passes `56` tests in `43.34s`; Ruff, compileall, and
+  The final affected gate passes `59` tests in `44.40s`; Ruff, compileall, and
   diff checks pass.
 - [ ] Execute that comparator on a sequential active-Aqua MPS fixed-32 pair
   after the independent specification-1.52 treatment releases the compute
   path; preserve learned-only defaults unless comprehensive eligibility passes.
-- [ ] Run disjoint RGB-only validation/test/OOD and promote only if every
+- [ ] Run the now-supported disjoint RGB-only fresh-validation/test/OOD pairs
+  and promote only if every
   comprehensive gate passes; otherwise preserve the learned runtime default.
 
 ## Axis-gated updater-head repair — specification 1.52 pre-launch
