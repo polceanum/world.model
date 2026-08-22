@@ -1,9 +1,9 @@
 # Design decisions
 
-## ADR-163 — Require a durable ownership gate before treatment accuracy gates
+## ADR-163 — Require repeated durable ownership gates before treatment accuracy gates
 
 - **Date:** 2026-08-22
-- **Status:** accepted and passed at step 128; treatment continues
+- **Status:** accepted and passed at steps 128 and 256; treatment continues
 - **Context:** The two-update smoke proved wiring but could not establish
   long-run optimizer ownership, exact-resume counters, sparse no-gradient draw
   behavior, or memory stability. Starting the paired control before the first
@@ -25,6 +25,11 @@
   are `6,23,39,50,71,117`. Logged applied blocks are balanced, finite,
   unclipped, and free of perception/interaction gradient leakage. Treatment
   continues; control remains pending step-512/1024 scientific evidence.
+  The repeated step-256 checkpoint audit also passes: checkpoint SHA-256
+  `200f9aa2...`, exactly the same six changed/Adam-owned tensors with Adam
+  step `256`, `219` exact frozen entries/buffers, and finite state throughout.
+  This repetition increases confidence in ownership stability but does not
+  substitute for the step-512 fixed-manifest selector.
 
 ## ADR-162 — Treat gate-off fixed-32 evidence as non-vacuity, not a control
 

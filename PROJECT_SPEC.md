@@ -8138,7 +8138,7 @@ before replacement, but the finalized report truthfully records
 themselves are retained byte-for-byte and are the sole numerical input to this
 finalization.
 
-## 246. Long treatment launch and step-128 ownership gate
+## 246. Long treatment launch and repeated ownership gates
 
 The frozen treatment arm launched from clean source
 `f08200f44646db6fa84f32de4b5bf538e647f546` as
@@ -8174,6 +8174,17 @@ not an accuracy or convergence result. The step-512 and step-1024 fixed-
 manifest selectors remain the first scientific continuation decisions. The
 control arm remains unstarted until the treatment satisfies those declared
 boundaries.
+
+The same immutable comparison was repeated at durable step `256` before the
+first accuracy gate. That `last.pt` is `12,593,239` bytes with SHA-256
+`200f9aa2313f1d9939420284bbfe43e53c8d0f21616a99edcc004b67429ecaee`.
+Exactly the six declared heads changed and own Adam moments, every Adam step is
+`256`, the other `219` model entries/buffers are bit-exact, and all model and
+optimizer tensors are finite. The independent report at
+`/private/tmp/20260822-spec152-treatment-step256-audit.json` has SHA-256
+`5de67a367d58a52ef31327c4107af5afa40253e8a02912f8352b2b9e7e6a398e`.
+This repeated gate proves ownership continuity only; step `512` remains the
+first trained fixed-manifest scientific decision.
 
 ---
 

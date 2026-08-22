@@ -84,6 +84,13 @@
   exactly six finite Adam states at step 128, preserves 219 other model entries
   plus four buffers bitwise, and records `134 = 128 + 6` draw progress. Pin
   retry draw IDs `6,23,39,50,71,117` for later control parity.
+- [x] Re-audit the same treatment at durable step 256. The independent report
+  `/private/tmp/20260822-spec152-treatment-step256-audit.json` (SHA-256
+  `5de67a367d58a52ef31327c4107af5afa40253e8a02912f8352b2b9e7e6a398e`)
+  binds `last.pt` SHA-256 `200f9aa2...`, `12,593,239` bytes, exactly six
+  changed head tensors, exactly six Adam owners at step `256`, `219` exact
+  frozen model entries/buffers, and finite model/optimizer state. This remains
+  an ownership/finiteness milestone, not accuracy evidence.
 - [ ] Reach and audit the treatment's fixed-manifest selectors at steps 512
   and 1024 before authorizing the long control.
 - [x] Establish the common rich fixed-32 step-zero baseline from the retained
