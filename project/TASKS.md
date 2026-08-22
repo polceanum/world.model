@@ -70,9 +70,14 @@
   zero retry/skips, finite two-step losses/gradients, matched learning rates,
   and terminal `32/32` validation. Both candidates remain rejected below the
   `1e-5` minimum-improvement threshold; this is not accuracy evidence.
-- [ ] Run the deterministic gate-on/gate-off zero-update forward ablation.
-  Keep it separate from the completed treatment/control smoke and do not use
-  it as the training control.
+- [x] Complete the deterministic gate-on/gate-off zero-update forward
+  ablation. The immutable v3 report at
+  `/private/tmp/20260821-spec152-axis-gate-zero-update-final` passes with rich
+  support `1.0`, exact preserved-forward identities, unchanged model state,
+  selector `0.2262970690`, and zero dynamics replay. It proves semantic
+  non-vacuity (`204` physical changes) but not promotion: strict guardrails
+  fail `211` gate-off-versus-on and `393` in reverse. Keep it separate from
+  the treatment/control pair.
 - [x] Establish the common rich fixed-32 step-zero baseline from the retained
   pre-update artifacts in both `20260821-151249` arms; no rerun is required.
   Bind initializer file/model SHA-256

@@ -4,8 +4,9 @@
 
 The narrow specification-1.52 source repair is implemented in the isolated
 qualification tree, committed/pushed, materialized into an immutable
-initializer, and exercised by a retained paired two-update wiring smoke. No
-gate-on/gate-off zero-update ablation, long paired campaign, model promotion,
+initializer, exercised by a retained paired two-update wiring smoke, and
+qualified by a deterministic gate-on/gate-off zero-update semantic ablation. No
+long paired campaign, model promotion,
 plateau, or convergence result exists yet. The retained pre-update artifacts
 now close the common rich fixed-32 step-zero gate. Deployment remains the
 protected step-zero incumbent.
@@ -229,13 +230,40 @@ seed and draw identities, scenario balance, devices, runtime axis gate,
 cadence, and manifests. Treatment enables macro physical reductions and
 axiswise hinges; control disables only those two switches. The retained
 two-update wiring gate above passes this structural contract. Gate-off versus
-gate-on remains a separate pending zero-update forward ablation, not the
-training control. The retained common rich fixed-32 step-zero evidence above
+gate-on is now a completed separate zero-update semantic ablation, not the
+training control. It proves non-vacuity but fails strict bidirectional slice
+guardrails. The retained common rich fixed-32 step-zero evidence above
 is complete; the terminal fixed-32 records above separately score the two
 post-update wiring candidates. Both long arms are configured for `3072`
 updates with selectors every `512` and must reach at least `512` and `1024`
 absent a truthful integrity/nonfinite stop. Long training, paired latency, and
 disjoint RGB-only validation/test/OOD remain pending.
+
+### Completed axis-gate zero-update semantic ablation
+
+The immutable finalized artifact is
+`/private/tmp/20260821-spec152-axis-gate-zero-update-final`. Its
+`report.json` SHA-256 is
+`1fdb9ea9f3ba5ada2f38b9442bfd60653a5f54f179abd9458bc216ba209e1f1b`;
+schema v3 reports `passed=true`, zero failures, rich support `1.0`, and no
+model/loader/optimizer/dynamics construction. The finalizer source is retained
+at SHA-256 `acd521d8610ad11833c2aa8cc039aaf7b777ccb7adedc2b5d66d4748d8ac46ee`.
+Independent recomputation reproduced all file identities, six scope hashes,
+selector score, guardrail counts, and unchanged model-state hash.
+
+Gate-off versus gate-on changes `204` physical, `152` pooled-additive, `102`
+causal-additive, and `123` derived validation metrics. Selector/position/
+velocity/collision F1 move from `0.23952864/0.15056456/0.81188211/0.28374656`
+to `0.22629707/0.13536790/0.74888604/0.31891892`. This is strong semantic
+non-vacuity, not a gate-off promotion: `211` strict guardrails fail in the
+gate-off-versus-on direction and `393` in reverse, with a camera-parallax
+regression among the coherent tradeoffs. The long pair retains gate-on in both
+arms and isolates only the two declared objective switches.
+
+The exact v2 producer script bytes were not retained before replacement; that
+forensic limitation is explicit in the report. The completed forward's raw,
+progress, failure, and contract bytes are retained exactly and are the only
+numerical inputs to finalization.
 
 ## Specification 1.51 comprehensive promotion evidence — 2026-08-21
 

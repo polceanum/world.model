@@ -8091,6 +8091,53 @@ collision F1 is `0.2837465564738292`, identity-switch rate is
 both false, so this common physical baseline cannot promote either arm. It
 closes only the shared rich fixed-32 step-zero gate.
 
+## 245. Axis-gate zero-update semantic ablation
+
+The deterministic gate-on/gate-off zero-update ablation is complete. The
+gate-off arm is the preserved fixed-32 forward from
+`/private/tmp/20260821-spec152-axis-gate-zero-update-v2`; its exact raw,
+progress, failure, and contract bytes were copied into the immutable finalized
+artifact at `/private/tmp/20260821-spec152-axis-gate-zero-update-final`.
+`report.json` is `422,423` bytes with SHA-256
+`1fdb9ea9f3ba5ada2f38b9442bfd60653a5f54f179abd9458bc216ba209e1f1b`;
+the retained finalizer source is `21,502` bytes with SHA-256
+`acd521d8610ad11833c2aa8cc039aaf7b777ccb7adedc2b5d66d4748d8ac46ee`.
+The report is schema `spec152_axis_gate_zero_update_v3`, `passed=true`, with
+zero failures. Every file is mode `0444` and the directory is mode `0555`.
+
+The finalizer did not construct a model, loader, optimizer, or dynamics
+forward. Runtime sentinels prove no forbidden entry point was called. It
+recomputed the production rich-support validator and selector from the exact
+preserved forward, injected only the trainer-derived
+`validation_rollout_selection_score`, and required exact source, config,
+initializer, model-state, seed/scenario, and gate-on evidence identities.
+Independent read-only recomputation reproduced rich support `1.0`, selector
+`0.22629706900790234`, all six metric-scope schemas and hashes, and unchanged
+initializer model-state SHA-256 `88f2df4d...`.
+
+Gate-off improves the pooled selector from `0.2395286358786779` to
+`0.22629706900790234`, current position RMSE from `0.15056456382003996` to
+`0.1353678963014635`, velocity RMSE from `0.8118821097143433` to
+`0.7488860388189023`, and collision F1 from `0.2837465564738292` to
+`0.31891891891891894`. It changes `204` physical metrics, `152` pooled
+additive metrics, `102` causal-additive metrics, and `123` derived validation
+metrics. This proves the runtime gate is semantically non-vacuous. It does not
+establish that gate-off is safer or promotable: gate-off versus gate-on has
+`211` strict guardrail failures, the reverse comparison has `393`, and the
+camera-parallax scenario score regresses from `0.14423294011785356` to
+`0.14953841960363534`. The long treatment and control therefore retain the
+declared gate-on runtime and compare only batch-macro reduction plus axiswise
+hinges. Paired latency, long training, disjoint RGB-only test/OOD, promotion,
+plateau, and convergence remain pending.
+
+The exact version-2 producer bytes were overwritten before they could be
+copied. The preserved contract and failure record consistently bind their
+reported SHA-256/size, and an independent reviewer inspected those bytes
+before replacement, but the finalized report truthfully records
+`exact_producer_bytes_retained=false`. The completed forward outputs
+themselves are retained byte-for-byte and are the sole numerical input to this
+finalization.
+
 ---
 
 # Closing directive

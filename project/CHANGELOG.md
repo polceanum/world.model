@@ -127,8 +127,16 @@
   comprehensive eligibility are false.
 - This entry records implemented source, measured attribution, immutable
   initializer provenance, paired two-update wiring, and the shared physical
-  step-zero baseline only. The gate-on/off zero-update ablation, `3072`-update
-  paired training, latency, disjoint RGB-only validation/test/OOD, promotion,
+  step-zero baseline plus the completed zero-update semantic ablation. The
+  immutable v3 report at
+  `/private/tmp/20260821-spec152-axis-gate-zero-update-final` has SHA-256
+  `1fdb9ea9...`, support `1.0`, selector `0.2262970690`, unchanged model state,
+  zero dynamics replay, and exact scope schemas. Gate-off changes `204`
+  physical metrics but fails `211` strict guardrails versus gate-on (`393` in
+  reverse), so it proves non-vacuity rather than promotion. Its forensic note
+  records that exact v2 producer bytes were not retained; the completed
+  forward artifacts are retained byte-for-byte. The `3072`-update paired
+  training, latency, disjoint RGB-only validation/test/OOD, promotion,
   and convergence remain pending. The completed repository/artifact,
   two-update, and common-baseline gates are not accuracy evidence.
 

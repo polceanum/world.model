@@ -1,5 +1,35 @@
 # Design decisions
 
+## ADR-162 — Treat gate-off fixed-32 evidence as non-vacuity, not a control
+
+- **Date:** 2026-08-21
+- **Status:** accepted and completed; no runtime default changed
+- **Context:** The repair needed proof that independent-axis support changes
+  real RGB-only causal behavior before committing to a long paired objective
+  comparison. A completed fixed-32 gate-off forward was preserved, but its
+  first harness stopped after production validation because the standalone
+  path lacked the trainer-derived `validation_rollout_selection_score` key.
+- **Decision:** Finalize only the exact preserved forward without replaying
+  dynamics. Recompute the production rich-support validator and selector,
+  inject that sole trainer-derived key into a comparison copy, require exact
+  metric schemas/hashes and source/config/initializer/model-state identities,
+  and retain the finalizer source and every preserved input byte. Classify the
+  result solely as runtime semantic non-vacuity. Keep the runtime gate enabled
+  in both long arms; treatment/control continue to differ only in batch-macro
+  physical reduction and axiswise correction hinges.
+- **Alternatives considered:** rerun the expensive fixed-32 forward; treat the
+  missing derived key as missing physical evidence; compare gate-on training
+  against gate-off and confound runtime support with objective semantics; or
+  promote the lower aggregate gate-off selector without slice guardrails.
+- **Consequences:** Immutable report SHA-256 `1fdb9ea9...` passes with support
+  `1.0`, selector `0.2262970690`, unchanged model hash, `204` changed physical
+  metrics, and no dynamics entry-point calls. Aggregate position, velocity,
+  and event metrics improve, proving non-vacuity, but `211` strict guardrails
+  fail against gate-on and `393` fail in reverse. No default, checkpoint, or
+  promotion changes. The report explicitly records that exact v2 producer
+  bytes were not retained before replacement; the completed forward artifacts
+  themselves are preserved exactly.
+
 ## ADR-161 — Reuse the retained step-zero pair as the common rich baseline
 
 - **Date:** 2026-08-21
