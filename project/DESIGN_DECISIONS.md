@@ -22,8 +22,11 @@
   and dropped forecasts. Require summed pooled position improvement of at least
   `1e-5` m and matched global/fast/rollout latency at or below `1.10x`.
 - **Consequences:** Physical, latency, and comprehensive eligibility are
-  separate and fail closed. The implementation passes `59` affected tests in
-  `44.40s` plus Ruff, compileall, and diff checks. No deployment change follows
+  separate and fail closed. A suite gate reconstructs all four decisions from
+  their immutable raw evaluator reports before accepting one checkpoint and
+  policy across standard validation, disjoint fresh validation, test, and OOD.
+  The implementation passes `61` affected tests in `46.35s` plus Ruff,
+  compileall, and diff checks. No deployment change follows
   until the sequential active-Aqua MPS fixed-32 pair and disjoint RGB-only
   validation/test/OOD gates pass.
 

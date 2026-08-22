@@ -41,8 +41,12 @@
   uncertainty, event, identity, coverage, and support, requires minimum pooled
   improvement, and enforces paired global/fast/rollout latency at `<=1.10x`.
   Evaluator and replay reports now carry the exact runtime-environment binding.
-  The final affected gate passes `59` tests in `44.40s`; Ruff, compileall, and
-  diff checks pass. The production MPS fixed-32 pair remains pending.
+  Added a comprehensive-suite aggregator that reopens and identity-checks the
+  raw evaluator reports, reproduces all four standard/fresh-validation/test/
+  OOD decisions, and requires one checkpoint, policy, source, config,
+  environment, and threshold contract. The final affected gate passes `61`
+  tests in `46.35s`; Ruff, compileall, and diff checks pass. The production
+  MPS fixed-32 pair remains pending.
 
 ### 2026-08-21 specification 1.52 axis-gated updater-head repair (pre-launch)
 

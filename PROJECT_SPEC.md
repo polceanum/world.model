@@ -8278,11 +8278,16 @@ coverage, identity association/mismatch, collision F1, and dropped forecasts.
 Promotion additionally requires at least `1e-5` metres summed pooled position
 improvement and paired global/fast/rollout latency no worse than `1.10x`.
 Physical, latency, and comprehensive eligibility are recorded separately.
+`scripts/aggregate_runtime_hypothesis_promotion.py` then requires the standard-
+validation, disjoint fresh-validation, test, and OOD comparisons together. It
+reopens every declared raw evaluator report, verifies its captured identity,
+reproduces each pair decision under the current clean source, and accepts only
+four comprehensive decisions from the same checkpoint and policy.
 
 Evaluator reports now persist the exact host, Python, Torch, requested/resolved
 device, precision, and accelerator-capability environment needed for a paired
 latency claim; the existing MPS replay verifier binds the same metadata. The
-final affected comparator/evaluator/replay gate passes `59` tests in `44.40s`;
+final affected comparator/evaluator/replay gate passes `61` tests in `46.35s`;
 Ruff format/check, isolated compileall, and `git diff --check` pass. This is
 only implementation qualification. No matched fixed-32 report, latency result,
 runtime-policy promotion, or disjoint-split result has yet been produced.

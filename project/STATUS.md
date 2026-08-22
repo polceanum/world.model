@@ -62,10 +62,19 @@ current-posterior parity, pooled plus every scenario/horizon position,
 velocity, uncertainty, event, identity, and coverage guardrails, at least
 `1e-5` metres summed pooled position-RMSE improvement, and paired global/fast/
 rollout latency no worse than `1.10x`. Physical, latency, and comprehensive
-eligibility are distinct. The final affected gate passes `59` tests in
+eligibility are distinct. The pre-aggregator paired-comparator gate passes `59` tests in
 `44.40s`; Ruff format/check, isolated compileall, and diff check pass. The real
 pair remains deferred while the independent specification-1.52 treatment owns
 the production compute path.
+
+A separate comprehensive-suite gate now consumes exactly the standard-
+validation, fresh-validation, test, and OOD decisions. It captures each
+comparison once, reopens and identity-checks every raw evaluator report,
+reproduces all four pair decisions, and requires one checkpoint, policy,
+source, config, environment, and exact threshold contract. The final combined
+affected gate, including this reconstruction path, passes `61` tests in
+`46.35s`; the earlier `59/44.40s` result is an intermediate pre-aggregator
+gate.
 
 ## Specification 1.52 axis-gated updater-head repair — pre-launch 2026-08-21
 

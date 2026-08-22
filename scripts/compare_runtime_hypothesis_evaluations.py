@@ -1086,6 +1086,8 @@ def compare_evaluation_reports(
         "checkpoint_step": reference_arm.metadata["checkpoint_step"],
         "source_provenance": dict(current_source),
         "resolved_evaluation_config_sha256": _canonical_sha256(config.to_dict()),
+        "evaluation_runtime_environment": reference_arm.metadata["evaluation_runtime_environment"],
+        "runtime_hypothesis_pool_policy": candidate_arm.metadata["runtime_hypothesis_pool_policy"],
         "protocol": {
             "split": resolved_seed_protocol.split,
             "seed_protocol": resolved_seed_protocol.name,

@@ -30,8 +30,11 @@
   config/source/standard-or-disjoint-manifest/runtime binding, full pooled and
   scenario/horizon physical/uncertainty/event/identity/support gates, positive non-learned
   selection/composition, minimum pooled improvement, and paired latency.
-  The final affected gate passes `59` tests in `44.40s`; Ruff, compileall, and
-  diff checks pass.
+  Add a comprehensive-suite aggregator that reconstructs all four pair
+  decisions from immutable raw evaluator reports and requires one checkpoint,
+  policy, source, config, environment, and threshold contract. The final
+  affected gate passes `61` tests in `46.35s`; Ruff, compileall, and diff
+  checks pass.
 - [ ] Execute that comparator on a sequential active-Aqua MPS fixed-32 pair
   after the independent specification-1.52 treatment releases the compute
   path; preserve learned-only defaults unless comprehensive eligibility passes.

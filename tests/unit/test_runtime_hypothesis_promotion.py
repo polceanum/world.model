@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts.aggregate_runtime_hypothesis_promotion import aggregate_comparisons
 from scripts.compare_runtime_hypothesis_evaluations import (
     CapturedReport,
     _canonical_json_value,
@@ -486,6 +487,8 @@ def test_runtime_hypothesis_report_pair_binds_disjoint_manifests(
 
     assert result["passed"] is True
     assert result["schema_version"] == "runtime_hypothesis_paired_promotion_v2"
+    assert result["evaluation_runtime_environment"] == _expected_runtime_environment("cpu")
+    assert result["runtime_hypothesis_pool_policy"] == _expected_runtime_policy(config)
     assert result["protocol"]["seed_manifest"][0] == expected_first
     assert result["protocol"]["seed_role"] == expected_role
 
@@ -539,3 +542,128 @@ def test_runtime_hypothesis_report_pair_runs_complete_gate(tmp_path: Path) -> No
     assert result["latency_guardrail_passed"] is True
     assert result["comprehensive_promotion_eligible"] is True
     assert result["passed"] is True
+
+
+def _complete_suite_comparisons(
+    tmp_path: Path,
+) -> tuple[dict[str, CapturedReport], object, dict[str, object]]:
+    config = _validation_config()
+    reference_metrics, candidate_metrics = _paired_metrics()
+    reference_metrics = _expand_scenario_metrics(reference_metrics)
+    candidate_metrics = _expand_scenario_metrics(candidate_metrics)
+    for metrics in (reference_metrics, candidate_metrics):
+        for prefix in ("rgb_global_update", "rgb_fast_update", "future_rollout"):
+            metrics[f"{prefix}_latency_mean_ms"] = 2.0
+            metrics[f"{prefix}_latency_sum_ms"] = 8.0
+            metrics[f"{prefix}_latency_sample_count"] = 4.0
+    contracts = {
+        "standard_validation": ("validation", "standard", 0),
+        "fresh_validation": ("validation", "fresh_validation", 32),
+        "test": ("test", "standard", 0),
+        "ood": ("ood", "standard", 0),
+    }
+    captures: dict[str, CapturedReport] = {}
+    common_source: dict[str, object] | None = None
+    for role, (split, seed_protocol, seed_offset) in contracts.items():
+        reference_payload, source = _arm_payload(
+            runtime_pool=False,
+            supplied_metrics=reference_metrics,
+            split=split,
+            seed_protocol=seed_protocol,
+            seed_offset=seed_offset,
+        )
+        candidate_payload, _ = _arm_payload(
+            runtime_pool=True,
+            supplied_metrics=candidate_metrics,
+            split=split,
+            seed_protocol=seed_protocol,
+            seed_offset=seed_offset,
+        )
+        common_source = source
+        reference_path = tmp_path / f"{role}-reference.json"
+        candidate_path = tmp_path / f"{role}-candidate.json"
+        reference_path.write_text(json.dumps(reference_payload, allow_nan=False), encoding="utf-8")
+        candidate_path.write_text(json.dumps(candidate_payload, allow_nan=False), encoding="utf-8")
+        comparison = compare_evaluation_reports(
+            CapturedReport.capture(reference_path, role=f"{role} reference"),
+            CapturedReport.capture(candidate_path, role=f"{role} candidate"),
+            config=config,
+            current_source=source,
+            expected_device="cpu",
+            split=split,
+            seed_protocol=seed_protocol,
+            seed_offset=seed_offset,
+        )
+        comparison_path = tmp_path / f"{role}-comparison.json"
+        comparison_path.write_text(json.dumps(comparison, allow_nan=False), encoding="utf-8")
+        captures[role] = CapturedReport.capture(comparison_path, role=role)
+    assert common_source is not None
+    return captures, config, common_source
+
+
+def test_runtime_hypothesis_suite_requires_all_four_comprehensive_pairs(tmp_path: Path) -> None:
+    captures, config, source = _complete_suite_comparisons(tmp_path)
+
+    result = aggregate_comparisons(
+        captures,
+        config=config,
+        current_source=source,
+        expected_device="cpu",
+    )
+
+    assert result["schema_version"] == "runtime_hypothesis_comprehensive_suite_v1"
+    assert result["comprehensive_promotion_eligible"] is True
+    assert list(result["comparisons"]) == [
+        "standard_validation",
+        "fresh_validation",
+        "test",
+        "ood",
+    ]
+
+
+def test_runtime_hypothesis_suite_rejects_one_adverse_or_misaligned_pair(tmp_path: Path) -> None:
+    captures, config, source = _complete_suite_comparisons(tmp_path)
+    adverse = deepcopy(captures["ood"].payload)
+    adverse["comprehensive_promotion_eligible"] = False
+    adverse_path = tmp_path / "ood-adverse.json"
+    adverse_path.write_text(json.dumps(adverse, allow_nan=False), encoding="utf-8")
+    captures["ood"] = CapturedReport.capture(adverse_path, role="adverse OOD")
+
+    with pytest.raises(ValueError, match="comprehensive_promotion_eligible"):
+        aggregate_comparisons(
+            captures,
+            config=config,
+            current_source=source,
+            expected_device="cpu",
+        )
+
+    raw_mutation_root = tmp_path / "raw-mutation"
+    raw_mutation_root.mkdir()
+    captures, config, source = _complete_suite_comparisons(raw_mutation_root)
+    test_identity = captures["test"].payload["candidate_report"]
+    assert isinstance(test_identity, dict)
+    raw_candidate = Path(test_identity["path"])
+    raw_candidate.write_bytes(raw_candidate.read_bytes() + b"\n")
+    with pytest.raises(ValueError, match="identity changed"):
+        aggregate_comparisons(
+            captures,
+            config=config,
+            current_source=source,
+            expected_device="cpu",
+        )
+
+    misaligned_root = tmp_path / "misaligned"
+    misaligned_root.mkdir()
+    captures, config, source = _complete_suite_comparisons(misaligned_root)
+    test_payload = deepcopy(captures["test"].payload)
+    test_payload["checkpoint_sha256"] = "f" * 64
+    misaligned_path = tmp_path / "test-misaligned.json"
+    misaligned_path.write_text(json.dumps(test_payload, allow_nan=False), encoding="utf-8")
+    captures["test"] = CapturedReport.capture(misaligned_path, role="misaligned test")
+    with pytest.raises(ValueError, match="does not reproduce"):
+        aggregate_comparisons(
+            captures,
+            config=config,
+            current_source=source,
+            expected_device="cpu",
+        )
