@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, fields, is_dataclass
+from numbers import Real
 from pathlib import Path
 from types import UnionType
 from typing import Any, TypeVar, Union, get_args, get_origin, get_type_hints
@@ -318,6 +319,13 @@ class RuntimeConfig:
     hypothesis_axis_prior_strength: float = 0.001
     hypothesis_evidence_decay: float = 1.0
     hypothesis_timestamp_tolerance_seconds: float = 1.0e-5
+    hypothesis_local_applicability_enabled: bool = False
+    hypothesis_minimum_support_count: int = 1
+    hypothesis_maximum_evidence_age_seconds: float = 1.0
+    hypothesis_minimum_observability: float = 0.0
+    hypothesis_minimum_confidence_margin: float = 0.0
+    hypothesis_robust_influence_delta: float = 0.0
+    hypothesis_composition_step_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -584,6 +592,57 @@ class OrpheusConfig:
             raise ValueError(
                 "runtime.hypothesis_timestamp_tolerance_seconds must be finite and nonnegative"
             )
+        if not isinstance(runtime.hypothesis_local_applicability_enabled, bool):
+            raise ValueError("runtime.hypothesis_local_applicability_enabled must be boolean")
+        if (
+            not isinstance(runtime.hypothesis_minimum_support_count, int)
+            or isinstance(runtime.hypothesis_minimum_support_count, bool)
+            or runtime.hypothesis_minimum_support_count <= 0
+        ):
+            raise ValueError("runtime.hypothesis_minimum_support_count must be a positive integer")
+        for name, value in (
+            (
+                "hypothesis_maximum_evidence_age_seconds",
+                runtime.hypothesis_maximum_evidence_age_seconds,
+            ),
+            ("hypothesis_minimum_observability", runtime.hypothesis_minimum_observability),
+            (
+                "hypothesis_minimum_confidence_margin",
+                runtime.hypothesis_minimum_confidence_margin,
+            ),
+            ("hypothesis_robust_influence_delta", runtime.hypothesis_robust_influence_delta),
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or not math.isfinite(value)
+                or value < 0.0
+            ):
+                raise ValueError(f"runtime.{name} must be finite and nonnegative")
+        if runtime.hypothesis_minimum_observability > 1.0:
+            raise ValueError("runtime.hypothesis_minimum_observability must lie in [0,1]")
+        if runtime.hypothesis_minimum_confidence_margin > 1.0:
+            raise ValueError("runtime.hypothesis_minimum_confidence_margin must lie in [0,1]")
+        if runtime.hypothesis_composition_step_seconds is not None:
+            step = runtime.hypothesis_composition_step_seconds
+            if (
+                isinstance(step, bool)
+                or not isinstance(step, Real)
+                or not math.isfinite(step)
+                or step <= 0.0
+            ):
+                raise ValueError(
+                    "runtime.hypothesis_composition_step_seconds must be null or finite and positive"
+                )
+            if not runtime.hypothesis_local_applicability_enabled:
+                raise ValueError("runtime hypothesis composition requires local applicability")
+            if not any(
+                math.isclose(step, horizon, rel_tol=0.0, abs_tol=1.0e-9)
+                for horizon in runtime.hypothesis_evidence_horizons_seconds
+            ):
+                raise ValueError(
+                    "runtime hypothesis composition step must match a supported evidence horizon"
+                )
         if simulator.type != "sphere_world":
             raise ValueError(f"Unsupported simulator type {simulator.type!r}")
         if len(simulator.image_size) != 2 or any(size <= 0 for size in simulator.image_size):

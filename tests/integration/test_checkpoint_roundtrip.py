@@ -2317,6 +2317,13 @@ def test_disabled_runtime_hypothesis_policy_migrates_but_enabled_policy_is_stric
         "hypothesis_axis_prior_strength",
         "hypothesis_evidence_decay",
         "hypothesis_timestamp_tolerance_seconds",
+        "hypothesis_local_applicability_enabled",
+        "hypothesis_minimum_support_count",
+        "hypothesis_maximum_evidence_age_seconds",
+        "hypothesis_minimum_observability",
+        "hypothesis_minimum_confidence_margin",
+        "hypothesis_robust_influence_delta",
+        "hypothesis_composition_step_seconds",
     ):
         legacy_runtime.pop(field_name)
 

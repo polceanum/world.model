@@ -11,6 +11,7 @@ from world_model.dynamics import (
     ConstantVelocityDynamics,
     DynamicsModel,
     HypothesisDynamicsPool,
+    HypothesisRegime,
     HypothesisRolloutEngine,
     RolloutStep,
     RuntimeHypothesisController,
@@ -324,6 +325,27 @@ class _CountingFixedDynamics(_FixedDynamics):
         return super().predict_step(belief, delta_time)
 
 
+class _IncrementXStateDynamics:
+    def __init__(self, increment: float, *, collision: bool = False) -> None:
+        self.increment = increment
+        self.collision = collision
+
+    def predict_step(self, belief, delta_time):
+        objects = belief.objects.clone()
+        objects.position[..., 0] = objects.position[..., 0] + self.increment
+        objects.velocity[..., 0] = self.increment / delta_time[:, None].clamp_min(1.0e-6)
+        objects.fast_log_variance[..., 0] = objects.fast_log_variance[..., 0] + 0.1
+        objects.fast_log_variance[..., 3] = objects.fast_log_variance[..., 3] + 0.1
+        event_logits = torch.full_like(objects.motion_mode_logits, -4.0)
+        if self.collision:
+            event_logits[..., 3] = 5.0
+        return RolloutStep(
+            belief=belief.replace(timestamp=belief.timestamp + delta_time, objects=objects),
+            event_logits=event_logits,
+            auxiliary={},
+        )
+
+
 def test_pool_assimilates_late_evidence_and_updates_selected_model() -> None:
     belief = BeliefFactory(max_objects=1).create()
     pool = HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)])
@@ -445,6 +467,204 @@ def test_pool_resets_entity_evidence_when_lifecycle_reuses_slot() -> None:
     assert pool.selected_entity_axis_index(reused)[0, 0].tolist() == [0, 0, 0]
 
 
+def test_pool_regime_evidence_is_local_and_exposes_support_state() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    pool = HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)])
+    trajectories = pool.rollout(source, [0.1])
+    trajectories[0].fast_log_variance[..., :3] = torch.log(torch.tensor(4.0))
+    trajectories[1].fast_log_variance[..., :3] = torch.log(torch.tensor(0.25))
+    pool.assimilate(
+        source,
+        torch.zeros_like(trajectories[0].positions),
+        torch.ones_like(trajectories[0].active_mask),
+        trajectories=trajectories,
+        uncertainty_aware=False,
+        entity_regime=torch.tensor([[int(HypothesisRegime.FREE)]], dtype=torch.int64),
+        evidence_timestamp=torch.tensor([0.1]),
+        entity_axis_observability=torch.full((1, 1, 3), 0.8),
+    )
+
+    free = pool.selected_entity_axis_applicability(
+        source,
+        entity_regime=torch.tensor([[int(HypothesisRegime.FREE)]], dtype=torch.int64),
+        current_timestamp=torch.tensor([0.2]),
+        minimum_support_count=1,
+        maximum_age_seconds=0.2,
+        minimum_observability=0.5,
+        minimum_confidence_margin=0.0,
+    )
+    collision = pool.selected_entity_axis_applicability(
+        source,
+        entity_regime=torch.tensor([[int(HypothesisRegime.COLLISION)]], dtype=torch.int64),
+        current_timestamp=torch.tensor([0.2]),
+        minimum_support_count=1,
+        maximum_age_seconds=0.2,
+        minimum_observability=0.5,
+        minimum_confidence_margin=0.0,
+    )
+
+    assert free.selected_index[0, 0].tolist() == [1, 0, 0]
+    assert free.supported[0, 0].tolist() == [True, True, True]
+    assert free.support_count[0, 0].tolist() == [1, 1, 1]
+    assert free.age_seconds[0, 0].tolist() == pytest.approx([0.1, 0.1, 0.1])
+    assert free.observability[0, 0].tolist() == pytest.approx([0.8, 0.8, 0.8])
+    assert free.predictive_variance[0, 0].tolist() == pytest.approx([0.25, 4.0, 4.0])
+    assert collision.selected_index[0, 0].tolist() == [0, 0, 0]
+    assert not collision.supported.any()
+    assert not collision.support_count.any()
+    assert not collision.predictive_variance.any()
+
+
+@pytest.mark.parametrize(
+    ("minimum_support", "maximum_age", "minimum_observability", "minimum_margin"),
+    [
+        (2, 1.0, 0.0, 0.0),
+        (1, 0.05, 0.0, 0.0),
+        (1, 1.0, 0.9, 0.0),
+        (1, 1.0, 0.0, 0.99),
+    ],
+)
+def test_pool_regime_applicability_falls_back_when_any_gate_fails(
+    minimum_support: int,
+    maximum_age: float,
+    minimum_observability: float,
+    minimum_margin: float,
+) -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    source = belief.replace(objects=objects)
+    pool = HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)])
+    trajectories = pool.rollout(source, [0.1])
+    regime = torch.tensor([[int(HypothesisRegime.FREE)]], dtype=torch.int64)
+    pool.assimilate(
+        source,
+        torch.zeros_like(trajectories[0].positions),
+        torch.ones_like(trajectories[0].active_mask),
+        trajectories=trajectories,
+        uncertainty_aware=False,
+        entity_regime=regime,
+        evidence_timestamp=torch.tensor([0.1]),
+        entity_axis_observability=torch.full((1, 1, 3), 0.8),
+    )
+
+    applicability = pool.selected_entity_axis_applicability(
+        source,
+        entity_regime=regime,
+        current_timestamp=torch.tensor([0.2]),
+        minimum_support_count=minimum_support,
+        maximum_age_seconds=maximum_age,
+        minimum_observability=minimum_observability,
+        minimum_confidence_margin=minimum_margin,
+    )
+
+    assert applicability.selected_index[0, 0].tolist() == [0, 0, 0]
+    assert not applicability.supported.any()
+
+
+def test_pool_regime_capability_mask_forces_learned_fallback() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    source = belief.replace(objects=objects)
+    pool = HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)])
+    trajectories = pool.rollout(source, [0.1])
+    regime = torch.tensor([[int(HypothesisRegime.COLLISION)]], dtype=torch.int64)
+    pool.assimilate(
+        source,
+        torch.zeros_like(trajectories[0].positions),
+        torch.ones_like(trajectories[0].active_mask),
+        trajectories=trajectories,
+        uncertainty_aware=False,
+        entity_regime=regime,
+        evidence_timestamp=torch.tensor([0.1]),
+        entity_axis_observability=torch.ones(1, 1, 3),
+    )
+    capability = torch.zeros(6, 2, dtype=torch.bool)
+    capability[:, 0] = True
+    capability[int(HypothesisRegime.FREE), 1] = True
+
+    applicability = pool.selected_entity_axis_applicability(
+        source,
+        entity_regime=regime,
+        current_timestamp=torch.tensor([0.1]),
+        minimum_support_count=1,
+        maximum_age_seconds=1.0,
+        minimum_observability=0.0,
+        minimum_confidence_margin=0.0,
+        candidate_regime_mask=capability,
+    )
+
+    assert applicability.supported.all()
+    assert applicability.selected_index[0, 0].tolist() == [0, 0, 0]
+
+
+def test_pool_regime_robust_influence_bounds_one_observation() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    source = belief.replace(objects=objects)
+    pool = HypothesisDynamicsPool([_FixedDynamics(0.0), _FixedDynamics(100.0)])
+    trajectories = pool.rollout(source, [0.1])
+    pool.assimilate(
+        source,
+        torch.zeros_like(trajectories[0].positions),
+        torch.ones_like(trajectories[0].active_mask),
+        trajectories=trajectories,
+        uncertainty_aware=False,
+        entity_regime=torch.tensor([[int(HypothesisRegime.FREE)]], dtype=torch.int64),
+        evidence_timestamp=torch.tensor([0.1]),
+        entity_axis_observability=torch.ones(1, 1, 3),
+        robust_influence_delta=0.25,
+    )
+
+    assert pool.entity_axis_regime_log_weights is not None
+    cell = pool.entity_axis_regime_log_weights[0, 0, 0, int(HypothesisRegime.FREE)]
+    assert abs(float(cell[0] - cell[1])) == pytest.approx(0.25)
+
+
+def test_pool_lifecycle_reuse_clears_regime_support_and_freshness() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    pool = HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)])
+    trajectories = pool.rollout(source, [0.1])
+    pool.assimilate(
+        source,
+        torch.zeros_like(trajectories[0].positions),
+        torch.ones_like(trajectories[0].active_mask),
+        trajectories=trajectories,
+        uncertainty_aware=False,
+        entity_regime=torch.tensor([[int(HypothesisRegime.FREE)]], dtype=torch.int64),
+        evidence_timestamp=torch.tensor([0.1]),
+        entity_axis_observability=torch.ones(1, 1, 3),
+    )
+    reused_objects = source.objects.clone()
+    reused_objects.object_id[0, 0] = 8
+    reused = source.replace(objects=reused_objects)
+
+    applicability = pool.selected_entity_axis_applicability(
+        reused,
+        entity_regime=torch.tensor([[int(HypothesisRegime.FREE)]], dtype=torch.int64),
+        current_timestamp=torch.tensor([0.2]),
+        minimum_support_count=1,
+        maximum_age_seconds=1.0,
+        minimum_observability=0.0,
+        minimum_confidence_margin=0.0,
+    )
+
+    assert not applicability.supported.any()
+    assert not applicability.support_count.any()
+    assert not applicability.observability.any()
+    assert not applicability.predictive_variance.any()
+
+
 def test_runtime_controller_uses_only_associated_measurements_and_splices_x() -> None:
     """A pending rollout is scored from RGB-style associated evidence only."""
 
@@ -482,6 +702,191 @@ def test_runtime_controller_uses_only_associated_measurements_and_splices_x() ->
     assert "hypothesis_axis_index" in forecast.auxiliary
     assert forecast.auxiliary["hypothesis_axis_index"].shape == (1, 1, 1, 3)
     torch.testing.assert_close(source.objects.position, belief.objects.position)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("maximum_evidence_age_seconds", True),
+        ("minimum_observability", "0.5"),
+        ("minimum_confidence_margin", None),
+        ("robust_influence_delta", False),
+    ),
+)
+def test_runtime_controller_rejects_non_numeric_local_thresholds(
+    field: str,
+    value: object,
+) -> None:
+    arguments = {field: value}
+    with pytest.raises(ValueError, match=field):
+        RuntimeHypothesisController(
+            HypothesisDynamicsPool([_FixedDynamics(0.0), _FixedDynamics(1.0)]),
+            evidence_horizons_seconds=(0.1,),
+            axis_independent_axes=(0,),
+            **arguments,
+        )
+
+
+def test_runtime_controller_local_applicability_reports_exact_cell_evidence() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+        local_applicability_enabled=True,
+        minimum_support_count=1,
+        maximum_evidence_age_seconds=0.5,
+        minimum_observability=0.5,
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+    controller.schedule(source)
+    due = source.replace(timestamp=torch.tensor([0.1]))
+    controller.assimilate_observation(
+        due,
+        SimpleNamespace(
+            timestamp=torch.tensor([0.1]),
+            measurement_mask=torch.tensor([[True]]),
+            auxiliary={
+                "world_position": torch.tensor([[[0.0, 0.0, 0.0]]]),
+                "world_position_log_variance": torch.full((1, 1, 3), -4.0),
+            },
+        ),
+        SimpleNamespace(
+            pair_mask=torch.tensor([[True]]),
+            belief_indices=torch.tensor([[0]], dtype=torch.int64),
+            measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+        ),
+    )
+
+    forecast = controller.predict(due, [0.1])
+
+    assert forecast is not None
+    assert forecast.positions[0, 0, 0, 0] == pytest.approx(0.0)
+    assert forecast.auxiliary["hypothesis_axis_index"][0, 0, 0, 0].item() == 1
+    assert forecast.auxiliary["hypothesis_axis_supported"][0, 0, 0, 0].item()
+    assert forecast.auxiliary["hypothesis_axis_support_count"][0, 0, 0, 0].item() == 1
+    assert forecast.auxiliary["hypothesis_axis_evidence_age_seconds"][
+        0, 0, 0, 0
+    ].item() == pytest.approx(0.0)
+    assert forecast.auxiliary["hypothesis_axis_observability"][0, 0, 0, 0].item() > 0.98
+    assert forecast.auxiliary["hypothesis_axis_predictive_variance"][0, 0, 0, 0].item() > 0.0
+    assert forecast.auxiliary["hypothesis_axis_confidence_margin"][0, 0, 0, 0].item() > 0.0
+    assert forecast.auxiliary["hypothesis_interaction_regime"][0, 0, 0].item() == int(
+        HypothesisRegime.FREE
+    )
+
+
+def test_runtime_controller_composes_selected_effect_in_bounded_steps() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_IncrementXStateDynamics(1.0), _IncrementXStateDynamics(0.25)]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+        local_applicability_enabled=True,
+        composition_step_seconds=0.1,
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+    controller.schedule(source)
+    due = source.replace(timestamp=torch.tensor([0.1]))
+    controller.assimilate_observation(
+        due,
+        SimpleNamespace(
+            timestamp=torch.tensor([0.1]),
+            measurement_mask=torch.tensor([[True]]),
+            auxiliary={"world_position": torch.tensor([[[0.25, 0.0, 0.0]]])},
+        ),
+        SimpleNamespace(
+            pair_mask=torch.tensor([[True]]),
+            belief_indices=torch.tensor([[0]], dtype=torch.int64),
+            measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+        ),
+    )
+
+    forecast = controller.predict(due, [0.1, 0.3])
+
+    assert forecast is not None
+    assert forecast.positions[0, :, 0, 0].tolist() == pytest.approx([0.25, 0.75])
+    assert forecast.velocities[0, :, 0, 0].tolist() == pytest.approx([2.5, 2.5])
+    assert forecast.fast_log_variance[0, 1, 0, 0] > forecast.fast_log_variance[0, 0, 0, 0]
+    assert forecast.auxiliary["hypothesis_composed_candidate_step_count"][
+        0, :, 0, 0, 1
+    ].tolist() == [1, 2]
+    assert forecast.auxiliary["hypothesis_composed_fallback_step_count"][0, :, 0, 0].tolist() == [
+        0,
+        0,
+    ]
+    candidate_counts = forecast.auxiliary["hypothesis_composed_candidate_step_count"]
+    total_counts = forecast.auxiliary["hypothesis_composed_total_step_count"]
+    regime_counts = forecast.auxiliary["hypothesis_composed_regime_step_count"]
+    assert torch.equal(candidate_counts.sum(dim=-1), total_counts)
+    assert torch.equal(regime_counts.sum(dim=-1), total_counts[..., 0])
+    assert total_counts[0, :, 0, 0].tolist() == [1, 2]
+    assert forecast.auxiliary["hypothesis_axis_predictive_variance"][
+        0, :, 0, 0
+    ].tolist() == pytest.approx([torch.exp(torch.tensor(0.1)).item()] * 2)
+    assert forecast.auxiliary["hypothesis_axis_supported"][0, :, 0, 0].tolist() == [
+        True,
+        True,
+    ]
+
+    fallback = controller.predict(due, [0.15])
+    assert fallback is not None
+    assert fallback.positions[0, 0, 0, 0].item() == pytest.approx(1.0)
+    assert fallback.auxiliary["hypothesis_axis_index"][0, 0, 0, 0].item() == 0
+    assert not fallback.auxiliary["hypothesis_axis_supported"].any()
+    assert fallback.auxiliary["hypothesis_composition_grid_fallback"][0, 0, 0, 0]
+    assert "hypothesis_composed_total_step_count" not in fallback.auxiliary
+
+
+def test_runtime_controller_composition_keeps_joint_collision_regime_learned() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool(
+            [_IncrementXStateDynamics(1.0, collision=True), _IncrementXStateDynamics(0.0)]
+        ),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+        local_applicability_enabled=True,
+        composition_step_seconds=0.1,
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+    controller.schedule(source)
+    due = source.replace(timestamp=torch.tensor([0.1]))
+    controller.assimilate_observation(
+        due,
+        SimpleNamespace(
+            timestamp=torch.tensor([0.1]),
+            measurement_mask=torch.tensor([[True]]),
+            auxiliary={"world_position": torch.tensor([[[0.0, 0.0, 0.0]]])},
+        ),
+        SimpleNamespace(
+            pair_mask=torch.tensor([[True]]),
+            belief_indices=torch.tensor([[0]], dtype=torch.int64),
+            measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+        ),
+    )
+
+    forecast = controller.predict(due, [0.1])
+
+    assert forecast is not None
+    assert forecast.positions[0, 0, 0, 0].item() == pytest.approx(1.0)
+    assert forecast.event_logits[0, 0, 0, 3].item() == pytest.approx(5.0)
+    assert forecast.auxiliary["hypothesis_axis_index"][0, 0, 0, 0].item() == 0
+    assert forecast.auxiliary["hypothesis_interaction_regime"][0, 0, 0].item() == int(
+        HypothesisRegime.COLLISION
+    )
 
 
 def test_runtime_controller_does_not_extrapolate_short_evidence_to_long_horizon() -> None:

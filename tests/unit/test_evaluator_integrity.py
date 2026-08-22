@@ -15,6 +15,8 @@ from world_model.evaluation.evaluator import (
     _require_finite_metrics,
     _require_finite_trajectory,
     _resolved_evaluation_protocol,
+    _runtime_hypothesis_learned_fallback_diagnostics,
+    _validate_runtime_hypothesis_composition_counts,
 )
 from world_model.evaluation.reports import write_evaluation_report
 from world_model.evaluation.seed_protocol import make_evaluation_seed_protocol
@@ -142,3 +144,74 @@ def test_resolved_protocol_hash_binds_manifest_batch_horizons_and_intervention()
     assert _canonical_sha256(protocol) == _canonical_sha256(repeated)
     assert _canonical_sha256(protocol) != _canonical_sha256(changed_batch)
     assert _canonical_sha256(protocol) != _canonical_sha256(changed_intervention)
+
+
+def test_runtime_hypothesis_composition_counts_are_fail_closed() -> None:
+    local_shape = (1, 2, 1, 3)
+    candidates = torch.zeros((*local_shape, 4), dtype=torch.int64)
+    candidates[..., 0] = 1
+    candidates[:, 1, ..., 0] = 0
+    candidates[:, 1, ..., 1] = 2
+    total = candidates.sum(dim=-1)
+    fallback = torch.zeros(local_shape, dtype=torch.int64)
+    fallback[:, 0] = 1
+    regimes = torch.zeros((1, 2, 1, 6), dtype=torch.int64)
+    regimes[..., 0] = total[..., 0]
+
+    arguments = {
+        "local_shape": local_shape,
+        "candidate_count": candidates,
+        "fallback_count": fallback,
+        "total_count": total,
+        "regime_count": regimes,
+        "independent_axes": (0, 1, 2),
+        "candidate_size": 4,
+        "regime_size": 6,
+    }
+    _validate_runtime_hypothesis_composition_counts(**arguments)
+
+    invalid_total = total.clone()
+    invalid_total[..., 0] += 1
+    with pytest.raises(RuntimeError, match="candidate counts must partition"):
+        _validate_runtime_hypothesis_composition_counts(
+            **{**arguments, "total_count": invalid_total}
+        )
+
+    invalid_fallback = fallback.clone()
+    invalid_fallback[..., 0] = 2
+    with pytest.raises(RuntimeError, match="fallback count must be contained"):
+        _validate_runtime_hypothesis_composition_counts(
+            **{**arguments, "fallback_count": invalid_fallback}
+        )
+
+    invalid_regimes = regimes.clone()
+    invalid_regimes[:, 1, ..., 0] -= 1
+    with pytest.raises(RuntimeError, match="regime counts must partition"):
+        _validate_runtime_hypothesis_composition_counts(
+            **{**arguments, "regime_count": invalid_regimes}
+        )
+
+
+def test_runtime_hypothesis_learned_fallback_has_complete_local_diagnostics() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    trajectory = _trajectory()
+
+    class Controller:
+        @staticmethod
+        def _trajectory_regime(source: object, forecast: BeliefTrajectory) -> torch.Tensor:
+            assert source is belief
+            return torch.full_like(forecast.active_mask, 2, dtype=torch.int64)
+
+    indices, supported, regimes = _runtime_hypothesis_learned_fallback_diagnostics(
+        Controller(),
+        belief,
+        trajectory,
+    )
+
+    assert indices.shape == (1, 1, 1, 3)
+    assert indices.dtype == torch.int64
+    assert not indices.any()
+    assert supported.shape == indices.shape
+    assert supported.dtype == torch.bool
+    assert not supported.any()
+    assert torch.equal(regimes, torch.tensor([[[2]]], dtype=torch.int64))

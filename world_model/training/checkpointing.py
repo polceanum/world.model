@@ -418,6 +418,13 @@ def _runtime_checkpoint_semantics(value: object) -> object:
         "hypothesis_axis_prior_strength",
         "hypothesis_evidence_decay",
         "hypothesis_timestamp_tolerance_seconds",
+        "hypothesis_local_applicability_enabled",
+        "hypothesis_minimum_support_count",
+        "hypothesis_maximum_evidence_age_seconds",
+        "hypothesis_minimum_observability",
+        "hypothesis_minimum_confidence_margin",
+        "hypothesis_robust_influence_delta",
+        "hypothesis_composition_step_seconds",
     )
     for field_name in policy_fields:
         runtime.setdefault(field_name, getattr(defaults, field_name))

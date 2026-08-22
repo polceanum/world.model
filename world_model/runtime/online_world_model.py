@@ -505,6 +505,15 @@ class OnlineWorldModel(nn.Module):
                 axis_independent_axes=config.runtime.hypothesis_axis_independent_axes,
                 axis_prior_strength=config.runtime.hypothesis_axis_prior_strength,
                 timestamp_tolerance_seconds=config.runtime.hypothesis_timestamp_tolerance_seconds,
+                local_applicability_enabled=(config.runtime.hypothesis_local_applicability_enabled),
+                minimum_support_count=config.runtime.hypothesis_minimum_support_count,
+                maximum_evidence_age_seconds=(
+                    config.runtime.hypothesis_maximum_evidence_age_seconds
+                ),
+                minimum_observability=config.runtime.hypothesis_minimum_observability,
+                minimum_confidence_margin=(config.runtime.hypothesis_minimum_confidence_margin),
+                robust_influence_delta=config.runtime.hypothesis_robust_influence_delta,
+                composition_step_seconds=config.runtime.hypothesis_composition_step_seconds,
             )
         model = cls(
             observation_modules=modules,

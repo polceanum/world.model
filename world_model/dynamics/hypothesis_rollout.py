@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from enum import IntEnum
+from numbers import Real
 
 import torch
 from torch import Tensor
@@ -18,6 +20,75 @@ from torch import Tensor
 from world_model.belief import BeliefTrajectory, MotionMode, WorldBelief
 from world_model.dynamics.analytic import AnalyticKinematics
 from world_model.dynamics.rollout import RolloutEngine, RolloutStep
+
+
+class HypothesisRegime(IntEnum):
+    """Causal interaction regime used to scope local model evidence.
+
+    The regime is derived from the accepted learned/structured prediction,
+    never from simulator truth or from the candidate being scored.  Keeping a
+    compact taxonomy makes the applicability tensor bounded while separating
+    free motion from the contact/event cases in which a transparent
+    kinematic fallback is not interchangeable with the structured model.
+    """
+
+    FREE = 0
+    GROUND_CONTACT = 1
+    PAIR_CONTACT = 2
+    COLLISION = 3
+    OCCLUDED = 4
+    EXTERNALLY_ACTUATED = 5
+
+
+NUM_HYPOTHESIS_REGIMES = len(HypothesisRegime)
+
+
+@dataclass(frozen=True)
+class HypothesisApplicability:
+    """One query's fail-closed local applicability decision."""
+
+    selected_index: Tensor
+    supported: Tensor
+    support_count: Tensor
+    age_seconds: Tensor
+    observability: Tensor
+    predictive_variance: Tensor
+    confidence_margin: Tensor
+    regime: Tensor
+
+    def validate(self, *, candidate_count: int) -> HypothesisApplicability:
+        expected = self.selected_index.shape
+        for name, value in (
+            ("supported", self.supported),
+            ("support_count", self.support_count),
+            ("age_seconds", self.age_seconds),
+            ("observability", self.observability),
+            ("predictive_variance", self.predictive_variance),
+            ("confidence_margin", self.confidence_margin),
+        ):
+            if value.shape != expected:
+                raise ValueError(f"hypothesis applicability {name} must match selected_index")
+        if self.regime.shape != expected[:2]:
+            raise ValueError("hypothesis applicability regime must have shape [B,N]")
+        if self.selected_index.dtype is not torch.int64 or self.regime.dtype is not torch.int64:
+            raise TypeError("hypothesis applicability indices must use torch.int64")
+        if self.supported.dtype is not torch.bool or self.support_count.dtype is not torch.int64:
+            raise TypeError("hypothesis applicability masks/counts use bool/int64")
+        if torch.any(self.selected_index < 0) or torch.any(self.selected_index >= candidate_count):
+            raise ValueError("hypothesis applicability selected index is out of range")
+        if torch.any(self.regime < 0) or torch.any(self.regime >= NUM_HYPOTHESIS_REGIMES):
+            raise ValueError("hypothesis applicability regime is out of range")
+        if torch.any(self.support_count < 0):
+            raise ValueError("hypothesis applicability support count must be nonnegative")
+        for name, value in (
+            ("age_seconds", self.age_seconds),
+            ("observability", self.observability),
+            ("predictive_variance", self.predictive_variance),
+            ("confidence_margin", self.confidence_margin),
+        ):
+            if not torch.isfinite(value).all() or torch.any(value < 0):
+                raise ValueError(f"hypothesis applicability {name} must be finite and nonnegative")
+        return self
 
 
 @dataclass(frozen=True)
@@ -179,6 +250,7 @@ class ConstantVelocityDynamics:
         if damping < 0 or not torch.isfinite(torch.as_tensor(damping)):
             raise ValueError("damping must be finite and nonnegative")
         self.damping = float(damping)
+        self.supported_hypothesis_regimes = (HypothesisRegime.FREE,)
 
     def predict_step(self, belief: WorldBelief, delta_time: Tensor) -> RolloutStep:
         if delta_time.shape != belief.timestamp.shape:
@@ -236,6 +308,11 @@ class BallisticContactDynamics:
         self.ground_height = float(ground_height)
         self.event_logit = float(event_logit)
         self.analytic = AnalyticKinematics()
+        self.supported_hypothesis_regimes = (
+            HypothesisRegime.FREE,
+            HypothesisRegime.GROUND_CONTACT,
+            HypothesisRegime.PAIR_CONTACT,
+        )
 
     def predict_step(self, belief: WorldBelief, delta_time: Tensor) -> RolloutStep:
         if delta_time.shape != belief.timestamp.shape:
@@ -420,7 +497,12 @@ class HypothesisRolloutEngine:
             ("axis_gate_ratio", axis_gate_ratio),
             ("event_gate_ratio", event_gate_ratio),
         ):
-            if value < 0 or not torch.isfinite(torch.as_tensor(value)):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or value < 0
+                or not torch.isfinite(torch.as_tensor(value))
+            ):
                 raise ValueError(f"{name} must be finite and nonnegative")
         if position_weight + lifecycle_weight + event_weight <= 0:
             raise ValueError("at least one hypothesis score weight must be positive")
@@ -719,6 +801,11 @@ class HypothesisDynamicsPool:
         self.axis_evidence_seen: Tensor | None = None
         self.entity_axis_log_weights: Tensor | None = None
         self.entity_axis_evidence_seen: Tensor | None = None
+        self.entity_axis_regime_log_weights: Tensor | None = None
+        self.entity_axis_regime_support_count: Tensor | None = None
+        self.entity_axis_regime_last_timestamp: Tensor | None = None
+        self.entity_axis_regime_observability: Tensor | None = None
+        self.entity_axis_regime_predictive_variance: Tensor | None = None
         self.entity_object_ids: Tensor | None = None
         self.entity_active: Tensor | None = None
         self.last_selection: HypothesisSelection | None = None
@@ -743,6 +830,11 @@ class HypothesisDynamicsPool:
         self.axis_evidence_seen = torch.zeros(batch_size, 3, device=device, dtype=torch.bool)
         self.entity_axis_log_weights = None
         self.entity_axis_evidence_seen = None
+        self.entity_axis_regime_log_weights = None
+        self.entity_axis_regime_support_count = None
+        self.entity_axis_regime_last_timestamp = None
+        self.entity_axis_regime_observability = None
+        self.entity_axis_regime_predictive_variance = None
         self.entity_object_ids = None
         self.entity_active = None
         self.last_selection = None
@@ -786,15 +878,63 @@ class HypothesisDynamicsPool:
             )
             self.entity_object_ids = belief.objects.object_id.detach().clone()
             self.entity_active = belief.objects.active.detach().clone()
+            regime_shape = (*entity_shape[:3], NUM_HYPOTHESIS_REGIMES)
+            self.entity_axis_regime_log_weights = belief.objects.position.new_zeros(
+                (*regime_shape, len(self.dynamics_models))
+            )
+            self.entity_axis_regime_support_count = torch.zeros(
+                regime_shape,
+                device=belief.device,
+                dtype=torch.int64,
+            )
+            self.entity_axis_regime_last_timestamp = belief.objects.position.new_zeros(regime_shape)
+            self.entity_axis_regime_observability = belief.objects.position.new_zeros(regime_shape)
+            self.entity_axis_regime_predictive_variance = belief.objects.position.new_zeros(
+                (*regime_shape, len(self.dynamics_models))
+            )
         assert self.entity_axis_evidence_seen is not None
+        assert self.entity_axis_regime_log_weights is not None
+        assert self.entity_axis_regime_support_count is not None
+        assert self.entity_axis_regime_last_timestamp is not None
+        assert self.entity_axis_regime_observability is not None
+        assert self.entity_axis_regime_predictive_variance is not None
         assert self.entity_object_ids is not None
         assert self.entity_active is not None
         if self.entity_axis_log_weights.shape != entity_shape:
             raise ValueError("entity-axis hypothesis weights have incompatible shape")
+        expected_regime_shape = (*entity_shape[:3], NUM_HYPOTHESIS_REGIMES)
+        if self.entity_axis_regime_log_weights.shape != (
+            *expected_regime_shape,
+            len(self.dynamics_models),
+        ):
+            raise ValueError("entity-axis-regime hypothesis weights have incompatible shape")
+        for name, value in (
+            ("support count", self.entity_axis_regime_support_count),
+            ("last timestamp", self.entity_axis_regime_last_timestamp),
+            ("observability", self.entity_axis_regime_observability),
+        ):
+            if value.shape != expected_regime_shape:
+                raise ValueError(f"entity-axis-regime {name} has incompatible shape")
+        if self.entity_axis_regime_predictive_variance.shape != (
+            *expected_regime_shape,
+            len(self.dynamics_models),
+        ):
+            raise ValueError("entity-axis-regime predictive variance has incompatible shape")
+        if self.entity_axis_regime_support_count.dtype != torch.int64:
+            raise TypeError("entity-axis-regime support count must use torch.int64")
         if (
             self.entity_axis_log_weights.device != belief.device
             or self.entity_axis_log_weights.dtype != belief.dtype
             or self.entity_axis_evidence_seen.device != belief.device
+            or self.entity_axis_regime_log_weights.device != belief.device
+            or self.entity_axis_regime_log_weights.dtype != belief.dtype
+            or self.entity_axis_regime_support_count.device != belief.device
+            or self.entity_axis_regime_last_timestamp.device != belief.device
+            or self.entity_axis_regime_last_timestamp.dtype != belief.dtype
+            or self.entity_axis_regime_observability.device != belief.device
+            or self.entity_axis_regime_observability.dtype != belief.dtype
+            or self.entity_axis_regime_predictive_variance.device != belief.device
+            or self.entity_axis_regime_predictive_variance.dtype != belief.dtype
             or self.entity_object_ids.device != belief.device
             or self.entity_active.device != belief.device
         ):
@@ -813,6 +953,32 @@ class HypothesisDynamicsPool:
                 torch.zeros_like(self.entity_axis_evidence_seen),
                 self.entity_axis_evidence_seen,
             )
+            regime_reset_mask = changed_entity.unsqueeze(-1).unsqueeze(-1)
+            self.entity_axis_regime_log_weights = torch.where(
+                regime_reset_mask.unsqueeze(-1),
+                torch.zeros_like(self.entity_axis_regime_log_weights),
+                self.entity_axis_regime_log_weights,
+            )
+            self.entity_axis_regime_support_count = torch.where(
+                regime_reset_mask,
+                torch.zeros_like(self.entity_axis_regime_support_count),
+                self.entity_axis_regime_support_count,
+            )
+            self.entity_axis_regime_last_timestamp = torch.where(
+                regime_reset_mask,
+                torch.zeros_like(self.entity_axis_regime_last_timestamp),
+                self.entity_axis_regime_last_timestamp,
+            )
+            self.entity_axis_regime_observability = torch.where(
+                regime_reset_mask,
+                torch.zeros_like(self.entity_axis_regime_observability),
+                self.entity_axis_regime_observability,
+            )
+            self.entity_axis_regime_predictive_variance = torch.where(
+                regime_reset_mask.unsqueeze(-1),
+                torch.zeros_like(self.entity_axis_regime_predictive_variance),
+                self.entity_axis_regime_predictive_variance,
+            ).detach()
             self.entity_object_ids = belief.objects.object_id.detach().clone()
             self.entity_active = belief.objects.active.detach().clone()
         return self.log_weights
@@ -917,6 +1083,11 @@ class HypothesisDynamicsPool:
         uncertainty_aware: bool = True,
         evidence_decay_override: float | None = None,
         axis_prior_strength: float = 0.0,
+        entity_regime: Tensor | None = None,
+        evidence_timestamp: Tensor | None = None,
+        entity_axis_observability: Tensor | None = None,
+        entity_axis_predictive_variance: Tensor | None = None,
+        robust_influence_delta: float = 0.0,
     ) -> HypothesisSelection:
         prior = self._ensure_weights(belief)
         if trajectories is None:
@@ -937,12 +1108,38 @@ class HypothesisDynamicsPool:
             uncertainty_aware=uncertainty_aware,
             temperature=self.temperature,
         )
-        return self._update_evidence(
+        updated = self._update_evidence(
             prior,
             selection,
             evidence_decay_override=evidence_decay_override,
             axis_prior_strength=axis_prior_strength,
         )
+        if entity_regime is not None:
+            if entity_axis_predictive_variance is None:
+                predictive_variance = torch.stack(
+                    [
+                        trajectory.fast_log_variance[..., :3].clamp(-20.0, 10.0).exp()
+                        for trajectory in trajectories
+                    ],
+                    dim=-1,
+                )
+                predictive_mask = target_mask.unsqueeze(-1).unsqueeze(-1)
+                predictive_count = target_mask.sum(dim=1).clamp_min(1).to(target_positions.dtype)
+                entity_axis_predictive_variance = (predictive_variance * predictive_mask).sum(
+                    dim=1
+                ) / predictive_count.unsqueeze(-1).unsqueeze(-1)
+            self._update_regime_evidence(
+                belief,
+                selection,
+                entity_regime=entity_regime,
+                evidence_timestamp=evidence_timestamp,
+                entity_axis_observability=entity_axis_observability,
+                entity_axis_predictive_variance=entity_axis_predictive_variance,
+                evidence_decay_override=evidence_decay_override,
+                axis_prior_strength=axis_prior_strength,
+                robust_influence_delta=robust_influence_delta,
+            )
+        return updated
 
     def assimilate_ensemble(
         self,
@@ -1114,6 +1311,275 @@ class HypothesisDynamicsPool:
         ).validate()
         return self.last_selection
 
+    def _update_regime_evidence(
+        self,
+        belief: WorldBelief,
+        selection: HypothesisSelection,
+        *,
+        entity_regime: Tensor,
+        evidence_timestamp: Tensor | None,
+        entity_axis_observability: Tensor | None,
+        entity_axis_predictive_variance: Tensor | None,
+        evidence_decay_override: float | None,
+        axis_prior_strength: float,
+        robust_influence_delta: float,
+    ) -> None:
+        """Update only the exact entity/axis/regime cells with RGB evidence."""
+
+        self._ensure_weights(belief)
+        if selection.entity_axis_scores is None:
+            raise ValueError("regime evidence requires entity-axis scores")
+        expected_regime_shape = belief.objects.active.shape
+        if entity_regime.shape != expected_regime_shape or entity_regime.dtype is not torch.int64:
+            raise ValueError("entity_regime must use int64 with shape [B,N]")
+        if torch.any(entity_regime < 0) or torch.any(entity_regime >= NUM_HYPOTHESIS_REGIMES):
+            raise ValueError("entity_regime contains an out-of-range value")
+        if evidence_timestamp is None or evidence_timestamp.shape != belief.timestamp.shape:
+            raise ValueError("regime evidence requires timestamp shape [B]")
+        if not torch.isfinite(evidence_timestamp).all():
+            raise ValueError("regime evidence timestamp must be finite")
+        expected_observability_shape = (*expected_regime_shape, 3)
+        if (
+            entity_axis_observability is None
+            or entity_axis_observability.shape != expected_observability_shape
+        ):
+            raise ValueError("regime evidence observability must have shape [B,N,3]")
+        expected_predictive_shape = (*expected_regime_shape, 3, len(self.dynamics_models))
+        if (
+            entity_axis_predictive_variance is None
+            or entity_axis_predictive_variance.shape != expected_predictive_shape
+        ):
+            raise ValueError("regime evidence predictive variance must have shape [B,N,3,H]")
+        if not torch.isfinite(entity_axis_predictive_variance).all() or torch.any(
+            entity_axis_predictive_variance < 0
+        ):
+            raise ValueError("regime evidence predictive variance must be finite nonnegative")
+        if (
+            not torch.isfinite(entity_axis_observability).all()
+            or torch.any(entity_axis_observability < 0)
+            or torch.any(entity_axis_observability > 1)
+        ):
+            raise ValueError("regime evidence observability must lie in [0,1]")
+        if (
+            isinstance(robust_influence_delta, bool)
+            or not isinstance(robust_influence_delta, Real)
+            or robust_influence_delta < 0
+            or not torch.isfinite(torch.as_tensor(robust_influence_delta))
+        ):
+            raise ValueError("robust_influence_delta must be finite and nonnegative")
+        decay = (
+            self.evidence_decay
+            if evidence_decay_override is None
+            else float(evidence_decay_override)
+        )
+        if not 0.0 < decay <= 1.0 or not torch.isfinite(torch.as_tensor(decay)):
+            raise ValueError("evidence_decay_override must lie in (0,1]")
+        if not 0.0 <= axis_prior_strength <= 1.0:
+            raise ValueError("axis_prior_strength must lie in [0,1]")
+        assert self.entity_axis_regime_log_weights is not None
+        assert self.entity_axis_regime_support_count is not None
+        assert self.entity_axis_regime_last_timestamp is not None
+        assert self.entity_axis_regime_observability is not None
+        assert self.entity_axis_regime_predictive_variance is not None
+        assert self.log_weights is not None
+        evidence_mask = selection.entity_axis_evidence_mask
+        if evidence_mask is None:
+            evidence_mask = torch.ones(
+                selection.entity_axis_scores.shape[:3],
+                device=belief.device,
+                dtype=torch.bool,
+            )
+        regime_one_hot = torch.nn.functional.one_hot(
+            entity_regime,
+            num_classes=NUM_HYPOTHESIS_REGIMES,
+        ).to(torch.bool)
+        cell_mask = evidence_mask.unsqueeze(-1) & regime_one_hot.unsqueeze(2)
+        gather_index = entity_regime[:, :, None, None, None].expand(
+            -1,
+            -1,
+            3,
+            1,
+            len(self.dynamics_models),
+        )
+        prior_cell = torch.gather(
+            self.entity_axis_regime_log_weights,
+            dim=3,
+            index=gather_index,
+        ).squeeze(3)
+        relative_scores = selection.entity_axis_scores - selection.entity_axis_scores[..., :1]
+        if robust_influence_delta:
+            relative_scores = relative_scores.clamp(
+                min=-float(robust_influence_delta),
+                max=float(robust_influence_delta),
+            )
+        proposed = decay * prior_cell - relative_scores / self.temperature
+        if axis_prior_strength:
+            proposed = proposed + axis_prior_strength * self.log_weights.unsqueeze(1).unsqueeze(1)
+        proposed = proposed - torch.logsumexp(proposed, dim=-1, keepdim=True)
+        expanded_proposed = proposed.unsqueeze(3).expand_as(self.entity_axis_regime_log_weights)
+        self.entity_axis_regime_log_weights = torch.where(
+            cell_mask.unsqueeze(-1),
+            expanded_proposed,
+            self.entity_axis_regime_log_weights,
+        ).detach()
+
+        old_count = self.entity_axis_regime_support_count
+        new_count = old_count + cell_mask.to(torch.int64)
+        expanded_observability = entity_axis_observability.unsqueeze(-1).expand_as(old_count)
+        running_observability = old_count.to(belief.dtype) * self.entity_axis_regime_observability
+        running_observability = (
+            running_observability + expanded_observability
+        ) / new_count.clamp_min(1).to(belief.dtype)
+        self.entity_axis_regime_support_count = new_count
+        self.entity_axis_regime_observability = torch.where(
+            cell_mask,
+            running_observability,
+            self.entity_axis_regime_observability,
+        ).detach()
+        expanded_predictive_variance = entity_axis_predictive_variance.unsqueeze(3).expand_as(
+            self.entity_axis_regime_predictive_variance
+        )
+        self.entity_axis_regime_predictive_variance = torch.where(
+            cell_mask.unsqueeze(-1),
+            expanded_predictive_variance,
+            self.entity_axis_regime_predictive_variance,
+        ).detach()
+        expanded_timestamp = evidence_timestamp[:, None, None, None].expand_as(
+            self.entity_axis_regime_last_timestamp
+        )
+        self.entity_axis_regime_last_timestamp = torch.where(
+            cell_mask,
+            expanded_timestamp,
+            self.entity_axis_regime_last_timestamp,
+        ).detach()
+
+    def selected_entity_axis_applicability(
+        self,
+        belief: WorldBelief,
+        *,
+        entity_regime: Tensor,
+        current_timestamp: Tensor,
+        minimum_support_count: int,
+        maximum_age_seconds: float,
+        minimum_observability: float,
+        minimum_confidence_margin: float,
+        candidate_regime_mask: Tensor | None = None,
+    ) -> HypothesisApplicability:
+        """Resolve local choices, falling back to candidate zero when unsupported."""
+
+        self._ensure_weights(belief)
+        if (
+            not isinstance(minimum_support_count, int)
+            or isinstance(minimum_support_count, bool)
+            or minimum_support_count <= 0
+        ):
+            raise ValueError("minimum_support_count must be a positive integer")
+        for name, value in (
+            ("maximum_age_seconds", maximum_age_seconds),
+            ("minimum_observability", minimum_observability),
+            ("minimum_confidence_margin", minimum_confidence_margin),
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or not torch.isfinite(torch.as_tensor(value))
+                or value < 0
+            ):
+                raise ValueError(f"{name} must be finite and nonnegative")
+        if minimum_observability > 1 or minimum_confidence_margin > 1:
+            raise ValueError("observability and confidence thresholds must lie in [0,1]")
+        if (
+            entity_regime.shape != belief.objects.active.shape
+            or entity_regime.dtype is not torch.int64
+        ):
+            raise ValueError("entity_regime must use int64 with shape [B,N]")
+        if (
+            current_timestamp.shape != belief.timestamp.shape
+            or not torch.isfinite(current_timestamp).all()
+        ):
+            raise ValueError("current_timestamp must be finite with shape [B]")
+        if torch.any(entity_regime < 0) or torch.any(entity_regime >= NUM_HYPOTHESIS_REGIMES):
+            raise ValueError("entity_regime contains an out-of-range value")
+        assert self.entity_axis_regime_log_weights is not None
+        assert self.entity_axis_regime_support_count is not None
+        assert self.entity_axis_regime_last_timestamp is not None
+        assert self.entity_axis_regime_observability is not None
+        assert self.entity_axis_regime_predictive_variance is not None
+        candidate_count = len(self.dynamics_models)
+        gather_index = entity_regime[:, :, None, None, None].expand(
+            -1,
+            -1,
+            3,
+            1,
+            candidate_count,
+        )
+        log_weights = torch.gather(
+            self.entity_axis_regime_log_weights,
+            dim=3,
+            index=gather_index,
+        ).squeeze(3)
+        if candidate_regime_mask is not None:
+            if candidate_regime_mask.shape != (NUM_HYPOTHESIS_REGIMES, candidate_count):
+                raise ValueError("candidate_regime_mask must have shape [R,H]")
+            if candidate_regime_mask.dtype is not torch.bool:
+                raise TypeError("candidate_regime_mask must be boolean")
+            applicable = candidate_regime_mask[entity_regime].unsqueeze(2).expand_as(log_weights)
+            if not torch.all(applicable[..., 0]):
+                raise ValueError("learned fallback candidate zero must support every regime")
+            log_weights = log_weights.masked_fill(~applicable, torch.finfo(log_weights.dtype).min)
+        posterior = torch.softmax(log_weights, dim=-1)
+        selected = posterior.argmax(dim=-1).to(torch.int64)
+        if candidate_count == 1:
+            margin = torch.ones_like(posterior[..., 0])
+        else:
+            top_two = posterior.topk(k=2, dim=-1).values
+            margin = top_two[..., 0] - top_two[..., 1]
+        scalar_index = entity_regime[:, :, None, None].expand(-1, -1, 3, 1)
+        support_count = torch.gather(
+            self.entity_axis_regime_support_count,
+            dim=3,
+            index=scalar_index,
+        ).squeeze(3)
+        last_timestamp = torch.gather(
+            self.entity_axis_regime_last_timestamp,
+            dim=3,
+            index=scalar_index,
+        ).squeeze(3)
+        observability = torch.gather(
+            self.entity_axis_regime_observability,
+            dim=3,
+            index=scalar_index,
+        ).squeeze(3)
+        candidate_predictive_variance = torch.gather(
+            self.entity_axis_regime_predictive_variance,
+            dim=3,
+            index=gather_index,
+        ).squeeze(3)
+        predictive_variance = torch.gather(
+            candidate_predictive_variance,
+            dim=-1,
+            index=selected.unsqueeze(-1),
+        ).squeeze(-1)
+        age = (current_timestamp[:, None, None] - last_timestamp).clamp_min(0)
+        supported = (
+            belief.objects.active.unsqueeze(-1)
+            & (support_count >= minimum_support_count)
+            & (age <= maximum_age_seconds)
+            & (observability >= minimum_observability)
+            & (margin >= minimum_confidence_margin)
+        )
+        selected = torch.where(supported, selected, torch.zeros_like(selected))
+        return HypothesisApplicability(
+            selected_index=selected,
+            supported=supported,
+            support_count=support_count,
+            age_seconds=age,
+            observability=observability,
+            predictive_variance=predictive_variance,
+            confidence_margin=margin,
+            regime=entity_regime,
+        ).validate(candidate_count=candidate_count)
+
     def selected_index(self, belief: WorldBelief) -> Tensor:
         weights = self._ensure_weights(belief)
         return weights.argmax(dim=-1).to(torch.int64)
@@ -1159,6 +1625,7 @@ class PendingHypothesisEvidence:
     source_object_ids: Tensor
     trajectories: tuple[BeliefTrajectory, ...]
     learned_step: RolloutStep
+    entity_regime: Tensor | None = None
     source_revision: int | None = None
     source_tensor_signature: object | None = None
     dynamics_tensor_signature: object | None = None
@@ -1185,6 +1652,13 @@ class RuntimeHypothesisController:
         axis_independent_axes: Sequence[int],
         axis_prior_strength: float = 0.0,
         timestamp_tolerance_seconds: float = 1.0e-5,
+        local_applicability_enabled: bool = False,
+        minimum_support_count: int = 1,
+        maximum_evidence_age_seconds: float = 1.0,
+        minimum_observability: float = 0.0,
+        minimum_confidence_margin: float = 0.0,
+        robust_influence_delta: float = 0.0,
+        composition_step_seconds: float | None = None,
     ) -> None:
         if not evidence_horizons_seconds or any(
             horizon <= 0 or not torch.isfinite(torch.as_tensor(horizon))
@@ -1199,6 +1673,39 @@ class RuntimeHypothesisController:
             torch.as_tensor(timestamp_tolerance_seconds)
         ):
             raise ValueError("timestamp_tolerance_seconds must be finite and nonnegative")
+        if not isinstance(local_applicability_enabled, bool):
+            raise ValueError("local_applicability_enabled must be boolean")
+        if (
+            not isinstance(minimum_support_count, int)
+            or isinstance(minimum_support_count, bool)
+            or minimum_support_count <= 0
+        ):
+            raise ValueError("minimum_support_count must be a positive integer")
+        for name, value in (
+            ("maximum_evidence_age_seconds", maximum_evidence_age_seconds),
+            ("minimum_observability", minimum_observability),
+            ("minimum_confidence_margin", minimum_confidence_margin),
+            ("robust_influence_delta", robust_influence_delta),
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or value < 0
+                or not torch.isfinite(torch.as_tensor(value))
+            ):
+                raise ValueError(f"{name} must be finite and nonnegative")
+        if minimum_observability > 1 or minimum_confidence_margin > 1:
+            raise ValueError("observability and confidence thresholds must lie in [0,1]")
+        if composition_step_seconds is not None:
+            if (
+                isinstance(composition_step_seconds, bool)
+                or not isinstance(composition_step_seconds, Real)
+                or composition_step_seconds <= 0
+                or not torch.isfinite(torch.as_tensor(composition_step_seconds))
+            ):
+                raise ValueError("composition_step_seconds must be null or finite and positive")
+            if not local_applicability_enabled:
+                raise ValueError("short-step composition requires local applicability")
         self.evidence_horizons_seconds = tuple(
             sorted(set(float(value) for value in evidence_horizons_seconds))
         )
@@ -1222,10 +1729,132 @@ class RuntimeHypothesisController:
         self.axis_independent_axes = tuple(sorted(set(int(axis) for axis in axis_independent_axes)))
         self.axis_prior_strength = float(axis_prior_strength)
         self.timestamp_tolerance_seconds = float(timestamp_tolerance_seconds)
+        self.local_applicability_enabled = local_applicability_enabled
+        self.minimum_support_count = int(minimum_support_count)
+        self.maximum_evidence_age_seconds = float(maximum_evidence_age_seconds)
+        self.minimum_observability = float(minimum_observability)
+        self.minimum_confidence_margin = float(minimum_confidence_margin)
+        self.robust_influence_delta = float(robust_influence_delta)
+        self.composition_step_seconds = (
+            None if composition_step_seconds is None else float(composition_step_seconds)
+        )
+        self.composition_horizon_index: int | None = None
+        if self.composition_step_seconds is not None:
+            matching = [
+                index
+                for index, horizon in enumerate(self.evidence_horizons_seconds)
+                if abs(horizon - self.composition_step_seconds) <= self.timestamp_tolerance_seconds
+            ]
+            if len(matching) != 1:
+                raise ValueError(
+                    "composition step must match exactly one configured evidence horizon"
+                )
+            self.composition_horizon_index = matching[0]
+        self.candidate_regime_mask = self._candidate_regime_mask(pool)
         self.pending: list[PendingHypothesisEvidence] = []
         self.runtime_dynamics_signature: object | None = None
         self.runtime_dynamics_training: bool | None = None
         self.pending_invalidation_counts: dict[str, int] = {}
+
+    @staticmethod
+    def _candidate_regime_mask(pool: HypothesisDynamicsPool) -> Tensor:
+        mask = torch.zeros(
+            NUM_HYPOTHESIS_REGIMES,
+            len(pool.dynamics_models),
+            dtype=torch.bool,
+        )
+        mask[:, 0] = True
+        for candidate_index, model in enumerate(pool.dynamics_models[1:], start=1):
+            regimes = getattr(model, "supported_hypothesis_regimes", (HypothesisRegime.FREE,))
+            for regime in regimes:
+                regime_index = int(regime)
+                if regime_index < 0 or regime_index >= NUM_HYPOTHESIS_REGIMES:
+                    raise ValueError("candidate exposes an out-of-range hypothesis regime")
+                mask[regime_index, candidate_index] = True
+        return mask
+
+    @staticmethod
+    def _trajectory_regime(
+        source: WorldBelief,
+        trajectory: BeliefTrajectory,
+    ) -> Tensor:
+        """Classify each learned interval without candidate or simulator truth."""
+
+        shape = trajectory.active_mask.shape
+        regime = torch.full(
+            shape,
+            int(HypothesisRegime.FREE),
+            device=trajectory.active_mask.device,
+            dtype=torch.int64,
+        )
+        source_mode = source.objects.motion_mode_logits.argmax(dim=-1)
+        source_mode = source_mode.unsqueeze(1).expand(shape)
+        ground_source = (
+            (source_mode == int(MotionMode.GROUND_CONTACT))
+            | (source_mode == int(MotionMode.ROLLING))
+            | (source_mode == int(MotionMode.SLIDING))
+            | (source_mode == int(MotionMode.SLEEPING))
+        )
+        regime = torch.where(
+            ground_source,
+            torch.full_like(regime, int(HypothesisRegime.GROUND_CONTACT)),
+            regime,
+        )
+        regime = torch.where(
+            source_mode == int(MotionMode.PAIR_CONTACT),
+            torch.full_like(regime, int(HypothesisRegime.PAIR_CONTACT)),
+            regime,
+        )
+        regime = torch.where(
+            source_mode == int(MotionMode.OCCLUDED),
+            torch.full_like(regime, int(HypothesisRegime.OCCLUDED)),
+            regime,
+        )
+        regime = torch.where(
+            source_mode == int(MotionMode.EXTERNALLY_ACTUATED),
+            torch.full_like(regime, int(HypothesisRegime.EXTERNALLY_ACTUATED)),
+            regime,
+        )
+
+        def node_any(name: str) -> Tensor | None:
+            value = trajectory.auxiliary.get(name)
+            if not isinstance(value, Tensor) or value.shape[:3] != shape:
+                return None
+            while value.ndim > 3:
+                value = value.any(dim=-1)
+            return value.to(torch.bool)
+
+        ground_contact = node_any("interval_ground_contact")
+        pair_contact = node_any("interval_pair_contact")
+        collision = node_any("pair_collision")
+        boundary_collision = node_any("boundary_collision")
+        if ground_contact is not None:
+            regime = torch.where(
+                ground_contact,
+                torch.full_like(regime, int(HypothesisRegime.GROUND_CONTACT)),
+                regime,
+            )
+        if pair_contact is not None:
+            regime = torch.where(
+                pair_contact,
+                torch.full_like(regime, int(HypothesisRegime.PAIR_CONTACT)),
+                regime,
+            )
+        predicted_collision = trajectory.event_logits[..., MotionMode.COLLISION] > 0
+        if collision is not None:
+            predicted_collision = predicted_collision | collision
+        if boundary_collision is not None:
+            predicted_collision = predicted_collision | boundary_collision
+        regime = torch.where(
+            predicted_collision,
+            torch.full_like(regime, int(HypothesisRegime.COLLISION)),
+            regime,
+        )
+        return torch.where(
+            trajectory.active_mask,
+            regime,
+            torch.full_like(regime, int(HypothesisRegime.OCCLUDED)),
+        )
 
     def reset(self, batch_size: int, *, device: torch.device, dtype: torch.dtype) -> None:
         for pool in self.pools:
@@ -1379,6 +2008,7 @@ class RuntimeHypothesisController:
                 delta_time,
             )
             learned_trajectory = self._trajectory_from_step(learned_step)
+            learned_regime = self._trajectory_regime(belief, learned_trajectory)[:, 0]
             alternative_trajectories = (
                 pool.rollout_engine.rollout_dynamics(
                     pool.dynamics_models[1:],
@@ -1397,6 +2027,7 @@ class RuntimeHypothesisController:
                     source_object_ids=belief.objects.object_id.detach().clone(),
                     trajectories=tuple(trajectories),
                     learned_step=learned_step,
+                    entity_regime=learned_regime.detach().clone(),
                     source_revision=source_revision,
                     source_tensor_signature=source_tensor_signature,
                     dynamics_tensor_signature=dynamics_tensor_signature,
@@ -1577,6 +2208,18 @@ class RuntimeHypothesisController:
             target_positions, target_mask, target_position_log_variance = targets
             if not bool(target_mask.any()):
                 continue
+            if self.local_applicability_enabled and pending.entity_regime is None:
+                raise RuntimeError("local hypothesis evidence is missing its scheduled regime")
+            entity_axis_observability = (
+                torch.ones_like(target_positions)
+                if target_position_log_variance is None
+                else 1.0 / (1.0 + target_position_log_variance.clamp(-20.0, 10.0).exp())
+            )
+            entity_axis_observability = torch.where(
+                target_mask.unsqueeze(-1),
+                entity_axis_observability,
+                torch.zeros_like(entity_axis_observability),
+            )
             latest = self.pools[pending.horizon_index].assimilate(
                 belief,
                 target_positions.unsqueeze(1),
@@ -1588,9 +2231,390 @@ class RuntimeHypothesisController:
                     else None
                 ),
                 axis_prior_strength=self.axis_prior_strength,
+                entity_regime=(pending.entity_regime if self.local_applicability_enabled else None),
+                evidence_timestamp=(timestamp if self.local_applicability_enabled else None),
+                entity_axis_observability=(
+                    entity_axis_observability if self.local_applicability_enabled else None
+                ),
+                robust_influence_delta=(
+                    self.robust_influence_delta if self.local_applicability_enabled else 0.0
+                ),
             )
         self.pending = retained
         return latest
+
+    def _learned_fallback_trajectory(
+        self,
+        belief: WorldBelief,
+        offsets: Tensor,
+        *,
+        composition_grid_fallback: bool,
+    ) -> BeliefTrajectory:
+        learned = self.pool.rollout_engine.rollout_dynamics(
+            (self.pool.dynamics_models[0],), belief, offsets
+        )[0]
+        local_shape = (*learned.active_mask.shape, 3)
+        indices = torch.zeros(local_shape, device=belief.device, dtype=torch.int64)
+        supported = torch.zeros_like(indices, dtype=torch.bool)
+        diagnostics = torch.zeros_like(indices, dtype=belief.dtype)
+        grid_fallback = learned.active_mask.unsqueeze(-1).expand(local_shape)
+        if not composition_grid_fallback:
+            grid_fallback = torch.zeros_like(grid_fallback)
+        return BeliefTrajectory(
+            timestamps=learned.timestamps,
+            positions=learned.positions,
+            velocities=learned.velocities,
+            orientations=learned.orientations,
+            motion_mode_logits=learned.motion_mode_logits,
+            fast_log_variance=learned.fast_log_variance,
+            active_mask=learned.active_mask,
+            event_logits=learned.event_logits,
+            auxiliary={
+                **learned.auxiliary,
+                "hypothesis_axis_index": indices,
+                "hypothesis_axis_supported": supported,
+                "hypothesis_axis_support_count": indices.clone(),
+                "hypothesis_axis_evidence_age_seconds": diagnostics.clone(),
+                "hypothesis_axis_observability": diagnostics.clone(),
+                "hypothesis_axis_predictive_variance": diagnostics.clone(),
+                "hypothesis_axis_confidence_margin": diagnostics.clone(),
+                "hypothesis_interaction_regime": self._trajectory_regime(belief, learned),
+                "hypothesis_composition_grid_fallback": grid_fallback,
+                "hypothesis_rollout_candidate_indices": torch.zeros(
+                    1, device=belief.device, dtype=torch.int64
+                ),
+            },
+        ).validate()
+
+    def _predict_composed(
+        self,
+        belief: WorldBelief,
+        offsets: Tensor,
+    ) -> BeliefTrajectory:
+        """Compose applicable local effects through bounded coherent steps."""
+
+        assert self.composition_step_seconds is not None
+        assert self.composition_horizon_index is not None
+        if offsets.shape[1] == 0:
+            return self._learned_fallback_trajectory(
+                belief, offsets, composition_grid_fallback=False
+            )
+        if not torch.isfinite(offsets).all() or torch.any(offsets < 0):
+            raise ValueError("query_times must be finite nonnegative offsets")
+        if offsets.shape[1] > 1 and torch.any(offsets[:, 1:] < offsets[:, :-1]):
+            raise ValueError("query_times must be sorted for every batch element")
+        # A shared query grid is the normal online/evaluator contract. Mixed
+        # per-row grids fall back to the learned model rather than coupling
+        # rows through a Python substep schedule or transferring evidence.
+        if not torch.equal(offsets, offsets[:1].expand_as(offsets)):
+            return self._learned_fallback_trajectory(
+                belief, offsets, composition_grid_fallback=True
+            )
+        step_seconds = self.composition_step_seconds
+        query_values = [float(value) for value in offsets[0].detach().cpu().tolist()]
+        previous = 0.0
+        substep_counts: list[int] = []
+        for query in query_values:
+            interval = query - previous
+            count = int(round(interval / step_seconds))
+            if count < 0 or abs(interval - count * step_seconds) > self.timestamp_tolerance_seconds:
+                return self._learned_fallback_trajectory(
+                    belief, offsets, composition_grid_fallback=True
+                )
+            substep_counts.append(count)
+            previous = query
+
+        current = belief.clone()
+        pool = self.pools[self.composition_horizon_index]
+        candidate_count = len(pool.dynamics_models)
+        beliefs: list[WorldBelief] = []
+        event_values: list[Tensor] = []
+        choice_values: list[Tensor] = []
+        supported_values: list[Tensor] = []
+        support_count_values: list[Tensor] = []
+        age_values: list[Tensor] = []
+        observability_values: list[Tensor] = []
+        predictive_variance_values: list[Tensor] = []
+        confidence_values: list[Tensor] = []
+        regime_values: list[Tensor] = []
+        candidate_step_count_values: list[Tensor] = []
+        fallback_step_count_values: list[Tensor] = []
+        total_step_count_values: list[Tensor] = []
+        regime_step_count_values: list[Tensor] = []
+        for query_index, substep_count in enumerate(substep_counts):
+            segment_candidate_count = torch.zeros(
+                belief.batch_size,
+                belief.objects.max_objects,
+                3,
+                candidate_count,
+                device=belief.device,
+                dtype=torch.int64,
+            )
+            segment_fallback_count = torch.zeros(
+                segment_candidate_count.shape[:-1],
+                device=belief.device,
+                dtype=torch.int64,
+            )
+            segment_total_count = torch.zeros_like(segment_fallback_count)
+            segment_supported_count = torch.zeros_like(segment_fallback_count)
+            segment_min_support = torch.full_like(
+                segment_fallback_count, torch.iinfo(torch.int64).max
+            )
+            segment_max_age = torch.zeros_like(segment_fallback_count, dtype=belief.dtype)
+            segment_min_observability = torch.ones_like(segment_fallback_count, dtype=belief.dtype)
+            segment_max_predictive_variance = torch.zeros_like(
+                segment_fallback_count, dtype=belief.dtype
+            )
+            segment_min_confidence = torch.ones_like(segment_fallback_count, dtype=belief.dtype)
+            segment_regime_count = torch.zeros(
+                belief.batch_size,
+                belief.objects.max_objects,
+                NUM_HYPOTHESIS_REGIMES,
+                device=belief.device,
+                dtype=torch.int64,
+            )
+            last_choice = torch.zeros_like(segment_fallback_count)
+            last_regime = torch.full(
+                belief.objects.active.shape,
+                int(HypothesisRegime.FREE),
+                device=belief.device,
+                dtype=torch.int64,
+            )
+            interval_collision_logits: Tensor | None = None
+            last_step: RolloutStep | None = None
+            for _ in range(substep_count):
+                delta_time = current.timestamp.new_full(
+                    current.timestamp.shape,
+                    step_seconds,
+                )
+                learned_step = pool.dynamics_models[0].predict_step(
+                    current.clone(),
+                    delta_time,
+                )
+                learned_trajectory = self._trajectory_from_step(learned_step)
+                regime = self._trajectory_regime(current, learned_trajectory)[:, 0]
+                applicability = pool.selected_entity_axis_applicability(
+                    belief,
+                    entity_regime=regime,
+                    current_timestamp=current.timestamp,
+                    minimum_support_count=self.minimum_support_count,
+                    maximum_age_seconds=self.maximum_evidence_age_seconds,
+                    minimum_observability=self.minimum_observability,
+                    minimum_confidence_margin=self.minimum_confidence_margin,
+                    candidate_regime_mask=self.candidate_regime_mask.to(belief.device),
+                )
+                active = learned_step.belief.objects.active
+                step_choice = torch.where(
+                    applicability.supported & active.unsqueeze(-1),
+                    applicability.selected_index,
+                    torch.zeros_like(applicability.selected_index),
+                )
+                candidate_steps: dict[int, RolloutStep] = {0: learned_step}
+                selected_candidates = {
+                    int(value)
+                    for value in step_choice[..., self.axis_independent_axes]
+                    .detach()
+                    .cpu()
+                    .reshape(-1)
+                    .tolist()
+                    if int(value) != 0
+                }
+                for candidate_index in sorted(selected_candidates):
+                    candidate_steps[candidate_index] = pool.dynamics_models[
+                        candidate_index
+                    ].predict_step(current.clone(), delta_time)
+
+                position = learned_step.belief.objects.position.clone()
+                velocity = learned_step.belief.objects.velocity.clone()
+                fast_log_variance = learned_step.belief.objects.fast_log_variance.clone()
+                for axis in self.axis_independent_axes:
+                    axis_active = active
+                    axis_supported = applicability.supported[..., axis] & axis_active
+                    axis_choice = step_choice[..., axis]
+                    segment_total_count[..., axis] += axis_active.to(torch.int64)
+                    segment_supported_count[..., axis] += axis_supported.to(torch.int64)
+                    segment_fallback_count[..., axis] += (axis_active & ~axis_supported).to(
+                        torch.int64
+                    )
+                    for candidate_index in range(candidate_count):
+                        segment_candidate_count[..., axis, candidate_index] += (
+                            axis_active & (axis_choice == candidate_index)
+                        ).to(torch.int64)
+                    segment_min_support[..., axis] = torch.where(
+                        axis_supported,
+                        torch.minimum(
+                            segment_min_support[..., axis],
+                            applicability.support_count[..., axis],
+                        ),
+                        segment_min_support[..., axis],
+                    )
+                    segment_max_age[..., axis] = torch.where(
+                        axis_supported,
+                        torch.maximum(
+                            segment_max_age[..., axis],
+                            applicability.age_seconds[..., axis],
+                        ),
+                        segment_max_age[..., axis],
+                    )
+                    segment_min_observability[..., axis] = torch.where(
+                        axis_supported,
+                        torch.minimum(
+                            segment_min_observability[..., axis],
+                            applicability.observability[..., axis],
+                        ),
+                        segment_min_observability[..., axis],
+                    )
+                    segment_max_predictive_variance[..., axis] = torch.where(
+                        axis_supported,
+                        torch.maximum(
+                            segment_max_predictive_variance[..., axis],
+                            applicability.predictive_variance[..., axis],
+                        ),
+                        segment_max_predictive_variance[..., axis],
+                    )
+                    segment_min_confidence[..., axis] = torch.where(
+                        axis_supported,
+                        torch.minimum(
+                            segment_min_confidence[..., axis],
+                            applicability.confidence_margin[..., axis],
+                        ),
+                        segment_min_confidence[..., axis],
+                    )
+                    for candidate_index, candidate_step in candidate_steps.items():
+                        if candidate_index == 0:
+                            continue
+                        selected = axis_supported & (axis_choice == candidate_index)
+                        selected = selected & candidate_step.belief.objects.active
+                        position[..., axis] = torch.where(
+                            selected,
+                            candidate_step.belief.objects.position[..., axis],
+                            position[..., axis],
+                        )
+                        velocity[..., axis] = torch.where(
+                            selected,
+                            candidate_step.belief.objects.velocity[..., axis],
+                            velocity[..., axis],
+                        )
+                        for state_axis in (axis, axis + 3):
+                            if state_axis >= fast_log_variance.shape[-1]:
+                                continue
+                            fast_log_variance[..., state_axis] = torch.where(
+                                selected,
+                                candidate_step.belief.objects.fast_log_variance[..., state_axis],
+                                fast_log_variance[..., state_axis],
+                            )
+                regime_one_hot = torch.nn.functional.one_hot(
+                    regime,
+                    num_classes=NUM_HYPOTHESIS_REGIMES,
+                ).to(torch.int64)
+                segment_regime_count += regime_one_hot * active.unsqueeze(-1).to(torch.int64)
+                last_choice = step_choice
+                last_regime = regime
+                composed_objects = learned_step.belief.objects.replace(
+                    position=position,
+                    velocity=velocity,
+                    fast_log_variance=fast_log_variance,
+                )
+                current = learned_step.belief.replace(objects=composed_objects)
+                collision_logits = learned_step.event_logits[..., MotionMode.COLLISION]
+                interval_collision_logits = (
+                    collision_logits
+                    if interval_collision_logits is None
+                    else torch.maximum(interval_collision_logits, collision_logits)
+                )
+                last_step = learned_step
+
+            if last_step is None:
+                zero_delta = current.timestamp.new_zeros(current.timestamp.shape)
+                last_step = pool.dynamics_models[0].predict_step(current.clone(), zero_delta)
+                last_regime = self._trajectory_regime(
+                    current,
+                    self._trajectory_from_step(last_step),
+                )[:, 0]
+                current = last_step.belief
+                interval_collision_logits = last_step.event_logits[..., MotionMode.COLLISION]
+            current = current.replace(timestamp=belief.timestamp + offsets[:, query_index])
+            event_logits = last_step.event_logits.clone()
+            assert interval_collision_logits is not None
+            event_logits[..., MotionMode.COLLISION] = interval_collision_logits
+            fully_supported = (segment_total_count > 0) & (
+                segment_supported_count == segment_total_count
+            )
+            minimum_support = torch.where(
+                segment_supported_count > 0,
+                segment_min_support,
+                torch.zeros_like(segment_min_support),
+            )
+            minimum_observability = torch.where(
+                segment_supported_count > 0,
+                segment_min_observability,
+                torch.zeros_like(segment_min_observability),
+            )
+            minimum_confidence = torch.where(
+                segment_supported_count > 0,
+                segment_min_confidence,
+                torch.zeros_like(segment_min_confidence),
+            )
+            dominant_choice = segment_candidate_count.argmax(dim=-1).to(torch.int64)
+            beliefs.append(current)
+            event_values.append(event_logits)
+            choice_values.append(dominant_choice if substep_count else last_choice)
+            supported_values.append(fully_supported)
+            support_count_values.append(minimum_support)
+            age_values.append(segment_max_age)
+            observability_values.append(minimum_observability)
+            predictive_variance_values.append(segment_max_predictive_variance)
+            confidence_values.append(minimum_confidence)
+            regime_values.append(last_regime)
+            candidate_step_count_values.append(segment_candidate_count)
+            fallback_step_count_values.append(segment_fallback_count)
+            total_step_count_values.append(segment_total_count)
+            regime_step_count_values.append(segment_regime_count)
+
+        return BeliefTrajectory(
+            timestamps=torch.stack([item.timestamp for item in beliefs], dim=1),
+            positions=torch.stack([item.objects.position for item in beliefs], dim=1),
+            velocities=torch.stack([item.objects.velocity for item in beliefs], dim=1),
+            orientations=torch.stack([item.objects.orientation for item in beliefs], dim=1),
+            motion_mode_logits=torch.stack(
+                [item.objects.motion_mode_logits for item in beliefs], dim=1
+            ),
+            fast_log_variance=torch.stack(
+                [item.objects.fast_log_variance for item in beliefs], dim=1
+            ),
+            active_mask=torch.stack([item.objects.active for item in beliefs], dim=1),
+            event_logits=torch.stack(event_values, dim=1),
+            auxiliary={
+                "hypothesis_axis_index": torch.stack(choice_values, dim=1),
+                "hypothesis_axis_supported": torch.stack(supported_values, dim=1),
+                "hypothesis_axis_support_count": torch.stack(support_count_values, dim=1),
+                "hypothesis_axis_evidence_age_seconds": torch.stack(age_values, dim=1),
+                "hypothesis_axis_observability": torch.stack(observability_values, dim=1),
+                "hypothesis_axis_predictive_variance": torch.stack(
+                    predictive_variance_values, dim=1
+                ),
+                "hypothesis_axis_confidence_margin": torch.stack(confidence_values, dim=1),
+                "hypothesis_interaction_regime": torch.stack(regime_values, dim=1),
+                "hypothesis_composed_candidate_step_count": torch.stack(
+                    candidate_step_count_values, dim=1
+                ),
+                "hypothesis_composed_fallback_step_count": torch.stack(
+                    fallback_step_count_values, dim=1
+                ),
+                "hypothesis_composed_total_step_count": torch.stack(total_step_count_values, dim=1),
+                "hypothesis_composed_regime_step_count": torch.stack(
+                    regime_step_count_values, dim=1
+                ),
+                "hypothesis_composition_grid_fallback": torch.zeros_like(
+                    torch.stack(supported_values, dim=1), dtype=torch.bool
+                ),
+                "hypothesis_rollout_candidate_indices": torch.arange(
+                    candidate_count,
+                    device=belief.device,
+                    dtype=torch.int64,
+                ),
+            },
+        ).validate()
 
     def predict(
         self, belief: WorldBelief, query_times: Tensor | Sequence[float]
@@ -1604,6 +2628,8 @@ class RuntimeHypothesisController:
             offsets = offsets.unsqueeze(0).expand(belief.batch_size, -1)
         elif offsets.ndim != 2 or offsets.shape[0] != belief.batch_size:
             raise ValueError("query_times must have shape [T] or [B,T]")
+        if self.composition_step_seconds is not None:
+            return self._predict_composed(belief, offsets)
         choices = torch.zeros(
             belief.batch_size,
             offsets.shape[1],
@@ -1613,22 +2639,90 @@ class RuntimeHypothesisController:
             dtype=torch.int64,
         )
         supported = torch.zeros_like(choices, dtype=torch.bool)
+        support_count = torch.zeros_like(choices, dtype=torch.int64)
+        age_seconds = torch.zeros_like(choices, dtype=belief.dtype)
+        observability = torch.zeros_like(choices, dtype=belief.dtype)
+        predictive_variance = torch.zeros_like(choices, dtype=belief.dtype)
+        confidence_margin = torch.zeros_like(choices, dtype=belief.dtype)
+        query_regime = torch.full(
+            choices.shape[:3],
+            int(HypothesisRegime.FREE),
+            device=belief.device,
+            dtype=torch.int64,
+        )
+        learned: BeliefTrajectory | None = None
+        if self.local_applicability_enabled:
+            learned = self.pool.rollout_engine.rollout_dynamics(
+                (self.pool.dynamics_models[0],),
+                belief,
+                query_times,
+            )[0]
+            query_regime = self._trajectory_regime(belief, learned)
         for horizon, pool in zip(self.evidence_horizons_seconds, self.pools, strict=True):
             if pool.last_selection is None:
                 continue
-            horizon_choices = pool.selected_entity_axis_index(belief)
             supported_queries = (offsets - float(horizon)).abs() <= self.timestamp_tolerance_seconds
-            assert pool.entity_axis_evidence_seen is not None
-            for axis in self.axis_independent_axes:
-                axis_supported = supported_queries.unsqueeze(-1) & pool.entity_axis_evidence_seen[
-                    :, :, axis
-                ].unsqueeze(1)
-                choices[..., axis] = torch.where(
-                    axis_supported,
-                    horizon_choices[:, :, axis].unsqueeze(1),
-                    choices[..., axis],
-                )
-                supported[..., axis] = supported[..., axis] | axis_supported
+            if self.local_applicability_enabled:
+                for query_index in range(offsets.shape[1]):
+                    applicability = pool.selected_entity_axis_applicability(
+                        belief,
+                        entity_regime=query_regime[:, query_index],
+                        current_timestamp=belief.timestamp,
+                        minimum_support_count=self.minimum_support_count,
+                        maximum_age_seconds=self.maximum_evidence_age_seconds,
+                        minimum_observability=self.minimum_observability,
+                        minimum_confidence_margin=self.minimum_confidence_margin,
+                        candidate_regime_mask=self.candidate_regime_mask.to(belief.device),
+                    )
+                    query_supported = supported_queries[:, query_index].view(-1, 1, 1)
+                    for axis in self.axis_independent_axes:
+                        axis_supported = (
+                            query_supported[..., 0] & applicability.supported[..., axis]
+                        )
+                        choices[:, query_index, :, axis] = torch.where(
+                            axis_supported,
+                            applicability.selected_index[..., axis],
+                            choices[:, query_index, :, axis],
+                        )
+                        supported[:, query_index, :, axis] |= axis_supported
+                        support_count[:, query_index, :, axis] = torch.where(
+                            axis_supported,
+                            applicability.support_count[..., axis],
+                            support_count[:, query_index, :, axis],
+                        )
+                        age_seconds[:, query_index, :, axis] = torch.where(
+                            axis_supported,
+                            applicability.age_seconds[..., axis],
+                            age_seconds[:, query_index, :, axis],
+                        )
+                        observability[:, query_index, :, axis] = torch.where(
+                            axis_supported,
+                            applicability.observability[..., axis],
+                            observability[:, query_index, :, axis],
+                        )
+                        predictive_variance[:, query_index, :, axis] = torch.where(
+                            axis_supported,
+                            applicability.predictive_variance[..., axis],
+                            predictive_variance[:, query_index, :, axis],
+                        )
+                        confidence_margin[:, query_index, :, axis] = torch.where(
+                            axis_supported,
+                            applicability.confidence_margin[..., axis],
+                            confidence_margin[:, query_index, :, axis],
+                        )
+            else:
+                horizon_choices = pool.selected_entity_axis_index(belief)
+                assert pool.entity_axis_evidence_seen is not None
+                for axis in self.axis_independent_axes:
+                    axis_supported = supported_queries.unsqueeze(
+                        -1
+                    ) & pool.entity_axis_evidence_seen[:, :, axis].unsqueeze(1)
+                    choices[..., axis] = torch.where(
+                        axis_supported,
+                        horizon_choices[:, :, axis].unsqueeze(1),
+                        choices[..., axis],
+                    )
+                    supported[..., axis] = supported[..., axis] | axis_supported
         # The forecast retains learned lifecycle, event, identity, and
         # uncertainty outputs.  Only candidates selected for configured axes
         # need a fresh long-horizon rollout.  In the common learned-selection
@@ -1641,12 +2735,27 @@ class RuntimeHypothesisController:
                 int(index) for index in choices[..., axis].detach().cpu().reshape(-1).tolist()
             )
         ordered_indices = tuple(sorted(candidate_indices))
-        trajectories = self.pool.rollout_engine.rollout_dynamics(
-            tuple(self.pool.dynamics_models[index] for index in ordered_indices),
-            belief,
-            query_times,
-        )
-        learned = trajectories[0]
+        if learned is None:
+            trajectories = self.pool.rollout_engine.rollout_dynamics(
+                tuple(self.pool.dynamics_models[index] for index in ordered_indices),
+                belief,
+                query_times,
+            )
+            learned = trajectories[0]
+        else:
+            alternative_models = tuple(
+                self.pool.dynamics_models[index] for index in ordered_indices if index != 0
+            )
+            alternatives = (
+                self.pool.rollout_engine.rollout_dynamics(
+                    alternative_models,
+                    belief,
+                    query_times,
+                )
+                if alternative_models
+                else []
+            )
+            trajectories = [learned, *alternatives]
         positions = learned.positions.clone()
         velocities = learned.velocities.clone()
         fast_log_variance = learned.fast_log_variance.clone()
@@ -1711,6 +2820,15 @@ class RuntimeHypothesisController:
                 **learned.auxiliary,
                 "hypothesis_axis_index": choices.detach().clone(),
                 "hypothesis_axis_supported": supported.detach().clone(),
+                "hypothesis_axis_support_count": support_count.detach().clone(),
+                "hypothesis_axis_evidence_age_seconds": age_seconds.detach().clone(),
+                "hypothesis_axis_observability": observability.detach().clone(),
+                "hypothesis_axis_predictive_variance": predictive_variance.detach().clone(),
+                "hypothesis_axis_confidence_margin": confidence_margin.detach().clone(),
+                "hypothesis_interaction_regime": query_regime.detach().clone(),
+                "hypothesis_composition_grid_fallback": torch.zeros_like(
+                    supported, dtype=torch.bool
+                ),
                 "hypothesis_rollout_candidate_indices": torch.tensor(
                     ordered_indices,
                     dtype=torch.int64,

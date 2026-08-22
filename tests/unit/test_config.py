@@ -125,6 +125,59 @@ def test_axis_composition_is_configured_only_for_attention_pilot() -> None:
     assert not attention.runtime.hypothesis_pool_enabled
     assert attention.runtime.hypothesis_evidence_horizons_seconds == (0.05,)
     assert attention.runtime.hypothesis_axis_independent_axes == (0,)
+    assert not attention.runtime.hypothesis_local_applicability_enabled
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        "runtime.hypothesis_local_applicability_enabled=1",
+        "runtime.hypothesis_minimum_support_count=0",
+        "runtime.hypothesis_minimum_support_count=true",
+        "runtime.hypothesis_minimum_support_count=1.5",
+        "runtime.hypothesis_maximum_evidence_age_seconds=-1",
+        "runtime.hypothesis_maximum_evidence_age_seconds=true",
+        "runtime.hypothesis_maximum_evidence_age_seconds=not-a-number",
+        "runtime.hypothesis_minimum_observability=1.1",
+        "runtime.hypothesis_minimum_observability=false",
+        "runtime.hypothesis_minimum_confidence_margin=1.1",
+        "runtime.hypothesis_minimum_confidence_margin=true",
+        "runtime.hypothesis_robust_influence_delta=-1",
+        "runtime.hypothesis_robust_influence_delta=true",
+        "runtime.hypothesis_composition_step_seconds=-1",
+        "runtime.hypothesis_composition_step_seconds=0.05",
+    ],
+)
+def test_runtime_hypothesis_applicability_controls_are_strict(override: str) -> None:
+    with pytest.raises(ValueError):
+        load_config(CONFIG_DIR / "toy_smoke.yaml", overrides=[override])
+
+
+def test_runtime_hypothesis_composition_step_must_have_matching_local_evidence() -> None:
+    config = load_config(
+        CONFIG_DIR / "toy_smoke.yaml",
+        overrides=[
+            "runtime.hypothesis_local_applicability_enabled=true",
+            "runtime.hypothesis_composition_step_seconds=0.05",
+        ],
+    )
+    assert config.runtime.hypothesis_composition_step_seconds == pytest.approx(0.05)
+    with pytest.raises(ValueError, match="match a supported evidence horizon"):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=[
+                "runtime.hypothesis_local_applicability_enabled=true",
+                "runtime.hypothesis_composition_step_seconds=0.04",
+            ],
+        )
+    with pytest.raises(ValueError, match="null or finite and positive"):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=[
+                "runtime.hypothesis_local_applicability_enabled=true",
+                "runtime.hypothesis_composition_step_seconds=true",
+            ],
+        )
 
 
 def test_simulator_scenario_mixture_is_typed_and_validated() -> None:

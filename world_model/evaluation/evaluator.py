@@ -102,6 +102,14 @@ _RUNTIME_HYPOTHESIS_CANDIDATES = (
     "damped_constant_velocity",
     "ballistic_contact",
 )
+_RUNTIME_HYPOTHESIS_REGIMES = (
+    "free",
+    "ground_contact",
+    "pair_contact",
+    "collision",
+    "occluded",
+    "externally_actuated",
+)
 
 
 def _primary_physical_metrics_hash_exclusion_declaration() -> dict[str, object]:
@@ -166,6 +174,13 @@ def enable_runtime_hypothesis_pool(
         axis_independent_axes=runtime.hypothesis_axis_independent_axes,
         axis_prior_strength=runtime.hypothesis_axis_prior_strength,
         timestamp_tolerance_seconds=runtime.hypothesis_timestamp_tolerance_seconds,
+        local_applicability_enabled=runtime.hypothesis_local_applicability_enabled,
+        minimum_support_count=runtime.hypothesis_minimum_support_count,
+        maximum_evidence_age_seconds=runtime.hypothesis_maximum_evidence_age_seconds,
+        minimum_observability=runtime.hypothesis_minimum_observability,
+        minimum_confidence_margin=runtime.hypothesis_minimum_confidence_margin,
+        robust_influence_delta=runtime.hypothesis_robust_influence_delta,
+        composition_step_seconds=runtime.hypothesis_composition_step_seconds,
     )
 
 
@@ -385,6 +400,70 @@ def _require_finite_trajectory(
             torch.isfinite(value).all()
         ):
             raise FloatingPointError(f"{context} trajectory tensor {name} contains NaN or Inf")
+
+
+def _validate_runtime_hypothesis_composition_counts(
+    *,
+    local_shape: tuple[int, ...],
+    candidate_count: Tensor,
+    fallback_count: Tensor,
+    total_count: Tensor,
+    regime_count: Tensor,
+    independent_axes: tuple[int, ...],
+    candidate_size: int,
+    regime_size: int,
+) -> None:
+    expected_candidate_shape = (*local_shape, candidate_size)
+    if (
+        candidate_count.shape != expected_candidate_shape
+        or candidate_count.dtype != torch.int64
+        or torch.any(candidate_count < 0)
+    ):
+        raise RuntimeError("runtime hypothesis composed candidate counts are invalid")
+    for name, value in (("fallback", fallback_count), ("total", total_count)):
+        if value.shape != local_shape or value.dtype != torch.int64 or torch.any(value < 0):
+            raise RuntimeError(f"runtime hypothesis composed {name} counts are invalid")
+    if not torch.equal(candidate_count.sum(dim=-1), total_count):
+        raise RuntimeError(
+            "runtime hypothesis candidate counts must partition total composed steps"
+        )
+    if torch.any(fallback_count > candidate_count[..., 0]):
+        raise RuntimeError(
+            "runtime hypothesis fallback count must be contained in the learned-candidate count"
+        )
+    expected_regime_shape = (local_shape[0], local_shape[1], local_shape[2], regime_size)
+    if (
+        regime_count.shape != expected_regime_shape
+        or regime_count.dtype != torch.int64
+        or torch.any(regime_count < 0)
+    ):
+        raise RuntimeError("runtime hypothesis composed regime counts are invalid")
+    regime_total = regime_count.sum(dim=-1)
+    for axis in independent_axes:
+        if not torch.equal(regime_total, total_count[..., axis]):
+            raise RuntimeError(
+                "runtime hypothesis regime counts must partition total composed steps"
+            )
+
+
+def _runtime_hypothesis_learned_fallback_diagnostics(
+    controller: object,
+    belief: WorldBelief,
+    trajectory: BeliefTrajectory,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Describe a learned fallback before any delayed selector evidence exists."""
+
+    classify_regime = getattr(controller, "_trajectory_regime", None)
+    if not callable(classify_regime):
+        raise RuntimeError("runtime hypothesis controller cannot classify interaction regimes")
+    axis_indices = torch.zeros(
+        (*trajectory.active_mask.shape, 3),
+        device=belief.device,
+        dtype=torch.int64,
+    )
+    axis_supported = torch.zeros_like(axis_indices, dtype=torch.bool)
+    interaction_regime = classify_regime(belief, trajectory)
+    return axis_indices, axis_supported, interaction_regime
 
 
 def _require_finite_measurements(measurements: Any, *, context: str) -> None:
@@ -1627,6 +1706,36 @@ def _evaluate_checkpoint_impl(
         axis: 0 for axis in config.runtime.hypothesis_axis_independent_axes
     }
     runtime_hypothesis_horizon_axis_support_count: dict[tuple[str, int], tuple[int, int]] = {}
+    runtime_hypothesis_axis_composed_candidate_step_count = {
+        axis: [0 for _ in _RUNTIME_HYPOTHESIS_CANDIDATES]
+        for axis in config.runtime.hypothesis_axis_independent_axes
+    }
+    runtime_hypothesis_axis_composed_fallback_step_count = {
+        axis: 0 for axis in config.runtime.hypothesis_axis_independent_axes
+    }
+    runtime_hypothesis_axis_composed_total_step_count = {
+        axis: 0 for axis in config.runtime.hypothesis_axis_independent_axes
+    }
+    runtime_hypothesis_axis_composition_grid_fallback_count = {
+        axis: 0 for axis in config.runtime.hypothesis_axis_independent_axes
+    }
+    runtime_hypothesis_regime_step_count = [0 for _ in _RUNTIME_HYPOTHESIS_REGIMES]
+    runtime_hypothesis_regime_query_count = [0 for _ in _RUNTIME_HYPOTHESIS_REGIMES]
+    runtime_hypothesis_axis_evidence_summary = {
+        axis: {
+            "cell_count": 0,
+            "support_count_sum": 0,
+            "age_seconds_sum": 0.0,
+            "age_seconds_max": 0.0,
+            "observability_sum": 0.0,
+            "observability_min": 1.0,
+            "predictive_variance_sum": 0.0,
+            "predictive_variance_max": 0.0,
+            "confidence_margin_sum": 0.0,
+            "confidence_margin_min": 1.0,
+        }
+        for axis in config.runtime.hypothesis_axis_independent_axes
+    }
     forecast_target_count: dict[str, int] = {}
     forecast_tracked_count: dict[str, int] = {}
     forecast_active_count: dict[str, int] = {}
@@ -2096,23 +2205,24 @@ def _evaluate_checkpoint_impl(
                     if runtime_hypothesis_pool:
                         axis_indices = trajectory.auxiliary.get("hypothesis_axis_index")
                         axis_supported = trajectory.auxiliary.get("hypothesis_axis_supported")
+                        interaction_regime = trajectory.auxiliary.get(
+                            "hypothesis_interaction_regime"
+                        )
                         # Before the first exact-due RGB observation there is
                         # deliberately no selector evidence, and normal
                         # runtime falls back to the learned rollout. Record
                         # that explicit default rather than pretending an
                         # axis-selection tensor already exists.
                         if axis_indices is None:
-                            axis_indices = torch.zeros(
-                                batch_size,
-                                len(event_query_plan.query_seconds),
-                                belief.objects.max_objects,
-                                3,
-                                device=belief.device,
-                                dtype=torch.int64,
-                            )
-                            axis_supported = torch.zeros_like(
+                            assert model.hypothesis_controller is not None
+                            (
                                 axis_indices,
-                                dtype=torch.bool,
+                                axis_supported,
+                                interaction_regime,
+                            ) = _runtime_hypothesis_learned_fallback_diagnostics(
+                                model.hypothesis_controller,
+                                belief,
+                                trajectory,
                             )
                         if isinstance(axis_indices, Tensor) and axis_indices.shape == (
                             batch_size,
@@ -2189,15 +2299,297 @@ def _evaluate_checkpoint_impl(
                             or torch.any(axis_indices >= len(_RUNTIME_HYPOTHESIS_CANDIDATES))
                         ):
                             raise RuntimeError("runtime hypothesis axis index is invalid")
+                        if (
+                            not isinstance(interaction_regime, Tensor)
+                            or interaction_regime.shape != axis_indices.shape[:3]
+                            or interaction_regime.dtype != torch.int64
+                            or torch.any(interaction_regime < 0)
+                            or torch.any(interaction_regime >= len(_RUNTIME_HYPOTHESIS_REGIMES))
+                        ):
+                            raise RuntimeError(
+                                "runtime hypothesis interaction regime must be int64 [B,Q,N]; "
+                                f"got {getattr(interaction_regime, 'shape', None)} / "
+                                f"{getattr(interaction_regime, 'dtype', None)} for "
+                                f"{axis_indices.shape[:3]}"
+                            )
+                        axis_support_count = trajectory.auxiliary.get(
+                            "hypothesis_axis_support_count"
+                        )
+                        axis_age = trajectory.auxiliary.get("hypothesis_axis_evidence_age_seconds")
+                        axis_observability = trajectory.auxiliary.get(
+                            "hypothesis_axis_observability"
+                        )
+                        axis_predictive_variance = trajectory.auxiliary.get(
+                            "hypothesis_axis_predictive_variance"
+                        )
+                        axis_confidence = trajectory.auxiliary.get(
+                            "hypothesis_axis_confidence_margin"
+                        )
+                        composed_candidate_count = trajectory.auxiliary.get(
+                            "hypothesis_composed_candidate_step_count"
+                        )
+                        composed_fallback_count = trajectory.auxiliary.get(
+                            "hypothesis_composed_fallback_step_count"
+                        )
+                        composed_total_count = trajectory.auxiliary.get(
+                            "hypothesis_composed_total_step_count"
+                        )
+                        composed_regime_count = trajectory.auxiliary.get(
+                            "hypothesis_composed_regime_step_count"
+                        )
+                        composition_grid_fallback = trajectory.auxiliary.get(
+                            "hypothesis_composition_grid_fallback"
+                        )
+                        local_shape = axis_indices.shape
+                        applicability_values = (
+                            axis_support_count,
+                            axis_age,
+                            axis_observability,
+                            axis_predictive_variance,
+                            axis_confidence,
+                        )
+                        if any(value is not None for value in applicability_values) and not all(
+                            isinstance(value, Tensor) for value in applicability_values
+                        ):
+                            raise RuntimeError(
+                                "runtime hypothesis applicability tensors are incomplete"
+                            )
+                        if axis_support_count is None:
+                            axis_support_count = torch.zeros_like(axis_indices)
+                            axis_age = torch.zeros_like(
+                                axis_indices, dtype=trajectory.positions.dtype
+                            )
+                            axis_observability = torch.zeros_like(
+                                axis_indices, dtype=trajectory.positions.dtype
+                            )
+                            axis_predictive_variance = torch.zeros_like(
+                                axis_indices, dtype=trajectory.positions.dtype
+                            )
+                            axis_confidence = torch.zeros_like(
+                                axis_indices, dtype=trajectory.positions.dtype
+                            )
+                        if composition_grid_fallback is None:
+                            composition_grid_fallback = torch.zeros_like(
+                                axis_supported, dtype=torch.bool
+                            )
+                        if (
+                            not isinstance(composition_grid_fallback, Tensor)
+                            or composition_grid_fallback.shape != local_shape
+                            or composition_grid_fallback.dtype != torch.bool
+                        ):
+                            raise RuntimeError(
+                                "runtime hypothesis composition grid fallback must be boolean "
+                                "[B,Q,N,3]"
+                            )
+                        if (
+                            not isinstance(axis_support_count, Tensor)
+                            or axis_support_count.shape != local_shape
+                            or axis_support_count.dtype != torch.int64
+                        ):
+                            raise RuntimeError(
+                                "runtime hypothesis support count must be int64 [B,Q,N,3]"
+                            )
+                        for name, value in (
+                            ("evidence age", axis_age),
+                            ("observability", axis_observability),
+                            ("predictive variance", axis_predictive_variance),
+                            ("confidence margin", axis_confidence),
+                        ):
+                            if (
+                                not isinstance(value, Tensor)
+                                or value.shape != local_shape
+                                or not value.is_floating_point()
+                                or not torch.isfinite(value).all()
+                                or torch.any(value < 0)
+                            ):
+                                raise RuntimeError(
+                                    f"runtime hypothesis {name} must be finite nonnegative [B,Q,N,3]"
+                                )
+                        composition_values = (
+                            composed_candidate_count,
+                            composed_fallback_count,
+                            composed_total_count,
+                            composed_regime_count,
+                        )
+                        if any(value is not None for value in composition_values):
+                            if not all(isinstance(value, Tensor) for value in composition_values):
+                                raise RuntimeError(
+                                    "runtime hypothesis composed count tensors are incomplete"
+                                )
+                            assert isinstance(composed_candidate_count, Tensor)
+                            assert isinstance(composed_fallback_count, Tensor)
+                            assert isinstance(composed_total_count, Tensor)
+                            assert isinstance(composed_regime_count, Tensor)
+                            _validate_runtime_hypothesis_composition_counts(
+                                local_shape=local_shape,
+                                candidate_count=composed_candidate_count,
+                                fallback_count=composed_fallback_count,
+                                total_count=composed_total_count,
+                                regime_count=composed_regime_count,
+                                independent_axes=config.runtime.hypothesis_axis_independent_axes,
+                                candidate_size=len(_RUNTIME_HYPOTHESIS_CANDIDATES),
+                                regime_size=len(_RUNTIME_HYPOTHESIS_REGIMES),
+                            )
                         runtime_hypothesis_forecast_anchor_count += batch_size
                         target_axis_indices = event_query_plan.select_target_endpoints(axis_indices)
                         target_axis_supported = event_query_plan.select_target_endpoints(
                             axis_supported
                         )
+                        target_interaction_regime = event_query_plan.select_target_endpoints(
+                            interaction_regime
+                        )
+                        target_axis_support_count = event_query_plan.select_target_endpoints(
+                            axis_support_count
+                        )
+                        target_axis_age = event_query_plan.select_target_endpoints(axis_age)
+                        target_axis_observability = event_query_plan.select_target_endpoints(
+                            axis_observability
+                        )
+                        target_axis_predictive_variance = event_query_plan.select_target_endpoints(
+                            axis_predictive_variance
+                        )
+                        target_axis_confidence = event_query_plan.select_target_endpoints(
+                            axis_confidence
+                        )
+                        target_composed_candidate_count = (
+                            event_query_plan.select_target_endpoints(composed_candidate_count)
+                            if isinstance(composed_candidate_count, Tensor)
+                            else None
+                        )
+                        target_composed_fallback_count = (
+                            event_query_plan.select_target_endpoints(composed_fallback_count)
+                            if isinstance(composed_fallback_count, Tensor)
+                            else None
+                        )
+                        target_composed_total_count = (
+                            event_query_plan.select_target_endpoints(composed_total_count)
+                            if isinstance(composed_total_count, Tensor)
+                            else None
+                        )
+                        target_composed_regime_count = (
+                            event_query_plan.select_target_endpoints(composed_regime_count)
+                            if isinstance(composed_regime_count, Tensor)
+                            else None
+                        )
+                        target_composition_grid_fallback = event_query_plan.select_target_endpoints(
+                            composition_grid_fallback
+                        )
                         target_hypothesis_active = event_query_plan.select_target_endpoints(
                             trajectory.active_mask
                         )
+                        query_regime_counts = (
+                            torch.bincount(
+                                target_interaction_regime.masked_select(target_hypothesis_active),
+                                minlength=len(_RUNTIME_HYPOTHESIS_REGIMES),
+                            )
+                            .detach()
+                            .cpu()
+                            .tolist()
+                        )
+                        for regime_index, count in enumerate(query_regime_counts):
+                            runtime_hypothesis_regime_query_count[regime_index] += int(count)
+                        if target_composed_regime_count is not None:
+                            regime_counts = (
+                                target_composed_regime_count
+                                * target_hypothesis_active.unsqueeze(-1).to(torch.int64)
+                            ).sum(dim=(0, 1, 2))
+                            for regime_index, count in enumerate(
+                                regime_counts.detach().cpu().tolist()
+                            ):
+                                runtime_hypothesis_regime_step_count[regime_index] += int(count)
                         for axis in config.runtime.hypothesis_axis_independent_axes:
+                            runtime_hypothesis_axis_composition_grid_fallback_count[axis] += int(
+                                (
+                                    target_composition_grid_fallback[..., axis]
+                                    & target_hypothesis_active
+                                )
+                                .sum()
+                                .detach()
+                                .cpu()
+                            )
+                            evidence_cells = (
+                                target_axis_supported[..., axis] & target_hypothesis_active
+                            )
+                            summary = runtime_hypothesis_axis_evidence_summary[axis]
+                            cell_count = int(evidence_cells.sum().detach().cpu())
+                            summary["cell_count"] += cell_count
+                            if cell_count:
+                                summary["support_count_sum"] += int(
+                                    target_axis_support_count[..., axis]
+                                    .masked_select(evidence_cells)
+                                    .sum()
+                                    .detach()
+                                    .cpu()
+                                )
+                                age_values = target_axis_age[..., axis].masked_select(
+                                    evidence_cells
+                                )
+                                observability_values = target_axis_observability[
+                                    ..., axis
+                                ].masked_select(evidence_cells)
+                                confidence_values = target_axis_confidence[..., axis].masked_select(
+                                    evidence_cells
+                                )
+                                predictive_variance_values = target_axis_predictive_variance[
+                                    ..., axis
+                                ].masked_select(evidence_cells)
+                                summary["age_seconds_sum"] += float(age_values.sum().detach().cpu())
+                                summary["age_seconds_max"] = max(
+                                    float(summary["age_seconds_max"]),
+                                    float(age_values.max().detach().cpu()),
+                                )
+                                summary["observability_sum"] += float(
+                                    observability_values.sum().detach().cpu()
+                                )
+                                summary["observability_min"] = min(
+                                    float(summary["observability_min"]),
+                                    float(observability_values.min().detach().cpu()),
+                                )
+                                summary["predictive_variance_sum"] += float(
+                                    predictive_variance_values.sum().detach().cpu()
+                                )
+                                summary["predictive_variance_max"] = max(
+                                    float(summary["predictive_variance_max"]),
+                                    float(predictive_variance_values.max().detach().cpu()),
+                                )
+                                summary["confidence_margin_sum"] += float(
+                                    confidence_values.sum().detach().cpu()
+                                )
+                                summary["confidence_margin_min"] = min(
+                                    float(summary["confidence_margin_min"]),
+                                    float(confidence_values.min().detach().cpu()),
+                                )
+                            if target_composed_candidate_count is not None:
+                                composed_counts = (
+                                    target_composed_candidate_count[..., axis, :]
+                                    * target_hypothesis_active.unsqueeze(-1).to(torch.int64)
+                                ).sum(dim=(0, 1, 2))
+                                for candidate_index, count in enumerate(
+                                    composed_counts.detach().cpu().tolist()
+                                ):
+                                    runtime_hypothesis_axis_composed_candidate_step_count[axis][
+                                        candidate_index
+                                    ] += int(count)
+                                assert target_composed_fallback_count is not None
+                                assert target_composed_total_count is not None
+                                runtime_hypothesis_axis_composed_fallback_step_count[axis] += int(
+                                    (
+                                        target_composed_fallback_count[..., axis]
+                                        * target_hypothesis_active.to(torch.int64)
+                                    )
+                                    .sum()
+                                    .detach()
+                                    .cpu()
+                                )
+                                runtime_hypothesis_axis_composed_total_step_count[axis] += int(
+                                    (
+                                        target_composed_total_count[..., axis]
+                                        * target_hypothesis_active.to(torch.int64)
+                                    )
+                                    .sum()
+                                    .detach()
+                                    .cpu()
+                                )
                             supported_count = int(
                                 (target_axis_supported[..., axis] & target_hypothesis_active)
                                 .sum()
@@ -2749,6 +3141,56 @@ def _evaluate_checkpoint_impl(
             metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_fallback_count"] = float(
                 runtime_hypothesis_axis_fallback_count[axis]
             )
+            for candidate, count in zip(
+                _RUNTIME_HYPOTHESIS_CANDIDATES,
+                runtime_hypothesis_axis_composed_candidate_step_count[axis],
+                strict=True,
+            ):
+                metrics[
+                    f"runtime_hypothesis_axis_{'xyz'[axis]}_{candidate}_composed_step_count"
+                ] = float(count)
+            metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_composed_fallback_step_count"] = float(
+                runtime_hypothesis_axis_composed_fallback_step_count[axis]
+            )
+            metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_composed_total_step_count"] = float(
+                runtime_hypothesis_axis_composed_total_step_count[axis]
+            )
+            metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_composition_grid_fallback_count"] = (
+                float(runtime_hypothesis_axis_composition_grid_fallback_count[axis])
+            )
+            summary = runtime_hypothesis_axis_evidence_summary[axis]
+            evidence_cell_count = int(summary["cell_count"])
+            prefix = f"runtime_hypothesis_axis_{'xyz'[axis]}_evidence"
+            metrics[f"{prefix}_cell_count"] = float(evidence_cell_count)
+            metrics[f"{prefix}_support_count_sum"] = float(summary["support_count_sum"])
+            metrics[f"{prefix}_age_seconds_sum"] = float(summary["age_seconds_sum"])
+            metrics[f"{prefix}_age_seconds_max"] = (
+                float(summary["age_seconds_max"]) if evidence_cell_count else None
+            )
+            metrics[f"{prefix}_observability_sum"] = float(summary["observability_sum"])
+            metrics[f"{prefix}_observability_min"] = (
+                float(summary["observability_min"]) if evidence_cell_count else None
+            )
+            metrics[f"{prefix}_predictive_variance_sum"] = float(summary["predictive_variance_sum"])
+            metrics[f"{prefix}_predictive_variance_max"] = (
+                float(summary["predictive_variance_max"]) if evidence_cell_count else None
+            )
+            metrics[f"{prefix}_confidence_margin_sum"] = float(summary["confidence_margin_sum"])
+            metrics[f"{prefix}_confidence_margin_min"] = (
+                float(summary["confidence_margin_min"]) if evidence_cell_count else None
+            )
+        for regime, count in zip(
+            _RUNTIME_HYPOTHESIS_REGIMES,
+            runtime_hypothesis_regime_step_count,
+            strict=True,
+        ):
+            metrics[f"runtime_hypothesis_regime_{regime}_composed_step_count"] = float(count)
+        for regime, count in zip(
+            _RUNTIME_HYPOTHESIS_REGIMES,
+            runtime_hypothesis_regime_query_count,
+            strict=True,
+        ):
+            metrics[f"runtime_hypothesis_regime_{regime}_query_count"] = float(count)
         for (horizon, axis), counts in sorted(
             runtime_hypothesis_horizon_axis_selection_count.items()
         ):
@@ -2941,7 +3383,7 @@ def _evaluate_checkpoint_impl(
     runtime_hypothesis_policy: dict[str, Any] | None = None
     if runtime_hypothesis_pool:
         runtime_hypothesis_policy = {
-            "policy_version": "evidence_bounded_entity_axis_horizon_v1",
+            "policy_version": "evidence_bounded_entity_axis_regime_horizon_v2",
             "candidates": [
                 {"name": "learned", "parameters": {}},
                 {"name": "constant_velocity", "parameters": {"damping": 0.0}},
@@ -2960,9 +3402,22 @@ def _evaluate_checkpoint_impl(
             "evidence_decay": config.runtime.hypothesis_evidence_decay,
             "temperature": 1.0,
             "score": "gaussian_nll_predictive_plus_rgb_measurement_variance",
-            "selection_locality": "persistent_entity_axis_exact_horizon",
+            "selection_locality": "persistent_entity_axis_interaction_regime_exact_horizon",
+            "local_applicability_enabled": (config.runtime.hypothesis_local_applicability_enabled),
+            "minimum_support_count": config.runtime.hypothesis_minimum_support_count,
+            "maximum_evidence_age_seconds": (
+                config.runtime.hypothesis_maximum_evidence_age_seconds
+            ),
+            "minimum_observability": config.runtime.hypothesis_minimum_observability,
+            "minimum_confidence_margin": (config.runtime.hypothesis_minimum_confidence_margin),
+            "robust_influence_delta": config.runtime.hypothesis_robust_influence_delta,
+            "composition_step_seconds": config.runtime.hypothesis_composition_step_seconds,
             "unsupported_query_policy": "learned_fallback",
-            "composition": "coherent_axis_state_endpoint_splice_diagnostic_only",
+            "composition": (
+                "bounded_short_step_coherent_state"
+                if config.runtime.hypothesis_composition_step_seconds is not None
+                else "coherent_axis_state_endpoint_splice_diagnostic_only"
+            ),
             "timestamp_tolerance_seconds": (config.runtime.hypothesis_timestamp_tolerance_seconds),
         }
         runtime_hypothesis_policy["fingerprint_sha256"] = hashlib.sha256(
