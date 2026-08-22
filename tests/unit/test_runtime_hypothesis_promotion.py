@@ -603,12 +603,14 @@ def _complete_suite_comparisons(
 
 def test_runtime_hypothesis_suite_requires_all_four_comprehensive_pairs(tmp_path: Path) -> None:
     captures, config, source = _complete_suite_comparisons(tmp_path)
+    raw_capture_sink: list[CapturedReport] = []
 
     result = aggregate_comparisons(
         captures,
         config=config,
         current_source=source,
         expected_device="cpu",
+        _raw_capture_sink=raw_capture_sink,
     )
 
     assert result["schema_version"] == "runtime_hypothesis_comprehensive_suite_v1"
@@ -619,6 +621,10 @@ def test_runtime_hypothesis_suite_requires_all_four_comprehensive_pairs(tmp_path
         "test",
         "ood",
     ]
+    assert len(raw_capture_sink) == 8
+    assert len({capture.path for capture in raw_capture_sink}) == 8
+    for capture in raw_capture_sink:
+        capture.assert_path_identity()
 
 
 def test_runtime_hypothesis_suite_rejects_one_adverse_or_misaligned_pair(tmp_path: Path) -> None:
