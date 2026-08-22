@@ -33,6 +33,12 @@ specification `1.53`, and runtime-source fingerprint
 It emitted exact candidate/fallback/total and regime partitions; this tiny run
 selected learned for every supported x cell and is wiring evidence only.
 
+The final exact repository gate passed `1196` tests with `17` expected
+backend skips in `482.97s` (`0:08:02`). Whole-tree Ruff check passed, Ruff
+format check reported `221 files already formatted`, isolated compileall over
+runtime/tests/entrypoints/scripts passed, the authoritative version test
+passed `1` in `0.79s`, and `git diff --check` is clean.
+
 Specification 1.53 is not promoted. A source-frozen matched learned-only
 versus regime-local fixed-32 comparison, paired latency, complete guardrails,
 and disjoint RGB-only validation/test/OOD remain pending. Deployment remains

@@ -19,8 +19,9 @@
 - [x] Pass the focused compatibility gate (`381 passed, 3 skipped`), final
   direct selection (`56 passed`), Ruff, compileall, diff check, and one real
   finite RGB-only CPU evaluator run with `0.05`-second composition.
-- [ ] Run the final whole-repository suite and record the post-version runtime
-  fingerprint and evaluator evidence.
+- [x] Run the final whole-repository suite and record the post-version runtime
+  fingerprint and evaluator evidence: `1196 passed, 17 skipped in 482.97s`,
+  whole-tree Ruff/format, compileall, version, and diff gates all pass.
 - [ ] Run a source-frozen fixed-32 learned-only versus regime-local paired
   comparator with full physical, uncertainty, event, identity, support, and
   paired-latency gates.

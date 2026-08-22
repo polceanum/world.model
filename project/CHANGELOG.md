@@ -25,6 +25,11 @@
   real finite RGB-only CPU evaluator run from clean commit `41d2c092...`.
   Its report SHA-256 is `2ded1df2...`; full repository and matched fixed-32
   promotion gates remain pending.
+- Closed the final repository gate: `1196 passed, 17 skipped in 482.97s`
+  (`0:08:02`), whole-tree Ruff check, Ruff format check (`221 files`), isolated
+  compileall, authoritative version test (`1 passed in 0.79s`), and clean diff
+  check. This qualifies source integrity, not runtime-pool accuracy or
+  promotion.
 
 ### 2026-08-21 specification 1.52 axis-gated updater-head repair (pre-launch)
 

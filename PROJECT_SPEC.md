@@ -8250,7 +8250,11 @@ clean commit `41d2c092520aeb2c2c6c302466317e5d9c01f8ac`, and runtime-source fing
 The focused compatibility gate passed `381` tests with `3`
 expected inactive-Aqua MPS skips; after final edge-case additions, the direct
 hypothesis/evaluator selection passed `56` tests. Ruff, compileall, and diff
-checks pass. These are implementation and instrumentation results only.
+checks pass. The final whole-repository gate passed `1196` tests with `17`
+expected backend skips in `482.97s` (`0:08:02`); whole-tree Ruff check,
+format check (`221 files already formatted`), isolated compileall, the version
+contract (`1 passed in 0.79s`), and diff check also pass. These are
+implementation and instrumentation results only.
 Promotion still requires a source-frozen matched learned-only versus
 regime-local fixed-32 comparison, full physical/uncertainty/event/identity
 guardrails, paired latency, and disjoint RGB-only validation/test/OOD evidence.

@@ -27,6 +27,9 @@
 - **Consequences:** The new policy is causal, local, auditable, and bounded,
   while disabled checkpoints retain historical semantics. Focused tests and a
   real one-episode RGB-only CPU run establish implementation integrity only.
+  The final repository gate passed `1196` tests with `17` expected backend
+  skips in `482.97s`; whole-tree Ruff/format, compileall, version, and diff
+  checks pass.
   The learned model remains the runtime default until a matched fixed-32,
   paired-latency, full-guardrail, disjoint RGB-only promotion gate passes.
 
