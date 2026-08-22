@@ -8138,6 +8138,43 @@ before replacement, but the finalized report truthfully records
 themselves are retained byte-for-byte and are the sole numerical input to this
 finalization.
 
+## 246. Long treatment launch and step-128 ownership gate
+
+The frozen treatment arm launched from clean source
+`f08200f44646db6fa84f32de4b5bf538e647f546` as
+`runs/20260822-192031-spec152-axis-gated-3072-treatment`. Its immutable
+initializer is the section-243 artifact, and its step-zero fixed-32 selector,
+current position/velocity, lifecycle, event, calibration, and every declared
+horizon metric match the section-244 common baseline exactly. The active
+closed-loop graph is CPU float32, RGB is the only runtime modality, debug
+oracle is disabled, and custom Torch is `2.9.0a0+gitcbe1a35` with MPS built
+and available for the configured measurement preference.
+
+The durable step-128 `last.pt` has SHA-256
+`c33cdeaf812f40a44d7149747a17e42bd022182ab26a62e0facda70922f8e285`
+and is `12,593,239` bytes. Against the initializer, exactly the six declared
+mean/variance/gate head tensors changed and exactly those six own Adam moments;
+every Adam step is `128`. The other `219` model entries and all four buffers
+remain bit-exact, and all model/optimizer tensors are finite. Persisted
+data-progress is `134` draws for `128` applied updates plus six no-gradient
+retries, satisfying the exact-resume invariant.
+
+Logged applied blocks are exactly steps `8..128` at cadence eight. Every block
+contains all eight scenarios, no nonfinite value, no global clipping, and zero
+perception/interaction gradient. Loss ranges `0.2861376..1.8364884` with mean
+`1.2304651`; applied gradient norm ranges `0.0244227..0.1393826` with mean
+`0.0779922`. Causal trajectory support remains `714..1088`; objective-family
+support is `6..10`; maximum RSS is `1,045,860,352` bytes. Retry draw identities
+are `6,23,39,50,71,117`. They are isolated structurally zero-gradient draws,
+within the declared maximum of 16 retries per update; the later control must
+reproduce their identities or fail paired-protocol qualification.
+
+This is a technical ownership, finiteness, throughput, and exact-resume gate,
+not an accuracy or convergence result. The step-512 and step-1024 fixed-
+manifest selectors remain the first scientific continuation decisions. The
+control arm remains unstarted until the treatment satisfies those declared
+boundaries.
+
 ---
 
 # Closing directive

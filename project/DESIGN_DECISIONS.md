@@ -1,5 +1,31 @@
 # Design decisions
 
+## ADR-163 — Require a durable ownership gate before treatment accuracy gates
+
+- **Date:** 2026-08-22
+- **Status:** accepted and passed at step 128; treatment continues
+- **Context:** The two-update smoke proved wiring but could not establish
+  long-run optimizer ownership, exact-resume counters, sparse no-gradient draw
+  behavior, or memory stability. Starting the paired control before the first
+  durable treatment checkpoint would double compute without proving the
+  treatment remained technically valid.
+- **Decision:** Launch treatment alone from the immutable initializer. Require
+  an exact step-zero baseline match and audit step 128 against the initializer:
+  only the six declared head tensors may change or own Adam state; every other
+  parameter/buffer must remain bit-exact; all state must be finite; Adam steps
+  and data-draw/retry counters must match the checkpoint step. Pin any retry
+  draw identities for eventual control equality. Continue scientifically only
+  to the predeclared fixed selectors at 512 and 1024.
+- **Alternatives considered:** launch both arms concurrently; infer ownership
+  from `requires_grad`; ignore skipped draws; wait until step 512 to discover a
+  technical defect; or interpret early training loss as validation accuracy.
+- **Consequences:** Step-128 checkpoint SHA-256 `c33cdeaf...` passes. Exactly
+  six heads changed and own finite Adam state at step 128; 219 other model
+  entries and four buffers are exact. Progress is `134 = 128 + 6`; retry draws
+  are `6,23,39,50,71,117`. Logged applied blocks are balanced, finite,
+  unclipped, and free of perception/interaction gradient leakage. Treatment
+  continues; control remains pending step-512/1024 scientific evidence.
+
 ## ADR-162 — Treat gate-off fixed-32 evidence as non-vacuity, not a control
 
 - **Date:** 2026-08-21

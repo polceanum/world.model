@@ -265,6 +265,27 @@ forensic limitation is explicit in the report. The completed forward's raw,
 progress, failure, and contract bytes are retained exactly and are the only
 numerical inputs to finalization.
 
+### Active long treatment and step-128 checkpoint
+
+Treatment `runs/20260822-192031-spec152-axis-gated-3072-treatment` is active
+from clean commit `f08200f...`. Its step-zero fixed-32 evidence matches the
+common section-244 baseline exactly. The durable step-128 checkpoint SHA-256
+is `c33cdeaf812f40a44d7149747a17e42bd022182ab26a62e0facda70922f8e285`
+(`12,593,239` bytes).
+
+Checkpoint comparison proves exactly six changed tensors and exactly six Adam
+owners: mean, variance, and gate head weight/bias. All Adam steps are `128`;
+the remaining `219` model entries and four buffers are bit-exact; model and
+optimizer state are finite. Data progress is `134 = 128 + 6` draws. The six
+isolated retry identities are `6,23,39,50,71,117` and must be reproduced by
+the later control.
+
+All 16 logged applied blocks through step 128 contain all eight scenarios,
+finite and unclipped gradients, zero perception/interaction gradient, causal
+trajectory support `714..1088`, objective-family support `6..10`, and RSS at
+most `1,045,860,352` bytes. This is a technical milestone only. Treatment
+continues toward fixed selectors 512 and 1024; control remains unstarted.
+
 ## Specification 1.51 comprehensive promotion evidence — 2026-08-21
 
 The isolated specification-1.51 implementation is review-complete with no

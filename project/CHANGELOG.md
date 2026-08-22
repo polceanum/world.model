@@ -139,6 +139,18 @@
   training, latency, disjoint RGB-only validation/test/OOD, promotion,
   and convergence remain pending. The completed repository/artifact,
   two-update, and common-baseline gates are not accuracy evidence.
+- Launched the long treatment as
+  `runs/20260822-192031-spec152-axis-gated-3072-treatment` from clean
+  `f08200f...`. Step-zero fixed-32 evidence matches the retained common
+  baseline exactly. Its durable step-128 checkpoint (`c33cdeaf...`,
+  `12,593,239` bytes) changes exactly the six declared heads, gives Adam state
+  to exactly those six at step 128, preserves 219 other model entries and four
+  buffers bitwise, and is finite throughout. Exact progress is
+  `134 = 128 + 6`; retry draw IDs `6,23,39,50,71,117` are pinned for later
+  control parity. All 16 logged blocks are scenario-balanced, unclipped, and
+  have zero perception/interaction gradient. This is a technical checkpoint,
+  not accuracy evidence; treatment continues to selectors 512/1024 and the
+  control remains unstarted.
 
 ### 2026-08-21 specification 1.51 final closure
 

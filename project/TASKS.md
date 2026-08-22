@@ -78,6 +78,14 @@
   non-vacuity (`204` physical changes) but not promotion: strict guardrails
   fail `211` gate-off-versus-on and `393` in reverse. Keep it separate from
   the treatment/control pair.
+- [x] Launch the frozen 3072-update treatment and pass its durable step-128
+  ownership gate. Step zero matches the common fixed-32 baseline exactly;
+  `last.pt` SHA-256 `c33cdeaf...` changes only the six declared heads, owns
+  exactly six finite Adam states at step 128, preserves 219 other model entries
+  plus four buffers bitwise, and records `134 = 128 + 6` draw progress. Pin
+  retry draw IDs `6,23,39,50,71,117` for later control parity.
+- [ ] Reach and audit the treatment's fixed-manifest selectors at steps 512
+  and 1024 before authorizing the long control.
 - [x] Establish the common rich fixed-32 step-zero baseline from the retained
   pre-update artifacts in both `20260821-151249` arms; no rerun is required.
   Bind initializer file/model SHA-256
