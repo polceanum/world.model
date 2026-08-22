@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import platform
 from dataclasses import replace
 from pathlib import Path
 
@@ -147,6 +148,22 @@ def test_recovery_probe_cannot_change_primary_metrics_or_posterior_trace(tmp_pat
         "dirty",
         "worktree_fingerprint",
         "runtime_source_fingerprint",
+    }
+    runtime_environment = clean_metadata["evaluation_runtime_environment"]
+    assert runtime_environment == probed_metadata["evaluation_runtime_environment"]
+    assert runtime_environment == {
+        "platform_system": platform.system(),
+        "platform_release": platform.release(),
+        "platform_machine": platform.machine(),
+        "platform_node": platform.node(),
+        "python_version": platform.python_version(),
+        "torch_version": device.torch_version,
+        "requested_device": device.requested,
+        "resolved_device": str(device.device),
+        "precision": device.precision,
+        "mps_built": device.mps_built,
+        "mps_available": device.mps_available,
+        "cuda_available": device.cuda_available,
     }
     report_text = Path(clean_result["markdown_report"]).read_text(encoding="utf-8")
     assert "- checkpoint_simulator_version: `sphere_world_v4`" in report_text

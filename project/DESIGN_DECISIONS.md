@@ -1,5 +1,31 @@
 # Design decisions
 
+## ADR-165 — Require one immutable, comprehensive pair before runtime-pool promotion
+
+- **Date:** 2026-08-22
+- **Status:** accepted and implemented; production pair pending
+- **Context:** The local/composed runtime policy is causally executable and
+  finite, but a small smoke cannot establish accuracy, uncertainty quality,
+  identity/event stability, or cost. A candidate could also appear useful by
+  selecting only learned dynamics, changing support, inflating variance, or
+  comparing reports from different checkpoints, source bytes, manifests, or
+  host/device contexts.
+- **Decision:** Compare learned-only and enabled-policy evaluator reports from
+  one immutable capture each. Bind the same checkpoint bytes/step, clean source,
+  tracked resolved config, exact 32 validation seeds, eight scenarios, five
+  horizons, posterior trace, evaluator schemas, primary-physical digest, and
+  complete host/Python/Torch/MPS/precision environment. Require positive
+  non-learned selection and bounded composition, exact support/current-state
+  evidence, and pooled plus every scenario/horizon guardrails for position,
+  velocity, Gaussian NLL, calibration, sharpness, coverage, event F1, identity,
+  and dropped forecasts. Require summed pooled position improvement of at least
+  `1e-5` m and matched global/fast/rollout latency at or below `1.10x`.
+- **Consequences:** Physical, latency, and comprehensive eligibility are
+  separate and fail closed. The implementation passes `56` affected tests in
+  `43.34s` plus Ruff, compileall, and diff checks. No deployment change follows
+  until the sequential active-Aqua MPS fixed-32 pair and disjoint RGB-only
+  validation/test/OOD gates pass.
+
 ## ADR-164 — Scope reusable hypothesis evidence by causal regime and compose it boundedly
 
 - **Date:** 2026-08-22

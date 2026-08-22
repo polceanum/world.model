@@ -14,6 +14,7 @@ import argparse
 import hashlib
 import json
 import math
+import platform
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -267,6 +268,20 @@ def _validated_latency_evaluation_report(
         "batches": replay_contract["evaluator_batch_count"],
         "device": replay_contract["device"],
         "precision": replay_contract["precision"],
+        "evaluation_runtime_environment": {
+            "platform_system": platform.system(),
+            "platform_release": platform.release(),
+            "platform_machine": platform.machine(),
+            "platform_node": platform.node(),
+            "python_version": platform.python_version(),
+            "torch_version": torch.__version__,
+            "requested_device": replay_contract["device"],
+            "resolved_device": replay_contract["device"],
+            "precision": replay_contract["precision"],
+            "mps_built": bool(torch.backends.mps.is_built()),
+            "mps_available": bool(torch.backends.mps.is_available()),
+            "cuda_available": bool(torch.cuda.is_available()),
+        },
         "evaluation_seed_protocol": "standard",
         "evaluation_seed_role": "standard_validation_evaluation",
         "evaluation_seed_offset": 0,
@@ -384,6 +399,7 @@ _MATCHED_LATENCY_METADATA_KEYS = (
     "episodes",
     "device",
     "precision",
+    "evaluation_runtime_environment",
     "primary_posterior_trace_frame_count",
     "primary_posterior_trace_schema",
     "batches",

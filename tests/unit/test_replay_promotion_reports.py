@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import platform
 import random
 from copy import deepcopy
 from pathlib import Path
@@ -126,6 +127,20 @@ def _report(
         "batches": contract["evaluator_batch_count"],
         "device": "mps",
         "precision": "float32",
+        "evaluation_runtime_environment": {
+            "platform_system": platform.system(),
+            "platform_release": platform.release(),
+            "platform_machine": platform.machine(),
+            "platform_node": platform.node(),
+            "python_version": platform.python_version(),
+            "torch_version": torch.__version__,
+            "requested_device": "mps",
+            "resolved_device": "mps",
+            "precision": "float32",
+            "mps_built": bool(torch.backends.mps.is_built()),
+            "mps_available": bool(torch.backends.mps.is_available()),
+            "cuda_available": bool(torch.cuda.is_available()),
+        },
         "rgb_only": True,
         "oracle_runtime_input_used": False,
         "primary_online_pass_evaluator_state_perturbation_free": True,

@@ -33,6 +33,15 @@
 - Passed the enabled local/composed RGB runtime path on active-Aqua MPS under
   custom Torch `2.9.0a0+gitcbe1a35` (`1 passed in 16.87s`), including finite
   output and exact candidate/total/regime partitions.
+- Added a fail-closed immutable fixed-32 learned-only versus local/composed
+  comparator. It binds checkpoint/config/source/manifest/posterior/schema/
+  physical-digest and host-device provenance, requires real non-learned use,
+  checks pooled and every scenario/horizon across position, velocity,
+  uncertainty, event, identity, coverage, and support, requires minimum pooled
+  improvement, and enforces paired global/fast/rollout latency at `<=1.10x`.
+  Evaluator and replay reports now carry the exact runtime-environment binding.
+  The final affected gate passes `56` tests in `43.34s`; Ruff, compileall, and
+  diff checks pass. The production MPS fixed-32 pair remains pending.
 
 ### 2026-08-21 specification 1.52 axis-gated updater-head repair (pre-launch)
 

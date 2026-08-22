@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import os
+import platform
 import statistics
 import time
 from collections.abc import Callable, Mapping
@@ -3476,6 +3477,20 @@ def _evaluate_checkpoint_impl(
         "batches": len(loader),
         "device": str(device),
         "precision": resolved_device.precision,
+        "evaluation_runtime_environment": {
+            "platform_system": platform.system(),
+            "platform_release": platform.release(),
+            "platform_machine": platform.machine(),
+            "platform_node": platform.node(),
+            "python_version": platform.python_version(),
+            "torch_version": resolved_device.torch_version,
+            "requested_device": resolved_device.requested,
+            "resolved_device": str(device),
+            "precision": resolved_device.precision,
+            "mps_built": resolved_device.mps_built,
+            "mps_available": resolved_device.mps_available,
+            "cuda_available": resolved_device.cuda_available,
+        },
         "rgb_only": True,
         "primary_online_pass_evaluator_state_perturbation_free": True,
         # Deprecated compatibility alias.  Its explicit scope prevents this

@@ -25,9 +25,16 @@
 - [x] Exercise the enabled local/composed RGB path on active-Aqua MPS; finite
   output and exact candidate/total/regime partitions pass (`1` test in
   `16.87s`).
-- [ ] Run a source-frozen fixed-32 learned-only versus regime-local paired
-  comparator with full physical, uncertainty, event, identity, support, and
-  paired-latency gates.
+- [x] Implement a fail-closed source-frozen fixed-32 learned-only versus
+  regime-local comparator with immutable report capture, exact checkpoint/
+  config/source/manifest/runtime binding, full pooled and scenario/horizon
+  physical/uncertainty/event/identity/support gates, positive non-learned
+  selection/composition, minimum pooled improvement, and paired latency.
+  The final affected gate passes `56` tests in `43.34s`; Ruff, compileall, and
+  diff checks pass.
+- [ ] Execute that comparator on a sequential active-Aqua MPS fixed-32 pair
+  after the independent specification-1.52 treatment releases the compute
+  path; preserve learned-only defaults unless comprehensive eligibility passes.
 - [ ] Run disjoint RGB-only validation/test/OOD and promote only if every
   comprehensive gate passes; otherwise preserve the learned runtime default.
 
