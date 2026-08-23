@@ -472,6 +472,11 @@ class TrainingConfig:
     # optimization. Reported NLL remains the exact proper-score value; only
     # standardized-error backward influence above this cap is logarithmic.
     closed_loop_uncertainty_standardized_error_gradient_cap: float | None = None
+    # Optional frozen-reference non-regression objective.  A positive weight
+    # compares each scenario row, physical axis, and current/forecast horizon
+    # against the immutable step-zero rollout reference on the exact same
+    # causal batch/window/perturbation stream.  Zero is exact legacy behavior.
+    closed_loop_protected_reference_nonregression_weight: float = 0.0
     # Trend validation still ingests and scores every current frame, but may
     # use a deterministic spread of forecast anchors. Full promotion
     # evaluation remains a separate, larger manifest.
@@ -1740,6 +1745,46 @@ class OrpheusConfig:
                 "training.closed_loop_uncertainty_standardized_error_gradient_cap "
                 "must be null or a finite positive number"
             )
+        protected_reference_weight = (
+            self.training.closed_loop_protected_reference_nonregression_weight
+        )
+        if (
+            isinstance(protected_reference_weight, bool)
+            or not isinstance(protected_reference_weight, (int, float))
+            or not math.isfinite(float(protected_reference_weight))
+            or float(protected_reference_weight) < 0.0
+        ):
+            raise ValueError(
+                "training.closed_loop_protected_reference_nonregression_weight "
+                "must be a finite nonnegative number"
+            )
+        if protected_reference_weight > 0.0:
+            if self.training.rgb_pretrain_steps != 0:
+                raise ValueError("protected-reference non-regression requires rgb_pretrain_steps=0")
+            if not self.training.scenario_balanced_batches:
+                raise ValueError(
+                    "protected-reference non-regression requires scenario_balanced_batches=true"
+                )
+            if self.training.batch_size != len(self.simulator.scenario_mixture):
+                raise ValueError(
+                    "protected-reference non-regression requires exactly one episode "
+                    "per declared scenario in each batch"
+                )
+            if not self.training.closed_loop_batch_macro_physical_losses_enabled:
+                raise ValueError(
+                    "protected-reference non-regression requires "
+                    "closed_loop_batch_macro_physical_losses_enabled=true"
+                )
+            if not self.training.closed_loop_axiswise_correction_hinge_enabled:
+                raise ValueError(
+                    "protected-reference non-regression requires "
+                    "closed_loop_axiswise_correction_hinge_enabled=true"
+                )
+            if self.model.dynamics.attention_dropout != 0.0:
+                raise ValueError(
+                    "protected-reference non-regression requires attention_dropout=0 "
+                    "so candidate/reference replay is deterministic"
+                )
         if (
             self.training.validation_rollout_anchors_per_episode is not None
             and self.training.validation_rollout_anchors_per_episode <= 0

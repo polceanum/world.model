@@ -1,5 +1,30 @@
 # Design decisions
 
+## ADR-175 — Constrain adaptation against the frozen causal reference
+
+- **Date:** 2026-08-23
+- **Status:** implementation accepted; qualification pending
+- **Context:** Specs 1.56–1.61 repeatedly improved pooled position/velocity but
+  rotated strict regressions across scenario/axis/horizon event and identity
+  slices. Post-hoc selector rejection protects deployment but does not shape
+  the optimizer.
+- **Decision:** Replay the immutable step-zero model on the exact causal
+  training draw and penalize only positive live-minus-reference error for each
+  supported scenario/axis/current-or-horizon cell, with node-event BCE cells
+  protected by scenario/horizon. Require exact support equality and preserve
+  RNG continuation. Keep weight zero as the exact legacy path; use one
+  evidence-based provisional weight `1.0`.
+- **Alternatives considered:** more event weight/duration; another head
+  interpolation; weight-space distance; validation constants as training
+  targets; accepting pooled gains despite slice failures; weakening support.
+- **Consequences:** Training compute roughly doubles but the reference graph is
+  detached. Runtime/WorldBelief semantics remain unchanged. A `1 cm` probe
+  yields an 11.1% gradient-scale constraint with all 328 cells aligned. One
+  paired smoke and one bounded accuracy rung decide whether this path ends or
+  advances; no tuning ladder is authorized. The final implementation gate is
+  `1295 passed, 20 skipped in 447.03s` plus clean Ruff, 225-file format,
+  isolated compile, version, and diff checks.
+
 ## ADR-174 — Protect recursive state heads with calibrated node-event descent
 
 - **Date:** 2026-08-23

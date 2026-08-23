@@ -3,7 +3,7 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.61
+**Version:** 1.62
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
@@ -8939,6 +8939,51 @@ sparse-event draws (`6/23`), no retry or clip, and maximum norm `1.564329`.
 Variable wall time is not paired latency evidence. Do not run step 64, tune the
 weight further, resume, compose, or promote this objective. Deployment remains
 the protected step-zero initializer; comprehensive promotion stays false.
+
+---
+
+## 256. Frozen-reference scenario-axis-horizon non-regression
+
+Specification 1.62 adds an opt-in causal training guard after repeated
+specification-1.56 through 1.61 candidates improved pooled accuracy while
+rotating regressions across scenarios, axes, horizons, events, and identity.
+`training.closed_loop_protected_reference_nonregression_weight` is a finite
+nonnegative scalar and defaults to zero, which preserves the exact legacy
+forward/backward path. A positive value is restricted to causal-only,
+one-row-per-scenario balanced batches with batch-macro physical losses,
+axiswise correction hinges, and zero attention dropout.
+
+The trainer loads a separate frozen model from the tensor-verified step-zero
+`reference_rollout.pt`. For every candidate update it executes the candidate
+once, restores the pre-forward Python/Torch/backend RNG state, replays the
+reference under `no_grad` on the exact same batch, window, and perturbation
+stream, then restores the candidate's post-forward RNG state. The runtime
+continues to consume only RGB; simulator state appears only in supervised
+error cells. The reference is not an alternate belief or inference branch.
+
+Current position/velocity and every configured forecast horizon produce
+additive Smooth-L1 cells separately for each world axis and scenario row.
+Node-event logits additionally produce per-row/horizon BCE cells. Candidate
+and reference schemas and support counts must match exactly; a candidate may
+not satisfy the hinge by dropping tracks or horizons. The optimized term is
+the mean positive candidate-minus-reference error across supported cells.
+Direct event routing preserves this explicit weight when reconstructing its
+non-event backward pass. Exact resume binds the field with legacy default
+zero.
+
+Focused config, objective, schedule, and checkpoint coverage passes `562`
+tests with one expected unavailable-MPS skip. A production-shaped CPU probe
+from the immutable initializer preserves all `328` supported cells. Exact
+equality gives zero loss and zero regressed cells; a `1 cm` allowed mean-head
+perturbation activates `136` cells with protected/base gradient-norm ratio
+`0.111032`. The dedicated profile therefore uses the single provisional
+weight `1.0`. This is formulation and gradient-scale evidence only. A clean
+paired wiring smoke and bounded fixed-32 accuracy rung remain mandatory. The
+final repository passes `1295` tests with `20` expected unavailable-backend
+skips in `447.03s`; Ruff, the `225`-file format check, isolated compile,
+version, and diff gates pass. Stop
+without retuning if the protected constraint does not materially reduce the
+known event/identity guardrail failures.
 
 ---
 

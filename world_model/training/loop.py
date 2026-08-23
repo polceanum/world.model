@@ -59,6 +59,18 @@ class TrainingBatchResult:
     # optimizer-relevant branch contributed to ``total_loss``. They are never
     # added to the optimized total a second time.
     support_terms: dict[str, Tensor] = field(default_factory=dict)
+    # Optional differentiable sufficient statistics for the frozen-reference
+    # non-regression objective.  Ordinary training and validation leave this
+    # empty, preserving the historical result contract.
+    protected_objective_cells: dict[str, ProtectedObjectiveCell] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ProtectedObjectiveCell:
+    """Per-scenario additive error and support for one semantic cell."""
+
+    error_sum: Tensor
+    coordinate_count: Tensor
 
 
 @dataclass
@@ -73,6 +85,7 @@ class _RolloutLossResult:
     position_log_variance: Tensor | None
     active_mask: Tensor | None
     physical_metrics: dict[str, float]
+    protected_objective_cells: dict[str, ProtectedObjectiveCell]
 
 
 @dataclass(frozen=True)
@@ -3062,6 +3075,128 @@ def _coordinate_mask(mask: Tensor, value: Tensor, coordinate: int) -> Tensor:
     raise ValueError("physical mask must match values or omit only their coordinate axis")
 
 
+def _protected_objective_cell(
+    prediction: Tensor,
+    target: Tensor,
+    mask: Tensor,
+) -> ProtectedObjectiveCell:
+    """Return batch-row additive Smooth-L1 evidence without reducing rows."""
+
+    if prediction.shape != target.shape or prediction.ndim < 1:
+        raise ValueError("protected objective predictions and targets must match")
+    expanded = mask
+    while expanded.ndim < prediction.ndim:
+        expanded = expanded.unsqueeze(-1)
+    expanded = expanded.expand_as(prediction)
+    flat_mask = expanded.reshape(prediction.shape[0], -1)
+    flat_error = F.smooth_l1_loss(prediction, target, reduction="none").reshape(
+        prediction.shape[0], -1
+    )
+    return ProtectedObjectiveCell(
+        error_sum=torch.where(
+            flat_mask,
+            flat_error,
+            torch.zeros_like(flat_error),
+        ).sum(dim=-1),
+        coordinate_count=flat_mask.sum(dim=-1),
+    )
+
+
+def _protected_event_objective_cell(
+    logits: Tensor,
+    target: Tensor,
+    mask: Tensor,
+) -> ProtectedObjectiveCell:
+    """Return unweighted per-row event BCE for reference non-regression."""
+
+    if logits.shape != target.shape or logits.shape != mask.shape:
+        raise ValueError("protected event logits, targets, and mask must match")
+    elementwise = F.binary_cross_entropy_with_logits(
+        logits,
+        target.to(logits.dtype),
+        reduction="none",
+    )
+    flat_mask = mask.reshape(mask.shape[0], -1)
+    flat_error = elementwise.reshape(elementwise.shape[0], -1)
+    return ProtectedObjectiveCell(
+        error_sum=torch.where(
+            flat_mask,
+            flat_error,
+            torch.zeros_like(flat_error),
+        ).sum(dim=-1),
+        coordinate_count=flat_mask.sum(dim=-1),
+    )
+
+
+def _merge_protected_objective_cells(
+    cells: list[ProtectedObjectiveCell],
+) -> ProtectedObjectiveCell:
+    if not cells:
+        raise ValueError("protected objective cell aggregation requires evidence")
+    shape = cells[0].error_sum.shape
+    if any(cell.error_sum.shape != shape or cell.coordinate_count.shape != shape for cell in cells):
+        raise ValueError("protected objective cell rows must have identical shapes")
+    return ProtectedObjectiveCell(
+        error_sum=torch.stack([cell.error_sum for cell in cells]).sum(dim=0),
+        coordinate_count=torch.stack([cell.coordinate_count for cell in cells]).sum(dim=0),
+    )
+
+
+def protected_reference_nonregression_loss(
+    candidate: Mapping[str, ProtectedObjectiveCell],
+    reference: Mapping[str, ProtectedObjectiveCell],
+) -> tuple[Tensor, dict[str, float]]:
+    """Penalise any scenario/axis/horizon error above a frozen reference.
+
+    Support is part of the contract.  A candidate may not satisfy the hinge by
+    dropping a track or horizon that the protected model scored.
+    """
+
+    if not candidate or candidate.keys() != reference.keys():
+        raise ValueError(
+            "protected candidate/reference objective schemas must match and be nonempty"
+        )
+    excesses: list[Tensor] = []
+    supported_cells = 0
+    for name in sorted(candidate):
+        candidate_cell = candidate[name]
+        reference_cell = reference[name]
+        if (
+            candidate_cell.error_sum.ndim != 1
+            or candidate_cell.error_sum.shape != reference_cell.error_sum.shape
+            or candidate_cell.coordinate_count.shape != candidate_cell.error_sum.shape
+            or reference_cell.coordinate_count.shape != candidate_cell.error_sum.shape
+        ):
+            raise ValueError(f"protected objective cell {name!r} must be batch-row vectors")
+        if not torch.equal(
+            candidate_cell.coordinate_count.detach(),
+            reference_cell.coordinate_count.detach(),
+        ):
+            raise ValueError(
+                f"protected objective support changed for {name!r}; refusing a fail-open update"
+            )
+        support = candidate_cell.coordinate_count > 0
+        if support.any():
+            candidate_mean = candidate_cell.error_sum / candidate_cell.coordinate_count.clamp_min(
+                1
+            ).to(candidate_cell.error_sum.dtype)
+            reference_mean = reference_cell.error_sum / reference_cell.coordinate_count.clamp_min(
+                1
+            ).to(reference_cell.error_sum.dtype)
+            excesses.append(F.relu(candidate_mean - reference_mean.detach()).masked_select(support))
+            supported_cells += int(support.sum().detach().cpu())
+    if not excesses:
+        raise ValueError("protected objective has no supported scenario cells")
+    concatenated = torch.cat(excesses)
+    return concatenated.mean(), {
+        "protected_reference_supported_scenario_cell_count": float(supported_cells),
+        "protected_reference_regressed_scenario_cell_count": float(
+            (concatenated.detach() > 0).sum().cpu()
+        ),
+        "protected_reference_maximum_error_excess": float(concatenated.detach().max().cpu()),
+    }
+
+
 def _axis_separable_masked_huber(
     prediction: Tensor,
     target: Tensor,
@@ -3356,9 +3491,12 @@ def _rollout_loss_result(
     trajectory: BeliefTrajectory | None = None,
     compute_event_loss: bool = True,
     collect_promotion_metrics: bool = False,
+    collect_protected_objective_cells: bool = False,
 ) -> _RolloutLossResult:
     if not isinstance(collect_promotion_metrics, bool):
         raise TypeError("collect_promotion_metrics must be bool")
+    if not isinstance(collect_protected_objective_cells, bool):
+        raise TypeError("collect_protected_objective_cells must be bool")
     total_frames = int(batch["rgb"].shape[1])
     frame_offsets, query_seconds, horizon_weights = _valid_rollout_offsets(
         config,
@@ -3376,6 +3514,7 @@ def _rollout_loss_result(
             position_log_variance=None,
             active_mask=None,
             physical_metrics={},
+            protected_objective_cells={},
         )
     event_query_plan = observation_window_query_plan(
         frame_offsets,
@@ -3449,6 +3588,7 @@ def _rollout_loss_result(
     pair_event_losses: list[Tensor] = []
     pair_event_weights: list[float] = []
     physical_metrics: dict[str, float] = {}
+    protected_objective_cells: dict[str, ProtectedObjectiveCell] = {}
     batch_macro = config.training.closed_loop_batch_macro_physical_losses_enabled
     scenario_tail_fraction = config.training.closed_loop_scenario_tail_fraction
     for query_index, frame_offset in enumerate(frame_offsets):
@@ -3538,6 +3678,27 @@ def _rollout_loss_result(
                         seconds,
                     )
                 ] = axis_loss
+                if collect_protected_objective_cells:
+                    protected_objective_cells[
+                        rollout_horizon_loss_key(
+                            f"rollout_position_{axis_name}",
+                            seconds,
+                        )
+                    ] = _protected_objective_cell(
+                        target_positions[:, query_index, :, axis_index],
+                        target_position[:, :, axis_index],
+                        loss_valid,
+                    )
+                    protected_objective_cells[
+                        rollout_horizon_loss_key(
+                            f"rollout_velocity_{axis_name}",
+                            seconds,
+                        )
+                    ] = _protected_objective_cell(
+                        target_velocities[:, query_index, :, axis_index],
+                        target_velocity[:, :, axis_index],
+                        loss_valid,
+                    )
         if valid.any():
             position_nll_weights.append(horizon_weights[query_index])
             position_nll_losses.append(position_nll)
@@ -3709,6 +3870,14 @@ def _rollout_loss_result(
             # the same interval, independent of the other forecast horizons.
             event_scores = target_event_logits[:, query_index, :, MotionMode.COLLISION]
             if loss_valid.any():
+                if collect_protected_objective_cells:
+                    protected_objective_cells[
+                        rollout_horizon_loss_key("event_collision_node", seconds)
+                    ] = _protected_event_objective_cell(
+                        event_scores,
+                        event_target,
+                        loss_valid,
+                    )
                 if compute_event_loss:
                     node_event_loss = balanced_binary_cross_entropy(
                         event_scores,
@@ -3828,6 +3997,7 @@ def _rollout_loss_result(
         position_log_variance=target_position_log_variance,
         active_mask=target_active_mask,
         physical_metrics=physical_metrics,
+        protected_objective_cells=protected_objective_cells,
     )
 
 
@@ -4499,6 +4669,7 @@ def run_closed_loop_batch(
     compute_future_correction: bool | None = None,
     active_trainable_scope: str | None = None,
     collect_promotion_metrics: bool = False,
+    collect_protected_objective_cells: bool = False,
 ) -> TrainingBatchResult:
     """Run one causal RGB-only sequence window through the real runtime.
 
@@ -4526,6 +4697,8 @@ def run_closed_loop_batch(
         raise ValueError("compute_future_correction must be boolean or None")
     if not isinstance(collect_promotion_metrics, bool):
         raise ValueError("collect_promotion_metrics must be boolean")
+    if not isinstance(collect_protected_objective_cells, bool):
+        raise ValueError("collect_protected_objective_cells must be boolean")
     loss_weights, event_weight_metrics = _closed_loop_loss_weights_for_scope(
         config,
         active_trainable_scope=active_trainable_scope,
@@ -4611,6 +4784,7 @@ def run_closed_loop_batch(
     # padding never counts.
     fast_supervised_slots = 0
     physical_metrics: dict[str, float] = {}
+    protected_cell_lists: dict[str, list[ProtectedObjectiveCell]] = {}
     deferred_validation_rollouts: list[_DeferredValidationRollout] = []
     rollout_execution_batched_anchor_count = 0
     rollout_execution_serial_fallback_anchor_count = 0
@@ -4630,6 +4804,9 @@ def run_closed_loop_batch(
 
     def add(name: str, value: Tensor) -> None:
         detail_lists.setdefault(name, []).append(value)
+
+    def add_protected(name: str, value: ProtectedObjectiveCell) -> None:
+        protected_cell_lists.setdefault(name, []).append(value)
 
     for frame_index in range(window_start, window_stop):
         packet = make_rgb_packet(batch, frame_index)
@@ -4868,6 +5045,24 @@ def run_closed_loop_batch(
             batch["objects"]["velocity"][:, frame_index],
             indices,
         )
+        if collect_protected_objective_cells:
+            for axis_index, axis_name in enumerate(("x", "y", "z")):
+                add_protected(
+                    f"state_position_{axis_name}@current",
+                    _protected_objective_cell(
+                        belief.objects.position[..., axis_index],
+                        aligned_position[..., axis_index],
+                        matched,
+                    ),
+                )
+                add_protected(
+                    f"state_velocity_{axis_name}@current",
+                    _protected_objective_cell(
+                        belief.objects.velocity[..., axis_index],
+                        aligned_velocity[..., axis_index],
+                        velocity_axis_support[..., axis_index],
+                    ),
+                )
         state_physical: dict[str, float] = {}
         _add_squared_error_metrics(
             state_physical,
@@ -5042,10 +5237,13 @@ def run_closed_loop_batch(
                     matched,
                     compute_event_loss=compute_event_loss,
                     collect_promotion_metrics=collect_promotion_metrics,
+                    collect_protected_objective_cells=(collect_protected_objective_cells),
                 )
                 rollout_execution_posterior_call_count += 1
                 for name, value in rollout_result.losses.items():
                     add(name, value)
+                for name, value in rollout_result.protected_objective_cells.items():
+                    add_protected(name, value)
                 _accumulate_float_metrics(
                     physical_metrics,
                     rollout_result.physical_metrics,
@@ -5220,6 +5418,10 @@ def run_closed_loop_batch(
 
     reference = rgb
     details = {name: _mean_losses(values, reference) for name, values in detail_lists.items()}
+    protected_objective_cells = {
+        name: _merge_protected_objective_cells(values)
+        for name, values in protected_cell_lists.items()
+    }
     global_measurement = details.pop("global_measurement", None)
     fast_measurement = details.pop("fast_measurement", None)
     if global_measurement is not None or fast_measurement is not None:
@@ -5589,6 +5791,7 @@ def run_closed_loop_batch(
                 else {}
             ),
         },
+        protected_objective_cells=protected_objective_cells,
     )
 
 

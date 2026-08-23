@@ -1,5 +1,23 @@
 # Tasks
 
+## Frozen-reference non-regression — specification 1.62
+
+- [x] Add default-zero, strict, exact-resume-bound protected-reference weight.
+- [x] Replay a frozen tensor-verified step-zero model under `no_grad` with the
+  exact candidate batch/window/perturbation stream and restore candidate RNG.
+- [x] Collect current and forecast position/velocity cells by scenario and
+  world axis, plus node-event BCE by scenario/horizon.
+- [x] Fail closed on cell-schema or support-count changes.
+- [x] Preserve the configured guard weight through direct collision routing.
+- [x] Pass focused coverage (`562 passed, 1 skipped`) and production-shaped
+  support/gradient probe (`328/328`, ratio `0.111032`).
+- [x] Pass full repository (`1295 passed, 20 skipped in 447.03s`), Ruff,
+  225-file format, isolated compile, version, and diff gates.
+- [ ] Freeze, commit, and push specification 1.62.
+- [ ] Run one clean paired wiring smoke and one bounded fixed-32 accuracy rung.
+- [ ] Stop without further weight/duration tuning unless guardrail failures
+  contract materially while pooled accuracy remains non-regressive.
+
 ## Protected node-event state routing — specification 1.61
 
 - [x] Localize the baseline F1 regression to the interaction of learned mean

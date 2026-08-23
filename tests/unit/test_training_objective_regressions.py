@@ -18,6 +18,7 @@ from world_model.observations import MeasurementSet
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
 from world_model.training.loop import (
+    ProtectedObjectiveCell,
     TrainingBatchResult,
     _axis_separable_masked_huber,
     _belief_state_losses,
@@ -36,6 +37,7 @@ from world_model.training.loop import (
     match_belief_to_targets,
     measurement_localization_metrics,
     pretrain_rgb_measurements,
+    protected_reference_nonregression_loss,
     run_closed_loop_batch,
 )
 from world_model.training.losses import gaussian_nll
@@ -673,6 +675,53 @@ def test_loop_axiswise_correction_hinge_prevents_cross_axis_cancellation() -> No
         torch.tensor([[[1.0 / 3.0, 0.0, 1.0 / 3.0]]]),
     )
     assert prior.grad is None
+
+
+def test_protected_reference_nonregression_is_row_local_and_detaches_reference() -> None:
+    candidate_error = torch.tensor([1.0, 4.0], requires_grad=True)
+    reference_error = torch.tensor([2.0, 2.0], requires_grad=True)
+    count = torch.ones(2, dtype=torch.int64)
+
+    loss, metrics = protected_reference_nonregression_loss(
+        {
+            "rollout_position_x@0.100s": ProtectedObjectiveCell(
+                error_sum=candidate_error,
+                coordinate_count=count,
+            )
+        },
+        {
+            "rollout_position_x@0.100s": ProtectedObjectiveCell(
+                error_sum=reference_error,
+                coordinate_count=count.clone(),
+            )
+        },
+    )
+
+    torch.testing.assert_close(loss, torch.tensor(1.0))
+    assert metrics["protected_reference_supported_scenario_cell_count"] == 2.0
+    assert metrics["protected_reference_regressed_scenario_cell_count"] == 1.0
+    assert metrics["protected_reference_maximum_error_excess"] == 2.0
+    loss.backward()
+    torch.testing.assert_close(candidate_error.grad, torch.tensor([0.0, 0.5]))
+    assert reference_error.grad is None
+
+
+def test_protected_reference_nonregression_fails_closed_on_support_change() -> None:
+    candidate = {
+        "state_position_x@current": ProtectedObjectiveCell(
+            error_sum=torch.ones(2),
+            coordinate_count=torch.tensor([1, 0]),
+        )
+    }
+    reference = {
+        "state_position_x@current": ProtectedObjectiveCell(
+            error_sum=torch.ones(2),
+            coordinate_count=torch.tensor([1, 1]),
+        )
+    }
+
+    with pytest.raises(ValueError, match="support changed"):
+        protected_reference_nonregression_loss(candidate, reference)
 
 
 def test_scenario_tail_physical_loss_is_axis_separable_and_omits_unsupported_rows() -> None:
@@ -1407,10 +1456,16 @@ def test_mature_mask_excludes_cold_deterministic_targets_but_reports_both() -> N
         frame_index=0,
         indices=torch.tensor([[0, 1]], dtype=torch.int64),
         matched=torch.ones(1, 2, dtype=torch.bool),
+        collect_protected_objective_cells=True,
     )
 
     assert result.losses["rollout_position"].item() == 0.0
     assert result.losses["rollout_position_nll"].item() > 0.0
+    assert {
+        f"rollout_{quantity}_{axis}@0.050s"
+        for quantity in ("position", "velocity")
+        for axis in ("x", "y", "z")
+    }.issubset(result.protected_objective_cells)
     assert (
         result.physical_metrics["physical_rollout_mature_position@0.050s_coordinate_count"] == 3.0
     )
@@ -1501,6 +1556,37 @@ def test_frozen_global_measurement_is_diagnostic_only_with_fast_roi_scope() -> N
         * config.training.fast_roi_pretrain_weight
         / (1.0 + config.training.fast_roi_pretrain_weight),
     )
+
+
+def test_closed_loop_collects_differentiable_protected_cells_without_metric_changes() -> None:
+    config = load_config("configs/tiny_overfit.yaml")
+    batch = collate_episodes([generate_episode(config, seed=9)])
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    set_closed_loop_trainable_scope(model, scope="state_dynamics")
+
+    result = run_closed_loop_batch(
+        model,
+        batch,
+        config,
+        window_steps=4,
+        apply_perturbations=False,
+        include_measurement_supervision=False,
+        rollout_anchors_per_window=1,
+        compute_future_correction=False,
+        collect_protected_objective_cells=True,
+    )
+
+    assert {
+        f"state_{quantity}_{axis}@current"
+        for quantity in ("position", "velocity")
+        for axis in ("x", "y", "z")
+    }.issubset(result.protected_objective_cells)
+    for cell in result.protected_objective_cells.values():
+        assert cell.error_sum.shape == (1,)
+        assert cell.coordinate_count.shape == (1,)
+        assert cell.coordinate_count.dtype is torch.int64
+        assert torch.isfinite(cell.error_sum).all()
+    assert any(cell.error_sum.requires_grad for cell in result.protected_objective_cells.values())
 
 
 def test_frozen_fast_measurement_cannot_train_state_dynamics_through_prior() -> None:

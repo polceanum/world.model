@@ -698,6 +698,65 @@ def test_uncertainty_standardized_error_gradient_cap_is_strict_and_optional() ->
             ).validate()
 
 
+def test_protected_reference_nonregression_requires_exact_causal_protocol() -> None:
+    source = load_config(CONFIG_DIR / "protected_state_event_updater_xy_repair_cpu.yaml")
+    protected = replace(
+        source,
+        training=replace(
+            source.training,
+            closed_loop_scenario_tail_fraction=None,
+            closed_loop_protected_reference_nonregression_weight=1.0,
+        ),
+    )
+    protected.validate()
+    assert protected.training.closed_loop_protected_reference_nonregression_weight == 1.0
+
+    for value in (-1.0, float("inf"), float("nan"), True, "1"):
+        with pytest.raises(
+            ValueError,
+            match="closed_loop_protected_reference_nonregression_weight",
+        ):
+            replace(
+                protected,
+                training=replace(
+                    protected.training,
+                    closed_loop_protected_reference_nonregression_weight=value,
+                ),
+            ).validate()
+    invalid = (
+        replace(protected.training, rgb_pretrain_steps=1),
+        replace(protected.training, scenario_balanced_batches=False),
+        replace(protected.training, batch_size=protected.training.batch_size * 2),
+        replace(protected.training, closed_loop_batch_macro_physical_losses_enabled=False),
+        replace(protected.training, closed_loop_axiswise_correction_hinge_enabled=False),
+    )
+    for training in invalid:
+        with pytest.raises(ValueError, match="protected-reference non-regression"):
+            replace(protected, training=training).validate()
+    with pytest.raises(ValueError, match="attention_dropout=0"):
+        replace(
+            protected,
+            model=replace(
+                protected.model,
+                dynamics=replace(protected.model.dynamics, attention_dropout=0.1),
+            ),
+        ).validate()
+
+
+def test_protected_reference_state_event_profile_changes_only_the_guard() -> None:
+    source = load_config(CONFIG_DIR / "protected_state_event_updater_xy_repair_cpu.yaml")
+    repaired = load_config(
+        CONFIG_DIR / "protected_reference_state_event_updater_xy_repair_cpu.yaml"
+    )
+
+    assert repaired.training.closed_loop_protected_reference_nonregression_weight == 1.0
+    source_dict = source.to_dict()
+    repaired_dict = repaired.to_dict()
+    source_dict["project"]["name"] = repaired_dict["project"]["name"]
+    source_dict["training"]["closed_loop_protected_reference_nonregression_weight"] = 1.0
+    assert source_dict == repaired_dict
+
+
 def test_scenario_tail_updater_profile_changes_only_tail_and_event_objectives() -> None:
     source = load_config(CONFIG_DIR / "axis_gated_updater_xy_repair_cpu.yaml")
     repaired = load_config(CONFIG_DIR / "scenario_tail_updater_xy_repair_cpu.yaml")

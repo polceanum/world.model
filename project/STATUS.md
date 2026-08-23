@@ -1,5 +1,25 @@
 # Project status
 
+## Specification 1.62 frozen-reference non-regression — implementation in qualification
+
+Repeated lateral-head/event objectives improved pooled state accuracy but
+failed scenario/event/identity guardrails. The new default-zero exact-resume
+field replays the tensor-verified step-zero model under `no_grad` on the same
+balanced batch, window, and perturbation RNG stream, then penalizes only
+positive per-scenario/axis/current-or-horizon error excess. Node-event BCE is
+also protected by scenario and horizon. Any support/schema mismatch fails
+closed; the reference never enters runtime inference or persistent belief.
+
+Focused coverage passes `562 passed, 1 skipped`. A production-shaped CPU probe
+preserves `328/328` support cells; equality gives zero hinge, while a `1 cm`
+permitted-head perturbation activates `136` cells at protected/base gradient
+ratio `0.111032`. The profile fixes the one provisional weight at `1.0`.
+The final repository passes `1295 passed, 20 skipped in 447.03s`; Ruff, the
+225-file format check, isolated compile, version, and diff gates pass. Clean
+commit/push, paired wiring, and bounded fixed-32 accuracy remain pending. Do
+not tune multiple weights or extend beyond the
+first bounded accuracy rung without materially fewer guardrail failures.
+
 ## Specification 1.61 protected state-event routing — implementation gate 2026-08-23
 
 The spec-1.60 relation owner was behaviorally inert on the failing baseline

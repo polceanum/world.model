@@ -2,6 +2,22 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-23 specification 1.62 frozen-reference non-regression
+
+- Added a default-zero exact-resume protected-reference weight and a frozen
+  step-zero causal replay on the exact candidate RNG stream.
+- Added fail-closed per-scenario current/forecast position and velocity cells
+  for every axis, plus per-horizon node-event BCE cells; support cannot be
+  reduced to evade the hinge.
+- Preserved the explicit weight through direct collision routing and added a
+  dedicated profile differing from spec 1.61 only by project name and weight
+  `1.0`.
+- Focused gates pass `562 passed, 1 skipped`; the production-shaped probe keeps
+  `328/328` cells and measures protected/base gradient ratio `0.111032` after
+  a `1 cm` permitted-head perturbation. The final repository passes `1295
+  passed, 20 skipped in 447.03s`; Ruff, 225-file format, isolated compile,
+  version, and diff gates pass. Bounded retained qualification remains pending.
+
 ### 2026-08-23 specification 1.61 protected state-event routing
 
 - Localized the spec-1.60 baseline collision regression to combined learned

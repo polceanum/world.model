@@ -58,6 +58,7 @@ from world_model.training.loop import (
     move_batch_to_device,
     physical_validation_metrics,
     pretrain_rgb_measurements,
+    protected_reference_nonregression_loss,
     run_closed_loop_batch,
     select_closed_loop_window,
 )
@@ -182,8 +183,46 @@ _CAUSAL_TRAJECTORY_LOSS_TERMS = frozenset(
         "uncertainty",
         "correction_position",
         "correction_velocity",
+        "protected_reference_nonregression",
     }
 )
+
+
+@dataclass(frozen=True)
+class _ReplayRngState:
+    """Global stochastic state needed for one exact candidate/reference replay."""
+
+    python: object
+    torch_cpu: Tensor
+    torch_cuda: tuple[Tensor, ...] | None
+    torch_mps: Tensor | None
+
+
+def _capture_replay_rng_state(device: torch.device) -> _ReplayRngState:
+    mps_state: Tensor | None = None
+    mps = getattr(torch, "mps", None)
+    if device.type == "mps" and mps is not None and hasattr(mps, "get_rng_state"):
+        mps_state = mps.get_rng_state().cpu().clone()
+    return _ReplayRngState(
+        python=random.getstate(),
+        torch_cpu=torch.get_rng_state().clone(),
+        torch_cuda=(
+            tuple(state.cpu().clone() for state in torch.cuda.get_rng_state_all())
+            if torch.cuda.is_available()
+            else None
+        ),
+        torch_mps=mps_state,
+    )
+
+
+def _restore_replay_rng_state(state: _ReplayRngState) -> None:
+    random.setstate(state.python)
+    torch.set_rng_state(state.torch_cpu.cpu())
+    if state.torch_cuda is not None:
+        torch.cuda.set_rng_state_all([value.cpu() for value in state.torch_cuda])
+    mps = getattr(torch, "mps", None)
+    if state.torch_mps is not None and mps is not None and hasattr(mps, "set_rng_state"):
+        mps.set_rng_state(state.torch_mps.cpu())
 
 
 @dataclass(frozen=True)
@@ -4536,6 +4575,9 @@ def _backward_training_result(
     )
     non_event_weights = dict(resolved_weights)
     non_event_weights["event"] = 0.0
+    non_event_weights["protected_reference_nonregression"] = float(
+        config.training.closed_loop_protected_reference_nonregression_weight
+    )
     non_event_loss = _weighted_closed_loop_total(result.loss_terms, non_event_weights)
 
     event = (
@@ -6090,6 +6132,86 @@ def _resolve_training_devices(
     )
 
 
+def _closed_loop_result_with_protected_reference(
+    model: OnlineWorldModel,
+    protected_reference_model: OnlineWorldModel | None,
+    batch: Mapping[str, Any],
+    config: OrpheusConfig,
+    *,
+    device: torch.device,
+    window_start: int,
+    window_steps: int,
+    active_trainable_scope: str,
+) -> TrainingBatchResult:
+    """Run the legacy candidate path plus an optional exact frozen replay."""
+
+    weight = float(config.training.closed_loop_protected_reference_nonregression_weight)
+    if weight == 0.0:
+        if protected_reference_model is not None:
+            raise AssertionError("disabled protected-reference objective has a reference model")
+        return run_closed_loop_batch(
+            model,
+            batch,
+            config,
+            window_start=window_start,
+            window_steps=window_steps,
+            apply_perturbations=True,
+            include_measurement_supervision=True,
+            rollout_anchors_per_window=config.training.rollout_anchors_per_window,
+            active_trainable_scope=active_trainable_scope,
+        )
+    if protected_reference_model is None:
+        raise RuntimeError("protected-reference objective requires the frozen reference model")
+
+    before = _capture_replay_rng_state(device)
+    candidate = run_closed_loop_batch(
+        model,
+        batch,
+        config,
+        window_start=window_start,
+        window_steps=window_steps,
+        apply_perturbations=True,
+        include_measurement_supervision=True,
+        rollout_anchors_per_window=config.training.rollout_anchors_per_window,
+        active_trainable_scope=active_trainable_scope,
+        collect_protected_objective_cells=True,
+    )
+    after = _capture_replay_rng_state(device)
+    try:
+        _restore_replay_rng_state(before)
+        with torch.no_grad():
+            reference = run_closed_loop_batch(
+                protected_reference_model,
+                batch,
+                config,
+                window_start=window_start,
+                window_steps=window_steps,
+                apply_perturbations=True,
+                include_measurement_supervision=True,
+                rollout_anchors_per_window=config.training.rollout_anchors_per_window,
+                active_trainable_scope=active_trainable_scope,
+                collect_protected_objective_cells=True,
+            )
+    finally:
+        _restore_replay_rng_state(after)
+    protected_loss, protected_metrics = protected_reference_nonregression_loss(
+        candidate.protected_objective_cells,
+        reference.protected_objective_cells,
+    )
+    candidate.loss_terms["protected_reference_nonregression"] = protected_loss
+    candidate.total_loss = candidate.total_loss + protected_loss * weight
+    candidate.metrics.update(protected_metrics)
+    candidate.metrics.update(
+        {
+            "protected_reference_nonregression_active": 1.0,
+            "protected_reference_nonregression_weight": weight,
+            "protected_reference_nonregression_loss": float(protected_loss.detach().cpu()),
+            "protected_reference_replay_call_count": 1.0,
+        }
+    )
+    return candidate
+
+
 def train_from_config(
     config: OrpheusConfig,
     *,
@@ -7423,6 +7545,46 @@ def _train_from_config_owned(
                 "guard; training continues without a deployment incumbent",
                 flush=True,
             )
+    protected_reference_model: OnlineWorldModel | None = None
+    protected_reference_weight = float(
+        config.training.closed_loop_protected_reference_nonregression_weight
+    )
+    if protected_reference_weight > 0.0:
+        if (
+            reference_rollout_selection is None
+            or reference_rollout_model_state_hash is None
+            or not reference_rollout_path.is_file()
+        ):
+            raise RuntimeError(
+                "protected-reference non-regression requires a supported, persisted "
+                "step-zero rollout reference"
+            )
+        protected_reference_model = OnlineWorldModel.from_config(config, device=device)
+        load_model_weights(
+            reference_rollout_path,
+            model=protected_reference_model,
+            expected_config=config,
+        )
+        protected_reference_model.requires_grad_(False)
+        protected_reference_model.eval()
+        protected_reference_hash = _current_model_state_hash(protected_reference_model)
+        if protected_reference_hash != reference_rollout_model_state_hash:
+            raise RuntimeError(
+                "protected-reference model hash does not match the validated rollout reference"
+            )
+        logger.log(
+            step=start_step,
+            split="training_control_protected_reference",
+            metrics={
+                "protected_reference_nonregression_active": 1.0,
+                "protected_reference_nonregression_weight": protected_reference_weight,
+                "protected_reference_checkpoint_step": float(
+                    reference_rollout_step if reference_rollout_step is not None else -1
+                ),
+                "protected_reference_model_state_hash": protected_reference_hash,
+                "training_data_draw_step": float(training_data_draw_step),
+            },
+        )
     measurement_handoff_pending = (
         not measurement_handoff_completed
         and start_step <= config.training.rgb_pretrain_steps < config.training.steps
@@ -7820,15 +7982,14 @@ def _train_from_config_owned(
                         config.training.joint_collision_long_horizon_sampling
                     ),
                 )
-                result = run_closed_loop_batch(
+                result = _closed_loop_result_with_protected_reference(
                     model,
+                    protected_reference_model,
                     batch,
                     config,
+                    device=device,
                     window_start=window_start,
                     window_steps=window_steps,
-                    apply_perturbations=True,
-                    include_measurement_supervision=True,
-                    rollout_anchors_per_window=(config.training.rollout_anchors_per_window),
                     active_trainable_scope=active_closed_loop_scope,
                 )
                 result.metrics["closed_loop_scope_transitioned"] = float(

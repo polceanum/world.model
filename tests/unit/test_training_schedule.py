@@ -1546,6 +1546,63 @@ def test_node_xy_collision_scope_routes_node_event_not_opposing_pair_event() -> 
     assert result.metrics["direct_collision_state_event_gradient_norm_pre_parameter_clip"] == 0.0
 
 
+def test_direct_collision_backward_preserves_protected_reference_weight() -> None:
+    source = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    scope = "updater_state_heads_xy_collision_node"
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            closed_loop_trainable_scope=scope,
+            closed_loop_event_loss_weights={scope: 0.0045},
+            loss_weights={"state_position": 2.0, "event": 0.0045},
+        ),
+    )
+    config.validate()
+    model = OnlineWorldModel.from_config(config)
+    # The full protocol validation is covered separately; this unit isolates
+    # the direct-event backward router's explicit protected weight.
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            closed_loop_protected_reference_nonregression_weight=2.0,
+        ),
+    )
+    set_closed_loop_trainable_scope(model, scope=scope)
+    corrector = model.updater.learned_corrector
+    attention = model.dynamics.attention_interactions
+    assert corrector is not None
+    assert attention is not None
+    state_signal = corrector.mean_head.weight.sum()
+    collision_row = attention.collision_output_index
+    node_event = attention.relation_decoder(
+        torch.ones(1, attention.width, dtype=state_signal.dtype)
+    )[..., collision_row].sum()
+    terms = {
+        "state_position": state_signal * 3.0,
+        "protected_reference_nonregression": state_signal * 5.0,
+        "event": node_event.detach(),
+    }
+    result = TrainingBatchResult(
+        total_loss=state_signal * 16.0,
+        loss_terms=terms,
+        metrics={},
+        phase="closed_loop_rgb",
+        support_terms={"event_collision_node": node_event},
+    )
+
+    _backward_training_result(model, result, config, active_scope=scope)
+
+    torch.testing.assert_close(
+        corrector.mean_head.weight.grad,
+        torch.full_like(corrector.mean_head.weight, 16.0),
+    )
+
+
 def test_node_xy_collision_scope_routes_node_event_to_selected_state_rows() -> None:
     source = load_config(
         "configs/tiny_overfit.yaml",
