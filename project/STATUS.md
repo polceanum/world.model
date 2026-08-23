@@ -1,5 +1,29 @@
 # Project status
 
+## Specification 1.61 protected state-event routing — implementation gate 2026-08-23
+
+The spec-1.60 relation owner was behaviorally inert on the failing baseline
+slice. A fixed four-seed component screen (`dcd10024...`) proves relation-only,
+mean-only, variance-only, and gate-only preserve the protected F1 exactly;
+mean plus variance reproduces the full failure even without gate or relation
+movement. The regression is therefore recursive state/uncertainty coupling,
+not insufficient collision-row weight.
+
+The new default-empty exact-resume mapping routes node-event BCE separately
+into only lateral mean/variance/gate rows while preserving the canonical
+forward loss and the relation weight `0.0045`. First-draw physical gradient
+opposes baseline event descent at cosine `-0.385393`; tail node-event aligns at
+`0.988060` and has break-even weight `0.0336883`. The profile uses `0.04`.
+The real applied proof records protected-event norm `0.0554673`, physical norm
+`0.119767`, combined head norm `0.112339`, relation norm `0.0265683`, and
+finite excluded-row evidence (`a7472420...`).
+
+Focused coverage passes `528 passed, 1 skipped`. The final repository gate
+passes `1285 passed, 20 skipped in 496.20s`; Ruff, the 224-file format check,
+isolated compile, version, and diff checks pass. Clean commit/push, two-update
+route-on/off ownership, and bounded fixed-32 accuracy are pending. This is not
+promotion evidence; deployment remains the protected step-zero initializer.
+
 ## Specification 1.60 node-only collision ownership — implementation gate 2026-08-23
 
 The specification-1.59 direct collision owner was mechanically exact but its

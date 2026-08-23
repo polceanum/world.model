@@ -4531,6 +4531,9 @@ def _backward_training_result(
     event_weight = float(resolved_weights["event"])
     if event_weight <= 0.0:
         raise ValueError("direct collision ownership requires a positive event weight")
+    state_event_weight = float(
+        config.training.closed_loop_state_event_loss_weights.get(active_scope, 0.0)
+    )
     non_event_weights = dict(resolved_weights)
     non_event_weights["event"] = 0.0
     non_event_loss = _weighted_closed_loop_total(result.loss_terms, non_event_weights)
@@ -4551,6 +4554,10 @@ def _backward_training_result(
                 "direct_collision_event_loss_weight": event_weight,
                 "direct_collision_event_gradient_norm_pre_parameter_clip": 0.0,
                 "direct_collision_event_noncollision_gradient_discarded_norm": 0.0,
+                "direct_collision_state_event_routing_active": float(state_event_weight > 0.0),
+                "direct_collision_state_event_loss_weight": state_event_weight,
+                "direct_collision_state_event_gradient_norm_pre_parameter_clip": 0.0,
+                "direct_collision_state_event_excluded_gradient_discarded_norm": 0.0,
             }
         )
         return
@@ -4564,6 +4571,26 @@ def _backward_training_result(
         attention.relation_decoder.weight,
         attention.relation_decoder.bias,
     )
+    state_parameters: tuple[Tensor, ...] = ()
+    state_routed: tuple[Tensor | None, ...] = ()
+    if state_event_weight > 0.0:
+        corrector = model.updater.learned_corrector
+        if corrector is None:
+            raise ValueError("state-event routing requires the learned state corrector")
+        state_parameters = (
+            corrector.mean_head.weight,
+            corrector.mean_head.bias,
+            corrector.variance_head.weight,
+            corrector.variance_head.bias,
+            corrector.gate_head.weight,
+            corrector.gate_head.bias,
+        )
+        state_routed = torch.autograd.grad(
+            event * state_event_weight,
+            state_parameters,
+            retain_graph=True,
+            allow_unused=True,
+        )
     routed = torch.autograd.grad(
         event * event_weight,
         parameters,
@@ -4572,6 +4599,30 @@ def _backward_training_result(
     )
     if non_event_loss.requires_grad:
         non_event_loss.backward()
+
+    state_routed_norm_squared = event.detach().new_zeros(())
+    state_discarded_norm_squared = event.detach().new_zeros(())
+    if state_routed:
+        selected_rows = torch.tensor(
+            [0, 1, 3, 4],
+            dtype=torch.int64,
+            device=event.device,
+        )
+        for parameter, event_gradient in zip(state_parameters, state_routed, strict=True):
+            if event_gradient is None:
+                continue
+            excluded_gradient = event_gradient.detach().clone()
+            excluded_gradient.index_fill_(0, selected_rows, 0)
+            state_discarded_norm_squared = (
+                state_discarded_norm_squared + excluded_gradient.square().sum()
+            )
+            if parameter.grad is None:
+                parameter.grad = torch.zeros_like(parameter)
+            selected_gradient = event_gradient.index_select(0, selected_rows)
+            parameter.grad.index_add_(0, selected_rows, selected_gradient)
+            state_routed_norm_squared = (
+                state_routed_norm_squared + selected_gradient.detach().square().sum()
+            )
 
     collision_row = attention.collision_output_index
     routed_norm_squared = event.detach().new_zeros(())
@@ -4590,7 +4641,14 @@ def _backward_training_result(
         )
     routed_norm = routed_norm_squared.sqrt()
     discarded_norm = discarded_norm_squared.sqrt()
-    if not bool(torch.isfinite(routed_norm)) or not bool(torch.isfinite(discarded_norm)):
+    state_routed_norm = state_routed_norm_squared.sqrt()
+    state_discarded_norm = state_discarded_norm_squared.sqrt()
+    if (
+        not bool(torch.isfinite(routed_norm))
+        or not bool(torch.isfinite(discarded_norm))
+        or not bool(torch.isfinite(state_routed_norm))
+        or not bool(torch.isfinite(state_discarded_norm))
+    ):
         raise FloatingPointError("nonfinite direct collision event routing gradient")
     result.metrics.update(
         {
@@ -4603,6 +4661,14 @@ def _backward_training_result(
             ),
             "direct_collision_event_noncollision_gradient_discarded_norm": float(
                 discarded_norm.detach().cpu()
+            ),
+            "direct_collision_state_event_routing_active": float(state_event_weight > 0.0),
+            "direct_collision_state_event_loss_weight": state_event_weight,
+            "direct_collision_state_event_gradient_norm_pre_parameter_clip": float(
+                state_routed_norm.detach().cpu()
+            ),
+            "direct_collision_state_event_excluded_gradient_discarded_norm": float(
+                state_discarded_norm.detach().cpu()
             ),
         }
     )

@@ -512,11 +512,52 @@ def test_closed_loop_trainable_scope_is_explicit() -> None:
                 "training.closed_loop_event_loss_weights="
                 "{updater_state_heads_xy_collision_node: 0.0045}"
             ),
+            (
+                "training.closed_loop_state_event_loss_weights="
+                "{updater_state_heads_xy_collision_node: 0.04}"
+            ),
         ],
     )
     assert node_collision_config.training.closed_loop_trainable_scope == (
         "updater_state_heads_xy_collision_node"
     )
+    assert node_collision_config.training.closed_loop_state_event_loss_weights == {
+        "updater_state_heads_xy_collision_node": 0.04
+    }
+
+
+@pytest.mark.parametrize("value", (-1.0, float("inf"), float("nan"), True, "0.04"))
+def test_state_event_routing_weight_is_strict(value: object) -> None:
+    scope = "updater_state_heads_xy_collision_node"
+    source = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=[
+            "model.dynamics.attention_residual_enabled=true",
+            f"training.closed_loop_trainable_scope={scope}",
+            f"training.closed_loop_event_loss_weights={{{scope}: 0.0045}}",
+        ],
+    )
+    with pytest.raises(ValueError, match="closed_loop_state_event_loss_weights"):
+        replace(
+            source,
+            training=replace(
+                source.training,
+                closed_loop_state_event_loss_weights={scope: value},
+            ),
+        ).validate()
+
+
+def test_state_event_routing_requires_matching_node_collision_scope() -> None:
+    with pytest.raises(ValueError, match="positive state-event routing requires"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[
+                (
+                    "training.closed_loop_state_event_loss_weights="
+                    "{updater_state_heads_xy_collision_node: 0.04}"
+                )
+            ],
+        )
 
 
 def test_combined_xy_collision_scope_requires_positive_event_weight() -> None:
@@ -743,6 +784,21 @@ def test_node_collision_owner_profile_changes_only_typed_event_routing() -> None
     source_dict["training"]["closed_loop_trainable_scope"] = scope
     source_dict["training"]["closed_loop_event_loss_weights"] = {scope: 0.0045}
     source_dict["training"]["loss_weights"]["event"] = 0.0045
+    assert source_dict == repaired_dict
+
+
+def test_protected_state_event_profile_adds_only_calibrated_state_routing() -> None:
+    source = load_config(CONFIG_DIR / "node_collision_owner_updater_xy_repair_cpu.yaml")
+    repaired = load_config(CONFIG_DIR / "protected_state_event_updater_xy_repair_cpu.yaml")
+
+    scope = "updater_state_heads_xy_collision_node"
+    assert repaired.training.closed_loop_event_loss_weights == {scope: 0.0045}
+    assert repaired.training.closed_loop_state_event_loss_weights == {scope: 0.04}
+    assert repaired.training.loss_weights["event"] == 0.0045
+    source_dict = source.to_dict()
+    repaired_dict = repaired.to_dict()
+    source_dict["project"]["name"] = repaired_dict["project"]["name"]
+    source_dict["training"]["closed_loop_state_event_loss_weights"] = {scope: 0.04}
     assert source_dict == repaired_dict
 
 

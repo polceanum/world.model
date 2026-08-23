@@ -1,5 +1,25 @@
 # Tasks
 
+## Protected node-event state routing — specification 1.61
+
+- [x] Localize the baseline F1 regression to the interaction of learned mean
+  and variance state heads; prove the relation row and each head alone are not
+  sufficient (`dcd10024...`).
+- [x] Attribute real balanced state-head gradients: physical opposes baseline
+  event descent at cosine `-0.385393`; tail node-event aligns at `0.988060`
+  with break-even weight `0.0336883` (`85eadc11...`).
+- [x] Add a default-empty, exact-resume-bound node-event state route limited to
+  lateral mean/variance/gate rows, retaining the canonical forward objective.
+- [x] Add the dedicated `0.04` state / `0.0045` relation profile and prove
+  finite applied norms plus excluded-row evidence (`a7472420...`).
+- [x] Pass focused config/schedule/objective/checkpoint coverage (`528 passed,
+  1 skipped`) plus whole-tree Ruff and 224-file format checks.
+- [x] Pass the full repository (`1285 passed, 20 skipped in 496.20s`), Ruff,
+  224-file format, isolated compile, version, and diff gates.
+- [ ] Freeze, commit, and push specification 1.61.
+- [ ] Run a clean two-update state-route-on/off ownership pair, then fresh
+  step-16/32 fixed-32 accuracy. Reject on any guardrail; do not resume spec1.60.
+
 ## Node-only typed collision ownership — specification 1.60
 
 - [x] Retain independent node/pair event-loss tensors without changing the

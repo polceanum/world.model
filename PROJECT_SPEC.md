@@ -3,7 +3,7 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.60
+**Version:** 1.61
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
@@ -8866,6 +8866,58 @@ Retain the routing instrumentation and protected step-zero deployment. Before
 another training rung, isolate the node-event collision-row gradients by
 horizon and determine whether aggregate/long-horizon supervision opposes the
 failed `0.1s` baseline slice; do not increase duration or weight blindly.
+
+---
+
+## 255. Protected node-event routing into lateral state heads
+
+Specification 1.61 addresses the actual owner of the specification-1.60
+baseline collision regression. A fixed four-episode component screen proves
+that the learned relation collision row is selector-inert: relation-only is
+bit-exact to the protected initializer, while the six state heads alone
+reproduce the complete step-32 baseline F1 failure. Mean-only, variance-only,
+and gate-only retain the initializer F1. The failure appears only when learned
+mean and learned variance are combined; gate and relation changes are not
+required. The report is
+`/private/tmp/20260823-spec161-baseline-component-screen-v3/report.json`,
+SHA-256 `dcd10024572776e11a385d2aa8750470358ecfbbd2ac589c586fea317f4e1a9d`.
+
+The new exact-resume-bound mapping
+`training.closed_loop_state_event_loss_weights` is empty by default and may
+contain only `updater_state_heads_xy_collision_node`. A positive value requires
+that scope and its existing positive relation-owner event override. It does
+not change the canonical forward event objective, logged total loss, runtime
+predictions, analytic events, metrics, selector, or relation-row weight.
+Instead, the same independently retained node-event tensor is differentiated
+again with the configured state weight and accumulated only into rows
+`0,1,3,4` of the mean, variance, and gate weight/bias tensors. Every excluded
+state row is measured and discarded; the existing AdamW row restoration keeps
+those values and moments exact. Missing node-event support remains a valid
+physical-only update with explicit zero routing evidence.
+
+The first balanced attribution shows why the protected route is needed. The
+physical lateral-head gradient norm is `0.11976653` and its cosine to baseline
+node-event descent is `-0.38539332`. Tail node-event gradient aligns with the
+baseline at cosine `0.98805958`; its first-order break-even weight is
+`0.03368828`. Equal-scenario and unit-normalized scenario routes require about
+`0.0832` at their smaller norm and do not improve directional coverage. The
+dedicated profile
+`configs/protected_state_event_updater_xy_repair_cpu.yaml` therefore retains
+the relation weight `0.0045` and adds a bounded state route `0.04`. Its real
+applied proof gives physical, protected-event, combined applied-head, and
+relation-row norms `0.11976653`, `0.05546733`, `0.11233944`, and `0.02656829`.
+Excluded state-event norm is `0.00595449`; all values are finite and below
+clipping. Attribution/proof report SHAs are `85eadc11...` and `a7472420...`.
+
+Focused config, exact-resume, schedule, objective, and checkpoint coverage
+passes `528` tests with one expected unavailable-MPS skip; whole-tree Ruff and
+the `224`-file format check pass. The final repository gate passes `1285`
+tests with `20` expected unavailable-backend skips in `496.20s`; Ruff, format,
+isolated compile, version, and diff checks pass. This is bounded routing
+evidence only. A frozen-source two-update route-on/route-off pair and fresh
+fixed-32 step-16/32 accuracy are mandatory. Do not resume or compose the
+rejected specification-1.60 checkpoints; deployment remains the protected
+step-zero initializer.
 
 ---
 

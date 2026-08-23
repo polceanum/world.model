@@ -363,6 +363,11 @@ class TrainingConfig:
     # lets staged causal curricula suppress event supervision until a scope
     # with an explicit event/relation owner is trainable.
     closed_loop_event_loss_weights: dict[str, float] = field(default_factory=dict)
+    # Optional parameter-specific node-event routing into the learned state
+    # heads of the node-collision scope.  The canonical forward objective and
+    # relation-row weight above remain unchanged; an empty mapping is exact
+    # specification-1.60 behavior.
+    closed_loop_state_event_loss_weights: dict[str, float] = field(default_factory=dict)
     # A measurement-only checkpoint may score well on the few proposals that
     # survive lifecycle gating while destroying the persistent runtime's
     # training support.  At the stage boundary, require both absolute and
@@ -1488,6 +1493,27 @@ class OrpheusConfig:
                 "to finite nonnegative weights"
             )
         configured_scopes = {self.training.closed_loop_trainable_scope, late_scope}
+        state_event_loss_weights = self.training.closed_loop_state_event_loss_weights
+        state_event_scope = "updater_state_heads_xy_collision_node"
+        if any(scope != state_event_scope for scope in state_event_loss_weights) or any(
+            isinstance(weight, bool)
+            or not isinstance(weight, (int, float))
+            or not math.isfinite(weight)
+            or weight < 0.0
+            for weight in state_event_loss_weights.values()
+        ):
+            raise ValueError(
+                "training.closed_loop_state_event_loss_weights must map only "
+                "updater_state_heads_xy_collision_node to a finite nonnegative weight"
+            )
+        if state_event_loss_weights.get(state_event_scope, 0.0) > 0.0 and (
+            state_event_scope not in configured_scopes
+            or event_loss_weights.get(state_event_scope, 0.0) <= 0.0
+        ):
+            raise ValueError(
+                "positive state-event routing requires the configured node-collision "
+                "scope and its positive direct event-loss override"
+            )
         if (
             "state_relation_roi" in configured_scopes
             and not self.model.dynamics.attention_residual_enabled

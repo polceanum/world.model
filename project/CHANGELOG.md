@@ -2,6 +2,23 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-23 specification 1.61 protected state-event routing
+
+- Localized the spec-1.60 baseline collision regression to combined learned
+  mean/variance state corrections; relation-only and every single-head
+  composition preserve both F1 slices (`dcd10024...`).
+- Added a default-empty exact-resume state-event routing map. It preserves the
+  canonical forward objective and routes retained node BCE only into lateral
+  mean/variance/gate rows; excluded rows are measured, discarded, and restored.
+- Added the protected profile with state weight `0.04` and unchanged relation
+  weight `0.0045`. The calibrated real proof gives protected-state norm
+  `0.0554673`, physical norm `0.1197665`, combined norm `0.1123394`, and
+  relation norm `0.0265683` (`85eadc11...`/`a7472420...`).
+- Focused gates pass `528 passed, 1 skipped`; the final repository passes
+  `1285 passed, 20 skipped in 496.20s`, with Ruff, 224-file format, isolated
+  compile, version, and diff checks clean. Clean pair, accuracy, latency, and
+  promotion remain pending.
+
 ### 2026-08-23 specification 1.60 node-only collision ownership
 
 - Retained independently aggregated node and pair collision BCE tensors for

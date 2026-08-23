@@ -1,5 +1,30 @@
 # Design decisions
 
+## ADR-174 — Protect recursive state heads with calibrated node-event descent
+
+- **Date:** 2026-08-23
+- **Status:** implementation accepted; clean ownership and accuracy pending
+- **Context:** Node-only relation training changed no selector-visible field at
+  step 32. Component rollback proves the baseline F1 threshold flip needs both
+  learned mean and learned variance, while the collision row and each head
+  alone are harmless. Physical state-head gradient opposes baseline node-event
+  descent at cosine `-0.38539332`.
+- **Decision:** Keep the canonical forward event loss and relation route
+  unchanged. Add a separate default-empty exact-resume map that may route the
+  retained node-event tensor only into lateral mean/variance/gate rows. Use
+  weight `0.04`, just above the measured tail-route break-even `0.03368828`,
+  while retaining relation weight `0.0045`.
+- **Alternatives considered:** increase relation weight/duration; remove pair
+  BCE from forward; freeze or scale variance; target the baseline scenario by
+  name; weaken guardrails; continue or interpolate rejected checkpoints.
+- **Consequences:** Runtime and selector semantics remain exact. A real applied
+  proof records physical/protected/combined-head/relation norms
+  `0.1197665/0.0554673/0.1123394/0.0265683`, all finite and unclipped. Focused
+  gates pass `528/1`; the final repository passes `1285/20 in 496.20s` with
+  every static gate clean. Report SHAs are `dcd10024...`, `85eadc11...`, and
+  `a7472420...`. Paired ownership and bounded accuracy remain mandatory;
+  deployment stays step zero.
+
 ## ADR-173 — Route collision learning from node evidence, not opposing pair BCE
 
 - **Date:** 2026-08-23
