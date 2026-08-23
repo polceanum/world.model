@@ -21,6 +21,15 @@ def _validated_batch_tail_fraction(batch_tail_fraction: float) -> float:
     return fraction
 
 
+def _validated_positive_finite_real(value: float, *, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (float, int)):
+        raise TypeError(f"{name} must be a real number")
+    typed = float(value)
+    if not math.isfinite(typed) or typed <= 0.0:
+        raise ValueError(f"{name} must be finite and positive")
+    return typed
+
+
 def _supported_row_tail_mean(
     row_mean: Tensor,
     supported_row: Tensor,
@@ -103,6 +112,7 @@ def gaussian_nll(
     detach_mean_error: bool = False,
     batch_macro: bool = False,
     batch_tail_fraction: float | None = None,
+    standardized_error_gradient_cap: float | None = None,
 ) -> Tensor:
     log_variance = log_variance.clamp(-12.0, 8.0)
     squared_error = (mean - target).square()
@@ -112,7 +122,23 @@ def gaussian_nll(
         # retained for the variance gradient; only its path into ``mean`` is
         # stopped.
         squared_error = squared_error.detach()
-    term = 0.5 * (squared_error * (-log_variance).exp() + log_variance)
+    standardized_error = squared_error * (-log_variance).exp()
+    if standardized_error_gradient_cap is not None:
+        cap = _validated_positive_finite_real(
+            standardized_error_gradient_cap,
+            name="standardized_error_gradient_cap",
+        )
+        # Keep the exact proper-score value while robustifying only backward.
+        # Above the cap, the logarithmic surrogate has derivative cap/x, so
+        # the standardized-error contribution to the log-variance gradient is
+        # bounded by cap instead of growing without limit.
+        surrogate = torch.where(
+            standardized_error <= cap,
+            standardized_error,
+            cap + cap * torch.log(standardized_error.clamp_min(cap) / cap),
+        )
+        standardized_error = standardized_error.detach() + surrogate - surrogate.detach()
+    term = 0.5 * (standardized_error + log_variance)
     return masked_mean(
         term,
         mask,

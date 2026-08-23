@@ -179,6 +179,7 @@ training:
   closed_loop_batch_macro_physical_losses_enabled: false
   closed_loop_axiswise_correction_hinge_enabled: false
   closed_loop_scenario_tail_fraction: null
+  closed_loop_uncertainty_standardized_error_gradient_cap: null
   validation_rollout_anchors_per_episode: null
   validation_rollout_anchor_batch_size: 1
   collision_positive_weight_max: 10.0

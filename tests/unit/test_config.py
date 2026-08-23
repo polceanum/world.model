@@ -580,6 +580,31 @@ def test_scenario_tail_objective_requires_exact_balanced_macro_axiswise_protocol
             replace(repaired, training=training).validate()
 
 
+def test_uncertainty_standardized_error_gradient_cap_is_strict_and_optional() -> None:
+    source = load_config(CONFIG_DIR / "axis_gated_updater_xy_repair_cpu.yaml")
+    robust = replace(
+        source,
+        training=replace(
+            source.training,
+            closed_loop_uncertainty_standardized_error_gradient_cap=25.0,
+        ),
+    )
+    robust.validate()
+    assert robust.training.closed_loop_uncertainty_standardized_error_gradient_cap == 25.0
+    for value in (0.0, -1.0, float("inf"), float("nan"), True, "25"):
+        with pytest.raises(
+            ValueError,
+            match="closed_loop_uncertainty_standardized_error_gradient_cap",
+        ):
+            replace(
+                robust,
+                training=replace(
+                    robust.training,
+                    closed_loop_uncertainty_standardized_error_gradient_cap=value,
+                ),
+            ).validate()
+
+
 def test_scenario_tail_updater_profile_changes_only_tail_and_event_objectives() -> None:
     source = load_config(CONFIG_DIR / "axis_gated_updater_xy_repair_cpu.yaml")
     repaired = load_config(CONFIG_DIR / "scenario_tail_updater_xy_repair_cpu.yaml")
@@ -613,6 +638,23 @@ def test_scenario_tail_updater_profile_changes_only_tail_and_event_objectives() 
     ):
         with pytest.raises(ValueError, match="closed_loop_scenario_tail_fraction"):
             replace(repaired, training=training).validate()
+
+
+def test_robust_scenario_tail_profile_changes_only_event_and_nll_gradient_ownership() -> None:
+    source = load_config(CONFIG_DIR / "scenario_tail_updater_xy_repair_cpu.yaml")
+    repaired = load_config(CONFIG_DIR / "robust_scenario_tail_updater_xy_repair_cpu.yaml")
+
+    assert repaired.training.closed_loop_scenario_tail_fraction == 0.25
+    assert repaired.training.closed_loop_event_loss_weights == {"updater_state_heads_xy": 0.0}
+    assert repaired.training.loss_weights["event"] == 0.0
+    assert repaired.training.closed_loop_uncertainty_standardized_error_gradient_cap == 25.0
+    source_dict = source.to_dict()
+    repaired_dict = repaired.to_dict()
+    source_dict["project"]["name"] = repaired_dict["project"]["name"]
+    source_dict["training"]["closed_loop_event_loss_weights"] = {"updater_state_heads_xy": 0.0}
+    source_dict["training"]["loss_weights"]["event"] = 0.0
+    source_dict["training"]["closed_loop_uncertainty_standardized_error_gradient_cap"] = 25.0
+    assert source_dict == repaired_dict
 
 
 def test_state_roi_scope_roundtrips_as_typed_configuration(tmp_path: Path) -> None:

@@ -1,5 +1,21 @@
 # Tasks
 
+## Forward-exact robust uncertainty influence — specification 1.58
+
+- [x] Add a strict optional standardized-error gradient cap with exact-null
+  legacy behavior and exact-resume binding.
+- [x] Preserve exact Gaussian-NLL forward values while bounding only the
+  extreme standardized-error backward contribution.
+- [x] Add a dedicated profile with cap `25.0`, zero event ownership, and the
+  retained scenario-tail/x-y ownership protocol.
+- [x] Prove exact forward equality, finite bounded extreme gradients, profile
+  isolation, and ordinary-data cap inactivity.
+- [x] Pass whole-repository pytest (`1260 passed, 20 skipped in 455.53s`),
+  Ruff, format, compile, version, and diff gates on final source.
+- [ ] Commit and push clean frozen specification-1.58 source.
+- [ ] Run a clean two-update capped/uncapped paired smoke and a bounded
+  fixed-manifest accuracy rung before any continuation or promotion.
+
 ## Scenario-axis-horizon tail-risk objective — specification 1.57
 
 - [x] Add a strict, exact-resume-bound optional scenario-tail fraction with an

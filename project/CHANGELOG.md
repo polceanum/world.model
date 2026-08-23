@@ -2,6 +2,22 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-23 specification 1.58 robust uncertainty influence
+
+- Added a strict, optional, exact-resume-bound standardized-error gradient cap
+  for Gaussian NLL; the null path retains exact legacy operations.
+- Preserved the exact forward proper-score value while replacing only the
+  extreme backward influence with a logarithmic surrogate.
+- Added a dedicated diagnostic profile using cap `25.0` and zero event BCE
+  ownership while retaining scenario-tail and exact x/y head ownership.
+- Passed `313` focused checks plus profile isolation. A real balanced probe is
+  finite and shows the cap inactive on ordinary data; the extreme regression
+  bounds the log-variance gradient at `12` instead of above one million.
+- Passed the full repository gate (`1260 passed, 20 skipped in 455.53s`) plus
+  Ruff, format, compile, version, and diff checks.
+- No accuracy, promotion, convergence, or deployment claim is made; clean
+  paired/fixed-manifest gates remain pending.
+
 ### 2026-08-23 specification 1.57 scenario-tail objective
 
 - Added an opt-in strict scenario-tail fraction with exact-null legacy

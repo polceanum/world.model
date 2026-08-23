@@ -463,6 +463,10 @@ class TrainingConfig:
     # supported fraction of scenario rows instead of allowing easy regimes to
     # cancel a hard-regime regression. None is the exact legacy reduction.
     closed_loop_scenario_tail_fraction: float | None = None
+    # Optional forward-exact robustification for physical Gaussian-NLL
+    # optimization. Reported NLL remains the exact proper-score value; only
+    # standardized-error backward influence above this cap is logarithmic.
+    closed_loop_uncertainty_standardized_error_gradient_cap: float | None = None
     # Trend validation still ingests and scores every current frame, but may
     # use a deterministic spread of forecast anchors. Full promotion
     # evaluation remains a separate, larger manifest.
@@ -1675,6 +1679,19 @@ class OrpheusConfig:
                     "training.closed_loop_scenario_tail_fraction requires "
                     "closed_loop_axiswise_correction_hinge_enabled=true"
                 )
+        uncertainty_gradient_cap = (
+            self.training.closed_loop_uncertainty_standardized_error_gradient_cap
+        )
+        if uncertainty_gradient_cap is not None and (
+            isinstance(uncertainty_gradient_cap, bool)
+            or not isinstance(uncertainty_gradient_cap, (int, float))
+            or not math.isfinite(float(uncertainty_gradient_cap))
+            or float(uncertainty_gradient_cap) <= 0.0
+        ):
+            raise ValueError(
+                "training.closed_loop_uncertainty_standardized_error_gradient_cap "
+                "must be null or a finite positive number"
+            )
         if (
             self.training.validation_rollout_anchors_per_episode is not None
             and self.training.validation_rollout_anchors_per_episode <= 0

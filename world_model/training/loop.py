@@ -2975,6 +2975,9 @@ def _belief_state_losses(
         detach_mean_error=True,
         batch_macro=batch_macro,
         batch_tail_fraction=scenario_tail_fraction,
+        standardized_error_gradient_cap=(
+            config.training.closed_loop_uncertainty_standardized_error_gradient_cap
+        ),
     )
     # Inactive factory padding is not a causal prediction.  Its zero logits
     # previously contributed BCE(0, 0) on every empty frame, creating a
@@ -3098,6 +3101,7 @@ def _axis_separable_gaussian_nll(
     detach_mean_error: bool,
     batch_macro: bool,
     batch_tail_fraction: float | None,
+    standardized_error_gradient_cap: float | None = None,
 ) -> Tensor:
     """Apply scenario-tail NLL independently to each physical axis."""
 
@@ -3109,6 +3113,7 @@ def _axis_separable_gaussian_nll(
             mask,
             detach_mean_error=detach_mean_error,
             batch_macro=batch_macro,
+            standardized_error_gradient_cap=standardized_error_gradient_cap,
         )
     if mean.shape != target.shape or mean.shape != log_variance.shape or mean.ndim < 2:
         raise ValueError("axis-separable Gaussian values must have matching shapes")
@@ -3121,6 +3126,7 @@ def _axis_separable_gaussian_nll(
             detach_mean_error=detach_mean_error,
             batch_macro=True,
             batch_tail_fraction=batch_tail_fraction,
+            standardized_error_gradient_cap=standardized_error_gradient_cap,
         )
         for coordinate in range(mean.shape[-1])
     ]
@@ -3496,6 +3502,9 @@ def _rollout_loss_result(
             detach_mean_error=True,
             batch_macro=batch_macro,
             batch_tail_fraction=scenario_tail_fraction,
+            standardized_error_gradient_cap=(
+                config.training.closed_loop_uncertainty_standardized_error_gradient_cap
+            ),
         )
         seconds = query_seconds[query_index]
         # Do not represent an unsupported horizon as a zero-valued training
@@ -5208,6 +5217,9 @@ def run_closed_loop_batch(
     )
     metrics["closed_loop_scenario_tail_fraction"] = float(
         config.training.closed_loop_scenario_tail_fraction or 0.0
+    )
+    metrics["closed_loop_uncertainty_standardized_error_gradient_cap"] = float(
+        config.training.closed_loop_uncertainty_standardized_error_gradient_cap or 0.0
     )
     metrics.update(physical_metrics)
     metrics.update(parameter_supervision_metrics)

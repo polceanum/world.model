@@ -6,6 +6,7 @@ import torch
 from world_model.training.losses import (
     balanced_binary_cross_entropy,
     correction_error,
+    gaussian_nll,
     masked_mean,
     posterior_improvement_hinge,
 )
@@ -121,6 +122,50 @@ def test_scenario_tail_masked_mean_rejects_invalid_fraction(value: object) -> No
             torch.ones(2, 1),
             torch.ones(2, 1, dtype=torch.bool),
             batch_tail_fraction=value,  # type: ignore[arg-type]
+        )
+
+
+def test_gaussian_nll_gradient_cap_preserves_value_and_bounds_variance_gradient() -> None:
+    mean = torch.zeros(1)
+    target = torch.full((1,), 10.0)
+    legacy_log_variance = torch.full((1,), -10.0, requires_grad=True)
+    robust_log_variance = legacy_log_variance.detach().clone().requires_grad_(True)
+    mask = torch.ones(1, dtype=torch.bool)
+
+    legacy = gaussian_nll(
+        mean,
+        target,
+        legacy_log_variance,
+        mask,
+        detach_mean_error=True,
+    )
+    robust = gaussian_nll(
+        mean,
+        target,
+        robust_log_variance,
+        mask,
+        detach_mean_error=True,
+        standardized_error_gradient_cap=25.0,
+    )
+
+    torch.testing.assert_close(robust, legacy, rtol=0.0, atol=0.0)
+    legacy.backward()
+    robust.backward()
+    assert legacy_log_variance.grad is not None
+    assert robust_log_variance.grad is not None
+    assert float(legacy_log_variance.grad.abs()) > 1_000_000.0
+    torch.testing.assert_close(robust_log_variance.grad, torch.tensor([-12.0]))
+
+
+@pytest.mark.parametrize("value", [0.0, -1.0, float("inf"), float("nan"), True, "25"])
+def test_gaussian_nll_rejects_invalid_standardized_error_gradient_cap(value: object) -> None:
+    with pytest.raises((TypeError, ValueError), match="standardized_error_gradient_cap"):
+        gaussian_nll(
+            torch.zeros(1),
+            torch.ones(1),
+            torch.zeros(1),
+            torch.ones(1, dtype=torch.bool),
+            standardized_error_gradient_cap=value,  # type: ignore[arg-type]
         )
 
 

@@ -1,5 +1,29 @@
 # Project status
 
+## Specification 1.58 robust uncertainty influence — implementation in progress 2026-08-23
+
+The successor to the rejected scenario-tail diagnostic keeps the exact
+forward Gaussian NLL but optionally logarithmically caps only the backward
+influence of extreme standardized residuals. `null` is exact legacy behavior;
+the finite positive cap is strict and exact-resume-bound. Runtime inference,
+validation proper scores, selector semantics, and deployment are unchanged.
+
+The dedicated CPU profile keeps fraction `0.25`, two anchors, uncertainty
+weight `0.025`, and exact x/y head ownership. It uses cap `25.0` and removes
+event BCE ownership from the state heads after specification 1.57 produced
+event/identity regressions despite a material event gradient. Analytic event
+dynamics and all event validation evidence remain active.
+
+Focused implementation checks pass (`313 passed`), as do profile resolution
+and exact-difference checks. The extreme regression retains an identical NLL
+value while changing the log-variance gradient from magnitude above one
+million to exactly `12`. A real balanced initializer probe is finite; the cap
+is inactive on ordinary data and event removal accounts for the objective
+delta. Report SHA-256 is `645dadd1...`. The full repository gate passes `1260
+passed, 20 skipped in 455.53s`; Ruff, format, compile, version, and diff checks
+pass. A clean paired smoke and bounded fixed-manifest accuracy remain pending.
+No candidate is promoted; deployment remains step zero.
+
 ## Specification 1.57 scenario-tail objective — retained mechanism, rejected candidate 2026-08-23
 
 An opt-in scenario-tail reduction now targets the failure mode hidden by pooled

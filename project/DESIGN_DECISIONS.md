@@ -4898,6 +4898,34 @@
   candidate, and require bounded per-objective influence plus direct semantic
   ownership before another training protocol. Deployment remains step zero.
 
+## ADR-171 — Bound extreme uncertainty gradients without changing proper scores
+
+- **Date:** 2026-08-23
+- **Status:** repository-gated; accuracy qualification pending
+- **Context:** The specification-1.57 tail objective improved pooled and many
+  sliced physical metrics at step 32, but update 48 produced a finite raw
+  gradient norm of `5230.0088`. Gaussian NLL contains an unbounded
+  standardized-error term, while the frozen event decoder's material gradient
+  coincided with worse collision guardrails.
+- **Decision:** Add an optional positive standardized-error gradient cap. Keep
+  the exact Gaussian-NLL forward value with a straight-through logarithmic
+  surrogate above the cap, and retain null as exact legacy behavior. Qualify
+  cap `25.0` in a separate profile with event objective ownership zero, while
+  keeping physical event dynamics, validation evidence, scenario-tail
+  reduction, and exact x/y head ownership unchanged.
+- **Alternatives considered:** clamp the NLL value or log variance; lower the
+  global gradient cap; reduce all uncertainty weight; retain event BCE on the
+  state heads; weaken validation guardrails; or resume the rejected step-48
+  checkpoint.
+- **Consequences:** Extreme forward values remain exact while the tested
+  log-variance gradient magnitude falls from above one million to `12`. On an
+  ordinary real balanced draw the cap is inactive and NLL gradients are exact;
+  removing event ownership explains the remaining gradient change. This is
+  bounded influence and routing evidence only. The final repository gate is
+  `1260 passed, 20 skipped in 455.53s` with all static checks clean. Clean
+  paired and fixed-manifest accuracy gates are still required; deployment
+  remains the protected step zero.
+
 ## ADR-169 — Restrict the updater repair to lateral typed rows, then reject its unconstrained objective
 
 - **Date:** 2026-08-23

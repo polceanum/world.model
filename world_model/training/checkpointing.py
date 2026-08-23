@@ -184,6 +184,7 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
     ("training", "closed_loop_batch_macro_physical_losses_enabled"): False,
     ("training", "closed_loop_axiswise_correction_hinge_enabled"): False,
     ("training", "closed_loop_scenario_tail_fraction"): None,
+    ("training", "closed_loop_uncertainty_standardized_error_gradient_cap"): None,
     ("training", "closed_loop_event_loss_weights"): {},
     ("training", "loss_weights", "rollout_nll"): 0.0,
     ("device", "closed_loop_preference"): "same",

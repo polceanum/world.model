@@ -906,6 +906,7 @@ def test_training_resume_binds_prior_future_correction_with_legacy_true_default(
         "closed_loop_batch_macro_physical_losses_enabled",
         "closed_loop_axiswise_correction_hinge_enabled",
         "closed_loop_scenario_tail_fraction",
+        "closed_loop_uncertainty_standardized_error_gradient_cap",
     ],
 )
 def test_training_resume_binds_physical_objective_repairs_with_legacy_default(
@@ -920,7 +921,13 @@ def test_training_resume_binds_physical_objective_repairs_with_legacy_default(
     }
 
     validate_training_resume_config(legacy_payload, config)
-    value = 0.25 if field_name == "closed_loop_scenario_tail_fraction" else True
+    value = (
+        0.25
+        if field_name == "closed_loop_scenario_tail_fraction"
+        else 25.0
+        if field_name == "closed_loop_uncertainty_standardized_error_gradient_cap"
+        else True
+    )
     changed_values: dict[str, object] = {
         "scenario_balanced_batches": field_name == "closed_loop_scenario_tail_fraction",
         "batch_size": (
