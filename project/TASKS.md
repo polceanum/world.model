@@ -36,12 +36,14 @@
   Require the resolved config path to be Git-tracked. The final affected gate
   passes `62` tests in `46.39s`; Ruff, compileall, and diff
   checks pass.
-- [ ] Execute that comparator on a sequential active-Aqua MPS fixed-32 pair
-  after the independent specification-1.52 treatment releases the compute
-  path; preserve learned-only defaults unless comprehensive eligibility passes.
-- [ ] Run the now-supported disjoint RGB-only fresh-validation/test/OOD pairs
-  and promote only if every
-  comprehensive gate passes; otherwise preserve the learned runtime default.
+- [x] Execute the sequential active-Aqua MPS fixed-32 pair. Repair only the
+  detached integer-report reduction crash and batched trace-count contract,
+  then reject the candidate: its persistent posterior trace changed and the
+  diagnostic physical comparison failed 598 guardrails despite 1681
+  non-learned composed steps.
+- [x] Stop before disjoint fresh-validation/test/OOD. The standard pair already
+  fails the forecast-only posterior invariant and broad guardrails; preserve
+  the learned runtime default and retain both reports as rejection evidence.
 
 ## Axis-gated updater-head repair — specification 1.52 pre-launch
 

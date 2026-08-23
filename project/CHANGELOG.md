@@ -46,7 +46,19 @@
   OOD decisions, and requires one checkpoint, policy, source, config,
   environment, and threshold contract. Configs must be Git-tracked. The final
   affected gate passes `62` tests in `46.39s`; Ruff, compileall, and diff checks
-  pass. The production MPS fixed-32 pair remains pending.
+  pass.
+- Moved only detached runtime-hypothesis integer report counters to CPU before
+  multi-axis reduction, avoiding a reproducible custom-Aqua-MPS compiler abort
+  without changing model or floating-point paths. The exact active-MPS test,
+  one uninstrumented 40-frame candidate, and the full repository gate pass
+  (`1212 passed, 18 skipped in 450.82s`).
+- Corrected the comparator posterior-trace contract to count batched belief
+  snapshots (`4 * 40 = 160`) rather than episode-frames.
+- Completed and rejected the clean fixed-32 pair on commit `33ff3e0`. Both arms
+  completed 32/32 with zero nonfinite outputs, but the intervention changed
+  persistent posterior state and a diagnostic physical comparison failed 598
+  guardrails despite 1681 non-learned composed steps. No disjoint ladder or
+  runtime-policy promotion was accepted.
 
 ### 2026-08-21 specification 1.52 axis-gated updater-head repair (pre-launch)
 

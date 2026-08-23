@@ -8288,9 +8288,19 @@ Evaluator reports now persist the exact host, Python, Torch, requested/resolved
 device, precision, and accelerator-capability environment needed for a paired
 latency claim; the existing MPS replay verifier binds the same metadata. The
 final affected comparator/evaluator/replay gate passes `62` tests in `46.39s`;
-Ruff format/check, isolated compileall, and `git diff --check` pass. This is
-only implementation qualification. No matched fixed-32 report, latency result,
-runtime-policy promotion, or disjoint-split result has yet been produced.
+Ruff format/check, isolated compileall, and `git diff --check` pass.
+
+The first production standard-validation attempt is terminal rejection
+evidence, not promotion. After moving only detached integer diagnostic
+reductions to the host to avoid a reproducible custom-Aqua-MPS compiler abort,
+both clean commit-`33ff3e0` arms completed the exact 32-episode MPS manifest
+with zero nonfinite outputs. The candidate composed 2450 x-axis steps, 1681
+from non-learned candidates, but its persistent posterior trace differed from
+the learned-only reference and violated the required forecast-only boundary.
+A diagnostic comparison also failed 598 physical, uncertainty, event,
+identity, and scenario guardrails, with every pooled position horizon slightly
+worse. The comparator remains fail-closed; no disjoint run or runtime-default
+promotion is permitted from this candidate.
 
 ---
 

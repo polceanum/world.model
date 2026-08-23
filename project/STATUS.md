@@ -74,8 +74,29 @@ reproduces all four pair decisions, and requires one checkpoint, policy,
 source, config, environment, and exact threshold contract. Config paths must
 also be real Git-tracked files, not merely ignored files inside the repository.
 The final combined affected gate passes `62` tests in `46.39s`; the earlier
-`59/44.40s` result is an intermediate pre-aggregator
-gate.
+`59/44.40s` result is an intermediate pre-aggregator gate.
+
+The production fixed-32 active-Aqua MPS gate is complete and rejects the
+runtime-pool intervention. Commit `623cce6` moves only detached integer report
+counters to the host, avoiding the reproducible custom-MPS compiler abort;
+the exact MPS regression, an uninstrumented 40-frame candidate, and the full
+repository gate (`1212 passed, 18 skipped in 450.82s`) pass. Commit `33ff3e0`
+corrects posterior trace accounting from episode-frames (`1280`) to batched
+belief snapshots (`160`).
+
+The final reports are
+`runs/20260823-023219-spec153-runtime-pool-reference-fixed32-mps/evaluation.json`
+(SHA-256 `c456f2ec...b08f2`) and
+`runs/20260823-023219-spec153-runtime-pool-candidate-fixed32-mps/evaluation.json`
+(SHA-256 `e91bb679...9b74`). Both completed `32/32` on clean commit
+`33ff3e097973d38b739245483757260cde4ab511` with zero nonfinite outputs.
+The candidate used 2450 composed x steps, including 1681 non-learned steps,
+but changed the persistent posterior trace (`14225261...` versus
+`846f7174...`). A diagnostic physical-only comparison also fails 598
+guardrails; every pooled position horizon regresses by `4.13e-6` to
+`7.38e-5` m alongside axis, velocity, NLL, calibration, event, identity, and
+scenario failures. No canonical comparison or disjoint run was accepted, and
+the learned runtime default remains protected.
 
 ## Specification 1.52 axis-gated updater-head repair — pre-launch 2026-08-21
 

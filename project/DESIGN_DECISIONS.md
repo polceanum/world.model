@@ -4793,6 +4793,22 @@
   Complete `32/32` initialization validation, a campaign relaunch, selector
   behavior, prediction accuracy, and convergence remain unproved.
 
+## ADR-166 — Reject regime-local runtime composition at the standard gate
+
+- **Date:** 2026-08-23
+- **Status:** rejected for promotion; learned runtime retained
+- **Context:** The specification-1.53 candidate completed the full 32-episode
+  RGB-only MPS manifest after a report-only integer reduction repair and used
+  1681 non-learned composed x steps.
+- **Decision:** Reject before disjoint evaluation. The intervention changed the
+  exact persistent posterior trace despite its forecast-only contract, and a
+  diagnostic comparison failed 598 pooled and sliced guardrails. Do not weaken
+  trace equality or physical thresholds to admit it.
+- **Consequences:** Preserve the learned deployment default and both raw
+  reports. The MPS counter repair and batched trace-count correction remain
+  valid infrastructure fixes. Any successor must isolate online propagation
+  from forecast composition and re-enter at a fresh standard pair.
+
 ## ADR-149 — Batch validation anchors only after exact MPS parity
 
 - **Date:** 2026-08-21
