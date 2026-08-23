@@ -75,6 +75,55 @@ def test_batch_macro_masked_mean_equalizes_unequal_row_support_and_gradients() -
     )
 
 
+def test_scenario_tail_masked_mean_selects_only_worst_supported_rows() -> None:
+    value = torch.tensor(
+        [
+            [1.0, 1.0],
+            [8.0, 8.0],
+            [4.0, 4.0],
+            [100.0, 100.0],
+        ],
+        requires_grad=True,
+    )
+    mask = torch.tensor(
+        [
+            [True, True],
+            [True, True],
+            [True, True],
+            [False, False],
+        ]
+    )
+
+    loss = masked_mean(value, mask, batch_tail_fraction=0.5)
+
+    torch.testing.assert_close(loss, torch.tensor(6.0))
+    loss.backward()
+    torch.testing.assert_close(
+        value.grad,
+        torch.tensor(
+            [
+                [0.0, 0.0],
+                [0.25, 0.25],
+                [0.25, 0.25],
+                [0.0, 0.0],
+            ]
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [0.0, -0.1, 1.1, float("inf"), float("nan"), True, "0.25"],
+)
+def test_scenario_tail_masked_mean_rejects_invalid_fraction(value: object) -> None:
+    with pytest.raises((TypeError, ValueError), match="batch_tail_fraction"):
+        masked_mean(
+            torch.ones(2, 1),
+            torch.ones(2, 1, dtype=torch.bool),
+            batch_tail_fraction=value,  # type: ignore[arg-type]
+        )
+
+
 def test_legacy_masked_mean_false_is_bit_and_gradient_identical() -> None:
     mask = torch.tensor([[True, False, True], [True, True, False]])
     implicit_value = torch.tensor([[1.0, 7.0, 3.0], [5.0, 9.0, 11.0]], requires_grad=True)
@@ -170,6 +219,24 @@ def test_balanced_binary_cross_entropy_upweights_rare_positive_events() -> None:
     assert float(loss) == pytest.approx(1.5 * torch.log(torch.tensor(2.0)).item())
 
 
+def test_balanced_binary_cross_entropy_scenario_tail_selects_hardest_row() -> None:
+    logits = torch.tensor([[-4.0, -4.0], [4.0, 4.0]], requires_grad=True)
+    target = torch.ones_like(logits)
+    mask = torch.ones_like(logits, dtype=torch.bool)
+
+    loss = balanced_binary_cross_entropy(
+        logits,
+        target,
+        mask,
+        batch_tail_fraction=0.5,
+    )
+
+    torch.testing.assert_close(loss, torch.nn.functional.softplus(torch.tensor(4.0)))
+    loss.backward()
+    assert torch.count_nonzero(logits.grad[0]) == 2
+    assert torch.count_nonzero(logits.grad[1]) == 0
+
+
 def test_balanced_binary_cross_entropy_handles_empty_and_all_negative_masks() -> None:
     logits = torch.tensor([0.0, 1.0], requires_grad=True)
     target = torch.zeros(2)
@@ -193,6 +260,13 @@ def test_balanced_binary_cross_entropy_handles_empty_and_all_negative_masks() ->
             target,
             torch.ones(2, dtype=torch.bool),
             maximum_positive_weight=0.5,
+        )
+    with pytest.raises(ValueError, match="batch_tail_fraction"):
+        balanced_binary_cross_entropy(
+            logits,
+            target,
+            torch.zeros(2, dtype=torch.bool),
+            batch_tail_fraction=0.0,
         )
     with pytest.raises(ValueError, match="matching shapes"):
         posterior_improvement_hinge(

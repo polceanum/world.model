@@ -19,6 +19,7 @@ from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
 from world_model.training.loop import (
     TrainingBatchResult,
+    _axis_separable_masked_huber,
     _belief_state_losses,
     _correction_non_regression_loss,
     _current_correction_objective_support,
@@ -28,6 +29,7 @@ from world_model.training.loop import (
     _select_rollout_anchor_frames,
     _state_velocity_objective_axis_support,
     _update_geometric_identity_metrics,
+    _validate_scenario_tail_training_batch,
     _weighted_closed_loop_total,
     future_scene_predictable_mask,
     gather_target_pairs,
@@ -671,6 +673,102 @@ def test_loop_axiswise_correction_hinge_prevents_cross_axis_cancellation() -> No
         torch.tensor([[[1.0 / 3.0, 0.0, 1.0 / 3.0]]]),
     )
     assert prior.grad is None
+
+
+def test_scenario_tail_physical_loss_is_axis_separable_and_omits_unsupported_rows() -> None:
+    prediction = torch.tensor(
+        [
+            [[4.0, 0.0, 0.0]],
+            [[0.0, 3.0, 0.0]],
+            [[1.0, 1.0, 0.0]],
+            [[100.0, 100.0, 100.0]],
+        ],
+        requires_grad=True,
+    )
+    target = torch.zeros_like(prediction)
+    support = torch.tensor([[True], [True], [True], [False]])
+
+    loss = _axis_separable_masked_huber(
+        prediction,
+        target,
+        support,
+        batch_macro=True,
+        batch_tail_fraction=0.5,
+    )
+
+    torch.testing.assert_close(loss, torch.tensor(7.0 / 6.0))
+    loss.backward()
+    assert prediction.grad is not None
+    torch.testing.assert_close(prediction.grad[0, 0], torch.tensor([1.0 / 6.0, 0.0, 0.0]))
+    torch.testing.assert_close(prediction.grad[1, 0], torch.tensor([0.0, 1.0 / 6.0, 0.0]))
+    torch.testing.assert_close(
+        prediction.grad[2, 0],
+        torch.tensor([1.0 / 6.0, 1.0 / 6.0, 0.0]),
+    )
+    assert torch.count_nonzero(prediction.grad[3]) == 0
+
+
+def test_scenario_tail_correction_hinge_selects_worst_row_per_axis() -> None:
+    config = _single_horizon_config()
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            closed_loop_batch_macro_physical_losses_enabled=True,
+            closed_loop_axiswise_correction_hinge_enabled=True,
+            closed_loop_scenario_tail_fraction=0.5,
+        ),
+    )
+    prior = torch.ones(4, 1, 3)
+    posterior = torch.tensor(
+        [
+            [[4.0, 0.0, 1.0]],
+            [[1.0, 3.0, 1.0]],
+            [[2.0, 2.0, 1.0]],
+            [[100.0, 100.0, 100.0]],
+        ],
+        requires_grad=True,
+    )
+    target = torch.zeros_like(posterior)
+    support = torch.tensor([[True], [True], [True], [False]])
+
+    loss = _correction_non_regression_loss(
+        posterior,
+        prior,
+        target,
+        support,
+        config,
+    )
+
+    torch.testing.assert_close(loss, torch.tensor(7.0 / 6.0))
+    loss.backward()
+    assert posterior.grad is not None
+    assert torch.count_nonzero(posterior.grad[3]) == 0
+    assert prior.grad is None
+
+
+def test_scenario_tail_training_requires_canonical_balanced_row_order() -> None:
+    source = load_config("configs/scenario_tail_updater_xy_repair_cpu.yaml")
+    canonical = list(source.simulator.scenario_mixture)
+
+    _validate_scenario_tail_training_batch(
+        {"metadata": {"scenario": canonical}},
+        source,
+        training_with_gradients=True,
+    )
+    with pytest.raises(ValueError, match="canonical order"):
+        _validate_scenario_tail_training_batch(
+            {"metadata": {"scenario": list(reversed(canonical))}},
+            source,
+            training_with_gradients=True,
+        )
+    # Validation runs one attributed episode at a time and never optimizes the
+    # tail objective, so its batch-one metadata remains valid.
+    _validate_scenario_tail_training_batch(
+        {"metadata": {"scenario": [canonical[0]]}},
+        source,
+        training_with_gradients=False,
+    )
 
 
 def test_current_physical_losses_are_batch_macro_and_omit_unsupported_rows() -> None:

@@ -458,6 +458,11 @@ class TrainingConfig:
     # False preserves vector-norm correction non-regression. New protocols may
     # require non-regression independently on each supported coordinate.
     closed_loop_axiswise_correction_hinge_enabled: bool = False
+    # Optional group-robust physical objective for one-row-per-scenario
+    # balanced batches. Each axis/horizon cell reduces the highest-loss
+    # supported fraction of scenario rows instead of allowing easy regimes to
+    # cancel a hard-regime regression. None is the exact legacy reduction.
+    closed_loop_scenario_tail_fraction: float | None = None
     # Trend validation still ingests and scores every current frame, but may
     # use a deterministic spread of forecast anchors. Full promotion
     # evaluation remains a separate, larger manifest.
@@ -1638,6 +1643,38 @@ class OrpheusConfig:
         ):
             if not isinstance(getattr(self.training, field_name), bool):
                 raise ValueError(f"training.{field_name} must be boolean")
+        scenario_tail_fraction = self.training.closed_loop_scenario_tail_fraction
+        if scenario_tail_fraction is not None:
+            if (
+                isinstance(scenario_tail_fraction, bool)
+                or not isinstance(scenario_tail_fraction, (int, float))
+                or not math.isfinite(float(scenario_tail_fraction))
+                or not 0.0 < float(scenario_tail_fraction) <= 1.0
+            ):
+                raise ValueError(
+                    "training.closed_loop_scenario_tail_fraction must be null or a "
+                    "finite number in (0, 1]"
+                )
+            if not self.training.scenario_balanced_batches:
+                raise ValueError(
+                    "training.closed_loop_scenario_tail_fraction requires "
+                    "scenario_balanced_batches=true"
+                )
+            if self.training.batch_size != len(self.simulator.scenario_mixture):
+                raise ValueError(
+                    "training.closed_loop_scenario_tail_fraction requires exactly one "
+                    "episode per declared scenario in each batch"
+                )
+            if not self.training.closed_loop_batch_macro_physical_losses_enabled:
+                raise ValueError(
+                    "training.closed_loop_scenario_tail_fraction requires "
+                    "closed_loop_batch_macro_physical_losses_enabled=true"
+                )
+            if not self.training.closed_loop_axiswise_correction_hinge_enabled:
+                raise ValueError(
+                    "training.closed_loop_scenario_tail_fraction requires "
+                    "closed_loop_axiswise_correction_hinge_enabled=true"
+                )
         if (
             self.training.validation_rollout_anchors_per_episode is not None
             and self.training.validation_rollout_anchors_per_episode <= 0

@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.56
+**Version:** 1.57
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, and exact lateral updater-head ownership amendments 23 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -8511,6 +8511,50 @@ reference-pairs event/identity/NLL. Ownership remains exact and finite. The
 step-128 checkpoint SHA-256 is `612d1f05...` and model-state hash is
 `7c5ccc1c...`. The tradeoff therefore begins during warmup and later rotates
 across scenarios; selecting an earlier checkpoint is not a repair.
+
+---
+
+## 251. Scenario-axis-horizon tail-risk objective
+
+Specification 1.57 adds one opt-in training field,
+`training.closed_loop_scenario_tail_fraction`. `null` preserves the exact
+legacy supported-mean reductions. A finite non-boolean fraction in `(0, 1]`
+requires scenario-balanced batches, one row for every declared scenario,
+batch-macro physical losses, and axiswise correction hinges. Differentiable
+training verifies the canonical declared scenario order before using the
+field; validation remains unchanged.
+
+When enabled, current and rollout position, velocity, and Gaussian-NLL losses
+are reduced independently by world axis. Each axis first computes one mean per
+supported scenario row, then averages the worst `ceil(fraction * supported)`
+rows. Correction hinges use the same axis-separated tail reduction. Node and
+pair event BCE use a scenario-row tail after deriving the globally bounded
+class weight. Unsupported rows are omitted, and the existing fixed configured
+horizon denominator remains unchanged. The mechanism changes optimization
+only: runtime inference, physical metrics, selector guardrails, support floors,
+and deployment semantics are untouched.
+
+The dedicated CPU diagnostic profile uses a tail fraction of `0.25`, two
+rollout anchors per window, collision-event weight `0.05`, and uncertainty
+weight `0.025`, while retaining the exact specification-1.56 x/y head
+ownership. The second anchor is required because a real balanced one-anchor
+draw produced exactly zero recursive rollout and event gradient at the owned
+heads. On the same eight-scenario draw, the calibrated two-anchor objective
+produced finite owned-head gradient norm `0.11139997`, `1.6526x` the legacy
+one-anchor norm, with cosine `0.72210806`. Weighted rollout-x, rollout-y,
+velocity, NLL, and event norms were `0.06375`, `0.00638`, `0.02232`, `0.04554`,
+and `0.04380`; total norm remained far below the global clip. The report is
+`/private/tmp/orpheus-spec157-tail-gradient-probe-calibrated-20260823/report.json`
+with SHA-256 `959869ad...`.
+
+This is gradient-routing evidence, not accuracy, convergence, or promotion
+evidence. The complete repository gate passes `1249` tests with `20` expected
+inactive-backend skips in `454.79s`; Ruff, format, compile, version, and diff
+checks pass. A clean frozen two-update tail-on/tail-off pair remains required.
+A bounded fixed-32 checkpoint may continue
+only if the 21 step-128 specification-1.56 failures contract without creating
+new pooled or scenario/axis/horizon uncertainty, event, identity, coverage, or
+physical regressions. Deployment remains the protected step-zero incumbent.
 
 ---
 

@@ -1,5 +1,25 @@
 # Tasks
 
+## Scenario-axis-horizon tail-risk objective — specification 1.57
+
+- [x] Add a strict, exact-resume-bound optional scenario-tail fraction with an
+  exact-null legacy path and canonical balanced-batch validation.
+- [x] Apply supported-row tail reduction independently to current/rollout
+  position, velocity, NLL, correction hinges, and collision-event BCE.
+- [x] Retain exact `updater_state_heads_xy` ownership and leave runtime,
+  selector, support, and deployment semantics unchanged.
+- [x] Calibrate two anchors, event weight `0.05`, uncertainty weight `0.025`,
+  and tail fraction `0.25` on one real balanced CPU gradient probe.
+- [x] Pass the focused implementation gate (`567 passed, 1 skipped`).
+- [x] Pass whole-repository (`1249 passed, 20 skipped in 454.79s`), Ruff,
+  format, compile, version, and diff gates.
+- [ ] Commit and push the frozen source.
+- [ ] Run a clean two-update tail-on/tail-off pair from the immutable
+  initializer and prove exact draws, ownership, finite gradients, and common
+  step-zero physical evidence.
+- [ ] Run a bounded fixed-32 checkpoint diagnostic. Stop unless the 21
+  specification-1.56 step-128 failures contract without new guardrail failures.
+
 ## Exact lateral updater-head ownership — specification 1.56
 
 - [x] Add `updater_state_heads_xy` as a strict typed training scope exposing

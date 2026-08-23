@@ -2947,11 +2947,13 @@ def _belief_state_losses(
     aligned_position = gather_target_slots(target_position, indices)
     aligned_velocity = gather_target_slots(target_objects["velocity"][:, frame_index], indices)
     batch_macro = config.training.closed_loop_batch_macro_physical_losses_enabled
-    state_position = masked_huber(
+    scenario_tail_fraction = config.training.closed_loop_scenario_tail_fraction
+    state_position = _axis_separable_masked_huber(
         objects.position,
         aligned_position,
         matched,
         batch_macro=batch_macro,
+        batch_tail_fraction=scenario_tail_fraction,
     )
     if velocity_axis_support is None:
         velocity_axis_support = _state_velocity_objective_axis_support(
@@ -2965,13 +2967,14 @@ def _belief_state_losses(
         raise ValueError("velocity axis support must be boolean belief-slot coordinates [B,N,3]")
     elif (velocity_axis_support & ~_state_velocity_objective_axis_support(belief, matched)).any():
         raise ValueError("velocity axis support cannot include a newborn or unmatched slot")
-    uncertainty = gaussian_nll(
+    uncertainty = _axis_separable_gaussian_nll(
         objects.position,
         aligned_position,
         objects.fast_log_variance[..., :3],
         matched,
         detach_mean_error=True,
         batch_macro=batch_macro,
+        batch_tail_fraction=scenario_tail_fraction,
     )
     # Inactive factory padding is not a causal prediction.  Its zero logits
     # previously contributed BCE(0, 0) on every empty frame, creating a
@@ -3018,11 +3021,12 @@ def _belief_state_losses(
             }
         )
     if velocity_axis_support.any():
-        losses["state_velocity"] = masked_huber(
+        losses["state_velocity"] = _axis_separable_masked_huber(
             objects.velocity,
             aligned_velocity,
             velocity_axis_support,
             batch_macro=batch_macro,
+            batch_tail_fraction=scenario_tail_fraction,
         )
     if drag_observable.any():
         losses["parameter_drag"] = masked_huber(
@@ -3041,6 +3045,86 @@ def _belief_state_losses(
         indices,
         matched,
     )
+
+
+def _coordinate_mask(mask: Tensor, value: Tensor, coordinate: int) -> Tensor:
+    """Return a mask for one final-axis coordinate without changing support."""
+
+    if mask.shape == value.shape:
+        return mask[..., coordinate]
+    if mask.shape == value.shape[:-1]:
+        return mask
+    raise ValueError("physical mask must match values or omit only their coordinate axis")
+
+
+def _axis_separable_masked_huber(
+    prediction: Tensor,
+    target: Tensor,
+    mask: Tensor,
+    *,
+    batch_macro: bool,
+    batch_tail_fraction: float | None,
+) -> Tensor:
+    """Apply scenario-tail reduction independently to each physical axis."""
+
+    if batch_tail_fraction is None:
+        return masked_huber(
+            prediction,
+            target,
+            mask,
+            batch_macro=batch_macro,
+        )
+    if prediction.shape != target.shape or prediction.ndim < 2:
+        raise ValueError("axis-separable physical values must share a coordinate axis")
+    axis_losses = [
+        masked_huber(
+            prediction[..., coordinate],
+            target[..., coordinate],
+            _coordinate_mask(mask, prediction, coordinate),
+            batch_macro=True,
+            batch_tail_fraction=batch_tail_fraction,
+        )
+        for coordinate in range(prediction.shape[-1])
+    ]
+    return torch.stack(axis_losses).mean()
+
+
+def _axis_separable_gaussian_nll(
+    mean: Tensor,
+    target: Tensor,
+    log_variance: Tensor,
+    mask: Tensor,
+    *,
+    detach_mean_error: bool,
+    batch_macro: bool,
+    batch_tail_fraction: float | None,
+) -> Tensor:
+    """Apply scenario-tail NLL independently to each physical axis."""
+
+    if batch_tail_fraction is None:
+        return gaussian_nll(
+            mean,
+            target,
+            log_variance,
+            mask,
+            detach_mean_error=detach_mean_error,
+            batch_macro=batch_macro,
+        )
+    if mean.shape != target.shape or mean.shape != log_variance.shape or mean.ndim < 2:
+        raise ValueError("axis-separable Gaussian values must have matching shapes")
+    axis_losses = [
+        gaussian_nll(
+            mean[..., coordinate],
+            target[..., coordinate],
+            log_variance[..., coordinate],
+            _coordinate_mask(mask, mean, coordinate),
+            detach_mean_error=detach_mean_error,
+            batch_macro=True,
+            batch_tail_fraction=batch_tail_fraction,
+        )
+        for coordinate in range(mean.shape[-1])
+    ]
+    return torch.stack(axis_losses).mean()
 
 
 def _state_velocity_objective_axis_support(
@@ -3116,11 +3200,26 @@ def _correction_non_regression_loss(
         posterior_error = correction_error(posterior, target)
         prior_error = correction_error(prior, target)
         support = object_support
+    scenario_tail_fraction = config.training.closed_loop_scenario_tail_fraction
+    if scenario_tail_fraction is not None and posterior_error.ndim == posterior.ndim:
+        return torch.stack(
+            [
+                posterior_improvement_hinge(
+                    posterior_error[..., coordinate],
+                    prior_error[..., coordinate],
+                    support[..., coordinate],
+                    batch_macro=True,
+                    batch_tail_fraction=scenario_tail_fraction,
+                )
+                for coordinate in range(posterior_error.shape[-1])
+            ]
+        ).mean()
     return posterior_improvement_hinge(
         posterior_error,
         prior_error,
         support,
         batch_macro=config.training.closed_loop_batch_macro_physical_losses_enabled,
+        batch_tail_fraction=scenario_tail_fraction,
     )
 
 
@@ -3339,6 +3438,7 @@ def _rollout_loss_result(
     event_weights: list[float] = []
     physical_metrics: dict[str, float] = {}
     batch_macro = config.training.closed_loop_batch_macro_physical_losses_enabled
+    scenario_tail_fraction = config.training.closed_loop_scenario_tail_fraction
     for query_index, frame_offset in enumerate(frame_offsets):
         target_index = frame_index + frame_offset
         future_active = (
@@ -3372,19 +3472,21 @@ def _rollout_loss_result(
         target_velocity = gather_target_slots(
             batch["objects"]["velocity"][:, target_index], indices
         )
-        position_loss = masked_huber(
+        position_loss = _axis_separable_masked_huber(
             target_positions[:, query_index],
             target_position,
             loss_valid,
             batch_macro=batch_macro,
+            batch_tail_fraction=scenario_tail_fraction,
         )
-        velocity_loss = masked_huber(
+        velocity_loss = _axis_separable_masked_huber(
             target_velocities[:, query_index],
             target_velocity,
             loss_valid,
             batch_macro=batch_macro,
+            batch_tail_fraction=scenario_tail_fraction,
         )
-        position_nll = gaussian_nll(
+        position_nll = _axis_separable_gaussian_nll(
             target_positions[:, query_index],
             target_position,
             target_position_log_variance[:, query_index],
@@ -3393,6 +3495,7 @@ def _rollout_loss_result(
             valid,
             detach_mean_error=True,
             batch_macro=batch_macro,
+            batch_tail_fraction=scenario_tail_fraction,
         )
         seconds = query_seconds[query_index]
         # Do not represent an unsupported horizon as a zero-valued training
@@ -3411,6 +3514,7 @@ def _rollout_loss_result(
                     target_position[:, :, axis_index],
                     loss_valid,
                     batch_macro=batch_macro,
+                    batch_tail_fraction=scenario_tail_fraction,
                 )
                 position_axis_losses[axis_name].append(axis_loss)
                 horizon_losses[
@@ -3596,6 +3700,7 @@ def _rollout_loss_result(
                         event_target,
                         loss_valid,
                         maximum_positive_weight=(config.training.collision_positive_weight_max),
+                        batch_tail_fraction=scenario_tail_fraction,
                     )
                     if target_pair_event_logits is not None:
                         assert pair_collision_targets is not None
@@ -3625,6 +3730,7 @@ def _rollout_loss_result(
                                 maximum_positive_weight=(
                                     config.training.collision_positive_weight_max
                                 ),
+                                batch_tail_fraction=scenario_tail_fraction,
                             )
                             # Keep the historical event objective's aggregate
                             # scale while adding direct relation ownership.
@@ -4322,6 +4428,27 @@ def _burn_in_causal_prefix(
     return last_observed_target_frame, last_observed_runtime_id
 
 
+def _validate_scenario_tail_training_batch(
+    batch: Mapping[str, Any],
+    config: OrpheusConfig,
+    *,
+    training_with_gradients: bool,
+) -> None:
+    """Bind tail-risk rows to the declared scenario-balanced protocol."""
+
+    if config.training.closed_loop_scenario_tail_fraction is None or not training_with_gradients:
+        return
+    metadata = batch.get("metadata")
+    scenarios = metadata.get("scenario") if isinstance(metadata, Mapping) else None
+    if not isinstance(scenarios, list) or tuple(str(item) for item in scenarios) != tuple(
+        config.simulator.scenario_mixture
+    ):
+        raise ValueError(
+            "scenario-tail training requires one batch row from every declared "
+            "scenario in canonical order"
+        )
+
+
 def run_closed_loop_batch(
     model: OnlineWorldModel,
     batch: Mapping[str, Any],
@@ -4352,6 +4479,11 @@ def run_closed_loop_batch(
     if not isinstance(rgb, Tensor) or rgb.ndim != 5:
         raise ValueError("closed-loop batch must contain rgb [B,T,3,H,W]")
     batch_size, total_frames = rgb.shape[:2]
+    _validate_scenario_tail_training_batch(
+        batch,
+        config,
+        training_with_gradients=model.training and torch.is_grad_enabled(),
+    )
     if compute_future_correction is None:
         compute_future_correction = config.training.closed_loop_prior_future_correction_enabled
     elif not isinstance(compute_future_correction, bool):
@@ -5071,6 +5203,12 @@ def run_closed_loop_batch(
     total = _weighted_closed_loop_total(terms, loss_weights)
     metrics = {name: float(value.detach().cpu()) for name, value in details.items()}
     metrics.update(event_weight_metrics)
+    metrics["closed_loop_scenario_tail_objective_active"] = float(
+        config.training.closed_loop_scenario_tail_fraction is not None
+    )
+    metrics["closed_loop_scenario_tail_fraction"] = float(
+        config.training.closed_loop_scenario_tail_fraction or 0.0
+    )
     metrics.update(physical_metrics)
     metrics.update(parameter_supervision_metrics)
     metrics.update(

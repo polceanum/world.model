@@ -559,6 +559,62 @@ def test_axis_gated_updater_xy_repair_changes_only_functional_ownership() -> Non
     assert source_dict == repaired_dict
 
 
+def test_scenario_tail_objective_requires_exact_balanced_macro_axiswise_protocol() -> None:
+    source = load_config(CONFIG_DIR / "axis_gated_updater_xy_repair_cpu.yaml")
+    repaired = replace(
+        source,
+        training=replace(
+            source.training,
+            closed_loop_scenario_tail_fraction=0.25,
+        ),
+    )
+    repaired.validate()
+    assert repaired.training.closed_loop_scenario_tail_fraction == 0.25
+
+    invalid_training = (
+        replace(repaired.training, closed_loop_scenario_tail_fraction=value)
+        for value in (0.0, -0.25, 1.25, float("inf"), True, "0.25")
+    )
+    for training in invalid_training:
+        with pytest.raises(ValueError, match="closed_loop_scenario_tail_fraction"):
+            replace(repaired, training=training).validate()
+
+
+def test_scenario_tail_updater_profile_changes_only_tail_and_event_objectives() -> None:
+    source = load_config(CONFIG_DIR / "axis_gated_updater_xy_repair_cpu.yaml")
+    repaired = load_config(CONFIG_DIR / "scenario_tail_updater_xy_repair_cpu.yaml")
+
+    assert repaired.training.closed_loop_scenario_tail_fraction == 0.25
+    assert repaired.training.closed_loop_event_loss_weights == {"updater_state_heads_xy": 0.05}
+    assert repaired.training.rollout_anchors_per_window == 2
+    assert repaired.training.loss_weights["event"] == 0.05
+    assert repaired.training.loss_weights["uncertainty"] == 0.025
+    source_dict = source.to_dict()
+    repaired_dict = repaired.to_dict()
+    source_dict["project"]["name"] = repaired_dict["project"]["name"]
+    source_dict["training"]["closed_loop_scenario_tail_fraction"] = 0.25
+    source_dict["training"]["closed_loop_event_loss_weights"] = {"updater_state_heads_xy": 0.05}
+    source_dict["training"]["rollout_anchors_per_window"] = 2
+    source_dict["training"]["loss_weights"]["event"] = 0.05
+    source_dict["training"]["loss_weights"]["uncertainty"] = 0.025
+    assert source_dict == repaired_dict
+
+    for training in (
+        replace(repaired.training, scenario_balanced_batches=False),
+        replace(repaired.training, batch_size=repaired.training.batch_size * 2),
+        replace(
+            repaired.training,
+            closed_loop_batch_macro_physical_losses_enabled=False,
+        ),
+        replace(
+            repaired.training,
+            closed_loop_axiswise_correction_hinge_enabled=False,
+        ),
+    ):
+        with pytest.raises(ValueError, match="closed_loop_scenario_tail_fraction"):
+            replace(repaired, training=training).validate()
+
+
 def test_state_roi_scope_roundtrips_as_typed_configuration(tmp_path: Path) -> None:
     config = load_config(
         CONFIG_DIR / "tiny_overfit.yaml",

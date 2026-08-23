@@ -1,5 +1,28 @@
 # Project status
 
+## Specification 1.57 scenario-tail objective — pre-launch gate 2026-08-23
+
+An opt-in scenario-tail reduction now targets the failure mode hidden by pooled
+means in specification 1.56. Current and rollout physical/NLL losses are split
+by world axis; each axis averages the worst supported scenario rows. Correction
+hinges and collision-event BCE use the same supported-row tail. The field is
+strict, exact-resume-bound, and requires canonical balanced scenario batches,
+batch-macro losses, and axiswise hinges. `null` is exact legacy behavior, and
+runtime inference plus selector semantics are unchanged.
+
+The diagnostic profile retains exact x/y head ownership, uses fraction `0.25`,
+two rollout anchors, event weight `0.05`, and uncertainty weight `0.025`. A
+real balanced CPU gradient probe activated the previously absent recursive
+rollout/event paths: owned-head norm was `0.11139997` (`1.6526x` legacy), with
+finite component norms and no clipping. The focused implementation gate is
+`567 passed, 1 skipped`; the full repository gate is `1249 passed, 20 skipped
+in 454.79s`. Ruff, format, compile, version, and diff checks pass. The
+calibrated report SHA-256 is `959869ad...`.
+
+This remains pre-accuracy evidence. A clean frozen tail-on/tail-off two-update
+pair and a bounded fixed-32 checkpoint comparison are pending. Deployment
+stays at the protected step-zero incumbent.
+
 ## Specification 1.56 exact lateral updater ownership — implementation gate 2026-08-23
 
 The new `updater_state_heads_xy` scope retains the six typed mean/variance/gate

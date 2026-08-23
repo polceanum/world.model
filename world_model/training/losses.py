@@ -2,9 +2,46 @@
 
 from __future__ import annotations
 
+import math
+
 import torch
 import torch.nn.functional as F
 from torch import Tensor
+
+
+def _validated_batch_tail_fraction(batch_tail_fraction: float) -> float:
+    if isinstance(batch_tail_fraction, bool) or not isinstance(
+        batch_tail_fraction,
+        (float, int),
+    ):
+        raise TypeError("batch_tail_fraction must be a real number")
+    fraction = float(batch_tail_fraction)
+    if not math.isfinite(fraction) or not 0.0 < fraction <= 1.0:
+        raise ValueError("batch_tail_fraction must lie in (0, 1]")
+    return fraction
+
+
+def _supported_row_tail_mean(
+    row_mean: Tensor,
+    supported_row: Tensor,
+    *,
+    batch_tail_fraction: float,
+) -> Tensor:
+    """Average the highest-loss supported batch rows.
+
+    Scenario-balanced causal batches place one episode from each declared
+    regime on the batch axis.  A tail mean therefore prevents an improvement
+    in several easy regimes from cancelling a regression in the hardest
+    supported regimes.  Unsupported rows are omitted before the deterministic
+    top-k selection.
+    """
+
+    fraction = _validated_batch_tail_fraction(batch_tail_fraction)
+    selected = row_mean.masked_select(supported_row)
+    if selected.numel() == 0:
+        return row_mean.sum() * 0
+    tail_count = max(1, math.ceil(selected.numel() * fraction))
+    return selected.topk(tail_count, largest=True, sorted=False).values.mean()
 
 
 def masked_mean(
@@ -12,14 +49,17 @@ def masked_mean(
     mask: Tensor,
     *,
     batch_macro: bool = False,
+    batch_tail_fraction: float | None = None,
 ) -> Tensor:
+    if batch_tail_fraction is not None:
+        batch_tail_fraction = _validated_batch_tail_fraction(batch_tail_fraction)
     expanded = mask
     while expanded.ndim < value.ndim:
         expanded = expanded.unsqueeze(-1)
     expanded = expanded.expand_as(value)
-    if batch_macro:
+    if batch_macro or batch_tail_fraction is not None:
         if value.ndim == 0:
-            raise ValueError("batch-macro masked mean requires a batch dimension")
+            raise ValueError("batch-row masked mean requires a batch dimension")
         flat_value = value.reshape(value.shape[0], -1)
         flat_mask = expanded.reshape(value.shape[0], -1)
         row_count = flat_mask.sum(dim=-1)
@@ -28,6 +68,12 @@ def masked_mean(
             return value.sum() * 0
         row_sum = torch.where(flat_mask, flat_value, torch.zeros_like(flat_value)).sum(dim=-1)
         row_mean = row_sum / row_count.clamp_min(1).to(value.dtype)
+        if batch_tail_fraction is not None:
+            return _supported_row_tail_mean(
+                row_mean,
+                supported_row,
+                batch_tail_fraction=batch_tail_fraction,
+            )
         return row_mean.masked_select(supported_row).mean()
     return value.masked_select(expanded).mean() if expanded.any() else value.sum() * 0
 
@@ -38,11 +84,13 @@ def masked_huber(
     mask: Tensor,
     *,
     batch_macro: bool = False,
+    batch_tail_fraction: float | None = None,
 ) -> Tensor:
     return masked_mean(
         F.smooth_l1_loss(prediction, target, reduction="none"),
         mask,
         batch_macro=batch_macro,
+        batch_tail_fraction=batch_tail_fraction,
     )
 
 
@@ -54,6 +102,7 @@ def gaussian_nll(
     *,
     detach_mean_error: bool = False,
     batch_macro: bool = False,
+    batch_tail_fraction: float | None = None,
 ) -> Tensor:
     log_variance = log_variance.clamp(-12.0, 8.0)
     squared_error = (mean - target).square()
@@ -64,7 +113,12 @@ def gaussian_nll(
         # stopped.
         squared_error = squared_error.detach()
     term = 0.5 * (squared_error * (-log_variance).exp() + log_variance)
-    return masked_mean(term, mask, batch_macro=batch_macro)
+    return masked_mean(
+        term,
+        mask,
+        batch_macro=batch_macro,
+        batch_tail_fraction=batch_tail_fraction,
+    )
 
 
 def correction_error(
@@ -92,6 +146,7 @@ def posterior_improvement_hinge(
     *,
     margin: float = 0.0,
     batch_macro: bool = False,
+    batch_tail_fraction: float | None = None,
 ) -> Tensor:
     """Penalise corrections that fail to improve on the incoming prior.
 
@@ -109,6 +164,7 @@ def posterior_improvement_hinge(
         F.relu(posterior_error - prior_error.detach() + float(margin)),
         mask,
         batch_macro=batch_macro,
+        batch_tail_fraction=batch_tail_fraction,
     )
 
 
@@ -118,6 +174,7 @@ def balanced_binary_cross_entropy(
     mask: Tensor,
     *,
     maximum_positive_weight: float = 10.0,
+    batch_tail_fraction: float | None = None,
 ) -> Tensor:
     """BCE with a bounded, batch-observed weight for rare positive events."""
 
@@ -125,8 +182,11 @@ def balanced_binary_cross_entropy(
         raise ValueError("logits, target, and mask must have matching shapes")
     if maximum_positive_weight < 1:
         raise ValueError("maximum_positive_weight must be at least one")
+    if batch_tail_fraction is not None:
+        batch_tail_fraction = _validated_batch_tail_fraction(batch_tail_fraction)
+    typed_target = target.to(logits.dtype)
     selected_logits = logits.masked_select(mask)
-    selected_target = target.to(logits.dtype).masked_select(mask)
+    selected_target = typed_target.masked_select(mask)
     if selected_logits.numel() == 0:
         return logits.sum() * 0
     positive_count = selected_target.sum()
@@ -139,10 +199,22 @@ def balanced_binary_cross_entropy(
         ),
         positive_count.new_ones(()),
     )
-    return F.binary_cross_entropy_with_logits(
-        selected_logits,
-        selected_target,
+    if batch_tail_fraction is None:
+        return F.binary_cross_entropy_with_logits(
+            selected_logits,
+            selected_target,
+            pos_weight=positive_weight,
+        )
+    elementwise = F.binary_cross_entropy_with_logits(
+        logits,
+        typed_target,
         pos_weight=positive_weight,
+        reduction="none",
+    )
+    return masked_mean(
+        elementwise,
+        mask,
+        batch_tail_fraction=batch_tail_fraction,
     )
 
 

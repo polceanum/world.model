@@ -4869,6 +4869,30 @@
   next repair toward joint learned axis/uncertainty ownership rather than
   post-hoc mean composition.
 
+## ADR-170 — Optimize the worst supported scenario rows per physical axis
+
+- **Date:** 2026-08-23
+- **Status:** implementation accepted; accuracy qualification pending
+- **Context:** Exact x/y head ownership improved pooled specification-1.56
+  metrics but failed 21 guardrails by step 128 and 34 by step 512. Failures
+  rotated across scenario, axis, horizon, NLL, event, and identity slices, so
+  pooled batch means did not provide a protected-base non-regression signal.
+- **Decision:** Add an optional scenario-tail fraction. For current and rollout
+  physical/NLL losses, reduce each world axis over the worst supported scenario
+  rows; apply the same row-tail rule to axiswise correction hinges and event
+  BCE. Require exact balanced scenario order, retain the fixed horizon
+  denominator, and preserve null as exact legacy behavior. Qualify fraction
+  `0.25` with two rollout anchors, event weight `0.05`, and uncertainty weight
+  `0.025` while keeping exact x/y optimizer ownership.
+- **Alternatives considered:** continue the rejected mean objective; select an
+  earlier checkpoint; weaken scenario guardrails; freeze or scale variance;
+  optimize an uncalibrated maximum; or change runtime inference.
+- **Consequences:** A real balanced CPU probe produces finite recursive
+  rollout/event gradients and owned-head norm `0.11139997`, `1.6526x` the
+  one-anchor legacy probe, without clipping. This only proves gradient routing.
+  Repository and clean paired gates must precede a bounded fixed-32 diagnostic,
+  and deployment remains the protected step-zero incumbent.
+
 ## ADR-169 — Restrict the updater repair to lateral typed rows, then reject its unconstrained objective
 
 - **Date:** 2026-08-23

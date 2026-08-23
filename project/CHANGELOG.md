@@ -2,6 +2,23 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-23 specification 1.57 scenario-tail objective
+
+- Added an opt-in strict scenario-tail fraction with exact-null legacy
+  behavior, canonical balanced-batch validation, and exact-resume binding.
+- Reduced current/rollout position, velocity, and NLL independently by axis,
+  using the worst supported scenario rows; extended the same principle to
+  correction hinges and collision-event BCE.
+- Added a diagnostic CPU profile retaining exact lateral head ownership with
+  tail fraction `0.25`, two rollout anchors, event weight `0.05`, and
+  uncertainty weight `0.025`.
+- A real balanced gradient probe activated recursive rollout and event signal
+  at the owned heads and stayed finite below clipping. This is routing evidence
+  only.
+- Passed the full repository gate (`1249 passed, 20 skipped in 454.79s`) plus
+  Ruff, format, compile, version, and diff checks. Clean paired-smoke and
+  fixed-manifest accuracy gates remain pending.
+
 ### 2026-08-23 specification 1.56 exact lateral updater-head ownership
 
 - Added `updater_state_heads_xy`, which trains only x/y position and velocity
