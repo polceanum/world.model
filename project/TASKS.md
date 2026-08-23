@@ -17,8 +17,16 @@
 - [x] Run a clean two-update capped/uncapped pair and prove exact forward
   losses, draws, step-zero evidence, x/y ownership, and finite reduced
   gradients (`227cb77c...`).
-- [ ] Run the bounded step-32 fixed-manifest accuracy rung before any
-  continuation or promotion.
+- [x] Run fresh bounded step-16 and step-32 fixed-manifest rungs. Reject step
+  16 for minimum-improvement plus heavy-light identity coverage; reject step
+  32 after it clears minimum improvement but fails two baseline collision-F1
+  guardrails. Maximum step-32 raw gradient is finite `1.630602`, with no clip.
+- [x] Reject step16-to-step32 interpolation: alpha `0.5` is guardrail-clean but
+  misses minimum improvement; alpha `0.8` clears minimum and retains both
+  baseline collision failures.
+- [ ] Add direct typed collision-event ownership or an equivalent protected-
+  base event constraint. Do not resume, compose, or promote rejected spec-1.58
+  candidates, and do not tune further interpolation on the gate manifest.
 
 ## Scenario-axis-horizon tail-risk objective — specification 1.57
 

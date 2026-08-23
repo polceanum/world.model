@@ -8618,9 +8618,8 @@ gradients are exact. Removing event ownership subtracts its weighted gradient,
 with finite total owned-head norm `0.11976653`, cosine `0.93073324` to the
 predecessor, and no clipping. The report is
 `/private/tmp/20260823-spec158-robust-gradient-probe/report.json`, SHA-256
-`645dadd1...`. This is implementation and routing evidence only. A clean
-paired smoke, bounded accuracy rung, and any promotion evidence remain
-pending. The final repository gate passes `1260` tests with `20` expected
+`645dadd1...`. This is implementation and routing evidence only. The final
+repository gate passes `1260` tests with `20` expected
 inactive-backend skips in `455.53s`; Ruff, format, compile, version, and diff
 checks pass. Deployment stays at the protected step-zero incumbent.
 
@@ -8636,8 +8635,27 @@ approximately `1.95e-7` score improvements do not reach the `1e-5` minimum.
 The paired audit is
 `/private/tmp/20260823-spec158-robust-tail-two-update-audit-v2.json`, SHA-256
 `227cb77c...`. This proves forward-exact backward influence control and state
-ownership, not accuracy. The bounded step-32 fixed-manifest rung remains
-mandatory before any continuation.
+ownership, not accuracy.
+
+The bounded accuracy rungs reject every candidate while accepting the
+numerical mechanism. A fresh step-32 run applies all 32 updates, retries two
+unsupported draws, never clips, and has maximum raw gradient norm `1.630602`;
+the specification-1.57 update-48 magnitude `5230.0088` does not recur. Exact
+x/y ownership and complete fixed-32 support hold. Selector score improves
+`0.23952864 -> 0.23951607`, clearing minimum improvement, but baseline
+collision F1 regresses at current and `0.1s`, so the candidate is rejected.
+The audit and checkpoint SHA-256 values begin `916af4ab...` and `a207ca97...`.
+
+The fresh step-16 candidate is rejected for insufficient score improvement
+and heavy-light `1s` identity association coverage. Interpolation cannot
+simultaneously satisfy the selector: alpha `0.5` has zero guardrail failures
+but misses minimum improvement, while alpha `0.8` clears minimum improvement
+and reproduces both baseline collision failures. These are terminal diagnostic
+results for specification 1.58. Do not resume or promote its checkpoints, and
+do not continue gate-manifest interpolation. Preserve the protected step-zero
+deployment. The next protocol must give collision-event semantics a direct
+typed trainable owner or impose an equivalent protected-base constraint while
+retaining the forward-exact uncertainty influence cap.
 
 ---
 

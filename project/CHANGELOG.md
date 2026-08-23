@@ -15,14 +15,23 @@
   bounds the log-variance gradient at `12` instead of above one million.
 - Passed the full repository gate (`1260 passed, 20 skipped in 455.53s`) plus
   Ruff, format, compile, version, and diff checks.
-- No accuracy, promotion, convergence, or deployment claim is made; the
-  fixed-manifest accuracy gate remains pending.
+- No promotion, convergence, or deployment claim is made.
 - Committed and pushed the clean implementation as `f16d984`.
 - Passed the clean capped/uncapped two-update pair: only the cap differs,
   `5700` step-zero physical/seed/scenario values and forward losses are exact,
   gradients are finite and reduced, and only the six permitted x/y heads own
-  changes and Adam state. Both candidates remain below minimum improvement;
-  bounded accuracy qualification is still pending.
+  changes and Adam state. Both candidates remain below minimum improvement.
+- Completed fresh step-16 and step-32 fixed-manifest rungs. Step 32 eliminates
+  the predecessor's extreme-gradient failure (`1.630602` maximum raw norm, no
+  clip), preserves exact ownership, and clears minimum score improvement, but
+  is rejected for baseline collision-F1 regressions at current and `0.1s`.
+  Step 16 is rejected for insufficient improvement plus heavy-light `1s`
+  identity association coverage.
+- Rejected step16-to-step32 interpolation. Alpha `0.5` removes all slice
+  failures but misses minimum improvement; alpha `0.8` clears minimum and
+  retains both baseline collision failures. Deployment remains step zero and
+  no further gate-manifest interpolation is allowed. The next repair must
+  give event semantics a direct typed owner or protected-base constraint.
 
 ### 2026-08-23 specification 1.57 scenario-tail objective
 

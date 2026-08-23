@@ -4901,7 +4901,7 @@
 ## ADR-171 — Bound extreme uncertainty gradients without changing proper scores
 
 - **Date:** 2026-08-23
-- **Status:** repository-gated; accuracy qualification pending
+- **Status:** mechanism retained; accuracy candidates rejected
 - **Context:** The specification-1.57 tail objective improved pooled and many
   sliced physical metrics at step 32, but update 48 produced a finite raw
   gradient norm of `5230.0088`. Gaussian NLL contains an unbounded
@@ -4922,15 +4922,24 @@
   ordinary real balanced draw the cap is inactive and NLL gradients are exact;
   removing event ownership explains the remaining gradient change. This is
   bounded influence and routing evidence only. The final repository gate is
-  `1260 passed, 20 skipped in 455.53s` with all static checks clean. Clean
-  paired and fixed-manifest accuracy gates are still required; deployment
+  `1260 passed, 20 skipped in 455.53s` with all static checks clean. Deployment
   remains the protected step zero.
   The clean two-update pair subsequently proves the intended boundary: cap
   `25.0` is the sole config delta, `5700` common step-zero evidence values and
   both loss sequences are exact, capped/control gradient-norm ratios are
   `0.999158/0.938261`, and exact six-head x/y ownership holds. Both microscopic
   candidates miss only the minimum-improvement threshold. Audit SHA-256 is
-  `227cb77c...`; this still does not replace the bounded accuracy gate.
+  `227cb77c...`.
+  The fresh step-32 accuracy rung then applies all 32 updates with no clip and
+  maximum raw norm `1.630602`, proving the cap repairs the predecessor's
+  numerical instability. It clears minimum score improvement but fails
+  baseline collision F1 at current and `0.1s`; step 16 fails minimum
+  improvement and heavy-light identity coverage. Alpha `0.5` interpolation is
+  guardrail-clean but below minimum improvement, while alpha `0.8` clears the
+  minimum and retains both collision failures. Retain the optimization
+  mechanism, reject every candidate, stop interpolation on the gate manifest,
+  and require direct typed event ownership or a protected-base event
+  constraint next.
 
 ## ADR-169 — Restrict the updater repair to lateral typed rows, then reject its unconstrained objective
 

@@ -1,6 +1,6 @@
 # Project status
 
-## Specification 1.58 robust uncertainty influence — implementation in progress 2026-08-23
+## Specification 1.58 robust uncertainty influence — mechanism retained, candidates rejected 2026-08-23
 
 The successor to the rejected scenario-tail diagnostic keeps the exact
 forward Gaussian NLL but optionally logarithmically caps only the backward
@@ -21,7 +21,7 @@ million to exactly `12`. A real balanced initializer probe is finite; the cap
 is inactive on ordinary data and event removal accounts for the objective
 delta. Report SHA-256 is `645dadd1...`. The full repository gate passes `1260
 passed, 20 skipped in 455.53s`; Ruff, format, compile, version, and diff checks
-pass. A clean paired smoke and bounded fixed-manifest accuracy remain pending.
+pass. A clean paired smoke and bounded fixed-manifest accuracy are complete.
 No candidate is promoted; deployment remains step zero.
 
 The clean source-frozen two-update pair also passes. The configs differ only
@@ -30,7 +30,24 @@ values and both forward losses are exact. The cap retains `99.9158%/93.8261%`
 of control gradient norm across the two updates, with no clip or retry.
 Exactly the permitted six x/y head tensors changed and own Adam state. Both
 candidates are rejected only by the `1e-5` minimum-improvement threshold.
-Audit SHA-256 is `227cb77c...`; bounded step-32 accuracy remains pending.
+Audit SHA-256 is `227cb77c...`.
+
+The fresh step-32 rung is mechanically healthy and eliminates the predecessor's
+extreme gradient failure: all 32 updates apply, two unsupported draws retry,
+no update clips, and the maximum raw norm is `1.630602`. Exact six-head/x-y-row
+ownership and complete fixed-32 support hold. Its selector improves
+`0.23952864 -> 0.23951607`, clearing the `1e-5` minimum, but the candidate is
+rejected for baseline collision F1 regressions at current and `0.1s`. Audit
+SHA-256 is `916af4ab...`; checkpoint SHA-256 is `a207ca97...`.
+
+A fresh step-16 rung is also rejected: it misses minimum improvement and fails
+heavy-light `1s` identity association coverage. Interpolating step 16 and 32
+does not expose an admissible region: alpha `0.5` has no slice failures but
+misses minimum improvement, while alpha `0.8` clears minimum improvement and
+reproduces the two baseline collision failures. No further gate-manifest
+interpolation is authorized. The bounded-gradient mechanism is retained, but
+the next training protocol must give collision semantics a direct typed owner
+or an equivalent protected-base constraint.
 
 ## Specification 1.57 scenario-tail objective — retained mechanism, rejected candidate 2026-08-23
 
