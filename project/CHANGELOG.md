@@ -2,6 +2,24 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-23 specification 1.60 node-only collision ownership
+
+- Retained independently aggregated node and pair collision BCE tensors for
+  typed routing while preserving the historical combined event objective,
+  runtime predictions, physical metrics, and selector exactly.
+- Added `updater_state_heads_xy_collision_node`: physical objectives retain the
+  six lateral state-head tensors, and node-event BCE alone owns collision row
+  1. Pair-event and noncollision relation gradients are discarded.
+- Added a dedicated CPU profile with node weight `0.0045`, calibrated to match
+  the former combined route's first-draw row norm rather than increase it.
+- Real attribution found node/pair row-gradient cosine `-0.97618997`, norms
+  `0.05904064`/`0.00681224`, and combined norm `0.02620572`; report/script SHAs
+  are `ec560d9b...`/`c2075057...`.
+- Focused objective/schedule/config/exact-resume checks pass `518 passed, 1
+  skipped`. The full repository passes `1275 passed, 20 skipped in 459.68s`;
+  Ruff, 224-file format, compile, version, and diff checks pass. Clean paired
+  ownership, accuracy, latency, promotion, and convergence remain pending.
+
 ### 2026-08-23 specification 1.59 direct collision ownership
 
 - Added `updater_state_heads_xy_collision`, retaining exact lateral updater

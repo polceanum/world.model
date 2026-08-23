@@ -777,11 +777,15 @@ def test_training_resume_binds_state_roi_scope_and_late_transition() -> None:
         "updater_state_heads",
         "updater_state_heads_xy",
         "updater_state_heads_xy_collision",
+        "updater_state_heads_xy_collision_node",
     ),
 )
 def test_training_resume_binds_updater_state_heads_scope(scope: str) -> None:
     source = _small_config()
-    if scope == "updater_state_heads_xy_collision":
+    if scope in {
+        "updater_state_heads_xy_collision",
+        "updater_state_heads_xy_collision_node",
+    }:
         source = replace(
             source,
             model=replace(
@@ -790,7 +794,7 @@ def test_training_resume_binds_updater_state_heads_scope(scope: str) -> None:
             ),
             training=replace(
                 source.training,
-                closed_loop_event_loss_weights={scope: 0.01},
+                closed_loop_event_loss_weights={scope: 0.0045},
             ),
         )
     updater_state_heads = replace(

@@ -943,6 +943,37 @@ class _DifferentiableEventRolloutDynamics(_StaticRolloutDynamics):
         ).validate()
 
 
+class _DifferentiableNodePairEventRolloutDynamics(_StaticRolloutDynamics):
+    def __init__(self) -> None:
+        super().__init__()
+        self.node_event_logit = torch.tensor(0.25, requires_grad=True)
+        self.pair_event_logit = torch.tensor(-0.15, requires_grad=True)
+
+    def rollout(
+        self,
+        belief: Any,
+        query_seconds: list[float] | tuple[float, ...],
+        *,
+        return_events: bool,
+        return_auxiliary: bool,
+        auxiliary_names: tuple[str, ...] = (),
+    ) -> BeliefTrajectory:
+        trajectory = super().rollout(
+            belief,
+            query_seconds,
+            return_events=return_events,
+            return_auxiliary=False,
+        )
+        assert trajectory.event_logits is not None
+        batch, query, objects = trajectory.active_mask.shape
+        pair_event_logits = self.pair_event_logit.expand(batch, query, objects, objects, 2)
+        return replace(
+            trajectory,
+            event_logits=trajectory.event_logits + self.node_event_logit,
+            auxiliary={"pair_event_logits": pair_event_logits},
+        ).validate()
+
+
 class _FixedPositionRolloutDynamics(_StaticRolloutDynamics):
     def __init__(self, positions: Tensor) -> None:
         super().__init__()
@@ -1104,6 +1135,12 @@ def test_zero_effective_event_weight_omits_bce_graph_but_keeps_physical_metrics(
     )
 
     assert "event_collision" in event_owned.losses
+    assert "event_collision_node" in event_owned.losses
+    assert "event_collision_pair" not in event_owned.losses
+    torch.testing.assert_close(
+        event_owned.losses["event_collision"],
+        event_owned.losses["event_collision_node"],
+    )
     assert not any(name.startswith("event_collision") for name in suppressed.losses)
     assert event_owned.positions is not None and suppressed.positions is not None
     assert event_owned.velocities is not None and suppressed.velocities is not None
@@ -1116,6 +1153,62 @@ def test_zero_effective_event_weight_omits_bce_graph_but_keeps_physical_metrics(
     assert event_owned_dynamics.event_logit.grad.abs().item() > 0.0
     sum(suppressed.losses.values()).backward()
     assert suppressed_dynamics.event_logit.grad is None
+
+
+def test_smooth_event_loss_exposes_exact_node_pair_decomposition() -> None:
+    source = _single_horizon_config()
+    config = replace(
+        source,
+        model=replace(
+            source.model,
+            dynamics=replace(
+                source.model.dynamics,
+                smooth_event_hazard_enabled=True,
+            ),
+        ),
+    )
+    config.validate()
+    batch = _rollout_batch(externally_actuated=torch.zeros(1, 2, 2, dtype=torch.bool))
+    batch["events"]["collision"][:, 1].fill_(True)
+    pair_collision = torch.zeros(1, 2, 2, 2, dtype=torch.bool)
+    pair_collision[:, 1, 0, 1] = True
+    pair_collision[:, 1, 1, 0] = True
+    batch["events"]["pair_collision"] = pair_collision
+    belief = _active_belief(
+        positions=torch.zeros(1, 2, 3),
+        age_steps=torch.full((1, 2), 5, dtype=torch.int64),
+    )
+    dynamics = _DifferentiableNodePairEventRolloutDynamics()
+    result = _rollout_loss_result(
+        SimpleNamespace(dynamics=dynamics),
+        belief,
+        batch,
+        config,
+        frame_index=0,
+        indices=torch.tensor([[0, 1]], dtype=torch.int64),
+        matched=torch.ones(1, 2, dtype=torch.bool),
+        compute_event_loss=True,
+    )
+
+    torch.testing.assert_close(
+        result.losses["event_collision"],
+        0.5 * (result.losses["event_collision_node"] + result.losses["event_collision_pair"]),
+    )
+    node_gradients = torch.autograd.grad(
+        result.losses["event_collision_node"],
+        (dynamics.node_event_logit, dynamics.pair_event_logit),
+        retain_graph=True,
+        allow_unused=True,
+    )
+    pair_gradients = torch.autograd.grad(
+        result.losses["event_collision_pair"],
+        (dynamics.node_event_logit, dynamics.pair_event_logit),
+        allow_unused=True,
+    )
+    assert node_gradients[0] is not None and node_gradients[0].abs() > 0
+    assert node_gradients[1] is None
+    assert pair_gradients[0] is None
+    assert pair_gradients[1] is not None and pair_gradients[1].abs() > 0
 
 
 def test_unseen_actuation_censors_the_coupled_scene_but_keeps_distribution_nll() -> None:

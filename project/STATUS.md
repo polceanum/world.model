@@ -1,5 +1,31 @@
 # Project status
 
+## Specification 1.60 node-only collision ownership — implementation gate 2026-08-23
+
+The specification-1.59 direct collision owner was mechanically exact but its
+step-32 candidate retained the same baseline current/0.1-second collision-F1
+failures. A real balanced attribution now localizes the problem: node and pair
+collision BCE gradients at the typed collision row have cosine `-0.97618997`.
+At event weight `0.01`, their norms are `0.05904064` and `0.00681224`, while
+the canonical combined route is `0.02620572`. Pair evidence therefore opposes
+the selector-owned node decision; more weight or duration was not warranted.
+
+The new exact-resume scope `updater_state_heads_xy_collision_node` retains the
+same six lateral state-head tensors and collision row 1, but routes only the
+independently retained node-event loss to the relation owner. The canonical
+combined forward loss, predictions, metrics, and selector are unchanged.
+Sparse missing node support keeps the physical update and leaves the relation
+owner untouched; detached present support fails closed. The dedicated profile
+uses weight `0.0045`, matching the former combined collision-row gradient norm
+within about `1.4%` on the attribution draw.
+
+Probe/report SHAs are `c2075057...`/`ec560d9b...`. Focused objective,
+schedule, config, and exact-resume checks pass `518 passed, 1 skipped`. The
+full repository passes `1275 passed, 20 skipped in 459.68s`; Ruff, the
+224-file format check, isolated compileall, version, and diff checks pass. A
+clean paired two-update state/row ownership proof and fresh bounded accuracy
+remain pending. No candidate is promoted; deployment remains step zero.
+
 ## Specification 1.59 direct collision ownership — implementation gate 2026-08-23
 
 The successor to the numerically stable but collision-rejected spec-1.58

@@ -3,7 +3,7 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.59
+**Version:** 1.60
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
@@ -8772,6 +8772,56 @@ row-routing mechanism and protected step-zero deployment. Before another
 training rung, separate node-level collision supervision (the selector-owned
 decision) from pair-level event evidence and measure their gradient agreement;
 increasing weight or duration without that attribution is not authorized.
+
+---
+
+## 254. Node-only typed collision ownership
+
+Specification 1.60 separates the collision signal that owns the selector's
+node-level decision from auxiliary pair-event evidence. The canonical forward
+event objective remains unchanged: where pair support exists it is still the
+historical half-sum of node and pair balanced BCE, and all logged losses,
+runtime predictions, analytic events, physical metrics, and selector semantics
+remain canonical. Training now also retains the independently aggregated node
+and pair sufficient loss tensors as non-double-counted routing evidence.
+
+The exact-resume-bound scope `updater_state_heads_xy_collision_node` retains
+the specification-1.59 tensor boundary: rows `0,1,3,4` of the corrector mean,
+variance, and gate weight/bias tensors plus only collision row `1` of the
+typed relation decoder. Physical objectives update only the six state-head
+tensors. The separate collision-owner `autograd.grad` consumes only the
+node-event tensor; pair-event gradients and every noncollision relation row
+are discarded. Missing node-event support remains a valid sparse physical
+update with zero event-owner gradient, while a present detached node-event
+term fails closed. Typed attention and a positive exact scope override remain
+mandatory.
+
+The first immutable balanced eight-scenario draw proves that the previous
+combined route was directionally conflicted rather than simply too weak.
+At event weight `0.01`, collision-row node and pair gradient norms are
+`0.05904064` and `0.00681224`, with cosine `-0.97618997`; their canonical
+combined norm is `0.02620572`. Node BCE is `15.51175976`, pair BCE is
+`0.05387612`, and the canonical combined BCE is `7.78281879`. The `9.54e-7`
+difference from an independently aggregated half-sum is ordinary float32
+reduction order; no forward operation is replaced. The probe report is
+`/private/tmp/20260823-spec160-node-pair-gradient-probe-v2/report.json`,
+SHA-256 `ec560d9b330a839c11b4f7c539a65380239d8c7a78aa21aecfe41cb53600b9d8`;
+its script SHA-256 is
+`c2075057a4463f34d97cbe6a2ebe60c0adc9604b0e368580a8591d5effedeec2`.
+
+The dedicated profile
+`configs/node_collision_owner_updater_xy_repair_cpu.yaml` changes the
+specification-1.59 profile only in project name, typed scope, and event weight.
+Its node-only weight is `0.0045`, yielding a predicted first-draw collision-row
+norm `0.02656829`, within about `1.4%` of the rejected combined route's
+`0.02620572` while removing the opposing pair direction. This is calibrated
+routing, not an accuracy claim. Focused objective/schedule/config/exact-resume
+coverage passes `518 tests` with one expected inactive-MPS skip. The complete
+repository passes `1275 tests` with `20` expected unavailable-backend skips in
+`459.68s`; whole-tree Ruff, the `224`-file format check, isolated compileall,
+version, and diff checks pass. A clean paired two-update ownership gate and
+fresh bounded fixed-manifest accuracy remain mandatory before any continuation
+or promotion. Deployment remains the protected step-zero incumbent.
 
 ---
 

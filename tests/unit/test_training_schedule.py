@@ -1367,7 +1367,14 @@ def test_updater_state_heads_xy_preserves_z_and_nonkinematic_rows_through_adamw(
         )
 
 
-def test_combined_xy_collision_scope_has_exact_typed_tensor_boundary() -> None:
+@pytest.mark.parametrize(
+    "scope",
+    (
+        "updater_state_heads_xy_collision",
+        "updater_state_heads_xy_collision_node",
+    ),
+)
+def test_combined_xy_collision_scope_has_exact_typed_tensor_boundary(scope: str) -> None:
     source = load_config(
         "configs/tiny_overfit.yaml",
         overrides=["model.dynamics.attention_residual_enabled=true"],
@@ -1376,14 +1383,14 @@ def test_combined_xy_collision_scope_has_exact_typed_tensor_boundary() -> None:
         source,
         training=replace(
             source.training,
-            closed_loop_trainable_scope="updater_state_heads_xy_collision",
-            closed_loop_event_loss_weights={"updater_state_heads_xy_collision": 0.05},
+            closed_loop_trainable_scope=scope,
+            closed_loop_event_loss_weights={scope: 0.05},
         ),
     )
     config.validate()
     model = OnlineWorldModel.from_config(config)
 
-    set_closed_loop_trainable_scope(model, scope="updater_state_heads_xy_collision")
+    set_closed_loop_trainable_scope(model, scope=scope)
 
     assert {name for name, parameter in model.named_parameters() if parameter.requires_grad} == {
         "updater.learned_corrector.mean_head.weight",
@@ -1470,6 +1477,72 @@ def test_combined_xy_collision_scope_routes_event_only_to_collision_row() -> Non
     assert result.metrics["direct_collision_event_noncollision_gradient_discarded_norm"] > 0.0
 
 
+def test_node_xy_collision_scope_routes_node_event_not_opposing_pair_event() -> None:
+    source = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    scope = "updater_state_heads_xy_collision_node"
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            closed_loop_trainable_scope=scope,
+            closed_loop_event_loss_weights={scope: 0.0045},
+            loss_weights={"state_position": 2.0, "event": 0.0045},
+        ),
+    )
+    config.validate()
+    model = OnlineWorldModel.from_config(config)
+    set_closed_loop_trainable_scope(model, scope=scope)
+    corrector = model.updater.learned_corrector
+    attention = model.dynamics.attention_interactions
+    assert corrector is not None
+    assert attention is not None
+
+    state_signal = corrector.mean_head.weight.sum()
+    relation_values = attention.relation_decoder(
+        torch.ones(1, attention.width, dtype=state_signal.dtype)
+    )
+    collision_row = attention.collision_output_index
+    other_rows = [row for row in range(attention.relation_output_dim) if row != collision_row]
+    node_event = relation_values[..., collision_row].sum()
+    pair_event = -node_event + 2.0 * relation_values[..., other_rows].sum()
+    combined_event = 0.5 * (node_event + pair_event)
+    terms = {"state_position": state_signal * 3.0, "event": combined_event}
+    weights, _ = _closed_loop_loss_weights_for_scope(
+        config,
+        active_trainable_scope=scope,
+    )
+    result = TrainingBatchResult(
+        total_loss=_weighted_closed_loop_total(terms, weights),
+        loss_terms=terms,
+        metrics={},
+        phase="closed_loop_rgb",
+        support_terms={"event_collision_node": node_event},
+    )
+
+    _backward_training_result(model, result, config, active_scope=scope)
+
+    torch.testing.assert_close(
+        corrector.mean_head.weight.grad,
+        torch.full_like(corrector.mean_head.weight, 6.0),
+    )
+    torch.testing.assert_close(
+        attention.relation_decoder.weight.grad[collision_row],
+        torch.full_like(attention.relation_decoder.weight.grad[collision_row], 0.0045),
+    )
+    torch.testing.assert_close(
+        attention.relation_decoder.bias.grad[collision_row],
+        torch.full_like(attention.relation_decoder.bias.grad[collision_row], 0.0045),
+    )
+    assert torch.count_nonzero(attention.relation_decoder.weight.grad[other_rows]) == 0
+    assert torch.count_nonzero(attention.relation_decoder.bias.grad[other_rows]) == 0
+    assert result.metrics["direct_collision_event_owner_active"] == 1.0
+    assert result.metrics["direct_collision_event_node_only_routing_active"] == 1.0
+    assert result.metrics["direct_collision_event_loss_weight"] == 0.0045
+
+
 def test_combined_xy_collision_scope_allows_sparse_batch_without_event_term() -> None:
     source = load_config(
         "configs/tiny_overfit.yaml",
@@ -1520,6 +1593,7 @@ def test_combined_xy_collision_scope_allows_sparse_batch_without_event_term() ->
     assert attention.relation_decoder.bias.grad is None
     assert result.metrics == {
         "direct_collision_event_owner_active": 1.0,
+        "direct_collision_event_node_only_routing_active": 0.0,
         "direct_collision_event_objective_supported": 0.0,
         "direct_collision_event_loss_weight": 0.05,
         "direct_collision_event_gradient_norm_pre_parameter_clip": 0.0,

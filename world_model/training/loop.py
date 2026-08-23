@@ -2572,6 +2572,8 @@ def _globally_weight_horizon_details(
         "rollout_velocity",
         "rollout_position_nll",
         "event_collision",
+        "event_collision_node",
+        "event_collision_pair",
         "correction_future",
         "correction_future_velocity",
     ]
@@ -3442,6 +3444,10 @@ def _rollout_loss_result(
     horizon_losses: dict[str, Tensor] = {}
     event_losses: list[Tensor] = []
     event_weights: list[float] = []
+    node_event_losses: list[Tensor] = []
+    node_event_weights: list[float] = []
+    pair_event_losses: list[Tensor] = []
+    pair_event_weights: list[float] = []
     physical_metrics: dict[str, float] = {}
     batch_macro = config.training.closed_loop_batch_macro_physical_losses_enabled
     scenario_tail_fraction = config.training.closed_loop_scenario_tail_fraction
@@ -3704,12 +3710,18 @@ def _rollout_loss_result(
             event_scores = target_event_logits[:, query_index, :, MotionMode.COLLISION]
             if loss_valid.any():
                 if compute_event_loss:
-                    event_loss = balanced_binary_cross_entropy(
+                    node_event_loss = balanced_binary_cross_entropy(
                         event_scores,
                         event_target,
                         loss_valid,
                         maximum_positive_weight=(config.training.collision_positive_weight_max),
                         batch_tail_fraction=scenario_tail_fraction,
+                    )
+                    event_loss = node_event_loss
+                    node_event_losses.append(node_event_loss)
+                    node_event_weights.append(horizon_weights[query_index])
+                    horizon_losses[rollout_horizon_loss_key("event_collision_node", seconds)] = (
+                        node_event_loss
                     )
                     if target_pair_event_logits is not None:
                         assert pair_collision_targets is not None
@@ -3741,6 +3753,11 @@ def _rollout_loss_result(
                                 ),
                                 batch_tail_fraction=scenario_tail_fraction,
                             )
+                            pair_event_losses.append(pair_event_loss)
+                            pair_event_weights.append(horizon_weights[query_index])
+                            horizon_losses[
+                                rollout_horizon_loss_key("event_collision_pair", seconds)
+                            ] = pair_event_loss
                             # Keep the historical event objective's aggregate
                             # scale while adding direct relation ownership.
                             event_loss = 0.5 * (event_loss + pair_event_loss)
@@ -3791,6 +3808,16 @@ def _rollout_loss_result(
         )
     if event_losses:
         aggregate_losses["event_collision"] = weighted_mean(event_losses, event_weights)
+    if node_event_losses:
+        aggregate_losses["event_collision_node"] = weighted_mean(
+            node_event_losses,
+            node_event_weights,
+        )
+    if pair_event_losses:
+        aggregate_losses["event_collision_pair"] = weighted_mean(
+            pair_event_losses,
+            pair_event_weights,
+        )
     aggregate_losses.update(horizon_losses)
     return _RolloutLossResult(
         losses=aggregate_losses,
@@ -5549,9 +5576,19 @@ def run_closed_loop_batch(
         loss_terms=terms,
         metrics=metrics,
         phase="closed_loop_rgb",
-        support_terms=(
-            {"fast_measurement": fast_measurement} if fast_measurement is not None else {}
-        ),
+        support_terms={
+            **({"fast_measurement": fast_measurement} if fast_measurement is not None else {}),
+            **(
+                {"event_collision_node": details["event_collision_node"]}
+                if "event_collision_node" in details
+                else {}
+            ),
+            **(
+                {"event_collision_pair": details["event_collision_pair"]}
+                if "event_collision_pair" in details
+                else {}
+            ),
+        },
     )
 
 

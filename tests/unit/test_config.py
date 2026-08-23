@@ -503,6 +503,21 @@ def test_closed_loop_trainable_scope_is_explicit() -> None:
         collision_config.training.closed_loop_trainable_scope == "updater_state_heads_xy_collision"
     )
 
+    node_collision_config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=[
+            "model.dynamics.attention_residual_enabled=true",
+            "training.closed_loop_trainable_scope=updater_state_heads_xy_collision_node",
+            (
+                "training.closed_loop_event_loss_weights="
+                "{updater_state_heads_xy_collision_node: 0.0045}"
+            ),
+        ],
+    )
+    assert node_collision_config.training.closed_loop_trainable_scope == (
+        "updater_state_heads_xy_collision_node"
+    )
+
 
 def test_combined_xy_collision_scope_requires_positive_event_weight() -> None:
     with pytest.raises(ValueError, match="requires a positive exact"):
@@ -512,6 +527,19 @@ def test_combined_xy_collision_scope_requires_positive_event_weight() -> None:
                 "model.dynamics.attention_residual_enabled=true",
                 "training.closed_loop_trainable_scope=updater_state_heads_xy_collision",
                 ("training.closed_loop_event_loss_weights={updater_state_heads_xy_collision: 0.0}"),
+            ],
+        )
+
+    with pytest.raises(ValueError, match="requires a positive exact"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[
+                "model.dynamics.attention_residual_enabled=true",
+                "training.closed_loop_trainable_scope=updater_state_heads_xy_collision_node",
+                (
+                    "training.closed_loop_event_loss_weights="
+                    "{updater_state_heads_xy_collision_node: 0.0}"
+                ),
             ],
         )
 
@@ -698,6 +726,23 @@ def test_direct_collision_owner_profile_changes_only_typed_event_ownership() -> 
         "updater_state_heads_xy_collision": 0.01
     }
     source_dict["training"]["loss_weights"]["event"] = 0.01
+    assert source_dict == repaired_dict
+
+
+def test_node_collision_owner_profile_changes_only_typed_event_routing() -> None:
+    source = load_config(CONFIG_DIR / "direct_collision_owner_updater_xy_repair_cpu.yaml")
+    repaired = load_config(CONFIG_DIR / "node_collision_owner_updater_xy_repair_cpu.yaml")
+
+    scope = "updater_state_heads_xy_collision_node"
+    assert repaired.training.closed_loop_trainable_scope == scope
+    assert repaired.training.closed_loop_event_loss_weights == {scope: 0.0045}
+    assert repaired.training.loss_weights["event"] == 0.0045
+    source_dict = source.to_dict()
+    repaired_dict = repaired.to_dict()
+    source_dict["project"]["name"] = repaired_dict["project"]["name"]
+    source_dict["training"]["closed_loop_trainable_scope"] = scope
+    source_dict["training"]["closed_loop_event_loss_weights"] = {scope: 0.0045}
+    source_dict["training"]["loss_weights"]["event"] = 0.0045
     assert source_dict == repaired_dict
 
 

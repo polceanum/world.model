@@ -4326,6 +4326,7 @@ def set_closed_loop_trainable_scope(
         "updater_state_heads",
         "updater_state_heads_xy",
         "updater_state_heads_xy_collision",
+        "updater_state_heads_xy_collision_node",
     }:
         corrector = model.updater.learned_corrector
         if corrector is None:
@@ -4338,7 +4339,10 @@ def set_closed_loop_trainable_scope(
         corrector.mean_head.requires_grad_(True)
         corrector.variance_head.requires_grad_(True)
         corrector.gate_head.requires_grad_(True)
-        if scope == "updater_state_heads_xy_collision":
+        if scope in {
+            "updater_state_heads_xy_collision",
+            "updater_state_heads_xy_collision_node",
+        }:
             attention = model.dynamics.attention_interactions
             if attention is None:
                 raise ValueError(f"{scope} scope requires typed attention dynamics")
@@ -4403,6 +4407,7 @@ def set_closed_loop_trainable_scope(
         "'attention_node_z', 'dynamics', 'updater', "
         "'updater_state_heads', 'updater_state_heads_xy', "
         "'updater_state_heads_xy_collision', 'updater_mean', "
+        "'updater_state_heads_xy_collision_node', "
         "'updater_mean_y', 'fast_roi', "
         "'state_dynamics', "
         "'state_roi', 'state_relation_roi', 'state_dynamics_fast_roi', or "
@@ -4428,7 +4433,11 @@ def _prepare_restricted_updater_mean_update(
     if scope == "updater_mean_y":
         selected_rows = (1,)
         selected_heads = ("mean_head",)
-    elif scope in {"updater_state_heads_xy", "updater_state_heads_xy_collision"}:
+    elif scope in {
+        "updater_state_heads_xy",
+        "updater_state_heads_xy_collision",
+        "updater_state_heads_xy_collision_node",
+    }:
         # Canonical fast-state packing is position xyz followed by velocity
         # xyz. Preserve z and every orientation/modal row exactly while the
         # lateral position/velocity mean, variance, and gate rows adapt.
@@ -4469,7 +4478,10 @@ def _prepare_restricted_attention_collision_update(
 ) -> list[tuple[Tensor, Tensor, Tensor]]:
     """Restrict a combined repair scope to the typed collision decoder row."""
 
-    if scope != "updater_state_heads_xy_collision":
+    if scope not in {
+        "updater_state_heads_xy_collision",
+        "updater_state_heads_xy_collision_node",
+    }:
         return []
     attention = model.dynamics.attention_interactions
     if attention is None:
@@ -4504,9 +4516,14 @@ def _backward_training_result(
 ) -> None:
     """Backpropagate event BCE only into its direct typed collision owner."""
 
-    if active_scope != "updater_state_heads_xy_collision":
+    direct_collision_scopes = {
+        "updater_state_heads_xy_collision",
+        "updater_state_heads_xy_collision_node",
+    }
+    if active_scope not in direct_collision_scopes:
         result.total_loss.backward()
         return
+    node_only_routing = active_scope == "updater_state_heads_xy_collision_node"
     resolved_weights, _ = _closed_loop_loss_weights_for_scope(
         config,
         active_trainable_scope=active_scope,
@@ -4518,13 +4535,18 @@ def _backward_training_result(
     non_event_weights["event"] = 0.0
     non_event_loss = _weighted_closed_loop_total(result.loss_terms, non_event_weights)
 
-    event = result.loss_terms.get("event")
+    event = (
+        result.support_terms.get("event_collision_node")
+        if node_only_routing
+        else result.loss_terms.get("event")
+    )
     if event is None:
         if non_event_loss.requires_grad:
             non_event_loss.backward()
         result.metrics.update(
             {
                 "direct_collision_event_owner_active": 1.0,
+                "direct_collision_event_node_only_routing_active": float(node_only_routing),
                 "direct_collision_event_objective_supported": 0.0,
                 "direct_collision_event_loss_weight": event_weight,
                 "direct_collision_event_gradient_norm_pre_parameter_clip": 0.0,
@@ -4573,6 +4595,7 @@ def _backward_training_result(
     result.metrics.update(
         {
             "direct_collision_event_owner_active": 1.0,
+            "direct_collision_event_node_only_routing_active": float(node_only_routing),
             "direct_collision_event_objective_supported": 1.0,
             "direct_collision_event_loss_weight": event_weight,
             "direct_collision_event_gradient_norm_pre_parameter_clip": float(
@@ -7778,6 +7801,9 @@ def _train_from_config_owned(
                 )
                 result.metrics["closed_loop_scope_updater_state_heads_xy_collision_only"] = float(
                     active_closed_loop_scope == "updater_state_heads_xy_collision"
+                )
+                result.metrics["closed_loop_scope_updater_state_heads_xy_collision_node_only"] = (
+                    float(active_closed_loop_scope == "updater_state_heads_xy_collision_node")
                 )
                 result.metrics["closed_loop_scope_updater_mean_only"] = float(
                     active_closed_loop_scope == "updater_mean"

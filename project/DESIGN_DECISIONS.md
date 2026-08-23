@@ -1,5 +1,31 @@
 # Design decisions
 
+## ADR-173 — Route collision learning from node evidence, not opposing pair BCE
+
+- **Date:** 2026-08-23
+- **Status:** implementation accepted; paired ownership and accuracy pending
+- **Context:** Specification 1.59 gave collision BCE an exact typed owner and
+  preserved every unrelated tensor, but its step-32 candidate retained the
+  baseline current/0.1-second F1 failures. On the first balanced draw, node
+  and pair collision-row gradients have cosine `-0.97618997`; pair evidence is
+  therefore directionally opposed to the node decision used by the selector.
+- **Decision:** Preserve the canonical combined event forward objective and
+  expose independent node/pair tensors only as routing evidence. Add the exact
+  scope `updater_state_heads_xy_collision_node`, retaining the same six lateral
+  heads and collision row 1 but sourcing its separate event backward only from
+  node BCE. Use weight `0.0045`, which predicts a first-draw row norm within
+  about `1.4%` of the former combined route. Keep sparse absence valid and
+  detached present support fail-closed.
+- **Alternatives considered:** increase the combined weight or duration;
+  delete pair BCE from the forward objective; train separate node and pair
+  rows; weaken collision guardrails; interpolate rejected checkpoints.
+- **Consequences:** Runtime/event predictions, canonical loss diagnostics,
+  physical metrics, and selector semantics stay unchanged. The probe report
+  SHA is `ec560d9b...`, script SHA `c2075057...`; focused gates pass `518/1`.
+  The full repository passes `1275/20 in 459.68s`, with all static gates clean.
+  This is routing evidence only. A clean paired two-update owner proof and
+  fresh bounded accuracy are required; step-zero deployment remains.
+
 ## ADR-165 — Require one immutable, comprehensive pair before runtime-pool promotion
 
 - **Date:** 2026-08-22

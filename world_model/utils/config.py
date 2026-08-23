@@ -1441,6 +1441,7 @@ class OrpheusConfig:
             "updater_state_heads",
             "updater_state_heads_xy",
             "updater_state_heads_xy_collision",
+            "updater_state_heads_xy_collision_node",
             "updater_mean",
             "updater_mean_y",
             "fast_roi",
@@ -1457,6 +1458,7 @@ class OrpheusConfig:
                 "'attention_node_y', 'attention_node_z', 'dynamics', "
                 "'updater', 'updater_state_heads', 'updater_state_heads_xy', "
                 "'updater_state_heads_xy_collision', 'updater_mean', "
+                "'updater_state_heads_xy_collision_node', "
                 "'updater_mean_y', 'fast_roi', "
                 "'state_dynamics', 'state_roi', 'state_relation_roi', "
                 "'state_dynamics_fast_roi', or 'state_dynamics_roi'"
@@ -1493,22 +1495,23 @@ class OrpheusConfig:
             raise ValueError(
                 "state_relation_roi scope requires model.dynamics.attention_residual_enabled=true"
             )
+        direct_collision_scopes = {
+            "updater_state_heads_xy_collision",
+            "updater_state_heads_xy_collision_node",
+        }
         if (
-            "updater_state_heads_xy_collision" in configured_scopes
+            configured_scopes & direct_collision_scopes
             and not self.model.dynamics.attention_residual_enabled
         ):
             raise ValueError(
-                "updater_state_heads_xy_collision scope requires "
+                "direct collision-owner scope requires "
                 "model.dynamics.attention_residual_enabled=true"
             )
-        if (
-            "updater_state_heads_xy_collision" in configured_scopes
-            and event_loss_weights.get("updater_state_heads_xy_collision", 0.0) <= 0.0
-        ):
-            raise ValueError(
-                "updater_state_heads_xy_collision scope requires a positive exact "
-                "closed_loop event-loss override"
-            )
+        for scope in configured_scopes & direct_collision_scopes:
+            if event_loss_weights.get(scope, 0.0) <= 0.0:
+                raise ValueError(
+                    f"{scope} scope requires a positive exact closed_loop event-loss override"
+                )
         if transition_steps is not None and (
             isinstance(transition_steps, bool)
             or not isinstance(transition_steps, int)

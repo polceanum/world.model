@@ -1,5 +1,24 @@
 # Tasks
 
+## Node-only typed collision ownership — specification 1.60
+
+- [x] Retain independent node/pair event-loss tensors without changing the
+  canonical combined forward objective or logged runtime/selector semantics.
+- [x] Measure the first balanced draw: node/pair collision-row gradients have
+  norms `0.05904064`/`0.00681224` and cosine `-0.97618997` (`ec560d9b...`).
+- [x] Add an exact node-only collision-owner scope retaining the six lateral
+  updater heads and only typed collision row 1.
+- [x] Add a dedicated profile with node weight `0.0045`, calibrated to the
+  predecessor's combined collision-row magnitude rather than increasing it.
+- [x] Pass focused objective/schedule/config/exact-resume coverage (`518
+  passed, 1 skipped`) plus Ruff and diff checks.
+- [x] Pass the full repository (`1275 passed, 20 skipped in 459.68s`), Ruff,
+  224-file format, isolated compile, version, and diff gates on frozen source.
+- [ ] Commit and push the clean specification-1.60 implementation source.
+- [ ] Run a clean paired two-update ownership gate, then fresh bounded
+  fixed-manifest accuracy only if routing/state isolation pass. Do not resume,
+  interpolate, or promote rejected specification-1.59 checkpoints.
+
 ## Direct typed collision-event ownership — specification 1.59
 
 - [x] Add an exact combined scope exposing the six lateral updater-head tensors
@@ -27,7 +46,7 @@
   initializer. Reject step 16 for minimum improvement plus heavy-light
   identity coverage; reject step 32 after it clears minimum improvement but
   retains both baseline collision-F1 failures (`03a4b5f0...`/`f19fe665...`).
-- [ ] Separate node-level collision supervision from pair-level event evidence
+- [x] Separate node-level collision supervision from pair-level event evidence
   and measure their typed-row gradient conflict before another bounded rung.
   Do not continue, interpolate, or promote either rejected spec-1.59 candidate.
 
