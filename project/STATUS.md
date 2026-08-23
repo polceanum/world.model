@@ -25,7 +25,8 @@ eight-episode validation used only one episode per scenario. The final source
 gate passes `1233` tests with `20` expected inactive-backend skips in
 `439.94s`; Ruff, format, version, compile, and diff checks pass. A clean
 fixed-32 step-zero plus step-512 diagnostic remains pending. Deployment remains
-the protected learned incumbent.
+the protected learned incumbent. The clean implementation/profile commit is
+`074fc6a`.
 
 ## Specification 1.55 causal residual diagnostics — retained mechanism, rejected selector 2026-08-23
 
