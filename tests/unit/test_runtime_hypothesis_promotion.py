@@ -368,7 +368,7 @@ def _arm_payload(
             _expected_runtime_policy(config) if runtime_pool else None
         ),
         **resolved_seed_protocol.metadata(),
-        "primary_posterior_trace_frame_count": 32 * config.simulator.sequence_frames,
+        "primary_posterior_trace_frame_count": 4 * config.simulator.sequence_frames,
         "primary_posterior_trace_schema": "world_belief_tensor_fields_v1",
         "primary_posterior_trace_sha256": "b" * 64,
         "primary_physical_metrics_hash_excludes": (

@@ -908,6 +908,7 @@ def _validate_arm(
             for scenario in scenarios
         }
     )
+    expected_batch_count = math.ceil(32 / min(config.training.batch_size, 32))
     expected_metadata = {
         "evaluation_metric_schema_version": _EVALUATION_METRIC_SCHEMA_VERSION,
         "resolved_evaluation_config_sha256": _canonical_sha256(config.to_dict()),
@@ -930,7 +931,7 @@ def _validate_arm(
         "evaluation_episode_scenarios": episode_scenarios,
         "split": resolved_seed_protocol.split,
         "episodes": 32,
-        "batches": math.ceil(32 / min(config.training.batch_size, 32)),
+        "batches": expected_batch_count,
         "device": expected_device,
         "precision": "float32",
         "evaluation_runtime_environment": _expected_runtime_environment(expected_device),
@@ -944,7 +945,9 @@ def _validate_arm(
         "evaluation_perturbations_applied": False,
         "runtime_hypothesis_pool_enabled": runtime_hypothesis_pool,
         **resolved_seed_protocol.metadata(),
-        "primary_posterior_trace_frame_count": 32 * config.simulator.sequence_frames,
+        "primary_posterior_trace_frame_count": (
+            expected_batch_count * config.simulator.sequence_frames
+        ),
         "primary_posterior_trace_schema": "world_belief_tensor_fields_v1",
     }
     for name, expected in expected_metadata.items():
