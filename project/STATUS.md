@@ -27,10 +27,16 @@ SHA-256 values are `e6cfd548...` (reference), `d90ae8ba...` (margin zero),
 and `c4dee191...` (conservative). No MPS fixed-32 or disjoint ladder is
 authorized, and the learned deployment default remains protected.
 
-Verification on the current implementation: focused CPU `322 passed`; full
-repository `1221 passed, 18 skipped in 438.39s`; focused active-Aqua MPS
+Verification on the current implementation: focused CPU `322 passed`; final
+repository `1221 passed, 19 skipped in 448.06s`; focused active-Aqua MPS
 velocity-veto `1 passed in 4.89s`; Ruff and diff checks are clean. A final
-clean source-frozen CPU pair is pending only as formal rejection confirmation.
+clean source-frozen CPU pair is complete on commit `19221ba`. Its reference,
+candidate, and comparison SHA-256 values are `060ba1ca...`, `3d44a46e...`, and
+`42946ac6...`. The comparator preserves posterior trace `5ecb850d...` and
+confirms 535 alternative steps, but rejects 255 numerical guardrails, one
+structural support cell, pooled position improvement `-3.5132e-05` m, and
+global/fast/rollout latency ratios `1.2417/1.2181/1.8921`. Physical, latency,
+and comprehensive eligibility are all false.
 
 ## Specification 1.53 regime-local runtime planning — implementation gate 2026-08-22
 

@@ -14,12 +14,17 @@
   exact-resume-bound.
 - Added posterior-isolation, learned-uncertainty ownership, exact-abstention,
   velocity-veto/allow, strict-configuration, and Aqua-MPS regressions.
-- Passed `322` focused CPU tests, `1221` full-suite tests with `18` expected
-  skips in `438.39s`, and one active-Aqua MPS test in `4.89s`.
+- Passed `322` focused CPU tests, `1221` full-suite tests with `19` expected
+  skips in `448.06s`, and one active-Aqua MPS test in `4.89s`.
 - Rejected both fixed-32 CPU selector settings: margin zero used 535 alternative
   x substeps but slightly regressed every pooled position horizon; confidence
   `0.001` plus observability `0.5` used only three and remained microscopically
   worse. No MPS/disjoint promotion ladder or deployment-default change follows.
+- Completed the clean source-frozen margin-zero pair on commit `19221ba`.
+  Posterior trace is exact, but the fail-closed comparator records 255 physical
+  failures, one structural support failure, negative pooled improvement, and
+  global/fast/rollout latency ratios above `1.10`; comparison SHA-256 is
+  `42946ac6...`. Physical, latency, and comprehensive promotion remain false.
 
 ### 2026-08-22 specification 1.53 regime-local runtime planning
 

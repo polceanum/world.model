@@ -4829,9 +4829,12 @@
   `5ecb850d...` and current-state metrics. The non-vacuous margin-zero veto
   still regresses all five position horizons after 535 alternative substeps;
   the conservative setting admits only three and has no gain. Preserve the
-  learned deployment default and stop before MPS/disjoint promotion. The
-  forecast-only isolation, learned-uncertainty ownership, and exact abstention
-  remain accepted robustness improvements independent of selector accuracy.
+  learned deployment default and stop before MPS/disjoint promotion. Clean
+  commit-`19221ba` comparison `42946ac6...` confirms 255 numerical failures,
+  one structural support failure, negative pooled improvement, and all three
+  latency failures. The forecast-only isolation, learned-uncertainty ownership,
+  and exact abstention remain accepted robustness improvements independent of
+  selector accuracy.
 
 ## ADR-149 — Batch validation anchors only after exact MPS parity
 

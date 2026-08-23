@@ -9,7 +9,7 @@
   intervenes.
 - [x] Add causal RGB temporal-velocity evidence plus a strict default-off
   learned-baseline non-regression veto, with exact-resume binding.
-- [x] Pass focused CPU (`322`), whole repository (`1221 passed, 18 skipped`),
+- [x] Pass focused CPU (`322`), whole repository (`1221 passed, 19 skipped`),
   Ruff/diff, and active-Aqua MPS (`1 passed`) gates.
 - [x] Run bounded fixed-32 CPU diagnostics. Reject the margin-zero policy after
   535 non-learned steps regressed every pooled position horizon; classify the
@@ -17,8 +17,11 @@
   steps and microscopic regressions.
 - [x] Stop before fixed-32 MPS and disjoint evaluation; retain learned runtime
   defaults and do not weaken promotion thresholds.
-- [ ] Retain a clean source-frozen CPU learned-only/candidate pair as formal
-  rejection confirmation, then commit and push the synchronized record.
+- [x] Retain a clean source-frozen CPU learned-only/candidate pair as formal
+  rejection confirmation. Commit `19221ba` preserves exact posterior state but
+  fails 255 numerical guardrails, one support cell, pooled improvement, and all
+  three latency limits; comparison SHA-256 is `42946ac6...`.
+- [x] Commit and push the final synchronized rejection record.
 
 ## Regime-local runtime planning — specification 1.53
 

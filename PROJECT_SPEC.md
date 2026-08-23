@@ -8352,13 +8352,24 @@ reports are diagnostic rejection evidence, not a formal matched promotion:
 - margin-zero veto: `/private/tmp/20260823-041910-spec154-velocity-veto-margin0-cpu/evaluation.json`, SHA-256 `d90ae8ba2c63c7e4cb558b62b018f56cc05ecd4e3bf78ea4bfc3e406f5cb6526`; and
 - conservative veto: `/private/tmp/20260823-042330-spec154-velocity-veto-margin0001-observe05-cpu/evaluation.json`, SHA-256 `c4dee1919726d20a59f1f4a9c816417762a61f5afcff22a74fb7189ce21ed889`.
 
-The focused CPU gate passes `322` tests. The whole repository passes `1221`
-tests with `18` expected inactive-backend skips in `438.39s`; the focused
+The focused CPU gate passes `322` tests. The final whole repository passes
+`1221` tests with `19` expected inactive-backend skips in `448.06s`; the focused
 active-Aqua MPS velocity-veto regression passes in `4.89s`. The learned
 deployment default remains protected. No MPS fixed-32 or disjoint ladder is
 authorized because the standard CPU diagnostics show no candidate accuracy
-gain. A clean source-frozen pair may be retained only as formal rejection
-confirmation; it cannot weaken the existing promotion thresholds.
+gain. The clean source-frozen confirmation on commit `19221baa4cdc85685f894938016d0b938e98ebb0`
+uses the same fixed manifest, checkpoint, resolved config, CPU/float32 runtime,
+and active-Aqua host contract in both arms. The reference report SHA-256 is
+`060ba1ca81fe3bf7664a2222524c8a07f6cd5e6870935d3d22657208a33f01a8`,
+the candidate is
+`3d44a46e5f4ffd4014127cb86e754ef3acff2e0b6d8ed22ab652418ca2a4eca7`,
+and the fail-closed comparison is
+`42946ac61ebdb9f89f3a78d7ef7888dc7e3b3d086a98420c16a52697d5dfac33`.
+The comparator confirms 535 alternative substeps and exact posterior trace,
+but rejects 255 numerical guardrails, one structural event-support cell,
+summed pooled position improvement `-3.5132182526070865e-05` m, and latency
+ratios `1.2417/1.2181/1.8921` for global/fast/rollout versus the `1.10` limit.
+This formal rejection cannot weaken the existing promotion thresholds.
 
 ---
 
