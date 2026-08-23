@@ -8913,11 +8913,32 @@ Focused config, exact-resume, schedule, objective, and checkpoint coverage
 passes `528` tests with one expected unavailable-MPS skip; whole-tree Ruff and
 the `224`-file format check pass. The final repository gate passes `1285`
 tests with `20` expected unavailable-backend skips in `496.20s`; Ruff, format,
-isolated compile, version, and diff checks pass. This is bounded routing
-evidence only. A frozen-source two-update route-on/route-off pair and fresh
-fixed-32 step-16/32 accuracy are mandatory. Do not resume or compose the
-rejected specification-1.60 checkpoints; deployment remains the protected
-step-zero initializer.
+isolated compile, version, and diff checks pass. The implementation is frozen,
+committed, and pushed at `72e31a7`.
+
+The clean route-on/zero-weight pair passes on that commit. Its configs differ
+only at state-event weight `0.04` versus `0.0`; all `5700` common step-zero
+physical/seed/scenario fields and `38` first-draw forward loss/event fields are
+bit-exact. Both arms change exactly the six permitted lateral head tensors plus
+collision relation weight/bias, own exactly those eight Adam states, and leave
+all other model state exact. Treatment state-event gradient norms are
+`0.0378016/0.0109499`; control norms are exactly zero. Audit SHA-256 is
+`27dcc456572233f8046ec618b420435ec6343d2c7a3380bbf902a9db6b19d217`.
+An earlier sandbox interruption and an empty-map override that merged instead
+of clearing the route are preserved and explicitly excluded from the pair.
+
+Fresh bounded accuracy is terminal and rejected. Step 16 improves selector by
+only `6.32059e-6`, below the required `1e-5`, and also fails heavy-light
+one-second identity association coverage (`1eb9225d...`). Step 32 clears the
+minimum with `1.51940e-5` improvement and slightly improves pooled position and
+velocity, but fails five guardrails: pooled `0.75s` collision F1, heavy-light
+`1.0s` association coverage, reference-pairs current and `0.75s` collision F1,
+and reference-pairs `0.25s` identity mismatch (`38d0de6e...`). Step 32 changes
+only the same eight tensors/rows, has eight finite Adam owners at step 32, two
+sparse-event draws (`6/23`), no retry or clip, and maximum norm `1.564329`.
+Variable wall time is not paired latency evidence. Do not run step 64, tune the
+weight further, resume, compose, or promote this objective. Deployment remains
+the protected step-zero initializer; comprehensive promotion stays false.
 
 ---
 

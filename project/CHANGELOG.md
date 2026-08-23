@@ -16,8 +16,18 @@
   relation norm `0.0265683` (`85eadc11...`/`a7472420...`).
 - Focused gates pass `528 passed, 1 skipped`; the final repository passes
   `1285 passed, 20 skipped in 496.20s`, with Ruff, 224-file format, isolated
-  compile, version, and diff checks clean. Clean pair, accuracy, latency, and
-  promotion remain pending.
+  compile, version, and diff checks clean. Clean source is committed/pushed at
+  `72e31a7`.
+- Passed the clean route-on/zero-weight pair: configs differ only at `0.04`
+  versus `0.0`; `5700` step-zero physical fields and `38` first-draw forward
+  fields are exact; both arms own only six heads plus collision relation
+  weight/bias and eight Adam states (`27dcc456...`).
+- Rejected step 16 for insufficient improvement plus heavy-light one-second
+  identity coverage (`1eb9225d...`). Rejected step 32 despite clearing the
+  minimum: pooled `0.75s` collision F1, heavy-light association, and three
+  reference-pairs collision/identity guardrails fail (`38d0de6e...`). Exact
+  ownership, sparse draws `6/23`, no clip/retry, and maximum norm `1.564329`
+  hold. Stop this objective at step 32; no promotion or further tuning.
 
 ### 2026-08-23 specification 1.60 node-only collision ownership
 

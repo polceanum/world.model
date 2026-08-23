@@ -3,7 +3,7 @@
 ## ADR-174 — Protect recursive state heads with calibrated node-event descent
 
 - **Date:** 2026-08-23
-- **Status:** implementation accepted; clean ownership and accuracy pending
+- **Status:** implementation accepted; bounded accuracy rejected; objective terminal
 - **Context:** Node-only relation training changed no selector-visible field at
   step 32. Component rollback proves the baseline F1 threshold flip needs both
   learned mean and learned variance, while the collision row and each head
@@ -22,8 +22,13 @@
   `0.1197665/0.0554673/0.1123394/0.0265683`, all finite and unclipped. Focused
   gates pass `528/1`; the final repository passes `1285/20 in 496.20s` with
   every static gate clean. Report SHAs are `dcd10024...`, `85eadc11...`, and
-  `a7472420...`. Paired ownership and bounded accuracy remain mandatory;
-  deployment stays step zero.
+  `a7472420...`; clean source is pushed at `72e31a7`. The route-on/zero-weight
+  pair proves exact forward and eight-tensor ownership (`27dcc456...`). Step 16
+  fails minimum improvement and heavy-light identity coverage (`1eb9225d...`).
+  Step 32 clears minimum improvement but fails five pooled/reference-pairs/
+  heavy-light collision and identity guardrails (`38d0de6e...`). Therefore the
+  calibrated route is mechanically valid but not behaviorally sufficient.
+  Stop at step 32; do not retune or extend it, and keep deployment at step zero.
 
 ## ADR-173 — Route collision learning from node evidence, not opposing pair BCE
 

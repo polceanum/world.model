@@ -16,9 +16,15 @@
   1 skipped`) plus whole-tree Ruff and 224-file format checks.
 - [x] Pass the full repository (`1285 passed, 20 skipped in 496.20s`), Ruff,
   224-file format, isolated compile, version, and diff gates.
-- [ ] Freeze, commit, and push specification 1.61.
-- [ ] Run a clean two-update state-route-on/off ownership pair, then fresh
-  step-16/32 fixed-32 accuracy. Reject on any guardrail; do not resume spec1.60.
+- [x] Freeze, commit, and push specification 1.61 (`72e31a7`).
+- [x] Pass the clean two-update state-route-on/zero-weight ownership pair with
+  exact step-zero/forward evidence and eight-tensor isolation (`27dcc456...`).
+- [x] Run fresh step-16/32 fixed-32 accuracy. Reject step 16 for minimum
+  improvement plus heavy-light identity coverage (`1eb9225d...`); reject step
+  32 despite clearing minimum improvement because five collision/identity
+  guardrails fail (`38d0de6e...`).
+- [x] Stop this objective at step 32. Do not extend, retune, interpolate,
+  compose, or promote; deployment remains the protected initializer.
 
 ## Node-only typed collision ownership — specification 1.60
 

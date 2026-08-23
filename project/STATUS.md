@@ -20,9 +20,30 @@ finite excluded-row evidence (`a7472420...`).
 
 Focused coverage passes `528 passed, 1 skipped`. The final repository gate
 passes `1285 passed, 20 skipped in 496.20s`; Ruff, the 224-file format check,
-isolated compile, version, and diff checks pass. Clean commit/push, two-update
-route-on/off ownership, and bounded fixed-32 accuracy are pending. This is not
-promotion evidence; deployment remains the protected step-zero initializer.
+isolated compile, version, and diff checks pass. The clean implementation is
+committed and pushed at `72e31a7`.
+
+The clean two-update route-on/zero-weight audit passes (`27dcc456...`). The
+configs differ only at state-event weight `0.04` versus `0.0`; all `5700`
+common step-zero physical fields and `38` first-draw forward fields are exact.
+Both arms change exactly the six permitted head tensors plus collision relation
+weight/bias, with eight finite Adam owners and every other model tensor exact.
+Treatment protected-event norms are `0.0378016/0.0109499`; control norms are
+zero. The first restricted control attempt is a truthful shared-memory
+interruption, and the next empty-map attempt is a treatment replicate because
+deep merge retained `0.04`; both are preserved and excluded.
+
+Fresh step 16 is mechanically exact but rejected for insufficient
+`6.32059e-6` improvement plus heavy-light one-second identity association
+coverage (`1eb9225d...`). Fresh step 32 clears minimum improvement at
+`1.51940e-5` and slightly improves pooled position/velocity, but is rejected by
+five guardrails: pooled `0.75s` collision F1, heavy-light `1.0s` association
+coverage, reference-pairs current and `0.75s` collision F1, and reference-pairs
+`0.25s` identity mismatch (`38d0de6e...`). It changes only the same eight
+tensors/rows, has sparse draws `6/23`, no retry/clip, and maximum norm
+`1.564329`. This objective is terminal: do not run step 64 or tune further.
+This is not promotion or latency evidence; deployment remains the protected
+step-zero initializer.
 
 ## Specification 1.60 node-only collision ownership — implementation gate 2026-08-23
 
