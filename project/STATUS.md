@@ -26,6 +26,27 @@ full repository passes `1275 passed, 20 skipped in 459.68s`; Ruff, the
 clean paired two-update state/row ownership proof and fresh bounded accuracy
 remain pending. No candidate is promoted; deployment remains step zero.
 
+Those pending gates are now complete and rejected scientifically. The clean
+node-only/combined two-update audit passes (`e5db2d9b...`): `5700` common
+step-zero physical fields and first-draw event components are exact, both arms
+own the same eight tensors/Adam entries, state heads are bit-exact, and only
+collision row 1 differs. Row-delta cosine is `0.99992348`; both candidates have
+the same microscopic `1.94448e-7` score improvement.
+
+Fresh step 16 is rejected for insufficient `5.76530e-6` improvement plus
+heavy-light 1-second identity association coverage (`51878e78...`). Fresh
+step 32 clears minimum improvement (`1.42553e-5`) but fails baseline collision
+F1 at aggregate/current and `0.1s`; pooled F1 falls `0.266563 -> 0.264132`.
+It is mechanically exact, with sparse draws `6/23`, no retry/clip, maximum raw
+norm `1.631959`, and only collision row 1 plus the six heads changed. Audit and
+checkpoint SHAs are `632f39e6...`/`3dd8b914...`.
+
+The step-32 spec-1.59 combined and spec-1.60 node-only candidates are exact on
+all `5829` common final physical/seed/scenario/validation fields. This objective
+is terminal: do not continue, interpolate, or promote it. Deployment remains
+step zero. Next isolate node collision gradients by horizon before proposing
+another bounded objective.
+
 ## Specification 1.59 direct collision ownership — implementation gate 2026-08-23
 
 The successor to the numerically stable but collision-rejected spec-1.58

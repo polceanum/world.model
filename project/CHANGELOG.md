@@ -19,6 +19,19 @@
   skipped`. The full repository passes `1275 passed, 20 skipped in 459.68s`;
   Ruff, 224-file format, compile, version, and diff checks pass. Clean paired
   ownership, accuracy, latency, promotion, and convergence remain pending.
+- Passed the clean node-only/combined two-update ownership pair. All `5700`
+  common step-zero physical values and first-draw event components are exact;
+  both arms own exactly the six lateral heads plus collision row 1, with eight
+  Adam entries and every other tensor exact. Audit SHA is `e5db2d9b...`.
+- Rejected fresh step 16 for insufficient improvement plus heavy-light
+  1-second identity association coverage (`51878e78...`).
+- Rejected fresh step 32 despite clearing minimum improvement: baseline
+  aggregate/current and 0.1-second collision F1 fail, and pooled F1 falls.
+  Exact ownership, sparse draws `6/23`, no clip/retry, and maximum norm
+  `1.631959` hold; audit/checkpoint SHAs are `632f39e6...`/`3dd8b914...`.
+- All `5829` common final selector-visible fields are exact between the
+  specification-1.59 combined and specification-1.60 node-only step-32
+  candidates. Stop this objective and isolate horizon gradients next.
 
 ### 2026-08-23 specification 1.59 direct collision ownership
 

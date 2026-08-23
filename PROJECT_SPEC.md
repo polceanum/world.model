@@ -8823,6 +8823,50 @@ version, and diff checks pass. A clean paired two-update ownership gate and
 fresh bounded fixed-manifest accuracy remain mandatory before any continuation
 or promotion. Deployment remains the protected step-zero incumbent.
 
+The clean node-only/combined two-update pair passes on commit `2e0fabc`.
+Resolved configs differ only in project name, typed scope, and their matched
+scope/event weights. All `5700` common step-zero physical/seed/scenario values
+and the first-draw node, pair, combined, and logged event losses are exact.
+Both arms change exactly the same six lateral state heads plus collision row
+`1`, own exactly eight Adam entries, and leave every other model tensor exact.
+The state-head tensors are bit-exact across arms. Collision-row delta norms are
+`1.26343e-6` node-only and `1.26077e-6` combined, with cosine `0.99992348`.
+Both candidates have the same `1.94448e-7` score improvement and unchanged
+collision F1, so both are rejected only by minimum improvement. The audit is
+`/private/tmp/20260823-spec160-node-combined-two-update-audit.json`, SHA-256
+`e5db2d9bcf2d5d4802e3097ef0c0c8f45fd9bf46c84ba5a76df0e649de37c463`;
+script SHA-256 is
+`cd3a74f94fd754428ae07d88883dd561a137b999932cf0ad21f3811ed3cf77d5`.
+This is ownership evidence, not latency or accuracy qualification.
+
+The fresh bounded accuracy rungs reject the node-only objective. Step 16
+applies all updates with one sparse event draw, zero retry/clip, maximum raw
+norm `0.419702`, exact eight-tensor ownership, and complete fixed-32 support.
+Its score improvement is only `5.76530e-6`, and heavy-light 1-second identity
+association coverage fails. The audit SHA-256 is
+`51878e7815d767a0be0605098f44151c477695d2a8d84917e449c9cc34a59300`.
+
+Step 32 also preserves exact ownership and support, handles sparse draws only
+at updates `6` and `23`, never clips/retries, and has maximum raw norm
+`1.631959`. Selector improvement `1.42553e-5` clears minimum, but baseline
+collision F1 fails at aggregate/current and `0.1s`; pooled F1 falls
+`0.266563 -> 0.264132`. Only collision row `1` changes beyond the six state
+heads (weight L2 `1.84176e-4`, bias `1.78469e-5`). Its audit is
+`/private/tmp/20260823-spec160-node-collision-step32-audit.json`, SHA-256
+`632f39e6b7737273f532b79fbaa5498c510c05e994f4904201310e82b2a4f9ff`;
+checkpoint SHA-256 is
+`3dd8b914f7f3abfd2ce5c0046a1c6feac3240e413e45aa9f672ab5fe51bd6cdd`.
+
+All `5829` common final physical, seed, scenario, and validation fields are
+bit-exact between the specification-1.59 combined step-32 candidate and this
+node-only candidate. Removing pair BCE at matched row magnitude therefore
+does not alter any selector-visible decision in this bounded regime. Do not
+continue, interpolate, or promote either specification-1.60 checkpoint.
+Retain the routing instrumentation and protected step-zero deployment. Before
+another training rung, isolate the node-event collision-row gradients by
+horizon and determine whether aggregate/long-horizon supervision opposes the
+failed `0.1s` baseline slice; do not increase duration or weight blindly.
+
 ---
 
 # Closing directive

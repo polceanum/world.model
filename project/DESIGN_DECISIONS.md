@@ -25,6 +25,16 @@
   The full repository passes `1275/20 in 459.68s`, with all static gates clean.
   This is routing evidence only. A clean paired two-update owner proof and
   fresh bounded accuracy are required; step-zero deployment remains.
+  The subsequent clean pair passes exact ownership and baseline checks
+  (`e5db2d9b...`), but both two-update candidates are behaviorally identical.
+  Fresh step 16 fails minimum improvement plus heavy-light identity coverage.
+  Fresh step 32 clears minimum improvement but fails baseline aggregate/current
+  and `0.1s` collision F1; audit/checkpoint SHAs are `632f39e6...`/
+  `3dd8b914...`. All `5829` common final selector-visible fields are bit-exact
+  to the specification-1.59 combined candidate. Therefore node-only routing at
+  matched magnitude does not repair the bounded behavior. Reject both
+  candidates, preserve step zero, and isolate horizon-level node gradients
+  before any further objective or duration.
 
 ## ADR-165 — Require one immutable, comprehensive pair before runtime-pool promotion
 

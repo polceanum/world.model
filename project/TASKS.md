@@ -14,10 +14,15 @@
   passed, 1 skipped`) plus Ruff and diff checks.
 - [x] Pass the full repository (`1275 passed, 20 skipped in 459.68s`), Ruff,
   224-file format, isolated compile, version, and diff gates on frozen source.
-- [ ] Commit and push the clean specification-1.60 implementation source.
-- [ ] Run a clean paired two-update ownership gate, then fresh bounded
-  fixed-manifest accuracy only if routing/state isolation pass. Do not resume,
-  interpolate, or promote rejected specification-1.59 checkpoints.
+- [x] Commit and push clean specification-1.60 source (`2e0fabc`).
+- [x] Pass the clean node-only/combined two-update ownership gate with exact
+  common baseline/event evidence and eight-tensor isolation (`e5db2d9b...`).
+- [x] Run fresh step-16/32 fixed-manifest accuracy. Reject step 16 for minimum
+  improvement plus heavy-light identity; reject step 32 despite clearing the
+  minimum because baseline aggregate/current and 0.1-second collision F1 fail
+  (`51878e78...`/`632f39e6...`).
+- [ ] Isolate node collision-row gradients by horizon before another objective.
+  Do not continue, interpolate, or promote rejected spec-1.60 checkpoints.
 
 ## Direct typed collision-event ownership — specification 1.59
 
