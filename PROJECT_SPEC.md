@@ -8954,7 +8954,10 @@ one-row-per-scenario balanced batches with batch-macro physical losses,
 axiswise correction hinges, and zero attention dropout.
 
 The trainer loads a separate frozen model from the tensor-verified step-zero
-`reference_rollout.pt`. For every candidate update it executes the candidate
+`reference_rollout.pt`. Construction, loading, freezing, and evaluation setup
+of that optional model must preserve and restore the candidate's global RNG
+state; enabling the guard may not alter the first candidate forward before a
+nonzero hinge exists. For every candidate update it executes the candidate
 once, restores the pre-forward Python/Torch/backend RNG state, replays the
 reference under `no_grad` on the exact same batch, window, and perturbation
 stream, then restores the candidate's post-forward RNG state. The runtime

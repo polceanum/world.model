@@ -15,10 +15,16 @@ preserves `328/328` support cells; equality gives zero hinge, while a `1 cm`
 permitted-head perturbation activates `136` cells at protected/base gradient
 ratio `0.111032`. The profile fixes the one provisional weight at `1.0`.
 The final repository passes `1295 passed, 20 skipped in 447.03s`; Ruff, the
-225-file format check, isolated compile, version, and diff gates pass. Clean
-commit/push, paired wiring, and bounded fixed-32 accuracy remain pending. Do
-not tune multiple weights or extend beyond the
-first bounded accuracy rung without materially fewer guardrail failures.
+225-file format check, isolated compile, version, and diff gates pass. The
+implementation was committed and pushed at `9b3ac1d`. The first retained
+two-update pair correctly matched seeds, scenarios, windows, and the sole
+config delta, but failed the stricter forward-parity gate: construction of the
+optional frozen model consumed global RNG before the first candidate forward.
+The run was stopped before the 32-update rung. Reference setup now preserves
+and restores the candidate RNG stream, with a focused construction regression;
+a fresh clean pair remains mandatory. Do not tune multiple weights or extend
+beyond the first bounded accuracy rung without materially fewer guardrail
+failures.
 
 ## Specification 1.61 protected state-event routing — implementation gate 2026-08-23
 

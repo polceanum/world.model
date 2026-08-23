@@ -13,8 +13,14 @@
   support/gradient probe (`328/328`, ratio `0.111032`).
 - [x] Pass full repository (`1295 passed, 20 skipped in 447.03s`), Ruff,
   225-file format, isolated compile, version, and diff gates.
-- [ ] Freeze, commit, and push specification 1.62.
-- [ ] Run one clean paired wiring smoke and one bounded fixed-32 accuracy rung.
+- [x] Freeze, commit, and push the initial specification-1.62 implementation
+  (`9b3ac1d`).
+- [x] Retain and reject the first paired smoke: exact draws/windows/config
+  exposed pre-forward RNG drift from optional reference-model construction.
+- [x] Preserve/restore candidate RNG around frozen-reference construction and
+  add a focused construction regression.
+- [ ] Commit/push the parity repair and run one fresh clean paired wiring smoke.
+- [ ] Run at most one bounded fixed-32 accuracy rung after exact forward parity.
 - [ ] Stop without further weight/duration tuning unless guardrail failures
   contract materially while pooled accuracy remains non-regressive.
 

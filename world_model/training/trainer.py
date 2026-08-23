@@ -6212,6 +6212,35 @@ def _closed_loop_result_with_protected_reference(
     return candidate
 
 
+def _load_protected_reference_model(
+    config: OrpheusConfig,
+    *,
+    device: torch.device,
+    reference_rollout_path: Path,
+    expected_model_state_hash: str,
+) -> tuple[OnlineWorldModel, str]:
+    """Load the frozen control without perturbing the candidate RNG stream."""
+
+    rng_state = _capture_replay_rng_state(device)
+    try:
+        protected_reference_model = OnlineWorldModel.from_config(config, device=device)
+        load_model_weights(
+            reference_rollout_path,
+            model=protected_reference_model,
+            expected_config=config,
+        )
+        protected_reference_model.requires_grad_(False)
+        protected_reference_model.eval()
+        protected_reference_hash = _current_model_state_hash(protected_reference_model)
+        if protected_reference_hash != expected_model_state_hash:
+            raise RuntimeError(
+                "protected-reference model hash does not match the validated rollout reference"
+            )
+    finally:
+        _restore_replay_rng_state(rng_state)
+    return protected_reference_model, protected_reference_hash
+
+
 def train_from_config(
     config: OrpheusConfig,
     *,
@@ -7559,19 +7588,12 @@ def _train_from_config_owned(
                 "protected-reference non-regression requires a supported, persisted "
                 "step-zero rollout reference"
             )
-        protected_reference_model = OnlineWorldModel.from_config(config, device=device)
-        load_model_weights(
-            reference_rollout_path,
-            model=protected_reference_model,
-            expected_config=config,
+        protected_reference_model, protected_reference_hash = _load_protected_reference_model(
+            config,
+            device=device,
+            reference_rollout_path=reference_rollout_path,
+            expected_model_state_hash=reference_rollout_model_state_hash,
         )
-        protected_reference_model.requires_grad_(False)
-        protected_reference_model.eval()
-        protected_reference_hash = _current_model_state_hash(protected_reference_model)
-        if protected_reference_hash != reference_rollout_model_state_hash:
-            raise RuntimeError(
-                "protected-reference model hash does not match the validated rollout reference"
-            )
         logger.log(
             step=start_step,
             split="training_control_protected_reference",

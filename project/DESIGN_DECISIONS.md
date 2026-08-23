@@ -19,11 +19,15 @@
   targets; accepting pooled gains despite slice failures; weakening support.
 - **Consequences:** Training compute roughly doubles but the reference graph is
   detached. Runtime/WorldBelief semantics remain unchanged. A `1 cm` probe
-  yields an 11.1% gradient-scale constraint with all 328 cells aligned. One
-  paired smoke and one bounded accuracy rung decide whether this path ends or
-  advances; no tuning ladder is authorized. The final implementation gate is
-  `1295 passed, 20 skipped in 447.03s` plus clean Ruff, 225-file format,
-  isolated compile, version, and diff checks.
+  yields an 11.1% gradient-scale constraint with all 328 cells aligned. The
+  first retained pair exposed that optional reference construction shifted
+  the candidate RNG before update one; exact draws/windows alone were not a
+  sufficient parity proof. The 32-update rung was not launched. Reference
+  setup now preserves/restores RNG and a fresh pair must prove exact first-
+  forward parity before the one authorized accuracy rung. No tuning ladder is
+  authorized. The initial implementation gate is `1295 passed, 20 skipped in
+  447.03s` plus clean Ruff, 225-file format, isolated compile, version, and
+  diff checks; initial source is pushed at `9b3ac1d`.
 
 ## ADR-174 — Protect recursive state heads with calibrated node-event descent
 

@@ -109,3 +109,52 @@ def test_zero_weight_protected_reference_path_is_the_single_legacy_call(monkeypa
     assert calls == 1
     assert result.total_loss.item() == 1.0
     assert "protected_reference_nonregression" not in result.loss_terms
+
+
+def test_loading_protected_reference_does_not_perturb_candidate_rng(monkeypatch, tmp_path) -> None:
+    config = load_config("configs/protected_state_event_updater_xy_repair_cpu.yaml")
+
+    class FakeReference:
+        def requires_grad_(self, enabled):
+            assert enabled is False
+            random.random()
+            torch.rand(())
+            return self
+
+        def eval(self):
+            random.random()
+            torch.rand(())
+            return self
+
+    reference = FakeReference()
+
+    def fake_from_config(*_args, **_kwargs):
+        random.random()
+        torch.rand(())
+        return reference
+
+    def fake_load(*_args, **_kwargs):
+        random.random()
+        torch.rand(())
+
+    monkeypatch.setattr(training_trainer.OnlineWorldModel, "from_config", fake_from_config)
+    monkeypatch.setattr(training_trainer, "load_model_weights", fake_load)
+    monkeypatch.setattr(training_trainer, "_current_model_state_hash", lambda _model: "hash")
+
+    random.seed(731)
+    torch.manual_seed(731)
+    loaded, loaded_hash = training_trainer._load_protected_reference_model(
+        config,
+        device=torch.device("cpu"),
+        reference_rollout_path=tmp_path / "reference_rollout.pt",
+        expected_model_state_hash="hash",
+    )
+    observed_python = random.random()
+    observed_torch = torch.rand(())
+
+    random.seed(731)
+    torch.manual_seed(731)
+    assert observed_python == random.random()
+    torch.testing.assert_close(observed_torch, torch.rand(()))
+    assert loaded is reference
+    assert loaded_hash == "hash"

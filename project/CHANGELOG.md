@@ -16,7 +16,14 @@
   `328/328` cells and measures protected/base gradient ratio `0.111032` after
   a `1 cm` permitted-head perturbation. The final repository passes `1295
   passed, 20 skipped in 447.03s`; Ruff, 225-file format, isolated compile,
-  version, and diff gates pass. Bounded retained qualification remains pending.
+  version, and diff gates pass. Initial source was committed/pushed at
+  `9b3ac1d`.
+- Retained the first two-update treatment/control pair and rejected it before
+  any longer accuracy run. Seeds, scenarios, windows, perturbation markers,
+  and config were paired, but optional reference-model construction shifted
+  global RNG and changed the first candidate forward despite a zero hinge.
+  Frozen-reference setup now snapshots/restores candidate RNG, with a focused
+  adversarial construction test. Fresh paired qualification remains pending.
 
 ### 2026-08-23 specification 1.61 protected state-event routing
 
