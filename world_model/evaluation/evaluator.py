@@ -447,6 +447,25 @@ def _validate_runtime_hypothesis_composition_counts(
             )
 
 
+def _sum_runtime_hypothesis_counts_on_host(
+    value: Tensor,
+    *,
+    dim: tuple[int, ...],
+) -> Tensor:
+    """Reduce detached integer diagnostics on the host.
+
+    The custom Aqua-MPS backend can abort while compiling multi-axis integer
+    reductions for the batched hypothesis evaluator. These values are report
+    counters only and are immediately consumed on the host, so transferring
+    before the exact integer reduction avoids that backend kernel without
+    changing model execution or floating-point metrics.
+    """
+
+    if value.dtype != torch.int64:
+        raise TypeError("runtime hypothesis diagnostic counts must use torch.int64")
+    return value.detach().cpu().sum(dim=dim)
+
+
 def _runtime_hypothesis_learned_fallback_diagnostics(
     controller: object,
     belief: WorldBelief,
@@ -2490,13 +2509,12 @@ def _evaluate_checkpoint_impl(
                         for regime_index, count in enumerate(query_regime_counts):
                             runtime_hypothesis_regime_query_count[regime_index] += int(count)
                         if target_composed_regime_count is not None:
-                            regime_counts = (
+                            regime_counts = _sum_runtime_hypothesis_counts_on_host(
                                 target_composed_regime_count
-                                * target_hypothesis_active.unsqueeze(-1).to(torch.int64)
-                            ).sum(dim=(0, 1, 2))
-                            for regime_index, count in enumerate(
-                                regime_counts.detach().cpu().tolist()
-                            ):
+                                * target_hypothesis_active.unsqueeze(-1).to(torch.int64),
+                                dim=(0, 1, 2),
+                            )
+                            for regime_index, count in enumerate(regime_counts.tolist()):
                                 runtime_hypothesis_regime_step_count[regime_index] += int(count)
                         for axis in config.runtime.hypothesis_axis_independent_axes:
                             runtime_hypothesis_axis_composition_grid_fallback_count[axis] += int(
@@ -2561,13 +2579,12 @@ def _evaluate_checkpoint_impl(
                                     float(confidence_values.min().detach().cpu()),
                                 )
                             if target_composed_candidate_count is not None:
-                                composed_counts = (
+                                composed_counts = _sum_runtime_hypothesis_counts_on_host(
                                     target_composed_candidate_count[..., axis, :]
-                                    * target_hypothesis_active.unsqueeze(-1).to(torch.int64)
-                                ).sum(dim=(0, 1, 2))
-                                for candidate_index, count in enumerate(
-                                    composed_counts.detach().cpu().tolist()
-                                ):
+                                    * target_hypothesis_active.unsqueeze(-1).to(torch.int64),
+                                    dim=(0, 1, 2),
+                                )
+                                for candidate_index, count in enumerate(composed_counts.tolist()):
                                     runtime_hypothesis_axis_composed_candidate_step_count[axis][
                                         candidate_index
                                     ] += int(count)

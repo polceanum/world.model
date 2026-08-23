@@ -16,6 +16,7 @@ from world_model.evaluation.evaluator import (
     _require_finite_trajectory,
     _resolved_evaluation_protocol,
     _runtime_hypothesis_learned_fallback_diagnostics,
+    _sum_runtime_hypothesis_counts_on_host,
     _validate_runtime_hypothesis_composition_counts,
 )
 from world_model.evaluation.reports import write_evaluation_report
@@ -34,6 +35,29 @@ def _trajectory(*, event_value: float = 0.0) -> BeliefTrajectory:
         active_mask=torch.ones(1, 1, 1, dtype=torch.bool),
         event_logits=torch.full((1, 1, 1, 4), event_value),
     )
+
+
+def test_runtime_hypothesis_diagnostic_counts_reduce_on_host() -> None:
+    value = torch.arange(8 * 5 * 6 * 6, dtype=torch.int64).reshape(8, 5, 6, 6)
+    value.requires_grad_(False)
+
+    reduced = _sum_runtime_hypothesis_counts_on_host(value, dim=(0, 1, 2))
+
+    assert reduced.device.type == "cpu"
+    assert reduced.dtype == torch.int64
+    assert torch.equal(reduced, value.sum(dim=(0, 1, 2)))
+    with pytest.raises(TypeError, match="must use torch.int64"):
+        _sum_runtime_hypothesis_counts_on_host(value.float(), dim=(0, 1, 2))
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="MPS is unavailable")
+def test_runtime_hypothesis_batched_mps_diagnostic_counts_reduce_on_host() -> None:
+    value = torch.ones((8, 5, 6, 6), dtype=torch.int64, device="mps")
+
+    reduced = _sum_runtime_hypothesis_counts_on_host(value, dim=(0, 1, 2))
+
+    assert reduced.device.type == "cpu"
+    assert torch.equal(reduced, torch.full((6,), 8 * 5 * 6, dtype=torch.int64))
 
 
 def test_nonfinite_belief_and_event_logits_fail_before_scoring() -> None:
