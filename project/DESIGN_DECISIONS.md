@@ -4931,6 +4931,15 @@
   F1 exact, and are rejected solely by minimum improvement. Audit SHA-256 is
   `52589137...`. This is ownership evidence, not latency or accuracy evidence;
   bounded accuracy remains required. Deployment remains step zero.
+  The first fresh step-16 attempt stopped at update 6 because a draw with no
+  supported rollout anchor legitimately produced no event term. Requiring a
+  differentiable event tensor on every draw was therefore a protocol bug, not
+  evidence corruption. Missing support now runs only the unchanged physical
+  backward, emits an explicit zero-support marker, and leaves collision
+  parameters and moments untouched; a present detached event term still
+  raises. The failed run is terminal and must not be resumed. The repaired
+  repository gate is `1269 passed, 20 skipped`; fresh accuracy restarts from
+  the immutable initializer.
 
 ## ADR-171 — Bound extreme uncertainty gradients without changing proper scores
 

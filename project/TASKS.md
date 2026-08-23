@@ -20,9 +20,12 @@
 - [x] Run a clean two-update direct-owner/event-zero pair with exact common
   forward evidence, draws, state ownership, collision-row ownership, and
   finite gradients before bounded accuracy (`52589137...`).
+- [x] Repair the real sparse-event draw failure: absent event support now keeps
+  the physical update and collision owner untouched, while a present detached
+  event term remains fail-closed. Pass `1269/20` on the final repaired tree.
 - [ ] Run fresh step-16/32 fixed-manifest accuracy from the immutable
-  initializer. Do not continue or promote unless every pooled and scenario
-  guardrail passes.
+  initializer. Do not resume the terminal failed update-6 attempt, and do not
+  continue or promote unless every pooled and scenario guardrail passes.
 
 ## Forward-exact robust uncertainty influence — specification 1.58
 

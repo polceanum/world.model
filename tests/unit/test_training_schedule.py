@@ -1465,8 +1465,111 @@ def test_combined_xy_collision_scope_routes_event_only_to_collision_row() -> Non
     assert torch.count_nonzero(attention.relation_decoder.weight.grad[other_rows]) == 0
     assert torch.count_nonzero(attention.relation_decoder.bias.grad[other_rows]) == 0
     assert result.metrics["direct_collision_event_owner_active"] == 1.0
+    assert result.metrics["direct_collision_event_objective_supported"] == 1.0
     assert result.metrics["direct_collision_event_loss_weight"] == 0.05
     assert result.metrics["direct_collision_event_noncollision_gradient_discarded_norm"] > 0.0
+
+
+def test_combined_xy_collision_scope_allows_sparse_batch_without_event_term() -> None:
+    source = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            closed_loop_trainable_scope="updater_state_heads_xy_collision",
+            closed_loop_event_loss_weights={"updater_state_heads_xy_collision": 0.05},
+            loss_weights={"state_position": 2.0, "event": 0.05},
+        ),
+    )
+    config.validate()
+    model = OnlineWorldModel.from_config(config)
+    set_closed_loop_trainable_scope(model, scope="updater_state_heads_xy_collision")
+    corrector = model.updater.learned_corrector
+    attention = model.dynamics.attention_interactions
+    assert corrector is not None
+    assert attention is not None
+
+    state_signal = corrector.mean_head.weight.sum()
+    terms = {"state_position": state_signal * 3.0}
+    weights, _ = _closed_loop_loss_weights_for_scope(
+        config,
+        active_trainable_scope="updater_state_heads_xy_collision",
+    )
+    result = TrainingBatchResult(
+        total_loss=_weighted_closed_loop_total(terms, weights),
+        loss_terms=terms,
+        metrics={},
+        phase="closed_loop_rgb",
+    )
+
+    _backward_training_result(
+        model,
+        result,
+        config,
+        active_scope="updater_state_heads_xy_collision",
+    )
+
+    torch.testing.assert_close(
+        corrector.mean_head.weight.grad,
+        torch.full_like(corrector.mean_head.weight, 6.0),
+    )
+    assert attention.relation_decoder.weight.grad is None
+    assert attention.relation_decoder.bias.grad is None
+    assert result.metrics == {
+        "direct_collision_event_owner_active": 1.0,
+        "direct_collision_event_objective_supported": 0.0,
+        "direct_collision_event_loss_weight": 0.05,
+        "direct_collision_event_gradient_norm_pre_parameter_clip": 0.0,
+        "direct_collision_event_noncollision_gradient_discarded_norm": 0.0,
+    }
+
+
+def test_combined_xy_collision_scope_rejects_present_detached_event_term() -> None:
+    source = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            closed_loop_trainable_scope="updater_state_heads_xy_collision",
+            closed_loop_event_loss_weights={"updater_state_heads_xy_collision": 0.05},
+            loss_weights={"state_position": 2.0, "event": 0.05},
+        ),
+    )
+    config.validate()
+    model = OnlineWorldModel.from_config(config)
+    set_closed_loop_trainable_scope(model, scope="updater_state_heads_xy_collision")
+    corrector = model.updater.learned_corrector
+    assert corrector is not None
+    state_signal = corrector.mean_head.weight.sum()
+    terms = {"state_position": state_signal * 3.0, "event": state_signal.detach()}
+    weights, _ = _closed_loop_loss_weights_for_scope(
+        config,
+        active_trainable_scope="updater_state_heads_xy_collision",
+    )
+    result = TrainingBatchResult(
+        total_loss=_weighted_closed_loop_total(terms, weights),
+        loss_terms=terms,
+        metrics={},
+        phase="closed_loop_rgb",
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="direct collision ownership requires a differentiable event loss",
+    ):
+        _backward_training_result(
+            model,
+            result,
+            config,
+            active_scope="updater_state_heads_xy_collision",
+        )
+    assert corrector.mean_head.weight.grad is None
 
 
 def test_combined_xy_collision_scope_preserves_noncollision_rows_through_adamw() -> None:

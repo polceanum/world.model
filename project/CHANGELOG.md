@@ -27,6 +27,13 @@
   bit-identical across arms, and treatment changes only typed collision row 1
   beyond the six shared heads. Both candidates miss only minimum improvement;
   audit SHA-256 is `52589137...`. The sequential timings are not qualified.
+- Repaired a real sparse-support failure found by the first step-16 attempt at
+  update 6. A missing event term now preserves the physical update, reports
+  zero direct-event support, and leaves the collision owner untouched; a
+  present detached event term still fails closed. The failed run is terminal.
+- Passed the repaired focused gate (`322 passed, 1 skipped`) and full repository
+  gate (`1269 passed, 20 skipped in 444.93s`) plus Ruff, 224-file format,
+  compile, version, and diff checks. Fresh accuracy restarts from step zero.
 
 ### 2026-08-23 specification 1.58 robust uncertainty influence
 

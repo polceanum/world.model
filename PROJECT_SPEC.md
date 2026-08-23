@@ -8730,6 +8730,20 @@ initialization encountered a transient host slowdown. Fresh bounded fixed-
 manifest accuracy, paired latency, promotion, and convergence remain
 mandatory. Deployment stays at the protected step-zero incumbent.
 
+Event-objective support is draw-local. A balanced causal draw may have no
+supported rollout anchor and therefore no event term. Under the combined
+scope, that absence must not fabricate event supervision or abort a valid
+physical update: backpropagate the unchanged non-event objective, record
+`direct_collision_event_objective_supported=0` with zero routed/discarded
+event norms, and leave relation-decoder gradients and moments untouched. If an
+event term is present but does not require gradients, fail closed. The first
+fresh step-16 attempt exposed this distinction at attempted update 6 and
+terminated after five finite unclipped updates; it produced no candidate and
+must not be resumed. The repaired focused gate is `322 passed, 1 skipped`; the
+final repository gate is `1269 passed, 20 skipped in 444.93s`, with Ruff,
+224-file format, compileall, version, and diff checks clean. Accuracy must be
+rerun fresh from the immutable initializer.
+
 ---
 
 # Closing directive

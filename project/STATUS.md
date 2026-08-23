@@ -40,6 +40,23 @@ control initialization experienced a transient host slowdown. Fresh bounded
 step-16/32 accuracy, paired latency, promotion, and convergence remain
 pending. Deployment remains step zero.
 
+The first fresh step-16 attempt then exposed one sparse-support bug and stopped
+safely at attempted update 6 after five finite, unclipped updates. That draw
+had no supported rollout anchor and therefore no event term; the direct-owner
+backward incorrectly required a differentiable event term on every draw. The
+repair distinguishes absence from corruption: a missing event term applies
+the unchanged physical backward, records zero direct-event support and norms,
+and leaves the collision decoder gradient/moments untouched. A present but
+detached event tensor still fails closed. The terminal failed run is
+`runs/20260823-151310-spec159-direct-collision-step16`; it produced no selector
+candidate and is not resumable evidence.
+
+The repaired focused schedule/objective/checkpoint gate passes `322 passed, 1
+skipped`; the final repository passes `1269 passed, 20 skipped in 444.93s`.
+Whole-tree Ruff, the 224-file format check, compileall, version, and diff gates
+pass. A fresh-from-initializer step-16 rerun is required; the failed run must
+not be resumed.
+
 ## Specification 1.58 robust uncertainty influence — mechanism retained, candidates rejected 2026-08-23
 
 The successor to the rejected scenario-tail diagnostic keeps the exact

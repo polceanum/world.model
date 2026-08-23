@@ -4507,9 +4507,6 @@ def _backward_training_result(
     if active_scope != "updater_state_heads_xy_collision":
         result.total_loss.backward()
         return
-    event = result.loss_terms.get("event")
-    if event is None or not event.requires_grad:
-        raise RuntimeError("direct collision ownership requires a differentiable event loss")
     resolved_weights, _ = _closed_loop_loss_weights_for_scope(
         config,
         active_trainable_scope=active_scope,
@@ -4520,6 +4517,23 @@ def _backward_training_result(
     non_event_weights = dict(resolved_weights)
     non_event_weights["event"] = 0.0
     non_event_loss = _weighted_closed_loop_total(result.loss_terms, non_event_weights)
+
+    event = result.loss_terms.get("event")
+    if event is None:
+        if non_event_loss.requires_grad:
+            non_event_loss.backward()
+        result.metrics.update(
+            {
+                "direct_collision_event_owner_active": 1.0,
+                "direct_collision_event_objective_supported": 0.0,
+                "direct_collision_event_loss_weight": event_weight,
+                "direct_collision_event_gradient_norm_pre_parameter_clip": 0.0,
+                "direct_collision_event_noncollision_gradient_discarded_norm": 0.0,
+            }
+        )
+        return
+    if not event.requires_grad:
+        raise RuntimeError("direct collision ownership requires a differentiable event loss")
 
     attention = model.dynamics.attention_interactions
     if attention is None:
@@ -4559,6 +4573,7 @@ def _backward_training_result(
     result.metrics.update(
         {
             "direct_collision_event_owner_active": 1.0,
+            "direct_collision_event_objective_supported": 1.0,
             "direct_collision_event_loss_weight": event_weight,
             "direct_collision_event_gradient_norm_pre_parameter_clip": float(
                 routed_norm.detach().cpu()
