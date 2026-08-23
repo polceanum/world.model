@@ -25,6 +25,9 @@
   the tradeoff, variance rollback lost the useful correction, and half
   variance failed 44 guardrails on fixed 32. Deployment remains step zero; the
   next repair must constrain protected-base scenario/axis/horizon regression.
+- Replayed the exact deterministic trajectory to retain step 128. Its pooled
+  selector worsened and 21 event/identity/NLL/position failures were already
+  present, rejecting early stopping as a substitute for objective repair.
 
 ### 2026-08-23 specification 1.55 output-only causal residual diagnostics
 

@@ -22,6 +22,9 @@
 - [x] Localize the result with fixed-eight mean/variance/gate rollbacks and a
   fixed-32 half-variance interpolation. Reject variance rollback and scaling;
   the latter failed 44 full-manifest guardrails.
+- [x] Reproduce and retain the missing step-128 checkpoint on the exact
+  deterministic trajectory. Reject early stopping after a worse selector and
+  21 guardrail failures already present during warmup.
 - [ ] Add a protected-base scenario/axis/horizon non-regression objective (or
   an equally explicit causal constraint) and re-enter from the immutable
   initializer. Do not continue or compose the rejected step-512 candidate.

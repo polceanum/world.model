@@ -40,6 +40,14 @@ not weaker selection. The run is
 `29e663cd...`. The implementation/profile commit is `074fc6a` and its memory
 closure is `ef8cd02`.
 
+A deterministic rerun retained step 128 and exactly reproduced the original
+cadence losses. That checkpoint is also rejected: score worsens
+`0.23952864 -> 0.23972992` with 21 failures already spanning collision,
+elastic-y/NLL, heavy-light event/identity, and reference event/identity/NLL.
+Its checkpoint/model hashes are `612d1f05...`/`7c5ccc1c...`. Exact lateral
+ownership still holds. The failure is present during warmup, so early stopping
+does not replace the required objective-level non-regression repair.
+
 ## Specification 1.55 causal residual diagnostics — retained mechanism, rejected selector 2026-08-23
 
 The runtime now has a strict, default-zero per-axis causal position-residual

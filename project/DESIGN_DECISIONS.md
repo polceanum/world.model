@@ -4896,9 +4896,12 @@
   pooled position horizons, but failed 34 guardrails across collision, NLL,
   identity, velocity, and position slices. Mean/gate rollback did not remove
   the failure; variance rollback lost useful correction; half variance failed
-  44 full-manifest guardrails. Preserve the ownership mechanism, reject the
-  checkpoint and post-hoc compositions, retain step zero, and require explicit
-  protected-base scenario/axis/horizon objective control before another run.
+  44 full-manifest guardrails. A deterministic step-128 rerun also worsened the
+  pooled selector and failed 21 guardrails, proving the tradeoff begins during
+  warmup rather than only after prolonged training. Preserve the ownership
+  mechanism, reject every checkpoint and post-hoc composition, retain step
+  zero, and require explicit protected-base scenario/axis/horizon objective
+  control before another run.
 
 ## ADR-149 — Batch validation anchors only after exact MPS parity
 

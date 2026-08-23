@@ -8502,6 +8502,16 @@ control; it may not weaken guardrails or promote this checkpoint. The numbered
 checkpoint SHA-256 is `682d223f...`, its model-state hash is `9d629cd3...`, and
 the clean runtime fingerprint is `29e663cd...`. Deployment remains step zero.
 
+A deterministic early-checkpoint rerun from the same initializer reproduces
+the original cadence losses exactly through update 128 and closes the
+early-stopping hypothesis. Its full fixed-32 score worsens
+`0.23952864 -> 0.23972992` and fails 21 guardrails, already including pooled
+and sliced collision F1, elastic-pairs y/NLL, heavy-light events/identity, and
+reference-pairs event/identity/NLL. Ownership remains exact and finite. The
+step-128 checkpoint SHA-256 is `612d1f05...` and model-state hash is
+`7c5ccc1c...`. The tradeoff therefore begins during warmup and later rotates
+across scenarios; selecting an earlier checkpoint is not a repair.
+
 ---
 
 # Closing directive
