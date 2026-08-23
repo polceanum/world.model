@@ -21,6 +21,12 @@
   `1267 passed, 20 skipped in 458.26s`; Ruff, 224-file format, compile,
   version, and diff checks pass. No accuracy, promotion, convergence, or
   deployment claim is made.
+- Committed and pushed the clean frozen implementation as `2154b68`.
+- Passed the clean direct-owner/event-zero two-update pair. All common
+  step-zero physical evidence and non-event losses are exact, state heads are
+  bit-identical across arms, and treatment changes only typed collision row 1
+  beyond the six shared heads. Both candidates miss only minimum improvement;
+  audit SHA-256 is `52589137...`. The sequential timings are not qualified.
 
 ### 2026-08-23 specification 1.58 robust uncertainty influence
 

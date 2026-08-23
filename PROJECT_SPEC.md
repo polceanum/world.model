@@ -8707,10 +8707,28 @@ Focused schedule/config/exact-resume/objective checks pass `510` tests with one
 expected inactive-MPS skip. The final whole-repository gate passes `1267`
 tests with `20` expected unavailable-backend skips in `458.26s`; whole-tree
 Ruff, the `224`-file format check, isolated compileall, version, and diff checks
-pass. This is typed ownership, routing, and calibration evidence only. A clean
-paired two-update proof, bounded fixed-manifest accuracy, latency, promotion,
-and convergence remain mandatory. Deployment stays at the protected step-zero
-incumbent.
+pass. The frozen source is committed and pushed as `2154b68`.
+
+The clean two-update direct-owner/event-zero pair passes on those exact source
+bytes. Resolved configurations differ only by project name, typed scope, and
+the matching scope/event weights. Both arms have identical ordered draws,
+`5700` exact common step-zero physical/seed/scenario values, exact common
+non-event losses, and bit-identical final state-head tensors. The control
+checkpoint owns exactly the six lateral state-head Adam entries. Treatment
+adds exactly relation-decoder weight and bias, and only collision row `1`
+changes; every other relation row and model tensor stays exact. Both candidates
+improve the selector by only about `1.9445e-7`, retain collision F1 exactly,
+and fail only the `1e-5` minimum-improvement requirement. The paired audit is
+`/private/tmp/20260823-spec159-direct-collision-two-update-audit.json`, SHA-256
+`52589137c99386e126a1dff0b60ec5d0248ba625857d944a7dde51984b204228`;
+its script SHA-256 is
+`a597885d6ef5934a136e9d0a65db925d1552877a1b61eba33d10626704f51186`.
+
+This is typed ownership, routing, and deterministic state-isolation evidence
+only. The sequential pair is not a latency qualification because the control
+initialization encountered a transient host slowdown. Fresh bounded fixed-
+manifest accuracy, paired latency, promotion, and convergence remain
+mandatory. Deployment stays at the protected step-zero incumbent.
 
 ---
 

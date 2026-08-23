@@ -16,10 +16,10 @@
 - [x] Pass the final whole-repository (`1267 passed, 20 skipped in 458.26s`),
   Ruff, 224-file format, compile, version, and diff gates on frozen spec-1.59
   source.
-- [ ] Commit and push the clean frozen specification-1.59 source.
-- [ ] Run a clean two-update direct-owner/event-zero pair with exact common
+- [x] Commit and push the clean frozen specification-1.59 source (`2154b68`).
+- [x] Run a clean two-update direct-owner/event-zero pair with exact common
   forward evidence, draws, state ownership, collision-row ownership, and
-  finite gradients before bounded accuracy.
+  finite gradients before bounded accuracy (`52589137...`).
 - [ ] Run fresh step-16/32 fixed-manifest accuracy from the immutable
   initializer. Do not continue or promote unless every pooled and scenario
   guardrail passes.

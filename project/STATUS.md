@@ -20,8 +20,25 @@ gradient `0.0768893` is explicitly discarded. Report SHA-256 is `f6904bd5...`.
 Focused implementation checks pass `510 passed, 1 skipped`. The final full
 repository gate passes `1267 passed, 20 skipped in 458.26s`; whole-tree Ruff,
 the 224-file format check, isolated compileall, version, and diff gates pass.
-Clean two-update, bounded accuracy, latency, promotion, and convergence gates
-remain pending. Deployment remains step zero.
+The clean source is committed and pushed as `2154b68`.
+
+The clean two-update direct-owner/event-zero pair passes on that exact commit.
+All `5700` common step-zero physical/seed/scenario values and every common
+non-event training loss are bit-exact. Both arms use the same ordered draws;
+the six lateral state-head tensors are bit-exact across arms. The control owns
+exactly those six Adam entries, while treatment adds exactly the relation
+decoder weight/bias entries and changes only collision row 1. Treatment
+records finite direct collision norms on both updates and zero typed output
+gradient for every noncollision row. Both post-update candidates have the
+same approximately `1.9445e-7` score improvement and unchanged collision F1,
+so both are rejected only by the `1e-5` minimum-improvement rule. Audit
+SHA-256 is `52589137...`; audit-script SHA-256 is `a597885d...`.
+
+This proves routing, exact ownership, and deterministic state isolation only.
+The sequential pair is explicitly not a latency qualification because the
+control initialization experienced a transient host slowdown. Fresh bounded
+step-16/32 accuracy, paired latency, promotion, and convergence remain
+pending. Deployment remains step zero.
 
 ## Specification 1.58 robust uncertainty influence — mechanism retained, candidates rejected 2026-08-23
 

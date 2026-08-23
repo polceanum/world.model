@@ -4901,7 +4901,7 @@
 ## ADR-172 — Route event supervision only to the typed collision owner
 
 - **Date:** 2026-08-23
-- **Status:** implementation-gated; accuracy pending
+- **Status:** ownership and paired wiring accepted; accuracy pending
 - **Context:** Specification 1.58 bounded the rare uncertainty gradient and
   improved the pooled selector at step 32, but two baseline collision-F1
   slices still failed. Event BCE on frozen state heads had previously produced
@@ -4922,8 +4922,15 @@
   `0.0087597` is eliminated; recursive noncollision relation gradient
   `0.0768893` is discarded. Exact cadence and forward predictions are
   unchanged. Focused tests pass `510/1`; the final repository gate passes
-  `1267/20` in `458.26s` with every static gate clean. Paired wiring and bounded
-  accuracy remain required. Deployment remains step zero.
+  `1267/20` in `458.26s` with every static gate clean. The source is committed
+  and pushed as `2154b68`. The clean two-update pair then proves `5700` common
+  step-zero physical/seed/scenario values, common non-event losses, deterministic
+  draws, and all six state-head tensors are exact across arms. Treatment adds
+  exactly two Adam owners and changes only collision row 1; control owns only
+  the six heads. Both candidates improve by only `1.9445e-7`, leave collision
+  F1 exact, and are rejected solely by minimum improvement. Audit SHA-256 is
+  `52589137...`. This is ownership evidence, not latency or accuracy evidence;
+  bounded accuracy remains required. Deployment remains step zero.
 
 ## ADR-171 — Bound extreme uncertainty gradients without changing proper scores
 
