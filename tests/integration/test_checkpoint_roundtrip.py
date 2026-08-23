@@ -771,13 +771,14 @@ def test_training_resume_binds_state_roi_scope_and_late_transition() -> None:
         validate_training_resume_config(payload, changed)
 
 
-def test_training_resume_binds_updater_state_heads_scope() -> None:
+@pytest.mark.parametrize("scope", ("updater_state_heads", "updater_state_heads_xy"))
+def test_training_resume_binds_updater_state_heads_scope(scope: str) -> None:
     source = _small_config()
     updater_state_heads = replace(
         source,
         training=replace(
             source.training,
-            closed_loop_trainable_scope="updater_state_heads",
+            closed_loop_trainable_scope=scope,
         ),
     )
     updater_state_heads.validate()
@@ -791,7 +792,9 @@ def test_training_resume_binds_updater_state_heads_scope() -> None:
         updater_state_heads,
         training=replace(
             updater_state_heads.training,
-            closed_loop_trainable_scope="updater",
+            closed_loop_trainable_scope=(
+                "updater" if scope == "updater_state_heads" else "updater_state_heads"
+            ),
         ),
     )
     with pytest.raises(

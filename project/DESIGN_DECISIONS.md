@@ -4869,6 +4869,33 @@
   next repair toward joint learned axis/uncertainty ownership rather than
   post-hoc mean composition.
 
+## ADR-169 — Restrict the next updater repair to lateral typed rows
+
+- **Date:** 2026-08-23
+- **Status:** implementation accepted; accuracy qualification pending
+- **Context:** The rejected 1.52 treatment updated only position/velocity rows
+  of the corrector's mean, variance, and gate heads. At step 1024 it improved
+  x/y position and pooled velocity but worsened z position by `7.84%`; z
+  variance rows had the largest head drift. The 1.55 output-only residual
+  family also showed that post-hoc mean corrections cannot safely repair this
+  joint mean/uncertainty tradeoff.
+- **Decision:** Add a separate `updater_state_heads_xy` scope. Train rows
+  `0,1,3,4` of mean, variance, and gate heads; preserve z rows `2,5` and every
+  later fast-state row exactly. Clear excluded gradients and moments around
+  AdamW and restore excluded parameter rows after each step. Keep all other
+  1.52 data, objective, schedule, model, and runtime semantics unchanged in a
+  dedicated profile.
+- **Alternatives considered:** continue unrestricted six-head training; mask z
+  only at inference; restore only the variance head; add another runtime
+  residual; weaken z/scenario guardrails; or train a new shared adapter before
+  establishing a minimal typed-row boundary.
+- **Consequences:** A paired two-update CPU wiring check preserves identical
+  draws and losses, changes exactly the four permitted rows in all six tensors,
+  and leaves all other state exact. This proves ownership only. The scope must
+  pass final repository gates and a clean fixed-32 step-zero/step-512 accuracy
+  diagnostic before continuation, and cannot change the deployed incumbent
+  without the full promotion ladder.
+
 ## ADR-149 — Batch validation anchors only after exact MPS parity
 
 - **Date:** 2026-08-21

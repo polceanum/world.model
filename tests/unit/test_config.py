@@ -485,6 +485,12 @@ def test_closed_loop_trainable_scope_is_explicit() -> None:
     )
     assert state_updater_config.training.closed_loop_trainable_scope == "updater_state_heads"
 
+    xy_state_updater_config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=["training.closed_loop_trainable_scope=updater_state_heads_xy"],
+    )
+    assert xy_state_updater_config.training.closed_loop_trainable_scope == "updater_state_heads_xy"
+
 
 def test_updater_state_heads_scope_roundtrips_as_typed_configuration(tmp_path: Path) -> None:
     config = load_config(
@@ -537,6 +543,20 @@ def test_axis_gated_updater_repair_profile_binds_the_paired_protocol() -> None:
     control_dict["training"].pop("closed_loop_batch_macro_physical_losses_enabled")
     control_dict["training"].pop("closed_loop_axiswise_correction_hinge_enabled")
     assert control_dict == repaired_dict
+
+
+def test_axis_gated_updater_xy_repair_changes_only_functional_ownership() -> None:
+    source = load_config(CONFIG_DIR / "axis_gated_updater_repair_cpu.yaml")
+    repaired = load_config(CONFIG_DIR / "axis_gated_updater_xy_repair_cpu.yaml")
+
+    assert repaired.training.closed_loop_trainable_scope == "updater_state_heads_xy"
+    assert repaired.training.closed_loop_event_loss_weights == {"updater_state_heads_xy": 0.0}
+    source_dict = source.to_dict()
+    repaired_dict = repaired.to_dict()
+    source_dict["project"]["name"] = repaired_dict["project"]["name"]
+    source_dict["training"]["closed_loop_trainable_scope"] = "updater_state_heads_xy"
+    source_dict["training"]["closed_loop_event_loss_weights"] = {"updater_state_heads_xy": 0.0}
+    assert source_dict == repaired_dict
 
 
 def test_state_roi_scope_roundtrips_as_typed_configuration(tmp_path: Path) -> None:

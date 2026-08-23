@@ -4054,6 +4054,7 @@ def _closed_loop_loss_weights_for_scope(
         "state_roi",
         "updater",
         "updater_state_heads",
+        "updater_state_heads_xy",
         "updater_mean",
         "updater_mean_y",
     }

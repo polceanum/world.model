@@ -2,6 +2,22 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-23 specification 1.56 exact lateral updater-head ownership
+
+- Added `updater_state_heads_xy`, which trains only x/y position and velocity
+  rows in the learned corrector's mean, variance, and gate heads.
+- Made the row boundary exact through AdamW: excluded gradients and moments
+  are zeroed, excluded values are snapshotted/restored, and z plus every
+  non-kinematic row remain bit-identical.
+- Added strict configuration and exact-resume coverage plus a distinct CPU
+  diagnostic profile that leaves the earlier six-head protocol untouched.
+- Completed a two-update dirty-source paired wiring check. Both arms used the
+  same draws and losses with no retries; lateral ownership reduced applied
+  gradient norms and changed exactly rows `0,1,3,4` in all six state-head
+  tensors. This is not accuracy or promotion evidence.
+- Passed the final repository gate (`1233 passed, 20 skipped in 439.94s`) plus
+  Ruff, format, version, compile, and diff checks.
+
 ### 2026-08-23 specification 1.55 output-only causal residual diagnostics
 
 - Added a strict, default-zero per-axis causal position residual keyed by

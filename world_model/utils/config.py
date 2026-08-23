@@ -1430,6 +1430,7 @@ class OrpheusConfig:
             "dynamics",
             "updater",
             "updater_state_heads",
+            "updater_state_heads_xy",
             "updater_mean",
             "updater_mean_y",
             "fast_roi",
@@ -1444,7 +1445,7 @@ class OrpheusConfig:
                 "training.closed_loop_trainable_scope must be "
                 "'all', 'attention', 'attention_relation', 'attention_node_x', "
                 "'attention_node_y', 'attention_node_z', 'dynamics', "
-                "'updater', 'updater_state_heads', 'updater_mean', "
+                "'updater', 'updater_state_heads', 'updater_state_heads_xy', 'updater_mean', "
                 "'updater_mean_y', 'fast_roi', "
                 "'state_dynamics', 'state_roi', 'state_relation_roi', "
                 "'state_dynamics_fast_roi', or 'state_dynamics_roi'"

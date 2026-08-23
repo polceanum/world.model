@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.55
+**Version:** 1.56
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, and output-only causal residual diagnostics amendment 23 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, and exact lateral updater-head ownership amendments 23 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -8430,6 +8430,53 @@ Both candidates were rejected: selector score moved `0.23952864` to
 improved `2.30%`, while z position RMSE worsened `7.84%`. This localizes the
 next training repair to learned axis/uncertainty ownership; it does not justify
 post-hoc inference composition or promotion of either checkpoint.
+
+---
+
+## 250. Exact lateral updater-head ownership
+
+Specification 1.56 adds the `updater_state_heads_xy` training scope. It exposes
+the same six typed mean, log-variance, and gate head tensors as
+`updater_state_heads`, but only canonical fast-state rows `0,1,3,4` may change:
+x/y position and x/y velocity. Rows `2` and `5` preserve z position/velocity,
+and every row from `6` onward preserves orientation, angular velocity, and
+modal state. The shared corrector representation and mode, existence, and
+visibility siblings remain frozen.
+
+Gradient masking alone is insufficient because AdamW weight decay and retained
+moments can move a zero-gradient row. Before every optimizer step, the trainer
+zeros excluded gradients and matching optimizer-state rows and snapshots their
+parameter values. Immediately after the step it restores excluded parameter
+rows exactly and keeps their moments zero. The configured trainable scope is
+already exact-resume-bound; an exact resume cannot cross between unrestricted
+six-head and lateral-row ownership.
+
+This scope is motivated by the rejected specification-1.52 treatment, whose
+step-1024 checkpoint changed only fast-state rows 0 through 5. Its largest head
+drift was z position/velocity variance, while fixed validation improved x/y
+position and pooled velocity but regressed z position by `7.84%`. The new
+profile is otherwise exactly the 1.52 axis-gated CPU protocol: only project
+name, scope, and the corresponding zero event-owner key differ.
+
+A bounded dirty-source CPU wiring pair from the immutable initializer completed
+two identical balanced eight-scenario updates per arm. Losses were bit-equal at
+`0.8310171366` and `1.5899894238`; the unrestricted gradient norms were
+`0.0713825151/0.0575892627`, while lateral ownership retained
+`0.0654180571/0.0444234833`. The lateral checkpoint changed only rows
+`0,1,3,4` of all six head tensors, preserved every excluded row and all other
+model tensors exactly, and completed with no skipped or retried update. Its
+checkpoint and metrics SHA-256 values are `51fe0089...` and `193ed79c...`; the
+matched unrestricted values are `16490c2d...` and `23780a54...`.
+
+This is wiring and optimizer-ownership evidence only. The eight-episode
+validation manifest deliberately has only one episode per scenario and is not
+a promotion gate. The final repository gate passes `1233` tests with `20`
+expected inactive-backend skips in `439.94s`; Ruff, format, version, compile,
+and diff checks pass. A clean source-frozen run must re-enter at the common
+rich fixed-32 step-zero reference and stop at step 512 unless pooled and every
+scenario/axis/horizon uncertainty, event, identity, coverage, and physical
+guardrail justify continuation. Deployment remains the protected learned
+incumbent.
 
 ---
 

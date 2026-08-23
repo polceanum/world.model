@@ -4320,10 +4320,10 @@ def set_closed_loop_trainable_scope(
         model.updater.requires_grad_(True)
         _freeze_disconnected_training_heads(model)
         return
-    if scope == "updater_state_heads":
+    if scope in {"updater_state_heads", "updater_state_heads_xy"}:
         corrector = model.updater.learned_corrector
         if corrector is None:
-            raise ValueError("updater_state_heads scope requires the learned fast corrector")
+            raise ValueError(f"{scope} scope requires the learned fast corrector")
         # Keep the shared representation frozen.  Its output also feeds the
         # mode, existence, and visibility heads, so adapting it would change
         # those sibling semantics even though their parameters are frozen.
@@ -4388,7 +4388,8 @@ def set_closed_loop_trainable_scope(
         "closed-loop trainable scope must be 'all', 'attention', "
         "'attention_relation', 'attention_node_x', 'attention_node_y', "
         "'attention_node_z', 'dynamics', 'updater', "
-        "'updater_state_heads', 'updater_mean', 'updater_mean_y', 'fast_roi', "
+        "'updater_state_heads', 'updater_state_heads_xy', 'updater_mean', "
+        "'updater_mean_y', 'fast_roi', "
         "'state_dynamics', "
         "'state_roi', 'state_relation_roi', 'state_dynamics_fast_roi', or "
         "'state_dynamics_roi'"
@@ -4401,7 +4402,7 @@ def _prepare_restricted_updater_mean_update(
     *,
     scope: str,
 ) -> list[tuple[Tensor, Tensor, Tensor]]:
-    """Mask and snapshot rows excluded by an axis-restricted mean scope.
+    """Mask and snapshot rows excluded by an axis-restricted updater scope.
 
     AdamW applies decoupled weight decay and can retain per-element moments,
     so a zero gradient alone does not freeze a row.  Snapshotting the excluded
@@ -4410,29 +4411,39 @@ def _prepare_restricted_updater_mean_update(
     transition.
     """
 
-    selected_row = {"updater_mean_y": 1}.get(scope)
-    if selected_row is None:
+    if scope == "updater_mean_y":
+        selected_rows = (1,)
+        selected_heads = ("mean_head",)
+    elif scope == "updater_state_heads_xy":
+        # Canonical fast-state packing is position xyz followed by velocity
+        # xyz. Preserve z and every orientation/modal row exactly while the
+        # lateral position/velocity mean, variance, and gate rows adapt.
+        selected_rows = (0, 1, 3, 4)
+        selected_heads = ("mean_head", "variance_head", "gate_head")
+    else:
         return []
     corrector = model.updater.learned_corrector
     if corrector is None:
         raise ValueError(f"{scope} scope requires the learned fast corrector")
     snapshots: list[tuple[Tensor, Tensor, Tensor]] = []
-    for parameter in (corrector.mean_head.weight, corrector.mean_head.bias):
-        if parameter.ndim == 0 or selected_row >= parameter.shape[0]:
-            raise ValueError(f"{scope} is incompatible with the learned mean-head shape")
-        frozen_rows = torch.as_tensor(
-            [row for row in range(parameter.shape[0]) if row != selected_row],
-            dtype=torch.int64,
-            device=parameter.device,
-        )
-        frozen_values = parameter.detach().index_select(0, frozen_rows).clone()
-        if parameter.grad is not None:
-            parameter.grad.index_fill_(0, frozen_rows, 0)
-        state = optimizer.state.get(parameter, {})
-        for value in state.values():
-            if isinstance(value, Tensor) and value.shape == parameter.shape:
-                value.index_fill_(0, frozen_rows, 0)
-        snapshots.append((parameter, frozen_rows, frozen_values))
+    for head_name in selected_heads:
+        head = getattr(corrector, head_name)
+        for parameter in (head.weight, head.bias):
+            if parameter.ndim == 0 or max(selected_rows) >= parameter.shape[0]:
+                raise ValueError(f"{scope} is incompatible with the learned {head_name} shape")
+            frozen_rows = torch.as_tensor(
+                [row for row in range(parameter.shape[0]) if row not in selected_rows],
+                dtype=torch.int64,
+                device=parameter.device,
+            )
+            frozen_values = parameter.detach().index_select(0, frozen_rows).clone()
+            if parameter.grad is not None:
+                parameter.grad.index_fill_(0, frozen_rows, 0)
+            state = optimizer.state.get(parameter, {})
+            for value in state.values():
+                if isinstance(value, Tensor) and value.shape == parameter.shape:
+                    value.index_fill_(0, frozen_rows, 0)
+            snapshots.append((parameter, frozen_rows, frozen_values))
     return snapshots
 
 
@@ -7623,6 +7634,9 @@ def _train_from_config_owned(
                 )
                 result.metrics["closed_loop_scope_updater_state_heads_only"] = float(
                     active_closed_loop_scope == "updater_state_heads"
+                )
+                result.metrics["closed_loop_scope_updater_state_heads_xy_only"] = float(
+                    active_closed_loop_scope == "updater_state_heads_xy"
                 )
                 result.metrics["closed_loop_scope_updater_mean_only"] = float(
                     active_closed_loop_scope == "updater_mean"

@@ -1289,6 +1289,82 @@ def test_updater_state_heads_adamw_step_cannot_mutate_frozen_siblings() -> None:
     assert torch.equal(output_after.visibility_delta, output_before.visibility_delta)
 
 
+def test_updater_state_heads_xy_preserves_z_and_nonkinematic_rows_through_adamw() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+    set_closed_loop_trainable_scope(model, scope="updater_state_heads_xy")
+    corrector = model.updater.learned_corrector
+    assert corrector is not None
+    trainable = {name for name, parameter in model.named_parameters() if parameter.requires_grad}
+    assert trainable == {
+        "updater.learned_corrector.mean_head.weight",
+        "updater.learned_corrector.mean_head.bias",
+        "updater.learned_corrector.variance_head.weight",
+        "updater.learned_corrector.variance_head.bias",
+        "updater.learned_corrector.gate_head.weight",
+        "updater.learned_corrector.gate_head.bias",
+    }
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.1, weight_decay=0.1)
+    heads = (corrector.mean_head, corrector.variance_head, corrector.gate_head)
+    batch = 2
+    corrector_inputs = {
+        "prior_fast_state": torch.zeros(batch, corrector.fast_state_dim),
+        "prior_log_variance": torch.zeros(batch, corrector.fast_state_dim),
+        "whitened_innovation": torch.ones(batch, corrector.fast_state_dim),
+        "association_cost": torch.zeros(batch),
+        "ambiguity": torch.zeros(batch, dtype=torch.bool),
+        "visibility": torch.ones(batch),
+        "elapsed_time": torch.full((batch,), 0.05),
+        "motion_mode_logits": torch.zeros(batch, corrector.num_motion_modes),
+        "modality_index": torch.zeros(batch, dtype=torch.int64),
+    }
+    with torch.no_grad():
+        output_before = corrector(**corrector_inputs)
+    before = {
+        parameter: parameter.detach().clone()
+        for head in heads
+        for parameter in (head.weight, head.bias)
+    }
+    for parameter in before:
+        parameter.grad = torch.ones_like(parameter)
+
+    snapshots = _prepare_restricted_updater_mean_update(
+        model,
+        optimizer,
+        scope="updater_state_heads_xy",
+    )
+    assert len(snapshots) == 6
+    for parameter in before:
+        assert torch.count_nonzero(parameter.grad[[0, 1, 3, 4]]) > 0
+        assert torch.count_nonzero(parameter.grad[2]) == 0
+        assert torch.count_nonzero(parameter.grad[5:]) == 0
+    optimizer.step()
+    _restore_restricted_updater_mean_update(optimizer, snapshots)
+
+    with torch.no_grad():
+        output_after = corrector(**corrector_inputs)
+
+    for parameter, original in before.items():
+        assert not torch.equal(parameter[[0, 1, 3, 4]], original[[0, 1, 3, 4]])
+        torch.testing.assert_close(parameter[2], original[2], rtol=0.0, atol=0.0)
+        torch.testing.assert_close(parameter[5:], original[5:], rtol=0.0, atol=0.0)
+        state = optimizer.state[parameter]
+        assert torch.count_nonzero(state["exp_avg"][2]) == 0
+        assert torch.count_nonzero(state["exp_avg"][5:]) == 0
+    for before_output, after_output in (
+        (output_before.mean_delta, output_after.mean_delta),
+        (output_before.log_variance_delta, output_after.log_variance_delta),
+        (output_before.state_gate, output_after.state_gate),
+    ):
+        assert not torch.equal(after_output[..., [0, 1, 3, 4]], before_output[..., [0, 1, 3, 4]])
+        torch.testing.assert_close(after_output[..., 2], before_output[..., 2], rtol=0.0, atol=0.0)
+        torch.testing.assert_close(
+            after_output[..., 5:],
+            before_output[..., 5:],
+            rtol=0.0,
+            atol=0.0,
+        )
+
+
 def test_updater_mean_scope_isolates_semantically_reset_gain_head() -> None:
     model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
 

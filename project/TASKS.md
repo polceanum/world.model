@@ -1,5 +1,24 @@
 # Tasks
 
+## Exact lateral updater-head ownership — specification 1.56
+
+- [x] Add `updater_state_heads_xy` as a strict typed training scope exposing
+  the same six state heads while permitting only rows `0,1,3,4` to move.
+- [x] Zero excluded gradients and optimizer moments before AdamW, restore
+  excluded values after AdamW, and prove exact z/non-kinematic output parity.
+- [x] Bind the new scope through strict config and exact resume.
+- [x] Add a separate 3,072-step CPU profile differing from specification 1.52
+  only in project name, scope, and matching zero event-owner key.
+- [x] Complete the deterministic two-update dirty-source wiring pair with
+  identical losses/draws, finite contained gradients, no retries, and exact
+  row/tensor ownership.
+- [x] Pass the final whole-repository (`1233 passed, 20 skipped in 439.94s`),
+  Ruff, format, compile, version, and diff gates on specification-1.56 source.
+- [ ] Commit and push a clean frozen source before retained accuracy evidence.
+- [ ] Run common rich fixed-32 step zero and a bounded step-512 diagnostic;
+  stop unless every configured pooled/scenario/axis/horizon gate supports
+  continuation.
+
 ## Output-only causal residual diagnostics — specification 1.55
 
 - [x] Add strict default-zero, exact-resume-bound per-axis residual gains keyed

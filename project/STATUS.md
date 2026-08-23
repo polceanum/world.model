@@ -1,5 +1,32 @@
 # Project status
 
+## Specification 1.56 exact lateral updater ownership — implementation gate 2026-08-23
+
+The new `updater_state_heads_xy` scope retains the six typed mean/variance/gate
+head tensors but permits AdamW to change only x/y position and velocity rows
+`0,1,3,4`. Z rows `2,5`, every later fast-state row, the shared corrector
+representation, and mode/existence/visibility siblings remain bit-exact.
+Excluded gradients and moments are cleared before the optimizer step and
+excluded values are restored afterward, preventing decoupled weight decay or
+historical moments from violating ownership. Scope is exact-resume-bound.
+
+The separate `axis_gated_updater_xy_repair_cpu.yaml` profile differs from the
+1.52 profile only in project name, ownership scope, and matching zero event-
+owner key. A two-update dirty-source CPU pair used the same immutable
+initializer, exact seed/scenario batches, and losses. Lateral gradient norms
+were `0.06541806/0.04442348` versus unrestricted
+`0.07138252/0.05758926`; no update skipped or retried. The lateral checkpoint
+changed only the four allowed rows in all six tensors and preserved all other
+model state. Checkpoint/metrics hashes are `51fe0089...`/`193ed79c...` for
+lateral and `16490c2d...`/`23780a54...` for unrestricted.
+
+This is optimizer wiring evidence, not an accuracy or promotion result. The
+eight-episode validation used only one episode per scenario. The final source
+gate passes `1233` tests with `20` expected inactive-backend skips in
+`439.94s`; Ruff, format, version, compile, and diff checks pass. A clean
+fixed-32 step-zero plus step-512 diagnostic remains pending. Deployment remains
+the protected learned incumbent.
+
 ## Specification 1.55 causal residual diagnostics — retained mechanism, rejected selector 2026-08-23
 
 The runtime now has a strict, default-zero per-axis causal position-residual
