@@ -12,9 +12,13 @@
   isolation, and ordinary-data cap inactivity.
 - [x] Pass whole-repository pytest (`1260 passed, 20 skipped in 455.53s`),
   Ruff, format, compile, version, and diff gates on final source.
-- [ ] Commit and push clean frozen specification-1.58 source.
-- [ ] Run a clean two-update capped/uncapped paired smoke and a bounded
-  fixed-manifest accuracy rung before any continuation or promotion.
+- [x] Commit and push clean frozen specification-1.58 implementation source
+  (`f16d984`).
+- [x] Run a clean two-update capped/uncapped pair and prove exact forward
+  losses, draws, step-zero evidence, x/y ownership, and finite reduced
+  gradients (`227cb77c...`).
+- [ ] Run the bounded step-32 fixed-manifest accuracy rung before any
+  continuation or promotion.
 
 ## Scenario-axis-horizon tail-risk objective — specification 1.57
 

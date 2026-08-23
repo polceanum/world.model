@@ -24,6 +24,14 @@ passed, 20 skipped in 455.53s`; Ruff, format, compile, version, and diff checks
 pass. A clean paired smoke and bounded fixed-manifest accuracy remain pending.
 No candidate is promoted; deployment remains step zero.
 
+The clean source-frozen two-update pair also passes. The configs differ only
+at cap `25.0` versus `null`; all `5700` common step-zero physical/seed/scenario
+values and both forward losses are exact. The cap retains `99.9158%/93.8261%`
+of control gradient norm across the two updates, with no clip or retry.
+Exactly the permitted six x/y head tensors changed and own Adam state. Both
+candidates are rejected only by the `1e-5` minimum-improvement threshold.
+Audit SHA-256 is `227cb77c...`; bounded step-32 accuracy remains pending.
+
 ## Specification 1.57 scenario-tail objective — retained mechanism, rejected candidate 2026-08-23
 
 An opt-in scenario-tail reduction now targets the failure mode hidden by pooled

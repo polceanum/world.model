@@ -4925,6 +4925,12 @@
   `1260 passed, 20 skipped in 455.53s` with all static checks clean. Clean
   paired and fixed-manifest accuracy gates are still required; deployment
   remains the protected step zero.
+  The clean two-update pair subsequently proves the intended boundary: cap
+  `25.0` is the sole config delta, `5700` common step-zero evidence values and
+  both loss sequences are exact, capped/control gradient-norm ratios are
+  `0.999158/0.938261`, and exact six-head x/y ownership holds. Both microscopic
+  candidates miss only the minimum-improvement threshold. Audit SHA-256 is
+  `227cb77c...`; this still does not replace the bounded accuracy gate.
 
 ## ADR-169 — Restrict the updater repair to lateral typed rows, then reject its unconstrained objective
 

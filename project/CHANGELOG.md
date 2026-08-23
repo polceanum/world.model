@@ -15,8 +15,14 @@
   bounds the log-variance gradient at `12` instead of above one million.
 - Passed the full repository gate (`1260 passed, 20 skipped in 455.53s`) plus
   Ruff, format, compile, version, and diff checks.
-- No accuracy, promotion, convergence, or deployment claim is made; clean
-  paired/fixed-manifest gates remain pending.
+- No accuracy, promotion, convergence, or deployment claim is made; the
+  fixed-manifest accuracy gate remains pending.
+- Committed and pushed the clean implementation as `f16d984`.
+- Passed the clean capped/uncapped two-update pair: only the cap differs,
+  `5700` step-zero physical/seed/scenario values and forward losses are exact,
+  gradients are finite and reduced, and only the six permitted x/y heads own
+  changes and Adam state. Both candidates remain below minimum improvement;
+  bounded accuracy qualification is still pending.
 
 ### 2026-08-23 specification 1.57 scenario-tail objective
 

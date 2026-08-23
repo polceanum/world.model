@@ -8624,6 +8624,21 @@ pending. The final repository gate passes `1260` tests with `20` expected
 inactive-backend skips in `455.53s`; Ruff, format, compile, version, and diff
 checks pass. Deployment stays at the protected step-zero incumbent.
 
+The clean frozen two-update capped/uncapped pair passes its wiring boundary.
+The resolved configurations differ only at the cap (`25.0` versus `null`), all
+`5700` common step-zero physical/seed/scenario values are exact, and both
+forward loss sequences are bit-identical. The capped arm retains `99.9158%`
+and `93.8261%` of the control gradient norm on updates one and two; all norms
+are finite and below clipping. Both arms use the same two ordered balanced seed
+batches, change exactly the permitted six x/y head tensors, and create exactly
+six optimizer-state entries. Both candidates are rejected only because their
+approximately `1.95e-7` score improvements do not reach the `1e-5` minimum.
+The paired audit is
+`/private/tmp/20260823-spec158-robust-tail-two-update-audit-v2.json`, SHA-256
+`227cb77c...`. This proves forward-exact backward influence control and state
+ownership, not accuracy. The bounded step-32 fixed-manifest rung remains
+mandatory before any continuation.
+
 ---
 
 # Closing directive
