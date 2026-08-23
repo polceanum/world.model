@@ -16,9 +16,15 @@
   Ruff, format, compile, version, and diff gates on specification-1.56 source.
 - [x] Commit and push clean frozen source `074fc6a` before retained accuracy
   evidence.
-- [ ] Run common rich fixed-32 step zero and a bounded step-512 diagnostic;
-  stop unless every configured pooled/scenario/axis/horizon gate supports
-  continuation.
+- [x] Run common rich fixed-32 step zero and a bounded step-512 diagnostic.
+  Stop after 34 guardrail failures despite improved pooled score, position,
+  velocity, coverage, and every pooled position horizon; retain step zero.
+- [x] Localize the result with fixed-eight mean/variance/gate rollbacks and a
+  fixed-32 half-variance interpolation. Reject variance rollback and scaling;
+  the latter failed 44 full-manifest guardrails.
+- [ ] Add a protected-base scenario/axis/horizon non-regression objective (or
+  an equally explicit causal constraint) and re-enter from the immutable
+  initializer. Do not continue or compose the rejected step-512 candidate.
 
 ## Output-only causal residual diagnostics — specification 1.55
 

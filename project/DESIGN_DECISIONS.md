@@ -4869,10 +4869,10 @@
   next repair toward joint learned axis/uncertainty ownership rather than
   post-hoc mean composition.
 
-## ADR-169 — Restrict the next updater repair to lateral typed rows
+## ADR-169 — Restrict the updater repair to lateral typed rows, then reject its unconstrained objective
 
 - **Date:** 2026-08-23
-- **Status:** implementation accepted; accuracy qualification pending
+- **Status:** ownership accepted; accuracy candidate rejected
 - **Context:** The rejected 1.52 treatment updated only position/velocity rows
   of the corrector's mean, variance, and gate heads. At step 1024 it improved
   x/y position and pooled velocity but worsened z position by `7.84%`; z
@@ -4891,10 +4891,14 @@
   establishing a minimal typed-row boundary.
 - **Consequences:** A paired two-update CPU wiring check preserves identical
   draws and losses, changes exactly the four permitted rows in all six tensors,
-  and leaves all other state exact. This proves ownership only. The scope must
-  pass final repository gates and a clean fixed-32 step-zero/step-512 accuracy
-  diagnostic before continuation, and cannot change the deployed incumbent
-  without the full promotion ladder.
+  and leaves all other state exact. The clean fixed-32 step-512 run preserved
+  that ownership and improved pooled score, current position/velocity, and all
+  pooled position horizons, but failed 34 guardrails across collision, NLL,
+  identity, velocity, and position slices. Mean/gate rollback did not remove
+  the failure; variance rollback lost useful correction; half variance failed
+  44 full-manifest guardrails. Preserve the ownership mechanism, reject the
+  checkpoint and post-hoc compositions, retain step zero, and require explicit
+  protected-base scenario/axis/horizon objective control before another run.
 
 ## ADR-149 — Batch validation anchors only after exact MPS parity
 

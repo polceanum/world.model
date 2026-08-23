@@ -20,13 +20,25 @@ changed only the four allowed rows in all six tensors and preserved all other
 model state. Checkpoint/metrics hashes are `51fe0089...`/`193ed79c...` for
 lateral and `16490c2d...`/`23780a54...` for unrestricted.
 
-This is optimizer wiring evidence, not an accuracy or promotion result. The
-eight-episode validation used only one episode per scenario. The final source
-gate passes `1233` tests with `20` expected inactive-backend skips in
-`439.94s`; Ruff, format, version, compile, and diff checks pass. A clean
-fixed-32 step-zero plus step-512 diagnostic remains pending. Deployment remains
-the protected learned incumbent. The clean implementation/profile commit is
-`074fc6a`.
+The clean fixed-32 step-512 diagnostic is complete and rejected. Exact lateral
+ownership held at checkpoints 256, 384, and 512. Pooled score improved
+`0.23952864 -> 0.23875991`; current position/velocity improved
+`0.15056456 -> 0.14956369` m and `0.81188211 -> 0.80074560` m/s, and every
+pooled position horizon improved. The candidate still failed 34 guardrails:
+12 collision, 9 Gaussian-NLL, 5 identity, 4 velocity, and 4 position. No
+support gate failed. Failures concentrate in baseline-x uncertainty,
+glancing-y accuracy/calibration, and long-horizon events. The run was stopped
+after validation; deployment remains the protected step-zero incumbent.
+
+Fixed-eight component rollback shows mean and gate are not the cause in
+isolation; rolling variance back loses the useful correction. Half variance
+then failed 44 guardrails on fixed 32, so post-hoc scaling is also rejected.
+The next repair requires protected-base scenario/axis/horizon objective control,
+not weaker selection. The run is
+`runs/20260823-065000-spec156-lateral-updater-3072-workers2`; checkpoint SHA is
+`682d223f...`, model hash `9d629cd3...`, and clean runtime fingerprint
+`29e663cd...`. The implementation/profile commit is `074fc6a` and its memory
+closure is `ef8cd02`.
 
 ## Specification 1.55 causal residual diagnostics — retained mechanism, rejected selector 2026-08-23
 

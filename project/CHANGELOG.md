@@ -17,6 +17,14 @@
   tensors. This is not accuracy or promotion evidence.
 - Passed the final repository gate (`1233 passed, 20 skipped in 439.94s`) plus
   Ruff, format, version, compile, and diff checks.
+- Completed and rejected the clean fixed-32 step-512 diagnostic. Pooled score,
+  current position/velocity, coverage, and every pooled position horizon
+  improved, but 34 collision/NLL/identity/velocity/position slice guardrails
+  failed. Exact lateral ownership held and no support gate failed.
+- Rejected post-hoc head rollback/scaling. Mean and gate rollback did not remove
+  the tradeoff, variance rollback lost the useful correction, and half
+  variance failed 44 guardrails on fixed 32. Deployment remains step zero; the
+  next repair must constrain protected-base scenario/axis/horizon regression.
 
 ### 2026-08-23 specification 1.55 output-only causal residual diagnostics
 

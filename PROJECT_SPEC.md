@@ -8478,6 +8478,30 @@ scenario/axis/horizon uncertainty, event, identity, coverage, and physical
 guardrail justify continuation. Deployment remains the protected learned
 incumbent.
 
+The clean source-frozen CPU run at
+`runs/20260823-065000-spec156-lateral-updater-3072-workers2` therefore stopped
+after its step-512 selector. Exact row ownership held at steps 256, 384, and
+512: only rows `0,1,3,4` of the six state heads changed, every excluded row and
+all other model tensors remained bit-identical, and excluded Adam moments were
+zero. Pooled selector score improved `0.23952864 -> 0.23875991`, current
+position RMSE improved `0.15056456 -> 0.14956369` m, current velocity RMSE
+improved `0.81188211 -> 0.80074560` m/s, and every pooled position horizon
+improved. Selection nevertheless failed 34 guardrails: 12 collision, 9
+Gaussian-NLL, 5 identity, 4 velocity, and 4 position failures, including
+coherent baseline-x uncertainty, glancing-y accuracy/calibration, and
+long-horizon event regressions. No support gate failed.
+
+Component rollback on fixed eight shows that mean- or gate-head rollback keeps
+the same 17 failures, while variance-head rollback creates 29 failures and
+loses the useful state correction. A half-variance interpolation looked better
+on eight episodes but failed 44 guardrails on the full fixed-32 manifest,
+especially elastic-pairs velocity/identity/uncertainty. This rejects both
+freezing and post-hoc scaling of variance. The next repair must add explicit
+protected-base scenario/axis/horizon non-regression or equivalent objective
+control; it may not weaken guardrails or promote this checkpoint. The numbered
+checkpoint SHA-256 is `682d223f...`, its model-state hash is `9d629cd3...`, and
+the clean runtime fingerprint is `29e663cd...`. Deployment remains step zero.
+
 ---
 
 # Closing directive
