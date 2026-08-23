@@ -2,6 +2,26 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-23 specification 1.59 direct collision ownership
+
+- Added `updater_state_heads_xy_collision`, retaining exact lateral updater
+  ownership and adding only collision row 1 of the existing relation decoder.
+- Separated backward ownership without changing forward values: physical
+  objectives train the state heads, while event BCE is differentiated only
+  with respect to the relation decoder and only collision row 1 is retained.
+  Recursive gradients into all other relation rows are recorded and discarded.
+- Added exact AdamW row/moment masking and restoration, strict attention/event-
+  weight validation, exact-resume coverage, and a profile differing from spec
+  1.58 only in project name, scope, and calibrated event weight `0.01`.
+- Real balanced calibration gives collision-row norm `0.0262057` against
+  physical lateral norm `0.1197665`; it eliminates `0.0087597` state-head event
+  leakage and discards `0.0768893` noncollision relation signal. Report SHA is
+  `f6904bd5...`.
+- Focused gates pass `510 passed, 1 skipped`. The final repository gate passes
+  `1267 passed, 20 skipped in 458.26s`; Ruff, 224-file format, compile,
+  version, and diff checks pass. No accuracy, promotion, convergence, or
+  deployment claim is made.
+
 ### 2026-08-23 specification 1.58 robust uncertainty influence
 
 - Added a strict, optional, exact-resume-bound standardized-error gradient cap

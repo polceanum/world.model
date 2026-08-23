@@ -3,7 +3,7 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.58
+**Version:** 1.59
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
@@ -8656,6 +8656,61 @@ do not continue gate-manifest interpolation. Preserve the protected step-zero
 deployment. The next protocol must give collision-event semantics a direct
 typed trainable owner or impose an equivalent protected-base constraint while
 retaining the forward-exact uncertainty influence cap.
+
+---
+
+## 253. Direct typed collision-event ownership
+
+Specification 1.59 adds the exact-resume-bound closed-loop scope
+`updater_state_heads_xy_collision`. Its physical ownership is exactly the
+specification-1.58 lateral boundary: rows `0,1,3,4` of the learned corrector's
+mean, variance, and gate weight/bias tensors. It additionally exposes the
+existing typed attention relation decoder, but AdamW may change only its
+collision-logit row `1`. The shared attention projections and transformer,
+node decoder, contact, force, impulse, and process-noise relation rows, every
+other updater row, perception, identity, and all physical dynamics parameters
+remain bit-exact. A positive exact scope-specific event-loss override is
+mandatory, and typed attention must be enabled.
+
+The logged forward objective and every runtime/event prediction stay
+canonical. Backward ownership is separated explicitly. The ordinary weighted
+backward structurally omits event BCE and updates the lateral state heads from
+physical objectives only. A separate `autograd.grad` evaluates the exact
+weighted event term with respect to the relation decoder alone; only collision
+row `1` is accumulated. Recursive event derivatives reaching contact, force,
+impulse, or process-noise rows are measured and discarded before parameter
+clipping. Excluded decoder gradients and Adam moments are zeroed, excluded
+values are snapshotted before AdamW and restored afterward. This is parameter-
+specific objective routing, not a detached or altered event forward pass.
+
+The dedicated profile
+`configs/direct_collision_owner_updater_xy_repair_cpu.yaml` differs from the
+specification-1.58 profile only in project name, the combined typed scope, and
+event weight `0.01` in both the scope override and loss map. It retains the
+scenario-tail fraction `0.25`, two anchors, uncertainty cap `25`, exact 120-Hz
+learned cadence, validation anchor batching, all physical weights, seed/data
+protocol, and selector unchanged.
+
+On the immutable initializer's first balanced eight-scenario batch, a weight
+of `0.05` would give collision row norm `0.13103` versus physical lateral-head
+norm `0.11977`, making the new owner dominant. The calibrated weight `0.01`
+gives collision-row norm `0.0262057`, about 21% of the disjoint combined norm,
+while the state heads remain exactly at the physical-only norm `0.1197665`.
+Unrestricted event BCE would have added `0.0087597` to those state heads; the
+new route eliminates it. Recursive noncollision relation gradient norm
+`0.0768893` is recorded and discarded. Every value is finite and collision
+output clipping is inactive. The report is
+`/private/tmp/20260823-spec159-direct-collision-owner-probe-v3/report.json`,
+SHA-256 `f6904bd5...`; its script SHA-256 is `2d1ab284...`.
+
+Focused schedule/config/exact-resume/objective checks pass `510` tests with one
+expected inactive-MPS skip. The final whole-repository gate passes `1267`
+tests with `20` expected unavailable-backend skips in `458.26s`; whole-tree
+Ruff, the `224`-file format check, isolated compileall, version, and diff checks
+pass. This is typed ownership, routing, and calibration evidence only. A clean
+paired two-update proof, bounded fixed-manifest accuracy, latency, promotion,
+and convergence remain mandatory. Deployment stays at the protected step-zero
+incumbent.
 
 ---
 

@@ -1440,6 +1440,7 @@ class OrpheusConfig:
             "updater",
             "updater_state_heads",
             "updater_state_heads_xy",
+            "updater_state_heads_xy_collision",
             "updater_mean",
             "updater_mean_y",
             "fast_roi",
@@ -1454,7 +1455,8 @@ class OrpheusConfig:
                 "training.closed_loop_trainable_scope must be "
                 "'all', 'attention', 'attention_relation', 'attention_node_x', "
                 "'attention_node_y', 'attention_node_z', 'dynamics', "
-                "'updater', 'updater_state_heads', 'updater_state_heads_xy', 'updater_mean', "
+                "'updater', 'updater_state_heads', 'updater_state_heads_xy', "
+                "'updater_state_heads_xy_collision', 'updater_mean', "
                 "'updater_mean_y', 'fast_roi', "
                 "'state_dynamics', 'state_roi', 'state_relation_roi', "
                 "'state_dynamics_fast_roi', or 'state_dynamics_roi'"
@@ -1483,12 +1485,29 @@ class OrpheusConfig:
                 "training.closed_loop_event_loss_weights must map valid scopes "
                 "to finite nonnegative weights"
             )
+        configured_scopes = {self.training.closed_loop_trainable_scope, late_scope}
         if (
-            "state_relation_roi" in {self.training.closed_loop_trainable_scope, late_scope}
+            "state_relation_roi" in configured_scopes
             and not self.model.dynamics.attention_residual_enabled
         ):
             raise ValueError(
                 "state_relation_roi scope requires model.dynamics.attention_residual_enabled=true"
+            )
+        if (
+            "updater_state_heads_xy_collision" in configured_scopes
+            and not self.model.dynamics.attention_residual_enabled
+        ):
+            raise ValueError(
+                "updater_state_heads_xy_collision scope requires "
+                "model.dynamics.attention_residual_enabled=true"
+            )
+        if (
+            "updater_state_heads_xy_collision" in configured_scopes
+            and event_loss_weights.get("updater_state_heads_xy_collision", 0.0) <= 0.0
+        ):
+            raise ValueError(
+                "updater_state_heads_xy_collision scope requires a positive exact "
+                "closed_loop event-loss override"
             )
         if transition_steps is not None and (
             isinstance(transition_steps, bool)

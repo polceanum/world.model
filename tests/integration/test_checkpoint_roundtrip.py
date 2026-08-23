@@ -771,9 +771,28 @@ def test_training_resume_binds_state_roi_scope_and_late_transition() -> None:
         validate_training_resume_config(payload, changed)
 
 
-@pytest.mark.parametrize("scope", ("updater_state_heads", "updater_state_heads_xy"))
+@pytest.mark.parametrize(
+    "scope",
+    (
+        "updater_state_heads",
+        "updater_state_heads_xy",
+        "updater_state_heads_xy_collision",
+    ),
+)
 def test_training_resume_binds_updater_state_heads_scope(scope: str) -> None:
     source = _small_config()
+    if scope == "updater_state_heads_xy_collision":
+        source = replace(
+            source,
+            model=replace(
+                source.model,
+                dynamics=replace(source.model.dynamics, attention_residual_enabled=True),
+            ),
+            training=replace(
+                source.training,
+                closed_loop_event_loss_weights={scope: 0.01},
+            ),
+        )
     updater_state_heads = replace(
         source,
         training=replace(

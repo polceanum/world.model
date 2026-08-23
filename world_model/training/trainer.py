@@ -53,6 +53,8 @@ from world_model.training.loop import (
     _PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M,
     PhysicalMetricSupportError,
     TrainingBatchResult,
+    _closed_loop_loss_weights_for_scope,
+    _weighted_closed_loop_total,
     move_batch_to_device,
     physical_validation_metrics,
     pretrain_rgb_measurements,
@@ -4320,7 +4322,11 @@ def set_closed_loop_trainable_scope(
         model.updater.requires_grad_(True)
         _freeze_disconnected_training_heads(model)
         return
-    if scope in {"updater_state_heads", "updater_state_heads_xy"}:
+    if scope in {
+        "updater_state_heads",
+        "updater_state_heads_xy",
+        "updater_state_heads_xy_collision",
+    }:
         corrector = model.updater.learned_corrector
         if corrector is None:
             raise ValueError(f"{scope} scope requires the learned fast corrector")
@@ -4332,6 +4338,13 @@ def set_closed_loop_trainable_scope(
         corrector.mean_head.requires_grad_(True)
         corrector.variance_head.requires_grad_(True)
         corrector.gate_head.requires_grad_(True)
+        if scope == "updater_state_heads_xy_collision":
+            attention = model.dynamics.attention_interactions
+            if attention is None:
+                raise ValueError(f"{scope} scope requires typed attention dynamics")
+            # The shared typed feature map stays frozen. Row masking below
+            # makes collision the sole relation output that can change.
+            attention.relation_decoder.requires_grad_(True)
         return
     if scope in {"updater_mean", "updater_mean_y"}:
         corrector = model.updater.learned_corrector
@@ -4388,7 +4401,8 @@ def set_closed_loop_trainable_scope(
         "closed-loop trainable scope must be 'all', 'attention', "
         "'attention_relation', 'attention_node_x', 'attention_node_y', "
         "'attention_node_z', 'dynamics', 'updater', "
-        "'updater_state_heads', 'updater_state_heads_xy', 'updater_mean', "
+        "'updater_state_heads', 'updater_state_heads_xy', "
+        "'updater_state_heads_xy_collision', 'updater_mean', "
         "'updater_mean_y', 'fast_roi', "
         "'state_dynamics', "
         "'state_roi', 'state_relation_roi', 'state_dynamics_fast_roi', or "
@@ -4414,7 +4428,7 @@ def _prepare_restricted_updater_mean_update(
     if scope == "updater_mean_y":
         selected_rows = (1,)
         selected_heads = ("mean_head",)
-    elif scope == "updater_state_heads_xy":
+    elif scope in {"updater_state_heads_xy", "updater_state_heads_xy_collision"}:
         # Canonical fast-state packing is position xyz followed by velocity
         # xyz. Preserve z and every orientation/modal row exactly while the
         # lateral position/velocity mean, variance, and gate rows adapt.
@@ -4445,6 +4459,115 @@ def _prepare_restricted_updater_mean_update(
                     value.index_fill_(0, frozen_rows, 0)
             snapshots.append((parameter, frozen_rows, frozen_values))
     return snapshots
+
+
+def _prepare_restricted_attention_collision_update(
+    model: OnlineWorldModel,
+    optimizer: torch.optim.AdamW,
+    *,
+    scope: str,
+) -> list[tuple[Tensor, Tensor, Tensor]]:
+    """Restrict a combined repair scope to the typed collision decoder row."""
+
+    if scope != "updater_state_heads_xy_collision":
+        return []
+    attention = model.dynamics.attention_interactions
+    if attention is None:
+        raise ValueError(f"{scope} requires typed attention dynamics")
+    selected_row = attention.collision_output_index
+    snapshots: list[tuple[Tensor, Tensor, Tensor]] = []
+    for parameter in (attention.relation_decoder.weight, attention.relation_decoder.bias):
+        if parameter.ndim == 0 or selected_row >= parameter.shape[0]:
+            raise ValueError(f"{scope} is incompatible with relation-decoder shape")
+        frozen_rows = torch.as_tensor(
+            [row for row in range(parameter.shape[0]) if row != selected_row],
+            dtype=torch.int64,
+            device=parameter.device,
+        )
+        frozen_values = parameter.detach().index_select(0, frozen_rows).clone()
+        if parameter.grad is not None:
+            parameter.grad.index_fill_(0, frozen_rows, 0)
+        state = optimizer.state.get(parameter, {})
+        for value in state.values():
+            if isinstance(value, Tensor) and value.shape == parameter.shape:
+                value.index_fill_(0, frozen_rows, 0)
+        snapshots.append((parameter, frozen_rows, frozen_values))
+    return snapshots
+
+
+def _backward_training_result(
+    model: OnlineWorldModel,
+    result: TrainingBatchResult,
+    config: OrpheusConfig,
+    *,
+    active_scope: str,
+) -> None:
+    """Backpropagate event BCE only into its direct typed collision owner."""
+
+    if active_scope != "updater_state_heads_xy_collision":
+        result.total_loss.backward()
+        return
+    event = result.loss_terms.get("event")
+    if event is None or not event.requires_grad:
+        raise RuntimeError("direct collision ownership requires a differentiable event loss")
+    resolved_weights, _ = _closed_loop_loss_weights_for_scope(
+        config,
+        active_trainable_scope=active_scope,
+    )
+    event_weight = float(resolved_weights["event"])
+    if event_weight <= 0.0:
+        raise ValueError("direct collision ownership requires a positive event weight")
+    non_event_weights = dict(resolved_weights)
+    non_event_weights["event"] = 0.0
+    non_event_loss = _weighted_closed_loop_total(result.loss_terms, non_event_weights)
+
+    attention = model.dynamics.attention_interactions
+    if attention is None:
+        raise ValueError("direct collision ownership requires typed attention dynamics")
+    parameters = (
+        attention.relation_decoder.weight,
+        attention.relation_decoder.bias,
+    )
+    routed = torch.autograd.grad(
+        event * event_weight,
+        parameters,
+        retain_graph=non_event_loss.requires_grad,
+        allow_unused=True,
+    )
+    if non_event_loss.requires_grad:
+        non_event_loss.backward()
+
+    collision_row = attention.collision_output_index
+    routed_norm_squared = event.detach().new_zeros(())
+    discarded_norm_squared = event.detach().new_zeros(())
+    for parameter, event_gradient in zip(parameters, routed, strict=True):
+        if event_gradient is None:
+            continue
+        frozen_gradient = event_gradient.detach().clone()
+        frozen_gradient[collision_row] = 0
+        discarded_norm_squared = discarded_norm_squared + frozen_gradient.square().sum()
+        if parameter.grad is None:
+            parameter.grad = torch.zeros_like(parameter)
+        parameter.grad[collision_row].add_(event_gradient[collision_row])
+        routed_norm_squared = (
+            routed_norm_squared + event_gradient[collision_row].detach().square().sum()
+        )
+    routed_norm = routed_norm_squared.sqrt()
+    discarded_norm = discarded_norm_squared.sqrt()
+    if not bool(torch.isfinite(routed_norm)) or not bool(torch.isfinite(discarded_norm)):
+        raise FloatingPointError("nonfinite direct collision event routing gradient")
+    result.metrics.update(
+        {
+            "direct_collision_event_owner_active": 1.0,
+            "direct_collision_event_loss_weight": event_weight,
+            "direct_collision_event_gradient_norm_pre_parameter_clip": float(
+                routed_norm.detach().cpu()
+            ),
+            "direct_collision_event_noncollision_gradient_discarded_norm": float(
+                discarded_norm.detach().cpu()
+            ),
+        }
+    )
 
 
 def _prepare_restricted_attention_node_update(
@@ -7638,6 +7761,9 @@ def _train_from_config_owned(
                 result.metrics["closed_loop_scope_updater_state_heads_xy_only"] = float(
                     active_closed_loop_scope == "updater_state_heads_xy"
                 )
+                result.metrics["closed_loop_scope_updater_state_heads_xy_collision_only"] = float(
+                    active_closed_loop_scope == "updater_state_heads_xy_collision"
+                )
                 result.metrics["closed_loop_scope_updater_mean_only"] = float(
                     active_closed_loop_scope == "updater_mean"
                 )
@@ -7682,7 +7808,12 @@ def _train_from_config_owned(
             )
             backward_started = time.perf_counter()
             if result.total_loss.requires_grad and causal_support_present:
-                result.total_loss.backward()
+                _backward_training_result(
+                    model,
+                    result,
+                    config,
+                    active_scope=active_closed_loop_scope,
+                )
             restricted_mean_snapshots = _prepare_restricted_updater_mean_update(
                 model,
                 optimizer,
@@ -7692,6 +7823,13 @@ def _train_from_config_owned(
                 model,
                 optimizer,
                 scope=active_closed_loop_scope,
+            )
+            restricted_attention_collision_snapshots = (
+                _prepare_restricted_attention_collision_update(
+                    model,
+                    optimizer,
+                    scope=active_closed_loop_scope,
+                )
             )
             try:
                 gradient_diagnostics = _clip_training_gradients(
@@ -7776,6 +7914,10 @@ def _train_from_config_owned(
                 _restore_restricted_updater_mean_update(
                     optimizer,
                     restricted_attention_node_snapshots,
+                )
+                _restore_restricted_updater_mean_update(
+                    optimizer,
+                    restricted_attention_collision_snapshots,
                 )
                 finite_check_started = time.perf_counter()
                 try:

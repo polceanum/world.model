@@ -491,6 +491,30 @@ def test_closed_loop_trainable_scope_is_explicit() -> None:
     )
     assert xy_state_updater_config.training.closed_loop_trainable_scope == "updater_state_heads_xy"
 
+    collision_config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=[
+            "model.dynamics.attention_residual_enabled=true",
+            "training.closed_loop_trainable_scope=updater_state_heads_xy_collision",
+            "training.closed_loop_event_loss_weights={updater_state_heads_xy_collision: 0.05}",
+        ],
+    )
+    assert (
+        collision_config.training.closed_loop_trainable_scope == "updater_state_heads_xy_collision"
+    )
+
+
+def test_combined_xy_collision_scope_requires_positive_event_weight() -> None:
+    with pytest.raises(ValueError, match="requires a positive exact"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[
+                "model.dynamics.attention_residual_enabled=true",
+                "training.closed_loop_trainable_scope=updater_state_heads_xy_collision",
+                ("training.closed_loop_event_loss_weights={updater_state_heads_xy_collision: 0.0}"),
+            ],
+        )
+
 
 def test_updater_state_heads_scope_roundtrips_as_typed_configuration(tmp_path: Path) -> None:
     config = load_config(
@@ -654,6 +678,26 @@ def test_robust_scenario_tail_profile_changes_only_event_and_nll_gradient_owners
     source_dict["training"]["closed_loop_event_loss_weights"] = {"updater_state_heads_xy": 0.0}
     source_dict["training"]["loss_weights"]["event"] = 0.0
     source_dict["training"]["closed_loop_uncertainty_standardized_error_gradient_cap"] = 25.0
+    assert source_dict == repaired_dict
+
+
+def test_direct_collision_owner_profile_changes_only_typed_event_ownership() -> None:
+    source = load_config(CONFIG_DIR / "robust_scenario_tail_updater_xy_repair_cpu.yaml")
+    repaired = load_config(CONFIG_DIR / "direct_collision_owner_updater_xy_repair_cpu.yaml")
+
+    assert repaired.training.closed_loop_trainable_scope == ("updater_state_heads_xy_collision")
+    assert repaired.training.closed_loop_event_loss_weights == {
+        "updater_state_heads_xy_collision": 0.01
+    }
+    assert repaired.training.loss_weights["event"] == 0.01
+    source_dict = source.to_dict()
+    repaired_dict = repaired.to_dict()
+    source_dict["project"]["name"] = repaired_dict["project"]["name"]
+    source_dict["training"]["closed_loop_trainable_scope"] = "updater_state_heads_xy_collision"
+    source_dict["training"]["closed_loop_event_loss_weights"] = {
+        "updater_state_heads_xy_collision": 0.01
+    }
+    source_dict["training"]["loss_weights"]["event"] = 0.01
     assert source_dict == repaired_dict
 
 

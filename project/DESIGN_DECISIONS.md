@@ -4898,6 +4898,33 @@
   candidate, and require bounded per-objective influence plus direct semantic
   ownership before another training protocol. Deployment remains step zero.
 
+## ADR-172 — Route event supervision only to the typed collision owner
+
+- **Date:** 2026-08-23
+- **Status:** implementation-gated; accuracy pending
+- **Context:** Specification 1.58 bounded the rare uncertainty gradient and
+  improved the pooled selector at step 32, but two baseline collision-F1
+  slices still failed. Event BCE on frozen state heads had previously produced
+  material gradient while worsening event quality; removing it made training
+  stable but left no parameter with direct collision semantics.
+- **Decision:** Add `updater_state_heads_xy_collision`. Retain the exact x/y
+  mean/variance/gate rows for physical objectives and expose only collision
+  row 1 of the existing typed relation decoder for event BCE. Compute the same
+  forward loss, but omit event from the ordinary backward and route it with
+  `autograd.grad` only to the decoder; discard every noncollision row before
+  clipping and restore excluded values/moments after AdamW. Use weight `0.01`.
+- **Alternatives considered:** restore event BCE on state heads; train the
+  broad relation/shared-attention scope; add a new calibration module and
+  alter checkpoint shapes; weaken collision guardrails; continue a rejected
+  checkpoint; or tune more interpolation on the gate manifest.
+- **Consequences:** The real balanced probe gives collision-row gradient
+  `0.0262057` versus physical x/y gradient `0.1197665`. State-event leakage
+  `0.0087597` is eliminated; recursive noncollision relation gradient
+  `0.0768893` is discarded. Exact cadence and forward predictions are
+  unchanged. Focused tests pass `510/1`; the final repository gate passes
+  `1267/20` in `458.26s` with every static gate clean. Paired wiring and bounded
+  accuracy remain required. Deployment remains step zero.
+
 ## ADR-171 — Bound extreme uncertainty gradients without changing proper scores
 
 - **Date:** 2026-08-23

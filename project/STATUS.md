@@ -1,5 +1,28 @@
 # Project status
 
+## Specification 1.59 direct collision ownership — implementation gate 2026-08-23
+
+The successor to the numerically stable but collision-rejected spec-1.58
+candidate gives event BCE a direct semantic owner. Physical losses retain the
+exact six-head/x-y-row boundary. Event BCE is separately differentiated only
+into collision row 1 of the existing zero-initialized relation decoder; every
+other relation row and the shared attention stack stay frozen and are restored
+exactly around AdamW. Analytic-event gradients no longer leak into state heads.
+
+The diagnostic profile changes only project name, typed scope, and event
+weight `0.01` relative to spec 1.58. It keeps exact cadence, scenario-tail
+reduction, uncertainty cap, physical weights, data, and selector. A real
+balanced probe gives lateral physical gradient `0.1197665` and routed
+collision gradient `0.0262057`; the `0.0087597` state-head event gradient that
+would exist without routing is eliminated. Noncollision recursive relation
+gradient `0.0768893` is explicitly discarded. Report SHA-256 is `f6904bd5...`.
+
+Focused implementation checks pass `510 passed, 1 skipped`. The final full
+repository gate passes `1267 passed, 20 skipped in 458.26s`; whole-tree Ruff,
+the 224-file format check, isolated compileall, version, and diff gates pass.
+Clean two-update, bounded accuracy, latency, promotion, and convergence gates
+remain pending. Deployment remains step zero.
+
 ## Specification 1.58 robust uncertainty influence — mechanism retained, candidates rejected 2026-08-23
 
 The successor to the rejected scenario-tail diagnostic keeps the exact

@@ -1,5 +1,29 @@
 # Tasks
 
+## Direct typed collision-event ownership — specification 1.59
+
+- [x] Add an exact combined scope exposing the six lateral updater-head tensors
+  plus the typed relation decoder, with only collision row 1 permitted to move.
+- [x] Route event BCE only to collision row 1 while keeping the logged forward
+  objective exact and physical gradients isolated to state heads.
+- [x] Zero and restore every excluded decoder row and optimizer moment around
+  AdamW; require enabled attention and a positive exact event override.
+- [x] Calibrate event weight `0.01` on one real balanced batch: collision norm
+  `0.0262057`, physical lateral norm `0.1197665`, eliminated state-event leak
+  `0.0087597`, and discarded noncollision relation norm `0.0768893`.
+- [x] Pass focused schedule/config/exact-resume/objective tests (`510 passed, 1
+  skipped`) plus Ruff, format, and diff checks.
+- [x] Pass the final whole-repository (`1267 passed, 20 skipped in 458.26s`),
+  Ruff, 224-file format, compile, version, and diff gates on frozen spec-1.59
+  source.
+- [ ] Commit and push the clean frozen specification-1.59 source.
+- [ ] Run a clean two-update direct-owner/event-zero pair with exact common
+  forward evidence, draws, state ownership, collision-row ownership, and
+  finite gradients before bounded accuracy.
+- [ ] Run fresh step-16/32 fixed-manifest accuracy from the immutable
+  initializer. Do not continue or promote unless every pooled and scenario
+  guardrail passes.
+
 ## Forward-exact robust uncertainty influence — specification 1.58
 
 - [x] Add a strict optional standardized-error gradient cap with exact-null

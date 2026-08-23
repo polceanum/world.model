@@ -32,6 +32,7 @@ from world_model.training.trainer import (
     _aggregate_physical_validation_metrics,
     _assert_interaction_gradient_retention,
     _attention_gradient_diagnostics,
+    _backward_training_result,
     _causal_training_support,
     _clip_training_gradients,
     _closed_loop_trainable_scope_for_step,
@@ -43,6 +44,7 @@ from world_model.training.trainer import (
     _make_loader,
     _mean_batch_results,
     _mutable_causal_training_support_failures,
+    _prepare_restricted_attention_collision_update,
     _prepare_restricted_attention_node_update,
     _prepare_restricted_updater_mean_update,
     _restore_restricted_updater_mean_update,
@@ -1363,6 +1365,179 @@ def test_updater_state_heads_xy_preserves_z_and_nonkinematic_rows_through_adamw(
             rtol=0.0,
             atol=0.0,
         )
+
+
+def test_combined_xy_collision_scope_has_exact_typed_tensor_boundary() -> None:
+    source = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            closed_loop_trainable_scope="updater_state_heads_xy_collision",
+            closed_loop_event_loss_weights={"updater_state_heads_xy_collision": 0.05},
+        ),
+    )
+    config.validate()
+    model = OnlineWorldModel.from_config(config)
+
+    set_closed_loop_trainable_scope(model, scope="updater_state_heads_xy_collision")
+
+    assert {name for name, parameter in model.named_parameters() if parameter.requires_grad} == {
+        "updater.learned_corrector.mean_head.weight",
+        "updater.learned_corrector.mean_head.bias",
+        "updater.learned_corrector.variance_head.weight",
+        "updater.learned_corrector.variance_head.bias",
+        "updater.learned_corrector.gate_head.weight",
+        "updater.learned_corrector.gate_head.bias",
+        "dynamics.attention_interactions.relation_decoder.weight",
+        "dynamics.attention_interactions.relation_decoder.bias",
+    }
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+    assert not attention.zero_output_bypass_eligible()
+
+
+def test_combined_xy_collision_scope_routes_event_only_to_collision_row() -> None:
+    source = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            closed_loop_trainable_scope="updater_state_heads_xy_collision",
+            closed_loop_event_loss_weights={"updater_state_heads_xy_collision": 0.05},
+            loss_weights={"state_position": 2.0, "event": 0.05},
+        ),
+    )
+    config.validate()
+    model = OnlineWorldModel.from_config(config)
+    set_closed_loop_trainable_scope(model, scope="updater_state_heads_xy_collision")
+    corrector = model.updater.learned_corrector
+    attention = model.dynamics.attention_interactions
+    assert corrector is not None
+    assert attention is not None
+
+    state_signal = corrector.mean_head.weight.sum()
+    relation_values = attention.relation_decoder(
+        torch.ones(1, attention.width, dtype=state_signal.dtype)
+    )
+    other_rows = [
+        row
+        for row in range(attention.relation_output_dim)
+        if row != attention.collision_output_index
+    ]
+    event = (
+        relation_values[..., attention.collision_output_index].sum()
+        + 2.0 * relation_values[..., other_rows].sum()
+        + state_signal
+    )
+    terms = {"state_position": state_signal * 3.0, "event": event}
+    weights, _ = _closed_loop_loss_weights_for_scope(
+        config,
+        active_trainable_scope="updater_state_heads_xy_collision",
+    )
+    result = TrainingBatchResult(
+        total_loss=_weighted_closed_loop_total(terms, weights),
+        loss_terms=terms,
+        metrics={},
+        phase="closed_loop_rgb",
+    )
+
+    _backward_training_result(
+        model,
+        result,
+        config,
+        active_scope="updater_state_heads_xy_collision",
+    )
+
+    torch.testing.assert_close(
+        corrector.mean_head.weight.grad,
+        torch.full_like(corrector.mean_head.weight, 6.0),
+    )
+    collision_row = attention.collision_output_index
+    assert torch.count_nonzero(attention.relation_decoder.weight.grad[collision_row]) > 0
+    assert torch.count_nonzero(attention.relation_decoder.bias.grad[collision_row]) > 0
+    assert torch.count_nonzero(attention.relation_decoder.weight.grad[other_rows]) == 0
+    assert torch.count_nonzero(attention.relation_decoder.bias.grad[other_rows]) == 0
+    assert result.metrics["direct_collision_event_owner_active"] == 1.0
+    assert result.metrics["direct_collision_event_loss_weight"] == 0.05
+    assert result.metrics["direct_collision_event_noncollision_gradient_discarded_norm"] > 0.0
+
+
+def test_combined_xy_collision_scope_preserves_noncollision_rows_through_adamw() -> None:
+    source = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["model.dynamics.attention_residual_enabled=true"],
+    )
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            closed_loop_trainable_scope="updater_state_heads_xy_collision",
+            closed_loop_event_loss_weights={"updater_state_heads_xy_collision": 0.05},
+        ),
+    )
+    config.validate()
+    model = OnlineWorldModel.from_config(config)
+    set_closed_loop_trainable_scope(model, scope="updater_state_heads_xy_collision")
+    attention = model.dynamics.attention_interactions
+    assert attention is not None
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.1, weight_decay=0.1)
+    with torch.no_grad():
+        attention.relation_decoder.weight.copy_(
+            torch.arange(
+                attention.relation_decoder.weight.numel(),
+                dtype=attention.relation_decoder.weight.dtype,
+            ).reshape_as(attention.relation_decoder.weight)
+            / 1000
+        )
+        attention.relation_decoder.bias.copy_(
+            torch.arange(
+                attention.relation_decoder.bias.numel(),
+                dtype=attention.relation_decoder.bias.dtype,
+            )
+            / 1000
+        )
+    before_weight = attention.relation_decoder.weight.detach().clone()
+    before_bias = attention.relation_decoder.bias.detach().clone()
+    attention.relation_decoder.weight.grad = torch.ones_like(attention.relation_decoder.weight)
+    attention.relation_decoder.bias.grad = torch.ones_like(attention.relation_decoder.bias)
+
+    snapshots = _prepare_restricted_attention_collision_update(
+        model,
+        optimizer,
+        scope="updater_state_heads_xy_collision",
+    )
+    optimizer.step()
+    _restore_restricted_updater_mean_update(optimizer, snapshots)
+
+    collision_row = attention.collision_output_index
+    other_rows = [row for row in range(attention.relation_output_dim) if row != collision_row]
+    assert not torch.equal(
+        attention.relation_decoder.weight[collision_row],
+        before_weight[collision_row],
+    )
+    assert not torch.equal(
+        attention.relation_decoder.bias[collision_row],
+        before_bias[collision_row],
+    )
+    torch.testing.assert_close(
+        attention.relation_decoder.weight[other_rows],
+        before_weight[other_rows],
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        attention.relation_decoder.bias[other_rows],
+        before_bias[other_rows],
+        rtol=0.0,
+        atol=0.0,
+    )
 
 
 def test_updater_mean_scope_isolates_semantically_reset_gain_head() -> None:
