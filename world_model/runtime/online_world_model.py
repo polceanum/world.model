@@ -516,6 +516,9 @@ class OnlineWorldModel(nn.Module):
                 velocity_nonregression_gate_enabled=(
                     config.runtime.hypothesis_velocity_nonregression_gate_enabled
                 ),
+                residual_correction_gain_by_axis=(
+                    config.runtime.hypothesis_residual_correction_gain_by_axis
+                ),
                 robust_influence_delta=config.runtime.hypothesis_robust_influence_delta,
                 composition_step_seconds=config.runtime.hypothesis_composition_step_seconds,
             )

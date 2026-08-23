@@ -125,6 +125,9 @@ def _paired_metrics() -> tuple[dict[str, float], dict[str, float]]:
             "runtime_hypothesis_axis_x_composed_total_step_count": 10.0,
             "runtime_hypothesis_axis_x_composed_fallback_step_count": 2.0,
             "runtime_hypothesis_axis_x_composition_grid_fallback_count": 0.0,
+            "runtime_hypothesis_axis_x_residual_applied_count": 0.0,
+            "runtime_hypothesis_axis_x_residual_sum": 0.0,
+            "runtime_hypothesis_axis_x_residual_absolute_sum": 0.0,
             "runtime_hypothesis@0.100s_axis_x_learned_count": 2.0,
             "runtime_hypothesis@0.100s_axis_x_constant_velocity_count": 3.0,
             "runtime_hypothesis@0.100s_axis_x_damped_constant_velocity_count": 1.0,
@@ -216,11 +219,35 @@ def test_runtime_hypothesis_comparison_requires_nonlearned_use() -> None:
     assert result["runtime_usage_failures"] == [
         {
             "metric": "runtime_hypothesis_nonlearned_use",
-            "direction": "positive_selected_and_composed_use_required",
-            "candidate": {"selected": 0.0, "composed_steps": 0.0},
+            "direction": "positive_nonlearned_or_causal_residual_use_required",
+            "candidate": {
+                "selected": 0.0,
+                "composed_steps": 0.0,
+                "residual_applied": 0.0,
+                "residual_absolute_sum": 0.0,
+            },
             "passed": False,
         }
     ]
+
+
+def test_runtime_hypothesis_comparison_accepts_nonvacuous_causal_residual_use() -> None:
+    reference, candidate = _paired_metrics()
+    candidate["runtime_hypothesis_axis_x_learned_count"] = 6.0
+    candidate["runtime_hypothesis_axis_x_constant_velocity_count"] = 0.0
+    candidate["runtime_hypothesis_axis_x_damped_constant_velocity_count"] = 0.0
+    candidate["runtime_hypothesis_axis_x_learned_composed_step_count"] = 10.0
+    candidate["runtime_hypothesis_axis_x_constant_velocity_composed_step_count"] = 0.0
+    candidate["runtime_hypothesis_axis_x_damped_constant_velocity_composed_step_count"] = 0.0
+    candidate["runtime_hypothesis_axis_x_residual_applied_count"] = 6.0
+    candidate["runtime_hypothesis_axis_x_residual_sum"] = -0.25
+    candidate["runtime_hypothesis_axis_x_residual_absolute_sum"] = 1.5
+
+    result = _compare(reference, candidate)
+
+    assert result["physical_promotion_eligible"] is True
+    assert result["runtime_nonlearned_selection_count"] == 0.0
+    assert result["runtime_residual_applied_count"] == 6.0
 
 
 def test_runtime_hypothesis_comparison_rejects_extra_nonruntime_metric() -> None:

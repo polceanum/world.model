@@ -146,6 +146,9 @@ def test_axis_composition_is_configured_only_for_attention_pilot() -> None:
         "runtime.hypothesis_velocity_evidence_weight=true",
         "runtime.hypothesis_velocity_evidence_weight=not-a-number",
         "runtime.hypothesis_velocity_nonregression_gate_enabled=1",
+        "runtime.hypothesis_residual_correction_gain_by_axis=[0.1,0.2]",
+        "runtime.hypothesis_residual_correction_gain_by_axis=[0.1,true,0.0]",
+        "runtime.hypothesis_residual_correction_gain_by_axis=[0.1,1.1,0.0]",
         "runtime.hypothesis_robust_influence_delta=-1",
         "runtime.hypothesis_robust_influence_delta=true",
         "runtime.hypothesis_composition_step_seconds=-1",
@@ -166,6 +169,28 @@ def test_runtime_hypothesis_composition_step_must_have_matching_local_evidence()
         ],
     )
     assert config.runtime.hypothesis_composition_step_seconds == pytest.approx(0.05)
+
+
+def test_runtime_hypothesis_residual_correction_requires_matching_local_axes() -> None:
+    config = load_config(
+        CONFIG_DIR / "toy_smoke.yaml",
+        overrides=[
+            "runtime.hypothesis_local_applicability_enabled=true",
+            "runtime.hypothesis_axis_independent_axes=[0,1]",
+            "runtime.hypothesis_residual_correction_gain_by_axis=[0.25,0.5,0.0]",
+        ],
+    )
+    assert config.runtime.hypothesis_residual_correction_gain_by_axis == (0.25, 0.5, 0.0)
+
+    with pytest.raises(ValueError, match="independently configured"):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=[
+                "runtime.hypothesis_local_applicability_enabled=true",
+                "runtime.hypothesis_axis_independent_axes=[0]",
+                "runtime.hypothesis_residual_correction_gain_by_axis=[0.25,0.5,0.0]",
+            ],
+        )
     with pytest.raises(ValueError, match="match a supported evidence horizon"):
         load_config(
             CONFIG_DIR / "toy_smoke.yaml",

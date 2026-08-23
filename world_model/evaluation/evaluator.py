@@ -184,6 +184,7 @@ def enable_runtime_hypothesis_pool(
         velocity_nonregression_gate_enabled=(
             runtime.hypothesis_velocity_nonregression_gate_enabled
         ),
+        residual_correction_gain_by_axis=(runtime.hypothesis_residual_correction_gain_by_axis),
         robust_influence_delta=runtime.hypothesis_robust_influence_delta,
         composition_step_seconds=runtime.hypothesis_composition_step_seconds,
     )
@@ -1743,6 +1744,15 @@ def _evaluate_checkpoint_impl(
     runtime_hypothesis_axis_composition_grid_fallback_count = {
         axis: 0 for axis in config.runtime.hypothesis_axis_independent_axes
     }
+    runtime_hypothesis_axis_residual_applied_count = {
+        axis: 0 for axis in config.runtime.hypothesis_axis_independent_axes
+    }
+    runtime_hypothesis_axis_residual_sum = {
+        axis: 0.0 for axis in config.runtime.hypothesis_axis_independent_axes
+    }
+    runtime_hypothesis_axis_residual_absolute_sum = {
+        axis: 0.0 for axis in config.runtime.hypothesis_axis_independent_axes
+    }
     runtime_hypothesis_regime_step_count = [0 for _ in _RUNTIME_HYPOTHESIS_REGIMES]
     runtime_hypothesis_regime_query_count = [0 for _ in _RUNTIME_HYPOTHESIS_REGIMES]
     runtime_hypothesis_axis_evidence_summary = {
@@ -2364,7 +2374,20 @@ def _evaluate_checkpoint_impl(
                         composition_grid_fallback = trajectory.auxiliary.get(
                             "hypothesis_composition_grid_fallback"
                         )
+                        position_residual = trajectory.auxiliary.get("hypothesis_position_residual")
+                        residual_applied = trajectory.auxiliary.get(
+                            "hypothesis_position_residual_applied"
+                        )
                         local_shape = axis_indices.shape
+                        if position_residual is None and residual_applied is None:
+                            position_residual = torch.zeros_like(
+                                axis_indices, dtype=trajectory.positions.dtype
+                            )
+                            residual_applied = torch.zeros_like(axis_indices, dtype=torch.bool)
+                        elif position_residual is None or residual_applied is None:
+                            raise RuntimeError(
+                                "runtime hypothesis residual diagnostics are incomplete"
+                            )
                         applicability_values = (
                             axis_support_count,
                             axis_age,
@@ -2404,6 +2427,23 @@ def _evaluate_checkpoint_impl(
                             raise RuntimeError(
                                 "runtime hypothesis composition grid fallback must be boolean "
                                 "[B,Q,N,3]"
+                            )
+                        if (
+                            not isinstance(position_residual, Tensor)
+                            or position_residual.shape != local_shape
+                            or not position_residual.is_floating_point()
+                            or not torch.isfinite(position_residual).all()
+                        ):
+                            raise RuntimeError(
+                                "runtime hypothesis position residual must be finite [B,Q,N,3]"
+                            )
+                        if (
+                            not isinstance(residual_applied, Tensor)
+                            or residual_applied.shape != local_shape
+                            or residual_applied.dtype != torch.bool
+                        ):
+                            raise RuntimeError(
+                                "runtime hypothesis residual-applied mask must be boolean [B,Q,N,3]"
                             )
                         if (
                             not isinstance(axis_support_count, Tensor)
@@ -2475,6 +2515,12 @@ def _evaluate_checkpoint_impl(
                         target_axis_confidence = event_query_plan.select_target_endpoints(
                             axis_confidence
                         )
+                        target_position_residual = event_query_plan.select_target_endpoints(
+                            position_residual
+                        )
+                        target_residual_applied = event_query_plan.select_target_endpoints(
+                            residual_applied
+                        )
                         target_composed_candidate_count = (
                             event_query_plan.select_target_endpoints(composed_candidate_count)
                             if isinstance(composed_candidate_count, Tensor)
@@ -2521,6 +2567,22 @@ def _evaluate_checkpoint_impl(
                             for regime_index, count in enumerate(regime_counts.tolist()):
                                 runtime_hypothesis_regime_step_count[regime_index] += int(count)
                         for axis in config.runtime.hypothesis_axis_independent_axes:
+                            applied_cells = (
+                                target_residual_applied[..., axis] & target_hypothesis_active
+                            )
+                            runtime_hypothesis_axis_residual_applied_count[axis] += int(
+                                applied_cells.sum().detach().cpu()
+                            )
+                            if bool(applied_cells.any()):
+                                applied_residual = target_position_residual[
+                                    ..., axis
+                                ].masked_select(applied_cells)
+                                runtime_hypothesis_axis_residual_sum[axis] += float(
+                                    applied_residual.sum().detach().cpu()
+                                )
+                                runtime_hypothesis_axis_residual_absolute_sum[axis] += float(
+                                    applied_residual.abs().sum().detach().cpu()
+                                )
                             runtime_hypothesis_axis_composition_grid_fallback_count[axis] += int(
                                 (
                                     target_composition_grid_fallback[..., axis]
@@ -3180,6 +3242,15 @@ def _evaluate_checkpoint_impl(
             metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_composition_grid_fallback_count"] = (
                 float(runtime_hypothesis_axis_composition_grid_fallback_count[axis])
             )
+            metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_residual_applied_count"] = float(
+                runtime_hypothesis_axis_residual_applied_count[axis]
+            )
+            metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_residual_sum"] = float(
+                runtime_hypothesis_axis_residual_sum[axis]
+            )
+            metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_residual_absolute_sum"] = float(
+                runtime_hypothesis_axis_residual_absolute_sum[axis]
+            )
             summary = runtime_hypothesis_axis_evidence_summary[axis]
             evidence_cell_count = int(summary["cell_count"])
             prefix = f"runtime_hypothesis_axis_{'xyz'[axis]}_evidence"
@@ -3405,7 +3476,7 @@ def _evaluate_checkpoint_impl(
     runtime_hypothesis_policy: dict[str, Any] | None = None
     if runtime_hypothesis_pool:
         runtime_hypothesis_policy = {
-            "policy_version": "evidence_bounded_entity_axis_regime_horizon_v4",
+            "policy_version": "evidence_bounded_entity_axis_regime_horizon_v5",
             "candidates": [
                 {"name": "learned", "parameters": {}},
                 {"name": "constant_velocity", "parameters": {"damping": 0.0}},
@@ -3439,13 +3510,24 @@ def _evaluate_checkpoint_impl(
             "velocity_nonregression_gate_enabled": (
                 config.runtime.hypothesis_velocity_nonregression_gate_enabled
             ),
+            "residual_correction_gain_by_axis": list(
+                config.runtime.hypothesis_residual_correction_gain_by_axis
+            ),
             "robust_influence_delta": config.runtime.hypothesis_robust_influence_delta,
             "composition_step_seconds": config.runtime.hypothesis_composition_step_seconds,
             "unsupported_query_policy": "learned_fallback",
             "composition": (
-                "bounded_short_step_coherent_state"
+                (
+                    "bounded_short_step_coherent_state_plus_output_only_causal_residual"
+                    if any(config.runtime.hypothesis_residual_correction_gain_by_axis)
+                    else "bounded_short_step_coherent_state"
+                )
                 if config.runtime.hypothesis_composition_step_seconds is not None
-                else "coherent_axis_state_endpoint_splice_diagnostic_only"
+                else (
+                    "coherent_axis_endpoint_plus_output_only_causal_residual"
+                    if any(config.runtime.hypothesis_residual_correction_gain_by_axis)
+                    else "coherent_axis_state_endpoint_splice_diagnostic_only"
+                )
             ),
             "timestamp_tolerance_seconds": (config.runtime.hypothesis_timestamp_tolerance_seconds),
         }

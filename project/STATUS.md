@@ -1,5 +1,41 @@
 # Project status
 
+## Specification 1.55 causal residual diagnostics — retained mechanism, rejected selector 2026-08-23
+
+The runtime now has a strict, default-zero per-axis causal position-residual
+mechanism for forecast outputs. Residual evidence is keyed by persistent
+entity, world axis, and learned regime; two successive same-sign observations
+are required, and lifecycle identity changes clear value and support. The
+correction is applied only to emitted forecast position. Persistent belief,
+velocity, uncertainty, events, lifecycle, and candidate evidence remain
+canonical learned outputs. Residual-only scenes begin from one canonical
+learned rollout, preserving exact unrelated-axis behavior. The gain vector is
+strictly validated and exact-resume-bound; all-zero is exact legacy behavior.
+
+The mechanism is scientifically rejected for promotion. A 3,564-sample/axis
+probe found lag cosine `0.5125/0.6313/0.0440` and predicted 0.1-gain MSE changes
+of `+9.27%/+11.66%/-0.12%` for x/y/z. Real matched fixed-eight CPU runs still
+failed broadly: canonical x had 72 failures despite `0.00677117` m summed
+pooled position improvement; observability-0.5 x had 56 failures and only
+`0.00211706` m improvement; canonical x/y had 60 failures despite
+`0.01502498` m improvement. Calibration, Gaussian NLL, axis, event-support,
+and scenario slices regress coherently. No fixed-32, MPS, or disjoint ladder is
+authorized. Deployment remains canonical learned dynamics with zero gains.
+
+The final repository gate is `1229 passed, 20 skipped in 447.14s`; focused
+active-Aqua MPS residual execution passes in `4.82s`. The probe SHA-256 is
+`82777b94...`; reference and candidate comparison hashes are recorded in
+PROJECT_SPEC section 249. These are dirty-source diagnostics, not promotion
+evidence.
+
+Recovered specification-1.52 treatment evidence also closes a stale record.
+The run reached fixed validation at steps 512 and 1024 before manual
+interruption at attempted update 1044. Both candidates were rejected: selector
+score worsened from `0.23952864` to `0.24117313` and `0.24155691`, with 122 and
+149 rejection reasons. At 1024, x/y position and pooled velocity improved, but
+z position worsened `7.84%`. The next accuracy repair must address learned
+axis/uncertainty ownership rather than post-hoc inference composition.
+
 ## Specification 1.54 forecast-only hypothesis isolation — rejected selector, accepted safety boundary 2026-08-23
 
 The successor runtime pool no longer reuses scheduled hypothesis rollouts as

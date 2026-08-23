@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.54
+**Version:** 1.55
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, and RGB temporal-velocity veto amendment 23 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, and output-only causal residual diagnostics amendment 23 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -8370,6 +8370,66 @@ but rejects 255 numerical guardrails, one structural event-support cell,
 summed pooled position improvement `-3.5132182526070865e-05` m, and latency
 ratios `1.2417/1.2181/1.8921` for global/fast/rollout versus the `1.10` limit.
 This formal rejection cannot weaken the existing promotion thresholds.
+
+---
+
+## 249. Output-only causal residual diagnostics and rejection boundary
+
+Specification 1.55 permits an opt-in, per-world-axis causal position residual
+on forecast outputs only. Delayed RGB evidence records the learned candidate's
+position error in the exact persistent entity/axis/regime cell. A correction
+is eligible only under the ordinary local applicability contract and after two
+successive nonzero residuals have the same sign. Lifecycle identity changes
+clear both the value and its support. The configured gain is a strict finite
+three-vector in `[0,1]`; every nonzero axis must be independently enabled.
+
+The correction never mutates persistent `WorldBelief`, velocity, uncertainty,
+events, lifecycle, or candidate evidence. Residual-only forecasts begin from
+one exact canonical learned trajectory and add the bounded residual only to
+the configured emitted position axis. This prevents short-step reconstruction
+from perturbing unrelated axes. The all-zero default is exact legacy behavior,
+and the field is exact-resume-bound. Evaluation reports applied count, signed
+sum, and absolute sum per axis; the paired comparator accepts those diagnostics
+as non-vacuous use but retains every physical, uncertainty, event, identity,
+support, and latency guardrail.
+
+The residual probe on 3,564 samples per axis found one-step lag cosine
+`0.5125/0.6313/0.0440` for x/y/z. A 0.1 residual gain predicted MSE improvement
+of `9.27%/11.66%/-0.12%`, so z was excluded. Real matched fixed-eight CPU
+diagnostics nevertheless reject the family:
+
+- x gain 0.1, canonical fallback: 428 applied cells, `42.69865` m absolute
+  residual evidence, `0.00677117` m summed pooled position-RMSE improvement,
+  but 72 failures (68 scenario-slice);
+- x gain 0.1 with minimum observability 0.5: 197 applied cells and
+  `0.00211706` m pooled improvement, but 56 failures; and
+- x/y gains 0.1: 952 applied cells, `101.21379` m absolute residual evidence,
+  and `0.01502498` m pooled improvement, but 60 failures.
+
+Failures are coherent calibration, Gaussian-NLL, axis-RMSE, event-support, and
+scenario regressions, especially camera parallax, heavy/light impacts,
+glancing impacts, and impulse perturbation. No fixed-32, MPS fixed-manifest,
+or disjoint promotion run is authorized. Deployment remains canonical learned
+dynamics with zero residual gains. The mechanism is retained only as explicit
+default-off research infrastructure; future work must jointly calibrate mean
+and uncertainty from broader evidence rather than tune the fixed-eight set.
+
+The final source gate passes `1229` tests with `20` expected inactive-backend
+skips in `447.14s`; the focused active-Aqua residual regression passes in
+`4.82s`. The probe SHA-256 is `82777b9482538de5701f4689b8cf2a42314873a54d27756102b7f3bde4ea7715`.
+The matched learned reference is `46fa51bf...`; canonical x, observability-x,
+and canonical x/y comparisons are `5ba37914...`, `8edf167c...`, and
+`acc9dd37...`. These are dirty-source diagnostic artifacts and establish no
+promotion or convergence claim.
+
+The previously unrecorded specification-1.52 treatment completed fixed
+validation at steps 512 and 1024 before manual interruption at update 1044.
+Both candidates were rejected: selector score moved `0.23952864` to
+`0.24117313` and `0.24155691`, with 122 and 149 rejection reasons. At step
+1024 x and y position RMSE improved `1.17%` and `2.53%`, and pooled velocity
+improved `2.30%`, while z position RMSE worsened `7.84%`. This localizes the
+next training repair to learned axis/uncertainty ownership; it does not justify
+post-hoc inference composition or promotion of either checkpoint.
 
 ---
 

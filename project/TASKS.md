@@ -1,5 +1,28 @@
 # Tasks
 
+## Output-only causal residual diagnostics — specification 1.55
+
+- [x] Add strict default-zero, exact-resume-bound per-axis residual gains keyed
+  by persistent entity, learned regime, and causal RGB evidence.
+- [x] Require two successive same-sign residuals and reset both residual value
+  and support on lifecycle identity changes.
+- [x] Apply residuals only to forecast position while preserving persistent
+  belief, velocity, uncertainty, events, lifecycle, and evidence exactly.
+- [x] Preserve exact canonical learned rollout behavior for residual-only
+  scenes and exact legacy behavior when every gain is zero.
+- [x] Extend evaluator and comparator evidence with per-axis applied count,
+  signed sum, and absolute sum, without weakening any promotion guardrail.
+- [x] Pass focused CPU, full repository (`1229 passed, 20 skipped`), active-Aqua
+  MPS (`1 passed in 4.82s`), Ruff, format, compile, version, and diff gates.
+- [x] Run the bounded fixed-eight residual probe and matched CPU candidates.
+  Reject canonical x, observability-filtered x, and canonical x/y after 72,
+  56, and 60 failures respectively despite small pooled position gains.
+- [x] Stop before fixed-32/MPS/disjoint promotion and retain canonical learned
+  deployment with zero residual gains.
+- [x] Recover and record the rejected specification-1.52 step-512/1024
+  treatment evidence; localize the next repair to axis/uncertainty ownership.
+- [ ] Commit and push the synchronized specification-1.55 rejection record.
+
 ## Forecast-only hypothesis isolation — specification 1.54
 
 - [x] Remove scheduled-hypothesis reuse from ordinary and prepared persistent

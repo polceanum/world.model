@@ -326,6 +326,7 @@ class RuntimeConfig:
     hypothesis_minimum_confidence_margin: float = 0.0
     hypothesis_velocity_evidence_weight: float = 0.0
     hypothesis_velocity_nonregression_gate_enabled: bool = False
+    hypothesis_residual_correction_gain_by_axis: tuple[float, float, float] = (0.0, 0.0, 0.0)
     hypothesis_robust_influence_delta: float = 0.0
     hypothesis_composition_step_seconds: float | None = None
 
@@ -599,6 +600,31 @@ class OrpheusConfig:
         if not isinstance(runtime.hypothesis_velocity_nonregression_gate_enabled, bool):
             raise ValueError(
                 "runtime.hypothesis_velocity_nonregression_gate_enabled must be boolean"
+            )
+        gains = runtime.hypothesis_residual_correction_gain_by_axis
+        if not isinstance(gains, (tuple, list)) or len(gains) != 3:
+            raise ValueError(
+                "runtime.hypothesis_residual_correction_gain_by_axis must contain three values"
+            )
+        for value in gains:
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or not math.isfinite(value)
+                or value < 0.0
+                or value > 1.0
+            ):
+                raise ValueError(
+                    "runtime.hypothesis_residual_correction_gain_by_axis values must lie in [0,1]"
+                )
+        residual_axes = {axis for axis, value in enumerate(gains) if value > 0.0}
+        if residual_axes and not runtime.hypothesis_local_applicability_enabled:
+            raise ValueError(
+                "runtime.hypothesis_residual_correction_gain_by_axis requires local applicability"
+            )
+        if not residual_axes.issubset(set(runtime.hypothesis_axis_independent_axes)):
+            raise ValueError(
+                "runtime.hypothesis_residual_correction_gain_by_axis axes must be independently configured"
             )
         if (
             not isinstance(runtime.hypothesis_minimum_support_count, int)

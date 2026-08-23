@@ -575,6 +575,8 @@ def compare_runtime_hypothesis_metrics(
         )
     total_nonlearned = 0.0
     total_nonlearned_composed = 0.0
+    total_residual_applied = 0.0
+    total_residual_absolute_sum = 0.0
     for axis in axes:
         axis_name = axis_names[axis]
         selected = {
@@ -649,6 +651,41 @@ def compare_runtime_hypothesis_metrics(
             )
         total_nonlearned += sum(selected[name] for name in _CANDIDATES[1:])
         total_nonlearned_composed += sum(composed[name] for name in _CANDIDATES[1:])
+        residual_applied = _number(
+            candidate_metrics,
+            f"runtime_hypothesis_axis_{axis_name}_residual_applied_count",
+            role="candidate",
+        )
+        residual_sum = _number(
+            candidate_metrics,
+            f"runtime_hypothesis_axis_{axis_name}_residual_sum",
+            role="candidate",
+        )
+        residual_absolute_sum = _number(
+            candidate_metrics,
+            f"runtime_hypothesis_axis_{axis_name}_residual_absolute_sum",
+            role="candidate",
+        )
+        if (
+            residual_applied < 0.0
+            or residual_absolute_sum < 0.0
+            or abs(residual_sum) > residual_absolute_sum + absolute_tolerance
+            or (residual_applied == 0.0 and residual_absolute_sum != 0.0)
+        ):
+            runtime_failures.append(
+                {
+                    "metric": f"runtime_hypothesis_axis_{axis_name}_residual_partition",
+                    "direction": "finite_bounded_residual_evidence",
+                    "candidate": {
+                        "applied": residual_applied,
+                        "sum": residual_sum,
+                        "absolute_sum": residual_absolute_sum,
+                    },
+                    "passed": False,
+                }
+            )
+        total_residual_applied += residual_applied
+        total_residual_absolute_sum += residual_absolute_sum
         for horizon in horizons:
             horizon_selected = {
                 candidate_name: _number(
@@ -703,14 +740,18 @@ def compare_runtime_hypothesis_metrics(
                     "passed": False,
                 }
             )
-    if total_nonlearned <= 0.0 or total_nonlearned_composed <= 0.0:
+    nonlearned_used = total_nonlearned > 0.0 and total_nonlearned_composed > 0.0
+    residual_used = total_residual_applied > 0.0 and total_residual_absolute_sum > 0.0
+    if not nonlearned_used and not residual_used:
         runtime_failures.append(
             {
                 "metric": "runtime_hypothesis_nonlearned_use",
-                "direction": "positive_selected_and_composed_use_required",
+                "direction": "positive_nonlearned_or_causal_residual_use_required",
                 "candidate": {
                     "selected": total_nonlearned,
                     "composed_steps": total_nonlearned_composed,
+                    "residual_applied": total_residual_applied,
+                    "residual_absolute_sum": total_residual_absolute_sum,
                 },
                 "passed": False,
             }
@@ -747,6 +788,8 @@ def compare_runtime_hypothesis_metrics(
         "minimum_pooled_position_improvement_m": minimum_pooled_position_improvement_m,
         "runtime_nonlearned_selection_count": total_nonlearned,
         "runtime_nonlearned_composed_step_count": total_nonlearned_composed,
+        "runtime_residual_applied_count": total_residual_applied,
+        "runtime_residual_absolute_sum": total_residual_absolute_sum,
     }
 
 
@@ -784,7 +827,7 @@ def _expected_protocol(
 
 def _expected_runtime_policy(config: OrpheusConfig) -> dict[str, Any]:
     policy: dict[str, Any] = {
-        "policy_version": "evidence_bounded_entity_axis_regime_horizon_v4",
+        "policy_version": "evidence_bounded_entity_axis_regime_horizon_v5",
         "candidates": [
             {"name": "learned", "parameters": {}},
             {"name": "constant_velocity", "parameters": {"damping": 0.0}},
@@ -816,10 +859,17 @@ def _expected_runtime_policy(config: OrpheusConfig) -> dict[str, Any]:
         "velocity_nonregression_gate_enabled": (
             config.runtime.hypothesis_velocity_nonregression_gate_enabled
         ),
+        "residual_correction_gain_by_axis": list(
+            config.runtime.hypothesis_residual_correction_gain_by_axis
+        ),
         "robust_influence_delta": config.runtime.hypothesis_robust_influence_delta,
         "composition_step_seconds": config.runtime.hypothesis_composition_step_seconds,
         "unsupported_query_policy": "learned_fallback",
-        "composition": "bounded_short_step_coherent_state",
+        "composition": (
+            "bounded_short_step_coherent_state_plus_output_only_causal_residual"
+            if any(config.runtime.hypothesis_residual_correction_gain_by_axis)
+            else "bounded_short_step_coherent_state"
+        ),
         "timestamp_tolerance_seconds": config.runtime.hypothesis_timestamp_tolerance_seconds,
     }
     policy["fingerprint_sha256"] = _canonical_sha256(policy)

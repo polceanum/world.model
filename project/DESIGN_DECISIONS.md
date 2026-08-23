@@ -4836,6 +4836,39 @@
   and exact abstention remain accepted robustness improvements independent of
   selector accuracy.
 
+## ADR-168 — Retain causal residual diagnostics but reject mean-only residual promotion
+
+- **Date:** 2026-08-23
+- **Status:** infrastructure accepted; selector rejected for promotion
+- **Context:** Forecast-only isolation removed posterior contamination, but the
+  learned predictor retained causal, regime-local delayed RGB position errors.
+  A 3,564-sample/axis probe showed positive one-step lag correlation for x/y
+  and predicted small mean-error gains from feeding a fraction of the prior
+  residual back into later forecasts. This suggested a bounded output-only
+  diagnostic without retraining the deployed model.
+- **Decision:** Permit a strict default-zero per-axis position residual on
+  emitted forecasts only. Key evidence by persistent entity, world axis, and
+  learned regime; require two successive nonzero observations with matching
+  sign; clear value and support on lifecycle changes. Keep persistent belief,
+  velocity, uncertainty, events, lifecycle, and candidate evidence learned-
+  authoritative. Begin residual-only forecasts from one canonical learned
+  trajectory so unrelated axes remain exact. Bind the gain vector to exact
+  resume and retain all existing promotion thresholds.
+- **Alternatives considered:** mutate persistent belief; correct velocity with
+  position residuals; import residual-derived uncertainty; tune the gain on
+  fixed-eight slices; weaken calibration or scenario guardrails; or proceed to
+  fixed-32 because pooled position improved.
+- **Consequences:** Canonical x, observability-filtered x, and canonical x/y
+  fixed-eight diagnostics improved summed pooled position RMSE by
+  `0.00677117`, `0.00211706`, and `0.01502498` m, but failed 72, 56, and 60
+  guardrails. Calibration, Gaussian NLL, local axes, events, and scenario
+  slices reject all three. Retain the mechanism as default-off research
+  infrastructure, keep zero gains in deployment, and stop before MPS/disjoint
+  promotion. The recovered specification-1.52 step-1024 result independently
+  shows x/y and velocity gains alongside a `7.84%` z regression, directing the
+  next repair toward joint learned axis/uncertainty ownership rather than
+  post-hoc mean composition.
+
 ## ADR-149 — Batch validation anchors only after exact MPS parity
 
 - **Date:** 2026-08-21

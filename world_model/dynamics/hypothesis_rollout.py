@@ -55,6 +55,8 @@ class HypothesisApplicability:
     predictive_variance: Tensor
     confidence_margin: Tensor
     regime: Tensor
+    position_residual: Tensor
+    position_residual_supported: Tensor
 
     def validate(self, *, candidate_count: int) -> HypothesisApplicability:
         expected = self.selected_index.shape
@@ -65,6 +67,8 @@ class HypothesisApplicability:
             ("observability", self.observability),
             ("predictive_variance", self.predictive_variance),
             ("confidence_margin", self.confidence_margin),
+            ("position_residual", self.position_residual),
+            ("position_residual_supported", self.position_residual_supported),
         ):
             if value.shape != expected:
                 raise ValueError(f"hypothesis applicability {name} must match selected_index")
@@ -74,6 +78,8 @@ class HypothesisApplicability:
             raise TypeError("hypothesis applicability indices must use torch.int64")
         if self.supported.dtype is not torch.bool or self.support_count.dtype is not torch.int64:
             raise TypeError("hypothesis applicability masks/counts use bool/int64")
+        if self.position_residual_supported.dtype is not torch.bool:
+            raise TypeError("hypothesis residual support must use bool")
         if torch.any(self.selected_index < 0) or torch.any(self.selected_index >= candidate_count):
             raise ValueError("hypothesis applicability selected index is out of range")
         if torch.any(self.regime < 0) or torch.any(self.regime >= NUM_HYPOTHESIS_REGIMES):
@@ -88,6 +94,8 @@ class HypothesisApplicability:
         ):
             if not torch.isfinite(value).all() or torch.any(value < 0):
                 raise ValueError(f"hypothesis applicability {name} must be finite and nonnegative")
+        if not torch.isfinite(self.position_residual).all():
+            raise ValueError("hypothesis applicability position residual must be finite")
         return self
 
 
@@ -924,6 +932,8 @@ class HypothesisDynamicsPool:
         self.entity_axis_regime_last_timestamp: Tensor | None = None
         self.entity_axis_regime_observability: Tensor | None = None
         self.entity_axis_regime_predictive_variance: Tensor | None = None
+        self.entity_axis_regime_position_residual: Tensor | None = None
+        self.entity_axis_regime_position_residual_supported: Tensor | None = None
         self.entity_object_ids: Tensor | None = None
         self.entity_active: Tensor | None = None
         self.last_selection: HypothesisSelection | None = None
@@ -953,6 +963,8 @@ class HypothesisDynamicsPool:
         self.entity_axis_regime_last_timestamp = None
         self.entity_axis_regime_observability = None
         self.entity_axis_regime_predictive_variance = None
+        self.entity_axis_regime_position_residual = None
+        self.entity_axis_regime_position_residual_supported = None
         self.entity_object_ids = None
         self.entity_active = None
         self.last_selection = None
@@ -1010,12 +1022,22 @@ class HypothesisDynamicsPool:
             self.entity_axis_regime_predictive_variance = belief.objects.position.new_zeros(
                 (*regime_shape, len(self.dynamics_models))
             )
+            self.entity_axis_regime_position_residual = belief.objects.position.new_zeros(
+                regime_shape
+            )
+            self.entity_axis_regime_position_residual_supported = torch.zeros(
+                regime_shape,
+                device=belief.device,
+                dtype=torch.bool,
+            )
         assert self.entity_axis_evidence_seen is not None
         assert self.entity_axis_regime_log_weights is not None
         assert self.entity_axis_regime_support_count is not None
         assert self.entity_axis_regime_last_timestamp is not None
         assert self.entity_axis_regime_observability is not None
         assert self.entity_axis_regime_predictive_variance is not None
+        assert self.entity_axis_regime_position_residual is not None
+        assert self.entity_axis_regime_position_residual_supported is not None
         assert self.entity_object_ids is not None
         assert self.entity_active is not None
         if self.entity_axis_log_weights.shape != entity_shape:
@@ -1038,6 +1060,12 @@ class HypothesisDynamicsPool:
             len(self.dynamics_models),
         ):
             raise ValueError("entity-axis-regime predictive variance has incompatible shape")
+        if self.entity_axis_regime_position_residual.shape != expected_regime_shape:
+            raise ValueError("entity-axis-regime position residual has incompatible shape")
+        if self.entity_axis_regime_position_residual_supported.shape != expected_regime_shape:
+            raise ValueError("entity-axis-regime residual support has incompatible shape")
+        if self.entity_axis_regime_position_residual_supported.dtype != torch.bool:
+            raise TypeError("entity-axis-regime residual support must use torch.bool")
         if self.entity_axis_regime_support_count.dtype != torch.int64:
             raise TypeError("entity-axis-regime support count must use torch.int64")
         if (
@@ -1053,6 +1081,9 @@ class HypothesisDynamicsPool:
             or self.entity_axis_regime_observability.dtype != belief.dtype
             or self.entity_axis_regime_predictive_variance.device != belief.device
             or self.entity_axis_regime_predictive_variance.dtype != belief.dtype
+            or self.entity_axis_regime_position_residual.device != belief.device
+            or self.entity_axis_regime_position_residual.dtype != belief.dtype
+            or self.entity_axis_regime_position_residual_supported.device != belief.device
             or self.entity_object_ids.device != belief.device
             or self.entity_active.device != belief.device
         ):
@@ -1096,6 +1127,16 @@ class HypothesisDynamicsPool:
                 regime_reset_mask.unsqueeze(-1),
                 torch.zeros_like(self.entity_axis_regime_predictive_variance),
                 self.entity_axis_regime_predictive_variance,
+            ).detach()
+            self.entity_axis_regime_position_residual = torch.where(
+                regime_reset_mask,
+                torch.zeros_like(self.entity_axis_regime_position_residual),
+                self.entity_axis_regime_position_residual,
+            ).detach()
+            self.entity_axis_regime_position_residual_supported = torch.where(
+                regime_reset_mask,
+                torch.zeros_like(self.entity_axis_regime_position_residual_supported),
+                self.entity_axis_regime_position_residual_supported,
             ).detach()
             self.entity_object_ids = belief.objects.object_id.detach().clone()
             self.entity_active = belief.objects.active.detach().clone()
@@ -1211,6 +1252,7 @@ class HypothesisDynamicsPool:
         entity_axis_observability: Tensor | None = None,
         entity_axis_predictive_variance: Tensor | None = None,
         robust_influence_delta: float = 0.0,
+        learned_position_residual: Tensor | None = None,
     ) -> HypothesisSelection:
         prior = self._ensure_weights(belief)
         if trajectories is None:
@@ -1266,6 +1308,7 @@ class HypothesisDynamicsPool:
                 evidence_decay_override=evidence_decay_override,
                 axis_prior_strength=axis_prior_strength,
                 robust_influence_delta=robust_influence_delta,
+                learned_position_residual=learned_position_residual,
             )
         return updated
 
@@ -1451,6 +1494,7 @@ class HypothesisDynamicsPool:
         evidence_decay_override: float | None,
         axis_prior_strength: float,
         robust_influence_delta: float,
+        learned_position_residual: Tensor | None,
     ) -> None:
         """Update only the exact entity/axis/regime cells with RGB evidence."""
 
@@ -1472,6 +1516,15 @@ class HypothesisDynamicsPool:
             or entity_axis_observability.shape != expected_observability_shape
         ):
             raise ValueError("regime evidence observability must have shape [B,N,3]")
+        if learned_position_residual is None:
+            learned_position_residual = belief.objects.position.new_zeros(
+                expected_observability_shape
+            )
+        if (
+            learned_position_residual.shape != expected_observability_shape
+            or not torch.isfinite(learned_position_residual).all()
+        ):
+            raise ValueError("learned position residual must be finite with shape [B,N,3]")
         expected_predictive_shape = (*expected_regime_shape, 3, len(self.dynamics_models))
         if (
             entity_axis_predictive_variance is None
@@ -1509,6 +1562,8 @@ class HypothesisDynamicsPool:
         assert self.entity_axis_regime_last_timestamp is not None
         assert self.entity_axis_regime_observability is not None
         assert self.entity_axis_regime_predictive_variance is not None
+        assert self.entity_axis_regime_position_residual is not None
+        assert self.entity_axis_regime_position_residual_supported is not None
         assert self.log_weights is not None
         evidence_mask = selection.entity_axis_evidence_mask
         if evidence_mask is None:
@@ -1580,6 +1635,22 @@ class HypothesisDynamicsPool:
             expanded_timestamp,
             self.entity_axis_regime_last_timestamp,
         ).detach()
+        expanded_residual = learned_position_residual.unsqueeze(-1).expand_as(
+            self.entity_axis_regime_position_residual
+        )
+        consistent_residual = (old_count > 0) & (
+            self.entity_axis_regime_position_residual * expanded_residual > 0
+        )
+        self.entity_axis_regime_position_residual_supported = torch.where(
+            cell_mask,
+            consistent_residual,
+            self.entity_axis_regime_position_residual_supported,
+        ).detach()
+        self.entity_axis_regime_position_residual = torch.where(
+            cell_mask,
+            expanded_residual,
+            self.entity_axis_regime_position_residual,
+        ).detach()
 
     def selected_entity_axis_applicability(
         self,
@@ -1633,6 +1704,8 @@ class HypothesisDynamicsPool:
         assert self.entity_axis_regime_last_timestamp is not None
         assert self.entity_axis_regime_observability is not None
         assert self.entity_axis_regime_predictive_variance is not None
+        assert self.entity_axis_regime_position_residual is not None
+        assert self.entity_axis_regime_position_residual_supported is not None
         candidate_count = len(self.dynamics_models)
         gather_index = entity_regime[:, :, None, None, None].expand(
             -1,
@@ -1688,6 +1761,16 @@ class HypothesisDynamicsPool:
             dim=-1,
             index=selected.unsqueeze(-1),
         ).squeeze(-1)
+        position_residual = torch.gather(
+            self.entity_axis_regime_position_residual,
+            dim=3,
+            index=scalar_index,
+        ).squeeze(3)
+        position_residual_supported = torch.gather(
+            self.entity_axis_regime_position_residual_supported,
+            dim=3,
+            index=scalar_index,
+        ).squeeze(3)
         age = (current_timestamp[:, None, None] - last_timestamp).clamp_min(0)
         supported = (
             belief.objects.active.unsqueeze(-1)
@@ -1706,6 +1789,8 @@ class HypothesisDynamicsPool:
             predictive_variance=predictive_variance,
             confidence_margin=margin,
             regime=entity_regime,
+            position_residual=position_residual,
+            position_residual_supported=position_residual_supported,
         ).validate(candidate_count=candidate_count)
 
     def selected_index(self, belief: WorldBelief) -> Tensor:
@@ -1787,6 +1872,7 @@ class RuntimeHypothesisController:
         minimum_confidence_margin: float = 0.0,
         velocity_evidence_weight: float = 0.0,
         velocity_nonregression_gate_enabled: bool = False,
+        residual_correction_gain_by_axis: Sequence[float] = (0.0, 0.0, 0.0),
         robust_influence_delta: float = 0.0,
         composition_step_seconds: float | None = None,
     ) -> None:
@@ -1807,6 +1893,17 @@ class RuntimeHypothesisController:
             raise ValueError("local_applicability_enabled must be boolean")
         if not isinstance(velocity_nonregression_gate_enabled, bool):
             raise ValueError("velocity_nonregression_gate_enabled must be boolean")
+        if len(residual_correction_gain_by_axis) != 3:
+            raise ValueError("residual_correction_gain_by_axis must contain exactly three values")
+        for value in residual_correction_gain_by_axis:
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or not torch.isfinite(torch.as_tensor(value))
+                or value < 0
+                or value > 1
+            ):
+                raise ValueError("residual correction gains must lie in [0,1]")
         if (
             not isinstance(minimum_support_count, int)
             or isinstance(minimum_support_count, bool)
@@ -1829,6 +1926,13 @@ class RuntimeHypothesisController:
                 raise ValueError(f"{name} must be finite and nonnegative")
         if minimum_observability > 1 or minimum_confidence_margin > 1:
             raise ValueError("observability and confidence thresholds must lie in [0,1]")
+        residual_axes = {
+            axis for axis, value in enumerate(residual_correction_gain_by_axis) if value > 0
+        }
+        if residual_axes and not local_applicability_enabled:
+            raise ValueError("residual correction requires local applicability")
+        if not residual_axes.issubset(set(axis_independent_axes)):
+            raise ValueError("residual correction axes must be independently configured")
         if composition_step_seconds is not None:
             if (
                 isinstance(composition_step_seconds, bool)
@@ -1869,6 +1973,9 @@ class RuntimeHypothesisController:
         self.minimum_confidence_margin = float(minimum_confidence_margin)
         self.velocity_evidence_weight = float(velocity_evidence_weight)
         self.velocity_nonregression_gate_enabled = velocity_nonregression_gate_enabled
+        self.residual_correction_gain_by_axis = tuple(
+            float(value) for value in residual_correction_gain_by_axis
+        )
         self.robust_influence_delta = float(robust_influence_delta)
         self.composition_step_seconds = (
             None if composition_step_seconds is None else float(composition_step_seconds)
@@ -2439,6 +2546,15 @@ class RuntimeHypothesisController:
                 robust_influence_delta=(
                     self.robust_influence_delta if self.local_applicability_enabled else 0.0
                 ),
+                learned_position_residual=(
+                    torch.where(
+                        target_mask.unsqueeze(-1),
+                        target_positions - pending.trajectories[0].positions[:, 0],
+                        torch.zeros_like(target_positions),
+                    )
+                    if self.local_applicability_enabled
+                    else None
+                ),
             )
         self.pending = retained
         return latest
@@ -2478,6 +2594,8 @@ class RuntimeHypothesisController:
                 "hypothesis_axis_observability": diagnostics.clone(),
                 "hypothesis_axis_predictive_variance": diagnostics.clone(),
                 "hypothesis_axis_confidence_margin": diagnostics.clone(),
+                "hypothesis_position_residual": diagnostics.clone(),
+                "hypothesis_position_residual_applied": supported.clone(),
                 "hypothesis_interaction_regime": self._trajectory_regime(belief, learned),
                 "hypothesis_composition_grid_fallback": grid_fallback,
                 "hypothesis_rollout_candidate_indices": torch.zeros(
@@ -2536,6 +2654,8 @@ class RuntimeHypothesisController:
         observability_values: list[Tensor] = []
         predictive_variance_values: list[Tensor] = []
         confidence_values: list[Tensor] = []
+        residual_values: list[Tensor] = []
+        residual_applied_values: list[Tensor] = []
         regime_values: list[Tensor] = []
         candidate_step_count_values: list[Tensor] = []
         fallback_step_count_values: list[Tensor] = []
@@ -2574,6 +2694,8 @@ class RuntimeHypothesisController:
                 dtype=torch.int64,
             )
             last_choice = torch.zeros_like(segment_fallback_count)
+            last_residual = torch.zeros_like(segment_max_age)
+            last_residual_applied = torch.zeros_like(segment_fallback_count, dtype=torch.bool)
             last_regime = torch.full(
                 belief.objects.active.shape,
                 int(HypothesisRegime.FREE),
@@ -2609,6 +2731,13 @@ class RuntimeHypothesisController:
                     applicability.selected_index,
                     torch.zeros_like(applicability.selected_index),
                 )
+                for axis in self.axis_independent_axes:
+                    if self.residual_correction_gain_by_axis[axis] > 0:
+                        step_choice[..., axis] = torch.where(
+                            applicability.supported[..., axis] & active,
+                            torch.zeros_like(step_choice[..., axis]),
+                            step_choice[..., axis],
+                        )
                 candidate_steps: dict[int, RolloutStep] = {0: learned_step}
                 selected_candidates = {
                     int(value)
@@ -2630,6 +2759,16 @@ class RuntimeHypothesisController:
                     axis_active = active
                     axis_supported = applicability.supported[..., axis] & axis_active
                     axis_choice = step_choice[..., axis]
+                    if self.residual_correction_gain_by_axis[axis] > 0:
+                        residual_axis_supported = (
+                            axis_supported & applicability.position_residual_supported[..., axis]
+                        )
+                        last_residual[..., axis] = torch.where(
+                            axis_supported,
+                            applicability.position_residual[..., axis],
+                            torch.zeros_like(last_residual[..., axis]),
+                        )
+                        last_residual_applied[..., axis] = residual_axis_supported
                     segment_total_count[..., axis] += axis_active.to(torch.int64)
                     segment_supported_count[..., axis] += axis_supported.to(torch.int64)
                     segment_fallback_count[..., axis] += (axis_active & ~axis_supported).to(
@@ -2755,6 +2894,8 @@ class RuntimeHypothesisController:
             observability_values.append(minimum_observability)
             predictive_variance_values.append(segment_max_predictive_variance)
             confidence_values.append(minimum_confidence)
+            residual_values.append(last_residual)
+            residual_applied_values.append(last_residual_applied)
             regime_values.append(last_regime)
             candidate_step_count_values.append(segment_candidate_count)
             fallback_step_count_values.append(segment_fallback_count)
@@ -2762,6 +2903,7 @@ class RuntimeHypothesisController:
             regime_step_count_values.append(segment_regime_count)
 
         candidate_step_counts = torch.stack(candidate_step_count_values, dim=1)
+        residual_applied = torch.stack(residual_applied_values, dim=1)
         scene_intervened = candidate_step_counts[..., 1:].sum(dim=(2, 3, 4)) > 0
         composed_positions = torch.stack([item.objects.position for item in beliefs], dim=1)
         composed_velocities = torch.stack([item.objects.velocity for item in beliefs], dim=1)
@@ -2791,6 +2933,15 @@ class RuntimeHypothesisController:
             composed_active = torch.where(node_mask, composed_active, canonical.active_mask)
             composed_events = torch.where(state_mask, composed_events, canonical.event_logits)
             trajectory_timestamps = canonical.timestamps
+        stacked_residual = torch.stack(residual_values, dim=1)
+        for axis in self.axis_independent_axes:
+            gain = self.residual_correction_gain_by_axis[axis]
+            if gain > 0:
+                composed_positions[..., axis] = torch.where(
+                    residual_applied[..., axis],
+                    composed_positions[..., axis] + float(gain) * stacked_residual[..., axis],
+                    composed_positions[..., axis],
+                )
 
         return BeliefTrajectory(
             timestamps=trajectory_timestamps,
@@ -2811,6 +2962,8 @@ class RuntimeHypothesisController:
                     predictive_variance_values, dim=1
                 ),
                 "hypothesis_axis_confidence_margin": torch.stack(confidence_values, dim=1),
+                "hypothesis_position_residual": stacked_residual,
+                "hypothesis_position_residual_applied": residual_applied,
                 "hypothesis_interaction_regime": torch.stack(regime_values, dim=1),
                 "hypothesis_composed_candidate_step_count": candidate_step_counts,
                 "hypothesis_composed_fallback_step_count": torch.stack(
@@ -2859,6 +3012,8 @@ class RuntimeHypothesisController:
         observability = torch.zeros_like(choices, dtype=belief.dtype)
         predictive_variance = torch.zeros_like(choices, dtype=belief.dtype)
         confidence_margin = torch.zeros_like(choices, dtype=belief.dtype)
+        position_residual = torch.zeros_like(choices, dtype=belief.dtype)
+        residual_supported = torch.zeros_like(choices, dtype=torch.bool)
         query_regime = torch.full(
             choices.shape[:3],
             int(HypothesisRegime.FREE),
@@ -2894,9 +3049,15 @@ class RuntimeHypothesisController:
                         axis_supported = (
                             query_supported[..., 0] & applicability.supported[..., axis]
                         )
+                        uses_residual = self.residual_correction_gain_by_axis[axis] > 0
+                        selected_index = (
+                            torch.zeros_like(applicability.selected_index[..., axis])
+                            if uses_residual
+                            else applicability.selected_index[..., axis]
+                        )
                         choices[:, query_index, :, axis] = torch.where(
                             axis_supported,
-                            applicability.selected_index[..., axis],
+                            selected_index,
                             choices[:, query_index, :, axis],
                         )
                         supported[:, query_index, :, axis] |= axis_supported
@@ -2925,6 +3086,16 @@ class RuntimeHypothesisController:
                             applicability.confidence_margin[..., axis],
                             confidence_margin[:, query_index, :, axis],
                         )
+                        if uses_residual:
+                            position_residual[:, query_index, :, axis] = torch.where(
+                                axis_supported,
+                                applicability.position_residual[..., axis],
+                                position_residual[:, query_index, :, axis],
+                            )
+                            residual_supported[:, query_index, :, axis] |= (
+                                axis_supported
+                                & applicability.position_residual_supported[..., axis]
+                            )
             else:
                 horizon_choices = pool.selected_entity_axis_index(belief)
                 assert pool.entity_axis_evidence_seen is not None
@@ -3004,6 +3175,13 @@ class RuntimeHypothesisController:
                     1,
                 ),
             ).squeeze(-1)
+            gain = self.residual_correction_gain_by_axis[axis]
+            if gain > 0:
+                positions[..., axis] = torch.where(
+                    residual_supported[..., axis],
+                    positions[..., axis] + float(gain) * position_residual[..., axis],
+                    positions[..., axis],
+                )
         return BeliefTrajectory(
             timestamps=learned.timestamps,
             positions=positions,
@@ -3025,6 +3203,8 @@ class RuntimeHypothesisController:
                 "hypothesis_axis_observability": observability.detach().clone(),
                 "hypothesis_axis_predictive_variance": predictive_variance.detach().clone(),
                 "hypothesis_axis_confidence_margin": confidence_margin.detach().clone(),
+                "hypothesis_position_residual": position_residual.detach().clone(),
+                "hypothesis_position_residual_applied": residual_supported.detach().clone(),
                 "hypothesis_interaction_regime": query_regime.detach().clone(),
                 "hypothesis_composition_grid_fallback": torch.zeros_like(
                     supported, dtype=torch.bool

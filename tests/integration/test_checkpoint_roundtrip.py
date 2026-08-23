@@ -2324,6 +2324,7 @@ def test_disabled_runtime_hypothesis_policy_migrates_but_enabled_policy_is_stric
         "hypothesis_minimum_confidence_margin",
         "hypothesis_velocity_evidence_weight",
         "hypothesis_velocity_nonregression_gate_enabled",
+        "hypothesis_residual_correction_gain_by_axis",
         "hypothesis_robust_influence_delta",
         "hypothesis_composition_step_seconds",
     ):

@@ -2,6 +2,29 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-23 specification 1.55 output-only causal residual diagnostics
+
+- Added a strict, default-zero per-axis causal position residual keyed by
+  persistent entity and learned regime. Two successive same-sign observations
+  are required, lifecycle changes clear support, and the field is
+  exact-resume-bound.
+- Kept residuals forecast-output-only. Persistent state, velocity,
+  uncertainty, events, lifecycle, and evidence remain learned-authoritative;
+  residual-only scenes reuse one canonical learned trajectory exactly.
+- Added evaluator applied-count/signed-sum/absolute-sum diagnostics and made
+  paired comparison recognize real residual use without relaxing physical,
+  uncertainty, event, identity, support, or latency gates.
+- Passed the full repository gate (`1229 passed, 20 skipped in 447.14s`) and a
+  focused active-Aqua MPS residual test (`1 passed in 4.82s`).
+- Rejected the residual selector family after fixed-eight CPU diagnostics:
+  canonical x, observability-filtered x, and canonical x/y failed 72, 56, and
+  60 guardrails respectively. No fixed-32/MPS/disjoint promotion run follows;
+  zero residual gains remain the deployment default.
+- Recovered the interrupted specification-1.52 treatment record. Its step-512
+  and step-1024 candidates were rejected with 122 and 149 reasons; step 1024
+  improved x/y and velocity but regressed z position by `7.84%`, motivating a
+  future axis/uncertainty ownership repair rather than inference composition.
+
 ### 2026-08-23 specification 1.54 forecast-only hypothesis isolation
 
 - Removed all scheduled-rollout reuse from persistent observation propagation;

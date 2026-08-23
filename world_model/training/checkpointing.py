@@ -425,6 +425,7 @@ def _runtime_checkpoint_semantics(value: object) -> object:
         "hypothesis_minimum_confidence_margin",
         "hypothesis_velocity_evidence_weight",
         "hypothesis_velocity_nonregression_gate_enabled",
+        "hypothesis_residual_correction_gain_by_axis",
         "hypothesis_robust_influence_delta",
         "hypothesis_composition_step_seconds",
     )
