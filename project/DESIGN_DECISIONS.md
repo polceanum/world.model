@@ -4809,6 +4809,30 @@
   valid infrastructure fixes. Any successor must isolate online propagation
   from forecast composition and re-enter at a fresh standard pair.
 
+## ADR-167 — Isolate hypothesis forecasts and reject velocity-veto selection
+
+- **Date:** 2026-08-23
+- **Status:** safety boundary accepted; selector rejected for promotion
+- **Context:** The 1.53 candidate reused a scheduled learned forecast as the
+  next persistent physical prior. This violated the pool's forecast-only
+  contract and changed the posterior trace. Analytic axis substitution also
+  imported candidate variance, while delayed position-only evidence could
+  select a velocity replacement that was worse than learned.
+- **Decision:** Persistent observation propagation always calls canonical
+  learned dynamics. Keep pool trajectories as forecast/evidence branches only,
+  preserve learned uncertainty during analytic position/velocity substitution,
+  and copy a canonical rollout exactly whenever no alternative intervenes.
+  Permit causal RGB temporal velocity only as optional weighted evidence or a
+  strict learned-baseline non-regression veto; default and legacy semantics
+  remain disabled and exact-resume-bound.
+- **Consequences:** Fixed-32 CPU runs now retain exact posterior trace
+  `5ecb850d...` and current-state metrics. The non-vacuous margin-zero veto
+  still regresses all five position horizons after 535 alternative substeps;
+  the conservative setting admits only three and has no gain. Preserve the
+  learned deployment default and stop before MPS/disjoint promotion. The
+  forecast-only isolation, learned-uncertainty ownership, and exact abstention
+  remain accepted robustness improvements independent of selector accuracy.
+
 ## ADR-149 — Batch validation anchors only after exact MPS parity
 
 - **Date:** 2026-08-21

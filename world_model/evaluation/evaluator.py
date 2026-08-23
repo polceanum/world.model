@@ -180,6 +180,10 @@ def enable_runtime_hypothesis_pool(
         maximum_evidence_age_seconds=runtime.hypothesis_maximum_evidence_age_seconds,
         minimum_observability=runtime.hypothesis_minimum_observability,
         minimum_confidence_margin=runtime.hypothesis_minimum_confidence_margin,
+        velocity_evidence_weight=runtime.hypothesis_velocity_evidence_weight,
+        velocity_nonregression_gate_enabled=(
+            runtime.hypothesis_velocity_nonregression_gate_enabled
+        ),
         robust_influence_delta=runtime.hypothesis_robust_influence_delta,
         composition_step_seconds=runtime.hypothesis_composition_step_seconds,
     )
@@ -3401,7 +3405,7 @@ def _evaluate_checkpoint_impl(
     runtime_hypothesis_policy: dict[str, Any] | None = None
     if runtime_hypothesis_pool:
         runtime_hypothesis_policy = {
-            "policy_version": "evidence_bounded_entity_axis_regime_horizon_v2",
+            "policy_version": "evidence_bounded_entity_axis_regime_horizon_v4",
             "candidates": [
                 {"name": "learned", "parameters": {}},
                 {"name": "constant_velocity", "parameters": {"damping": 0.0}},
@@ -3419,7 +3423,10 @@ def _evaluate_checkpoint_impl(
             "axis_prior_strength": config.runtime.hypothesis_axis_prior_strength,
             "evidence_decay": config.runtime.hypothesis_evidence_decay,
             "temperature": 1.0,
-            "score": "gaussian_nll_predictive_plus_rgb_measurement_variance",
+            "score": (
+                "gaussian_nll_position_plus_optional_rgb_temporal_velocity_"
+                "with_predictive_and_measurement_variance"
+            ),
             "selection_locality": "persistent_entity_axis_interaction_regime_exact_horizon",
             "local_applicability_enabled": (config.runtime.hypothesis_local_applicability_enabled),
             "minimum_support_count": config.runtime.hypothesis_minimum_support_count,
@@ -3428,6 +3435,10 @@ def _evaluate_checkpoint_impl(
             ),
             "minimum_observability": config.runtime.hypothesis_minimum_observability,
             "minimum_confidence_margin": (config.runtime.hypothesis_minimum_confidence_margin),
+            "velocity_evidence_weight": (config.runtime.hypothesis_velocity_evidence_weight),
+            "velocity_nonregression_gate_enabled": (
+                config.runtime.hypothesis_velocity_nonregression_gate_enabled
+            ),
             "robust_influence_delta": config.runtime.hypothesis_robust_influence_delta,
             "composition_step_seconds": config.runtime.hypothesis_composition_step_seconds,
             "unsupported_query_policy": "learned_fallback",

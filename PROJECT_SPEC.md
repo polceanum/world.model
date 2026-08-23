@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.53
+**Version:** 1.54
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, and RGB temporal-velocity veto amendment 23 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -8220,12 +8220,12 @@ When `runtime.hypothesis_composition_step_seconds` is enabled, it must match
 one configured evidence horizon exactly. Forecasts are recursively composed
 on that bounded shared grid: every step first advances the learned joint model,
 then replaces only supported configured position/velocity axes and their
-position-derived variance with the chosen transparent candidate. Learned
-lifecycle, identity, motion mode, event output, cross-axis state, and all
-unsupported axes remain authoritative. Collision evidence is max-pooled over
-each query interval. Mixed-row or nonaligned query grids fall back to one
-ordinary learned rollout and are reported separately; they may not silently
-couple rows or interpolate evidence.
+chosen transparent candidate state. Learned uncertainty, lifecycle, identity,
+motion mode, event output, cross-axis state, and all unsupported axes remain
+authoritative. Collision evidence is max-pooled over each query interval.
+Mixed-row or nonaligned query grids fall back to one ordinary learned rollout
+and are reported separately; they may not silently couple rows or interpolate
+evidence.
 
 The following fields are strict, exact-resume-bound runtime semantics and
 retain legacy-disabled defaults:
@@ -8301,6 +8301,64 @@ A diagnostic comparison also failed 598 physical, uncertainty, event,
 identity, and scenario guardrails, with every pooled position horizon slightly
 worse. The comparator remains fail-closed; no disjoint run or runtime-default
 promotion is permitted from this candidate.
+
+---
+
+## 248. Forecast-only hypothesis isolation and conservative velocity evidence
+
+Specification 1.54 closes the causal failure exposed by the first 1.53
+production pair. A scheduled hypothesis rollout is evidence for future
+selection only. It may never be reused as the physical prior for ordinary or
+prepared observation ingestion, even when its source belief, model revision,
+and nominal endpoint match. Persistent `WorldBelief` propagation always calls
+the canonical learned dynamics path. This makes the online posterior
+independent of whether the optional pool is attached.
+
+Composed forecasts may replace only configured supported position and velocity
+axes. Predictive uncertainty remains owned by the learned trajectory; an
+analytic candidate may not substitute its own state variance. If a composed
+query contains no non-learned intervention, every physical trajectory tensor
+and timestamp must be copied from one ordinary learned rollout exactly rather
+than reconstructed through the short-step grid.
+
+Delayed evidence may optionally include causal RGB temporal velocity, its
+per-axis validity mask, and its reported variance. The evidence is collected
+only after the observation module updates temporal history and before direct
+velocity correction changes persistent belief. Two new strict, exact-resume-
+bound fields retain disabled defaults:
+
+- `hypothesis_velocity_evidence_weight=0.0`; and
+- `hypothesis_velocity_nonregression_gate_enabled=false`.
+
+When the non-regression gate is enabled, a non-learned entity-axis candidate
+is eligible only if its uncertainty-aware temporal-velocity loss is no worse
+than the learned candidate for the same valid RGB evidence. Missing or invalid
+velocity evidence fails closed. Position evidence remains the ranking target;
+the velocity condition is a veto, not simulator supervision and not a hidden
+replacement objective.
+
+The isolated learned-only reference and both CPU fixed-32 diagnostics retain
+the exact posterior trace SHA-256
+`5ecb850d11039c2a424b50e4aa499891dd396c7fec40007cfb98e5e9afb7936d`
+and have zero changed `posterior_current*` metrics. The non-vacuous margin-zero
+velocity-veto arm used 535 non-learned x substeps but regressed pooled position
+RMSE at all five horizons by `2.66e-6` to `8.93e-6` m and regressed four of
+five velocity horizons. The confidence-`0.001`/observability-`0.5` arm used
+only three non-learned substeps and remained microscopically worse at 0.10 and
+0.25 seconds before becoming exact learned fallback. These dirty-source CPU
+reports are diagnostic rejection evidence, not a formal matched promotion:
+
+- learned reference: `/private/tmp/20260823-033146-20260823-spec154-isolated-reference-cpu-r2/evaluation.json`, SHA-256 `e6cfd548553dc038b6ba3e1c7e3b3d95cbc8a4661f1c6832397d472bfe988fa1`;
+- margin-zero veto: `/private/tmp/20260823-041910-spec154-velocity-veto-margin0-cpu/evaluation.json`, SHA-256 `d90ae8ba2c63c7e4cb558b62b018f56cc05ecd4e3bf78ea4bfc3e406f5cb6526`; and
+- conservative veto: `/private/tmp/20260823-042330-spec154-velocity-veto-margin0001-observe05-cpu/evaluation.json`, SHA-256 `c4dee1919726d20a59f1f4a9c816417762a61f5afcff22a74fb7189ce21ed889`.
+
+The focused CPU gate passes `322` tests. The whole repository passes `1221`
+tests with `18` expected inactive-backend skips in `438.39s`; the focused
+active-Aqua MPS velocity-veto regression passes in `4.89s`. The learned
+deployment default remains protected. No MPS fixed-32 or disjoint ladder is
+authorized because the standard CPU diagnostics show no candidate accuracy
+gain. A clean source-frozen pair may be retained only as formal rejection
+confirmation; it cannot weaken the existing promotion thresholds.
 
 ---
 

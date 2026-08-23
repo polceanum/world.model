@@ -784,7 +784,7 @@ def _expected_protocol(
 
 def _expected_runtime_policy(config: OrpheusConfig) -> dict[str, Any]:
     policy: dict[str, Any] = {
-        "policy_version": "evidence_bounded_entity_axis_regime_horizon_v2",
+        "policy_version": "evidence_bounded_entity_axis_regime_horizon_v4",
         "candidates": [
             {"name": "learned", "parameters": {}},
             {"name": "constant_velocity", "parameters": {"damping": 0.0}},
@@ -802,13 +802,20 @@ def _expected_runtime_policy(config: OrpheusConfig) -> dict[str, Any]:
         "axis_prior_strength": config.runtime.hypothesis_axis_prior_strength,
         "evidence_decay": config.runtime.hypothesis_evidence_decay,
         "temperature": 1.0,
-        "score": "gaussian_nll_predictive_plus_rgb_measurement_variance",
+        "score": (
+            "gaussian_nll_position_plus_optional_rgb_temporal_velocity_"
+            "with_predictive_and_measurement_variance"
+        ),
         "selection_locality": "persistent_entity_axis_interaction_regime_exact_horizon",
         "local_applicability_enabled": config.runtime.hypothesis_local_applicability_enabled,
         "minimum_support_count": config.runtime.hypothesis_minimum_support_count,
         "maximum_evidence_age_seconds": (config.runtime.hypothesis_maximum_evidence_age_seconds),
         "minimum_observability": config.runtime.hypothesis_minimum_observability,
         "minimum_confidence_margin": config.runtime.hypothesis_minimum_confidence_margin,
+        "velocity_evidence_weight": config.runtime.hypothesis_velocity_evidence_weight,
+        "velocity_nonregression_gate_enabled": (
+            config.runtime.hypothesis_velocity_nonregression_gate_enabled
+        ),
         "robust_influence_delta": config.runtime.hypothesis_robust_influence_delta,
         "composition_step_seconds": config.runtime.hypothesis_composition_step_seconds,
         "unsupported_query_policy": "learned_fallback",

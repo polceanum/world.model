@@ -1,5 +1,25 @@
 # Tasks
 
+## Forecast-only hypothesis isolation — specification 1.54
+
+- [x] Remove scheduled-hypothesis reuse from ordinary and prepared persistent
+  propagation; prove pool-enabled and learned-only posterior traces are exact.
+- [x] Keep analytic candidates forecast-only, preserve learned uncertainty,
+  and copy canonical learned trajectory tensors exactly when no alternative
+  intervenes.
+- [x] Add causal RGB temporal-velocity evidence plus a strict default-off
+  learned-baseline non-regression veto, with exact-resume binding.
+- [x] Pass focused CPU (`322`), whole repository (`1221 passed, 18 skipped`),
+  Ruff/diff, and active-Aqua MPS (`1 passed`) gates.
+- [x] Run bounded fixed-32 CPU diagnostics. Reject the margin-zero policy after
+  535 non-learned steps regressed every pooled position horizon; classify the
+  confidence/observability policy as vacuous after only three alternative
+  steps and microscopic regressions.
+- [x] Stop before fixed-32 MPS and disjoint evaluation; retain learned runtime
+  defaults and do not weaken promotion thresholds.
+- [ ] Retain a clean source-frozen CPU learned-only/candidate pair as formal
+  rejection confirmation, then commit and push the synchronized record.
+
 ## Regime-local runtime planning — specification 1.53
 
 - [x] Store delayed RGB evidence by persistent entity, independent world axis,
@@ -13,7 +33,8 @@
   truth or hindsight-conditioned evidence.
 - [x] Add bounded short-step recursive composition that preserves learned
   lifecycle/events/cross-axis state and replaces only supported configured
-  position/velocity axes plus variance.
+  position/velocity axes. Specification 1.54 additionally restores learned
+  uncertainty ownership.
 - [x] Bind all seven default-disabled runtime semantics to exact resume and
   preserve legacy behavior when local applicability/composition are off.
 - [x] Pass the focused compatibility gate (`381 passed, 3 skipped`), final

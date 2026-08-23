@@ -200,7 +200,7 @@ def test_prepared_ingest_matches_normal_runtime_state_and_diagnostics() -> None:
         _assert_nested_close(prepared_record, normal_record)
 
 
-def test_runtime_pool_reuses_scheduled_learned_step_for_next_prepared_ingest(
+def test_runtime_pool_never_reuses_scheduled_forecast_for_persistent_ingest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     model = OnlineWorldModel.from_config(_rgb_hypothesis_config(), device="cpu")
@@ -221,11 +221,31 @@ def test_runtime_pool_reuses_scheduled_learned_step_for_next_prepared_ingest(
 
     prepared = model.prepare_propagation(1.0 / 30.0)
 
-    assert calls == 2
+    assert calls == 3  # canonical prepared propagation is always evaluated
     model.ingest(_rgb_packet(1.0 / 30.0, shift=1), prepared=prepared)
-    assert calls == 3  # only the next delayed-evidence forecast was added
+    assert calls == 4  # the next delayed-evidence forecast is separate
     model.ingest(_rgb_packet(2.0 / 30.0, shift=2))
-    assert calls == 4  # ordinary ingest reuses the due forecast as well
+    assert calls == 6  # ordinary canonical propagation plus delayed forecast
+
+
+def test_runtime_pool_keeps_persistent_posterior_bit_exact_to_learned_only() -> None:
+    torch.manual_seed(29)
+    learned_only = OnlineWorldModel.from_config(_rgb_config(), device="cpu")
+    pooled = OnlineWorldModel.from_config(_rgb_hypothesis_config(), device="cpu")
+    pooled.load_state_dict(learned_only.state_dict())
+    learned_only.eval()
+    pooled.eval()
+
+    packets = [_rgb_packet(index / 30.0, shift=index) for index in range(3)]
+    learned_trace = [learned_only.ingest(packet).detach().clone() for packet in packets]
+    pooled_trace = [pooled.ingest(packet).detach().clone() for packet in packets]
+
+    for learned_posterior, pooled_posterior in zip(
+        learned_trace,
+        pooled_trace,
+        strict=True,
+    ):
+        _assert_nested_close(pooled_posterior, learned_posterior)
 
 
 @pytest.mark.parametrize(

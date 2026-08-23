@@ -324,6 +324,8 @@ class RuntimeConfig:
     hypothesis_maximum_evidence_age_seconds: float = 1.0
     hypothesis_minimum_observability: float = 0.0
     hypothesis_minimum_confidence_margin: float = 0.0
+    hypothesis_velocity_evidence_weight: float = 0.0
+    hypothesis_velocity_nonregression_gate_enabled: bool = False
     hypothesis_robust_influence_delta: float = 0.0
     hypothesis_composition_step_seconds: float | None = None
 
@@ -594,6 +596,10 @@ class OrpheusConfig:
             )
         if not isinstance(runtime.hypothesis_local_applicability_enabled, bool):
             raise ValueError("runtime.hypothesis_local_applicability_enabled must be boolean")
+        if not isinstance(runtime.hypothesis_velocity_nonregression_gate_enabled, bool):
+            raise ValueError(
+                "runtime.hypothesis_velocity_nonregression_gate_enabled must be boolean"
+            )
         if (
             not isinstance(runtime.hypothesis_minimum_support_count, int)
             or isinstance(runtime.hypothesis_minimum_support_count, bool)
@@ -609,6 +615,10 @@ class OrpheusConfig:
             (
                 "hypothesis_minimum_confidence_margin",
                 runtime.hypothesis_minimum_confidence_margin,
+            ),
+            (
+                "hypothesis_velocity_evidence_weight",
+                runtime.hypothesis_velocity_evidence_weight,
             ),
             ("hypothesis_robust_influence_delta", runtime.hypothesis_robust_influence_delta),
         ):

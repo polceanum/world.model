@@ -512,6 +512,10 @@ class OnlineWorldModel(nn.Module):
                 ),
                 minimum_observability=config.runtime.hypothesis_minimum_observability,
                 minimum_confidence_margin=(config.runtime.hypothesis_minimum_confidence_margin),
+                velocity_evidence_weight=(config.runtime.hypothesis_velocity_evidence_weight),
+                velocity_nonregression_gate_enabled=(
+                    config.runtime.hypothesis_velocity_nonregression_gate_enabled
+                ),
                 robust_influence_delta=config.runtime.hypothesis_robust_influence_delta,
                 composition_step_seconds=config.runtime.hypothesis_composition_step_seconds,
             )
@@ -686,20 +690,12 @@ class OnlineWorldModel(nn.Module):
         predict_step = getattr(self.dynamics, "predict_step", None)
         if not callable(predict_step):
             raise TypeError("prepared propagation requires dynamics.predict_step")
-        propagation = (
-            self.hypothesis_controller.reusable_learned_step(
-                current,
-                requested,
-                source_revision=self.state.ingest_count,
-                source_tensor_signature=source_tensor_signature,
-                dynamics_tensor_signature=dynamics_tensor_signature_before,
-                dynamics_training=self.dynamics.training,
-            )
-            if self.hypothesis_controller is not None
-            else None
-        )
-        if propagation is None:
-            propagation = predict_step(current, delta_time)
+        # Hypothesis trajectories are delayed evidence and forecast branches,
+        # never physical priors.  Even a learned candidate scheduled from the
+        # same posterior can have a source-plus-horizon timestamp or execution
+        # context that differs from the canonical observation propagation.
+        # Always preserve that single canonical path for persistent belief.
+        propagation = predict_step(current, delta_time)
         if tensor_identity_version_signature(current) != source_tensor_signature:
             raise PreparedPropagationError(
                 "dynamics.predict_step mutated the prepared propagation source belief"
@@ -1049,12 +1045,6 @@ class OnlineWorldModel(nn.Module):
         active_before = int(posterior.objects.active.sum().detach().cpu())
         predicted_belief = posterior
         association = self.associator.match(posterior, measurements, predicted)
-        if self.hypothesis_controller is not None and packet.modality == "rgb":
-            self.hypothesis_controller.assimilate_observation(
-                posterior,
-                measurements,
-                association,
-            )
         innovation = module.innovation(measurements, predicted, association)
         surprise = self.surprise_classifier(innovation, association)
         posterior = self.updater.correct(
@@ -1076,6 +1066,16 @@ class OnlineWorldModel(nn.Module):
             self.state.temporal_histories.pop(packet.sensor_id, None)
         else:
             self.state.temporal_histories[packet.sensor_id] = temporal_history
+        if self.hypothesis_controller is not None and packet.modality == "rgb":
+            # Temporal RGB processing adds causal velocity values, per-axis
+            # validity, and variance to this same measurement set.  Score the
+            # delayed local models only after those fields are available, but
+            # before direct-velocity correction changes persistent belief.
+            self.hypothesis_controller.assimilate_observation(
+                posterior,
+                measurements,
+                association,
+            )
         if velocity_evidence is not None:
             posterior = self.updater.correct_direct_velocity(
                 posterior,
@@ -1245,20 +1245,10 @@ class OnlineWorldModel(nn.Module):
                 predict_step = getattr(self.dynamics, "predict_step", None)
                 prior_interval_collision_mask: Tensor | None = None
                 if callable(predict_step):
-                    propagation = (
-                        self.hypothesis_controller.reusable_learned_step(
-                            current,
-                            requested,
-                            source_revision=self.state.ingest_count,
-                            source_tensor_signature=source_tensor_signature,
-                            dynamics_tensor_signature=dynamics_tensor_signature,
-                            dynamics_training=self.dynamics.training,
-                        )
-                        if self.hypothesis_controller is not None
-                        else None
-                    )
-                    if propagation is None:
-                        propagation = predict_step(current, dt)
+                    # Runtime-pool rollouts are never substituted for the
+                    # canonical persistent-state propagation; see
+                    # ``prepare_propagation`` above.
+                    propagation = predict_step(current, dt)
                     prior = propagation.belief
                     auxiliary = getattr(propagation, "auxiliary", None)
                     if not isinstance(auxiliary, Mapping):

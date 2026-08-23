@@ -423,6 +423,8 @@ def _runtime_checkpoint_semantics(value: object) -> object:
         "hypothesis_maximum_evidence_age_seconds",
         "hypothesis_minimum_observability",
         "hypothesis_minimum_confidence_margin",
+        "hypothesis_velocity_evidence_weight",
+        "hypothesis_velocity_nonregression_gate_enabled",
         "hypothesis_robust_influence_delta",
         "hypothesis_composition_step_seconds",
     )

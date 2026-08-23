@@ -2,6 +2,25 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-23 specification 1.54 forecast-only hypothesis isolation
+
+- Removed all scheduled-rollout reuse from persistent observation propagation;
+  the optional pool can affect forecast outputs and evidence only.
+- Preserved learned trajectory uncertainty during analytic axis substitution
+  and made no-intervention composition exactly equal to canonical learned
+  rollout tensors and timestamps.
+- Added optional causal RGB temporal-velocity scoring and a default-off
+  learned-baseline velocity non-regression veto. Both fields are strict and
+  exact-resume-bound.
+- Added posterior-isolation, learned-uncertainty ownership, exact-abstention,
+  velocity-veto/allow, strict-configuration, and Aqua-MPS regressions.
+- Passed `322` focused CPU tests, `1221` full-suite tests with `18` expected
+  skips in `438.39s`, and one active-Aqua MPS test in `4.89s`.
+- Rejected both fixed-32 CPU selector settings: margin zero used 535 alternative
+  x substeps but slightly regressed every pooled position horizon; confidence
+  `0.001` plus observability `0.5` used only three and remained microscopically
+  worse. No MPS/disjoint promotion ladder or deployment-default change follows.
+
 ### 2026-08-22 specification 1.53 regime-local runtime planning
 
 - Added exact persistent-entity/axis/learned-regime/horizon evidence to the
@@ -12,8 +31,9 @@
   ballistic contact supports free/ground/pair; learned remains universal.
 - Added optional bounded short-step composition that retains learned joint
   lifecycle/event/cross-axis semantics and substitutes only supported local
-  position/velocity/variance. Mixed or nonaligned grids fall back explicitly
-  to learned dynamics.
+  position/velocity state. Specification 1.54 restores learned uncertainty
+  ownership. Mixed or nonaligned grids fall back explicitly to learned
+  dynamics.
 - Extended held-out evaluation with exact candidate/fallback/total, regime,
   grid-fallback, support, age, observability, predictive-variance, and
   confidence diagnostics plus arithmetic partition validation.

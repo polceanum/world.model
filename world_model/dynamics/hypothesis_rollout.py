@@ -453,8 +453,13 @@ class HypothesisRolloutEngine:
         target_mask: Tensor,
         *,
         target_position_log_variance: Tensor | None = None,
+        target_velocities: Tensor | None = None,
+        target_velocity_axis_mask: Tensor | None = None,
+        target_velocity_log_variance: Tensor | None = None,
         target_collision: Tensor | None = None,
         position_weight: float = 1.0,
+        velocity_weight: float = 0.0,
+        velocity_nonregression_gate_enabled: bool = False,
         lifecycle_weight: float = 0.0,
         event_weight: float = 0.0,
         position_gate_ratio: float = 0.0,
@@ -464,7 +469,7 @@ class HypothesisRolloutEngine:
         uncertainty_aware: bool = True,
         temperature: float = 1.0,
     ) -> HypothesisSelection:
-        """Score candidates by masked position NLL and select per batch item.
+        """Score candidates by masked physical NLL and select per batch item.
 
         ``target_mask`` is ``[B,T,N]`` and permits asynchronous/occluded
         observations.  With uncertainty enabled, the score is the Gaussian
@@ -487,10 +492,39 @@ class HypothesisRolloutEngine:
                 raise ValueError("target_position_log_variance must match target_positions")
             if not torch.isfinite(target_position_log_variance).all():
                 raise ValueError("target_position_log_variance contains NaN or Inf")
+        velocity_fields = (
+            target_velocities,
+            target_velocity_axis_mask,
+            target_velocity_log_variance,
+        )
+        if any(value is not None for value in velocity_fields):
+            if not all(isinstance(value, Tensor) for value in velocity_fields):
+                raise ValueError("velocity targets require values, axis mask, and log variance")
+            assert target_velocities is not None
+            assert target_velocity_axis_mask is not None
+            assert target_velocity_log_variance is not None
+            if target_velocities.shape != target_positions.shape:
+                raise ValueError("target_velocities must match target_positions")
+            if target_velocity_axis_mask.shape != target_positions.shape:
+                raise ValueError("target_velocity_axis_mask must match target_positions")
+            if target_velocity_axis_mask.dtype is not torch.bool:
+                raise TypeError("target_velocity_axis_mask must use torch.bool")
+            if target_velocity_log_variance.shape != target_positions.shape:
+                raise ValueError("target_velocity_log_variance must match target_positions")
+            if (
+                not torch.isfinite(target_velocities).all()
+                or not torch.isfinite(target_velocity_log_variance).all()
+            ):
+                raise ValueError("velocity targets contain NaN or Inf")
+        elif velocity_weight or velocity_nonregression_gate_enabled:
+            raise ValueError("velocity scoring requires explicit velocity evidence")
+        if not isinstance(velocity_nonregression_gate_enabled, bool):
+            raise TypeError("velocity_nonregression_gate_enabled must use bool")
         if temperature <= 0 or not torch.isfinite(torch.as_tensor(temperature)):
             raise ValueError("temperature must be finite and positive")
         for name, value in (
             ("position_weight", position_weight),
+            ("velocity_weight", velocity_weight),
             ("lifecycle_weight", lifecycle_weight),
             ("event_weight", event_weight),
             ("position_gate_ratio", position_gate_ratio),
@@ -504,7 +538,7 @@ class HypothesisRolloutEngine:
                 or not torch.isfinite(torch.as_tensor(value))
             ):
                 raise ValueError(f"{name} must be finite and nonnegative")
-        if position_weight + lifecycle_weight + event_weight <= 0:
+        if position_weight + velocity_weight + lifecycle_weight + event_weight <= 0:
             raise ValueError("at least one hypothesis score weight must be positive")
         if position_gate_ratio and position_weight <= 0:
             raise ValueError("position_gate_ratio requires a positive position_weight")
@@ -546,6 +580,15 @@ class HypothesisRolloutEngine:
                 target_positions.shape[-1],
             )
         )
+        uses_velocity_evidence = bool(velocity_weight or velocity_nonregression_gate_enabled)
+        if uses_velocity_evidence:
+            assert target_velocity_axis_mask is not None
+            velocity_axis_evidence_mask = target_velocity_axis_mask.any(dim=(1, 2))
+            velocity_entity_axis_evidence_mask = target_velocity_axis_mask.any(dim=1)
+            axis_evidence_mask = axis_evidence_mask & velocity_axis_evidence_mask
+            entity_axis_evidence_mask = (
+                entity_axis_evidence_mask & velocity_entity_axis_evidence_mask
+            )
         valid_count = mask.sum(dim=(1, 2, 3)).clamp_min(1).to(target_positions.dtype)
         axis_valid_count = target_mask.sum(dim=(1, 2)).clamp_min(1).to(target_positions.dtype)
         entity_valid_count = target_mask.sum(dim=1).clamp_min(1).to(target_positions.dtype)
@@ -554,10 +597,17 @@ class HypothesisRolloutEngine:
             if target_position_log_variance is not None
             else None
         )
+        velocity_measurement_variance = (
+            target_velocity_log_variance.clamp(-20.0, 10.0).exp()
+            if target_velocity_log_variance is not None
+            else None
+        )
         candidate_scores: list[Tensor] = []
         position_scores: list[Tensor] = []
         axis_position_scores: list[Tensor] = []
         entity_axis_position_scores: list[Tensor] = []
+        axis_velocity_scores: list[Tensor] = []
+        entity_axis_velocity_scores: list[Tensor] = []
         event_scores: list[Tensor] = []
         for trajectory in trajectories:
             if trajectory.positions.shape != target_positions.shape:
@@ -584,6 +634,54 @@ class HypothesisRolloutEngine:
             position_score = (point_loss * mask).sum(dim=(1, 2, 3)) / valid_count
             position_scores.append(position_score)
             score = position_weight * position_score
+            if uses_velocity_evidence:
+                assert target_velocities is not None
+                assert target_velocity_axis_mask is not None
+                velocity_mask = target_velocity_axis_mask & target_mask.unsqueeze(-1)
+                velocity_count = (
+                    velocity_mask.sum(dim=(1, 2, 3)).clamp_min(1).to(target_positions.dtype)
+                )
+                velocity_axis_count = (
+                    velocity_mask.sum(dim=(1, 2)).clamp_min(1).to(target_positions.dtype)
+                )
+                velocity_entity_axis_count = (
+                    velocity_mask.sum(dim=1).clamp_min(1).to(target_positions.dtype)
+                )
+                velocity_residual = trajectory.velocities - target_velocities
+                if uncertainty_aware:
+                    velocity_log_variance = trajectory.fast_log_variance[..., 3:6].clamp(
+                        -20.0, 10.0
+                    )
+                    velocity_variance = velocity_log_variance.exp()
+                    if velocity_measurement_variance is not None:
+                        velocity_variance = velocity_variance + velocity_measurement_variance
+                        velocity_log_variance = velocity_variance.log()
+                    velocity_point_loss = (
+                        velocity_residual.square() / velocity_variance + velocity_log_variance
+                    )
+                else:
+                    velocity_point_loss = velocity_residual.square()
+                velocity_axis_score = (velocity_point_loss * velocity_mask).sum(
+                    dim=(1, 2)
+                ) / velocity_axis_count
+                velocity_entity_axis_score = (velocity_point_loss * velocity_mask).sum(
+                    dim=1
+                ) / velocity_entity_axis_count
+                axis_velocity_scores.append(velocity_axis_score)
+                entity_axis_velocity_scores.append(velocity_entity_axis_score)
+                if velocity_weight:
+                    axis_position_scores[-1] = (
+                        position_weight * axis_position_scores[-1]
+                        + velocity_weight * velocity_axis_score
+                    )
+                    entity_axis_position_scores[-1] = (
+                        position_weight * entity_axis_position_scores[-1]
+                        + velocity_weight * velocity_entity_axis_score
+                    )
+                velocity_score = (velocity_point_loss * velocity_mask).sum(
+                    dim=(1, 2, 3)
+                ) / velocity_count
+                score = score + velocity_weight * velocity_score
             if lifecycle_weight:
                 lifecycle_loss = (
                     (trajectory.active_mask != target_mask)
@@ -636,6 +734,26 @@ class HypothesisRolloutEngine:
                 torch.zeros_like(scores),
                 scores.new_full((), 1.0e6),
             )
+        axis_score_matrix = torch.stack(axis_position_scores, dim=-1)
+        entity_axis_score_matrix = torch.stack(entity_axis_position_scores, dim=-1)
+        if velocity_nonregression_gate_enabled:
+            axis_velocity_matrix = torch.stack(axis_velocity_scores, dim=-1)
+            entity_axis_velocity_matrix = torch.stack(entity_axis_velocity_scores, dim=-1)
+            axis_velocity_allowed = axis_velocity_matrix <= axis_velocity_matrix[..., :1] + 1.0e-8
+            entity_axis_velocity_allowed = (
+                entity_axis_velocity_matrix <= entity_axis_velocity_matrix[..., :1] + 1.0e-8
+            )
+            penalty = scores.new_full((), 1.0e6)
+            axis_score_matrix = axis_score_matrix + torch.where(
+                axis_velocity_allowed,
+                torch.zeros_like(axis_score_matrix),
+                penalty,
+            )
+            entity_axis_score_matrix = entity_axis_score_matrix + torch.where(
+                entity_axis_velocity_allowed,
+                torch.zeros_like(entity_axis_score_matrix),
+                penalty,
+            )
         scale = torch.as_tensor(temperature, device=scores.device, dtype=scores.dtype)
         posterior_weights = torch.softmax(-scores / scale, dim=-1)
         selected_index = scores.argmin(dim=-1).to(torch.int64)
@@ -643,8 +761,8 @@ class HypothesisRolloutEngine:
             scores,
             selected_index,
             posterior_weights,
-            axis_scores=torch.stack(axis_position_scores, dim=-1),
-            entity_axis_scores=torch.stack(entity_axis_position_scores, dim=-1),
+            axis_scores=axis_score_matrix,
+            entity_axis_scores=entity_axis_score_matrix,
             evidence_mask=evidence_mask,
             axis_evidence_mask=axis_evidence_mask,
             entity_axis_evidence_mask=entity_axis_evidence_mask,
@@ -1072,8 +1190,13 @@ class HypothesisDynamicsPool:
         *,
         trajectories: Sequence[BeliefTrajectory] | None = None,
         target_position_log_variance: Tensor | None = None,
+        target_velocities: Tensor | None = None,
+        target_velocity_axis_mask: Tensor | None = None,
+        target_velocity_log_variance: Tensor | None = None,
         target_collision: Tensor | None = None,
         position_weight: float = 1.0,
+        velocity_weight: float = 0.0,
+        velocity_nonregression_gate_enabled: bool = False,
         lifecycle_weight: float = 0.0,
         event_weight: float = 0.0,
         position_gate_ratio: float = 0.0,
@@ -1097,8 +1220,13 @@ class HypothesisDynamicsPool:
             target_positions,
             target_mask,
             target_position_log_variance=target_position_log_variance,
+            target_velocities=target_velocities,
+            target_velocity_axis_mask=target_velocity_axis_mask,
+            target_velocity_log_variance=target_velocity_log_variance,
             target_collision=target_collision,
             position_weight=position_weight,
+            velocity_weight=velocity_weight,
+            velocity_nonregression_gate_enabled=velocity_nonregression_gate_enabled,
             lifecycle_weight=lifecycle_weight,
             event_weight=event_weight,
             position_gate_ratio=position_gate_ratio,
@@ -1657,6 +1785,8 @@ class RuntimeHypothesisController:
         maximum_evidence_age_seconds: float = 1.0,
         minimum_observability: float = 0.0,
         minimum_confidence_margin: float = 0.0,
+        velocity_evidence_weight: float = 0.0,
+        velocity_nonregression_gate_enabled: bool = False,
         robust_influence_delta: float = 0.0,
         composition_step_seconds: float | None = None,
     ) -> None:
@@ -1675,6 +1805,8 @@ class RuntimeHypothesisController:
             raise ValueError("timestamp_tolerance_seconds must be finite and nonnegative")
         if not isinstance(local_applicability_enabled, bool):
             raise ValueError("local_applicability_enabled must be boolean")
+        if not isinstance(velocity_nonregression_gate_enabled, bool):
+            raise ValueError("velocity_nonregression_gate_enabled must be boolean")
         if (
             not isinstance(minimum_support_count, int)
             or isinstance(minimum_support_count, bool)
@@ -1685,6 +1817,7 @@ class RuntimeHypothesisController:
             ("maximum_evidence_age_seconds", maximum_evidence_age_seconds),
             ("minimum_observability", minimum_observability),
             ("minimum_confidence_margin", minimum_confidence_margin),
+            ("velocity_evidence_weight", velocity_evidence_weight),
             ("robust_influence_delta", robust_influence_delta),
         ):
             if (
@@ -1734,6 +1867,8 @@ class RuntimeHypothesisController:
         self.maximum_evidence_age_seconds = float(maximum_evidence_age_seconds)
         self.minimum_observability = float(minimum_observability)
         self.minimum_confidence_margin = float(minimum_confidence_margin)
+        self.velocity_evidence_weight = float(velocity_evidence_weight)
+        self.velocity_nonregression_gate_enabled = velocity_nonregression_gate_enabled
         self.robust_influence_delta = float(robust_influence_delta)
         self.composition_step_seconds = (
             None if composition_step_seconds is None else float(composition_step_seconds)
@@ -2038,79 +2173,39 @@ class RuntimeHypothesisController:
                 )
             )
 
-    def reusable_learned_step(
-        self,
-        belief: WorldBelief,
-        target_timestamp: Tensor,
-        *,
-        source_revision: int,
-        source_tensor_signature: object,
-        dynamics_tensor_signature: object,
-        dynamics_training: bool,
-    ) -> RolloutStep | None:
-        """Reuse the exact due learned forecast for the next propagation.
-
-        A scheduled learned candidate starts from the same corrected posterior
-        as the next normal prior.  Reusing it removes duplicate model work, but
-        only when identity, revision, tensor versions, model state, and target
-        timestamp still match exactly.  Historical forecasts remain pending
-        for evidence even when they are no longer safe propagation caches.
-        """
-
-        for pending in reversed(self.pending):
-            if pending.source is not belief:
-                continue
-            if pending.source_revision != source_revision:
-                continue
-            if pending.source_tensor_signature != source_tensor_signature:
-                continue
-            if pending.dynamics_tensor_signature != dynamics_tensor_signature:
-                continue
-            if pending.dynamics_training != dynamics_training:
-                continue
-            if not bool(
-                torch.all(
-                    (pending.due_timestamp - target_timestamp).abs()
-                    <= self.timestamp_tolerance_seconds
-                )
-            ):
-                continue
-            timestamp_snap = target_timestamp - pending.learned_step.belief.timestamp
-            if not bool(torch.all(timestamp_snap.abs() <= self.timestamp_tolerance_seconds)):
-                continue
-            if torch.equal(pending.learned_step.belief.timestamp, target_timestamp):
-                return pending.learned_step
-            # Observation clocks commonly construct frame timestamps by
-            # absolute index while the pending endpoint uses source+horizon;
-            # float32 round-off can differ by one ULP.  The configured exact-
-            # evidence tolerance defines these instants as the same causal
-            # endpoint. Retimestamp a fresh wrapper (never the historical
-            # evidence) and expose the bounded snap explicitly.
-            return RolloutStep(
-                belief=pending.learned_step.belief.replace(
-                    timestamp=target_timestamp.detach().clone()
-                ),
-                event_logits=pending.learned_step.event_logits,
-                auxiliary={
-                    **pending.learned_step.auxiliary,
-                    "hypothesis_timestamp_snap_seconds": timestamp_snap.detach().clone(),
-                },
-            )
-        return None
-
     @staticmethod
     def _associated_rgb_targets(
         belief: WorldBelief,
         measured: object,
         association: object,
         source_object_ids: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor | None] | None:
+    ) -> (
+        tuple[
+            Tensor,
+            Tensor,
+            Tensor | None,
+            Tensor | None,
+            Tensor | None,
+            Tensor | None,
+        ]
+        | None
+    ):
         """Map associated RGB back-projections to persistent candidate slots."""
 
         auxiliary = getattr(measured, "auxiliary", None)
         positions = auxiliary.get("world_position") if isinstance(auxiliary, dict) else None
         position_log_variance = (
             auxiliary.get("world_position_log_variance") if isinstance(auxiliary, dict) else None
+        )
+        velocity = auxiliary.get("world_velocity") if isinstance(auxiliary, dict) else None
+        velocity_log_variance = (
+            auxiliary.get("world_velocity_log_variance") if isinstance(auxiliary, dict) else None
+        )
+        velocity_valid = (
+            auxiliary.get("world_velocity_valid_mask") if isinstance(auxiliary, dict) else None
+        )
+        velocity_axis_valid = (
+            auxiliary.get("world_velocity_axis_valid_mask") if isinstance(auxiliary, dict) else None
         )
         measurement_mask = getattr(measured, "measurement_mask", None)
         pair_mask = getattr(association, "pair_mask", None)
@@ -2141,6 +2236,30 @@ class RuntimeHypothesisController:
             or not torch.isfinite(position_log_variance).all()
         ):
             return None
+        velocity_fields = (
+            velocity,
+            velocity_log_variance,
+            velocity_valid,
+            velocity_axis_valid,
+        )
+        if any(value is not None for value in velocity_fields):
+            if not all(isinstance(value, Tensor) for value in velocity_fields):
+                return None
+            assert isinstance(velocity, Tensor)
+            assert isinstance(velocity_log_variance, Tensor)
+            assert isinstance(velocity_valid, Tensor)
+            assert isinstance(velocity_axis_valid, Tensor)
+            if (
+                velocity.shape != expected
+                or velocity_log_variance.shape != expected
+                or velocity_valid.shape != measurement_mask.shape
+                or velocity_axis_valid.shape != expected
+                or velocity_valid.dtype is not torch.bool
+                or velocity_axis_valid.dtype is not torch.bool
+                or not torch.isfinite(velocity).all()
+                or not torch.isfinite(velocity_log_variance).all()
+            ):
+                return None
         target = belief.objects.position.new_zeros(belief.objects.position.shape)
         target_log_variance = (
             belief.objects.position.new_zeros(belief.objects.position.shape)
@@ -2148,6 +2267,21 @@ class RuntimeHypothesisController:
             else None
         )
         target_mask = torch.zeros_like(belief.objects.active)
+        target_velocity = (
+            belief.objects.velocity.new_zeros(belief.objects.velocity.shape)
+            if isinstance(velocity, Tensor)
+            else None
+        )
+        target_velocity_log_variance = (
+            belief.objects.velocity.new_zeros(belief.objects.velocity.shape)
+            if isinstance(velocity_log_variance, Tensor)
+            else None
+        )
+        target_velocity_axis_mask = (
+            torch.zeros_like(belief.objects.velocity, dtype=torch.bool)
+            if isinstance(velocity_axis_valid, Tensor)
+            else None
+        )
         for batch_index in range(belief.batch_size):
             for pair_index in (
                 torch.nonzero(pair_mask[batch_index], as_tuple=False).flatten().tolist()
@@ -2175,8 +2309,34 @@ class RuntimeHypothesisController:
                         batch_index,
                         measurement_index,
                     ]
+                if target_velocity is not None:
+                    assert isinstance(velocity, Tensor)
+                    assert isinstance(velocity_log_variance, Tensor)
+                    assert isinstance(velocity_valid, Tensor)
+                    assert isinstance(velocity_axis_valid, Tensor)
+                    assert target_velocity_log_variance is not None
+                    assert target_velocity_axis_mask is not None
+                    target_velocity[batch_index, slot] = velocity[
+                        batch_index,
+                        measurement_index,
+                    ]
+                    target_velocity_log_variance[batch_index, slot] = velocity_log_variance[
+                        batch_index,
+                        measurement_index,
+                    ]
+                    target_velocity_axis_mask[batch_index, slot] = (
+                        velocity_valid[batch_index, measurement_index]
+                        & velocity_axis_valid[batch_index, measurement_index]
+                    )
                 target_mask[batch_index, slot] = True
-        return target, target_mask, target_log_variance
+        return (
+            target,
+            target_mask,
+            target_log_variance,
+            target_velocity,
+            target_velocity_axis_mask,
+            target_velocity_log_variance,
+        )
 
     def assimilate_observation(
         self,
@@ -2205,8 +2365,22 @@ class RuntimeHypothesisController:
             )
             if targets is None:
                 continue
-            target_positions, target_mask, target_position_log_variance = targets
+            (
+                target_positions,
+                target_mask,
+                target_position_log_variance,
+                target_velocities,
+                target_velocity_axis_mask,
+                target_velocity_log_variance,
+            ) = targets
             if not bool(target_mask.any()):
+                continue
+            uses_velocity_evidence = bool(
+                self.velocity_evidence_weight or self.velocity_nonregression_gate_enabled
+            )
+            if uses_velocity_evidence and (
+                target_velocity_axis_mask is None or not bool(target_velocity_axis_mask.any())
+            ):
                 continue
             if self.local_applicability_enabled and pending.entity_regime is None:
                 raise RuntimeError("local hypothesis evidence is missing its scheduled regime")
@@ -2220,6 +2394,17 @@ class RuntimeHypothesisController:
                 entity_axis_observability,
                 torch.zeros_like(entity_axis_observability),
             )
+            if uses_velocity_evidence:
+                assert target_velocity_axis_mask is not None
+                assert target_velocity_log_variance is not None
+                velocity_observability = 1.0 / (
+                    1.0 + target_velocity_log_variance.clamp(-20.0, 10.0).exp()
+                )
+                entity_axis_observability = torch.where(
+                    target_velocity_axis_mask,
+                    torch.minimum(entity_axis_observability, velocity_observability),
+                    torch.zeros_like(entity_axis_observability),
+                )
             latest = self.pools[pending.horizon_index].assimilate(
                 belief,
                 target_positions.unsqueeze(1),
@@ -2230,6 +2415,21 @@ class RuntimeHypothesisController:
                     if target_position_log_variance is not None
                     else None
                 ),
+                target_velocities=(
+                    target_velocities.unsqueeze(1) if target_velocities is not None else None
+                ),
+                target_velocity_axis_mask=(
+                    target_velocity_axis_mask.unsqueeze(1)
+                    if target_velocity_axis_mask is not None
+                    else None
+                ),
+                target_velocity_log_variance=(
+                    target_velocity_log_variance.unsqueeze(1)
+                    if target_velocity_log_variance is not None
+                    else None
+                ),
+                velocity_weight=self.velocity_evidence_weight,
+                velocity_nonregression_gate_enabled=(self.velocity_nonregression_gate_enabled),
                 axis_prior_strength=self.axis_prior_strength,
                 entity_regime=(pending.entity_regime if self.local_applicability_enabled else None),
                 evidence_timestamp=(timestamp if self.local_applicability_enabled else None),
@@ -2426,7 +2626,6 @@ class RuntimeHypothesisController:
 
                 position = learned_step.belief.objects.position.clone()
                 velocity = learned_step.belief.objects.velocity.clone()
-                fast_log_variance = learned_step.belief.objects.fast_log_variance.clone()
                 for axis in self.axis_independent_axes:
                     axis_active = active
                     axis_supported = applicability.supported[..., axis] & axis_active
@@ -2495,14 +2694,6 @@ class RuntimeHypothesisController:
                             candidate_step.belief.objects.velocity[..., axis],
                             velocity[..., axis],
                         )
-                        for state_axis in (axis, axis + 3):
-                            if state_axis >= fast_log_variance.shape[-1]:
-                                continue
-                            fast_log_variance[..., state_axis] = torch.where(
-                                selected,
-                                candidate_step.belief.objects.fast_log_variance[..., state_axis],
-                                fast_log_variance[..., state_axis],
-                            )
                 regime_one_hot = torch.nn.functional.one_hot(
                     regime,
                     num_classes=NUM_HYPOTHESIS_REGIMES,
@@ -2513,7 +2704,6 @@ class RuntimeHypothesisController:
                 composed_objects = learned_step.belief.objects.replace(
                     position=position,
                     velocity=velocity,
-                    fast_log_variance=fast_log_variance,
                 )
                 current = learned_step.belief.replace(objects=composed_objects)
                 collision_logits = learned_step.event_logits[..., MotionMode.COLLISION]
@@ -2571,19 +2761,46 @@ class RuntimeHypothesisController:
             total_step_count_values.append(segment_total_count)
             regime_step_count_values.append(segment_regime_count)
 
+        candidate_step_counts = torch.stack(candidate_step_count_values, dim=1)
+        scene_intervened = candidate_step_counts[..., 1:].sum(dim=(2, 3, 4)) > 0
+        composed_positions = torch.stack([item.objects.position for item in beliefs], dim=1)
+        composed_velocities = torch.stack([item.objects.velocity for item in beliefs], dim=1)
+        composed_orientations = torch.stack([item.objects.orientation for item in beliefs], dim=1)
+        composed_modes = torch.stack([item.objects.motion_mode_logits for item in beliefs], dim=1)
+        composed_variance = torch.stack([item.objects.fast_log_variance for item in beliefs], dim=1)
+        composed_active = torch.stack([item.objects.active for item in beliefs], dim=1)
+        composed_events = torch.stack(event_values, dim=1)
+        trajectory_timestamps = belief.timestamp.unsqueeze(1) + offsets
+        if not bool(scene_intervened.all()):
+            canonical = pool.rollout_engine.rollout_dynamics(
+                (pool.dynamics_models[0],),
+                belief,
+                offsets,
+            )[0]
+            state_mask = scene_intervened.unsqueeze(-1).unsqueeze(-1)
+            node_mask = scene_intervened.unsqueeze(-1)
+            composed_positions = torch.where(state_mask, composed_positions, canonical.positions)
+            composed_velocities = torch.where(state_mask, composed_velocities, canonical.velocities)
+            composed_orientations = torch.where(
+                state_mask, composed_orientations, canonical.orientations
+            )
+            composed_modes = torch.where(state_mask, composed_modes, canonical.motion_mode_logits)
+            composed_variance = torch.where(
+                state_mask, composed_variance, canonical.fast_log_variance
+            )
+            composed_active = torch.where(node_mask, composed_active, canonical.active_mask)
+            composed_events = torch.where(state_mask, composed_events, canonical.event_logits)
+            trajectory_timestamps = canonical.timestamps
+
         return BeliefTrajectory(
-            timestamps=torch.stack([item.timestamp for item in beliefs], dim=1),
-            positions=torch.stack([item.objects.position for item in beliefs], dim=1),
-            velocities=torch.stack([item.objects.velocity for item in beliefs], dim=1),
-            orientations=torch.stack([item.objects.orientation for item in beliefs], dim=1),
-            motion_mode_logits=torch.stack(
-                [item.objects.motion_mode_logits for item in beliefs], dim=1
-            ),
-            fast_log_variance=torch.stack(
-                [item.objects.fast_log_variance for item in beliefs], dim=1
-            ),
-            active_mask=torch.stack([item.objects.active for item in beliefs], dim=1),
-            event_logits=torch.stack(event_values, dim=1),
+            timestamps=trajectory_timestamps,
+            positions=composed_positions,
+            velocities=composed_velocities,
+            orientations=composed_orientations,
+            motion_mode_logits=composed_modes,
+            fast_log_variance=composed_variance,
+            active_mask=composed_active,
+            event_logits=composed_events,
             auxiliary={
                 "hypothesis_axis_index": torch.stack(choice_values, dim=1),
                 "hypothesis_axis_supported": torch.stack(supported_values, dim=1),
@@ -2595,9 +2812,7 @@ class RuntimeHypothesisController:
                 ),
                 "hypothesis_axis_confidence_margin": torch.stack(confidence_values, dim=1),
                 "hypothesis_interaction_regime": torch.stack(regime_values, dim=1),
-                "hypothesis_composed_candidate_step_count": torch.stack(
-                    candidate_step_count_values, dim=1
-                ),
+                "hypothesis_composed_candidate_step_count": candidate_step_counts,
                 "hypothesis_composed_fallback_step_count": torch.stack(
                     fallback_step_count_values, dim=1
                 ),
@@ -2758,13 +2973,8 @@ class RuntimeHypothesisController:
             trajectories = [learned, *alternatives]
         positions = learned.positions.clone()
         velocities = learned.velocities.clone()
-        fast_log_variance = learned.fast_log_variance.clone()
         candidate_positions = torch.stack([item.positions for item in trajectories], dim=-1)
         candidate_velocities = torch.stack([item.velocities for item in trajectories], dim=-1)
-        candidate_fast_log_variance = torch.stack(
-            [item.fast_log_variance for item in trajectories],
-            dim=-1,
-        )
         local_index = torch.empty(
             len(self.pool.dynamics_models),
             device=belief.device,
@@ -2794,26 +3004,16 @@ class RuntimeHypothesisController:
                     1,
                 ),
             ).squeeze(-1)
-            for state_axis in (axis, axis + 3):
-                if state_axis >= fast_log_variance.shape[-1]:
-                    continue
-                fast_log_variance[..., state_axis] = torch.gather(
-                    candidate_fast_log_variance[..., state_axis, :],
-                    -1,
-                    selected.expand(
-                        belief.batch_size,
-                        fast_log_variance.shape[1],
-                        fast_log_variance.shape[2],
-                        1,
-                    ),
-                ).squeeze(-1)
         return BeliefTrajectory(
             timestamps=learned.timestamps,
             positions=positions,
             velocities=velocities,
             orientations=learned.orientations,
             motion_mode_logits=learned.motion_mode_logits,
-            fast_log_variance=fast_log_variance,
+            # Analytic alternatives do not own a calibrated predictive
+            # uncertainty model.  Keep the learned trajectory's uncertainty
+            # while composing only the explicitly selected physical axes.
+            fast_log_variance=learned.fast_log_variance,
             active_mask=learned.active_mask,
             event_logits=learned.event_logits,
             auxiliary={

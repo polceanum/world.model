@@ -1,5 +1,37 @@
 # Project status
 
+## Specification 1.54 forecast-only hypothesis isolation — rejected selector, accepted safety boundary 2026-08-23
+
+The successor runtime pool no longer reuses scheduled hypothesis rollouts as
+ordinary or prepared physical priors. Persistent `WorldBelief` propagation is
+always canonical learned dynamics, while the pool remains a future-forecast
+and delayed-evidence branch. Fixed-32 CPU evidence now preserves the exact
+learned posterior trace (`5ecb850d...`) and all `posterior_current*` metrics.
+Composed forecasts keep learned uncertainty, and a query with no non-learned
+intervention copies every physical tensor and timestamp from one canonical
+learned rollout exactly.
+
+Optional RGB temporal-velocity scoring is now available after causal temporal
+history update. The strict default-off non-regression gate vetoes an entity-
+axis alternative whose uncertainty-aware velocity evidence is worse than the
+learned candidate. Both new fields are strict and exact-resume-bound. No
+simulator state or posterior target is used.
+
+The selector remains rejected. A margin-zero fixed-32 CPU diagnostic used 535
+non-learned x substeps but regressed all five pooled position horizons by
+`2.66e-6..8.93e-6` m and four velocity horizons. Confidence `0.001` plus
+observability `0.5` reduced use to three substeps and produced only microscopic
+0.10/0.25-second regressions before exact learned fallback. These reports are
+dirty-source diagnostic evidence, not a source-frozen promotion pair; their
+SHA-256 values are `e6cfd548...` (reference), `d90ae8ba...` (margin zero),
+and `c4dee191...` (conservative). No MPS fixed-32 or disjoint ladder is
+authorized, and the learned deployment default remains protected.
+
+Verification on the current implementation: focused CPU `322 passed`; full
+repository `1221 passed, 18 skipped in 438.39s`; focused active-Aqua MPS
+velocity-veto `1 passed in 4.89s`; Ruff and diff checks are clean. A final
+clean source-frozen CPU pair is pending only as formal rejection confirmation.
+
 ## Specification 1.53 regime-local runtime planning — implementation gate 2026-08-22
 
 The opt-in heterogeneous runtime pool now makes applicability local to
@@ -13,9 +45,9 @@ unsupported cell. No simulator truth or candidate output classifies regime.
 
 Optional bounded composition recursively advances the learned joint state at
 a configured evidence-horizon step and splices only supported position/
-velocity axes plus their variance. Learned lifecycle, identity, event,
-cross-axis, and unsupported outputs remain authoritative. Nonaligned or mixed
-query grids produce an explicit learned fallback. All seven new runtime
+velocity axes. Learned uncertainty, lifecycle, identity, event, cross-axis,
+and unsupported outputs remain authoritative. Nonaligned or mixed query grids
+produce an explicit learned fallback. All seven specification-1.53 runtime
 fields default to disabled/legacy values and are strict and exact-resume-bound;
 the normal runtime and active specification-1.52 treatment are unchanged.
 

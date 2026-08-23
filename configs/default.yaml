@@ -139,6 +139,8 @@ runtime:
   hypothesis_maximum_evidence_age_seconds: 1.0
   hypothesis_minimum_observability: 0.0
   hypothesis_minimum_confidence_margin: 0.0
+  hypothesis_velocity_evidence_weight: 0.0
+  hypothesis_velocity_nonregression_gate_enabled: false
   hypothesis_robust_influence_delta: 0.0
   hypothesis_composition_step_seconds: null
 
