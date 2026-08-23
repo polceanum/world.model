@@ -21,7 +21,8 @@
   deployment with zero residual gains.
 - [x] Recover and record the rejected specification-1.52 step-512/1024
   treatment evidence; localize the next repair to axis/uncertainty ownership.
-- [ ] Commit and push the synchronized specification-1.55 rejection record.
+- [x] Commit and push the synchronized specification-1.55 rejection record
+  (`46f98d8`).
 
 ## Forecast-only hypothesis isolation — specification 1.54
 

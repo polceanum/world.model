@@ -26,7 +26,8 @@ The final repository gate is `1229 passed, 20 skipped in 447.14s`; focused
 active-Aqua MPS residual execution passes in `4.82s`. The probe SHA-256 is
 `82777b94...`; reference and candidate comparison hashes are recorded in
 PROJECT_SPEC section 249. These are dirty-source diagnostics, not promotion
-evidence.
+evidence. Implementation and the synchronized rejection record were published
+on commit `46f98d8`.
 
 Recovered specification-1.52 treatment evidence also closes a stale record.
 The run reached fixed validation at steps 512 and 1024 before manual
