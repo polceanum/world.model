@@ -4901,7 +4901,7 @@
 ## ADR-172 — Route event supervision only to the typed collision owner
 
 - **Date:** 2026-08-23
-- **Status:** ownership and paired wiring accepted; accuracy pending
+- **Status:** mechanism retained; accuracy candidates rejected
 - **Context:** Specification 1.58 bounded the rare uncertainty gradient and
   improved the pooled selector at step 32, but two baseline collision-F1
   slices still failed. Event BCE on frozen state heads had previously produced
@@ -4940,6 +4940,15 @@
   raises. The failed run is terminal and must not be resumed. The repaired
   repository gate is `1269 passed, 20 skipped`; fresh accuracy restarts from
   the immutable initializer.
+  The fresh step-16 candidate then fails minimum improvement and heavy-light
+  1-second identity association coverage. Step 32 is mechanically exact and
+  clears minimum score improvement with maximum raw norm `1.632861`, but
+  retains the exact two baseline current/0.1-second collision-F1 failures.
+  Collision row 1 moves non-vacuously, yet trades one false positive for one
+  lost true positive; pooled F1 also falls. Audits are `03a4b5f0...` and
+  `f19fe665...`. Retain the typed routing mechanism, reject both candidates,
+  and separate node-level selector ownership from pair-level BCE before any
+  new accuracy run. Deployment remains step zero.
 
 ## ADR-171 — Bound extreme uncertainty gradients without changing proper scores
 

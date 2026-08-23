@@ -34,6 +34,13 @@
 - Passed the repaired focused gate (`322 passed, 1 skipped`) and full repository
   gate (`1269 passed, 20 skipped in 444.93s`) plus Ruff, 224-file format,
   compile, version, and diff checks. Fresh accuracy restarts from step zero.
+- Rejected the fresh step-16 candidate for minimum improvement and heavy-light
+  1-second identity association coverage (`03a4b5f0...`).
+- Rejected the fresh step-32 candidate despite clearing minimum improvement.
+  Exact ownership, two sparse draws, no clip/retry, and maximum raw norm
+  `1.632861` hold, but the same baseline current/0.1-second collision-F1 slices
+  fail and pooled F1 falls. Audit/checkpoint SHAs are `f19fe665...`/`4f4a51f8...`.
+  Preserve step zero and separate node/pair event supervision next.
 
 ### 2026-08-23 specification 1.58 robust uncertainty influence
 

@@ -54,8 +54,25 @@ candidate and is not resumable evidence.
 The repaired focused schedule/objective/checkpoint gate passes `322 passed, 1
 skipped`; the final repository passes `1269 passed, 20 skipped in 444.93s`.
 Whole-tree Ruff, the 224-file format check, compileall, version, and diff gates
-pass. A fresh-from-initializer step-16 rerun is required; the failed run must
-not be resumed.
+pass.
+
+Fresh step-16 and step-32 accuracy rungs are complete and rejected. Step 16
+applies all updates with exact ownership, handles sparse event support only at
+update 6, and never clips or retries. Score improves by `5.7653e-6`, below the
+`1e-5` requirement, and heavy-light 1-second identity association coverage
+fails. Audit SHA-256 is `03a4b5f0...`.
+
+Step 32 applies all updates, handles sparse support only at updates 6 and 23,
+never clips/retries, and has maximum raw norm `1.632861`. Score improves by
+`1.4255e-5`, clearing minimum improvement, but the exact two baseline
+collision-F1 failures from specification 1.58 remain. The learned row trades
+one false positive for one lost true positive at current/0.1 seconds; pooled
+collision F1 also falls `0.266563 -> 0.264132`. Only collision row 1 moves
+(`1.82117e-4` weight L2, `1.75639e-5` bias). Audit SHA-256 is `f19fe665...`;
+checkpoint SHA-256 is `4f4a51f8...`. Do not continue, interpolate, or promote
+either candidate. The mechanism is retained, deployment remains step zero,
+and the next protocol must separate node-level selector supervision from pair-
+level event evidence before another training rung.
 
 ## Specification 1.58 robust uncertainty influence — mechanism retained, candidates rejected 2026-08-23
 

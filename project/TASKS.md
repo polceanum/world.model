@@ -23,9 +23,13 @@
 - [x] Repair the real sparse-event draw failure: absent event support now keeps
   the physical update and collision owner untouched, while a present detached
   event term remains fail-closed. Pass `1269/20` on the final repaired tree.
-- [ ] Run fresh step-16/32 fixed-manifest accuracy from the immutable
-  initializer. Do not resume the terminal failed update-6 attempt, and do not
-  continue or promote unless every pooled and scenario guardrail passes.
+- [x] Run fresh step-16/32 fixed-manifest accuracy from the immutable
+  initializer. Reject step 16 for minimum improvement plus heavy-light
+  identity coverage; reject step 32 after it clears minimum improvement but
+  retains both baseline collision-F1 failures (`03a4b5f0...`/`f19fe665...`).
+- [ ] Separate node-level collision supervision from pair-level event evidence
+  and measure their typed-row gradient conflict before another bounded rung.
+  Do not continue, interpolate, or promote either rejected spec-1.59 candidate.
 
 ## Forward-exact robust uncertainty influence — specification 1.58
 

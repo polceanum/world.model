@@ -8744,6 +8744,35 @@ final repository gate is `1269 passed, 20 skipped in 444.93s`, with Ruff,
 224-file format, compileall, version, and diff checks clean. Accuracy must be
 rerun fresh from the immutable initializer.
 
+The fresh bounded accuracy rungs reject the current objective while retaining
+the mechanism. Step 16 completes with exact eight-tensor ownership, one sparse
+event draw, no clip/retry, and complete fixed-32 support. Its score improvement
+is only `5.7653e-6`, and heavy-light 1-second identity association coverage
+fails. The audit is
+`/private/tmp/20260823-spec159-direct-collision-step16-audit.json`, SHA-256
+`03a4b5f014f9696b44966e6714e7325174cdf6118e2a0c6ea9b567b2b0b63cdf`.
+
+Step 32 also preserves exact ownership and complete support, handles sparse
+event draws only at updates `6` and `23`, never clips or retries, and reaches
+maximum raw norm `1.632861`. Selector score improves
+`0.23952864 -> 0.23951438`, clearing minimum improvement. Nevertheless, the
+same baseline current and 0.1-second collision-F1 guardrails that rejected
+specification 1.58 remain. Collision row 1 changes non-vacuously (weight L2
+`1.82117e-4`, bias magnitude `1.75639e-5`), but the resulting decisions trade
+one false positive for one true positive becoming false negative; pooled F1
+falls `0.266563 -> 0.264132`. The audit is
+`/private/tmp/20260823-spec159-direct-collision-step32-audit.json`, SHA-256
+`f19fe665174342c8a1594e647b065e1758012c6cc4a7edbba5144aa7a4173def`;
+checkpoint SHA-256 is
+`4f4a51f80c8123185da1cbdc543d77f27ebac59324685a149d5ab0c490af47dc`.
+
+These are terminal accuracy results for the current direct-owner objective.
+Do not resume, interpolate, or promote either checkpoint. Retain the typed
+row-routing mechanism and protected step-zero deployment. Before another
+training rung, separate node-level collision supervision (the selector-owned
+decision) from pair-level event evidence and measure their gradient agreement;
+increasing weight or duration without that attribution is not authorized.
+
 ---
 
 # Closing directive
