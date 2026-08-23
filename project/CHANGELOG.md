@@ -16,8 +16,14 @@
   at the owned heads and stayed finite below clipping. This is routing evidence
   only.
 - Passed the full repository gate (`1249 passed, 20 skipped in 454.79s`) plus
-  Ruff, format, compile, version, and diff checks. Clean paired-smoke and
-  fixed-manifest accuracy gates remain pending.
+  Ruff, format, compile, version, and diff checks.
+- Passed the clean two-update wiring pair with exact common step-zero physical
+  evidence, deterministic draws, and exact six-head/x-y-row ownership.
+- Rejected the accuracy candidate. Step 32 improved pooled score and reduced
+  the earlier failure burden to five, but retained event/identity regressions.
+  Step 48 produced a `5230.0088` raw gradient spike and 11 fixed-manifest
+  failures. A 75% interpolation retained all five step-32 failures. No
+  checkpoint was promoted; default-null behavior and step-zero deployment stay.
 
 ### 2026-08-23 specification 1.56 exact lateral updater-head ownership
 

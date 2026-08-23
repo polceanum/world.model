@@ -1,6 +1,6 @@
 # Project status
 
-## Specification 1.57 scenario-tail objective — pre-launch gate 2026-08-23
+## Specification 1.57 scenario-tail objective — retained mechanism, rejected candidate 2026-08-23
 
 An opt-in scenario-tail reduction now targets the failure mode hidden by pooled
 means in specification 1.56. Current and rollout physical/NLL losses are split
@@ -19,9 +19,21 @@ finite component norms and no clipping. The focused implementation gate is
 in 454.79s`. Ruff, format, compile, version, and diff checks pass. The
 calibrated report SHA-256 is `959869ad...`.
 
-This remains pre-accuracy evidence. A clean frozen tail-on/tail-off two-update
-pair and a bounded fixed-32 checkpoint comparison are pending. Deployment
-stays at the protected step-zero incumbent.
+The clean paired two-update gate passes: configs differ only in tail fraction,
+all `5700` common step-zero physical/seed/scenario fields are exact, seed draws
+match, and only the six permitted x/y head tensors own finite optimizer state.
+Audit SHA-256 is `c57f3f56...`.
+
+Accuracy qualification rejects the candidate. Step 32 improves selector
+`0.23952864 -> 0.23950921` and contracts the prior 21-failure burden to five,
+with exact ownership and complete support, but event/identity guardrails still
+fail. Continuing to step 48 yields raw gradient norm `5230.0088` (contained by
+global clipping) and expands fixed-32 failures to 11 despite a better pooled
+score `0.23947856`. A 75% interpolation still has the same five step-32
+failures. The run was interrupted, no candidate was promoted, and deployment
+remains the protected step-zero incumbent. The next objective must bound
+per-term influence and address event/identity through direct semantic ownership
+or an equivalent protected-base constraint.
 
 ## Specification 1.56 exact lateral updater ownership — implementation gate 2026-08-23
 

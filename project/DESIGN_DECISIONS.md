@@ -4872,7 +4872,7 @@
 ## ADR-170 — Optimize the worst supported scenario rows per physical axis
 
 - **Date:** 2026-08-23
-- **Status:** implementation accepted; accuracy qualification pending
+- **Status:** mechanism retained; accuracy candidate rejected
 - **Context:** Exact x/y head ownership improved pooled specification-1.56
   metrics but failed 21 guardrails by step 128 and 34 by step 512. Failures
   rotated across scenario, axis, horizon, NLL, event, and identity slices, so
@@ -4889,9 +4889,14 @@
   optimize an uncalibrated maximum; or change runtime inference.
 - **Consequences:** A real balanced CPU probe produces finite recursive
   rollout/event gradients and owned-head norm `0.11139997`, `1.6526x` the
-  one-anchor legacy probe, without clipping. This only proves gradient routing.
-  Repository and clean paired gates must precede a bounded fixed-32 diagnostic,
-  and deployment remains the protected step-zero incumbent.
+  one-anchor legacy probe, without clipping. The clean paired gate proves exact
+  step-zero evidence, draws, and six-head ownership. Step 32 improves pooled
+  score and contracts the earlier 21 failures to five, but retains coherent
+  event/identity regressions. Step 48 then produces raw gradient `5230.0088`
+  and expands to 11 collision-dominated failures; 75% head interpolation keeps
+  all five earlier failures. Retain the default-null mechanism, reject every
+  candidate, and require bounded per-objective influence plus direct semantic
+  ownership before another training protocol. Deployment remains step zero.
 
 ## ADR-169 — Restrict the updater repair to lateral typed rows, then reject its unconstrained objective
 

@@ -13,12 +13,18 @@
 - [x] Pass the focused implementation gate (`567 passed, 1 skipped`).
 - [x] Pass whole-repository (`1249 passed, 20 skipped in 454.79s`), Ruff,
   format, compile, version, and diff gates.
-- [ ] Commit and push the frozen source.
-- [ ] Run a clean two-update tail-on/tail-off pair from the immutable
+- [x] Commit and push the frozen source (`b646cd0`).
+- [x] Run a clean two-update tail-on/tail-off pair from the immutable
   initializer and prove exact draws, ownership, finite gradients, and common
   step-zero physical evidence.
-- [ ] Run a bounded fixed-32 checkpoint diagnostic. Stop unless the 21
-  specification-1.56 step-128 failures contract without new guardrail failures.
+- [x] Run bounded fixed-32 step-32 and step-48 diagnostics. Reject step 32 after
+  five event/identity failures; stop at step 48 after raw gradient `5230.0088`
+  and 11 failures despite pooled improvement.
+- [x] Reject 75% step-32 head interpolation after it preserves the same five
+  guardrail failures.
+- [ ] Design a bounded-influence successor with direct event/identity semantic
+  ownership or an equivalent protected-base constraint. Do not resume or
+  initialize from the rejected step-32/48 candidates.
 
 ## Exact lateral updater-head ownership — specification 1.56
 

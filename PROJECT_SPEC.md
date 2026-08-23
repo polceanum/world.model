@@ -8547,14 +8547,41 @@ and `0.04380`; total norm remained far below the global clip. The report is
 `/private/tmp/orpheus-spec157-tail-gradient-probe-calibrated-20260823/report.json`
 with SHA-256 `959869ad...`.
 
-This is gradient-routing evidence, not accuracy, convergence, or promotion
-evidence. The complete repository gate passes `1249` tests with `20` expected
+The clean frozen two-update tail-on/tail-off pair passes its wiring boundary:
+the configurations differ only in tail fraction, all `5700` common step-zero
+physical/seed/scenario values are exact, both seed batches match, and exactly
+the permitted six x/y head tensors own finite Adam state. Treatment gradients
+are materially larger but contained. Both two-update candidates are rejected
+only because their microscopic score changes do not reach the `1e-5` minimum.
+The paired audit is
+`/private/tmp/20260823-111142-spec157-tail-two-update-audit.json`, SHA-256
+`c57f3f56...`.
+
+The clean step-32 rung clears the pooled threshold: score improves
+`0.23952864 -> 0.23950921`, current position and velocity improve slightly,
+and the specification-1.56 step-128 failure burden contracts from `21` to `5`.
+Exact six-head/x-y-row ownership and full `32/32` seed plus `8/8` scenario
+support hold. The remaining failures are pooled and reference-pair 0.75-second
+collision F1, reference-pair 0.25-second identity mismatch, and heavy-light
+1-second association coverage. One of 32 updates clips and two unsupported
+draws retry successfully. The candidate remains rejected.
+
+Continuation is unsafe. Update 48 produces a finite raw gradient norm of
+`5230.0088`, globally clipped to `2.0`. Read-only fixed-32 evaluation of that
+durable checkpoint remains forward-finite and improves score to `0.23947856`,
+but failures expand to `11`, dominated by collision regressions. A 75% in-memory
+interpolation of the step-32 heads still clears pooled improvement at
+`0.23951368` but preserves all five failures exactly. Neither interpolation,
+resumption, nor promotion is allowed. The step-32 and step-48 audit SHAs are
+`1757f99f...` and `403e431d...`; deployment remains the protected step-zero
+incumbent.
+
+The complete repository gate passes `1249` tests with `20` expected
 inactive-backend skips in `454.79s`; Ruff, format, compile, version, and diff
-checks pass. A clean frozen two-update tail-on/tail-off pair remains required.
-A bounded fixed-32 checkpoint may continue
-only if the 21 step-128 specification-1.56 failures contract without creating
-new pooled or scenario/axis/horizon uncertainty, event, identity, coverage, or
-physical regressions. Deployment remains the protected step-zero incumbent.
+checks pass. Retain the default-null mechanism for research. A successor must
+bound per-objective influence and give event/identity semantics direct typed
+ownership or an equivalent protected-base constraint; increasing hard-tail
+pressure on these state heads is rejected.
 
 ---
 
