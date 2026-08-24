@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.67
+**Version:** 1.68
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, and raw learned-existence supervision-boundary amendments 24 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, and opt-in dense multi-instance global-discovery amendments 24 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9310,6 +9310,63 @@ confidence, split, or admission follow-up is permitted. A future attempt must
 use a genuinely different multi-instance discovery architecture. Terminal
 evidence is `/private/tmp/20260824-spec167-raw-existence-detector-terminal.json`
 (SHA-256 `7c8cf4985becf2fef1891d31a989f70c994d27cdde6c9d8b6f3e987bf0f8a7a7`).
+
+---
+
+## 262. Opt-in dense multi-instance global discovery
+
+Specification 1.68 introduces one opt-in dense local-maximum global detector
+after the query-detector family reached its terminal accuracy boundary. The
+mode is disabled by default. Disabled models must contain no dense-detector
+state and must preserve historical query-detector construction, checkpoint,
+runtime, and training behavior exactly.
+
+The dense center branch is fixed by the accepted feasibility probe: one
+`3x3` convolution from the configured RGB feature width to 64 channels,
+eight-group normalization, SiLU, and one `1x1` center-logit convolution. This
+branch has exactly `55,553` parameters for the grounded 96-channel backbone.
+It uses deterministic local-maximum top-query decoding and the unchanged
+CenterNet-style focal heatmap objective with two-pixel Gaussian labels. The
+qualified center branch must not acquire a second top-query BCE gradient or
+attribute-loss gradient. A separate `1x1` typed attribute head consumes
+detached center-trunk features and emits radius, inverse-depth residual,
+colour, visibility, seven measurement log variances, and appearance. Runtime
+proposals continue through the existing `GlobalDetectorOutput`, projection,
+structured RGB override, association, lifecycle, and `MeasurementSet`
+contracts. Generated projected centers are training labels only; runtime
+inference consumes RGB features and calibration, never simulator truth.
+
+`model.rgb.dense_global_detector_enabled` is a strict boolean, defaults false,
+and is an exact-resume semantic. The matching
+`training.rgb_pretrain_trainable_scope=dense_global_detector` freezes every
+other parameter, including the historical query detector and shared RGB
+backbone. Weight-only initialization may grow the complete
+`observation_modules.rgb.dense_global_detector.` prefix only when the stored
+model has the explicit legacy-false semantic, the target enables it, and all
+other model semantics match. Partial prefix growth, exact resume across the
+mode boundary, and undeclared model changes fail closed. Run metadata records
+the deterministic module-growth prefix.
+
+The off-repo feasibility evidence is fixed and non-promotional: `181/192`
+(`94.27%`) top-count recall and `181/181` confident precision on the eight-seed,
+eight-anchor three-object manifest, versus protected query-detector evidence
+`56/192` (`29.17%`) and `44/143` (`30.77%`). The exact report is
+`/private/tmp/20260824-spec168-dense-center-feasibility-exact-gate.json`
+(SHA-256 `f7587471fa4810fbf315aa8c47bffdad8b064bd9952899ba69f6bf91bd4bcb06`).
+This result authorizes implementation, not deployment.
+
+Production qualification remains deliberately sequential. First pass focused
+typed-output, focal-gradient, exact-owner, legacy-default, and checkpoint-
+growth tests plus the complete repository gate. That implementation gate is
+green at `1341 passed`, `20` expected unavailable-backend skips in `469.30s`,
+together with Ruff, format, compile, version, and diff validation. Then perform exactly one clean
+fixed-eight production-path repetition with the frozen dense center weights.
+It must retain at least a ten-percentage-point recall improvement over the
+protected query baseline, lose no more than five precision points, preserve
+all eight scenario support, and keep the non-dense production state bit-exact.
+Failure closes this fixed architecture without LR, duration, width, loss,
+threshold, NMS, or admission tuning. Success alone authorizes a fixed-32
+physical gate and then active-Aqua MPS evidence; it is not itself promotion.
 
 ---
 

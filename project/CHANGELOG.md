@@ -15,6 +15,13 @@
   This is feasibility only; full typed measurement emission, checkpoint growth,
   runtime/lifecycle integration, repository gates, and physical/MPS evidence
   remain pending (`f7587471...`).
+- Added specification-1.68 opt-in production integration: the fixed dense
+  center branch and focal objective, detached-feature typed attribute maps,
+  complete global measurement emission, strict dense-only ownership, legacy-
+  false config/exact-resume semantics, and whole-prefix deterministic
+  weight-only growth. Focused gate: 578 passed and four unavailable-MPS skips;
+  full repository gate: 1341 passed and 20 expected skips in 469.30s, with
+  Ruff/format/compile/version/diff clean. The fixed-eight gate remains pending.
 
 ### 2026-08-24 specification 1.67 raw learned-existence supervision repair
 

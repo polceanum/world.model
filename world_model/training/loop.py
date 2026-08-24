@@ -1482,6 +1482,78 @@ def supervised_measurement_losses(
         "geometry": matched & aligned_geometry_support,
     }
     losses = module.training_losses(outputs, targets, masks)
+    dense_center_logits = measurements.auxiliary.get("dense_center_logits")
+    if dense_center_logits is not None:
+        if not isinstance(dense_center_logits, Tensor):
+            raise TypeError("measurements.auxiliary.dense_center_logits must be a Tensor")
+        if dense_center_logits.ndim != 4 or dense_center_logits.shape[:2] != (
+            target_values.shape[0],
+            1,
+        ):
+            raise ValueError("dense_center_logits must have shape [B,1,H,W]")
+        # The dense focal map is the complete objectness objective. Avoid a
+        # second, top-k-only BCE gradient that would change the qualified
+        # center optimization problem.
+        if "rgb_existence" in losses:
+            losses["rgb_existence"] = losses["rgb_existence"].detach()
+        labels = batch.get("labels")
+        if not isinstance(labels, Mapping):
+            raise ValueError("dense center supervision requires batch.labels")
+        projected_center = labels.get("projected_center")
+        projected_valid = labels.get("projected_valid")
+        label_existence = labels.get("existence")
+        label_visibility = labels.get("visible")
+        if not all(
+            isinstance(value, Tensor)
+            for value in (
+                projected_center,
+                projected_valid,
+                label_existence,
+                label_visibility,
+            )
+        ):
+            raise ValueError("dense center supervision requires projected RGB labels")
+        assert isinstance(projected_center, Tensor)
+        assert isinstance(projected_valid, Tensor)
+        assert isinstance(label_existence, Tensor)
+        assert isinstance(label_visibility, Tensor)
+        centres = projected_center[:, frame_index]
+        valid = (
+            projected_valid[:, frame_index].bool()
+            & label_existence[:, frame_index].bool()
+            & label_visibility[:, frame_index].bool()
+        )
+        height, width = dense_center_logits.shape[-2:]
+        x = ((centres[..., 0] + 1.0) * 0.5 * (width - 1)).round()
+        y = ((centres[..., 1] + 1.0) * 0.5 * (height - 1)).round()
+        yy = torch.arange(
+            height,
+            device=centres.device,
+            dtype=centres.dtype,
+        ).view(1, 1, height, 1)
+        xx = torch.arange(
+            width,
+            device=centres.device,
+            dtype=centres.dtype,
+        ).view(1, 1, 1, width)
+        distance_squared = (xx - x[..., None, None]).square() + (yy - y[..., None, None]).square()
+        target_heatmap = torch.exp(-distance_squared / (2.0 * 2.0**2))
+        target_heatmap = torch.where(
+            valid[..., None, None],
+            target_heatmap,
+            torch.zeros_like(target_heatmap),
+        ).amax(dim=1, keepdim=True)
+        probability = dense_center_logits.sigmoid().clamp(1.0e-6, 1.0 - 1.0e-6)
+        positive = target_heatmap.eq(1.0)
+        negative = ~positive
+        negative_weight = (1.0 - target_heatmap).pow(4.0)
+        positive_loss = torch.log(probability) * (1.0 - probability).pow(2.0) * positive
+        negative_loss = (
+            torch.log(1.0 - probability) * probability.pow(2.0) * negative_weight * negative
+        )
+        losses["rgb_dense_center_heatmap"] = -(
+            positive_loss.sum() + negative_loss.sum()
+        ) / positive.sum().clamp_min(1)
     if not losses:
         raise RuntimeError("RGB observation module returned no training losses")
     return losses
@@ -2378,8 +2450,10 @@ def _global_measurement_has_trainable_path(module: torch.nn.Module) -> bool:
     global_detector = getattr(module, "global_detector", None)
     if backbone is None or global_detector is None:
         raise TypeError("RGB module is missing backbone or global_detector")
+    dense_global_detector = getattr(module, "dense_global_detector", None)
     global_modules = (
         global_detector,
+        *((dense_global_detector,) if dense_global_detector is not None else ()),
         *backbone.stages,
         *backbone.projections,
     )

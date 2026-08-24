@@ -103,6 +103,9 @@ class RGBConfig:
     backbone_channels: tuple[int, ...] = (32, 64, 96, 128)
     feature_dim: int = 96
     proposal_queries: int = 10
+    # Opt-in dense local-maximum proposal detector. Disabled preserves the
+    # historical query detector module/state and exact runtime behavior.
+    dense_global_detector_enabled: bool = False
     global_every_steps: int = 12
     roi_size: int = 20
     fast_depth_residual_enabled: bool = False
@@ -1140,6 +1143,8 @@ class OrpheusConfig:
             or not 0.0 < model.rgb.structured_disc_position_confidence <= 1.0
         ):
             raise ValueError("model.rgb.structured_disc_position_confidence must lie in (0, 1]")
+        if not isinstance(model.rgb.dense_global_detector_enabled, bool):
+            raise ValueError("model.rgb.dense_global_detector_enabled must be boolean")
         if not (
             0.0 <= model.lifecycle.occlusion_existence_decay <= model.lifecycle.existence_decay
         ):
@@ -1421,13 +1426,24 @@ class OrpheusConfig:
         if self.training.rgb_pretrain_trainable_scope not in {
             "all",
             "global_detector",
+            "dense_global_detector",
         }:
             raise ValueError(
-                "training.rgb_pretrain_trainable_scope must be 'all' or 'global_detector'"
+                "training.rgb_pretrain_trainable_scope must be 'all', "
+                "'global_detector', or 'dense_global_detector'"
+            )
+        if (
+            self.training.rgb_pretrain_trainable_scope == "dense_global_detector"
+            and not model.rgb.dense_global_detector_enabled
+        ):
+            raise ValueError(
+                "training.rgb_pretrain_trainable_scope=dense_global_detector requires "
+                "model.rgb.dense_global_detector_enabled=true"
             )
         if (
             self.training.rgb_pretrain_steps > 0
-            and self.training.rgb_pretrain_trainable_scope == "global_detector"
+            and self.training.rgb_pretrain_trainable_scope
+            in {"global_detector", "dense_global_detector"}
             and float(self.training.loss_weights.get("measurement", 0.0)) <= 0.0
         ):
             raise ValueError(

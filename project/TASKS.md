@@ -10,12 +10,15 @@
   exceeds `83%` recall (`f7587471...`).
 - [x] Prove the production model state stays bit-exact at `88f2df4d...`; retain
   the temporary head only as feasibility evidence, not a deployable checkpoint.
-- [ ] Implement one opt-in dense global detector that emits the complete typed
+- [x] Implement one opt-in dense global detector that emits the complete typed
   measurement contract, with strict config/checkpoint-growth/exact-resume and
   detector-only optimizer ownership.
-- [ ] Preserve the fixed dense architecture/loss and pass focused runtime,
-  supervision, lifecycle, checkpoint, and full repository gates before one
-  clean fixed-eight rerun. Require the same material gate before fixed-32/MPS.
+- [x] Pass the focused runtime, supervision, config, ownership, and checkpoint
+  bundle (`578 passed`, four expected unavailable-MPS skips).
+- [x] Pass the complete repository gate (`1341 passed`, `20` expected skips in
+  `469.30s`) plus Ruff, format, compile, version, and diff validation.
+- [ ] Run one clean fixed-eight production-path repetition. Require the same
+  material gate before fixed-32/MPS.
 
 ## Raw learned-existence supervision repair — specification 1.67
 

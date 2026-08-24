@@ -61,6 +61,7 @@ model:
     backbone_channels: [32, 64, 96, 128]
     feature_dim: 96
     proposal_queries: 10
+    dense_global_detector_enabled: false
     global_every_steps: 12
     roi_size: 20
     fast_depth_residual_enabled: false
@@ -201,6 +202,7 @@ training:
     rgb_visibility: 0.25
     rgb_appearance: 0.25
     rgb_raw_centre: 2.0
+    rgb_dense_center_heatmap: 1.0
     rgb_world_position: 8.0
     rgb_world_position_nll: 0.05
   loss_weights:

@@ -29,7 +29,10 @@ from world_model.observations.packets import ObservationPacket
 from world_model.observations.registry import register_observation_module
 from world_model.observations.rgb.backbone import RGBBackbone
 from world_model.observations.rgb.cache import RGBModalityCache
-from world_model.observations.rgb.global_detector import GlobalObjectDetector
+from world_model.observations.rgb.global_detector import (
+    DenseGlobalObjectDetector,
+    GlobalObjectDetector,
+)
 from world_model.observations.rgb.losses import rgb_measurement_losses
 from world_model.observations.rgb.projector import (
     RGBMeasurementProjector,
@@ -58,6 +61,7 @@ class RGBObservationConfig:
     feature_dim: int = 64
     appearance_dim: int = 32
     global_detector_cpu_on_mps: bool = True
+    dense_global_detector_enabled: bool = False
     roi_size: int = 20
     roi_hidden_dim: int = 96
     fast_depth_residual_enabled: bool = False
@@ -539,6 +543,15 @@ class RGBObservationModule(ObservationModule):
             query_count=self.config.max_objects + self.config.birth_extra_queries,
             appearance_dim=self.config.appearance_dim,
         )
+        self.dense_global_detector = (
+            DenseGlobalObjectDetector(
+                feature_dim=self.config.feature_dim,
+                query_count=self.config.max_objects + self.config.birth_extra_queries,
+                appearance_dim=self.config.appearance_dim,
+            )
+            if self.config.dense_global_detector_enabled
+            else None
+        )
         self.roi_updater = FastROIUpdater(
             feature_dim=self.config.feature_dim,
             appearance_dim=self.config.appearance_dim,
@@ -571,6 +584,8 @@ class RGBObservationModule(ObservationModule):
             backbone_device = next(self.backbone.parameters()).device
             if backbone_device.type == "mps":
                 self.global_detector.to(device="cpu")
+                if self.dense_global_detector is not None:
+                    self.dense_global_detector.to(device="cpu")
         return self
 
     def validate_packet(self, packet: ObservationPacket) -> None:
@@ -647,9 +662,14 @@ class RGBObservationModule(ObservationModule):
         packet: ObservationPacket,
     ) -> MeasurementSet:
         feature_pyramid = self.backbone(image)
-        detector_device = next(self.global_detector.parameters()).device
+        detector = (
+            self.dense_global_detector
+            if self.dense_global_detector is not None
+            else self.global_detector
+        )
+        detector_device = next(detector.parameters()).device
         detector_features = feature_pyramid["full"].to(device=detector_device)
-        output = self.global_detector(detector_features)
+        output = detector(detector_features)
         if detector_device != image.device:
             output = output.to(image.device)
         batch = image.shape[0]
@@ -957,6 +977,11 @@ class RGBObservationModule(ObservationModule):
                 # BCE is evaluated at the near-perfect structured confidence
                 # and supplies only a vanishing straight-through gradient.
                 "raw_existence_logits": raw_existence_logits,
+                **(
+                    {"dense_center_logits": output.dense_center_logits}
+                    if output.dense_center_logits is not None
+                    else {}
+                ),
                 "structured_centre_valid": structured_valid,
                 "structured_centre_ambiguous": structured_ambiguous,
                 "structured_depth_valid": structured_depth_valid,

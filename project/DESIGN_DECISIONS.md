@@ -3,7 +3,7 @@
 ## ADR-186 — Advance one dense center model after query-detector termination
 
 - **Date:** 2026-08-24
-- **Status:** off-repo feasibility accepted; production implementation pending
+- **Status:** production implementation complete; fixed-eight gate pending
 - **Context:** Correct raw existence supervision repairs confidence but leaves
   the existing DETR-like query detector at `28.13%` top-count recall, below its
   protected `29.17%` baseline. That family is terminal. A future attempt must
@@ -25,6 +25,15 @@
   authorize deployment or physical/MPS promotion; those remain behind focused
   integration, fixed-eight repetition, fixed-32, and active-Aqua gates. Exact
   report SHA-256 is `f7587471...`.
+- **Implementation boundary:** Specification 1.68 keeps the qualified center
+  branch and focal loss fixed, gives typed attributes a separate detached-input
+  head, and makes the complete detector opt-in/default-off. Only the dense
+  module is trainable in its dedicated scope. Whole-prefix weight growth is
+  allowed only from explicit legacy-false model semantics; exact resume across
+  the mode boundary is rejected. The 578-pass focused gate is green, and the
+  full repository passes 1341 tests with 20 expected skips in 469.30s plus
+  Ruff/format/compile/version/diff. No production-path accuracy, physical, or
+  MPS claim exists yet.
 
 ## ADR-185 — Supervise raw learned existence while preserving structured runtime evidence
 

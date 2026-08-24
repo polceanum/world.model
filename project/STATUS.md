@@ -1,6 +1,6 @@
 # Project status
 
-## Dense multi-instance center feasibility — production implementation pending
+## Dense multi-instance global discovery — specification 1.68 implementation gate
 
 The detector-only query family is closed, but one genuinely different
 architecture clears its predeclared off-repo feasibility gate. A 55,553-
@@ -20,14 +20,22 @@ The exact-gate report is
 `/private/tmp/20260824-spec168-dense-center-feasibility-exact-gate.json`
 (`f7587471...`); the frozen model hash is identical before and after.
 
-This is architecture feasibility, not runtime or promotion evidence. The head
-does not yet emit the full typed measurement attributes, participate in
-checkpoint/config/exact-resume contracts, or run through lifecycle and closed-
-loop validation. The next justified production change is one opt-in dense
-global detector with an explicit growth initializer, full attribute maps, and
-detector-only ownership. Do not tune the successful probe or alter deployment;
-first preserve its fixed architecture/loss and prove runtime integration on
-focused tests, then reapply fixed-eight before any fixed-32 physical/MPS gate.
+The opt-in production implementation now preserves the exact 55,553-parameter
+center branch and focal objective, adds a detached-feature typed attribute head,
+and emits the existing `GlobalDetectorOutput`/`MeasurementSet` contract. The
+legacy default constructs no dense module. The strict dense-only training scope
+freezes the backbone, historical query detector, ROI, state, identifier, and
+dynamics; checkpoint growth permits only the complete dense prefix and exact
+resume across the mode boundary fails. Focused config/output/gradient/growth
+tests pass as part of a 578-pass focused bundle (four unavailable-MPS skips).
+The final repository gate passes `1341` tests with `20` expected unavailable-
+backend skips in `469.30s`; Ruff, format, compile, version, and diff checks are
+green.
+
+This is still not runtime or promotion evidence. One clean fixed-eight
+production-path repetition is pending. Do not tune
+the successful architecture. Require the unchanged +10/-5 point material gate
+and all-scenario support before any fixed-32 physical or active-Aqua MPS work.
 
 ## Raw learned-existence supervision repair — specification 1.67
 

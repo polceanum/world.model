@@ -3,6 +3,7 @@
 from world_model.observations.rgb.backbone import RGBBackbone
 from world_model.observations.rgb.cache import RGBModalityCache
 from world_model.observations.rgb.global_detector import (
+    DenseGlobalObjectDetector,
     GlobalDetectorOutput,
     GlobalObjectDetector,
 )
@@ -25,6 +26,7 @@ from world_model.observations.rgb.temporal import RGBTemporalPositionHistory
 
 __all__ = [
     "FastROIUpdater",
+    "DenseGlobalObjectDetector",
     "GlobalDetectorOutput",
     "GlobalObjectDetector",
     "RGBBackbone",

@@ -42,6 +42,7 @@ _SIMULATOR_COMPATIBILITY_FIELDS = (
 )
 
 _RGB_LEGACY_DEFAULT_FIELDS = (
+    "dense_global_detector_enabled",
     "temporal_velocity_enabled",
     "temporal_velocity_history_size",
     "temporal_velocity_min_samples",
@@ -183,6 +184,7 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
     ("training", "validation_rollout_anchors_per_episode"): None,
     ("training", "validation_rollout_anchor_batch_size"): 1,
     ("training", "rgb_pretrain_trainable_scope"): "all",
+    ("model", "rgb", "dense_global_detector_enabled"): False,
     ("training", "closed_loop_prior_future_correction_enabled"): True,
     ("training", "closed_loop_batch_macro_physical_losses_enabled"): False,
     ("training", "closed_loop_axiswise_correction_hinge_enabled"): False,
@@ -212,6 +214,7 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
 _RUNTIME_SOURCE_ROOT_FILES = frozenset({"train.py"})
 _RUNTIME_SOURCE_SUFFIXES = frozenset({".py", ".pyi"})
 _TYPED_ATTENTION_PREFIX = "dynamics.attention_interactions."
+_DENSE_GLOBAL_DETECTOR_PREFIX = "observation_modules.rgb.dense_global_detector."
 _TYPED_ATTENTION_BLOCK_PATTERN = re.compile(
     rf"^{re.escape(_TYPED_ATTENTION_PREFIX)}blocks\.(\d+)\.(.+)$"
 )
@@ -1546,6 +1549,37 @@ def _identity_attention_depth_growth_state(
     return prepared, grown_indices
 
 
+def _validate_dense_global_detector_growth_config(
+    payload: Mapping[str, Any],
+    config: OrpheusConfig,
+) -> None:
+    checkpoint_config = payload.get("config")
+    if not isinstance(checkpoint_config, Mapping):
+        raise ValueError("dense detector growth requires checkpoint configuration")
+    source_model = _model_checkpoint_semantics(checkpoint_config.get("model"))
+    target_model = _model_checkpoint_semantics(config.to_dict()["model"])
+    if not isinstance(source_model, Mapping) or not isinstance(target_model, Mapping):
+        raise ValueError("dense detector growth requires resolved model mappings")
+    source_model = deepcopy(dict(source_model))
+    target_model = deepcopy(dict(target_model))
+    source_rgb = source_model.get("rgb")
+    target_rgb = target_model.get("rgb")
+    if not isinstance(source_rgb, Mapping) or not isinstance(target_rgb, Mapping):
+        raise ValueError("dense detector growth requires resolved RGB mappings")
+    source_rgb = dict(source_rgb)
+    target_rgb = dict(target_rgb)
+    if source_rgb.get("dense_global_detector_enabled") is not False:
+        raise ValueError("dense detector growth requires a disabled source detector")
+    if target_rgb.get("dense_global_detector_enabled") is not True:
+        raise ValueError("dense detector growth requires an enabled target detector")
+    source_rgb["dense_global_detector_enabled"] = False
+    target_rgb["dense_global_detector_enabled"] = False
+    source_model["rgb"] = source_rgb
+    target_model["rgb"] = target_rgb
+    if source_model != target_model:
+        raise ValueError("dense detector growth cannot change other model semantics")
+
+
 def load_model_weights(
     path: str | Path,
     *,
@@ -1619,11 +1653,34 @@ def load_model_weights(
         )
     prepared_state = dict(source_state)
     identity_grown_attention_blocks: tuple[int, ...] = ()
+    initialized_missing_module_prefixes: list[str] = []
     remaining_missing = set(missing_keys)
     for prefix in allowed_missing_prefixes:
         source_has_prefix = any(key.startswith(prefix) for key in source_keys)
         missing_under_prefix = tuple(key for key in missing_keys if key.startswith(prefix))
-        if not source_has_prefix or not missing_under_prefix:
+        if not missing_under_prefix:
+            continue
+        if not source_has_prefix:
+            target_under_prefix = {key for key in target_keys if key.startswith(prefix)}
+            if set(missing_under_prefix) != target_under_prefix:
+                raise RuntimeError(
+                    f"initialization checkpoint is missing only part of new module {prefix!r}"
+                )
+            if prefix == _TYPED_ATTENTION_PREFIX:
+                # Historical first-time attention enablement retains the
+                # destination module's ordinary deterministic initialization.
+                continue
+            if prefix != _DENSE_GLOBAL_DETECTOR_PREFIX:
+                raise RuntimeError(f"unsupported initialized module growth prefix: {prefix!r}")
+            if architecture_growth_config is None:
+                raise RuntimeError(
+                    "dense detector growth requires an explicit target configuration"
+                )
+            _validate_dense_global_detector_growth_config(
+                payload,
+                architecture_growth_config,
+            )
+            initialized_missing_module_prefixes.append(prefix)
             continue
         growth = _identity_attention_depth_growth_state(
             prepared_state,
@@ -1653,4 +1710,5 @@ def load_model_weights(
         raise RuntimeError("model state changed during validated weight loading")
     payload["weight_load_missing_keys"] = tuple(missing_keys)
     payload["identity_grown_attention_blocks"] = identity_grown_attention_blocks
+    payload["initialized_missing_module_prefixes"] = tuple(initialized_missing_module_prefixes)
     return payload

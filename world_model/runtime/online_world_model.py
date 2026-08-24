@@ -209,6 +209,7 @@ class OnlineWorldModel(nn.Module):
                     feature_dim=rgb_config.feature_dim,
                     appearance_dim=state_config.appearance_dim,
                     global_detector_cpu_on_mps=(config.device.global_detector_cpu_on_mps),
+                    dense_global_detector_enabled=(rgb_config.dense_global_detector_enabled),
                     roi_size=rgb_config.roi_size,
                     roi_hidden_dim=config.model.filter.hidden_dim,
                     fast_depth_residual_enabled=(rgb_config.fast_depth_residual_enabled),

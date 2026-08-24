@@ -4306,6 +4306,9 @@ def set_global_perception_trainable(
     if backbone is None or global_detector is None:
         raise TypeError("RGB module is missing backbone or global_detector")
     global_detector.requires_grad_(trainable)
+    dense_global_detector = getattr(module, "dense_global_detector", None)
+    if dense_global_detector is not None:
+        dense_global_detector.requires_grad_(trainable)
     if trainable:
         backbone.requires_grad_(True)
         return
@@ -4325,14 +4328,14 @@ def set_rgb_pretrain_trainable_scope(
     if scope == "all":
         model.requires_grad_(True)
         return
-    if scope != "global_detector":
+    if scope not in {"global_detector", "dense_global_detector"}:
         raise ValueError(f"unsupported RGB pretraining scope: {scope}")
     model.requires_grad_(False)
     module = model.observation_modules["rgb"]
-    global_detector = getattr(module, "global_detector", None)
-    if global_detector is None:
-        raise TypeError("RGB module is missing global_detector")
-    global_detector.requires_grad_(True)
+    selected = getattr(module, scope, None)
+    if selected is None:
+        raise TypeError(f"RGB module is missing {scope}")
+    selected.requires_grad_(True)
 
 
 def set_closed_loop_trainable_scope(
@@ -6619,9 +6622,16 @@ def _train_from_config_owned(
                 captured_initialization.snapshot_path,
                 model=model,
                 allowed_missing_prefixes=(
-                    ("dynamics.attention_interactions.",)
-                    if config.model.dynamics.attention_residual_enabled
-                    else ()
+                    *(
+                        ("dynamics.attention_interactions.",)
+                        if config.model.dynamics.attention_residual_enabled
+                        else ()
+                    ),
+                    *(
+                        ("observation_modules.rgb.dense_global_detector.",)
+                        if config.model.rgb.dense_global_detector_enabled
+                        else ()
+                    ),
                 ),
                 architecture_growth_config=config,
             )
@@ -6641,6 +6651,9 @@ def _train_from_config_owned(
         )
         identity_grown_blocks = tuple(
             initialization_payload.get("identity_grown_attention_blocks", ())
+        )
+        initialized_missing_module_prefixes = tuple(
+            initialization_payload.get("initialized_missing_module_prefixes", ())
         )
         del initialization_model_state
         del stored_artifact_metadata
@@ -6662,6 +6675,12 @@ def _train_from_config_owned(
                 "type": "identity_attention_depth_growth",
                 "source_checkpoint": str(source),
                 "appended_blocks": list(identity_grown_blocks),
+            }
+        if initialized_missing_module_prefixes:
+            run_metadata["initialization_module_growth"] = {
+                "type": "deterministic_missing_module_initialization",
+                "source_checkpoint": str(source),
+                "prefixes": list(initialized_missing_module_prefixes),
             }
         atomic_write_text(
             run_directory / "run_metadata.json",
@@ -7998,6 +8017,9 @@ def _train_from_config_owned(
                 )
                 result.metrics["rgb_pretrain_scope_global_detector_only"] = float(
                     config.training.rgb_pretrain_trainable_scope == "global_detector"
+                )
+                result.metrics["rgb_pretrain_scope_dense_global_detector_only"] = float(
+                    config.training.rgb_pretrain_trainable_scope == "dense_global_detector"
                 )
             else:
                 target_learning_rate = closed_loop_learning_rate_at_update(
