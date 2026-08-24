@@ -1,5 +1,43 @@
 # Project status
 
+## Causal structured/dense observation pool — terminally vacuous diagnostic
+
+The dense detector's physical rejection suggested an identity-aware
+observation-model pool rather than another detector threshold or training
+rung. Two bounded CPU/RGB-only diagnostics tested whether causal association
+evidence could safely choose between the protected query/structured detector
+and the frozen dense detector while keeping `WorldBelief` as the sole physical
+state.
+
+The prerequisite is too weak. On the protected fixed-eight manifest only
+`14/944` associated pairs (`1.48%`) are marked ambiguous, across five of 40
+batched observation calls, so deferred ambiguous correction cannot address the
+broad discovery/identity failure. A temporary complete observation-pool path
+then reused one backbone pass, generated both typed `MeasurementSet`
+candidates, associated each to the same predicted belief, and selected per
+batch row by maximum matched beliefs, minimum ambiguity, then minimum summed
+association cost, with the protected detector as the no-evidence/tie fallback.
+No simulator state entered selection.
+
+The pool is terminally vacuous on 112 fixed-eight decision rows. Dense has
+higher matched support on zero rows, lower support on one, and equal support on
+111. All 111 equal-support rows also tie on ambiguity; dense cost is higher on
+95, equal on 16, and lower on none. The protected candidate is consequently
+selected on all 112 rows. All 6,839 common non-latency numeric evaluator
+metrics are exact against the protected run, confirming safe fallback but no
+behavioral value. The ambiguity and pool reports are
+`/private/tmp/20260824-spec168-association-ambiguity-fixed8-final.json`
+(`e3fd7b6e...`) and
+`/private/tmp/20260824-spec169-measurement-pool-fixed8-v3.json`
+(`33f0e12e...`).
+
+The complete candidate implementation and tests were reverted. Do not tune
+association margins, introduce score weights, admit dense proposals despite
+worse evidence, or run fixed-32/MPS. Reopen observation-model selection only
+with a genuinely independent candidate whose causal association evidence is
+better on a predeclared manifest. Deployment and specification remain
+unchanged at the protected step-zero model and version 1.68.
+
 ## Dense multi-instance global discovery — specification 1.68 implementation gate
 
 The detector-only query family is closed, but one genuinely different

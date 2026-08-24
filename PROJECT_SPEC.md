@@ -9393,6 +9393,33 @@ deployment, and additional training are not authorized from this result.
 
 ---
 
+## 263. Causal observation-model pooling requires independent evidence
+
+An observation-model pool must not admit a broadly rejected detector merely
+because it emits more confident proposals. Candidate choice must be causal,
+derived from prediction-versus-measurement evidence, and preserve protected
+fallback when no candidate is strictly better. Simulator identity, target
+count, future labels, and evaluation truth are forbidden runtime selectors.
+`WorldBelief` remains the sole physical state; detached candidate measurements
+may be compared, but an unselected candidate must not update filtering,
+lifecycle, identity, dynamics, or persistent caches.
+
+The first structured/dense pool diagnostic is terminally rejected and leaves
+no production semantic. A protected fixed-eight audit contains only `14/944`
+ambiguous pairs. In a complete temporary two-candidate path, dense has greater
+associated-belief support on zero of 112 decision rows and lower equal-support
+association cost on zero; the protected detector is selected everywhere.
+All 6,839 common non-latency numeric evaluator metrics remain exact. Evidence
+is `/private/tmp/20260824-spec168-association-ambiguity-fixed8-final.json`
+(`e3fd7b6e...`) and
+`/private/tmp/20260824-spec169-measurement-pool-fixed8-v3.json`
+(`33f0e12e...`). The temporary implementation is fully reverted. Do not tune
+association margins, score weights, dense admission, or attributes on this
+manifest. Reopen only when a materially different observation candidate first
+proves strictly better causal evidence under a predeclared independent gate.
+
+---
+
 # Closing directive
 
 Project Orpheus should emerge from the first serious implementation as a small but real online world-model system:

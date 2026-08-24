@@ -2,6 +2,21 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 terminal causal observation-model pool diagnostic
+
+- Measured only `14/944` ambiguous associated pairs (`1.48%`) on the protected
+  fixed-eight RGB manifest, rejecting deferred ambiguous correction as too
+  narrow before production work (`e3fd7b6e...`).
+- Built one temporary structured/dense observation-model pool with a shared
+  backbone, typed candidates, prediction-derived association evidence, exact
+  protected fallback, and no simulator runtime input.
+- Rejected it at the non-vacuity gate. Across 112 decision rows dense had more
+  matched beliefs on zero rows and lower equal-support association cost on
+  zero; the protected detector was selected everywhere (`33f0e12e...`).
+- Verified all 6,839 common non-latency numeric evaluator metrics were exact,
+  then reverted the complete implementation and tests. No fixed-32, MPS,
+  score-weight, margin, admission, or attribute tuning was run.
+
 ### 2026-08-24 dense multi-instance center feasibility
 
 - Ran one temp-only dense center-heatmap architecture probe with a frozen

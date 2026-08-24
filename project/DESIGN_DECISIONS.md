@@ -1,5 +1,28 @@
 # Design decisions
 
+## ADR-187 — Require better causal evidence before pooling observation models
+
+- **Date:** 2026-08-24
+- **Status:** rejected and reverted
+- **Context:** The opt-in dense detector has excellent raw center recall but
+  fails the broad physical gate on current z, uncertainty, precision, identity,
+  and scenario slices. A causal observation-model pool could in principle use
+  dense centers only when prediction-versus-measurement evidence supports them,
+  without creating a second physical belief.
+- **Decision:** Test ambiguity support first, then one lexicographic pool:
+  maximize matched active beliefs, minimize ambiguous pairs, minimize summed
+  association cost, and use the protected query/structured detector on every
+  no-evidence or exact tie. Reject before production retention unless the dense
+  branch wins at least one fixed-eight row from causal evidence.
+- **Alternatives considered:** tune the dense detector, admit dense proposals
+  by confidence/count, defer all ambiguous corrections, blend measurements,
+  use simulator identity, or proceed directly to fixed-32/MPS.
+- **Consequences:** Ambiguity is only `14/944` pairs. In the complete temporary
+  pool dense wins neither support nor cost on any of 112 rows and is selected
+  zero times; protected fallback preserves 6,839 non-latency numeric metrics
+  exactly. Revert the mechanism. A future pool candidate must first prove
+  independently better causal evidence rather than rely on tuned admission.
+
 ## ADR-186 — Advance one dense center model after query-detector termination
 
 - **Date:** 2026-08-24

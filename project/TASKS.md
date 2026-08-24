@@ -1,5 +1,26 @@
 # Tasks
 
+## Causal structured/dense observation-pool diagnostic — no specification change
+
+- [x] Measure whether deferred ambiguous-association branching has enough
+  support on the protected fixed-eight RGB manifest. Reject it at `14/944`
+  associated pairs (`1.48%`) across only five batched frames.
+- [x] Implement one temporary causal observation-model pool that evaluates the
+  protected query/structured and dense detectors from one backbone pass and
+  selects per batch row by matched count, ambiguity, then association cost.
+- [x] Apply the predeclared non-vacuity gate. Reject: dense has more matched
+  beliefs on zero of 112 rows, one fewer on one row, and equal support on 111;
+  among equal rows it has lower cost on zero, equal cost on 16, and higher cost
+  on 95.
+- [x] Verify all 6,839 common non-latency numeric evaluator metrics are exact
+  when the protected fallback is selected, proving the diagnostic did not
+  mutate the physical baseline.
+- [x] Revert the complete implementation and tests. Do not tune association
+  margins, score weights, admission, or dense attributes; require a candidate
+  with independently better causal evidence before reopening.
+- [x] Synchronize, commit, and push the terminal evidence boundary. Deployment
+  remains the protected step-zero model.
+
 ## Dense multi-instance center architecture — feasibility passed
 
 - [x] Train one distinct dense heatmap head off-repo with the production model
