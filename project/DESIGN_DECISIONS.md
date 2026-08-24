@@ -22,7 +22,10 @@
   real future physical losses at nearly the hard-path compute cost. The new
   switch is legacy-false and exact-resume-bound. It receives one technical
   smoke and one paired accuracy test; failure closes it without gate-manifest
-  tuning or a long campaign.
+  tuning or a long campaign. The clean-commit smoke exercises 96 carrier rows,
+  preserves forward loss `2.708743`, applies finite `4.020634/1.064066`
+  raw/applied gradients with zero learned-dynamics gradient, and adds no
+  observable runtime failure.
 
 ## ADR-192 — Relax hard assimilation for training, retain it for deployment
 

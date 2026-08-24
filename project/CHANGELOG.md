@@ -12,8 +12,11 @@
   transition replacement, or differentiable integer identity.
 - Added strict legacy-false configuration and exact-resume binding plus
   forward-exact, recursive-gradient, causal-loop, and invalid-config tests.
-- Passed the focused combined gate (`589 passed`, one expected MPS skip); smoke
-  and paired hard-accuracy qualification remain pending.
+- Passed the final gate (`1359 passed`, `20` expected skips in `495.25 s`) and a
+  clean-commit balanced one-update smoke. The smoke exercises 96 carrier rows,
+  72 position and three velocity coordinates, changes the backward but not the
+  `2.708743` forward loss, and applies with no retry or learned-dynamics
+  gradient. Paired hard-accuracy qualification remains pending.
 
 ### 2026-08-24 differentiable physics assimilation (specification 1.69)
 

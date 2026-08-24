@@ -8,11 +8,13 @@
 - [x] Propagate its graph through the existing recurrent state and analytic
   rollout rather than adding a second dynamics rollout or learned transition.
 - [x] Bind the strict legacy-false switch to configuration and exact resume.
-- [x] Pass focused forward-exact, recursive-gradient, causal-loop, config,
-  checkpoint, schedule, and objective tests (`589 passed`, one expected skip).
-- [ ] Complete one balanced technical update, then one frozen paired
-  qualification against the auxiliary-only graph; stop without tuning if the
-  hard five-horizon gain is not material.
+- [x] Pass the final repository gate (`1359 passed`, `20` expected skips in
+  `495.25 s`) plus Ruff/format/compile/version/diff checks.
+- [x] Complete one balanced clean-commit technical update with 96 carrier rows,
+  finite `4.020634/1.064066` raw/applied gradients, zero learned-dynamics
+  gradient, no retry, and hard pre/post validation.
+- [ ] Complete one frozen paired qualification against the auxiliary-only
+  graph; stop without tuning if the hard five-horizon gain is not material.
 
 ## Differentiable physics assimilation — specification 1.69
 

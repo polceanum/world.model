@@ -9687,6 +9687,16 @@ against the otherwise identical auxiliary-only graph is required before any
 long campaign; failure closes this carrier without temperature or loss-weight
 tuning on the fixed manifest.
 
+The clean-commit one-update smoke at
+`/private/tmp/20260824-123200-spec170-soft-posterior-one-update-smoke`
+exercised 96 carrier rows, 72 independently supported position coordinates,
+and three velocity coordinates. Its forward scalar loss remains the exact
+auxiliary-only value `2.708743`; raw/applied gradient norms change as intended
+to `4.020634/1.064066`. The balanced update applied with zero retry, learned
+dynamics gradient remained exactly zero, and the two hard validations plus
+training completed in `203.41 s`. This proves graph, ownership, exact-forward,
+and bounded cost only; it is not accuracy evidence.
+
 ---
 
 # Closing directive

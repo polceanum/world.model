@@ -10,10 +10,15 @@ frames and forecast losses, allowing assignment-boundary evidence to train the
 RGB estimator without replacing Hungarian identity, lifecycle, contacts, or
 the persistent forward state. It adds no second rollout or learned mechanics.
 
-Focused forward-exact/recursive-gradient, generated causal-loop, configuration,
-checkpoint, schedule, and objective gates pass `589` tests with one expected
-unavailable-MPS skip. A bounded one-update smoke and one frozen treatment versus
-auxiliary-only qualification remain pending; no long campaign is authorized.
+The final repository gate passes `1359` tests with `20` expected unavailable-
+backend skips in `495.25 s`; Ruff, format, compile, version, and diff checks are
+clean. The clean-commit one-update smoke under
+`/private/tmp/20260824-123200-spec170-soft-posterior-one-update-smoke` exercises
+96 carrier rows, 72 position coordinates, and three velocity coordinates. Its
+forward loss is unchanged at `2.708743`; raw/applied gradients are
+`4.020634/1.064066`, learned dynamics gradient is zero, and no retry occurs.
+One frozen treatment versus auxiliary-only qualification remains pending; no
+long campaign is authorized.
 
 ## Differentiable physics assimilation — specification 1.69 implemented
 
