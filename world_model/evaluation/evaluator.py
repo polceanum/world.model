@@ -113,6 +113,16 @@ _RUNTIME_HYPOTHESIS_REGIMES = (
 )
 
 
+def _runtime_hypothesis_candidate_names(config: OrpheusConfig) -> tuple[str, ...]:
+    """Return the exact evaluator candidate schema for the resolved policy."""
+
+    return _RUNTIME_HYPOTHESIS_CANDIDATES + (
+        ("online_local_acceleration",)
+        if config.runtime.hypothesis_online_acceleration_enabled
+        else ()
+    )
+
+
 def _primary_physical_metrics_hash_exclusion_declaration() -> dict[str, object]:
     """Describe every final-report metric excluded from the primary digest."""
 
@@ -1731,8 +1741,9 @@ def _evaluate_checkpoint_impl(
     simulator_created_object_event_count = 0
     simulator_removed_object_event_count = 0
     runtime_hypothesis_forecast_anchor_count = 0
+    runtime_hypothesis_candidates = _runtime_hypothesis_candidate_names(config)
     runtime_hypothesis_axis_selection_count = {
-        axis: [0 for _ in _RUNTIME_HYPOTHESIS_CANDIDATES]
+        axis: [0 for _ in runtime_hypothesis_candidates]
         for axis in config.runtime.hypothesis_axis_independent_axes
     }
     runtime_hypothesis_horizon_axis_selection_count: dict[tuple[str, int], list[int]] = {}
@@ -1744,7 +1755,7 @@ def _evaluate_checkpoint_impl(
     }
     runtime_hypothesis_horizon_axis_support_count: dict[tuple[str, int], tuple[int, int]] = {}
     runtime_hypothesis_axis_composed_candidate_step_count = {
-        axis: [0 for _ in _RUNTIME_HYPOTHESIS_CANDIDATES]
+        axis: [0 for _ in runtime_hypothesis_candidates]
         for axis in config.runtime.hypothesis_axis_independent_axes
     }
     runtime_hypothesis_axis_composed_fallback_step_count = {
@@ -2342,7 +2353,7 @@ def _evaluate_checkpoint_impl(
                         if (
                             axis_indices.dtype != torch.int64
                             or torch.any(axis_indices < 0)
-                            or torch.any(axis_indices >= len(_RUNTIME_HYPOTHESIS_CANDIDATES))
+                            or torch.any(axis_indices >= len(runtime_hypothesis_candidates))
                         ):
                             raise RuntimeError("runtime hypothesis axis index is invalid")
                         if (
@@ -2503,7 +2514,7 @@ def _evaluate_checkpoint_impl(
                                 total_count=composed_total_count,
                                 regime_count=composed_regime_count,
                                 independent_axes=config.runtime.hypothesis_axis_independent_axes,
-                                candidate_size=len(_RUNTIME_HYPOTHESIS_CANDIDATES),
+                                candidate_size=len(runtime_hypothesis_candidates),
                                 regime_size=len(_RUNTIME_HYPOTHESIS_REGIMES),
                             )
                         runtime_hypothesis_forecast_anchor_count += batch_size
@@ -2703,7 +2714,7 @@ def _evaluate_checkpoint_impl(
                                     target_axis_indices[..., axis].masked_select(
                                         target_hypothesis_active & target_axis_supported[..., axis]
                                     ),
-                                    minlength=len(_RUNTIME_HYPOTHESIS_CANDIDATES),
+                                    minlength=len(runtime_hypothesis_candidates),
                                 )
                                 .detach()
                                 .cpu()
@@ -2719,7 +2730,7 @@ def _evaluate_checkpoint_impl(
                                 horizon_counts = (
                                     runtime_hypothesis_horizon_axis_selection_count.setdefault(
                                         key,
-                                        [0 for _ in _RUNTIME_HYPOTHESIS_CANDIDATES],
+                                        [0 for _ in runtime_hypothesis_candidates],
                                     )
                                 )
                                 selected_counts = (
@@ -2728,7 +2739,7 @@ def _evaluate_checkpoint_impl(
                                             target_hypothesis_active[:, query_index]
                                             & target_axis_supported[:, query_index, :, axis]
                                         ),
-                                        minlength=len(_RUNTIME_HYPOTHESIS_CANDIDATES),
+                                        minlength=len(runtime_hypothesis_candidates),
                                     )
                                     .detach()
                                     .cpu()
@@ -3229,7 +3240,7 @@ def _evaluate_checkpoint_impl(
             runtime_hypothesis_forecast_anchor_count
         )
         for axis, counts in runtime_hypothesis_axis_selection_count.items():
-            for candidate, count in zip(_RUNTIME_HYPOTHESIS_CANDIDATES, counts, strict=True):
+            for candidate, count in zip(runtime_hypothesis_candidates, counts, strict=True):
                 metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_{candidate}_count"] = float(count)
             metrics[f"runtime_hypothesis_axis_{'xyz'[axis]}_supported_count"] = float(
                 runtime_hypothesis_axis_supported_count[axis]
@@ -3238,7 +3249,7 @@ def _evaluate_checkpoint_impl(
                 runtime_hypothesis_axis_fallback_count[axis]
             )
             for candidate, count in zip(
-                _RUNTIME_HYPOTHESIS_CANDIDATES,
+                runtime_hypothesis_candidates,
                 runtime_hypothesis_axis_composed_candidate_step_count[axis],
                 strict=True,
             ):
@@ -3299,7 +3310,7 @@ def _evaluate_checkpoint_impl(
         for (horizon, axis), counts in sorted(
             runtime_hypothesis_horizon_axis_selection_count.items()
         ):
-            for candidate, count in zip(_RUNTIME_HYPOTHESIS_CANDIDATES, counts, strict=True):
+            for candidate, count in zip(runtime_hypothesis_candidates, counts, strict=True):
                 metrics[f"runtime_hypothesis@{horizon}_axis_{'xyz'[axis]}_{candidate}_count"] = (
                     float(count)
                 )

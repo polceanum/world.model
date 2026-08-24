@@ -15,8 +15,15 @@ The implementation is intentionally a single bounded hypothesis after the
 terminal adaptive-residual decision. Focused construction, config,
 checkpoint, controller, fallback, reset, and report-policy coverage passes
 `437` tests with `3` expected backend skips. The final repository passes
-`1308` tests with `20` expected unavailable-backend skips in `455.58s`; Ruff,
+`1309` tests with `20` expected unavailable-backend skips in `456.84s`; Ruff,
 the `225`-file format check, isolated compile, version, and diff gates pass.
+The first clean fixed-32 candidate launch exposed a pre-episode evaluator
+accounting assumption that still allocated four candidate slots. It is
+retained as a failed `0/32` implementation artifact, not accuracy evidence.
+Candidate names, index bounds, count partitions, and report fields now derive
+from the resolved policy; a dirty-source one-episode CPU evaluator smoke
+completed finite with the five-candidate schema. Both fixed-32 arms must be
+rerun on the repaired clean commit.
 The only authorized accuracy screen is one
 source-frozen sequential fixed-32 CPU learned-only/enabled pair on the
 protected checkpoint. It must use the fifth candidate non-vacuously, improve

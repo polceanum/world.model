@@ -15,6 +15,7 @@ from world_model.evaluation.evaluator import (
     _require_finite_metrics,
     _require_finite_trajectory,
     _resolved_evaluation_protocol,
+    _runtime_hypothesis_candidate_names,
     _runtime_hypothesis_learned_fallback_diagnostics,
     _sum_runtime_hypothesis_counts_on_host,
     _validate_runtime_hypothesis_composition_counts,
@@ -214,6 +215,48 @@ def test_runtime_hypothesis_composition_counts_are_fail_closed() -> None:
         _validate_runtime_hypothesis_composition_counts(
             **{**arguments, "regime_count": invalid_regimes}
         )
+
+
+def test_runtime_hypothesis_candidate_schema_expands_only_when_enabled() -> None:
+    legacy = load_config("configs/tiny_overfit.yaml")
+    enabled = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=[
+            "model.rgb.temporal_velocity_enabled=true",
+            "runtime.hypothesis_local_applicability_enabled=true",
+            "runtime.hypothesis_online_acceleration_enabled=true",
+        ],
+    )
+
+    assert _runtime_hypothesis_candidate_names(legacy) == (
+        "learned",
+        "constant_velocity",
+        "damped_constant_velocity",
+        "ballistic_contact",
+    )
+    assert _runtime_hypothesis_candidate_names(enabled) == (
+        "learned",
+        "constant_velocity",
+        "damped_constant_velocity",
+        "ballistic_contact",
+        "online_local_acceleration",
+    )
+    local_shape = (1, 1, 1, 3)
+    candidate_count = torch.zeros((*local_shape, 5), dtype=torch.int64)
+    candidate_count[..., 4] = 1
+    total_count = candidate_count.sum(dim=-1)
+    regime_count = torch.zeros((1, 1, 1, 6), dtype=torch.int64)
+    regime_count[..., 0] = total_count[..., 0]
+    _validate_runtime_hypothesis_composition_counts(
+        local_shape=local_shape,
+        candidate_count=candidate_count,
+        fallback_count=torch.zeros(local_shape, dtype=torch.int64),
+        total_count=total_count,
+        regime_count=regime_count,
+        independent_axes=(0, 1, 2),
+        candidate_size=len(_runtime_hypothesis_candidate_names(enabled)),
+        regime_size=6,
+    )
 
 
 def test_runtime_hypothesis_learned_fallback_has_complete_local_diagnostics() -> None:

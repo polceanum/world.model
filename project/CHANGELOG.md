@@ -13,9 +13,12 @@
 - Added strict configuration and exact-resume semantics plus runtime/evaluator
   construction. The disabled policy remains version 5; only the enabled
   five-candidate intervention records version 6.
-- Focused affected coverage passes `437 passed, 3 skipped`; the final
-  repository passes `1308 passed, 20 skipped in 455.58s`. Ruff, the 225-file
-  format check, isolated compile, version, and diff gates pass.
+- Focused affected coverage passes `437 passed, 3 skipped`. After repairing a
+  fixed-four candidate accounting assumption exposed before the first
+  fixed-32 candidate episode, the final repository passes `1309 passed, 20
+  skipped in 456.84s`. A one-episode five-candidate CPU evaluator smoke also
+  completes finite. Ruff, the 225-file format check, isolated compile,
+  version, and diff gates pass.
 - Predeclared a single fixed-32 CPU go/no-go pair. Weak improvement or any
   physical/uncertainty/event/identity/support guardrail failure stops the
   hypothesis before MPS; CPU success permits only one matched MPS confirmation.

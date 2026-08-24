@@ -9049,10 +9049,14 @@ accuracy from restarting the exhausted coefficient, interpolation, or residual
 families.
 
 The frozen implementation gate passes `437` affected tests with `3` expected
-backend skips and `1308` repository tests with `20` expected backend skips in
-`455.58s`. Ruff, the `225`-file format check, isolated compile, specification
-version, and diff checks pass. This is implementation evidence only; the
-bounded accuracy pair remains pending.
+backend skips. The first candidate launch failed before episode one because
+evaluator accounting still allocated four candidate slots; the failed `0/32`
+artifact is not accuracy evidence. Candidate names and count partitions now
+derive from the resolved policy, a one-episode five-candidate CPU report
+completes finite, and the final repository passes `1309` tests with `20`
+expected backend skips in `456.84s`. Ruff, the `225`-file format check,
+isolated compile, specification version, and diff checks pass. This is
+implementation evidence only; both clean bounded accuracy arms remain pending.
 
 ---
 

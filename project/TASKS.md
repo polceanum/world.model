@@ -8,10 +8,13 @@
   candidate with identity/non-free reset and exact learned fallback.
 - [x] Bind strict config, exact-resume semantics, evaluator policy versioning,
   and normal runtime/evaluator construction.
-- [x] Pass the final affected CPU suite (`437 passed, 3 skipped`) and full
-  repository (`1308 passed, 20 skipped in 455.58s`), plus Ruff, 225-file
+- [x] Pass the final affected CPU suite (`437 passed, 3 skipped`) and final
+  repository (`1309 passed, 20 skipped in 456.84s`), plus Ruff, 225-file
   format, isolated compile, version, and diff gates.
-- [ ] Freeze, commit, and push the implementation source.
+- [x] Repair the pre-episode fixed-four evaluator accounting assumption and
+  complete a finite one-episode five-candidate CPU report smoke.
+- [x] Freeze, commit, and push the implementation source and repaired dynamic
+  evaluator accounting before the retained fixed-32 pair.
 - [ ] Run exactly one sequential source-frozen fixed-32 CPU learned-only versus
   enabled pair. Require non-vacuous fifth-candidate use, at least `1e-5` metres
   summed pooled position improvement, and every existing guardrail.

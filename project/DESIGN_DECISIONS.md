@@ -27,8 +27,10 @@
   The normal runtime and historical policy remain unchanged by default. No
   accuracy, latency, deployment, or promotion claim exists until the bounded
   pair completes; failure terminates this hypothesis rather than spawning
-  nearby variants. Focused coverage passes `437/3`, and the final repository
-  gate passes `1308/20` with every static gate clean.
+  nearby variants. Focused coverage passes `437/3`. A pre-episode fixed-four
+  evaluator accounting assumption was repaired and a five-candidate report
+  smoke completed; the final repository gate passes `1309/20` with every
+  static gate clean.
 
 ## ADR-176 — Stop causal residual and current-checkpoint objective iteration
 
