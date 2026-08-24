@@ -28,6 +28,10 @@
 - [x] Test full camera covariance and an image-space centre EKF before changing
   belief schema. Reject the EKF after aggregate FAST error and x/z regress,
   despite the expected y improvement; do not add post-hoc gain/axis masks.
+- [x] Test a fixed 95% lower-confidence bound on delayed causal advantage.
+  Reject it after statistically selected reference-pairs y corrections worsen
+  true error; the delayed RGB proxy is biased, so do not tune confidence or
+  support thresholds.
 
 ## Learned-radius-derived depth — specification 1.76
 

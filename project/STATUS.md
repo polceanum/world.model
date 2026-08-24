@@ -66,6 +66,18 @@ is `/private/tmp/20260824-spec178-image-centre-ekf-feasibility-fixed8.json`
 (`d5119756...`). A future estimator must retain bounded coupled hypotheses in
 `WorldBelief`; moment-collapsing another Gaussian correction is closed.
 
+A final statistical check also closes the delayed-reliability interpretation.
+Requiring four paired observations and a positive two-sided 95% Student-t
+lower confidence bound removes most speculative axes and leaves heavy/light an
+exact no-op. It still worsens reference-pairs y error
+`0.155934 -> 0.191578 m` while the proxy advantage is confidently positive.
+The later global RGB observation is therefore a biased proxy for true state,
+not merely a noisy one; confidence thresholds cannot make that supervision
+consistent. The fixed-eight report is
+`/private/tmp/20260824-spec179-uncertainty-aware-causal-evidence-fixed8.json`
+(`7c014dcc...`). This closes delayed scalar reliability without another
+threshold or confidence sweep.
+
 ## Learned-radius-derived depth — specification 1.76 stable, accuracy rejected
 
 The fast RGB observer now has a default-off, fully differentiable camera-model

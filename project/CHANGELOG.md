@@ -34,6 +34,11 @@
   error worsens `0.116027 -> 0.122192 m` through x/z regressions. This closes
   moment-collapsed Gaussian correction variants before any belief-schema or
   runtime change.
+- Rejected a fixed 95% Student-t lower-confidence causal reliability rule.
+  Although it removes most speculative corrections and improves seven scenario
+  aggregates, a confidently selected reference-pairs correction worsens y
+  error `0.155934 -> 0.191578 m`. The delayed global RGB target is biased, not
+  just noisy, so no confidence/support tuning follows.
 
 ### 2026-08-24 learned-radius-derived depth (specification 1.76)
 
