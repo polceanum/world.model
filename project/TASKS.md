@@ -11,9 +11,13 @@
 - [x] Pass focused checkpoint/objective/config gates (`647 passed`, one
   expected skip) and the full repository suite (`1367 passed`, `20` expected
   skips in `510.17 s`) on the final source bytes.
-- [ ] Run one predeclared paired short accuracy gate against exact weight zero;
-  stop without tuning if material hard-rollout improvement is absent.
-- [ ] Merge/push to `main` only if the full accuracy and safety gate passes.
+- [x] Run one predeclared paired short accuracy gate against exact weight zero.
+  Reject it: hard equal-horizon gain is `0.000002095`, about 477 times below
+  the frozen `0.001` bar, despite passing every safety check.
+- [x] Restore supported profile weight zero and stop this adjacent surrogate
+  line without tuning or a longer run.
+- [x] Evaluate the conditional main-merge gate. It fails; preserve the research
+  evidence on the branch and leave `main` unchanged.
 
 ## RGB-only analytic silhouette reprojection — specification 1.71
 

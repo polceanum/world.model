@@ -3,7 +3,7 @@
 ## ADR-195 — Use a true smooth posterior as the differentiable training surrogate
 
 - **Date:** 2026-08-24
-- **Status:** implemented; bounded qualification pending
+- **Status:** mechanism retained legacy-zero; accuracy experiment rejected
 - **Context:** Auxiliary soft association improves current state but barely
   moves long rollouts; a zero-forward straight-through carrier is high variance;
   and dense silhouette reprojection is safe but materially inert. The hard
@@ -20,7 +20,10 @@
 - **Consequences:** The backward path is smooth and equation-consistent, while
   persistent identity/lifecycle/contact semantics stay hard. Training pays for
   one extra analytic rollout at the scored anchor; validation/deployment pay
-  nothing. One frozen paired gate decides retention, with no adjacent tuning.
+  nothing. The frozen pair halves the difficult update-nine raw-gradient spike
+  but gains only `0.000002095` on the hard equal-horizon score versus the
+  required `0.001`; both arms retain six selector failures. Restore weight zero
+  and close the adjacent surrogate line without tuning or a main merge.
 
 ## ADR-194 — Use analytic RGB silhouette reprojection as dense state evidence
 

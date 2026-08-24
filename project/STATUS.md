@@ -1,6 +1,6 @@
 # Project status
 
-## Smooth analytic shadow posterior — specification 1.72 implemented, qualification pending
+## Smooth analytic shadow posterior — specification 1.72 terminally rejected
 
 A true training-only soft posterior now evaluates the same gated RGB
 association evidence with the analytic diagonal correction, copies hard typed
@@ -17,8 +17,21 @@ and temperature, and legacy zero does not request an ingest trace. Full
 checkpoint/config/objective/trainer coverage passes `647` tests with one
 expected unavailable-MPS skip. The complete repository gate passes `1367`
 tests with `20` expected backend skips in `510.17 s`; Ruff and format checks
-are clean. One frozen treatment/control accuracy decision remains pending; no
-long run or main merge is authorized.
+are clean.
+
+The frozen pair under
+`/private/tmp/20260824-152800-spec172-soft-shadow-{treatment,control}` differs
+only in outer shadow weight `1.0` versus `0.0`, pairs all 16 draws/scenarios,
+and has 340 exact initial physical metrics. Treatment reduces the hard
+equal-weight horizon score only `0.205274486 -> 0.205272390`, a gain of
+`0.000002095` versus the predeclared `0.001`. Every non-regression check passes,
+frozen dynamics remain exact, and the difficult update-nine raw gradient falls
+from `177.624` to `84.668`, but both arms retain six selector guardrail
+failures. The supported profile restores exact weight zero. This closes the
+adjacent differentiable-surrogate experiments without weight, temperature,
+duration, or manifest tuning, without a long campaign, and without a main
+merge. Audit:
+`/private/tmp/20260824-152800-spec172-soft-shadow-paired-audit.json`.
 
 ## RGB-only analytic silhouette reprojection — specification 1.71 terminally rejected
 

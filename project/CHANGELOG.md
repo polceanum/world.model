@@ -15,7 +15,12 @@
   isolation, and strict configuration coverage.
 - Passed the focused checkpoint/config/objective/trainer gate (`647 passed`,
   one expected skip) and complete suite (`1367 passed`, `20` expected skips in
-  `510.17 s`). The bounded paired accuracy gate remains pending.
+  `510.17 s`).
+- Completed the exact 16-update pair. The smooth shadow lowers the hard
+  equal-horizon score only `0.205274486 -> 0.205272390` (`+0.000002095`), far
+  below the predeclared `+0.001`; both arms retain six selector failures.
+  Restored weight zero and closed the surrogate line without tuning, a long
+  campaign, or a main merge.
 
 ### 2026-08-24 RGB-only analytic silhouette reprojection (specification 1.71)
 

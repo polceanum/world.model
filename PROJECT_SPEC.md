@@ -9796,6 +9796,16 @@ exact weight zero. The pair must predeclare materiality and non-regression
 criteria and must stop without adjacent temperature, weight, duration, or
 target-manifest tuning if it fails.
 
+The frozen qualification is terminal. Treatment and control pair all 16 draws,
+scenarios, and 340 initial hard physical metrics, differing only in shadow
+weight `1.0` versus `0.0`. The hard equal-horizon score changes
+`0.205274486 -> 0.205272390`, only `+0.000002095`; both candidates retain the
+same six selector guardrail failures. Although every safety non-regression
+condition passes, frozen dynamics remain exact, and the shared difficult-batch
+raw gradient drops `177.624 -> 84.668`, material hard accuracy does not move.
+The supported profile must use exact weight zero. No adjacent surrogate tuning,
+longer qualification, or main merge is permitted.
+
 ---
 
 # Closing directive
