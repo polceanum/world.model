@@ -13,6 +13,7 @@
   `58` tests.
 - Passed the final repository (`1334 passed, 20 skipped in 468.79s`) plus
   Ruff, the 225-file format check, version, and diff gates.
+- Committed and pushed the coherent specification-1.67 repair as `cb2d6a0`.
 - Recorded a fixed-eight, eight-anchor CPU attribution. The old substituted
   path supplies mean absolute logit gradient `0.029132` both before and after
   detector training. The rejected candidate's raw negative confidence is

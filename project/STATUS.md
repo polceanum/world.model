@@ -17,7 +17,8 @@ unchanged; only global detector BCE consumes the raw logits. Shape/type checks
 fail closed. Focused structured-RGB and supervision coverage passes `58`
 tests. The final repository passes `1334` tests with `20` expected
 unavailable-backend skips in `468.79s`; Ruff, the 225-file format check,
-version, and diff gates are clean.
+version, and diff gates are clean. The coherent repair is committed and pushed
+at `cb2d6a0`.
 
 A frozen fixed-eight, eight-anchor CPU probe quantifies the defect. At the
 protected initializer, raw BCE has mean absolute logit gradient `0.418034`

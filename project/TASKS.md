@@ -15,7 +15,7 @@
   supervision exposes `0.935359` (`1cc459c9...`).
 - [x] Pass final repository (`1334 passed, 20 skipped in 468.79s`) plus
   Ruff, 225-file formatting, version, and diff gates.
-- [ ] Commit and push the clean specification-1.67 source.
+- [x] Commit and push the clean specification-1.67 source (`cb2d6a0`).
 - [ ] Run exactly one fresh 128-update detector-only rung with every
   specification-1.66 protocol and accuracy threshold unchanged. Stop
   permanently on another miss; do not tune adjacent hyperparameters.
