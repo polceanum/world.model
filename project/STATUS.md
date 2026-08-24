@@ -1,6 +1,6 @@
 # Project status
 
-## Specification 1.63 online local-acceleration candidate — bounded qualification
+## Specification 1.63 online local-acceleration candidate — terminally rejected
 
 A new default-off runtime candidate fits entity/axis acceleration from the
 already accepted causal RGB temporal-velocity measurement. It is outside
@@ -22,15 +22,24 @@ accounting assumption that still allocated four candidate slots. It is
 retained as a failed `0/32` implementation artifact, not accuracy evidence.
 Candidate names, index bounds, count partitions, and report fields now derive
 from the resolved policy; a dirty-source one-episode CPU evaluator smoke
-completed finite with the five-candidate schema. Both fixed-32 arms must be
-rerun on the repaired clean commit.
-The only authorized accuracy screen is one
-source-frozen sequential fixed-32 CPU learned-only/enabled pair on the
-protected checkpoint. It must use the fifth candidate non-vacuously, improve
-summed pooled position RMSE by at least `1e-5` metres, and pass every existing
-guardrail. Otherwise this branch stops without MPS or promotion. An active-
-Aqua MPS confirmation is permitted only after CPU success. Deployment remains
-the protected step-zero model.
+completed finite with the five-candidate schema.
+
+The sole repaired, source-frozen fixed-32 CPU pair is terminally negative. The
+fifth candidate was selected `0` times at current state and at every
+`0.1/0.25/0.5/0.75/1.0s` horizon, so it failed the required non-vacuity gate.
+Enabling it nevertheless increased the sum of pooled position RMSE by
+`0.000107280209 m`; every pooled position horizon worsened. The comparison
+records `246` physical guardrail failures and all three latency failures,
+including rollout latency ratio `1.73110`. One damped-contact one-second event
+slice also lacked positive-class support, but the vacuity and broad physical
+regressions already reject the candidate independently. The comparison SHA is
+`ebeb6b63...`; reference/candidate report SHAs are `ca20f6bf...` and
+`9fe1e4d6...`.
+
+The predeclared stop is therefore enforced: no MPS confirmation, threshold,
+support-count, acceleration-bound, duration, residual, or interpolation
+iteration follows. The mechanism remains default-off research code;
+deployment remains the protected step-zero model.
 
 ## Causal adaptive-residual screen — rejected; current ladder stopped
 

@@ -3,7 +3,7 @@
 ## ADR-177 — Bound one observation-fitted transition candidate, then stop
 
 - **Date:** 2026-08-24
-- **Status:** implemented; bounded qualification pending
+- **Status:** mechanism retained default-off; bounded accuracy rejected; terminal
 - **Context:** Fixed analytic candidates and fixed/adaptive output residuals
   either regressed broad guardrails or produced only marginal pooled gains.
   The final adaptive probe nevertheless showed that earlier causal RGB
@@ -24,13 +24,16 @@
   storing the fit in persistent belief; using simulator velocities; weakening
   scenario/event/identity guardrails; or continuing after marginal gain.
 - **Consequences:** The experiment has a narrow causal route and a hard stop.
-  The normal runtime and historical policy remain unchanged by default. No
-  accuracy, latency, deployment, or promotion claim exists until the bounded
-  pair completes; failure terminates this hypothesis rather than spawning
-  nearby variants. Focused coverage passes `437/3`. A pre-episode fixed-four
-  evaluator accounting assumption was repaired and a five-candidate report
-  smoke completed; the final repository gate passes `1309/20` with every
-  static gate clean.
+  The normal runtime and historical policy remain unchanged by default.
+  Focused coverage passes `437/3`; the final repository gate passes `1309/20`
+  with every static gate clean. A pre-episode fixed-four evaluator accounting
+  assumption was repaired before the sole valid pair. In that repaired
+  fixed-32 CPU comparison, the fifth candidate is selected zero times, summed
+  pooled position RMSE worsens `0.000107280209 m`, `246` physical guardrails
+  fail, and rollout latency is `1.73110x`. The candidate is rejected before
+  MPS (`ebeb6b63...`). Failure terminates this hypothesis rather than spawning
+  threshold, support-count, bound, duration, residual, or interpolation
+  variants. Deployment remains step zero.
 
 ## ADR-176 — Stop causal residual and current-checkpoint objective iteration
 

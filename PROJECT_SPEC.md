@@ -9055,8 +9055,25 @@ artifact is not accuracy evidence. Candidate names and count partitions now
 derive from the resolved policy, a one-episode five-candidate CPU report
 completes finite, and the final repository passes `1309` tests with `20`
 expected backend skips in `456.84s`. Ruff, the `225`-file format check,
-isolated compile, specification version, and diff checks pass. This is
-implementation evidence only; both clean bounded accuracy arms remain pending.
+isolated compile, specification version, and diff checks pass.
+
+The sole repaired fixed-32 CPU pair on clean commit `f60aac7` is the terminal
+accuracy decision. The enabled fifth candidate has zero selections at current
+state and every configured horizon, failing the required non-vacuity gate.
+Summed pooled position RMSE worsens `0.000107280209 m`; each of the five
+horizons regresses. The paired comparison reports `246` physical guardrail
+failures and latency ratios `1.24317/1.23565/1.73110` for global, fast, and
+rollout execution. A damped-contact one-second event slice also has no positive
+reference or candidate class support. These are independent failures; none is
+treated as promotion evidence. The comparison report is
+`/private/tmp/20260824-spec163-online-acceleration-fixed32-cpu-comparison.json`
+(SHA-256 `ebeb6b63c4fcc990abd6ee56406c8053188d89409faef6d6e54d2a617111ad39`),
+with source reports `ca20f6bf...` and `9fe1e4d6...`.
+
+Therefore no MPS confirmation is run and no nearby configuration is tested.
+The candidate remains default off, the protected step-zero deployment remains
+unchanged, and this hypothesis is closed under the declared diminishing-
+returns rule.
 
 ---
 

@@ -19,10 +19,16 @@
   skipped in 456.84s`. A one-episode five-candidate CPU evaluator smoke also
   completes finite. Ruff, the 225-file format check, isolated compile,
   version, and diff gates pass.
-- Predeclared a single fixed-32 CPU go/no-go pair. Weak improvement or any
-  physical/uncertainty/event/identity/support guardrail failure stops the
-  hypothesis before MPS; CPU success permits only one matched MPS confirmation.
-  No accuracy or promotion result exists yet.
+- Completed the sole repaired, source-frozen fixed-32 CPU pair. The fifth
+  candidate is selected `0` times at every reported horizon, pooled position
+  RMSE worsens at all five horizons by `0.000107280209 m` in total, `246`
+  physical guardrails fail, and rollout latency is `1.73110x` reference. The
+  comparison is `ebeb6b63...`; reference/candidate reports are `ca20f6bf...`
+  and `9fe1e4d6...`.
+- Rejected the hypothesis before MPS and enforced the declared stop. The
+  default remains off, deployment remains step zero, and no nearby threshold,
+  support-count, acceleration-bound, duration, residual, or interpolation
+  variant is authorized.
 
 ### 2026-08-24 terminal causal adaptive-residual diagnostic
 

@@ -15,14 +15,13 @@
   complete a finite one-episode five-candidate CPU report smoke.
 - [x] Freeze, commit, and push the implementation source and repaired dynamic
   evaluator accounting before the retained fixed-32 pair.
-- [ ] Run exactly one sequential source-frozen fixed-32 CPU learned-only versus
-  enabled pair. Require non-vacuous fifth-candidate use, at least `1e-5` metres
-  summed pooled position improvement, and every existing guardrail.
-- [ ] If and only if CPU passes, run one matched active-Aqua MPS confirmation.
-  Otherwise reject and stop without threshold, duration, interpolation, or
-  residual iteration.
-- [ ] Synchronize the final evidence decision, commit, and push it. Deployment
-  remains the protected step-zero model unless comprehensive promotion passes.
+- [x] Run exactly one sequential source-frozen fixed-32 CPU learned-only versus
+  enabled pair. The fifth candidate is selected `0` times, summed pooled
+  position RMSE worsens `0.000107280209 m`, and `246` physical guardrails fail.
+- [x] Reject before MPS under the predeclared rule. Do not tune threshold,
+  support count, acceleration bound, duration, interpolation, or residuals.
+- [x] Synchronize the terminal evidence decision. Deployment remains the
+  protected step-zero model; commit and push the evidence closure.
 
 ## Terminal causal-adaptation screen
 
