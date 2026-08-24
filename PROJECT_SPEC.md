@@ -9680,12 +9680,12 @@ The switch is strict boolean, legacy-false, and exact-resume-bound. Enabling it
 requires a positive soft-association temperature and the
 `differentiable_state_estimator` scope. It adds no extra dynamics rollout and no
 new scalar objective: existing physical current/forecast losses provide the
-gradient, keeping training cost close to the hard recursive path. The CPU
-profile enables this carrier after the auxiliary-only paired qualification
-missed its long-horizon materiality bar. One bounded paired qualification
-against the otherwise identical auxiliary-only graph is required before any
-long campaign; failure closes this carrier without temperature or loss-weight
-tuning on the fixed manifest.
+gradient, keeping training cost close to the hard recursive path. The carrier
+is an opt-in research mechanism only; the supported CPU profile keeps it
+disabled. One bounded paired qualification against the otherwise identical
+auxiliary-only graph decides whether it may enter a long campaign. Failure
+closes this carrier without temperature, clipping, or loss-weight tuning on the
+fixed manifest.
 
 The clean-commit one-update smoke at
 `/private/tmp/20260824-123200-spec170-soft-posterior-one-update-smoke`
@@ -9696,6 +9696,20 @@ to `4.020634/1.064066`. The balanced update applied with zero retry, learned
 dynamics gradient remained exactly zero, and the two hard validations plus
 training completed in `203.41 s`. This proves graph, ownership, exact-forward,
 and bounded cost only; it is not accuracy evidence.
+
+The frozen 16-update qualification under
+`/private/tmp/20260824-123651-spec170-soft-posterior-{treatment,control}` pairs
+every draw/scenario, all 340 initial hard physical metrics, and the complete
+initial model state; its sole configuration difference is this switch. The
+carrier fails the frozen gate: the equal-horizon position selector changes
+from `0.23694237291752868` to `0.23695040382841093`, a treatment gain of
+`-0.00000803091088225` versus the required `+0.001`. Current position and
+velocity are also slightly adverse, while the maximum raw gradient grows from
+`7.812855` to `8570.701116`; global clipping keeps the updates finite and no
+frozen dynamics tensor changes. This is estimator-variance and accuracy
+evidence, not a differentiability or runtime-integrity failure. The carrier is
+terminally rejected for supported training, remains legacy-off for
+reproducibility, and receives no adjacent tuning or long campaign.
 
 ---
 

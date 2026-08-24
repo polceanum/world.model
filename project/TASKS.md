@@ -13,8 +13,12 @@
 - [x] Complete one balanced clean-commit technical update with 96 carrier rows,
   finite `4.020634/1.064066` raw/applied gradients, zero learned-dynamics
   gradient, no retry, and hard pre/post validation.
-- [ ] Complete one frozen paired qualification against the auxiliary-only
-  graph; stop without tuning if the hard five-horizon gain is not material.
+- [x] Complete one frozen paired qualification against the auxiliary-only
+  graph. Reject it: selector gain is `-0.000008031` versus the required
+  `+0.001`, current errors are slightly adverse, and treatment raw gradient
+  peaks at `8570.701` versus `7.813` in control.
+- [x] Disable the carrier in the supported CPU profile and stop without
+  temperature, clipping, or loss-weight tuning and without a long campaign.
 
 ## Differentiable physics assimilation — specification 1.69
 

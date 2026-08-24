@@ -1,6 +1,6 @@
 # Project status
 
-## Forward-exact soft posterior — specification 1.70 implemented
+## Forward-exact soft posterior — specification 1.70 terminally rejected
 
 The next structural repair is implemented without changing hard runtime
 values. A gated soft analytic Kalman correction contributes only a zero-valued
@@ -17,8 +17,18 @@ clean. The clean-commit one-update smoke under
 96 carrier rows, 72 position coordinates, and three velocity coordinates. Its
 forward loss is unchanged at `2.708743`; raw/applied gradients are
 `4.020634/1.064066`, learned dynamics gradient is zero, and no retry occurs.
-One frozen treatment versus auxiliary-only qualification remains pending; no
-long campaign is authorized.
+The frozen 16-update treatment versus auxiliary-only qualification under
+`/private/tmp/20260824-123651-spec170-soft-posterior-{treatment,control}` is
+complete. It pairs every draw/scenario and all 340 initial hard physical
+metrics, changes only the carrier switch, and leaves frozen dynamics exact.
+Treatment is slightly adverse: the equal-horizon position selector changes
+`0.236942373 -> 0.236950404` (gain `-0.000008031`), current position changes
+`0.117554824 -> 0.117555851 m`, and current velocity changes
+`0.776555581 -> 0.776634463 m/s`. More importantly, treatment reaches a raw
+gradient norm of `8570.701` versus `7.813` in control, although global clipping
+keeps updates finite. The predeclared `0.001` materiality bar therefore fails
+decisively. The runnable profile disables the carrier; it remains only as a
+legacy-off research mechanism. No tuning and no long campaign are authorized.
 
 ## Differentiable physics assimilation — specification 1.69 implemented
 
@@ -58,9 +68,11 @@ bar: the equal-horizon position selector improves only
 `0.237095 -> 0.236942` (`0.000153`) rather than the required `0.001`.
 Therefore this weight/configuration is not approved for a longer campaign and
 must not be tuned on the fixed-eight manifest. The result supports retaining
-the differentiable trace/scope infrastructure, but the next intervention must
-make the post-assimilation posterior/rollout surrogate itself differentiable
-rather than adding another assignment-loss weight sweep.
+the differentiable trace/scope infrastructure. The subsequent forward-exact
+straight-through posterior experiment was also rejected because it was
+slightly adverse and high variance. Future work should improve observable RGB
+state/association evidence or use a demonstrably lower-variance estimator,
+not tune either surrogate on the fixed manifest.
 
 ## Event-epoch adaptive local model — terminal rejection
 

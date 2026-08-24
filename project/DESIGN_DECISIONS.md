@@ -3,7 +3,7 @@
 ## ADR-193 — Use a zero-value soft-posterior gradient carrier
 
 - **Date:** 2026-08-24
-- **Status:** implementation accepted; bounded accuracy pending
+- **Status:** mechanism retained legacy-off; accuracy experiment rejected
 - **Context:** The first soft-assignment auxiliary materially improves current
   hard state but barely changes the five-horizon selector. Conditional hard
   matches are differentiable, yet forecast gradients cannot express how a
@@ -25,7 +25,11 @@
   tuning or a long campaign. The clean-commit smoke exercises 96 carrier rows,
   preserves forward loss `2.708743`, applies finite `4.020634/1.064066`
   raw/applied gradients with zero learned-dynamics gradient, and adds no
-  observable runtime failure.
+  observable runtime failure. The frozen 16-update pair then changes the hard
+  equal-horizon selector `0.236942373 -> 0.236950404`, slightly worsens current
+  position/velocity, and spikes the raw gradient to `8570.701` versus `7.813`
+  in control. This fails the predeclared `0.001` improvement bar. Disable the
+  carrier in the supported profile and close it without tuning or a long run.
 
 ## ADR-192 — Relax hard assimilation for training, retain it for deployment
 

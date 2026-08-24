@@ -167,7 +167,9 @@ training:
   closed_loop_axiswise_correction_hinge_enabled: true
   # Training-only relaxation of hard Hungarian identity assignment.
   closed_loop_soft_association_temperature: 0.5
-  closed_loop_soft_posterior_straight_through_enabled: true
+  # Retained only as an opt-in research mechanism after its frozen paired gate
+  # was slightly adverse and exhibited a large raw-gradient spike.
+  closed_loop_soft_posterior_straight_through_enabled: false
   closed_loop_scenario_tail_fraction: 0.25
   closed_loop_uncertainty_standardized_error_gradient_cap: 25.0
   # Frozen step-zero scenario/axis/horizon replay is an 11.1% gradient-scale

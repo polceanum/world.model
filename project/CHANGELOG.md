@@ -16,7 +16,13 @@
   clean-commit balanced one-update smoke. The smoke exercises 96 carrier rows,
   72 position and three velocity coordinates, changes the backward but not the
   `2.708743` forward loss, and applies with no retry or learned-dynamics
-  gradient. Paired hard-accuracy qualification remains pending.
+  gradient.
+- Completed the frozen 16-update treatment/control qualification with exact
+  paired draws, 340 exact initial physical metrics, and frozen dynamics. The
+  carrier is slightly adverse (`0.236942373 -> 0.236950404`) and produces a
+  raw-gradient spike of `8570.701` versus `7.813`; rejected it at the frozen
+  `0.001` materiality bar, disabled it in the supported profile, and stopped
+  without tuning or a long campaign.
 
 ### 2026-08-24 differentiable physics assimilation (specification 1.69)
 
