@@ -1,5 +1,22 @@
 # Tasks
 
+## Dense multi-instance center architecture — feasibility passed
+
+- [x] Train one distinct dense heatmap head off-repo with the production model
+  and backbone frozen, 128 balanced updates, and no threshold/architecture
+  sweep.
+- [x] Recompute under the exact 192-target raw gate. Candidate recall/precision
+  are `94.27%/100%` versus query baseline `29.17%/30.77%`; every scenario
+  exceeds `83%` recall (`f7587471...`).
+- [x] Prove the production model state stays bit-exact at `88f2df4d...`; retain
+  the temporary head only as feasibility evidence, not a deployable checkpoint.
+- [ ] Implement one opt-in dense global detector that emits the complete typed
+  measurement contract, with strict config/checkpoint-growth/exact-resume and
+  detector-only optimizer ownership.
+- [ ] Preserve the fixed dense architecture/loss and pass focused runtime,
+  supervision, lifecycle, checkpoint, and full repository gates before one
+  clean fixed-eight rerun. Require the same material gate before fixed-32/MPS.
+
 ## Raw learned-existence supervision repair — specification 1.67
 
 - [x] Prove that structured runtime confidence was substituted into global

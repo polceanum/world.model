@@ -1,5 +1,31 @@
 # Design decisions
 
+## ADR-186 — Advance one dense center model after query-detector termination
+
+- **Date:** 2026-08-24
+- **Status:** off-repo feasibility accepted; production implementation pending
+- **Context:** Correct raw existence supervision repairs confidence but leaves
+  the existing DETR-like query detector at `28.13%` top-count recall, below its
+  protected `29.17%` baseline. That family is terminal. A future attempt must
+  provide genuinely different multi-instance localization capacity.
+- **Decision:** Permit one fixed dense center-heatmap probe over frozen
+  production RGB features. Use 128 balanced updates, generated projected-center
+  labels, local-maximum top-count decoding, the existing `0.1` distance and
+  `0.55` confidence thresholds, and the unchanged +10/-5 point gate. Do not
+  alter the production model or sweep architecture/loss/thresholds.
+- **Alternatives considered:** further query-detector training/tuning; another
+  chromatic split; broader learned fallback admission; a large external
+  detector; or immediate production integration without feasibility evidence.
+- **Consequences:** The 55,553-parameter head reaches `181/192` (`94.27%`)
+  recall and 100% confident precision, improving the query baseline by
+  `+65.10/+69.23` points. Minimum scenario recall is `83.33%`, and the frozen
+  production model hash remains exact. This materially clears feasibility and
+  authorizes one opt-in production dense detector with full typed attributes,
+  explicit checkpoint growth, and detector-only ownership. It does not
+  authorize deployment or physical/MPS promotion; those remain behind focused
+  integration, fixed-eight repetition, fixed-32, and active-Aqua gates. Exact
+  report SHA-256 is `f7587471...`.
+
 ## ADR-185 — Supervise raw learned existence while preserving structured runtime evidence
 
 - **Date:** 2026-08-24

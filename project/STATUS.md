@@ -1,5 +1,34 @@
 # Project status
 
+## Dense multi-instance center feasibility — production implementation pending
+
+The detector-only query family is closed, but one genuinely different
+architecture clears its predeclared off-repo feasibility gate. A 55,553-
+parameter dense center-heatmap head was trained for exactly 128 balanced CPU
+updates over 1,024 generated three-object episodes while the complete
+production model and RGB backbone stayed frozen at model-state hash
+`88f2df4d...`. It uses generated projected centers only as training labels;
+evaluation and proposed runtime inference consume RGB features only.
+
+On the exact fixed-eight, eight-anchor raw-query support of 192 projected
+targets, NMS top-count peaks localize `181/192` within `0.1` normalized image
+coordinates (`94.27%`) with `181/181` confident precision. The protected query
+detector baseline is `56/192` (`29.17%`) and `44/143` (`30.77%`), so recall and
+precision improve by `+65.10` and `+69.23` percentage points. Every scenario
+is at least `83.33%` recall; baseline, camera, damped, and impulse are 100%.
+The exact-gate report is
+`/private/tmp/20260824-spec168-dense-center-feasibility-exact-gate.json`
+(`f7587471...`); the frozen model hash is identical before and after.
+
+This is architecture feasibility, not runtime or promotion evidence. The head
+does not yet emit the full typed measurement attributes, participate in
+checkpoint/config/exact-resume contracts, or run through lifecycle and closed-
+loop validation. The next justified production change is one opt-in dense
+global detector with an explicit growth initializer, full attribute maps, and
+detector-only ownership. Do not tune the successful probe or alter deployment;
+first preserve its fixed architecture/loss and prove runtime integration on
+focused tests, then reapply fixed-eight before any fixed-32 physical/MPS gate.
+
 ## Raw learned-existence supervision repair — specification 1.67
 
 The rejected specification-1.66 detector run exposed a distinct supervision

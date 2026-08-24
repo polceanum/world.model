@@ -2,6 +2,20 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 dense multi-instance center feasibility
+
+- Ran one temp-only dense center-heatmap architecture probe with a frozen
+  production model/backbone, exactly 128 balanced updates, 1,024 disjoint
+  generated training episodes, and no architecture/threshold sweep.
+- Passed the exact fixed-eight raw localization gate: `181/192` (`94.27%`)
+  top-count recall and `181/181` confident precision versus the query-detector
+  baseline `56/192` (`29.17%`) and `44/143` (`30.77%`). Every scenario reaches
+  at least `83.33%` recall.
+- Verified the production model-state hash remains bit-exact `88f2df4d...`.
+  This is feasibility only; full typed measurement emission, checkpoint growth,
+  runtime/lifecycle integration, repository gates, and physical/MPS evidence
+  remain pending (`f7587471...`).
+
 ### 2026-08-24 specification 1.67 raw learned-existence supervision repair
 
 - Separated structured runtime existence confidence from the learned global
