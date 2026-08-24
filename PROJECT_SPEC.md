@@ -3,13 +3,14 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.75
+**Version:** 1.76
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, opt-in dense multi-instance global-discovery, causal observation-model selection, terminal dense typed-attribute evidence, frozen-foundation-feature feasibility, adaptive Gaussian local-model evidence, event-epoch local-model evidence, differentiable hard-runtime assimilation surrogate, and forward-exact soft-posterior gradient-carrier amendments 24 August 2026
 **Amendment 24 August 2026:** RGB-only analytic silhouette reprojection and smooth analytic shadow-posterior training
 **Amendment 24 August 2026:** modular differentiable backward ownership and bounded accuracy rejection
 **Amendment 24 August 2026:** semigroup-safe shared chronological hypothesis horizons
 **Amendment 24 August 2026:** RGB-only photometric sphere geometry with differentiable learned-head carriers
+**Amendment 24 August 2026:** calibrated learned-radius depth and complete normal-runtime hypothesis-policy routing
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9957,6 +9958,62 @@ guardrails fail. This demonstrates that the exact-forward straight-through
 carrier is a biased, inefficient teacher rather than a trainable deployment
 solution. No fixed-32 escalation, longer run, threshold sweep, or further
 photometric successor is authorized.
+
+---
+
+## 275. Derive depth from a learned image quantity and a differentiable camera equation
+
+The fast RGB observer may opt into a calibrated sphere-projection path in which
+the ROI network predicts apparent log radius and the measurement module derives
+inverse depth from focal length, image size, and the configured physical sphere
+radius. The analytic camera equation remains inside the ordinary PyTorch graph:
+the depth objective backpropagates into the learned radius row, while no separate
+unconstrained inverse-depth residual is trained. This is the preferred pattern
+for differentiable physical inductive bias: learn the image quantity that is
+observable, then transform it with the known equation rather than asking a
+black-box head to relearn both.
+
+`model.rgb.fast_radius_derived_depth_enabled` is a strict boolean, defaults
+false, has a legacy-false exact-resume migration, and is mutually exclusive with
+both unconstrained fast depth residuals and structured-disc depth substitution.
+The disabled path is unchanged. Focused coverage proves the exact projection,
+nonzero radius-row gradient, zero direct depth-row gradient, strict configuration,
+and checkpoint semantic binding. Separately, normal `OnlineWorldModel` creation
+must pass `runtime.hypothesis_shared_horizon_rollout_enabled` into the runtime
+hypothesis controller; evaluator-only wiring is insufficient. A construction
+regression protects that integration path.
+
+The bounded evidence rejects promotion. A zero-update fixed-eight screen is
+mixed: position improves at 0.1--0.75 seconds by `5.82e-6` to `2.16e-5 m`, but
+current and 1-second position regress slightly. One frozen 16-update balanced
+CPU treatment/control pair then demonstrates real optimization value without
+accuracy value. The derived-depth treatment keeps maximum raw perception
+gradient at `0.922627` with zero local clips, while the exact control reaches
+`8579.301758` and clips once. Nevertheless treatment versus control worsens
+current position by `0.000229989 m`, worsens current velocity by
+`0.000008844 m/s`, regresses four of five velocity horizons, and improves only
+collision F1 and 1-second position slightly. Both arms also regress from the
+common initializer on current position, velocity, and collision F1.
+
+This candidate therefore stops before fixed-32, MPS, longer training, or any
+learning-rate/weight/duration sweep. The mechanism remains default-off as a
+sound differentiable equation path and gradient-stability diagnostic, but is
+not eligible for `main`. The dominant accuracy conclusion remains the oracle
+anchor result: equation rollouts are already close to the simulator when the
+initial world state is correct, so future work must improve RGB observation and
+association evidence without sacrificing the fixed physical guardrails.
+
+Evidence is retained at
+`/private/tmp/20260824-spec176-learned-radius-derived-depth-fixed8.json`
+(`e7fe61f2...`) and the paired run roots
+`/private/tmp/20260824-210000-spec176-radius-depth-treatment16` and
+`/private/tmp/20260824-211500-spec176-radius-depth-control16`. Their resolved
+config SHA-256 values are `52d47503...` and `547d57ad...`; metrics SHA-256
+values are `d1fdcb21...` and `41169998...`; validation-step-16 checkpoint
+SHA-256 values are `b8b53dde...` and `8cabddc1...`.
+
+The final repository gate on these source bytes passes `1386` tests with `20`
+expected unavailable-backend skips in `520.50 s`.
 
 ---
 

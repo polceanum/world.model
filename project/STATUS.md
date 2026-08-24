@@ -1,5 +1,26 @@
 # Project status
 
+## Learned-radius-derived depth — specification 1.76 stable, accuracy rejected
+
+The fast RGB observer now has a default-off, fully differentiable camera-model
+path: the network predicts apparent log radius and calibrated sphere projection
+derives inverse depth. Depth gradients reach the learned radius row and bypass
+the unconstrained depth row. Strict configuration, mutual exclusion, legacy
+resume, checkpoint binding, and runtime construction tests are in place. The
+normal runtime also now receives the typed shared-horizon hypothesis policy;
+previously only evaluator construction routed that field.
+
+The bounded training gate is terminal. In the exact 16-update treatment/control
+pair, learned-radius depth prevents the control's raw gradient spike
+(`8579.301758` versus `0.922627`) and eliminates local clipping. It does not
+improve hard accuracy: treatment versus control worsens current position by
+`0.000229989 m`, worsens current velocity by `0.000008844 m/s`, and regresses
+four of five velocity horizons. Both arms regress from the common initializer.
+No fixed-32, MPS, longer, or hyperparameter follow-up is authorized. The
+mechanism remains default-off on the research branch and is not eligible for
+`main`. The final repository gate passes `1386` tests with `20` expected skips
+in `520.50 s`.
+
 ## Photometric RGB geometry — specification 1.75 mechanism retained, runtime use rejected
 
 An oracle-anchor fixed-eight decomposition reduces 0.1-second position RMSE

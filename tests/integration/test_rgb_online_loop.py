@@ -119,6 +119,24 @@ def test_runtime_constructs_online_acceleration_only_when_explicitly_enabled() -
     assert candidates[-1].maximum_acceleration == pytest.approx(12.0)
 
 
+def test_runtime_routes_shared_horizon_policy_from_typed_config() -> None:
+    base = _small_rgb_config()
+    config = replace(
+        base,
+        runtime=replace(
+            base.runtime,
+            hypothesis_pool_enabled=True,
+            hypothesis_shared_horizon_rollout_enabled=True,
+        ),
+    )
+    config.validate()
+
+    model = OnlineWorldModel.from_config(config, device="cpu")
+
+    assert model.hypothesis_controller is not None
+    assert model.hypothesis_controller.shared_horizon_rollout_enabled is True
+
+
 def test_rgb_only_runtime_initialises_then_uses_cached_fast_path() -> None:
     torch.manual_seed(3)
     model = OnlineWorldModel.from_config(_small_rgb_config(), device="cpu")

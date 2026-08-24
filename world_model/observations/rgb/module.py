@@ -66,6 +66,7 @@ class RGBObservationConfig:
     roi_size: int = 20
     roi_hidden_dim: int = 96
     fast_depth_residual_enabled: bool = False
+    fast_radius_derived_depth_enabled: bool = False
     temporal_velocity_enabled: bool = False
     temporal_velocity_history_size: int = 3
     temporal_velocity_min_samples: int = 3
@@ -166,6 +167,15 @@ class RGBObservationConfig:
     measurement_log_variance_max: float = 3.0
 
     def __post_init__(self) -> None:
+        if not isinstance(self.fast_radius_derived_depth_enabled, bool):
+            raise TypeError("fast_radius_derived_depth_enabled must be boolean")
+        if self.fast_radius_derived_depth_enabled and (
+            self.fast_depth_residual_enabled or self.structured_disc_fast_depth_enabled
+        ):
+            raise ValueError(
+                "fast_radius_derived_depth_enabled is mutually exclusive with "
+                "fast_depth_residual_enabled and structured_disc_fast_depth_enabled"
+            )
         if self.temporal_velocity_history_size < 3:
             raise ValueError("temporal_velocity_history_size must be at least three")
         if not 2 <= self.temporal_velocity_min_samples <= self.temporal_velocity_history_size:
@@ -1063,7 +1073,9 @@ class RGBObservationModule(ObservationModule):
         )
         values = output.values
         raw_centre = output.values[..., :2]
-        if not self.config.fast_depth_residual_enabled:
+        if not (
+            self.config.fast_depth_residual_enabled or self.config.fast_radius_derived_depth_enabled
+        ):
             # Depth is substantially less observable from a small residual
             # crop than centre offset.  Keep the analytic predicted depth until
             # a trained checkpoint passes a held-out per-mode improvement gate.
@@ -1079,6 +1091,23 @@ class RGBObservationModule(ObservationModule):
         world_from_camera = predicted.auxiliary["world_from_camera"][:, 0]
         intrinsics = predicted.auxiliary["intrinsics"][:, 0]
         image_size = (image.shape[-2], image.shape[-1])
+        if self.config.fast_radius_derived_depth_enabled:
+            # The learned ROI head estimates apparent radius, while calibrated
+            # sphere projection supplies the only depth equation.  This keeps
+            # the deployed forward fully differentiable without giving a
+            # separate unconstrained inverse-depth residual permission to
+            # contradict the radius evidence.
+            analytic_inverse_depth = self._structured_inverse_depth(
+                values[..., 2:3],
+                intrinsics,
+                image_size,
+                self.config.default_world_radius,
+                torch.zeros_like(values[..., 3:4]),
+            ).unsqueeze(-1)
+            values = torch.cat(
+                (values[..., :3], analytic_inverse_depth, values[..., 4:]),
+                dim=-1,
+            )
         structured_valid = torch.zeros(
             values.shape[:2],
             device=image.device,

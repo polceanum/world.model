@@ -2,6 +2,22 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 learned-radius-derived depth (specification 1.76)
+
+- Added a default-off differentiable observation path that predicts apparent
+  radius and derives inverse depth with calibrated sphere-projection geometry.
+- Added strict boolean/exclusivity validation, legacy-false exact-resume
+  binding, exact equation/gradient coverage, and normal-runtime routing of the
+  shared-horizon hypothesis policy.
+- The sole 16-update paired gate reduced maximum raw perception gradient from
+  `8579.301758` to `0.922627` and removed clipping, but slightly worsened current
+  position/velocity and four velocity horizons.
+- Rejected promotion and stopped before fixed-32, MPS, longer training, or
+  parameter sweeps. The mechanism remains default-off on the research branch;
+  `main` is unchanged.
+- Passed the final repository gate (`1386 passed`, `20` expected skips in
+  `520.50 s`).
+
 ### 2026-08-24 photometric RGB geometry (specification 1.75)
 
 - Added a default-off RGB-only inverse-rendering fit for complete structured

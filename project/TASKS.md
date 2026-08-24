@@ -1,5 +1,26 @@
 # Tasks
 
+## Learned-radius-derived depth — specification 1.76
+
+- [x] Route the learned apparent-radius measurement through the calibrated
+  differentiable sphere-projection equation instead of learning an independent
+  inverse-depth residual.
+- [x] Keep the path strict, default-off, mutually exclusive with existing depth
+  substitutions, and exact-resume-bound with legacy false.
+- [x] Repair normal-runtime routing of the typed shared-horizon hypothesis flag.
+- [x] Prove exact forward geometry and radius-only depth gradients; pass the
+  focused config/checkpoint/runtime/RGB suite.
+- [x] Run one zero-update fixed-eight screen and exactly one frozen 16-update
+  balanced treatment/control pair.
+- [x] Reject the candidate after treatment stabilizes gradients but slightly
+  worsens hard position/velocity accuracy; stop before fixed-32, MPS, longer
+  training, or adjacent tuning.
+- [x] Pass the final repository gate (`1386 passed`, `20 skipped` in
+  `520.50 s`) on the exact documented source bytes.
+- [ ] Merge to `main` only when a new observation/association hypothesis passes
+  the complete fixed accuracy and promotion contract; specification 1.76 does
+  not.
+
 ## Photometric RGB geometry — specification 1.75
 
 - [x] Localize short-horizon error with an oracle-anchor decomposition; confirm

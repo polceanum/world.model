@@ -65,6 +65,7 @@ model:
     global_every_steps: 12
     roi_size: 20
     fast_depth_residual_enabled: false
+    fast_radius_derived_depth_enabled: false
     temporal_velocity_independent_raw_history_enabled: false
     temporal_velocity_continuous_gravity_axis_enabled: false
     structured_disc_center_enabled: true

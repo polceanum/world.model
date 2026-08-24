@@ -5848,3 +5848,34 @@
   velocity, and clips 15/16 updates. The straight-through carrier is therefore
   rejected as a biased training surrogate and the entire photometric line is
   closed without fixed-32 escalation.
+
+## ADR-200 — Learn apparent radius and derive depth through calibrated geometry
+
+- **Date:** 2026-08-24
+- **Status:** mechanism retained default-off; accuracy candidate rejected
+- **Context:** Oracle-anchor evaluation reduced 0.1-second position RMSE from
+  `0.140636` to `0.005056 m`, showing that the equation rollout is already
+  nearly exact from a correct state. The supported fast RGB path supervised
+  world position but disabled both learned and structured depth corrections,
+  so no useful depth gradient reached the ROI observer. The photometric fitter
+  was accurate in isolation but biased as a direct or straight-through runtime
+  measurement.
+- **Decision:** Let the network predict apparent log radius, then derive inverse
+  depth through the calibrated sphere-projection equation inside the autograd
+  graph. Do not expose a simultaneous independent depth residual. Keep the
+  switch strict, default-off, mutually exclusive with other fast-depth modes,
+  and exact-resume-bound. Also route the shared-horizon policy through normal
+  runtime construction rather than evaluator construction alone.
+- **Alternatives considered:** repeat photometric threshold/fusion tuning;
+  enable an unconstrained depth head; replace equation dynamics with a learned
+  transition; weaken fixed guardrails; or launch a long training campaign
+  before a paired short gate.
+- **Consequences:** The 16-update pair proves a large stability benefit: maximum
+  raw perception gradient falls from `8579.301758` to `0.922627` and local clips
+  fall from one to zero. It does not improve accuracy. Current position worsens
+  by `0.000229989 m`, current velocity worsens by `0.000008844 m/s`, four of
+  five velocity horizons regress, and both arms are worse than the common
+  initializer. Retain the differentiable equation mechanism for research,
+  reject promotion, and stop this line before fixed-32, MPS, longer training,
+  or hyperparameter sweeps. `main` remains protected. The final repository
+  gate passes `1386` tests with `20` expected skips in `520.50 s`.

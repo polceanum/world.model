@@ -236,6 +236,9 @@ class OnlineWorldModel(nn.Module):
                     roi_size=rgb_config.roi_size,
                     roi_hidden_dim=config.model.filter.hidden_dim,
                     fast_depth_residual_enabled=(rgb_config.fast_depth_residual_enabled),
+                    fast_radius_derived_depth_enabled=(
+                        rgb_config.fast_radius_derived_depth_enabled
+                    ),
                     temporal_velocity_enabled=rgb_config.temporal_velocity_enabled,
                     temporal_velocity_history_size=(rgb_config.temporal_velocity_history_size),
                     temporal_velocity_min_samples=(rgb_config.temporal_velocity_min_samples),
@@ -565,6 +568,9 @@ class OnlineWorldModel(nn.Module):
                 ),
                 robust_influence_delta=config.runtime.hypothesis_robust_influence_delta,
                 composition_step_seconds=config.runtime.hypothesis_composition_step_seconds,
+                shared_horizon_rollout_enabled=(
+                    config.runtime.hypothesis_shared_horizon_rollout_enabled
+                ),
             )
         model = cls(
             observation_modules=modules,

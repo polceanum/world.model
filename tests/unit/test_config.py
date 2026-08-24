@@ -182,6 +182,41 @@ def test_photometric_fast_depth_is_strict_and_requires_structured_depth() -> Non
     ).validate()
 
 
+def test_fast_radius_derived_depth_is_strict_and_exclusive() -> None:
+    base = OrpheusConfig()
+    with pytest.raises(ValueError, match="must be boolean"):
+        replace(
+            base,
+            model=replace(
+                base.model,
+                rgb=replace(base.model.rgb, fast_radius_derived_depth_enabled=1),
+            ),
+        ).validate()
+    for conflicting in (
+        {"fast_depth_residual_enabled": True},
+        {"structured_disc_fast_depth_enabled": True},
+    ):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            replace(
+                base,
+                model=replace(
+                    base.model,
+                    rgb=replace(
+                        base.model.rgb,
+                        fast_radius_derived_depth_enabled=True,
+                        **conflicting,
+                    ),
+                ),
+            ).validate()
+    replace(
+        base,
+        model=replace(
+            base.model,
+            rgb=replace(base.model.rgb, fast_radius_derived_depth_enabled=True),
+        ),
+    ).validate()
+
+
 def test_soft_shadow_physical_requires_temperature_and_differentiable_scope() -> None:
     base = OrpheusConfig()
     weights = {**base.training.loss_weights, "soft_shadow_physical": 1.0}

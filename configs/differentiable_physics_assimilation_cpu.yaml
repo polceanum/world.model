@@ -64,6 +64,7 @@ model:
     global_every_steps: 3
     roi_size: 20
     fast_depth_residual_enabled: false
+    fast_radius_derived_depth_enabled: false
     temporal_velocity_enabled: true
     temporal_velocity_history_size: 5
     temporal_velocity_min_samples: 3

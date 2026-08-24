@@ -2435,6 +2435,7 @@ def test_rgb_runtime_controls_are_semantic_with_legacy_defaults() -> None:
         "structured_disc_min_pixels",
         "structured_disc_max_assignment_distance",
         "structured_disc_center_std_pixels",
+        "fast_radius_derived_depth_enabled",
         "structured_disc_photometric_fast_depth_enabled",
         "structured_disc_photometric_maximum_fit_rms",
     ):
@@ -2482,6 +2483,19 @@ def test_rgb_runtime_controls_are_semantic_with_legacy_defaults() -> None:
         validate_checkpoint_config(payload, enabled)
     with pytest.raises(ValueError, match="model"):
         validate_checkpoint_config(legacy_payload, enabled)
+
+    derived_enabled = replace(
+        config,
+        model=replace(
+            config.model,
+            rgb=replace(config.model.rgb, fast_radius_derived_depth_enabled=True),
+        ),
+    )
+    derived_enabled.validate()
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(payload, derived_enabled)
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(legacy_payload, derived_enabled)
 
     architecture_change = replace(
         enabled,

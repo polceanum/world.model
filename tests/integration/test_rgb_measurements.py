@@ -262,6 +262,67 @@ def test_fast_roi_depth_residual_is_gated_until_explicitly_enabled() -> None:
     assert not torch.allclose(enabled_measurement, enabled_prediction)
 
 
+def test_fast_roi_radius_derives_calibrated_depth_and_backpropagates_only_through_radius() -> None:
+    intrinsics, world_from_camera = _calibration()
+    belief = BeliefFactory(max_objects=1, geometry_dim=1, appearance_dim=8).create(
+        intrinsics=intrinsics.unsqueeze(0),
+        world_from_camera=world_from_camera.unsqueeze(0),
+    )
+    belief = belief.replace(
+        objects=belief.objects.replace(
+            active=torch.tensor([[True]]),
+            object_id=torch.tensor([[2]]),
+            position=torch.tensor([[[0.0, 0.0, 3.0]]]),
+            geometry=torch.tensor([[[0.21]]]),
+        )
+    )
+    packet = ObservationPacket(
+        modality="rgb",
+        sensor_id="camera",
+        timestamp=0.05,
+        payload=torch.zeros(1, 3, 32, 32),
+        calibration={
+            "intrinsics": intrinsics.unsqueeze(0),
+            "world_from_camera": world_from_camera.unsqueeze(0),
+        },
+        frame_id="camera:camera",
+    )
+    module = RGBObservationModule(
+        RGBObservationConfig(
+            max_objects=1,
+            backbone_channels=(8, 16, 24, 32),
+            feature_dim=16,
+            appearance_dim=8,
+            roi_size=8,
+            roi_hidden_dim=16,
+            fast_radius_derived_depth_enabled=True,
+            default_world_radius=0.21,
+        )
+    )
+    predicted = module.project(
+        belief,
+        SensorContext(
+            sensor_id=packet.sensor_id,
+            timestamp=packet.timestamp,
+            calibration=packet.calibration,
+            frame_id=packet.frame_id,
+            image_size=(32, 32),
+        ),
+    )
+    measured, _ = module.encode_measurements([packet], belief, predicted, None)
+
+    radius_pixels = measured.values[..., 2].exp() * 16.0
+    focal = 0.5 * (intrinsics[0, 0] + intrinsics[1, 1])
+    expected_inverse_depth = radius_pixels / (focal * 0.21)
+    torch.testing.assert_close(measured.values[..., 3], expected_inverse_depth)
+
+    measured.values[..., 3].sum().backward()
+    gradient = module.roi_updater.delta_head.bias.grad
+    assert gradient is not None
+    assert gradient[2].abs() > 0
+    assert gradient[3] == 0
+
+
 def test_offscreen_object_is_invalid_and_cannot_be_roi_associated() -> None:
     intrinsics, world_from_camera = _calibration()
     belief = BeliefFactory(max_objects=1, geometry_dim=1, appearance_dim=8).create()

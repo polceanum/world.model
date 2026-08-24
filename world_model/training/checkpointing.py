@@ -43,6 +43,7 @@ _SIMULATOR_COMPATIBILITY_FIELDS = (
 
 _RGB_LEGACY_DEFAULT_FIELDS = (
     "dense_global_detector_enabled",
+    "fast_radius_derived_depth_enabled",
     "temporal_velocity_enabled",
     "temporal_velocity_history_size",
     "temporal_velocity_min_samples",

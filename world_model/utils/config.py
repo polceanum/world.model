@@ -109,6 +109,7 @@ class RGBConfig:
     global_every_steps: int = 12
     roi_size: int = 20
     fast_depth_residual_enabled: bool = False
+    fast_radius_derived_depth_enabled: bool = False
     temporal_velocity_enabled: bool = False
     temporal_velocity_history_size: int = 3
     temporal_velocity_min_samples: int = 3
@@ -1150,6 +1151,15 @@ class OrpheusConfig:
             or not 0.0 < model.rgb.structured_disc_depth_relative_std <= 1.0
         ):
             raise ValueError("model.rgb.structured_disc_depth_relative_std must lie in (0, 1]")
+        if not isinstance(model.rgb.fast_radius_derived_depth_enabled, bool):
+            raise ValueError("model.rgb.fast_radius_derived_depth_enabled must be boolean")
+        if model.rgb.fast_radius_derived_depth_enabled and (
+            model.rgb.fast_depth_residual_enabled or model.rgb.structured_disc_fast_depth_enabled
+        ):
+            raise ValueError(
+                "model.rgb.fast_radius_derived_depth_enabled is mutually exclusive with "
+                "fast_depth_residual_enabled and structured_disc_fast_depth_enabled"
+            )
         if not isinstance(model.rgb.structured_disc_photometric_fast_depth_enabled, bool):
             raise ValueError(
                 "model.rgb.structured_disc_photometric_fast_depth_enabled must be boolean"
