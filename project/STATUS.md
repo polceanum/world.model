@@ -29,6 +29,30 @@ the rejected patch is retained separately with SHA-256
 `3fc46d0b339199752e0159172cff19258c791ef1e75fd9ca55f0c92408e8161f`.
 `main` remains unchanged.
 
+Three bounded successors also fail before production integration.  Installing
+the existing smooth analytic association posterior as actual continuous state
+is non-vacuous (`963` supported rows) but catastrophic on fixed eight: selector
+`0.212869 -> 0.276724` with 299 guardrail failures.  Motion-compensated
+multi-view line triangulation is numerically observable on only 146/666 rows at
+an eigenvalue ratio of `0.001` and yields `2.106 m` RMSE there versus
+`0.129 m` for the learned prior; 64-pixel short-baseline rays are too noisy and
+ill-conditioned.
+
+A 24-hidden-unit differentiable reliability gate was then trained on the first
+two fixed-manifest occurrences of every scenario and evaluated on the last two.
+Scalar runtime features improve held-out FAST error `0.130435 -> 0.116629 m`;
+adding the existing ROI object embedding improves it to `0.114619 m` and also
+improves aggregate NLL.  The frozen all-slice condition still fails: baseline-z,
+camera-z, damped-z, elastic-z, glancing-y, and heavy/light-x regress by more
+than `0.5%`.  This gate family is closed without runtime code.  The reports are
+`/private/tmp/20260824-spec178-runtime-soft-posterior-fixed8.json`
+(`892d43d9...`),
+`/private/tmp/20260824-spec178-multiview-depth-feasibility-fixed8.json`
+(`7a2701a3...`), and
+`/private/tmp/20260824-spec178-contextual-visual-reliability-feasibility-fixed32.json`
+(`bbbcf012...`).  The remaining observation problem requires an explicit
+ambiguity representation, not another posterior-mean blend or scalar gate.
+
 ## Learned-radius-derived depth — specification 1.76 stable, accuracy rejected
 
 The fast RGB observer now has a default-off, fully differentiable camera-model

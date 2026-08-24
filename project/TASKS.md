@@ -15,6 +15,16 @@
 - [ ] Do not merge this mechanism to `main` or tune adjacent thresholds.  A
   future proposal must predeclare separate z/contact/calibration ownership and
   pass the complete guardrail contract, not only pooled score.
+- [x] Test the existing smooth analytic association posterior as actual
+  continuous runtime state; reject it after 299 fixed-eight failures.
+- [x] Test motion-compensated RGB multi-view triangulation before integration;
+  reject the ill-conditioned 64-pixel short-baseline geometry.
+- [x] Train one small context-conditioned reliability gate, then add the
+  already-computed ROI embedding once under a frozen held-out all-slice rule.
+  Close the family after six scenario/axis cells still regress beyond `0.5%`.
+- [ ] Replace single-mean observation assimilation with an explicit bounded
+  ambiguity representation while preserving hard persistent identity and the
+  analytic equation rollout; do not reopen scalar-gain or soft-average sweeps.
 
 ## Learned-radius-derived depth — specification 1.76
 

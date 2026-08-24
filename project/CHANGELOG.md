@@ -18,6 +18,17 @@
   `/private/tmp/20260824-spec177-causal-axis-reliability-localization-only-fixed32.json`
   and the rejected patch under SHA-256 `3fc46d0b339199752e0159172cff19258c791ef1e75fd9ca55f0c92408e8161f`.
   No production/default behavior changed and `main` remains unchanged.
+- Rejected actual smooth-association posterior assimilation after fixed-eight
+  score worsened `0.212869 -> 0.276724` with 299 guardrail failures.
+- Rejected motion-compensated multi-view depth before integration: even the
+  strongest supported conditioning cell produced `2.106 m` RMSE against the
+  `0.129 m` learned prior because the 64-pixel short-baseline rays are
+  ill-conditioned.
+- Rejected a bounded learned reliability gate despite held-out aggregate FAST
+  improvement `0.130435 -> 0.114619 m`; six scenario/axis cells exceeded the
+  frozen `0.5%` non-regression limit after adding existing ROI visual context.
+  No runtime or checkpoint semantic was added.  Future work must represent
+  ambiguity explicitly rather than repeat posterior-mean/gain variants.
 
 ### 2026-08-24 learned-radius-derived depth (specification 1.76)
 
