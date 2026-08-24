@@ -228,9 +228,9 @@ training:
     soft_association_state: 2.0
     soft_association_velocity: 1.0
     soft_association_exclusivity: 0.05
-    # Dense RGB-only evidence from an analytic soft sphere silhouette. This
-    # adds no simulator labels, persistent state, or second rollout.
-    rgb_reprojection: 2.0
+    # The bounded specification-1.71 accuracy pair rejected this opt-in
+    # objective. Keep the supported profile on its legacy-exact zero path.
+    rgb_reprojection: 0.0
 
 evaluation:
   horizons_seconds: [0.1, 0.25, 0.5, 0.75, 1.0]

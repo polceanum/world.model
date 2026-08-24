@@ -16,11 +16,13 @@
   9.54% gradient share and cosine `-0.0471` with the remaining objective.
 - [x] Pass the complete repository gate (`1364 passed`, `20` expected skips in
   `507.45 s`) plus Ruff/format/compile/version/diff checks.
-- [ ] Run one frozen 16-update pair against exact weight zero. Require at least
-  `0.001` hard five-horizon selector gain and all established non-regression
-  checks; stop without tuning if it fails.
-- [ ] If and only if the gate passes, synchronize evidence and merge/push the
-  validated branch to `main`.
+- [x] Run one frozen 16-update pair against exact weight zero. Reject it: the
+  hard equal-horizon gain is only `0.000002495` versus the frozen `0.001` bar,
+  although all non-regression checks pass and frozen dynamics remain exact.
+- [x] Restore the supported profile to exact weight zero and stop without
+  threshold, renderer, weight, or duration tuning and without a long run.
+- [x] Evaluate the conditional main-merge gate. It fails, so preserve the
+  evidence on the research branch and do not merge this mechanism to `main`.
 
 ## Forward-exact soft posterior — specification 1.70
 

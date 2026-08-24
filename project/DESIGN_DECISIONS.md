@@ -3,7 +3,7 @@
 ## ADR-194 — Use analytic RGB silhouette reprojection as dense state evidence
 
 - **Date:** 2026-08-24
-- **Status:** implemented; bounded accuracy pending
+- **Status:** mechanism retained legacy-zero; accuracy experiment rejected
 - **Context:** Local soft assignment improves current state but barely moves
   long rollouts, while a recursive straight-through posterior is high variance.
   The remaining errors concentrate in overlap/depth observation slices and a
@@ -20,8 +20,11 @@
 - **Consequences:** The objective supplies dense low-variance gradients to
   projected x/y/depth/radius at small pixel cost and is absent from validation
   and deployment. Its sole weight is frozen at `2.0` from a first-draw 9.54%
-  gradient share before validation. One 16-update paired gate decides whether
-  it is retained; failure closes it without adjacent tuning or a long campaign.
+  gradient share before validation. The paired gate preserves all safety
+  conditions but gains only `0.000002495` on the hard equal-horizon score
+  versus the required `0.001`, and both arms have six selector guardrail
+  failures. Restore exact profile weight zero and close it without adjacent
+  tuning, a long campaign, or a main merge.
 
 ## ADR-193 — Use a zero-value soft-posterior gradient carrier
 

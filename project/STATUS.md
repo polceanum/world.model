@@ -1,6 +1,6 @@
 # Project status
 
-## RGB-only analytic silhouette reprojection — specification 1.71 implemented
+## RGB-only analytic silhouette reprojection — specification 1.71 terminally rejected
 
 A new training-only observation likelihood projects the active spheres in
 `WorldBelief` into a smooth RGB foreground silhouette and compares it with
@@ -21,8 +21,21 @@ At the frozen weight `2.0`, the reprojection gradient is `0.558601`, 9.54% of
 the combined `5.854154` norm, and nearly orthogonal to the remaining objective
 (cosine `-0.0471`). The attribution artifact is
 `/private/tmp/20260824-spec171-rgb-reprojection-gradient-attribution.json`.
-One frozen 16-update paired accuracy qualification remains pending; no long
-campaign is authorized.
+
+The frozen 16-update treatment/control qualification under
+`/private/tmp/20260824-133948-spec171-rgb-reprojection-{treatment,control}` is
+complete. The arms differ only in reprojection weight `2.0` versus `0.0`, pair
+all 16 ordered balanced draws, and have 340 exact initial physical metrics.
+Treatment improves the hard equal-weight five-horizon position score only
+`0.205274486 -> 0.205271991`, a gain of `0.000002495` against the frozen
+`0.001` requirement. Current position/velocity and every horizon remain within
+the safety tolerance, frozen dynamics are exact, and the shared update-nine
+gradient spike is smaller in treatment (`143.077`) than control (`177.624`),
+but both candidates have the same six selector guardrail failures. The
+supported profile therefore restores weight zero. No threshold, edge, weight,
+renderer, or duration tuning and no long campaign or main merge is authorized.
+The paired audit is
+`/private/tmp/20260824-133948-spec171-rgb-reprojection-paired-audit.json`.
 
 ## Forward-exact soft posterior — specification 1.70 terminally rejected
 

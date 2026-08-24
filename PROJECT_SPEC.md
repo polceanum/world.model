@@ -9753,6 +9753,16 @@ calibration retain the established non-regression tolerances. Failure closes
 this objective without threshold, edge, weight, renderer, or duration tuning
 and without a long campaign.
 
+The frozen qualification is terminal. Treatment and control pair all 16
+ordered balanced draws and 340 initial hard physical metrics, with the sole
+configuration difference `2.0` versus `0.0`. The hard equal-weight horizon
+score changes `0.205274486 -> 0.205271991`, only `+0.000002495`; both candidates
+retain the same six selector guardrail failures. Although every safety
+non-regression condition passes and the analytic dynamics remain tensor-exact,
+the materiality condition fails by about 400 times. The supported profile must
+therefore use weight zero. No adjacent tuning, longer run, or main merge of
+this objective is permitted.
+
 ---
 
 # Closing directive

@@ -17,8 +17,13 @@
   draw: 32 supported rows, 96 objects, 2,237 pixels, 9.54% gradient share, and
   `-0.0471` cosine with the rest of the objective.
 - Passed the complete repository gate (`1364 passed`, `20` expected skips in
-  `507.45 s`) plus Ruff, format, compile, version, and diff checks. The paired
-  accuracy gate remains pending.
+  `507.45 s`) plus Ruff, format, compile, version, and diff checks.
+- Completed the frozen 16-update pair with exact draws and 340 exact initial
+  physical metrics. The objective changes the hard five-horizon score only
+  `0.205274486 -> 0.205271991` (`+0.000002495`), far below the predeclared
+  `+0.001` bar; both arms retain the same six selector guardrail failures.
+  Restored profile weight zero and closed the objective without tuning, a long
+  campaign, or a merge to `main`.
 
 ### 2026-08-24 forward-exact soft posterior (specification 1.70)
 
