@@ -5,7 +5,7 @@
 **Status:** Living authoritative specification
 **Version:** 1.68
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, opt-in dense multi-instance global-discovery, causal observation-model selection, terminal dense typed-attribute evidence, frozen-foundation-feature feasibility, and adaptive Gaussian local-model evidence amendments 24 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, opt-in dense multi-instance global-discovery, causal observation-model selection, terminal dense typed-attribute evidence, frozen-foundation-feature feasibility, adaptive Gaussian local-model evidence, and event-epoch local-model evidence amendments 24 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9539,6 +9539,55 @@ manifest, and do not advance to fixed-32 or MPS. In particular, the successful
 0.10/0.25-second cells may not be selected post hoc. The next local-model
 candidate must use causal event/change-point segmentation or be a genuinely
 different model with independent evidence.
+
+---
+
+## 267. Event segmentation does not rescue residual-history models
+
+After the adaptive Gaussian residual failed the broad fixed-eight gate, its
+only authorized continuation was a causal event/change-point boundary. The
+candidate retained the exact four-pair support, `0.25 m` clipping, bounded
+least-squares gain, x/y ownership, empirical second-moment uncertainty
+expansion, and learned fallback. It added one rule only: when the accepted
+learned trajectory changed interaction regime, all adaptive residual
+statistics for that persistent entity and exact horizon began a new epoch.
+
+The boundary is runtime-causal and candidate-independent. It uses only the
+learned structured motion mode plus learned interval contact/collision outputs
+already accepted by the ordinary regime classifier. Simulator truth,
+evaluation targets, posterior target state, and alternative-candidate outputs
+may not classify the transition. The reset does not mutate persistent
+`WorldBelief`, model weights, velocity, events, lifecycle, or identity.
+
+The protected fixed-eight CPU/RGB diagnostic exercises `435` regime
+transitions across `248` entity-transition observations: `199` free-to-
+collision, `125` collision-to-free, `56` collision-to-ground, `33`
+ground-to-free, and smaller remaining transitions. It records `8,811` causal
+residual pairs, `5,370` supported corrections, and `85` variance expansions.
+The 0.10-second pooled position RMSE still improves
+`0.142104 -> 0.138094 m`, but the prior 0.25-second improvement becomes a
+regression (`0.167849 -> 0.169963 m`) and the candidate introduces
+0.10-second identity mismatch rate `0.005587` from an exact-zero reference.
+
+Only `68/84` core cells improve or tie and 13 scenario-horizon position cells
+regress, versus the already-rejected unsegmented candidate's `73/84` and 12.
+The final report is
+`/private/tmp/20260824-spec170-event-epoch-adaptive-residual-fixed8.json`
+(SHA-256
+`370aaeb84f8dffb31ae6722a9e64b35e0eb95fe8a7137991d88d0185b3e57319`),
+the evaluator report is SHA-256
+`6a7bcd318e5eece05a70bb619af1948bebd7b10bfe7075071c2a0fbc36efd83a`,
+event diagnostics are SHA-256
+`b7cfbe1200980b396276251644778b29948d36cf67b0c83482b78c5bbccb7566`,
+and the temp script is SHA-256
+`d1c821a6305eeb57d764ee8b1bb410d2d9365bf9d9a95c28fe17ea90768a0199`.
+
+This closes the adaptive/output-residual-history family. Do not tune regime
+classification, epoch reset scope, support, residual bound, gain, uncertainty,
+horizon admission, or adjacent thresholds, and do not advance this candidate
+to fixed-32 or MPS. A future runtime candidate must carry genuinely different
+causal model state and evidence rather than another partition of residual
+history.
 
 ---
 

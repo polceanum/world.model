@@ -2,6 +2,20 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 terminal event-epoch adaptive local-model diagnostic
+
+- Added one temp-only causal epoch boundary to the rejected adaptive Gaussian
+  residual: an accepted learned interaction-regime transition clears all prior
+  adaptive residual statistics for that persistent entity and exact horizon.
+- Exercised `435` transitions, including `199` free-to-collision and `125`
+  collision-to-free boundaries, with no privileged runtime state or belief,
+  checkpoint, lifecycle, event, velocity, or identity mutation.
+- Rejected the segmented candidate because it passes only `68/84` core cells
+  and regresses 13 scenario-horizon position cells, worse than the already
+  rejected unsegmented `73/84` and 12 (`370aaeb8...`).
+- Closed the residual-history family without threshold/reset/support/horizon
+  tuning, production integration, fixed-32, or MPS.
+
 ### 2026-08-24 terminal adaptive Gaussian local-model diagnostic
 
 - Exercised a temp-only per-entity/axis/regime/horizon causal residual model

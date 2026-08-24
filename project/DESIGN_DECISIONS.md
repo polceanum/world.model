@@ -1,5 +1,30 @@
 # Design decisions
 
+## ADR-191 — Close residual-history models after event-epoch rejection
+
+- **Date:** 2026-08-24
+- **Status:** diagnostic rejected; residual family terminal
+- **Context:** The adaptive Gaussian residual improved short pooled horizons
+  but failed broad scenario, calibration, and identity gates. Its remaining
+  plausible causal defect was reuse of old same-regime evidence after an
+  entity crossed an event boundary and later re-entered that regime.
+- **Decision:** Permit one temp-only event-epoch variant. On a persistent
+  entity's accepted learned interaction-regime transition, clear every
+  axis/regime adaptive statistic for that exact horizon. Keep every other
+  protocol choice fixed and require the same 84 core plus scenario-horizon
+  non-regression gate.
+- **Alternatives considered:** tune support, residual clipping, gain,
+  uncertainty expansion, reset thresholds/scope, or select only successful
+  horizons; classify events from simulator truth; mutate persistent belief;
+  proceed on pooled short-horizon gains.
+- **Consequences:** The rule is exercised by `435` transitions but reduces
+  supported corrections `7,875 -> 5,370`, erases the 0.25-second gain,
+  introduces a 0.10-second identity mismatch, and worsens the gate from
+  `73/84` core cells and 12 scenario regressions to `68/84` and 13
+  (`370aaeb8...`). Close adaptive/output-residual history models. Future work
+  must introduce a genuinely different causal local-model state and evidence
+  mechanism rather than repartitioning residual history.
+
 ## ADR-190 — Require event-segmented evidence after adaptive residual rejection
 
 - **Date:** 2026-08-24

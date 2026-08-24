@@ -1,5 +1,39 @@
 # Project status
 
+## Event-epoch adaptive local model — terminal rejection
+
+The only evidence-backed continuation of the adaptive Gaussian residual was a
+causal event/change-point boundary, not another coefficient or support sweep.
+A temp-only candidate therefore cleared every residual statistic for a
+persistent entity and exact horizon whenever the accepted learned trajectory's
+interaction regime changed. The boundary used only learned motion modes and
+predicted event/contact outputs; simulator truth, posterior target state, and
+the alternative candidate never classified it. All four-pair support,
+`0.25 m` clipping, `[0,1]` least-squares gain, empirical variance expansion,
+x/y ownership, and exact learned fallback semantics stayed unchanged.
+
+The fixed-eight CPU/RGB run exercised `435` regime transitions across `248`
+entity-transition observations (`199` free-to-collision and `125`
+collision-to-free), so the intervention is non-vacuous. It retained `8,811`
+causal residual pairs, `5,370` supported corrections, and `85` variance
+expansions. Pooled 0.10-second position still improves
+`0.142104 -> 0.138094 m`, but the unsegmented candidate's 0.25-second gain is
+erased (`0.167849 -> 0.169963 m`), and a new 0.10-second identity mismatch
+rate of `0.005587` appears.
+
+The broad result is worse than the already-rejected unsegmented adapter:
+`68/84` rather than `73/84` core cells improve or tie, and 13 rather than 12
+scenario-horizon position cells regress. The terminal report is
+`/private/tmp/20260824-spec170-event-epoch-adaptive-residual-fixed8.json`
+(`370aaeb8...`), with evaluator `6a7bcd31...`, event diagnostics
+`b7cfbe12...`, and script `d1c821a6...`.
+
+Close this adaptive/output-residual family. Do not tune the epoch classifier,
+reset scope, support count, clipping, gain, variance rule, horizon admission,
+or regime threshold, and do not advance to fixed-32/MPS. A future runtime
+candidate must be a genuinely different causal model rather than another
+residual-history partition.
+
 ## Adaptive Gaussian local-model evidence — terminally mixed
 
 The runtime pool is structurally complete but its fixed analytic candidates

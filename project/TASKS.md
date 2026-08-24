@@ -1,5 +1,20 @@
 # Tasks
 
+## Event-epoch adaptive local model — terminal rejection
+
+- [x] Preserve the prior adaptive Gaussian protocol and add exactly one causal
+  boundary: clear an entity/horizon's residual statistics when the accepted
+  learned interaction regime changes.
+- [x] Verify the reset locally and exercise it non-vacuously on fixed eight:
+  `435` regime transitions, `8,811` residual pairs, `5,370` supported
+  corrections, and `85` variance expansions.
+- [x] Apply the unchanged protected broad gate. Reject at `68/84` core cells
+  and 13 scenario-horizon position regressions, worse than the unsegmented
+  `73/84` and 12 (`370aaeb8...`).
+- [x] Stop without reset/support/bound/gain/variance/horizon/regime tuning,
+  production integration, fixed-32, or MPS; close this residual family.
+- [x] Synchronize, commit, and push the terminal event-epoch evidence.
+
 ## Adaptive Gaussian local-model evidence — terminal rejection
 
 - [x] Audit the deployed objective contract and confirm the runtime pool already
