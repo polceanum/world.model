@@ -132,6 +132,34 @@ def test_rgb_reprojection_requires_differentiable_rgb_state_estimator() -> None:
     ).validate()
 
 
+def test_observation_hypothesis_nll_requires_differentiable_scope_and_prior_rollout() -> None:
+    base = OrpheusConfig()
+    weights = {**base.training.loss_weights, "observation_hypothesis_nll": 0.25}
+    with pytest.raises(ValueError, match="differentiable_state_estimator"):
+        replace(
+            base,
+            training=replace(base.training, loss_weights=weights),
+        ).validate()
+
+    enabled = replace(
+        base,
+        training=replace(
+            base.training,
+            closed_loop_trainable_scope="differentiable_state_estimator",
+            loss_weights=weights,
+        ),
+    )
+    enabled.validate()
+    with pytest.raises(ValueError, match="shared prior future rollout"):
+        replace(
+            enabled,
+            training=replace(
+                enabled.training,
+                closed_loop_prior_future_correction_enabled=False,
+            ),
+        ).validate()
+
+
 def test_photometric_fast_depth_is_strict_and_requires_structured_depth() -> None:
     base = OrpheusConfig()
     with pytest.raises(ValueError, match="must be boolean"):

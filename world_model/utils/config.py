@@ -559,6 +559,7 @@ class TrainingConfig:
             "soft_association_exclusivity": 0.0,
             "rgb_reprojection": 0.0,
             "soft_shadow_physical": 0.0,
+            "observation_hypothesis_nll": 0.0,
         }
     )
 
@@ -1692,6 +1693,18 @@ class OrpheusConfig:
                 )
             if self.runtime.modality != "rgb":
                 raise ValueError("RGB reprojection requires runtime.modality=rgb")
+        if float(self.training.loss_weights.get("observation_hypothesis_nll", 0.0)) > 0.0:
+            if "differentiable_state_estimator" not in configured_scopes:
+                raise ValueError(
+                    "observation hypothesis NLL requires the "
+                    "differentiable_state_estimator trainable scope"
+                )
+            if self.runtime.modality != "rgb":
+                raise ValueError("observation hypothesis NLL requires runtime.modality=rgb")
+            if not self.training.closed_loop_prior_future_correction_enabled:
+                raise ValueError(
+                    "observation hypothesis NLL requires the shared prior future rollout"
+                )
         if (late_scope is None) != (transition_steps is None):
             raise ValueError(
                 "training.closed_loop_late_trainable_scope and "

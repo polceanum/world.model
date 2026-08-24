@@ -1,5 +1,28 @@
 # Tasks
 
+## Differentiable continuous observation hypotheses — specification 1.77
+
+- [x] Prove that the remaining RGB ambiguity is primarily prior-versus-
+  observation rather than additional fixed depth bins.
+- [x] Reject immediate next-image hard mode selection after mixed scenario
+  accuracy; do not tune its score or threshold.
+- [x] Add typed continuous belief and trajectory hypotheses with shared hard
+  identity/lifecycle structure and differentiable Gaussian-mixture evidence.
+- [x] Reuse the existing prior and posterior equation rollouts; prove zero
+  additional rollout calls, exact ordinary forward metrics, finite gradients,
+  strict config, and legacy-zero exact resume.
+- [x] Run one real balanced gradient/runtime attribution and select only weight
+  `0.1` (`9.723%` gradient share; no measurable forward overhead).
+- [x] Pass the complete repository gate (`1394 passed`, `20` expected skips in
+  `514.16 s`) and the static format/lint/compile/diff gates on the retained
+  implementation.
+- [ ] Run one paired short treatment/control accuracy gate at weight `0.1`.
+  Reject and stop if material fixed-manifest improvement is absent or any broad
+  guardrail coherently regresses; do not sweep weight or duration.
+- [ ] Merge to `main` only after the complete fixed-manifest accuracy,
+  uncertainty, event, identity, latency, support, and provenance contract
+  passes. Otherwise retain the default-off mechanism on the research branch.
+
 ## Delayed causal RGB reliability — bounded diagnostic
 
 - [x] Decompose RGB observation error from equation rollout error using the

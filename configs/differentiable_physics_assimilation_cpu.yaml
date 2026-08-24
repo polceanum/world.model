@@ -238,6 +238,7 @@ training:
     # The specification-1.72 paired accuracy gate rejected this opt-in shadow.
     # Preserve the supported profile's legacy-exact zero path.
     soft_shadow_physical: 0.0
+    observation_hypothesis_nll: 0.0
 
 evaluation:
   horizons_seconds: [0.1, 0.25, 0.5, 0.75, 1.0]

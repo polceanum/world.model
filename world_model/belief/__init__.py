@@ -1,7 +1,11 @@
 """Public persistent-belief contracts."""
 
 from world_model.belief.camera_belief import CameraBelief
-from world_model.belief.hypotheses import HypothesisSet
+from world_model.belief.hypotheses import (
+    HypothesisSet,
+    PositionHypothesisMarginal,
+    TrajectoryHypothesisSet,
+)
 from world_model.belief.lifecycle import (
     LifecycleConfig,
     ObjectLifecycle,
@@ -43,6 +47,8 @@ __all__ = [
     "BeliefTrajectory",
     "CameraBelief",
     "HypothesisSet",
+    "PositionHypothesisMarginal",
+    "TrajectoryHypothesisSet",
     "LifecycleConfig",
     "MotionMode",
     "NUM_MOTION_MODES",

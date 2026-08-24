@@ -5879,3 +5879,32 @@
   reject promotion, and stop this line before fixed-32, MPS, longer training,
   or hyperparameter sweeps. `main` remains protected. The final repository
   gate passes `1386` tests with `20` expected skips in `520.50 s`.
+
+## ADR-201 — Marginalize continuous observation modes through the physical equations
+
+- **Date:** 2026-08-25
+- **Status:** implementation and gradient path accepted; accuracy pending
+- **Context:** Equation rollouts become almost exact from the correct initial
+  state, while repeated scalar reliability, soft averaging, image-space EKF,
+  and hard next-image selection fail coherent scenario/axis guardrails. A
+  four-mode capacity check reduces the useful ambiguity to prior versus RGB
+  posterior rather than more discrete depth offsets.
+- **Decision:** Keep hard identity/lifecycle/contact as typed runtime decisions,
+  but retain the continuous prior and posterior as explicit modes during
+  training. Propagate both with the same dynamics equations and optimize their
+  proper marginal likelihood with `logsumexp`. Reuse the correction objective's
+  detached prior rollout and the normal posterior rollout. Bind the sole weight
+  to exact resume with default/legacy zero and require RGB,
+  `differentiable_state_estimator`, and prior-future rollout support.
+- **Alternatives considered:** another scalar confidence gate; hard MAP mode
+  selection; mean interpolation; more fixed depth offsets; learned replacement
+  dynamics; simulator truth at runtime; or weakening scenario guardrails.
+- **Consequences:** The affected gate passes `510/1`; a real balanced batch
+  proves finite current/future support, exact existing outputs, zero extra
+  rollout calls, and effectively zero measured overhead. Weight `0.1` provides
+  a predeclared `9.723%` gradient share but opposes the point objective at
+  cosine `-0.37794`. Run exactly one paired short accuracy gate. Pass advances
+  to the complete fixed manifest; failure closes this candidate without a
+  weight/duration sweep. `main` remains protected until that full gate passes.
+  The exact implementation gate is `1394 passed`, `20` expected skips in
+  `514.16 s`.

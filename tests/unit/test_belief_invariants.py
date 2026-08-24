@@ -7,6 +7,7 @@ import torch
 
 from world_model.belief import (
     BeliefFactory,
+    BeliefTrajectory,
     HypothesisSet,
     LifecycleConfig,
     MotionMode,
@@ -108,6 +109,124 @@ def test_hypothesis_set_normalises_and_reweights() -> None:
     assert torch.allclose(hypotheses.normalized_weights.sum(-1), torch.ones(2))
     updated = hypotheses.reweight(torch.tensor([[0.0, 2.0], [0.0, 0.0]]))
     assert updated.best(0) is updated.beliefs[1]
+
+
+def test_hypothesis_set_marginal_position_loss_is_differentiable_without_selection() -> None:
+    base = BeliefFactory(max_objects=1).create()
+    first_position = torch.tensor([[[0.0, 0.0, 0.0]]], requires_grad=True)
+    second_position = torch.tensor([[[2.0, 0.0, 0.0]]], requires_grad=True)
+    first = base.replace(objects=base.objects.replace(position=first_position))
+    second = base.replace(objects=base.objects.replace(position=second_position))
+    log_weights = torch.tensor([[0.0, 0.0]], requires_grad=True)
+    hypotheses = HypothesisSet([first, second], log_weights)
+    target = torch.tensor([[[1.8, 0.0, 0.0]]])
+    evidence = hypotheses.marginal_position_evidence(
+        target,
+        torch.tensor([[[True, False, False]]]),
+    )
+    loss = hypotheses.marginal_position_nll(
+        target,
+        torch.tensor([[[True, False, False]]]),
+    )
+    loss.backward()
+
+    assert evidence.posterior_weights[0, 0, 1] > evidence.posterior_weights[0, 0, 0]
+    assert first_position.grad is not None and torch.isfinite(first_position.grad).all()
+    assert second_position.grad is not None and torch.isfinite(second_position.grad).all()
+    assert log_weights.grad is not None and torch.isfinite(log_weights.grad).all()
+    assert torch.count_nonzero(first_position.grad) == 1
+    assert torch.count_nonzero(second_position.grad) == 1
+
+
+def test_hypothesis_set_posterior_expected_position_uses_target_conditioned_weights() -> None:
+    base = BeliefFactory(max_objects=1).create()
+    first = base.replace(objects=base.objects.replace(position=torch.tensor([[[0.0, 0.0, 0.0]]])))
+    second = base.replace(objects=base.objects.replace(position=torch.tensor([[[2.0, 0.0, 0.0]]])))
+    hypotheses = HypothesisSet(
+        [first, second],
+        torch.zeros(1, 2),
+    )
+    evidence = hypotheses.marginal_position_evidence(
+        torch.tensor([[[1.9, 0.0, 0.0]]]),
+        torch.tensor([[True]]),
+    )
+    expected = hypotheses.posterior_expected_position(evidence)
+    assert 1.0 < float(expected[0, 0, 0]) < 2.0
+    torch.testing.assert_close(expected[0, 0, 1:], torch.zeros(2))
+
+
+def test_hypothesis_set_marginal_requires_shared_hard_identity() -> None:
+    base = BeliefFactory(max_objects=1).create()
+    base = base.replace(
+        objects=base.objects.replace(
+            object_id=torch.tensor([[0]], dtype=torch.int64),
+            active=torch.tensor([[True]]),
+        )
+    )
+    changed = base.replace(
+        objects=base.objects.replace(object_id=torch.tensor([[4]], dtype=torch.int64))
+    )
+    hypotheses = HypothesisSet([base, changed], torch.zeros(1, 2))
+    with pytest.raises(ValueError, match="share object identity"):
+        hypotheses.marginal_position_evidence(
+            torch.zeros(1, 1, 3),
+            torch.ones(1, 1, dtype=torch.bool),
+        )
+
+
+def test_hypothesis_set_empty_position_support_is_exact_zero() -> None:
+    base = BeliefFactory(max_objects=1).create()
+    log_weights = torch.tensor([[0.25, -0.75]], requires_grad=True)
+    hypotheses = HypothesisSet([base, base.clone()], log_weights)
+    evidence = hypotheses.marginal_position_evidence(
+        torch.zeros(1, 1, 3),
+        torch.zeros(1, 1, dtype=torch.bool),
+    )
+    loss = hypotheses.marginal_position_nll(
+        torch.zeros(1, 1, 3),
+        torch.zeros(1, 1, dtype=torch.bool),
+    )
+    torch.testing.assert_close(loss, torch.zeros_like(loss))
+    torch.testing.assert_close(
+        evidence.posterior_log_weights[:, 0],
+        torch.log_softmax(log_weights, dim=-1),
+    )
+
+
+def test_hypothesis_set_rollout_retains_modes_and_equation_gradients() -> None:
+    base = _activate_first(BeliefFactory(max_objects=1).create())
+    first_position = torch.tensor([[[0.0, 0.0, 0.0]]], requires_grad=True)
+    second_position = torch.tensor([[[1.0, 0.0, 0.0]]], requires_grad=True)
+    first = base.replace(objects=base.objects.replace(position=first_position))
+    second = base.replace(objects=base.objects.replace(position=second_position))
+    log_weights = torch.tensor([[0.0, 0.0]], requires_grad=True)
+    hypotheses = HypothesisSet([first, second], log_weights)
+
+    def equation_rollout(belief: object, query_times: object) -> BeliefTrajectory:
+        del query_times
+        world = belief
+        positions = world.objects.position[:, None] + world.objects.velocity[:, None] * 0.1
+        return BeliefTrajectory(
+            timestamps=world.timestamp[:, None] + 0.1,
+            positions=positions,
+            velocities=world.objects.velocity[:, None],
+            orientations=world.objects.orientation[:, None],
+            motion_mode_logits=world.objects.motion_mode_logits[:, None],
+            fast_log_variance=world.objects.fast_log_variance[:, None],
+            active_mask=world.objects.active[:, None],
+        )
+
+    trajectories = hypotheses.rollout(equation_rollout, [0.1])
+    loss = trajectories.marginal_position_nll(
+        torch.tensor([[[[0.9, 0.0, 0.0]]]]),
+        torch.tensor([[[True]]]),
+    )
+    loss.backward()
+
+    assert len(trajectories.trajectories) == 2
+    assert first_position.grad is not None and torch.isfinite(first_position.grad).all()
+    assert second_position.grad is not None and torch.isfinite(second_position.grad).all()
+    assert log_weights.grad is not None and torch.isfinite(log_weights.grad).all()
 
 
 def test_lifecycle_birth_allocates_monotonic_id_from_measurement() -> None:

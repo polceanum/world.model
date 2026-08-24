@@ -20,7 +20,13 @@ import torch.nn.functional as F
 from scipy.optimize import linear_sum_assignment
 from torch import Tensor
 
-from world_model.belief import BeliefTrajectory, MotionMode, WorldBelief
+from world_model.belief import (
+    BeliefTrajectory,
+    HypothesisSet,
+    MotionMode,
+    TrajectoryHypothesisSet,
+    WorldBelief,
+)
 from world_model.filtering.analytic_update import diagonal_kalman_update
 from world_model.observations import (
     MeasurementSet,
@@ -91,6 +97,7 @@ class _RolloutLossResult:
     velocities: Tensor | None
     position_log_variance: Tensor | None
     active_mask: Tensor | None
+    trajectory: BeliefTrajectory | None
     physical_metrics: dict[str, float]
     protected_objective_cells: dict[str, ProtectedObjectiveCell]
 
@@ -3955,6 +3962,7 @@ def _rollout_loss_result(
             velocities=None,
             position_log_variance=None,
             active_mask=None,
+            trajectory=None,
             physical_metrics={},
             protected_objective_cells={},
         )
@@ -4438,6 +4446,7 @@ def _rollout_loss_result(
         velocities=target_velocities,
         position_log_variance=target_position_log_variance,
         active_mask=target_active_mask,
+        trajectory=trajectory,
         physical_metrics=physical_metrics,
         protected_objective_cells=protected_objective_cells,
     )
@@ -4703,6 +4712,193 @@ def _soft_shadow_physical_loss(
     return total, metrics
 
 
+def _observation_state_hypotheses(
+    trace: DifferentiableIngestTrace,
+) -> tuple[HypothesisSet, Tensor]:
+    """Keep prediction and RGB-corrected continuous states as explicit modes.
+
+    Both modes inherit the exact hard identity/lifecycle structure of the
+    deployed posterior. Only slots associated on this packet differ, and only
+    in continuous position, velocity, and their canonical fast variances.
+    """
+
+    posterior = trace.posterior
+    predicted = trace.predicted_belief
+    observed = torch.zeros_like(posterior.objects.active)
+    batch_index, pair_index = torch.nonzero(trace.association.pair_mask, as_tuple=True)
+    if batch_index.numel():
+        belief_index = trace.association.belief_indices[batch_index, pair_index]
+        observed[batch_index, belief_index] = True
+    shared = (
+        observed
+        & predicted.objects.active
+        & posterior.objects.active
+        & (predicted.objects.object_id == posterior.objects.object_id)
+    )
+    vector_support = shared.unsqueeze(-1)
+    prior_fast_log_variance = posterior.objects.fast_log_variance.clone()
+    prior_fast_log_variance[..., :6] = torch.where(
+        vector_support,
+        predicted.objects.fast_log_variance[..., :6],
+        posterior.objects.fast_log_variance[..., :6],
+    )
+    prior_objects = posterior.objects.replace(
+        position=torch.where(
+            vector_support,
+            predicted.objects.position,
+            posterior.objects.position,
+        ),
+        velocity=torch.where(
+            vector_support,
+            predicted.objects.velocity,
+            posterior.objects.velocity,
+        ),
+        fast_log_variance=prior_fast_log_variance,
+    )
+    prior_mode = posterior.replace(objects=prior_objects)
+    log_weights = posterior.objects.position.new_zeros((posterior.batch_size, 2))
+    # The first marginal evaluation validates the complete typed structure.
+    # Avoid doing that validation twice on the training hot path.
+    return HypothesisSet([prior_mode, posterior], log_weights), shared
+
+
+def _observation_hypothesis_marginal_loss(
+    trace: DifferentiableIngestTrace,
+    batch: Mapping[str, Any],
+    config: OrpheusConfig,
+    frame_index: int,
+    indices: Tensor,
+    matched: Tensor,
+    aligned_position: Tensor,
+    *,
+    prior_trajectory: BeliefTrajectory | None,
+    posterior_trajectory: BeliefTrajectory | None,
+) -> tuple[Tensor, dict[str, float]]:
+    """Train two exact continuous modes with a proper marginal likelihood."""
+
+    hypotheses, observed = _observation_state_hypotheses(trace)
+    current_support = matched & observed
+    current_evidence = hypotheses.marginal_position_evidence(
+        aligned_position,
+        current_support,
+    )
+    current_nll = current_evidence.supported_batch_macro_mean()
+    total = current_nll
+    rollout_support_count = 0
+    rollout_horizon_count = 0
+    if prior_trajectory is not None and posterior_trajectory is not None:
+        total_frames = int(batch["rgb"].shape[1])
+        frame_offsets, _, horizon_weights = _valid_rollout_offsets(
+            config,
+            frame_index,
+            total_frames,
+        )
+        if frame_offsets:
+            query_plan = observation_window_query_plan(
+                frame_offsets,
+                frame_rate=config.simulator.frame_rate,
+            )
+            if prior_trajectory.timestamps.shape != posterior_trajectory.timestamps.shape:
+                raise ValueError("observation hypothesis trajectories must share query plan")
+            posterior_endpoint = BeliefTrajectory(
+                timestamps=query_plan.select_target_endpoints(posterior_trajectory.timestamps),
+                positions=query_plan.select_target_endpoints(posterior_trajectory.positions),
+                velocities=query_plan.select_target_endpoints(posterior_trajectory.velocities),
+                orientations=query_plan.select_target_endpoints(posterior_trajectory.orientations),
+                motion_mode_logits=query_plan.select_target_endpoints(
+                    posterior_trajectory.motion_mode_logits
+                ),
+                fast_log_variance=query_plan.select_target_endpoints(
+                    posterior_trajectory.fast_log_variance
+                ),
+                active_mask=query_plan.select_target_endpoints(posterior_trajectory.active_mask),
+            )
+            prior_endpoint = BeliefTrajectory(
+                # Hard temporal/lifecycle structure remains the deployed
+                # posterior's. The detached prior supplies only its continuous
+                # equation trajectory and uncertainty on shared observed rows.
+                timestamps=posterior_endpoint.timestamps,
+                positions=query_plan.select_target_endpoints(prior_trajectory.positions),
+                velocities=query_plan.select_target_endpoints(prior_trajectory.velocities),
+                orientations=posterior_endpoint.orientations,
+                motion_mode_logits=posterior_endpoint.motion_mode_logits,
+                fast_log_variance=query_plan.select_target_endpoints(
+                    prior_trajectory.fast_log_variance
+                ),
+                active_mask=posterior_endpoint.active_mask,
+            )
+            endpoint_set = TrajectoryHypothesisSet(
+                [prior_endpoint, posterior_endpoint],
+                hypotheses.log_weights,
+            )
+            targets: list[Tensor] = []
+            supports: list[Tensor] = []
+            mature = trace.posterior.objects.age_steps >= config.training.minimum_rollout_age_steps
+            for frame_offset in frame_offsets:
+                target_index = frame_index + frame_offset
+                target_active = (
+                    gather_target_slots(
+                        batch["objects"]["active"][:, target_index].unsqueeze(-1),
+                        indices,
+                    )
+                    .squeeze(-1)
+                    .bool()
+                )
+                predictable = future_predictable_mask(
+                    batch,
+                    anchor_index=frame_index,
+                    target_index=target_index,
+                    target_indices=indices,
+                )
+                targets.append(
+                    gather_target_slots(
+                        batch["objects"]["position"][:, target_index],
+                        indices,
+                    )
+                )
+                supports.append(matched & observed & target_active & predictable & mature)
+            target_tensor = torch.stack(targets, dim=1)
+            support_tensor = torch.stack(supports, dim=1)
+            rollout_evidence = endpoint_set.marginal_position_evidence(
+                target_tensor,
+                support_tensor,
+            )
+            weighted_horizon_losses: list[Tensor] = []
+            used_weights: list[float] = []
+            for horizon_index, horizon_weight in enumerate(horizon_weights):
+                horizon_support = rollout_evidence.support[:, horizon_index]
+                per_batch_count = horizon_support.sum(dim=1)
+                supported_batch = per_batch_count > 0
+                if not bool(supported_batch.any()):
+                    continue
+                per_batch = rollout_evidence.negative_log_likelihood[:, horizon_index].sum(
+                    dim=1
+                ) / per_batch_count.clamp_min(1).to(target_tensor.dtype)
+                horizon_loss = (
+                    per_batch * supported_batch.to(target_tensor.dtype)
+                ).sum() / supported_batch.sum().to(target_tensor.dtype)
+                weighted_horizon_losses.append(horizon_loss * float(horizon_weight))
+                used_weights.append(float(horizon_weight))
+            if weighted_horizon_losses:
+                total = total + sum(
+                    weighted_horizon_losses,
+                    current_nll.new_zeros(()),
+                ) / max(sum(used_weights), 1.0e-8)
+            rollout_support_count = int(rollout_evidence.support.sum().detach().cpu())
+            rollout_horizon_count = len(used_weights)
+    posterior_weights = current_evidence.posterior_weights
+    return total, {
+        "observation_hypothesis_current_object_count": float(
+            current_evidence.support.sum().detach().cpu()
+        ),
+        "observation_hypothesis_rollout_object_horizon_count": float(rollout_support_count),
+        "observation_hypothesis_rollout_horizon_count": float(rollout_horizon_count),
+        "observation_hypothesis_posterior_mode_weight_sum": float(
+            (posterior_weights[..., 1] * current_evidence.support).sum().detach().cpu()
+        ),
+    }
+
+
 def _group_closed_loop_terms(
     details: dict[str, Tensor],
     reference: Tensor,
@@ -4729,6 +4925,7 @@ def _group_closed_loop_terms(
         "soft_association_exclusivity",
         "rgb_reprojection",
         "soft_shadow_physical",
+        "observation_hypothesis_nll",
     ):
         if name in details:
             terms[name] = details[name]
@@ -4842,6 +5039,7 @@ def _weighted_closed_loop_total(
         "soft_association_exclusivity",
         "rgb_reprojection",
         "soft_shadow_physical",
+        "observation_hypothesis_nll",
     }
     selected: dict[str, Tensor] = {
         name: value
@@ -5254,6 +5452,11 @@ def run_closed_loop_batch(
         and torch.is_grad_enabled()
         and float(loss_weights.get("soft_shadow_physical", 0.0)) > 0.0
     )
+    observation_hypothesis_enabled = (
+        model.training
+        and torch.is_grad_enabled()
+        and float(loss_weights.get("observation_hypothesis_nll", 0.0)) > 0.0
+    )
     soft_association_enabled = (
         model.training
         and torch.is_grad_enabled()
@@ -5515,7 +5718,7 @@ def run_closed_loop_batch(
 
         ingest_trace: DifferentiableIngestTrace | None = None
         soft_shadow_belief: WorldBelief | None = None
-        if soft_association_enabled:
+        if soft_association_enabled or observation_hypothesis_enabled:
             belief, ingest_trace = model.ingest_with_trace(
                 packet,
                 prepared=prepared_propagation,
@@ -5568,7 +5771,7 @@ def run_closed_loop_batch(
             batch["objects"]["velocity"][:, frame_index],
             indices,
         )
-        if ingest_trace is not None:
+        if ingest_trace is not None and soft_association_enabled:
             assert soft_association_temperature is not None
             soft_losses, soft_metrics = _soft_association_surrogate_losses(
                 model,
@@ -5886,6 +6089,28 @@ def run_closed_loop_batch(
                     physical_metrics,
                     rollout_result.physical_metrics,
                 )
+
+        if observation_hypothesis_enabled:
+            if ingest_trace is None:
+                raise AssertionError("observation hypothesis objective requires ingest trace")
+            hypothesis_loss, hypothesis_metrics = _observation_hypothesis_marginal_loss(
+                ingest_trace,
+                batch,
+                config,
+                frame_index,
+                indices,
+                matched,
+                aligned_position,
+                prior_trajectory=prior_rollout,
+                posterior_trajectory=(
+                    None if rollout_result is None else rollout_result.trajectory
+                ),
+            )
+            add("observation_hypothesis_nll", hypothesis_loss)
+            _accumulate_float_metrics(
+                parameter_supervision_metrics,
+                hypothesis_metrics,
+            )
 
         if (
             prior_rollout is not None

@@ -996,6 +996,36 @@ def test_training_resume_binds_prior_future_correction_with_legacy_true_default(
         validate_training_resume_config(legacy_payload, changed)
 
 
+def test_training_resume_binds_observation_hypothesis_nll_with_legacy_zero_default() -> None:
+    config = _small_config()
+    checkpoint_config = config.to_dict()
+    checkpoint_config["training"]["loss_weights"].pop("observation_hypothesis_nll")
+    legacy_payload = {
+        "config": checkpoint_config,
+        "simulator_version": SIMULATOR_VERSION,
+    }
+
+    validate_training_resume_config(legacy_payload, config)
+
+    changed = replace(
+        config,
+        training=replace(
+            config.training,
+            closed_loop_trainable_scope="differentiable_state_estimator",
+            loss_weights={
+                **config.training.loss_weights,
+                "observation_hypothesis_nll": 0.1,
+            },
+        ),
+    )
+    changed.validate()
+    with pytest.raises(
+        ValueError,
+        match=r"training\.loss_weights\.observation_hypothesis_nll",
+    ):
+        validate_training_resume_config(legacy_payload, changed)
+
+
 @pytest.mark.parametrize(
     "field_name",
     [

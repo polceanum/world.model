@@ -2,6 +2,24 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-25 differentiable continuous observation hypotheses (specification 1.77)
+
+- Added typed current-state and trajectory hypothesis sets that preserve the
+  equation prior and RGB-corrected posterior without relaxing hard object
+  identity or lifecycle state.
+- Added a proper Gaussian-mixture `logsumexp` objective over current and future
+  position evidence. It reuses existing prior/posterior rollouts, adds no
+  dynamics call, and is legacy/default zero plus exact-resume-bound.
+- Added strict RGB/scope/prior-rollout configuration guards and differentiable,
+  hard-structure, empty-support, rollout, forward-parity, and checkpoint tests.
+- Passed the focused affected gate (`510 passed`, one expected MPS skip). A real
+  balanced attribution found exact ordinary losses/metrics, negligible measured
+  overhead, and a `9.723%` gradient share at the sole candidate weight `0.1`.
+- Passed the complete repository gate (`1394 passed`, `20` expected backend
+  skips in `514.16 s`) on the exact specification-1.77 source bytes.
+- Kept the supported profile at zero pending one paired short accuracy gate.
+  No merge or promotion is claimed.
+
 ### 2026-08-24 delayed causal RGB reliability diagnostic
 
 - Localized a genuine differentiable observation-side signal: delayed global

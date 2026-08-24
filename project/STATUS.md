@@ -1,5 +1,40 @@
 # Project status
 
+## Differentiable continuous observation hypotheses — specification 1.77
+
+The observation bottleneck is now represented without asking a hard selector
+to learn through a discrete choice. A typed two-mode `HypothesisSet` retains
+the equation prior and RGB-corrected posterior with shared hard identity and
+lifecycle structure, propagates both through the same dynamics, and scores
+current and forecast supervision by Gaussian-mixture `logsumexp`. The path
+reuses the existing detached prior rollout and ordinary differentiable
+posterior rollout; it adds no dynamics call and changes no deployed forward
+value while its weight is zero.
+
+Focused configuration, exact-resume, belief, objective, and trainer integrity
+coverage passes `510` tests with one expected unavailable-MPS skip. The real
+balanced eight-scenario attribution uses seeds
+`17800,1001,3138,24235,17100,23365,2614,8279`: existing losses and physical
+metrics are exact, support is 94 current objects and 235 future object-horizons,
+and enabled/disabled forward time is `15.1887/15.2041 s`. Weight `0.1` is the
+single predeclared accuracy candidate because it contributes `9.723%` of the
+combined gradient. Its cosine with the other objective is `-0.37794`, so the
+candidate is not promoted on gradient evidence alone. The report is
+`/private/tmp/20260825-spec177-hypothesis-gradient-probe.json` (SHA-256
+`e3d464a8...`).
+
+The complete repository gate passes `1394` tests with `20` expected backend
+skips in `514.16 s` on these exact source bytes.
+
+The preceding bounded diagnostics explain this design. Four continuous depth
+modes showed that the oracle needs only prior versus RGB mean, never the
+mean-plus/minus-one-standard-deviation modes (`edc62cf...`). A causal next-
+image hard choice improved some scenarios but regressed baseline, heavy/light,
+and impulse (`fad29085...`). The remaining gate is exactly one paired short
+weight-`0.1` treatment/control followed by the fixed physical comparator. No
+adjacent weight or duration tuning is authorized; `main` remains unchanged
+unless the complete gate passes.
+
 ## Delayed causal RGB reliability — bounded diagnostic rejected
 
 A differentiable, image-only correction was tested after the radius-derived

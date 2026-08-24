@@ -2465,3 +2465,102 @@ def test_disabling_prior_future_correction_removes_only_the_extra_rollout_and_lo
     assert enabled_physical.keys() == disabled_physical.keys()
     for name, value in disabled_physical.items():
         assert value == pytest.approx(enabled_physical[name], nan_ok=True)
+
+
+def test_observation_hypothesis_nll_reuses_existing_rollouts_and_preserves_forward(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        training_loop,
+        "_PHYSICAL_SELECTION_DISTANCE_THRESHOLD_M",
+        10.0,
+    )
+    base = _prior_future_correction_test_config()
+    common_training = replace(
+        base.training,
+        closed_loop_trainable_scope="differentiable_state_estimator",
+    )
+    enabled_config = replace(
+        base,
+        training=replace(
+            common_training,
+            loss_weights={
+                **common_training.loss_weights,
+                "observation_hypothesis_nll": 0.1,
+            },
+        ),
+    )
+    disabled_config = replace(
+        base,
+        training=replace(
+            common_training,
+            loss_weights={
+                **common_training.loss_weights,
+                "observation_hypothesis_nll": 0.0,
+            },
+        ),
+    )
+    enabled_config.validate()
+    disabled_config.validate()
+    batch = collate_episodes([generate_episode(base, seed=9)])
+
+    torch.manual_seed(551)
+    enabled_model = OnlineWorldModel.from_config(enabled_config, device="cpu")
+    disabled_model = OnlineWorldModel.from_config(disabled_config, device="cpu")
+    disabled_model.load_state_dict(enabled_model.state_dict())
+    enabled_calls = 0
+    disabled_calls = 0
+
+    def count_rollouts(model: OnlineWorldModel, *, enabled: bool) -> None:
+        original = model.dynamics.rollout
+
+        def recording(*args: Any, **kwargs: Any) -> BeliefTrajectory:
+            nonlocal enabled_calls, disabled_calls
+            if enabled:
+                enabled_calls += 1
+            else:
+                disabled_calls += 1
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(model.dynamics, "rollout", recording)
+
+    count_rollouts(enabled_model, enabled=True)
+    count_rollouts(disabled_model, enabled=False)
+    common = {
+        "window_steps": 4,
+        "apply_perturbations": False,
+        "include_measurement_supervision": False,
+        "rollout_anchors_per_window": 2,
+    }
+    torch.manual_seed(991)
+    enabled = run_closed_loop_batch(enabled_model, batch, enabled_config, **common)
+    torch.manual_seed(991)
+    disabled = run_closed_loop_batch(disabled_model, batch, disabled_config, **common)
+
+    assert enabled_calls == disabled_calls
+    assert "observation_hypothesis_nll" in enabled.loss_terms
+    assert "observation_hypothesis_nll" not in disabled.loss_terms
+    assert enabled.loss_terms["observation_hypothesis_nll"].requires_grad
+    assert torch.isfinite(enabled.loss_terms["observation_hypothesis_nll"])
+    assert enabled.metrics["observation_hypothesis_current_object_count"] > 0
+    assert enabled.metrics["observation_hypothesis_rollout_object_horizon_count"] > 0
+    for name, value in disabled.loss_terms.items():
+        if name != "total":
+            torch.testing.assert_close(value, enabled.loss_terms[name])
+    enabled_physical = {
+        name: value for name, value in enabled.metrics.items() if name.startswith("physical_")
+    }
+    disabled_physical = {
+        name: value for name, value in disabled.metrics.items() if name.startswith("physical_")
+    }
+    assert enabled_physical == disabled_physical
+
+    enabled_model.zero_grad(set_to_none=True)
+    enabled.loss_terms["observation_hypothesis_nll"].backward()
+    gradients = [
+        parameter.grad
+        for parameter in enabled_model.parameters()
+        if parameter.requires_grad and parameter.grad is not None
+    ]
+    assert gradients
+    assert all(torch.isfinite(gradient).all() for gradient in gradients)
