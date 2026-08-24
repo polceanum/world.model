@@ -15,12 +15,16 @@ Replacing its per-substep host index transfer with eager evaluation of all
 three built-in analytic alternatives preserved output sums and candidate-count
 diagnostics exactly, but took `1.069251 s` (+28.67%).
 
-The candidate patch was reverted completely. Do not trade sparse dispatch for
-eager unused-candidate execution on this host. Reopen throughput only with a
-batched/vectorized heterogeneous dispatch that avoids both host selection and
-unused model execution. The terminal report is
+One informed follow-up transferred the exact static-candidate argmax superset
+only once per forecast and retained sparse execution. It was also output-exact,
+but reached only `0.822398 s` (-1.04%) in this deliberately sync-heavy
+microbenchmark, too small to justify new device-specific dispatch complexity
+and likely smaller in real learned rollouts. Both candidate patches were
+reverted completely. Reopen throughput only with a batched/vectorized
+heterogeneous dispatch that avoids both host selection and unused model
+execution. The terminal report is
 `/private/tmp/20260824-spec166-runtime-pool-dispatch-terminal.json` (SHA-256
-`75908cb5...`); deployment remains the learned-only step-zero model.
+`54c62854...`); deployment remains the learned-only step-zero model.
 
 ## RGB global-discovery split diagnostic — terminally rejected
 

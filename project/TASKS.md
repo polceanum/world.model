@@ -8,9 +8,11 @@
   dispatch with eager built-in analytic candidate evaluation.
 - [x] Reject and fully revert it: active-Aqua MPS median latency worsens
   `0.831007 -> 1.069251 s` (+28.67%) despite exact output/diagnostic sums.
+- [x] Test one informed forecast-level sparse plan. Reject and fully revert its
+  output-exact but immaterial `0.831007 -> 0.822398 s` (-1.04%) result.
 - [x] Stop without fixed-32 or training. Require a genuinely vectorized design
   that avoids both host synchronization and unused candidate execution before
-  reopening; record, commit, and push the boundary (`75908cb5...`).
+  reopening; record, commit, and push the boundary (`54c62854...`).
 
 ## RGB global-discovery split diagnostic — no specification change
 

@@ -18,10 +18,13 @@
   semantic flag; or tune composition step/horizon and confound accuracy.
 - **Consequences:** Forecast output and diagnostics are exact, but eager
   evaluation raises median latency from `0.831007` to `1.069251 s` (+28.67%).
-  The code is fully reverted. Sparse dispatch remains authoritative; reopen
-  only with vectorized heterogeneous execution that avoids both host selection
-  and unused candidates. Terminal evidence is `75908cb5...`; no deployment,
-  checkpoint, fixed-32, or training change follows.
+  A forecast-level static-candidate plan retains sparse execution but reaches
+  only `0.822398 s` (-1.04%) in the deliberately sync-heavy benchmark. Both
+  patches are fully reverted as slower/immaterial. Sparse dispatch remains
+  authoritative; reopen only with vectorized heterogeneous execution that
+  avoids both host selection and unused candidates. Terminal evidence is
+  `54c62854...`; no deployment, checkpoint, fixed-32, or training change
+  follows.
 
 ## ADR-182 — Reject unconstrained splitting of merged RGB components
 

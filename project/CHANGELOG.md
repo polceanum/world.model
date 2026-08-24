@@ -10,9 +10,11 @@
   built-in analytic alternatives on active-Aqua MPS. Exact output sums and
   candidate-count diagnostics were preserved, but median latency worsened
   `0.831007 -> 1.069251 s` (+28.67%).
-- Reverted the candidate completely and stopped before fixed-32 or training.
-  Future work requires batched/vectorized heterogeneous dispatch rather than
-  executing unused candidates. Terminal evidence SHA-256 is `75908cb5...`.
+- Tested one forecast-level sparse candidate plan after that failure. It was
+  also output-exact but improved the deliberately sync-heavy microbenchmark by
+  only 1.04%, below materiality. Reverted both candidates and stopped before
+  fixed-32 or training. Future work requires batched/vectorized heterogeneous
+  dispatch. Terminal evidence SHA-256 is `54c62854...`.
 
 ### 2026-08-24 terminal RGB global-discovery split diagnostic
 
