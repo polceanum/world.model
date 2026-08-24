@@ -17,8 +17,15 @@
   overhead, and a `9.723%` gradient share at the sole candidate weight `0.1`.
 - Passed the complete repository gate (`1394 passed`, `20` expected backend
   skips in `514.16 s`) on the exact specification-1.77 source bytes.
-- Kept the supported profile at zero pending one paired short accuracy gate.
-  No merge or promotion is claimed.
+- Completed the sole paired 16-update weight-`0.1` gate. Treatment versus
+  control worsens selector `0.213057243 -> 0.213980102`, current position
+  `0.121319889 -> 0.124220580 m`, velocity
+  `0.780868870 -> 0.805925877 m/s`, and collision F1
+  `0.219178082 -> 0.213953488`; the production comparator reports `18` pooled
+  guardrail failures.
+- Applied the bounded stop rule: no fixed-32, adjacent-weight, or duration
+  sweep. The mechanism remains default off on the research branch and is not
+  merged to `main`. Paired report SHA-256: `de410f10e2671bc85fcefac23d8e385504b69e12cde02a7e41622f5286d12c24`.
 
 ### 2026-08-24 delayed causal RGB reliability diagnostic
 

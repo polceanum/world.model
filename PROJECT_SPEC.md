@@ -10051,6 +10051,24 @@ material fixed-manifest improvement with all existing scenario/axis/horizon,
 event, identity, calibration, uncertainty, support, latency, and provenance
 guardrails intact.
 
+The sole paired 16-update CPU gate is the terminal accuracy decision. Both
+arms use identical balanced draws, complete without skipped or retried updates,
+and differ only at the candidate weight (`0.1` versus `0.0`). Treatment worsens
+the selector `0.213057243 -> 0.213980102` (lower is better), current position
+`0.121319889 -> 0.124220580 m`, current velocity
+`0.780868870 -> 0.805925877 m/s`, and collision F1
+`0.219178082 -> 0.213953488`. The production comparator records `18` pooled
+guardrail failures across position, velocity, collision, identity-association,
+and Gaussian-NLL evidence. The reduced manifest's sparse scenario support is
+not needed for rejection because the pooled score and guardrails already fail.
+
+The declared stop boundary therefore applies. No fixed-32 escalation, adjacent
+weight, or duration sweep is permitted. The weight remains default and legacy
+zero, deployed inference is unchanged, and this mechanism is not eligible for
+merge to `main`. The immutable paired report is
+`/private/tmp/20260825-spec177-hypothesis-paired16-audit.json` with SHA-256
+`de410f10e2671bc85fcefac23d8e385504b69e12cde02a7e41622f5286d12c24`.
+
 The exact repository gate for this implementation passes `1394` tests with
 `20` expected unavailable-backend skips in `514.16 s`.
 

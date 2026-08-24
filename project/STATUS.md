@@ -26,14 +26,34 @@ candidate is not promoted on gradient evidence alone. The report is
 The complete repository gate passes `1394` tests with `20` expected backend
 skips in `514.16 s` on these exact source bytes.
 
+The bounded paired accuracy gate is now terminal. Both CPU arms completed all
+`16` balanced updates with identical draws and no skipped/retried update; their
+resolved configurations differ only at
+`training.loss_weights.observation_hypothesis_nll` (`0.1` treatment versus
+`0.0` control). The treatment selector is worse, `0.213980102` versus
+`0.213057243` (`+0.000922859`, lower is better), rather than improving by the
+required `1e-5`. Current position worsens `0.121319889 -> 0.124220580 m`,
+velocity worsens `0.780868870 -> 0.805925877 m/s`, and collision F1 falls
+`0.219178082 -> 0.213953488`. The production comparator reports `18` pooled
+guardrail failures, including z position, y velocity, short-horizon velocity,
+0.75-second collision F1, identity association coverage, and y-axis NLL. The
+reduced fixed-eight scenario slices add `105` complete failures/support cells;
+the pooled rejection alone is sufficient and does not depend on those sparse
+slices.
+
+The predeclared stop rule therefore fires: no fixed-32 escalation, adjacent
+weight, or duration sweep is authorized. The mechanism stays default/legacy
+zero on the research branch and is not eligible for `main`. The paired report
+is `/private/tmp/20260825-spec177-hypothesis-paired16-audit.json` (SHA-256
+`de410f10e2671bc85fcefac23d8e385504b69e12cde02a7e41622f5286d12c24`).
+
 The preceding bounded diagnostics explain this design. Four continuous depth
 modes showed that the oracle needs only prior versus RGB mean, never the
 mean-plus/minus-one-standard-deviation modes (`edc62cf...`). A causal next-
 image hard choice improved some scenarios but regressed baseline, heavy/light,
-and impulse (`fad29085...`). The remaining gate is exactly one paired short
-weight-`0.1` treatment/control followed by the fixed physical comparator. No
-adjacent weight or duration tuning is authorized; `main` remains unchanged
-unless the complete gate passes.
+and impulse (`fad29085...`). The marginal objective likewise provides a real
+gradient but does not improve the fixed physical comparator. This closes the
+candidate without changing deployed inference or the protected `main` branch.
 
 ## Delayed causal RGB reliability — bounded diagnostic rejected
 

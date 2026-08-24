@@ -5883,7 +5883,7 @@
 ## ADR-201 — Marginalize continuous observation modes through the physical equations
 
 - **Date:** 2026-08-25
-- **Status:** implementation and gradient path accepted; accuracy pending
+- **Status:** implementation and gradient path accepted; accuracy candidate rejected
 - **Context:** Equation rollouts become almost exact from the correct initial
   state, while repeated scalar reliability, soft averaging, image-space EKF,
   and hard next-image selection fail coherent scenario/axis guardrails. A
@@ -5903,8 +5903,11 @@
   proves finite current/future support, exact existing outputs, zero extra
   rollout calls, and effectively zero measured overhead. Weight `0.1` provides
   a predeclared `9.723%` gradient share but opposes the point objective at
-  cosine `-0.37794`. Run exactly one paired short accuracy gate. Pass advances
-  to the complete fixed manifest; failure closes this candidate without a
-  weight/duration sweep. `main` remains protected until that full gate passes.
-  The exact implementation gate is `1394 passed`, `20` expected skips in
-  `514.16 s`.
+  cosine `-0.37794`. The sole paired 16-update gate then worsens selector
+  `0.213057243 -> 0.213980102`, position `0.121319889 -> 0.124220580 m`,
+  velocity `0.780868870 -> 0.805925877 m/s`, and collision F1
+  `0.219178082 -> 0.213953488`, with `18` pooled guardrail failures. This
+  activates the declared stop rule: no fixed-32, weight, or duration sweep;
+  retain default zero and do not merge to `main`. The exact implementation
+  gate remains `1394 passed`, `20` expected skips in `514.16 s`; paired evidence
+  is `de410f10...`.
