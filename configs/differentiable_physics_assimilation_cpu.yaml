@@ -231,6 +231,9 @@ training:
     # The bounded specification-1.71 accuracy pair rejected this opt-in
     # objective. Keep the supported profile on its legacy-exact zero path.
     rgb_reprojection: 0.0
+    # Smooth training-only posterior propagated by the existing analytic
+    # dynamics. The hard tracker remains the runtime/deployment state.
+    soft_shadow_physical: 1.0
 
 evaluation:
   horizons_seconds: [0.1, 0.25, 0.5, 0.75, 1.0]

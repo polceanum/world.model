@@ -11,6 +11,7 @@ from world_model.observations.rgb import RGBTemporalPositionHistory
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
 from world_model.training.loop import (
+    _soft_analytic_posterior_belief,
     _soft_association_surrogate_losses,
     _soft_posterior_straight_through_belief,
 )
@@ -252,6 +253,48 @@ def test_soft_posterior_carrier_is_forward_exact_and_rollout_differentiable() ->
     assert world_position.grad is not None
     assert torch.isfinite(world_position.grad).all()
     assert bool((world_position.grad != 0).any())
+
+
+def test_soft_analytic_posterior_is_smooth_without_mutating_hard_runtime() -> None:
+    torch.manual_seed(29)
+    base = _small_rgb_config()
+    config = replace(
+        base,
+        model=replace(
+            base.model,
+            rgb=replace(base.model.rgb, global_every_steps=1),
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    model.train()
+    model.observation_modules["rgb"].requires_grad_(True)
+    model.ingest(_rgb_packet(0.0))
+    model.ingest(_rgb_packet(1.0 / 30.0, shift=1))
+    _, trace = model.ingest_with_trace(_rgb_packet(2.0 / 30.0, shift=2))
+    assert trace is not None
+    hard_position = trace.posterior.objects.position.detach().clone()
+    hard_velocity = trace.posterior.objects.velocity.detach().clone()
+    world_position = trace.measurements.auxiliary["world_position"]
+    world_position.retain_grad()
+
+    shadow, metrics = _soft_analytic_posterior_belief(
+        model,
+        trace,
+        temperature=0.5,
+    )
+    assert metrics["soft_posterior_position_coordinate_count"] > 0
+    assert torch.equal(model.belief.objects.position, hard_position)
+    assert torch.equal(model.belief.objects.velocity, hard_velocity)
+    assert torch.equal(shadow.objects.active, trace.posterior.objects.active)
+    assert torch.equal(shadow.objects.object_id, trace.posterior.objects.object_id)
+
+    trajectory = model.dynamics.rollout(shadow, [0.1], return_events=False)
+    trajectory.positions.square().sum().backward()
+    assert world_position.grad is not None
+    assert torch.isfinite(world_position.grad).all()
+    assert bool((world_position.grad != 0).any())
+    assert torch.equal(model.belief.objects.position, hard_position)
+    assert torch.equal(model.belief.objects.velocity, hard_velocity)
 
 
 def test_opt_in_runtime_pool_uses_rgb_measurements_without_oracle_state() -> None:

@@ -1,5 +1,27 @@
 # Design decisions
 
+## ADR-195 — Use a true smooth posterior as the differentiable training surrogate
+
+- **Date:** 2026-08-24
+- **Status:** implemented; bounded qualification pending
+- **Context:** Auxiliary soft association improves current state but barely
+  moves long rollouts; a zero-forward straight-through carrier is high variance;
+  and dense silhouette reprojection is safe but materially inert. The hard
+  tracker remains a useful deployment inductive bias, not a suitable backward
+  graph across assignment boundaries.
+- **Decision:** Keep the complete hard runtime unchanged. For one scored
+  training anchor, form a detached typed shell whose supported continuous
+  state is the true soft-assignment analytic posterior, then propagate it with
+  the existing physical dynamics and supervise the ordinary current/forecast
+  targets. Mirror established physical weights behind one opt-in scale.
+- **Alternatives considered:** tune any rejected surrogate; deploy soft IDs;
+  replace equations with a neural transition; use simulator state at runtime;
+  or continue training longer without changing the gradient path.
+- **Consequences:** The backward path is smooth and equation-consistent, while
+  persistent identity/lifecycle/contact semantics stay hard. Training pays for
+  one extra analytic rollout at the scored anchor; validation/deployment pay
+  nothing. One frozen paired gate decides retention, with no adjacent tuning.
+
 ## ADR-194 — Use analytic RGB silhouette reprojection as dense state evidence
 
 - **Date:** 2026-08-24

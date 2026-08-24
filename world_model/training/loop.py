@@ -1450,20 +1450,18 @@ def _soft_association_weights(
     return weights, row_mass
 
 
-def _soft_posterior_straight_through_belief(
+def _soft_analytic_posterior_belief(
     model: OnlineWorldModel,
     trace: DifferentiableIngestTrace,
     *,
     temperature: float,
 ) -> tuple[WorldBelief, dict[str, float]]:
-    """Attach soft-assignment gradients to the exact hard posterior values.
+    """Build a training-only smooth posterior with hard typed structure.
 
-    The hard posterior remains the forward value, including its integer
-    identity/lifecycle decisions.  A zero-valued carrier supplies gradients
-    from the same analytic diagonal correction evaluated under the gated soft
-    assignment.  Subsequent recurrent propagation and rollout therefore train
-    the evidence behind assignment boundaries without substituting a soft
-    runtime or a learned dynamics model.
+    Integer identity, lifecycle, active masks, and every unsupported object are
+    copied from a detached hard posterior. Supported continuous position and
+    velocity rows use the same diagonal analytic correction under the gated
+    soft assignment. The result is never installed into runtime state.
     """
 
     hard = trace.posterior
@@ -1558,7 +1556,8 @@ def _soft_posterior_straight_through_belief(
         axis_support = torch.ones_like(expected_position, dtype=torch.bool)
 
     prior_objects = trace.predicted_belief.objects
-    hard_objects = hard.objects
+    shadow = hard.detach().clone()
+    shadow_objects = shadow.objects
     updater_config = model.updater.config
     analytic_position = diagonal_kalman_update(
         prior_objects.position[batch_index, belief_index],
@@ -1570,18 +1569,12 @@ def _soft_posterior_straight_through_belief(
         minimum_log_variance=updater_config.minimum_log_variance,
         maximum_log_variance=updater_config.maximum_log_variance,
     )
-    position = hard_objects.position.clone()
-    fast_log_variance = hard_objects.fast_log_variance.clone()
-    position_carrier = analytic_position.mean - analytic_position.mean.detach()
-    position_lv_carrier = analytic_position.log_variance - analytic_position.log_variance.detach()
-    position[batch_index, belief_index] = (
-        hard_objects.position[batch_index, belief_index] + position_carrier
-    )
-    fast_log_variance[batch_index, belief_index, :3] = (
-        hard_objects.fast_log_variance[batch_index, belief_index, :3] + position_lv_carrier
-    )
+    position = shadow_objects.position.clone()
+    fast_log_variance = shadow_objects.fast_log_variance.clone()
+    position[batch_index, belief_index] = analytic_position.mean
+    fast_log_variance[batch_index, belief_index, :3] = analytic_position.log_variance
 
-    velocity = hard_objects.velocity
+    velocity = shadow_objects.velocity
     velocity_coordinate_count = 0
     measured_velocity = measured.auxiliary.get("world_velocity")
     measured_velocity_lv = measured.auxiliary.get("world_velocity_log_variance")
@@ -1621,21 +1614,13 @@ def _soft_posterior_straight_through_belief(
             minimum_log_variance=updater_config.minimum_log_variance,
             maximum_log_variance=updater_config.maximum_log_variance,
         )
-        velocity = hard_objects.velocity.clone()
-        velocity[batch_index, belief_index] = (
-            hard_objects.velocity[batch_index, belief_index]
-            + analytic_velocity.mean
-            - analytic_velocity.mean.detach()
-        )
-        fast_log_variance[batch_index, belief_index, 3:6] = (
-            hard_objects.fast_log_variance[batch_index, belief_index, 3:6]
-            + analytic_velocity.log_variance
-            - analytic_velocity.log_variance.detach()
-        )
+        velocity = shadow_objects.velocity.clone()
+        velocity[batch_index, belief_index] = analytic_velocity.mean
+        fast_log_variance[batch_index, belief_index, 3:6] = analytic_velocity.log_variance
         velocity_coordinate_count = int(velocity_support.sum().detach().cpu())
 
-    posterior = hard.replace(
-        objects=hard_objects.replace(
+    posterior = shadow.replace(
+        objects=shadow_objects.replace(
             position=position,
             velocity=velocity,
             fast_log_variance=fast_log_variance,
@@ -1646,6 +1631,39 @@ def _soft_posterior_straight_through_belief(
         "soft_posterior_position_coordinate_count": float(axis_support.sum().detach().cpu()),
         "soft_posterior_velocity_coordinate_count": float(velocity_coordinate_count),
     }
+
+
+def _soft_posterior_straight_through_belief(
+    model: OnlineWorldModel,
+    trace: DifferentiableIngestTrace,
+    *,
+    temperature: float,
+) -> tuple[WorldBelief, dict[str, float]]:
+    """Attach soft analytic gradients to exact hard posterior values."""
+
+    soft, metrics = _soft_analytic_posterior_belief(
+        model,
+        trace,
+        temperature=temperature,
+    )
+    hard = trace.posterior
+    hard_objects = hard.objects
+    soft_objects = soft.objects
+    posterior = hard.replace(
+        objects=hard_objects.replace(
+            position=(
+                hard_objects.position + (soft_objects.position - soft_objects.position.detach())
+            ),
+            velocity=(
+                hard_objects.velocity + (soft_objects.velocity - soft_objects.velocity.detach())
+            ),
+            fast_log_variance=(
+                hard_objects.fast_log_variance
+                + (soft_objects.fast_log_variance - soft_objects.fast_log_variance.detach())
+            ),
+        )
+    )
+    return posterior, metrics
 
 
 def gather_target_pairs(target: Tensor, indices: Tensor) -> Tensor:
@@ -4604,6 +4622,87 @@ def _rollout_losses(
     ).losses
 
 
+def _soft_shadow_physical_loss(
+    model: OnlineWorldModel,
+    shadow: WorldBelief,
+    batch: Mapping[str, Any],
+    config: OrpheusConfig,
+    frame_index: int,
+    indices: Tensor,
+    matched: Tensor,
+    *,
+    aligned_position: Tensor,
+    aligned_velocity: Tensor,
+    physical_weights: Mapping[str, float],
+) -> tuple[Tensor, dict[str, float]]:
+    """Score a smooth posterior through the existing analytic rollout.
+
+    The hard runtime belief remains authoritative. This training-only shadow
+    uses the hard target alignment as a fixed supervision label, then follows
+    the same equation-based dynamics as deployment. The composite mirrors the
+    resolved physical state/rollout weights so it introduces only one opt-in
+    scale rather than a second set of tuned horizon weights.
+    """
+
+    batch_macro = config.training.closed_loop_batch_macro_physical_losses_enabled
+    tail_fraction = config.training.closed_loop_scenario_tail_fraction
+    velocity_support = _state_velocity_objective_axis_support(shadow, matched)
+    state_position = _axis_separable_masked_huber(
+        shadow.objects.position,
+        aligned_position,
+        matched,
+        batch_macro=batch_macro,
+        batch_tail_fraction=tail_fraction,
+    )
+    state_velocity = _axis_separable_masked_huber(
+        shadow.objects.velocity,
+        aligned_velocity,
+        velocity_support,
+        batch_macro=batch_macro,
+        batch_tail_fraction=tail_fraction,
+    )
+    rollout = _rollout_loss_result(
+        model,
+        shadow,
+        batch,
+        config,
+        frame_index,
+        indices,
+        matched,
+        compute_event_loss=False,
+    )
+    components = {
+        "state_position": state_position,
+        "state_velocity": state_velocity,
+        "rollout_position": rollout.losses.get("rollout_position"),
+        "rollout_position_x": rollout.losses.get("rollout_position_x"),
+        "rollout_position_y": rollout.losses.get("rollout_position_y"),
+        "rollout_position_z": rollout.losses.get("rollout_position_z"),
+        "rollout_velocity": rollout.losses.get("rollout_velocity"),
+        "rollout_nll": rollout.losses.get("rollout_position_nll"),
+    }
+    use_axis_position = any(
+        name in physical_weights
+        for name in ("rollout_position_x", "rollout_position_y", "rollout_position_z")
+    )
+    weighted = [
+        value * float(physical_weights[name])
+        for name, value in components.items()
+        if value is not None
+        and not (name == "rollout_position" and use_axis_position)
+        and float(physical_weights.get(name, 0.0)) != 0.0
+    ]
+    total = sum(weighted, state_position.new_zeros(()))
+    metrics = {
+        "soft_shadow_state_position_coordinate_count": float(
+            matched.unsqueeze(-1).expand_as(shadow.objects.position).sum().detach().cpu()
+        ),
+        "soft_shadow_state_velocity_coordinate_count": float(velocity_support.sum().detach().cpu()),
+        "soft_shadow_rollout_horizon_count": float(len(rollout.frame_offsets)),
+    }
+    return total, metrics
+
+
 def _group_closed_loop_terms(
     details: dict[str, Tensor],
     reference: Tensor,
@@ -4629,6 +4728,7 @@ def _group_closed_loop_terms(
         "soft_association_velocity",
         "soft_association_exclusivity",
         "rgb_reprojection",
+        "soft_shadow_physical",
     ):
         if name in details:
             terms[name] = details[name]
@@ -4741,6 +4841,7 @@ def _weighted_closed_loop_total(
         "soft_association_velocity",
         "soft_association_exclusivity",
         "rgb_reprojection",
+        "soft_shadow_physical",
     }
     selected: dict[str, Tensor] = {
         name: value
@@ -5148,12 +5249,18 @@ def run_closed_loop_batch(
     soft_posterior_straight_through = (
         config.training.closed_loop_soft_posterior_straight_through_enabled
     )
+    soft_shadow_enabled = (
+        model.training
+        and torch.is_grad_enabled()
+        and float(loss_weights.get("soft_shadow_physical", 0.0)) > 0.0
+    )
     soft_association_enabled = (
         model.training
         and torch.is_grad_enabled()
         and soft_association_temperature is not None
         and (
             soft_posterior_straight_through
+            or soft_shadow_enabled
             or any(
                 float(loss_weights.get(name, 0.0)) > 0.0
                 for name in (
@@ -5407,6 +5514,7 @@ def run_closed_loop_batch(
                         fast_supervised_slots += int(valid_supervision.sum().detach().cpu())
 
         ingest_trace: DifferentiableIngestTrace | None = None
+        soft_shadow_belief: WorldBelief | None = None
         if soft_association_enabled:
             belief, ingest_trace = model.ingest_with_trace(
                 packet,
@@ -5417,6 +5525,14 @@ def run_closed_loop_batch(
                 packet,
                 prepared=prepared_propagation,
             )
+        if ingest_trace is not None and soft_shadow_enabled and score_rollout:
+            assert soft_association_temperature is not None
+            soft_shadow_belief, soft_shadow_metrics = _soft_analytic_posterior_belief(
+                model,
+                ingest_trace,
+                temperature=soft_association_temperature,
+            )
+            _accumulate_float_metrics(parameter_supervision_metrics, soft_shadow_metrics)
         if ingest_trace is not None and soft_posterior_straight_through:
             assert soft_association_temperature is not None
             belief, soft_posterior_metrics = _soft_posterior_straight_through_belief(
@@ -5465,6 +5581,21 @@ def run_closed_loop_batch(
             for name, value in soft_losses.items():
                 add(name, value)
             _accumulate_float_metrics(parameter_supervision_metrics, soft_metrics)
+        if soft_shadow_belief is not None:
+            shadow_loss, shadow_metrics = _soft_shadow_physical_loss(
+                model,
+                soft_shadow_belief,
+                batch,
+                config,
+                frame_index,
+                indices,
+                matched,
+                aligned_position=aligned_position,
+                aligned_velocity=aligned_velocity,
+                physical_weights=loss_weights,
+            )
+            add("soft_shadow_physical", shadow_loss)
+            _accumulate_float_metrics(parameter_supervision_metrics, shadow_metrics)
         distance_gated_matched = _distance_gate_physical_matches(
             belief.objects.position,
             aligned_position,

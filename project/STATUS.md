@@ -1,5 +1,25 @@
 # Project status
 
+## Smooth analytic shadow posterior — specification 1.72 implemented, qualification pending
+
+A true training-only soft posterior now evaluates the same gated RGB
+association evidence with the analytic diagonal correction, copies hard typed
+identity/lifecycle structure without gradient, and propagates the resulting
+continuous state through the existing physical dynamics. It never replaces
+the persistent hard belief and introduces no learned transition. The shadow
+composite mirrors the resolved current and forecast physical weights behind a
+single legacy-zero `soft_shadow_physical` scale.
+
+Focused tests prove the previous straight-through path remains forward-exact,
+the true shadow produces finite RGB gradients through rollout, hard runtime
+state remains tensor-exact, positive configuration requires the intended scope
+and temperature, and legacy zero does not request an ingest trace. Full
+checkpoint/config/objective/trainer coverage passes `647` tests with one
+expected unavailable-MPS skip. The complete repository gate passes `1367`
+tests with `20` expected backend skips in `510.17 s`; Ruff and format checks
+are clean. One frozen treatment/control accuracy decision remains pending; no
+long run or main merge is authorized.
+
 ## RGB-only analytic silhouette reprojection — specification 1.71 terminally rejected
 
 A new training-only observation likelihood projects the active spheres in

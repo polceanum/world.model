@@ -1,5 +1,20 @@
 # Tasks
 
+## Smooth analytic shadow posterior — specification 1.72
+
+- [x] Build a true soft analytic posterior in a detached hard typed shell
+  without mutating persistent runtime state.
+- [x] Propagate the shadow with the existing equation-based dynamics and mirror
+  the configured current/rollout physical weights behind one legacy-zero key.
+- [x] Preserve the rejected forward-exact carrier and prove hard-runtime
+  isolation plus finite RGB rollout gradients.
+- [x] Pass focused checkpoint/objective/config gates (`647 passed`, one
+  expected skip) and the full repository suite (`1367 passed`, `20` expected
+  skips in `510.17 s`) on the final source bytes.
+- [ ] Run one predeclared paired short accuracy gate against exact weight zero;
+  stop without tuning if material hard-rollout improvement is absent.
+- [ ] Merge/push to `main` only if the full accuracy and safety gate passes.
+
 ## RGB-only analytic silhouette reprojection — specification 1.71
 
 - [x] Add a label-free smooth sphere-silhouette projection from the current

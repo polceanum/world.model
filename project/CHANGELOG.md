@@ -2,6 +2,21 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 smooth analytic shadow posterior (specification 1.72)
+
+- Added a true training-only soft posterior under the existing gated RGB
+  association and analytic diagonal correction while retaining hard typed
+  identity/lifecycle structure as detached data.
+- Propagated that shadow through the existing equation-based dynamics and
+  mirrored the configured current/forecast physical objective behind one
+  exact-resume-bound, legacy-zero scale.
+- Preserved persistent hard runtime state, validation, deployment, and the
+  earlier forward-exact carrier; added focused smooth-gradient, runtime
+  isolation, and strict configuration coverage.
+- Passed the focused checkpoint/config/objective/trainer gate (`647 passed`,
+  one expected skip) and complete suite (`1367 passed`, `20` expected skips in
+  `510.17 s`). The bounded paired accuracy gate remains pending.
+
 ### 2026-08-24 RGB-only analytic silhouette reprojection (specification 1.71)
 
 - Added a training-only differentiable union of calibrated sphere silhouettes

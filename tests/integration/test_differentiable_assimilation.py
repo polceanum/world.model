@@ -185,3 +185,51 @@ def test_disabled_rgb_reprojection_does_not_call_renderer(monkeypatch) -> None:
         window_steps=2,
     )
     assert torch.isfinite(result.total_loss)
+
+
+def test_soft_shadow_physical_rollout_reaches_rgb_without_runtime_replacement() -> None:
+    torch.manual_seed(31)
+    base = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        base,
+        training=replace(
+            base.training,
+            batch_size=2,
+            num_workers=0,
+            tbptt_steps=4,
+            rollout_anchors_per_window=1,
+            closed_loop_trainable_scope="differentiable_state_estimator",
+            closed_loop_soft_association_temperature=0.5,
+            closed_loop_soft_posterior_straight_through_enabled=False,
+            loss_weights={**base.training.loss_weights, "soft_shadow_physical": 1.0},
+        ),
+    )
+    config.validate()
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    model.train()
+    set_closed_loop_trainable_scope(model, scope="differentiable_state_estimator")
+    batch = next(iter(_make_loader(config, split="train", episodes=2, shuffle=False)))
+
+    result = run_closed_loop_batch(
+        model,
+        batch,
+        config,
+        window_start=3,
+        window_steps=4,
+        active_trainable_scope="differentiable_state_estimator",
+    )
+
+    assert "soft_shadow_physical" in result.loss_terms
+    assert torch.isfinite(result.loss_terms["soft_shadow_physical"])
+    assert result.metrics["soft_shadow_rollout_horizon_count"] > 0
+    assert result.metrics["soft_posterior_position_coordinate_count"] > 0
+    hard_position = model.belief.objects.position.detach().clone()
+    result.loss_terms["soft_shadow_physical"].backward()
+    assert any(
+        parameter.grad is not None
+        and torch.isfinite(parameter.grad).all()
+        and bool((parameter.grad != 0).any())
+        for parameter in model.observation_modules["rgb"].parameters()
+        if parameter.requires_grad
+    )
+    assert torch.equal(model.belief.objects.position, hard_position)

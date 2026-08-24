@@ -546,6 +546,7 @@ class TrainingConfig:
             "soft_association_velocity": 0.0,
             "soft_association_exclusivity": 0.0,
             "rgb_reprojection": 0.0,
+            "soft_shadow_physical": 0.0,
         }
     )
 
@@ -1613,6 +1614,7 @@ class OrpheusConfig:
             "soft_association_state",
             "soft_association_velocity",
             "soft_association_exclusivity",
+            "soft_shadow_physical",
         )
         soft_weights = [
             float(self.training.loss_weights.get(name, 0.0)) for name in soft_weight_names
