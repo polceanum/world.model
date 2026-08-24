@@ -1,5 +1,33 @@
 # Design decisions
 
+## ADR-197 — Separate semantic gradient ownership without changing physical execution
+
+- **Date:** 2026-08-24
+- **Status:** mechanism retained default-off; bounded accuracy rejected; terminal
+- **Context:** The active graph differentiates through continuous RGB estimates,
+  filter correction, physical parameters, and analytic rollout, but a 256-step
+  warmup had hidden how unstable the fully coupled recursive image Jacobian was.
+  At constant `1e-5`, the coupled path produced a `12123.1967` raw-gradient
+  spike and adverse fixed-manifest accuracy.
+- **Decision:** Preserve the exact causal forward. Optionally differentiate
+  direct measurement/association/reprojection losses only with respect to RGB
+  parameters and physical state/rollout/uncertainty/event/parameter losses only
+  with respect to the recurrent filter and identifier. Make the switch strict,
+  legacy-false, exact-resume-bound, and disabled in the supported profile.
+- **Alternatives considered:** continue warmup-hidden training; globally lower
+  LR; detach or replace equation rollouts; soften runtime identities/contacts;
+  repeat failed surrogate weights; train only RGB or only state modules; weaken
+  scenario guardrails.
+- **Consequences:** Maximum raw gradient falls to `5.5366` and pooled score gains
+  `0.001954565`, proving a cheaper and substantially better-conditioned
+  differentiable route. It is not accuracy-safe: full, RGB-only, and non-RGB
+  candidates respectively fail `142`, `154`, and `24` guardrails, while the
+  non-RGB score gain is only `0.000310844`. Retain the reusable owner boundary,
+  reject every checkpoint, stop this experiment family, and do not merge it to
+  `main` absent a new complete-gate success (`c977bc3f...`). The final source
+  gate is `1374 passed`, `20` expected skips in `519.18 s`, with all static
+  checks clean.
+
 ## ADR-196 — Reject a straight-through contact derivative before accuracy testing
 
 - **Date:** 2026-08-24

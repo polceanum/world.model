@@ -165,6 +165,9 @@ training:
   closed_loop_prior_future_correction_enabled: true
   closed_loop_batch_macro_physical_losses_enabled: true
   closed_loop_axiswise_correction_hinge_enabled: true
+  # The bounded specification-1.73 diagnostic proved this routing stabilizes
+  # recursive gradients but failed broad accuracy guardrails. Keep it opt-in.
+  closed_loop_modular_gradient_ownership_enabled: false
   # Training-only relaxation of hard Hungarian identity assignment.
   closed_loop_soft_association_temperature: 0.5
   # Retained only as an opt-in research mechanism after its frozen paired gate

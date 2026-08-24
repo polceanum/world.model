@@ -1200,6 +1200,8 @@ def test_closed_loop_physical_objective_repairs_are_legacy_false_and_roundtrip(
         overrides=[
             "training.closed_loop_batch_macro_physical_losses_enabled=true",
             "training.closed_loop_axiswise_correction_hinge_enabled=true",
+            "training.closed_loop_modular_gradient_ownership_enabled=true",
+            "training.closed_loop_trainable_scope=differentiable_state_estimator",
         ],
     )
     resolved_path = tmp_path / "macro-axiswise-objective.yaml"
@@ -1209,8 +1211,10 @@ def test_closed_loop_physical_objective_repairs_are_legacy_false_and_roundtrip(
 
     assert not legacy.training.closed_loop_batch_macro_physical_losses_enabled
     assert not legacy.training.closed_loop_axiswise_correction_hinge_enabled
+    assert not legacy.training.closed_loop_modular_gradient_ownership_enabled
     assert restored.training.closed_loop_batch_macro_physical_losses_enabled
     assert restored.training.closed_loop_axiswise_correction_hinge_enabled
+    assert restored.training.closed_loop_modular_gradient_ownership_enabled
     assert restored.to_dict() == repaired.to_dict()
 
 
@@ -1219,6 +1223,7 @@ def test_closed_loop_physical_objective_repairs_are_legacy_false_and_roundtrip(
     [
         "closed_loop_batch_macro_physical_losses_enabled",
         "closed_loop_axiswise_correction_hinge_enabled",
+        "closed_loop_modular_gradient_ownership_enabled",
     ],
 )
 @pytest.mark.parametrize("value", ["0", "1", "null", "not-a-boolean"])
@@ -1230,6 +1235,14 @@ def test_closed_loop_physical_objective_repairs_require_boolean(
         load_config(
             CONFIG_DIR / "tiny_overfit.yaml",
             overrides=[f"training.{field_name}={value}"],
+        )
+
+
+def test_modular_gradient_ownership_requires_differentiable_estimator_scope() -> None:
+    with pytest.raises(ValueError, match="differentiable_state_estimator"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=["training.closed_loop_modular_gradient_ownership_enabled=true"],
         )
 
 

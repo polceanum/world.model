@@ -4582,6 +4582,99 @@ def _prepare_restricted_attention_collision_update(
     return snapshots
 
 
+def _backward_modular_state_estimator(
+    model: OnlineWorldModel,
+    result: TrainingBatchResult,
+    config: OrpheusConfig,
+) -> None:
+    """Route local RGB and physical gradients to their semantic owners.
+
+    The deployed forward remains the ordinary hard-association causal graph.
+    Direct measurement and soft-association objectives train only the RGB
+    observer. State, rollout, uncertainty, correction, event, and parameter
+    objectives train the recurrent filter/identifier without differentiating
+    through the observer's parameters. This avoids turning a long recursive
+    image Jacobian into a normalized high-variance perception update while
+    retaining an exact differentiable physics path for the state owners.
+    """
+
+    resolved_weights, _ = _closed_loop_loss_weights_for_scope(
+        config,
+        active_trainable_scope="differentiable_state_estimator",
+    )
+    resolved_weights["protected_reference_nonregression"] = float(
+        config.training.closed_loop_protected_reference_nonregression_weight
+    )
+    perception_owned = {
+        "measurement",
+        "soft_association_state",
+        "soft_association_velocity",
+        "soft_association_exclusivity",
+        "rgb_reprojection",
+    }
+    perception_weights = {name: 0.0 for name in resolved_weights}
+    for name in perception_owned:
+        perception_weights[name] = float(resolved_weights.get(name, 0.0))
+    physical_weights = dict(resolved_weights)
+    for name in perception_owned:
+        physical_weights[name] = 0.0
+
+    perception_loss = _weighted_closed_loop_total(result.loss_terms, perception_weights)
+    physical_loss = _weighted_closed_loop_total(result.loss_terms, physical_weights)
+    rgb = model.observation_modules["rgb"]
+    perception_parameters = tuple(
+        parameter for parameter in rgb.parameters() if parameter.requires_grad
+    )
+    perception_ids = {id(parameter) for parameter in perception_parameters}
+    physical_parameters = tuple(
+        parameter
+        for parameter in model.parameters()
+        if parameter.requires_grad and id(parameter) not in perception_ids
+    )
+    if not perception_parameters or not physical_parameters:
+        raise RuntimeError(
+            "modular state-estimator ownership requires trainable RGB and state parameters"
+        )
+
+    physical_gradients: tuple[Tensor | None, ...] = tuple(None for _ in physical_parameters)
+    if physical_loss.requires_grad:
+        physical_gradients = torch.autograd.grad(
+            physical_loss,
+            physical_parameters,
+            retain_graph=perception_loss.requires_grad,
+            allow_unused=True,
+        )
+    perception_gradients: tuple[Tensor | None, ...] = tuple(None for _ in perception_parameters)
+    if perception_loss.requires_grad:
+        perception_gradients = torch.autograd.grad(
+            perception_loss,
+            perception_parameters,
+            allow_unused=True,
+        )
+
+    def install(
+        parameters: tuple[Tensor, ...],
+        gradients: tuple[Tensor | None, ...],
+    ) -> Tensor:
+        norm_squared = result.total_loss.detach().new_zeros(())
+        for parameter, gradient in zip(parameters, gradients, strict=True):
+            if gradient is None:
+                continue
+            parameter.grad = gradient.detach().clone()
+            norm_squared = norm_squared + gradient.detach().float().square().sum()
+        return norm_squared.sqrt()
+
+    perception_norm = install(perception_parameters, perception_gradients)
+    physical_norm = install(physical_parameters, physical_gradients)
+    result.metrics.update(
+        {
+            "modular_gradient_ownership_active": 1.0,
+            "modular_perception_gradient_norm_pre_clip": float(perception_norm.cpu()),
+            "modular_physical_gradient_norm_pre_clip": float(physical_norm.cpu()),
+        }
+    )
+
+
 def _backward_training_result(
     model: OnlineWorldModel,
     result: TrainingBatchResult,
@@ -4595,6 +4688,12 @@ def _backward_training_result(
         "updater_state_heads_xy_collision",
         "updater_state_heads_xy_collision_node",
     }
+    if (
+        active_scope == "differentiable_state_estimator"
+        and config.training.closed_loop_modular_gradient_ownership_enabled
+    ):
+        _backward_modular_state_estimator(model, result, config)
+        return
     if active_scope not in direct_collision_scopes:
         result.total_loss.backward()
         return

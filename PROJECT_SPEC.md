@@ -3,10 +3,11 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.72
+**Version:** 1.73
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, opt-in dense multi-instance global-discovery, causal observation-model selection, terminal dense typed-attribute evidence, frozen-foundation-feature feasibility, adaptive Gaussian local-model evidence, event-epoch local-model evidence, differentiable hard-runtime assimilation surrogate, and forward-exact soft-posterior gradient-carrier amendments 24 August 2026
 **Amendment 24 August 2026:** RGB-only analytic silhouette reprojection and smooth analytic shadow-posterior training
+**Amendment 24 August 2026:** modular differentiable backward ownership and bounded accuracy rejection
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9805,6 +9806,49 @@ condition passes, frozen dynamics remain exact, and the shared difficult-batch
 raw gradient drops `177.624 -> 84.668`, material hard accuracy does not move.
 The supported profile must use exact weight zero. No adjacent surrogate tuning,
 longer qualification, or main merge is permitted.
+
+---
+
+## 272. Route differentiable objectives to their semantic parameter owners
+
+The deployed causal forward remains the exact hard RGB association, recurrent
+belief correction, identified physical parameters, and equation-based rollout.
+Training may optionally partition only its backward ownership: direct RGB
+measurement, soft-association, and reprojection objectives differentiate with
+respect to the RGB observation module; current-state, forecast, uncertainty,
+correction, event, and parameter objectives differentiate with respect to the
+trainable recurrent filter and physical identifier. Each branch is evaluated
+from the same forward graph. No prediction is detached, substituted, or made
+less physical, and equation derivatives with respect to continuous state and
+identified parameters remain intact.
+
+`training.closed_loop_modular_gradient_ownership_enabled` is a strict boolean,
+legacy-false, and exact-resume-bound. It is valid only for the
+`differentiable_state_estimator` scope with both RGB and non-RGB trainable
+owners. The default and supported differentiable-assimilation profile remain
+false unless a separately frozen accuracy qualification passes. This routing
+exists to prevent a long recursive image Jacobian from becoming a normalized,
+high-variance update of the observer while retaining differentiable physical
+learning in the filter and identifier; it does not claim that hard Hungarian
+identity, birth/death, or contact admission are differentiable.
+
+The bounded constant-`1e-5`, 16-update CPU diagnostic is terminal. The ordinary
+coupled graph suffered a raw-gradient spike of `12123.1967`, worsened selector
+score `0.239528636 -> 0.239554524`, and failed 58 guardrails. Modular ownership
+bounded the largest raw norm to `5.5366` and materially improved the pooled
+score to `0.237574071`, but velocity and calibration regressed and 142 broad
+scenario/axis/horizon guardrails failed. Exact component checks close the
+remaining ambiguity: RGB-only retains a material `0.001572000` score gain but
+fails 154 guardrails, whereas updater plus identifier fails only 24 guardrails
+but improves just `0.000310844`, below the fixed `0.001` materiality threshold.
+Therefore the mechanism is retained default-off as gradient-stability research
+infrastructure, every candidate is rejected, and no adjacent learning-rate,
+loss-weight, duration, or component sweep and no merge to `main` is authorized.
+The audit is
+`/private/tmp/20260824-spec173-modular-gradient-ownership-audit.json`
+(`c977bc3f...`). The final repository gate passes `1374` tests with `20`
+expected unavailable-backend skips in `519.18 s`; Ruff, format, compile,
+version, and diff checks are clean.
 
 ---
 

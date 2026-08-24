@@ -1541,6 +1541,55 @@ def test_combined_xy_collision_scope_routes_event_only_to_collision_row() -> Non
     assert result.metrics["direct_collision_event_noncollision_gradient_discarded_norm"] > 0.0
 
 
+def test_modular_state_estimator_routes_measurement_and_physical_gradients_to_owners() -> None:
+    source = load_config("configs/tiny_overfit.yaml")
+    config = replace(
+        source,
+        training=replace(
+            source.training,
+            closed_loop_trainable_scope="differentiable_state_estimator",
+            closed_loop_modular_gradient_ownership_enabled=True,
+            loss_weights={"measurement": 1.0, "state_position": 1.0},
+        ),
+    )
+    config.validate()
+    model = OnlineWorldModel.from_config(config)
+    set_closed_loop_trainable_scope(model, scope="differentiable_state_estimator")
+    rgb_parameter = next(
+        parameter
+        for parameter in model.observation_modules["rgb"].parameters()
+        if parameter.requires_grad
+    )
+    state_parameter = next(
+        parameter for parameter in model.updater.parameters() if parameter.requires_grad
+    )
+    rgb_signal = rgb_parameter.sum()
+    state_signal = state_parameter.sum()
+    terms = {
+        "measurement": rgb_signal + 100.0 * state_signal,
+        "state_position": 100.0 * rgb_signal + state_signal,
+    }
+    result = TrainingBatchResult(
+        total_loss=_weighted_closed_loop_total(terms, config.training.loss_weights),
+        loss_terms=terms,
+        metrics={},
+        phase="closed_loop_rgb",
+    )
+
+    _backward_training_result(
+        model,
+        result,
+        config,
+        active_scope="differentiable_state_estimator",
+    )
+
+    torch.testing.assert_close(rgb_parameter.grad, torch.ones_like(rgb_parameter))
+    torch.testing.assert_close(state_parameter.grad, torch.ones_like(state_parameter))
+    assert result.metrics["modular_gradient_ownership_active"] == 1.0
+    assert result.metrics["modular_perception_gradient_norm_pre_clip"] > 0.0
+    assert result.metrics["modular_physical_gradient_norm_pre_clip"] > 0.0
+
+
 def test_node_xy_collision_scope_routes_node_event_not_opposing_pair_event() -> None:
     source = load_config(
         "configs/tiny_overfit.yaml",

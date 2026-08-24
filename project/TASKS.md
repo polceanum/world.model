@@ -1,5 +1,22 @@
 # Tasks
 
+## Modular differentiable gradient ownership — specification 1.73
+
+- [x] Keep the hard causal forward and analytic physics equations unchanged.
+- [x] Route direct RGB/association losses only to perception and physical
+  current/forecast/uncertainty/event/parameter losses only to filter/identifier.
+- [x] Add strict legacy-false configuration, exact-resume migration, and a
+  deliberate cross-wiring gradient regression.
+- [x] Run one paired constant-LR 16-update diagnostic and the two exhaustive
+  RGB versus updater/identifier component compositions.
+- [x] Reject all accuracy candidates: the full and RGB-only gains fail broad
+  guardrails; the stable non-RGB gain misses materiality.
+- [x] Restore the supported profile to false and stop adjacent tuning.
+- [x] Pass the final repository gate (`1374 passed`, `20 skipped`) and all
+  Ruff/format/compile/version/diff checks.
+- [ ] Merge to `main` only after a genuinely new hypothesis passes the complete
+  fixed-manifest accuracy and promotion gate; specification 1.73 does not.
+
 ## Smooth analytic shadow posterior — specification 1.72
 
 - [x] Build a true soft analytic posterior in a detached hard typed shell

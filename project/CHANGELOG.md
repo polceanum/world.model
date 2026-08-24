@@ -2,6 +2,25 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 modular differentiable gradient ownership (specification 1.73)
+
+- Added an opt-in backward-only owner partition for the differentiable state
+  estimator without changing hard association, lifecycle, contact, belief, or
+  analytic rollout values.
+- Direct RGB, soft-association, and reprojection objectives now can update only
+  the RGB observer; physical state/forecast/uncertainty/correction/event and
+  parameter objectives can update only the recurrent filter and identifier.
+- Added strict boolean validation, legacy-false exact-resume migration, and a
+  deliberate 100x cross-wiring test proving gradients reach only their owners.
+- The paired constant-LR diagnostic reduced the pathological maximum recursive
+  gradient from `12123.1967` to `5.5366` and improved pooled score by
+  `0.001954565`, but failed 142 accuracy guardrails. RGB-only failed 154;
+  updater+identifier missed materiality at `0.000310844` with 24 failures.
+- Restored the supported profile to false, rejected every candidate, and ended
+  this ladder without LR/weight/duration/component tuning or a `main` merge.
+- Passed the final repository gate (`1374 passed`, `20` expected skips in
+  `519.18 s`) plus clean Ruff, format, compile, version, and diff checks.
+
 ### 2026-08-24 forward-exact smooth contact derivative diagnostic
 
 - Tested a temporary backward-only smooth gate around the exact hard

@@ -476,6 +476,11 @@ class TrainingConfig:
     # False preserves vector-norm correction non-regression. New protocols may
     # require non-regression independently on each supported coordinate.
     closed_loop_axiswise_correction_hinge_enabled: bool = False
+    # Keep the forward causal graph unchanged while assigning backward
+    # ownership by subsystem: direct RGB objectives train perception, and
+    # physical state/rollout objectives train the recurrent filter and slow
+    # identifier. False preserves the historical fully coupled backward.
+    closed_loop_modular_gradient_ownership_enabled: bool = False
     # Training-only relaxation of hard Hungarian association. ``None`` keeps
     # the exact legacy runtime/training graph. A positive temperature exposes
     # the same gated cost matrix to differentiable physical supervision while
@@ -1869,9 +1874,18 @@ class OrpheusConfig:
         for field_name in (
             "closed_loop_batch_macro_physical_losses_enabled",
             "closed_loop_axiswise_correction_hinge_enabled",
+            "closed_loop_modular_gradient_ownership_enabled",
         ):
             if not isinstance(getattr(self.training, field_name), bool):
                 raise ValueError(f"training.{field_name} must be boolean")
+        if (
+            self.training.closed_loop_modular_gradient_ownership_enabled
+            and "differentiable_state_estimator" not in configured_scopes
+        ):
+            raise ValueError(
+                "modular gradient ownership requires the "
+                "differentiable_state_estimator trainable scope"
+            )
         scenario_tail_fraction = self.training.closed_loop_scenario_tail_fraction
         if scenario_tail_fraction is not None:
             if (

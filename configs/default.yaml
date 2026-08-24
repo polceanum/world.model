@@ -187,6 +187,7 @@ training:
   closed_loop_prior_future_correction_enabled: true
   closed_loop_batch_macro_physical_losses_enabled: false
   closed_loop_axiswise_correction_hinge_enabled: false
+  closed_loop_modular_gradient_ownership_enabled: false
   closed_loop_soft_association_temperature: null
   closed_loop_soft_posterior_straight_through_enabled: false
   closed_loop_scenario_tail_fraction: null

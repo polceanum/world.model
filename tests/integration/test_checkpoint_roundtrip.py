@@ -1001,6 +1001,7 @@ def test_training_resume_binds_prior_future_correction_with_legacy_true_default(
     [
         "closed_loop_batch_macro_physical_losses_enabled",
         "closed_loop_axiswise_correction_hinge_enabled",
+        "closed_loop_modular_gradient_ownership_enabled",
         "closed_loop_scenario_tail_fraction",
         "closed_loop_uncertainty_standardized_error_gradient_cap",
         "closed_loop_protected_reference_nonregression_weight",
@@ -1066,6 +1067,15 @@ def test_training_resume_binds_physical_objective_repairs_with_legacy_default(
                 "closed_loop_protected_reference_nonregression_weight",
             }
             or config.training.closed_loop_axiswise_correction_hinge_enabled
+        ),
+        "closed_loop_modular_gradient_ownership_enabled": (
+            field_name == "closed_loop_modular_gradient_ownership_enabled"
+            or config.training.closed_loop_modular_gradient_ownership_enabled
+        ),
+        "closed_loop_trainable_scope": (
+            "differentiable_state_estimator"
+            if field_name == "closed_loop_modular_gradient_ownership_enabled"
+            else config.training.closed_loop_trainable_scope
         ),
         "rgb_pretrain_steps": (
             0

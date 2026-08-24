@@ -1,5 +1,29 @@
 # Project status
 
+## Modular differentiable gradient ownership — specification 1.73 rejected for accuracy
+
+The causal forward was already differentiable through RGB measurements,
+continuous belief correction, identified parameters, and the exact analytic
+dynamics wherever the runtime makes no discrete identity/lifecycle/contact
+decision. A new opt-in backward router now assigns direct RGB and soft
+association objectives only to the RGB observer, while physical state,
+forecast, uncertainty, correction, event, and parameter objectives update only
+the recurrent filter and identifier. It changes no forward value or runtime
+equation and is strict-boolean, legacy-false, and exact-resume-bound.
+
+This solves the concrete optimization pathology but not the complete accuracy
+problem. In a paired constant-`1e-5` 16-update CPU diagnostic, the historical
+coupled backward reached raw norm `12123.1967`; modular ownership bounded the
+maximum at `5.5366`. The modular selector improves materially
+`0.239528636 -> 0.237574071`, but velocity/calibration regress and 142 broad
+guardrails fail. RGB-only retains a `0.001572000` score gain with 154 failures;
+updater plus identifier has only 24 failures but improves `0.000310844`, below
+the frozen `0.001` threshold. The supported profile is restored to false,
+every checkpoint/composition is rejected, and this route is terminal without
+another LR/weight/duration/module sweep. Audit SHA: `c977bc3f...`.
+The final repository gate passes `1374` tests with `20` expected backend skips
+in `519.18 s`; all static gates are clean.
+
 ## Forward-exact smooth contact derivative — rejected at stability gate
 
 One bounded diagnostic tested the remaining discontinuity in the otherwise
