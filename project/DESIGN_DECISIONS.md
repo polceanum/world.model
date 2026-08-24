@@ -1,5 +1,31 @@
 # Design decisions
 
+## ADR-180 — Add late-event data only behind an all-horizon gradient gate
+
+- **Date:** 2026-08-24
+- **Status:** mechanism accepted; training pending gradient evidence
+- **Context:** Existing balanced data aligns ensured-pair impacts early. The
+  retained horizon attribution has material short/mid gradients but
+  effectively zero 0.75/1.00-second gradients, and future-window
+  redistribution cannot create one-second support from early episodes.
+- **Decision:** Add default-null event-frame and vertical-speed ranges for the
+  ensured pair. Enabled data rejection-samples against the real solver and
+  normal gravity, bounded by the existing attempt count. Keep null bit-exact,
+  bind both fields to exact resume, and require a balanced all-horizon gradient
+  probe before any training.
+- **Alternatives considered:** tune collision weights or window probabilities;
+  extend a rejected owner; lower gravity; increase world height and lose the
+  established camera distribution; accept zero tail support; or launch a long
+  campaign before proving trainable signal.
+- **Consequences:** The simulator can now produce deterministic late impacts
+  without privileged runtime input. Disabled cross-source generation is exact
+  (`5c630359...`), enabled focused examples land at frames 20--24, and
+  config/simulator/checkpoint coverage passes `379/1`. The final repository
+  gate is `1325/20 in 465.25s` with every static check clean. This is not
+  accuracy evidence. If any configured horizon remains unsupported or opposed
+  in the next probe, the intervention stops before training; otherwise exactly
+  one bounded rung may proceed. Deployment remains step zero.
+
 ## ADR-179 — Reject unsupported collision-horizon redistribution
 
 - **Date:** 2026-08-24

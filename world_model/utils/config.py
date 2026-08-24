@@ -63,6 +63,8 @@ class SimulatorConfig:
     ensured_pair_surface_gap_range: tuple[float, float] = (0.75, 0.9)
     ensured_pair_speed_range: tuple[float, float] = (0.85, 1.25)
     ensured_pair_lateral_offset_range: tuple[float, float] = (0.0, 0.0)
+    ensured_pair_vertical_speed_range: tuple[float, float] | None = None
+    ensured_pair_event_frame_range: tuple[int, int] | None = None
     ensured_pair_floor_clearance_frames: int = 2
     ensured_pair_floor_clearance_margin_m: float = 0.03
     ensured_pair_scene_resample_attempts: int = 32
@@ -1252,11 +1254,43 @@ class OrpheusConfig:
         ):
             if len(bounds) != 2 or bounds[0] > bounds[1]:
                 raise ValueError(f"invalid simulator {name}_range")
+        vertical_speed_range = simulator.ensured_pair_vertical_speed_range
+        if vertical_speed_range is not None and (
+            len(vertical_speed_range) != 2
+            or any(
+                isinstance(value, bool) or not isinstance(value, Real)
+                for value in vertical_speed_range
+            )
+            or not all(math.isfinite(float(value)) for value in vertical_speed_range)
+            or vertical_speed_range[0] < 0.0
+            or vertical_speed_range[1] < vertical_speed_range[0]
+        ):
+            raise ValueError(
+                "simulator.ensured_pair_vertical_speed_range must be null or a finite "
+                "nonnegative increasing pair"
+            )
         if not (0 <= simulator.restitution_range[0] <= simulator.restitution_range[1] <= 1):
             raise ValueError("restitution_range must lie in [0, 1]")
         if not (0 <= simulator.friction_range[0] <= simulator.friction_range[1] <= 1):
             raise ValueError("friction_range must lie in [0, 1]")
         if simulator.ensure_collision and simulator.max_objects >= 2:
+            event_frame_range = simulator.ensured_pair_event_frame_range
+            if event_frame_range is not None and (
+                len(event_frame_range) != 2
+                or any(
+                    isinstance(value, bool) or not isinstance(value, int)
+                    for value in event_frame_range
+                )
+                or event_frame_range[0] < 1
+                or event_frame_range[1] < event_frame_range[0]
+                or event_frame_range[1] + simulator.ensured_pair_floor_clearance_frames - 1
+                >= simulator.sequence_frames
+            ):
+                raise ValueError(
+                    "simulator.ensured_pair_event_frame_range must be null or an "
+                    "increasing positive integer pair that leaves the configured "
+                    "floor-clearance frames inside the episode"
+                )
             if (
                 isinstance(simulator.ensured_pair_floor_clearance_frames, bool)
                 or not isinstance(simulator.ensured_pair_floor_clearance_frames, int)

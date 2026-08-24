@@ -1,5 +1,30 @@
 # Project status
 
+## Specification 1.65 event-frame-targeted training data — implementation gate
+
+Existing collision-owner gradients are unsupported at the longest horizons,
+so specification 1.65 adds genuinely new data capacity rather than another
+loss-weight or sampler variant. Two default-null simulator fields can
+rejection-sample an ensured pair into an inclusive event-frame range and give
+it an explicitly bounded upward launch so normal gravity does not force a
+premature floor collision. The real high-rate solver remains authoritative;
+range exhaustion fails closed. Runtime remains RGB-only and never receives
+the target frame or launch velocity.
+
+Null preserves historical generation exactly. A cross-source seed-`17800`
+comparison against commit `c58f881` is byte-identical for every RGB, object,
+event, label, camera, and metadata field (hash map `5c630359...`). Enabled
+generation is deterministic and produces frame-20--24 impacts under normal
+gravity in focused tests. Historical checkpoints normalize missing fields only
+to null, while either enabled semantic is exact-resume incompatible.
+
+Focused config/simulator/checkpoint coverage passes `379 passed, 1 skipped`.
+The final repository passes `1325 passed, 20 skipped in 465.25s`; Ruff, the
+225-file format check, isolated compile, version, and diff gates pass. This is
+a data-mechanism gate only. Training remains unauthorized until one balanced
+event-rich gradient probe shows material, non-opposed collision-owner gradients
+at every configured horizon. Deployment remains step zero.
+
 ## Collision-horizon objective and sampler screen — terminally rejected
 
 The required post-specification-1.60 horizon attribution was already available

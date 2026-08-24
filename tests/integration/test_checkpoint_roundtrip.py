@@ -1106,6 +1106,8 @@ def test_training_resume_normalizes_explicit_legacy_defaults() -> None:
     )
     checkpoint_config = legacy_config.to_dict()
     checkpoint_config["simulator"].pop("ensured_pair_lateral_offset_range")
+    checkpoint_config["simulator"].pop("ensured_pair_vertical_speed_range")
+    checkpoint_config["simulator"].pop("ensured_pair_event_frame_range")
     checkpoint_config["training"].pop("normalize_rollout_axes_over_configured_horizons")
     checkpoint_config["training"].pop("joint_collision_long_horizon_sampling")
     checkpoint_config["training"].pop("minimum_rollout_age_steps")
@@ -1179,6 +1181,26 @@ def test_training_resume_normalizes_explicit_legacy_defaults() -> None:
                 ),
             ),
             "simulator.scenario_mixture",
+        ),
+        (
+            lambda config: replace(
+                config,
+                simulator=replace(
+                    config.simulator,
+                    ensured_pair_vertical_speed_range=(4.7, 5.1),
+                ),
+            ),
+            "simulator.ensured_pair_vertical_speed_range",
+        ),
+        (
+            lambda config: replace(
+                config,
+                simulator=replace(
+                    config.simulator,
+                    ensured_pair_event_frame_range=(20, 24),
+                ),
+            ),
+            "simulator.ensured_pair_event_frame_range",
         ),
         (
             lambda config: replace(

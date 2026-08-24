@@ -1,5 +1,26 @@
 # Tasks
 
+## Event-frame-targeted training data — specification 1.65
+
+- [x] Add strict default-null ensured-pair event-frame and vertical-speed
+  ranges with bounded real-solver rejection sampling and fail-closed exhaustion.
+- [x] Preserve historical generation bit-for-bit when disabled; cross-source
+  seed-17800 RGB/state/event/camera/label/metadata hash map is exact
+  (`5c630359...`).
+- [x] Bind both semantics to exact resume with legacy-null migration and reject
+  malformed, out-of-episode, nonfinite, negative, or unordered values.
+- [x] Prove deterministic enabled frame-20--24 collision generation under
+  normal gravity and pass combined config/simulator/checkpoint coverage
+  (`379 passed, 1 skipped`).
+- [ ] Run one balanced immutable event-rich horizon-gradient probe. Require
+  material support and non-opposed collision-owner gradient at every horizon.
+- [ ] Only if that probe passes, run one bounded training/validation rung; do
+  not tune data ranges, weights, sampling probabilities, or duration after a
+  failed gate.
+- [x] Pass the final repository (`1325 passed, 20 skipped in 465.25s`) plus
+  Ruff, 225-file format, isolated compile, version, and diff gates; synchronize
+  and commit/push the coherent mechanism boundary. Deployment remains step zero.
+
 ## Collision-horizon diagnostic closure — no specification change
 
 - [x] Reuse the immutable balanced horizon-gradient attribution rather than

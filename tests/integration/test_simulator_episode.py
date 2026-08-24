@@ -228,6 +228,37 @@ def test_ensured_pair_scene_resampling_requires_a_positive_bounded_attempt_count
         config.validate()
 
 
+@pytest.mark.parametrize("seed", [59, 60])
+def test_ensured_pair_event_frame_range_produces_late_deterministic_collision(
+    seed: int,
+) -> None:
+    config = SphereWorldConfig(
+        frame_rate=20.0,
+        physics_rate=120.0,
+        sequence_frames=40,
+        min_objects=2,
+        max_objects=2,
+        ensured_pair_surface_gap_range=(1.8, 3.4),
+        ensured_pair_speed_range=(0.85, 1.25),
+        ensured_pair_vertical_speed_range=(4.7, 5.1),
+        ensured_pair_event_frame_range=(20, 24),
+        ensured_pair_scene_resample_attempts=256,
+    )
+
+    def pair_frame() -> int:
+        world = SphereWorld(config, seed=seed)
+        for frame_index in range(1, config.sequence_frames):
+            events = world.step(config.observation_dt)
+            if bool(events.pair_collision[0, 1]):
+                return frame_index
+        raise AssertionError("targeted ensured pair did not collide")
+
+    first = pair_frame()
+    second = pair_frame()
+    assert 20 <= first <= 24
+    assert second == first
+
+
 def test_placement_retry_rng_is_isolated_from_external_interventions() -> None:
     config = SphereWorldConfig(
         sequence_frames=32,

@@ -98,6 +98,8 @@ def test_ensured_pair_scene_resampling_is_explicit_and_validated() -> None:
     config = load_config(CONFIG_DIR / "default.yaml")
 
     assert config.simulator.ensured_pair_scene_resample_attempts == 32
+    assert config.simulator.ensured_pair_event_frame_range is None
+    assert config.simulator.ensured_pair_vertical_speed_range is None
     with pytest.raises(
         ValueError,
         match="simulator.ensured_pair_scene_resample_attempts must be a positive integer",
@@ -106,6 +108,49 @@ def test_ensured_pair_scene_resampling_is_explicit_and_validated() -> None:
             CONFIG_DIR / "default.yaml",
             overrides=["simulator.ensured_pair_scene_resample_attempts=0"],
         )
+
+
+@pytest.mark.parametrize(
+    "value",
+    ("[0,20]", "[20,72]", "[20,19]", "[true,20]", "[20.0,24]"),
+)
+def test_ensured_pair_event_frame_range_is_strict_and_bounded(value: str) -> None:
+    with pytest.raises(
+        ValueError,
+        match="simulator.ensured_pair_event_frame_range must be null or an increasing",
+    ):
+        load_config(
+            CONFIG_DIR / "default.yaml",
+            overrides=[
+                f"simulator.ensured_pair_event_frame_range={value}",
+            ],
+        )
+
+    configured = load_config(
+        CONFIG_DIR / "default.yaml",
+        overrides=[
+            "simulator.ensured_pair_event_frame_range=[20,30]",
+        ],
+    )
+    assert configured.simulator.ensured_pair_event_frame_range == (20, 30)
+
+
+@pytest.mark.parametrize("value", ("[-1,2]", "[2,1]", "[true,2]", "[nan,2]"))
+def test_ensured_pair_vertical_speed_range_is_strict(value: str) -> None:
+    with pytest.raises(
+        ValueError,
+        match="simulator.ensured_pair_vertical_speed_range must be null or a finite",
+    ):
+        load_config(
+            CONFIG_DIR / "default.yaml",
+            overrides=[f"simulator.ensured_pair_vertical_speed_range={value}"],
+        )
+
+    configured = load_config(
+        CONFIG_DIR / "default.yaml",
+        overrides=["simulator.ensured_pair_vertical_speed_range=[4.7,5.1]"],
+    )
+    assert configured.simulator.ensured_pair_vertical_speed_range == (4.7, 5.1)
 
 
 def test_legacy_contaminating_evaluation_mode_is_rejected() -> None:

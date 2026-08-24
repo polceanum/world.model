@@ -27,6 +27,8 @@ simulator:
   drag_range: [0.01, 0.16]
   friction_range: [0.05, 0.35]
   ensured_pair_lateral_offset_range: [0.0, 0.0]
+  ensured_pair_vertical_speed_range: null
+  ensured_pair_event_frame_range: null
   ensured_pair_floor_clearance_frames: 2
   ensured_pair_floor_clearance_margin_m: 0.03
   ensured_pair_scene_resample_attempts: 32

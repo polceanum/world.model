@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.64
+**Version:** 1.65
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate and bounded diminishing-returns gate amendment 24 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, and event-frame-targeted training-data amendment 24 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9113,6 +9113,54 @@ pass. This is evidence-path hardening only: runtime predictions,
 `WorldBelief`, checkpoint tensors, the default-off candidate, and the protected
 deployment are unchanged. It does not authorize another acceleration-candidate
 run.
+
+---
+
+## 259. Event-frame-targeted ensured-pair training data
+
+Specification 1.65 introduces default-off simulator controls for genuinely
+new event-rich training data after existing collision objectives proved sparse
+and unsupported at the longest horizons. The optional inclusive
+`simulator.ensured_pair_event_frame_range` constrains the isolated ensured-pair
+collision frame. The optional
+`simulator.ensured_pair_vertical_speed_range` supplies a physically observable
+upward launch so a delayed pair can remain above the floor under normal
+gravity. Both fields are null by default.
+
+Null must preserve the historical generator bit-for-bit: the pair keeps its
+fixed `0.15 m/s` upward velocity, no additional random number is consumed, and
+the pair is sampled exactly once. When an event-frame range is enabled, the
+simulator may rejection-sample pair height, lateral offset, surface gap,
+horizontal speed, and the explicitly configured vertical speed up to the
+existing bounded scene-attempt count. The real high-rate solver determines the
+accepted event frame and floor-clearance requirement. Exhaustion fails closed;
+it may not silently emit an out-of-range or floor-confounded episode.
+
+Both fields are strict resolved configuration and exact-resume semantics.
+Missing historical checkpoint fields migrate only to null. Event-frame bounds
+must be positive integers, ordered, and leave the configured clearance frames
+inside the episode. Vertical-speed bounds must be finite, nonnegative, and
+ordered. Simulator truth may select training examples and labels only; runtime
+inference remains RGB-only and receives no target frame, velocity, or event
+schedule.
+
+Implementation alone does not authorize training. The next gate is one
+balanced, immutable gradient probe on event-rich data. Every configured event
+horizon must have material support and its collision-owner gradient must be
+non-opposed to the aggregate. Failure closes this data intervention without a
+training campaign. Success authorizes one bounded training/validation rung,
+still subject to the complete pooled and scenario/axis/horizon physical,
+event, uncertainty, identity, support, and latency gates.
+
+Legacy cross-source generation at seed `17800` is bit-identical to commit
+`c58f881` across every RGB, state, event, camera, label, and metadata field;
+the canonical hash map is `5c630359...`. Enabled late-event generation is
+deterministic and lands inside the requested frame range. Config, simulator,
+and checkpoint compatibility coverage passes `379` tests with one expected
+unavailable-MPS skip. The final repository passes `1325` tests with `20`
+expected unavailable-backend skips in `465.25s`; Ruff, the `225`-file format
+check, isolated compile, version, and diff gates pass. These are mechanism
+gates, not accuracy evidence; the protected deployment remains unchanged.
 
 ---
 

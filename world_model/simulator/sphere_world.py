@@ -43,6 +43,17 @@ def _tuple_range(value: Any, *, name: str) -> tuple[float, float]:
     return result
 
 
+def _tuple_int_range(value: Any, *, name: str) -> tuple[int, int]:
+    result = tuple(value)
+    if (
+        len(result) != 2
+        or any(isinstance(item, bool) or not isinstance(item, int) for item in result)
+        or result[1] < result[0]
+    ):
+        raise ValueError(f"{name} must be an increasing integer pair")
+    return int(result[0]), int(result[1])
+
+
 @dataclass(frozen=True)
 class SphereWorldConfig:
     """Resolved simulator configuration for one dataset family."""
@@ -70,6 +81,10 @@ class SphereWorldConfig:
     ensured_pair_surface_gap_range: tuple[float, float] = (0.75, 0.9)
     ensured_pair_speed_range: tuple[float, float] = (0.85, 1.25)
     ensured_pair_lateral_offset_range: tuple[float, float] = (0.0, 0.0)
+    ensured_pair_vertical_speed_range: tuple[float, float] | None = None
+    # Optional inclusive event-frame support for deliberately event-rich
+    # training data. Null preserves the historical sampling path bit-for-bit.
+    ensured_pair_event_frame_range: tuple[int, int] | None = None
     # A value of two leaves one complete observation interval between the
     # labelled pair-impact interval and the first permitted floor-impact
     # interval.  The initial height is raised deterministically when needed.
@@ -137,7 +152,38 @@ class SphereWorldConfig:
                 raise ValueError(f"{name} must be nonnegative and increasing")
         if self.radius_range[0] <= 0 or self.mass_range[0] <= 0:
             raise ValueError("radius and mass must be strictly positive")
+        vertical_speed_range = self.ensured_pair_vertical_speed_range
+        if vertical_speed_range is not None and (
+            len(vertical_speed_range) != 2
+            or any(
+                isinstance(value, bool) or not isinstance(value, (int, float))
+                for value in vertical_speed_range
+            )
+            or not all(math.isfinite(float(value)) for value in vertical_speed_range)
+            or vertical_speed_range[0] < 0.0
+            or vertical_speed_range[1] < vertical_speed_range[0]
+        ):
+            raise ValueError(
+                "ensured_pair_vertical_speed_range must be null or a finite nonnegative "
+                "increasing pair"
+            )
         if self.ensure_collision and self.max_objects >= 2:
+            event_frame_range = self.ensured_pair_event_frame_range
+            if event_frame_range is not None and (
+                len(event_frame_range) != 2
+                or any(
+                    isinstance(value, bool) or not isinstance(value, int)
+                    for value in event_frame_range
+                )
+                or event_frame_range[0] < 1
+                or event_frame_range[1] < event_frame_range[0]
+                or event_frame_range[1] + self.ensured_pair_floor_clearance_frames - 1
+                >= self.sequence_frames
+            ):
+                raise ValueError(
+                    "ensured_pair_event_frame_range must leave the pair event and "
+                    "configured floor-clearance frames inside the episode"
+                )
             if (
                 isinstance(self.ensured_pair_floor_clearance_frames, bool)
                 or not isinstance(self.ensured_pair_floor_clearance_frames, int)
@@ -263,8 +309,18 @@ class SphereWorldConfig:
         ):
             if range_name in values:
                 values[range_name] = _tuple_range(values[range_name], name=range_name)
+        if values.get("ensured_pair_vertical_speed_range") is not None:
+            values["ensured_pair_vertical_speed_range"] = _tuple_range(
+                values["ensured_pair_vertical_speed_range"],
+                name="ensured_pair_vertical_speed_range",
+            )
         if "scenario_mixture" in values:
             values["scenario_mixture"] = tuple(str(item) for item in values["scenario_mixture"])
+        if values.get("ensured_pair_event_frame_range") is not None:
+            values["ensured_pair_event_frame_range"] = _tuple_int_range(
+                values["ensured_pair_event_frame_range"],
+                name="ensured_pair_event_frame_range",
+            )
         resolved = cls(**values)
         resolved.validate()
         return resolved
@@ -721,47 +777,86 @@ class SphereWorld:
         bounds = torch.tensor(config.world_bounds, dtype=torch.float32)
         placed = 0
         if count >= 2 and config.ensure_collision:
-            pair_height = float(_uniform(self.generator, (), config.ensured_pair_height_range))
-            pair_z = float(_uniform(self.generator, (), (-0.25, 0.25)))
-            lateral_offset = float(
-                _uniform(
-                    self.generator,
-                    (),
-                    config.ensured_pair_lateral_offset_range,
+            target_frames = config.ensured_pair_event_frame_range
+            pair_attempts = (
+                1 if target_frames is None else config.ensured_pair_scene_resample_attempts
+            )
+            accepted_pair: tuple[float, float, int] | None = None
+            last_pair_error: ValueError | None = None
+            for _ in range(pair_attempts):
+                position[:2].zero_()
+                velocity[:2].zero_()
+                pair_height = float(_uniform(self.generator, (), config.ensured_pair_height_range))
+                pair_z = float(_uniform(self.generator, (), (-0.25, 0.25)))
+                lateral_offset = float(
+                    _uniform(
+                        self.generator,
+                        (),
+                        config.ensured_pair_lateral_offset_range,
+                    )
                 )
-            )
-            surface_gap = float(
-                _uniform(
-                    self.generator,
-                    (),
-                    config.ensured_pair_surface_gap_range,
+                surface_gap = float(
+                    _uniform(
+                        self.generator,
+                        (),
+                        config.ensured_pair_surface_gap_range,
+                    )
                 )
-            )
-            center_distance = float(radius[0, 0] + radius[1, 0]) + surface_gap
-            if lateral_offset >= center_distance:
-                raise ValueError("ensured pair lateral offset must be below center separation")
-            half_separation = 0.5 * math.sqrt(
-                center_distance * center_distance - lateral_offset * lateral_offset
-            )
-            position[0] = torch.tensor(
-                [-half_separation, pair_height, pair_z - 0.5 * lateral_offset]
-            )
-            position[1] = torch.tensor(
-                [half_separation, pair_height, pair_z + 0.5 * lateral_offset]
-            )
-            speed = float(_uniform(self.generator, (), config.ensured_pair_speed_range))
-            velocity[0] = torch.tensor([speed, 0.15, 0.0])
-            velocity[1] = torch.tensor([-speed, 0.15, 0.0])
-            clearance_height, isolated_pair_frame = _isolated_pair_clearance_height(
-                config,
-                position=position,
-                velocity=velocity,
-                radius=radius,
-                mass=mass,
-                restitution=restitution,
-                drag=drag,
-                friction=friction,
-            )
+                center_distance = float(radius[0, 0] + radius[1, 0]) + surface_gap
+                if lateral_offset >= center_distance:
+                    raise ValueError("ensured pair lateral offset must be below center separation")
+                half_separation = 0.5 * math.sqrt(
+                    center_distance * center_distance - lateral_offset * lateral_offset
+                )
+                position[0] = torch.tensor(
+                    [-half_separation, pair_height, pair_z - 0.5 * lateral_offset]
+                )
+                position[1] = torch.tensor(
+                    [half_separation, pair_height, pair_z + 0.5 * lateral_offset]
+                )
+                speed = float(_uniform(self.generator, (), config.ensured_pair_speed_range))
+                vertical_speed = (
+                    0.15
+                    if config.ensured_pair_vertical_speed_range is None
+                    else float(
+                        _uniform(
+                            self.generator,
+                            (),
+                            config.ensured_pair_vertical_speed_range,
+                        )
+                    )
+                )
+                velocity[0] = torch.tensor([speed, vertical_speed, 0.0])
+                velocity[1] = torch.tensor([-speed, vertical_speed, 0.0])
+                try:
+                    clearance_height, isolated_pair_frame = _isolated_pair_clearance_height(
+                        config,
+                        position=position,
+                        velocity=velocity,
+                        radius=radius,
+                        mass=mass,
+                        restitution=restitution,
+                        drag=drag,
+                        friction=friction,
+                    )
+                except ValueError as error:
+                    if target_frames is None:
+                        raise
+                    last_pair_error = error
+                    continue
+                if target_frames is not None and not (
+                    target_frames[0] <= isolated_pair_frame <= target_frames[1]
+                ):
+                    continue
+                accepted_pair = (pair_height, clearance_height, isolated_pair_frame)
+                break
+            if accepted_pair is None:
+                detail = "" if last_pair_error is None else f"; last error: {last_pair_error}"
+                raise ValueError(
+                    "could not sample an ensured pair inside "
+                    f"event-frame range {target_frames} after {pair_attempts} attempts{detail}"
+                )
+            pair_height, clearance_height, isolated_pair_frame = accepted_pair
             # Random interventions are intentionally a later surprise. Letting
             # one alter the constructed reference impact would silently turn
             # the ensured pair/floor sequence into a different compound event.

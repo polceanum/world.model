@@ -175,6 +175,8 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
     # values below reproduce the behavior of a checkpoint where they are
     # absent; they are not blindly replaced with today's defaults.
     ("simulator", "ensured_pair_lateral_offset_range"): [0.0, 0.0],
+    ("simulator", "ensured_pair_vertical_speed_range"): None,
+    ("simulator", "ensured_pair_event_frame_range"): None,
     ("training", "normalize_rollout_axes_over_configured_horizons"): False,
     ("training", "joint_collision_long_horizon_sampling"): False,
     ("training", "minimum_rollout_age_steps"): 0,

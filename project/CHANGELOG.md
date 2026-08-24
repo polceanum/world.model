@@ -2,6 +2,24 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 specification 1.65 event-frame-targeted training data
+
+- Added default-null ensured-pair event-frame and upward-speed ranges. Enabled
+  data uses bounded rejection sampling and the real high-rate solver to produce
+  a requested late pair collision while retaining normal gravity and floor
+  clearance; exhaustion fails closed.
+- Kept the disabled generator exact: no new RNG draw and the historical fixed
+  `0.15 m/s` upward speed. Cross-source seed-17800 generation matches commit
+  `c58f881` for every tensor and metadata field (`5c630359...`).
+- Added strict config, deterministic enabled-generation, legacy-null migration,
+  and exact-resume mismatch coverage. The combined config/simulator/checkpoint
+  gate passes `379 passed, 1 skipped`.
+- Passed the final repository (`1325 passed, 20 skipped in 465.25s`), Ruff,
+  225-file format, isolated compile, version, and diff gates.
+- This is mechanism evidence only. A balanced event-rich all-horizon gradient
+  probe remains mandatory before one bounded training rung; no accuracy,
+  promotion, latency, or deployment claim is made.
+
 ### 2026-08-24 collision-horizon diagnostic closure
 
 - Reused the retained balanced collision-gradient attribution. Short/mid
