@@ -25,6 +25,9 @@
 - [ ] Replace single-mean observation assimilation with an explicit bounded
   ambiguity representation while preserving hard persistent identity and the
   analytic equation rollout; do not reopen scalar-gain or soft-average sweeps.
+- [x] Test full camera covariance and an image-space centre EKF before changing
+  belief schema. Reject the EKF after aggregate FAST error and x/z regress,
+  despite the expected y improvement; do not add post-hoc gain/axis masks.
 
 ## Learned-radius-derived depth — specification 1.76
 

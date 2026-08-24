@@ -29,6 +29,11 @@
   frozen `0.5%` non-regression limit after adding existing ROI visual context.
   No runtime or checkpoint semantic was added.  Future work must represent
   ambiguity explicitly rather than repeat posterior-mean/gain variants.
+- Rejected an exact image-space centre EKF feasibility path. It correctly
+  retains pinhole cross-axis covariance and improves y, but total accepted-FAST
+  error worsens `0.116027 -> 0.122192 m` through x/z regressions. This closes
+  moment-collapsed Gaussian correction variants before any belief-schema or
+  runtime change.
 
 ### 2026-08-24 learned-radius-derived depth (specification 1.76)
 

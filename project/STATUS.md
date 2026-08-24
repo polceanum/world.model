@@ -53,6 +53,19 @@ than `0.5%`.  This gate family is closed without runtime code.  The reports are
 (`bbbcf012...`).  The remaining observation problem requires an explicit
 ambiguity representation, not another posterior-mean blend or scalar gate.
 
+The first equation-level ambiguity check confirms why. Existing RGB
+backprojection propagates the pinhole Jacobian but stores only diagonal world
+variance. Restoring the full 3x3 covariance is an exact no-op on FAST frames
+because their camera-plane evidence is rejected by the world-axis independence
+test. Assimilating the same independent centre evidence correctly in image
+space through a differentiable 2x2 EKF is non-vacuous, but fixed-eight accepted
+pair error worsens `0.116027 -> 0.122192 m`: y improves
+`0.115322 -> 0.096511 m`, while x worsens `0.085722 -> 0.097625 m` and z
+worsens `0.140498 -> 0.161082 m`. No gain/mask follow-up is allowed. Evidence
+is `/private/tmp/20260824-spec178-image-centre-ekf-feasibility-fixed8.json`
+(`d5119756...`). A future estimator must retain bounded coupled hypotheses in
+`WorldBelief`; moment-collapsing another Gaussian correction is closed.
+
 ## Learned-radius-derived depth — specification 1.76 stable, accuracy rejected
 
 The fast RGB observer now has a default-off, fully differentiable camera-model
