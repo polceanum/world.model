@@ -173,6 +173,7 @@ training:
   num_workers: 0
   fixed_dataset: false
   rgb_pretrain_steps: 100
+  rgb_pretrain_trainable_scope: all
   measurement_validation_frames: 8
   perturbation_probability: 0.25
   perturbation_position_std: 0.12

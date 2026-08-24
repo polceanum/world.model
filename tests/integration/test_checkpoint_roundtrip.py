@@ -739,6 +739,39 @@ def test_training_resume_rejects_closed_loop_validation_device_change() -> None:
         validate_training_resume_config(payload, changed)
 
 
+def test_training_resume_binds_rgb_pretrain_trainable_scope_with_legacy_all() -> None:
+    source = _small_config()
+    detector = replace(
+        source,
+        training=replace(
+            source.training,
+            rgb_pretrain_trainable_scope="global_detector",
+        ),
+    )
+    detector.validate()
+    payload = {
+        "config": detector.to_dict(),
+        "simulator_version": SIMULATOR_VERSION,
+    }
+    with pytest.raises(
+        ValueError,
+        match=r"incompatible fields:.*training\.rgb_pretrain_trainable_scope",
+    ):
+        validate_training_resume_config(payload, source)
+
+    legacy_payload = {
+        "config": source.to_dict(),
+        "simulator_version": SIMULATOR_VERSION,
+    }
+    legacy_payload["config"]["training"].pop("rgb_pretrain_trainable_scope")
+    validate_training_resume_config(legacy_payload, source)
+    with pytest.raises(
+        ValueError,
+        match=r"incompatible fields:.*training\.rgb_pretrain_trainable_scope",
+    ):
+        validate_training_resume_config(legacy_payload, detector)
+
+
 def test_training_resume_binds_state_roi_scope_and_late_transition() -> None:
     source = _small_config()
     state_roi = replace(

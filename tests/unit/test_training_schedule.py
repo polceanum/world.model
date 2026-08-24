@@ -64,6 +64,7 @@ from world_model.training.trainer import (
     measurement_pretrain_frame_index,
     set_closed_loop_trainable_scope,
     set_global_perception_trainable,
+    set_rgb_pretrain_trainable_scope,
 )
 from world_model.utils.config import load_config
 
@@ -236,6 +237,47 @@ def test_global_perception_freeze_leaves_shared_fast_encoder_trainable() -> None
     set_global_perception_trainable(model, trainable=True)
     assert all(parameter.requires_grad for parameter in rgb.backbone.parameters())
     assert all(parameter.requires_grad for parameter in rgb.global_detector.parameters())
+
+
+def test_global_detector_rgb_pretrain_scope_has_exact_parameter_ownership() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+
+    set_rgb_pretrain_trainable_scope(model, scope="global_detector")
+
+    expected = {
+        name
+        for name, _ in model.named_parameters()
+        if name.startswith("observation_modules.rgb.global_detector.")
+    }
+    actual = {name for name, parameter in model.named_parameters() if parameter.requires_grad}
+    assert actual == expected
+
+    before = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.01, weight_decay=0.01)
+    for parameter in model.parameters():
+        if parameter.requires_grad:
+            parameter.grad = torch.ones_like(parameter)
+    optimizer.step()
+
+    changed = {
+        name
+        for name, parameter in model.named_parameters()
+        if not torch.equal(before[name], parameter.detach())
+    }
+    optimizer_owned = {
+        name for name, parameter in model.named_parameters() if parameter in optimizer.state
+    }
+    assert changed == expected
+    assert optimizer_owned == expected
+
+
+def test_legacy_rgb_pretrain_scope_retains_all_parameter_owners() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+    model.requires_grad_(False)
+
+    set_rgb_pretrain_trainable_scope(model, scope="all")
+
+    assert all(parameter.requires_grad for parameter in model.parameters())
 
 
 def test_dynamics_only_scope_preserves_rgb_and_filter_weights() -> None:

@@ -433,6 +433,11 @@ class TrainingConfig:
     num_workers: int = 0
     fixed_dataset: bool = False
     rgb_pretrain_steps: int = 100
+    # ``all`` preserves historical paired global/fast RGB pretraining.
+    # ``global_detector`` freezes the shared backbone and every non-global
+    # owner so a balanced discovery curriculum cannot drift the protected
+    # persistent state, ROI, identifier, or dynamics paths.
+    rgb_pretrain_trainable_scope: str = "all"
     fast_roi_pretrain_weight: float = 1.0
     measurement_validation_frames: int = 8
     perturbation_probability: float = 0.25
@@ -1413,6 +1418,13 @@ class OrpheusConfig:
             or self.training.rgb_pretrain_steps < 0
         ):
             raise ValueError("training.rgb_pretrain_steps must be a nonnegative integer")
+        if self.training.rgb_pretrain_trainable_scope not in {
+            "all",
+            "global_detector",
+        }:
+            raise ValueError(
+                "training.rgb_pretrain_trainable_scope must be 'all' or 'global_detector'"
+            )
         if self.training.train_episodes <= 0 or self.training.validation_episodes <= 0:
             raise ValueError("training train_episodes and validation_episodes must be positive")
         if len(set(simulator.scenario_mixture)) != len(simulator.scenario_mixture):

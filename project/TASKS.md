@@ -1,5 +1,23 @@
 # Tasks
 
+## Detector-only global discovery repair — specification 1.66
+
+- [x] Add strict `all`/`global_detector` RGB pretraining ownership with
+  legacy-`all` migration and exact-resume binding.
+- [x] Prove a real generated-RGB measurement loss, backward, and AdamW step
+  changes and owns state only inside the global detector.
+- [x] Pass focused config, schedule, RGB-supervision, and checkpoint coverage
+  (`530 passed, 1 skipped`).
+- [x] Pass the final repository (`1331 passed, 20 skipped in 462.32s`) plus
+  Ruff, 225-file format, version, and diff gates.
+- [ ] From a clean pushed source, run exactly one 128-update balanced
+  three-object detector-only rung from the immutable protected initializer.
+- [ ] Apply the predeclared fixed-eight raw-query gate: at least +10 percentage
+  points recall within `0.1 m`, no more than -5 points precision, and no broad
+  structured/runtime regression.
+- [ ] Stop and record failure if that gate misses. Only a pass may proceed to
+  one fixed-32 physical comparison and conditional active-Aqua confirmation.
+
 ## Runtime-pool MPS dispatch diagnostic — no retained code change
 
 - [x] Confirm that the completed active-Aqua runtime-pool candidate is

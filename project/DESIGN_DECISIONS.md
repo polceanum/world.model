@@ -1,5 +1,32 @@
 # Design decisions
 
+## ADR-184 — Train only the existing global detector before changing discovery logic
+
+- **Date:** 2026-08-24
+- **Status:** mechanism accepted; one bounded accuracy rung pending
+- **Context:** Structured RGB components are accurate when visible discs are
+  separated but merge under severe overlap. Hand-coded chromatic splitting
+  worsened centroid error in every scenario, and frozen raw learned queries
+  were too inaccurate for safe fallback admission.
+- **Decision:** Add a strict `global_detector` RGB-pretraining scope. Freeze the
+  shared backbone, fast ROI, filter, identifier, dynamics, and all sibling
+  owners; train only the existing global detector through the unchanged raw-
+  centre/existence measurement objective. Bind the scope to exact resume with
+  historical `all` migration. Permit one 128-update, balanced three-object
+  rung and require material fixed-eight raw-query recall improvement before
+  any fixed-32 or MPS work.
+- **Alternatives considered:** tune chromatic thresholds; admit noisy raw
+  queries directly; train the shared backbone and risk established ROI/runtime
+  behavior; alter lifecycle confidence; add a new detector architecture; or
+  iterate durations and loss weights on the same manifest.
+- **Consequences:** Real backward and AdamW coverage proves exact detector-only
+  gradient, tensor-change, and optimizer-state ownership. Focused affected
+  suites pass `530/1`; the final repository passes `1331/20` in `462.32s` with
+  every static gate clean. Runtime behavior and deployment are unchanged. The
+  bounded accuracy rung remains a hard stopping gate: a miss closes the family,
+  while a material pass authorizes only the standard fixed-32 comparison and
+  conditional active-Aqua confirmation.
+
 ## ADR-183 — Preserve sparse runtime-pool dispatch until it can be vectorized
 
 - **Date:** 2026-08-24

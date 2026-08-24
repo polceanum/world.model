@@ -24,7 +24,10 @@ from world_model.training.loop import (
     supervised_measurement_losses,
     supervised_slot_measurement_losses,
 )
-from world_model.training.trainer import set_closed_loop_trainable_scope
+from world_model.training.trainer import (
+    set_closed_loop_trainable_scope,
+    set_rgb_pretrain_trainable_scope,
+)
 from world_model.utils.config import load_config
 
 
@@ -545,6 +548,50 @@ def _closed_loop_config() -> Any:
     )
     config.validate()
     return config
+
+
+def test_global_detector_pretrain_real_backward_and_step_have_exact_ownership() -> None:
+    config = _closed_loop_config()
+    batch = collate_episodes([generate_episode(config, seed=7)])
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    set_rgb_pretrain_trainable_scope(model, scope="global_detector")
+    detector_prefix = "observation_modules.rgb.global_detector."
+    before = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=0.01,
+        weight_decay=config.training.weight_decay,
+    )
+
+    result = pretrain_rgb_measurements(model, batch, config, frame_index=0)
+    assert result.total_loss.requires_grad
+    assert torch.isfinite(result.total_loss)
+    result.total_loss.backward()
+
+    gradient_owners = {
+        name
+        for name, parameter in model.named_parameters()
+        if parameter.grad is not None and bool(torch.count_nonzero(parameter.grad))
+    }
+    assert gradient_owners
+    assert all(name.startswith(detector_prefix) for name in gradient_owners)
+    assert all(
+        parameter.grad is None or not bool(torch.count_nonzero(parameter.grad))
+        for name, parameter in model.named_parameters()
+        if not name.startswith(detector_prefix)
+    )
+
+    optimizer.step()
+    changed = {
+        name
+        for name, parameter in model.named_parameters()
+        if not torch.equal(before[name], parameter.detach())
+    }
+    optimizer_owned = {
+        name for name, parameter in model.named_parameters() if parameter in optimizer.state
+    }
+    assert changed == gradient_owners
+    assert optimizer_owned == gradient_owners
 
 
 def test_stage_b_pair_uses_detached_rgb_birth_and_trains_both_perception_paths(

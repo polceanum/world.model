@@ -542,6 +542,22 @@ def test_closed_loop_global_trainable_steps_is_nonnegative() -> None:
         )
 
 
+def test_rgb_pretrain_trainable_scope_is_strict_and_legacy_all() -> None:
+    legacy = load_config(CONFIG_DIR / "tiny_overfit.yaml")
+    detector = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=["training.rgb_pretrain_trainable_scope=global_detector"],
+    )
+
+    assert legacy.training.rgb_pretrain_trainable_scope == "all"
+    assert detector.training.rgb_pretrain_trainable_scope == "global_detector"
+    with pytest.raises(ValueError, match="rgb_pretrain_trainable_scope"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=["training.rgb_pretrain_trainable_scope=global_and_fast"],
+        )
+
+
 def test_closed_loop_trainable_scope_is_explicit() -> None:
     with pytest.raises(ValueError, match="closed_loop_trainable_scope"):
         load_config(

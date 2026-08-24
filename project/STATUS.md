@@ -1,5 +1,30 @@
 # Project status
 
+## Detector-only global discovery repair — specification 1.66
+
+The terminal structured-split diagnostic identified a genuine overlapping-
+disc discovery limitation, while the frozen learned proposals were too
+inaccurate for runtime admission. The next and only non-marginal route is a
+bounded training test of the existing global detector. Measurement pretraining
+now has a strict, exact-resume-bound `global_detector` scope that freezes the
+shared backbone, fast ROI path, filter, identifier, dynamics, and every other
+parameter owner. Historical and missing-checkpoint semantics remain `all`.
+
+A real generated RGB batch, complete measurement loss, backward, and AdamW
+step proves that nonzero gradients, changed tensors, and optimizer state are
+confined exactly to global-detector owners. Focused config, schedule,
+supervision, and checkpoint coverage passes `530` tests with one expected
+unavailable-MPS skip. The final repository passes `1331/20` in `462.32s` with
+Ruff, the 225-file format check, version, and diff gates clean. Runtime
+predictions and the protected deployment are unchanged.
+
+One clean-source 128-update, balanced three-object rung is pending. It must
+improve frozen fixed-eight raw-query recall within `0.1 m` by at least ten
+percentage points without losing more than five percentage points of precision
+or broadly regressing structured/runtime evidence. Failure closes this family;
+success permits only the existing fixed-32 physical gate and conditional MPS
+confirmation.
+
 ## Runtime-pool MPS dispatch diagnostic — rejected and reverted
 
 The remaining paired-latency requirement cannot rescue the existing

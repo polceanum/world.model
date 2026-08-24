@@ -4315,6 +4315,26 @@ def set_global_perception_trainable(
         projection.requires_grad_(False)
 
 
+def set_rgb_pretrain_trainable_scope(
+    model: OnlineWorldModel,
+    *,
+    scope: str,
+) -> None:
+    """Restrict measurement pretraining to its declared parameter owners."""
+
+    if scope == "all":
+        model.requires_grad_(True)
+        return
+    if scope != "global_detector":
+        raise ValueError(f"unsupported RGB pretraining scope: {scope}")
+    model.requires_grad_(False)
+    module = model.observation_modules["rgb"]
+    global_detector = getattr(module, "global_detector", None)
+    if global_detector is None:
+        raise TypeError("RGB module is missing global_detector")
+    global_detector.requires_grad_(True)
+
+
 def set_closed_loop_trainable_scope(
     model: OnlineWorldModel,
     *,
@@ -7852,7 +7872,10 @@ def _train_from_config_owned(
         active_closed_loop_scope = config.training.closed_loop_trainable_scope
         closed_loop_scope_transitioned = False
         if step < config.training.rgb_pretrain_steps:
-            model.requires_grad_(True)
+            set_rgb_pretrain_trainable_scope(
+                model,
+                scope=config.training.rgb_pretrain_trainable_scope,
+            )
         else:
             (
                 active_closed_loop_scope,
@@ -7865,10 +7888,10 @@ def _train_from_config_owned(
                 model,
                 scope=active_closed_loop_scope,
             )
-        set_global_perception_trainable(
-            model,
-            trainable=global_perception_trainable,
-        )
+            set_global_perception_trainable(
+                model,
+                trainable=global_perception_trainable,
+            )
         no_gradient_attempts = 0
         post_step_finite_check_seconds = 0.0
         update_started = time.perf_counter()
@@ -7972,6 +7995,9 @@ def _train_from_config_owned(
                     batch,
                     config,
                     frame_index=frame_index,
+                )
+                result.metrics["rgb_pretrain_scope_global_detector_only"] = float(
+                    config.training.rgb_pretrain_trainable_scope == "global_detector"
                 )
             else:
                 target_learning_rate = closed_loop_learning_rate_at_update(

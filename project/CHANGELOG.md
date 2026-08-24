@@ -2,6 +2,21 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 specification 1.66 detector-only global discovery repair
+
+- Added strict, exact-resume-bound RGB measurement-pretraining ownership.
+  `global_detector` trains only the existing global proposal detector while
+  freezing the shared backbone, fast ROI path, state/filter owners, and
+  dynamics; historical `all` behavior is unchanged.
+- Added real backward/optimizer ownership coverage plus strict config and
+  legacy checkpoint compatibility tests. Focused affected suites pass
+  `530 passed, 1 skipped`.
+- Passed the final repository (`1331 passed, 20 skipped in 462.32s`) plus Ruff,
+  the 225-file format check, version, and diff gates.
+- Declared one bounded 128-update, balanced three-object accuracy rung with a
+  material fixed-eight raw-query recall/precision gate. No runtime admission,
+  lifecycle, split, model-shape, checkpoint, or deployment change is claimed.
+
 ### 2026-08-24 terminal runtime-pool MPS dispatch diagnostic
 
 - Confirmed that paired latency cannot rehabilitate the existing physically
