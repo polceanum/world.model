@@ -192,6 +192,7 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
     ("training", "loss_weights", "soft_association_state"): 0.0,
     ("training", "loss_weights", "soft_association_velocity"): 0.0,
     ("training", "loss_weights", "soft_association_exclusivity"): 0.0,
+    ("training", "loss_weights", "rgb_reprojection"): 0.0,
     ("training", "closed_loop_axiswise_correction_hinge_enabled"): False,
     ("training", "closed_loop_scenario_tail_fraction"): None,
     ("training", "closed_loop_uncertainty_standardized_error_gradient_cap"): None,

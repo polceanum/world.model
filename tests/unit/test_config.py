@@ -113,6 +113,25 @@ def test_soft_posterior_straight_through_requires_temperature_and_scope() -> Non
     ).validate()
 
 
+def test_rgb_reprojection_requires_differentiable_rgb_state_estimator() -> None:
+    base = OrpheusConfig()
+    weights = {**base.training.loss_weights, "rgb_reprojection": 0.25}
+    with pytest.raises(ValueError, match="differentiable_state_estimator"):
+        replace(
+            base,
+            training=replace(base.training, loss_weights=weights),
+        ).validate()
+
+    replace(
+        base,
+        training=replace(
+            base.training,
+            closed_loop_trainable_scope="differentiable_state_estimator",
+            loss_weights=weights,
+        ),
+    ).validate()
+
+
 def test_sustained_v3_analytic_contacts_match_reference_solver_thresholds() -> None:
     config = load_config(CONFIG_DIR / "sustained_accuracy_mps_v3.yaml")
     dynamics = config.model.dynamics

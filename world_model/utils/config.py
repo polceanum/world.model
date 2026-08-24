@@ -545,6 +545,7 @@ class TrainingConfig:
             "soft_association_state": 0.0,
             "soft_association_velocity": 0.0,
             "soft_association_exclusivity": 0.0,
+            "rgb_reprojection": 0.0,
         }
     )
 
@@ -1638,6 +1639,13 @@ class OrpheusConfig:
                     "soft posterior straight-through requires the "
                     "differentiable_state_estimator trainable scope"
                 )
+        if float(self.training.loss_weights.get("rgb_reprojection", 0.0)) > 0.0:
+            if "differentiable_state_estimator" not in configured_scopes:
+                raise ValueError(
+                    "RGB reprojection requires the differentiable_state_estimator trainable scope"
+                )
+            if self.runtime.modality != "rgb":
+                raise ValueError("RGB reprojection requires runtime.modality=rgb")
         if (late_scope is None) != (transition_steps is None):
             raise ValueError(
                 "training.closed_loop_late_trainable_scope and "

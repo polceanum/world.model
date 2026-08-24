@@ -29,6 +29,7 @@ from world_model.observations import (
     PredictedMeasurements,
     SensorContext,
 )
+from world_model.observations.rgb.reprojection import soft_sphere_silhouette_reprojection
 from world_model.runtime import (
     DifferentiableIngestTrace,
     OnlineWorldModel,
@@ -4627,6 +4628,7 @@ def _group_closed_loop_terms(
         "soft_association_state",
         "soft_association_velocity",
         "soft_association_exclusivity",
+        "rgb_reprojection",
     ):
         if name in details:
             terms[name] = details[name]
@@ -4738,6 +4740,7 @@ def _weighted_closed_loop_total(
         "soft_association_state",
         "soft_association_velocity",
         "soft_association_exclusivity",
+        "rgb_reprojection",
     }
     selected: dict[str, Tensor] = {
         name: value
@@ -5161,6 +5164,11 @@ def run_closed_loop_batch(
             )
         )
     )
+    rgb_reprojection_enabled = (
+        model.training
+        and torch.is_grad_enabled()
+        and float(loss_weights.get("rgb_reprojection", 0.0)) > 0.0
+    )
     if (
         isinstance(validation_rollout_anchor_batch_size, bool)
         or not isinstance(validation_rollout_anchor_batch_size, int)
@@ -5421,6 +5429,16 @@ def run_closed_loop_batch(
             # every posterior rollout in the current TBPTT window.
             model.state.belief = belief
             _accumulate_float_metrics(parameter_supervision_metrics, soft_posterior_metrics)
+        if rgb_reprojection_enabled:
+            module = model.observation_modules["rgb"]
+            reprojection_loss, reprojection_metrics = soft_sphere_silhouette_reprojection(
+                belief,
+                packet.payload,
+                packet.calibration,
+                foreground_threshold=module.config.structured_disc_threshold,
+            )
+            add("rgb_reprojection", reprojection_loss)
+            _accumulate_float_metrics(parameter_supervision_metrics, reprojection_metrics)
         indices, matched = target_matcher.match(
             belief,
             batch["objects"]["position"][:, frame_index],

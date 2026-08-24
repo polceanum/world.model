@@ -1,5 +1,29 @@
 # Project status
 
+## RGB-only analytic silhouette reprojection — specification 1.71 implemented
+
+A new training-only observation likelihood projects the active spheres in
+`WorldBelief` into a smooth RGB foreground silhouette and compares it with
+foreground evidence extracted directly from the observed frame. It uses camera
+calibration and the same sphere geometry already present in the belief, but no
+simulator labels, target identity, target state, segmentation, or future
+information. The hard runtime, Hungarian association, lifecycle, contacts, and
+analytic rollout are unchanged; no second rollout or learned mechanics is
+introduced.
+
+Focused geometry, unsupported-row, configuration, exact-resume, causal
+gradient, and objective regression coverage passes `433` tests with one
+expected unavailable-MPS skip. The complete repository gate passes `1364`
+tests with `20` expected unavailable-backend skips in `507.45 s`; Ruff,
+format, compile, version, and diff checks are clean. The exact first balanced production draw has
+32 supported frame rows, 96 projectable objects, and 2,237 foreground pixels.
+At the frozen weight `2.0`, the reprojection gradient is `0.558601`, 9.54% of
+the combined `5.854154` norm, and nearly orthogonal to the remaining objective
+(cosine `-0.0471`). The attribution artifact is
+`/private/tmp/20260824-spec171-rgb-reprojection-gradient-attribution.json`.
+One frozen 16-update paired accuracy qualification remains pending; no long
+campaign is authorized.
+
 ## Forward-exact soft posterior — specification 1.70 terminally rejected
 
 The next structural repair is implemented without changing hard runtime

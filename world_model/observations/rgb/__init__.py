@@ -1,5 +1,9 @@
 """RGB global discovery, projection, and residual ROI measurement path."""
 
+from world_model.observations.rgb.reprojection import soft_sphere_silhouette_reprojection
+
+__all__ = ["soft_sphere_silhouette_reprojection"]
+
 from world_model.observations.rgb.backbone import RGBBackbone
 from world_model.observations.rgb.cache import RGBModalityCache
 from world_model.observations.rgb.global_detector import (

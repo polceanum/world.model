@@ -1,5 +1,27 @@
 # Tasks
 
+## RGB-only analytic silhouette reprojection — specification 1.71
+
+- [x] Add a label-free smooth sphere-silhouette projection from the current
+  `WorldBelief` and calibrated RGB packet, without runtime mutation or a second
+  rollout.
+- [x] Balance foreground/background per row, omit unsupported rows exactly,
+  and expose additive support/IoU diagnostics.
+- [x] Bind the opt-in loss to exact resume with legacy zero and require the
+  differentiable RGB state-estimator scope.
+- [x] Prove correct geometry, finite gradients to RGB/filter owners, hard-path
+  isolation when disabled, and focused regression coverage (`433 passed`, one
+  expected skip).
+- [x] Freeze the sole treatment weight at `2.0` from first-draw attribution:
+  9.54% gradient share and cosine `-0.0471` with the remaining objective.
+- [x] Pass the complete repository gate (`1364 passed`, `20` expected skips in
+  `507.45 s`) plus Ruff/format/compile/version/diff checks.
+- [ ] Run one frozen 16-update pair against exact weight zero. Require at least
+  `0.001` hard five-horizon selector gain and all established non-regression
+  checks; stop without tuning if it fails.
+- [ ] If and only if the gate passes, synchronize evidence and merge/push the
+  validated branch to `main`.
+
 ## Forward-exact soft posterior — specification 1.70
 
 - [x] Add a zero-forward-value soft analytic posterior carrier over the exact

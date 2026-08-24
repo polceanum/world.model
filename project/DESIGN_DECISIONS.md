@@ -1,5 +1,28 @@
 # Design decisions
 
+## ADR-194 — Use analytic RGB silhouette reprojection as dense state evidence
+
+- **Date:** 2026-08-24
+- **Status:** implemented; bounded accuracy pending
+- **Context:** Local soft assignment improves current state but barely moves
+  long rollouts, while a recursive straight-through posterior is high variance.
+  The remaining errors concentrate in overlap/depth observation slices and a
+  balanced update receives only three soft temporal-velocity coordinates.
+- **Decision:** Project the active sphere geometry in `WorldBelief` into a
+  smooth foreground silhouette and compare it with foreground extracted from
+  the current RGB frame. Keep the target label-free, balance foreground and
+  background per row, and optimize the existing perception/filter owners. Do
+  not alter hard identity/lifecycle/contact semantics or add another rollout.
+- **Alternatives considered:** tune the rejected assignment/carrier weights;
+  differentiate Hungarian IDs; use simulator segmentation; add a neural
+  renderer or learned transition; resume dense/foundation detectors; or train
+  longer without a new evidence path.
+- **Consequences:** The objective supplies dense low-variance gradients to
+  projected x/y/depth/radius at small pixel cost and is absent from validation
+  and deployment. Its sole weight is frozen at `2.0` from a first-draw 9.54%
+  gradient share before validation. One 16-update paired gate decides whether
+  it is retained; failure closes it without adjacent tuning or a long campaign.
+
 ## ADR-193 — Use a zero-value soft-posterior gradient carrier
 
 - **Date:** 2026-08-24

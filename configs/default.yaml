@@ -222,6 +222,7 @@ training:
     soft_association_state: 0.0
     soft_association_velocity: 0.0
     soft_association_exclusivity: 0.0
+    rgb_reprojection: 0.0
 
 evaluation:
   horizons_seconds: [0.1, 0.25, 0.5, 1.0, 2.0]

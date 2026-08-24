@@ -2,6 +2,24 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 RGB-only analytic silhouette reprojection (specification 1.71)
+
+- Added a training-only differentiable union of calibrated sphere silhouettes
+  from `WorldBelief`, supervised solely by robust foreground evidence from the
+  current RGB frame.
+- Preserved hard association, lifecycle, contacts, persistent state, analytic
+  rollout, and deployment latency; no simulator labels or second rollout enter
+  the objective.
+- Added legacy-zero exact-resume binding, strict scope validation, balanced
+  foreground/background reduction, explicit support/IoU evidence, and focused
+  geometry/gradient/disabled-path tests.
+- Froze weight `2.0` before accuracy evaluation from an exact balanced training
+  draw: 32 supported rows, 96 objects, 2,237 pixels, 9.54% gradient share, and
+  `-0.0471` cosine with the rest of the objective.
+- Passed the complete repository gate (`1364 passed`, `20` expected skips in
+  `507.45 s`) plus Ruff, format, compile, version, and diff checks. The paired
+  accuracy gate remains pending.
+
 ### 2026-08-24 forward-exact soft posterior (specification 1.70)
 
 - Added a training-only straight-through carrier from the gated soft assignment
