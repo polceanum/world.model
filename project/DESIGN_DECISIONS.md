@@ -3,7 +3,7 @@
 ## ADR-192 — Relax hard assimilation for training, retain it for deployment
 
 - **Date:** 2026-08-24
-- **Status:** implementation and bounded wiring gate accepted; accuracy pending
+- **Status:** infrastructure accepted; first accuracy configuration rejected
 - **Context:** Narrow typed-head campaigns attempted to improve a system whose
   dominant error is RGB state estimation. Hard assignment/lifecycle decisions
   and frozen upstream owners left only about 0.08% of model scalars functionally
@@ -24,8 +24,13 @@
   persistent. Real causal gradients reach perception, filter, and identifier;
   drag/restitution are trained through observable parameter and analytic rollout
   losses. A balanced one-update CPU smoke is finite with zero retry and
-  exact-zero learned-residual gradient. This authorizes one bounded accuracy
-  qualification, not a long campaign or promotion.
+  exact-zero learned-residual gradient. The paired 16-update qualification then
+  improves hard current position/velocity `2.35%/3.65%` but misses the frozen
+  long-rollout selector bar (`0.000153 < 0.001`). Retain the trace and broad
+  differentiable estimator scope, reject these surrogate weights without
+  tuning, and require the next experiment to differentiate the assimilated
+  posterior and its analytic rollout rather than merely strengthening the same
+  auxiliary assignment losses.
 
 ## ADR-191 — Close residual-history models after event-epoch rejection
 

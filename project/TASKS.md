@@ -17,8 +17,13 @@
   gradients, zero retry, physical-parameter support, and hard post-validation.
 - [x] Pass the full repository gate (`1353 passed`, `20` expected skips in
   `515.07s`) and final Ruff/format/compile/version/diff checks.
-- [ ] Run one predeclared short paired accuracy qualification; stop if broad
-  validation improvement is not material and do not tune on the gate manifest.
+- [x] Run one predeclared short paired accuracy qualification. Reject the
+  current soft-loss configuration: current hard position/velocity improve
+  `2.35%/3.65%`, but the equal-horizon selector gain is only `0.000153` versus
+  the frozen `0.001` bar. Do not tune its weights on fixed eight.
+- [ ] Replace the auxiliary-only association relaxation with one bounded
+  differentiable post-assimilation posterior/rollout surrogate, while retaining
+  exact hard runtime behavior and equation-based propagation.
 
 ## Event-epoch adaptive local model — terminal rejection
 

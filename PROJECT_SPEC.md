@@ -9639,10 +9639,20 @@ objects. Loss and gradients were finite (`2.708743`, raw norm `1.875017`,
 applied norm `1.017866`); the learned attention/dynamics residual gradient was
 exactly zero and peak RSS was about `1.88 GiB`. This is graph, ownership, and
 throughput evidence only. The warmup-scale single update is not accuracy,
-promotion, or convergence evidence. The next experiment is one predeclared
-short paired qualification against the hard-runtime baseline; stop if broad
-fixed validation does not improve materially rather than iterating objective
-weights on the gate manifest.
+promotion, or convergence evidence.
+
+The predeclared 16-update paired qualification under
+`/private/tmp/20260824-113943-spec169-soft-association-{treatment,control}`
+differs only in the three surrogate weights and pairs every draw, scenario, and
+initial hard metric. Treatment improves final hard current position and
+velocity `2.35%` and `3.65%`, respectively, without coverage, precision,
+identity, collision, or frozen-dynamics regression. Its equal-weight five-
+horizon position selector improves only `0.000153`, below the frozen `0.001`
+materiality threshold. This surrogate configuration is rejected and must not
+be weight-tuned on fixed eight. The trace and broad estimator scope remain
+valid infrastructure; a subsequent bounded experiment must construct a
+differentiable post-assimilation posterior and propagate that state through the
+same equation-based rollout, not repeat an auxiliary association-loss sweep.
 
 ---
 

@@ -17,6 +17,13 @@
   gradients, and hard post-validation. No accuracy or promotion claim is made.
 - Passed the final repository gate (`1353 passed`, `20` expected skips in
   `515.07s`) plus Ruff, format, compile, version, and diff validation.
+- Completed the predeclared 16-update treatment/control qualification with
+  exact paired draws and hard validation. Soft association improves current
+  position/velocity `2.35%/3.65%` without safety regressions, but improves the
+  five-horizon selector only `0.000153`, below the frozen `0.001` bar.
+  Rejected this configuration without weight tuning or a longer campaign;
+  retained the differentiable infrastructure for a structurally different
+  post-assimilation posterior/rollout surrogate.
 
 ### 2026-08-24 terminal event-epoch adaptive local-model diagnostic
 

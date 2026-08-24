@@ -24,8 +24,23 @@ three velocity coordinates, 70 drag and seven restitution observations, loss
 gradient, and about `1.88 GiB` peak RSS. The final repository gate passes
 `1353` tests with `20` expected unavailable-backend skips in `515.07s`; Ruff,
 format, compile, version, and diff checks are clean. This is technical evidence
-only; the single warmup update is not an accuracy or promotion result. A
-separately predeclared short accuracy qualification remains pending.
+only; the single warmup update is not an accuracy or promotion result.
+
+The predeclared 16-update paired CPU qualification is now complete under
+`/private/tmp/20260824-113943-spec169-soft-association-{treatment,control}`.
+The arms differ only in the three soft-association weights; all 16 ordered
+balanced draws, 340 initial hard physical metrics, scenario order, optimizer
+updates, and frozen dynamics are paired/exact. The surrogate improves final
+hard current position `0.120388 -> 0.117555 m` (`2.35%`) and velocity
+`0.805958 -> 0.776556 m/s` (`3.65%`) with unchanged coverage, precision,
+identity, and collision F1. It nevertheless misses the frozen long-rollout
+bar: the equal-horizon position selector improves only
+`0.237095 -> 0.236942` (`0.000153`) rather than the required `0.001`.
+Therefore this weight/configuration is not approved for a longer campaign and
+must not be tuned on the fixed-eight manifest. The result supports retaining
+the differentiable trace/scope infrastructure, but the next intervention must
+make the post-assimilation posterior/rollout surrogate itself differentiable
+rather than adding another assignment-loss weight sweep.
 
 ## Event-epoch adaptive local model — terminal rejection
 
