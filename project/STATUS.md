@@ -25,6 +25,12 @@ a data-mechanism gate only. Training remains unauthorized until one balanced
 event-rich gradient probe shows material, non-opposed collision-owner gradients
 at every configured horizon. Deployment remains step zero.
 
+The existing rollout code computed per-horizon node-event tensors but exposed
+only their detached scalar logs. `TrainingBatchResult.support_terms` now
+retains those already-built node tensors for gradient audit only; no objective,
+weight, prediction, or optimizer route changes. Full training-schedule and
+objective coverage passes `195 passed` after the instrumentation.
+
 ## Collision-horizon objective and sampler screen — terminally rejected
 
 The required post-specification-1.60 horizon attribution was already available

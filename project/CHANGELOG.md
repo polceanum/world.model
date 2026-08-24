@@ -16,6 +16,9 @@
   gate passes `379 passed, 1 skipped`.
 - Passed the final repository (`1325 passed, 20 skipped in 465.25s`), Ruff,
   225-file format, isolated compile, version, and diff gates.
+- Exposed already-built differentiable per-horizon node-event tensors through
+  the audit support map, without changing loss construction or runtime output;
+  schedule/objective coverage passes `195 passed`.
 - This is mechanism evidence only. A balanced event-rich all-horizon gradient
   probe remains mandatory before one bounded training rung; no accuracy,
   promotion, latency, or deployment claim is made.

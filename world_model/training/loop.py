@@ -4260,6 +4260,14 @@ def _group_closed_loop_terms(
     return terms
 
 
+def _event_horizon_support_terms(details: Mapping[str, Tensor]) -> dict[str, Tensor]:
+    """Retain already-built node-event horizon tensors for gradient audits."""
+
+    return {
+        name: value for name, value in details.items() if name.startswith("event_collision_node@")
+    }
+
+
 def _weighted_closed_loop_total(
     terms: dict[str, Tensor],
     weights: dict[str, float],
@@ -5790,6 +5798,7 @@ def run_closed_loop_batch(
                 if "event_collision_pair" in details
                 else {}
             ),
+            **_event_horizon_support_terms(details),
         },
         protected_objective_cells=protected_objective_cells,
     )

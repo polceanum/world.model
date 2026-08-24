@@ -16,6 +16,7 @@ from world_model.training.loop import (
     _closed_loop_loss_weights_for_scope,
     _combine_measurement_objectives,
     _distance_gate_physical_matches,
+    _event_horizon_support_terms,
     _fast_measurement_has_trainable_perception_path,
     _global_measurement_has_trainable_path,
     _globally_weight_horizon_details,
@@ -1544,6 +1545,28 @@ def test_node_xy_collision_scope_routes_node_event_not_opposing_pair_event() -> 
     assert result.metrics["direct_collision_state_event_routing_active"] == 0.0
     assert result.metrics["direct_collision_state_event_loss_weight"] == 0.0
     assert result.metrics["direct_collision_state_event_gradient_norm_pre_parameter_clip"] == 0.0
+
+
+def test_event_horizon_support_terms_retain_only_node_event_tensors() -> None:
+    node_short = torch.tensor(1.0, requires_grad=True)
+    node_long = torch.tensor(2.0, requires_grad=True)
+    details = {
+        "event_collision_node": torch.tensor(3.0),
+        "event_collision_pair@0.100s": torch.tensor(4.0),
+        "event_collision_node@0.100s": node_short,
+        "event_collision_node@1.000s": node_long,
+        "rollout_position@0.100s": torch.tensor(5.0),
+    }
+
+    retained = _event_horizon_support_terms(details)
+
+    assert retained == {
+        "event_collision_node@0.100s": node_short,
+        "event_collision_node@1.000s": node_long,
+    }
+    (retained["event_collision_node@0.100s"] + retained["event_collision_node@1.000s"]).backward()
+    torch.testing.assert_close(node_short.grad, torch.ones_like(node_short))
+    torch.testing.assert_close(node_long.grad, torch.ones_like(node_long))
 
 
 def test_direct_collision_backward_preserves_protected_reference_weight() -> None:

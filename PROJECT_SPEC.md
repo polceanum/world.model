@@ -9152,6 +9152,12 @@ training campaign. Success authorizes one bounded training/validation rung,
 still subject to the complete pooled and scenario/axis/horizon physical,
 event, uncertainty, identity, support, and latency gates.
 
+The training result retains the already-computed differentiable node-event
+tensor for each configured horizon as audit support. This does not add a loss,
+change weighting, or alter predictions; it prevents a gradient gate from being
+reconstructed from detached scalar logs. Pair and non-event horizon tensors
+remain excluded from this audit channel.
+
 Legacy cross-source generation at seed `17800` is bit-identical to commit
 `c58f881` across every RGB, state, event, camera, label, and metadata field;
 the canonical hash map is `5c630359...`. Enabled late-event generation is
