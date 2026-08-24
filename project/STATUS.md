@@ -1,5 +1,35 @@
 # Project status
 
+## Frozen DINOv2 typed-observation probe — terminally mixed
+
+After closing the hand-built dense detector family, one genuinely independent
+feature source was available locally and offline: the frozen
+`facebook/dinov2-small` snapshot (`ae1e99fc...`). A temp-only 384-channel
+patch decoder trained for exactly 128 balanced CPU updates over 1,024
+three-object episodes. DINO weights remained frozen; the probe emitted a center
+heatmap plus log radius, inverse depth, colour, and visibility. No hosted model,
+download, production code, configuration, or checkpoint semantic was used.
+
+The result is informative but fails the predeclared fixed-eight gate. Against
+the already-trained dense typed candidate, DINO reduces log-radius MAE
+`1.99744 -> 0.03972`, inverse-depth relative MAE
+`5.05671 -> 0.12472`, visibility MAE `0.03640 -> 0.02963`, and the four-field
+composite `1.80009 -> 0.10063`. Those gains are not usable because top-count
+center recall falls `181/191 -> 128/191` (`94.76% -> 67.02%`), matched typed
+support falls `181 -> 128`, colour MAE worsens `0.10981 -> 0.20843`, and
+minimum scenario recall is only `37.5%` on heavy/light. Three of six gates
+pass; center recall, scenario floor, support, and every-attribute
+non-regression requirements do not all pass.
+
+Evidence is
+`/private/tmp/20260824-spec169-dinov2-typed-fixed8-feasibility.json`
+(`35a57c65...`); the temp head is `03fab138...` and probe script is
+`214b36a2...`. Stop before production integration, physical fixed-32, or MPS.
+Do not tune input resolution, decoder, objective weights, duration, center
+threshold, or compose DINO attributes with the rejected dense centers on this
+manifest. Reopen foundation perception only with a materially different
+pretrained instance-aware model or independently stronger evidence.
+
 ## Dense typed-attribute completion — terminally rejected
 
 One final bounded diagnostic tested the only credible explanation left by the

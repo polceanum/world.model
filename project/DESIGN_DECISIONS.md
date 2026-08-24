@@ -1,5 +1,28 @@
 # Design decisions
 
+## ADR-189 — Reject frozen DINO features without center-support parity
+
+- **Date:** 2026-08-24
+- **Status:** feasibility rejected; no production change
+- **Context:** The hand-built query and dense observation families are closed,
+  but a cached offline DINOv2-S model provides genuinely independent pretrained
+  RGB features. It could improve typed radius/depth/visibility evidence without
+  another local-backbone detector iteration.
+- **Decision:** Permit one frozen-DINO, temp-only typed decoder trained for 128
+  balanced CPU updates. Require at least 90% fixed-eight center recall, 95%
+  confident precision, 80% recall in every scenario, non-regressing matched
+  support and every attribute family, and at least 10% composite attribute
+  improvement against the trained dense typed candidate.
+- **Alternatives considered:** immediately integrate DINO; fine-tune it; sweep
+  image resolution, decoder, loss weights, thresholds, or duration; combine
+  its attributes with rejected dense centers; or use hosted foundation models.
+- **Consequences:** Radius, inverse-depth, visibility, and composite errors
+  improve dramatically, but recall falls to `67.02%`, support to `128`, colour
+  MAE worsens, and heavy/light recall is `37.5%`. Reject (`35a57c65...`). The
+  failure is complementary rather than a near-threshold miss, so do not tune
+  or compose it. Future foundation perception needs an instance-aware local
+  model or independent evidence materially stronger than this patch decoder.
+
 ## ADR-188 — Close dense observation modeling after attribute-only rejection
 
 - **Date:** 2026-08-24

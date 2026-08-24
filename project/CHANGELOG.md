@@ -2,6 +2,18 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 terminal frozen-DINOv2 typed-observation probe
+
+- Bound the fully cached/offline `facebook/dinov2-small` weights and trained
+  one temp-only typed decoder for exactly 128 balanced CPU updates; DINO and
+  production Orpheus weights remained frozen.
+- Measured large held-out log-radius, inverse-depth, and visibility gains over
+  the trained dense typed candidate, but rejected the probe because center
+  recall fell `94.76% -> 67.02%`, matched support fell `181 -> 128`, colour
+  MAE worsened, and heavy/light recall reached only `37.5%` (`35a57c65...`).
+- Stopped before production integration, fixed-32, MPS, or adjacent tuning;
+  no source/config/runtime/checkpoint semantic is retained.
+
 ### 2026-08-24 terminal dense typed-attribute diagnostic
 
 - Trained one bounded 128-update CPU attribute-only rung from the frozen dense

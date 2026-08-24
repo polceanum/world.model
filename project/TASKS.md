@@ -1,5 +1,20 @@
 # Tasks
 
+## Frozen DINOv2 typed-observation probe — terminal rejection
+
+- [x] Audit local-only foundation vision availability and bind the exact
+  cached `facebook/dinov2-small` weights (`ae1e99fc...`), with no download or
+  hosted inference.
+- [x] Run one temp-only 128-update frozen-DINO typed decoder over 1,024
+  disjoint balanced three-object episodes.
+- [x] Apply the predeclared fixed-eight raw gate against the trained dense
+  typed candidate. Reject: recall `94.76% -> 67.02%`, matched support
+  `181 -> 128`, colour MAE nearly doubles, and minimum scenario recall is
+  `37.5%`, despite large radius/depth/visibility gains (`35a57c65...`).
+- [x] Stop without resolution/decoder/loss/duration/threshold/composition
+  tuning, production integration, fixed-32, or MPS.
+- [x] Synchronize, commit, and push the terminal foundation-feature evidence.
+
 ## Dense typed-attribute completion — terminal rejection
 
 - [x] Train exactly one bounded 128-update CPU rung from the frozen dense
