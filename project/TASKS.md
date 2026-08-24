@@ -16,9 +16,13 @@
 - [x] Pass final repository (`1334 passed, 20 skipped in 468.79s`) plus
   Ruff, 225-file formatting, version, and diff gates.
 - [x] Commit and push the clean specification-1.67 source (`cb2d6a0`).
-- [ ] Run exactly one fresh 128-update detector-only rung with every
-  specification-1.66 protocol and accuracy threshold unchanged. Stop
-  permanently on another miss; do not tune adjacent hyperparameters.
+- [x] Run exactly one fresh 128-update detector-only rung with every
+  specification-1.66 protocol and accuracy threshold unchanged. All updates
+  are healthy and exactly owned, but the selector rejects and raw recall is
+  `28.13%` versus baseline `29.17%`; close the family (`7c8cf498...`).
+- [x] Stop before fixed-32 physical/MPS work and prohibit adjacent
+  hyperparameter or admission tuning. Require a distinct multi-instance
+  discovery architecture before reopening.
 
 ## Detector-only global discovery repair — specification 1.66
 

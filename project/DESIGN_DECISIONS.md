@@ -3,7 +3,8 @@
 ## ADR-185 — Supervise raw learned existence while preserving structured runtime evidence
 
 - **Date:** 2026-08-24
-- **Status:** implementation retained; one bounded accuracy rerun pending
+- **Status:** implementation retained; corrected accuracy candidate rejected;
+  detector-only family terminal
 - **Context:** The sole detector-only rung made every raw learned query
   confident and failed the predeclared accuracy gate. Source tracing showed
   that structured RGB confidence was substituted before detector BCE. The
@@ -21,12 +22,15 @@
 - **Consequences:** Runtime outputs stay exact while the rejected candidate's
   negative-query gradient changes from `0.006299` to the truthful `0.935359`.
   The protected initializer's mean absolute existence gradient changes from
-  `0.029132` to `0.418034`. One fresh 128-update rerun is warranted under the
-  unchanged data, ownership, optimizer, and accuracy gate. No adjacent tuning
-  ladder is authorized; a second material miss terminates this detector family.
-  Probe evidence SHA-256 is `1cc459c9...`. The final repository passes
-  `1334/20` in `468.79s` with every static gate clean; deployment remains step
-  zero.
+  `0.029132` to `0.418034`. The final repository passes `1334/20` in `468.79s`
+  with every static gate clean. The one authorized rerun applies all 128
+  updates with exact 41-tensor detector-only model/Adam ownership. It repairs
+  confidence calibration—proposal count `143 -> 81`, precision `30.77% ->
+  37.04%`—but raw top-target-count recall falls `29.17% -> 28.13%`, and the
+  fixed-32 measurement selector rejects `1.2175323715` against `1.2169759717`.
+  The second material miss terminates this detector family before physical
+  fixed-32/MPS or adjacent tuning. Terminal evidence is `7c8cf498...`;
+  deployment remains step zero.
 
 ## ADR-184 — Train only the existing global detector before changing discovery logic
 

@@ -9295,6 +9295,22 @@ The implementation gate passes the complete repository (`1334 passed, 20`
 expected unavailable-backend skips in `468.79s`) together with Ruff, the
 225-file format check, the version contract, and diff validation.
 
+The authorized rerun is complete and terminally negative. Clean pushed commit
+`6eeaa85` applied all `128` balanced detector-only updates with zero retry,
+maximum finite unclipped gradient `0.804476`, zero interaction gradient, and
+exactly `41` changed plus `41` Adam-owned tensors confined to the detector. The
+fixed-32 measurement selector rejected candidate score `1.2175323715` against
+reference `1.2169759717`. Corrected BCE materially repairs confidence: fixed-
+eight confident proposals fall from `143` to `81` and precision rises from
+`30.77%` to `37.04%`. It does not repair localization: top-target-count recall
+falls from `56/192` (`29.17%`) to `54/192` (`28.13%`), far below the required
+ten-point improvement. Therefore the detector-only family is permanently
+closed. No physical fixed-32, MPS, duration, LR, loss-weight, threshold,
+confidence, split, or admission follow-up is permitted. A future attempt must
+use a genuinely different multi-instance discovery architecture. Terminal
+evidence is `/private/tmp/20260824-spec167-raw-existence-detector-terminal.json`
+(SHA-256 `7c8cf4985becf2fef1891d31a989f70c994d27cdde6c9d8b6f3e987bf0f8a7a7`).
+
 ---
 
 # Closing directive

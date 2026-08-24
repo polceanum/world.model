@@ -19,9 +19,14 @@
   detector training. The rejected candidate's raw negative confidence is
   `0.935359`, so corrected BCE exposes negative gradient `0.935359` rather
   than `0.006299` (`1cc459c9...`).
-- Authorized one correctness-corrected 128-update rerun under the unchanged
-  specification-1.66 accuracy gate. Nearby duration, LR, loss-weight,
-  confidence, split, and admission tuning remain prohibited.
+- Completed the sole correctness-corrected 128-update rerun. All updates
+  applied with exact 41-tensor detector-only model/Adam ownership, no retry,
+  finite unclipped gradients, and zero interaction gradient.
+- Rejected the candidate. Fixed-32 measurement score is `1.2175323715` versus
+  reference `1.2169759717`. Corrected BCE reduces confident raw proposals
+  `143 -> 81` and improves precision `30.77% -> 37.04%`, but top-target-count
+  recall falls `29.17% -> 28.13%` instead of gaining ten points. Closed the
+  family before physical fixed-32/MPS or adjacent tuning (`7c8cf498...`).
 
 ### 2026-08-24 specification 1.66 detector-only global discovery repair
 

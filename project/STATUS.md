@@ -29,13 +29,23 @@ is `1.849297`, yet the substituted BCE remains `0.238379` with the same
 `0.935359` instead of `0.006299`. Evidence is
 `/private/tmp/20260824-spec167-existence-gradient-probe.json` (`1cc459c9...`).
 
-This authorizes exactly one fresh 128-update rerun under the frozen
-specification-1.66 data, ownership, optimizer, and raw-query gates after the
-repository is clean and pushed. It does not authorize a learning-rate, loss-
-weight, duration, confidence, split, or admission sweep. If the corrected run
-still misses the declared material recall/precision gate, stop this detector
-family permanently and move to a genuinely different multi-instance model.
-Deployment remains the protected step-zero model.
+The sole correctness-corrected rung is complete and terminally rejected. All
+128 balanced updates applied with zero retry; the maximum finite, unclipped
+gradient was `0.804476`, interaction gradient stayed exactly zero, and exactly
+41 changed tensors plus 41 Adam owners are confined to the global detector.
+The fixed-32 measurement selector again retained the protected incumbent:
+candidate `1.2175323715` versus reference `1.2169759717`.
+
+Corrected BCE repairs the confidence collapse but not localization. Fixed-
+eight confident proposals fall `143 -> 81` and precision improves `30.77% ->
+37.04%`, while top-target-count recall moves `56/192 -> 54/192` (`29.17% ->
+28.13%`) rather than improving by the required ten points. This is the second
+material miss, so the detector-only family is permanently closed: do not tune
+learning rate, loss weights, duration, confidence, split, or admission, and do
+not run physical fixed-32 or MPS gates. Terminal evidence is
+`/private/tmp/20260824-spec167-raw-existence-detector-terminal.json`
+(`7c8cf498...`). Deployment remains the protected step-zero model; future work
+requires a genuinely different multi-instance discovery architecture.
 
 ## Detector-only global discovery repair — specification 1.66
 
