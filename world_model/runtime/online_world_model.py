@@ -167,6 +167,7 @@ class OnlineWorldModel(nn.Module):
             ConstantVelocityDynamics,
             DynamicsModel,
             HypothesisDynamicsPool,
+            OnlineLocalAccelerationDynamics,
         )
         from world_model.observations.rgb import (
             RGBObservationConfig,
@@ -490,13 +491,26 @@ class OnlineWorldModel(nn.Module):
             # Candidate zero is always the learned dynamics, preserving its
             # full lifecycle/event trajectory.  Analytic candidates are only
             # coordinate proposals selected later by RGB delayed evidence.
+            hypothesis_candidates: list[object] = [
+                dynamics,
+                ConstantVelocityDynamics(),
+                ConstantVelocityDynamics(damping=0.05),
+                BallisticContactDynamics(),
+            ]
+            if config.runtime.hypothesis_online_acceleration_enabled:
+                hypothesis_candidates.append(
+                    OnlineLocalAccelerationDynamics(
+                        minimum_support_count=(
+                            config.runtime.hypothesis_online_acceleration_minimum_support_count
+                        ),
+                        maximum_acceleration=(
+                            config.runtime.hypothesis_online_acceleration_maximum_mps2
+                        ),
+                        minimum_delta_time=rgb_config.temporal_velocity_min_dt,
+                    )
+                )
             pool = HypothesisDynamicsPool(
-                (
-                    dynamics,
-                    ConstantVelocityDynamics(),
-                    ConstantVelocityDynamics(damping=0.05),
-                    BallisticContactDynamics(),
-                ),
+                tuple(hypothesis_candidates),
                 evidence_decay=config.runtime.hypothesis_evidence_decay,
             )
             hypothesis_controller = RuntimeHypothesisController(

@@ -329,6 +329,9 @@ class RuntimeConfig:
     hypothesis_residual_correction_gain_by_axis: tuple[float, float, float] = (0.0, 0.0, 0.0)
     hypothesis_robust_influence_delta: float = 0.0
     hypothesis_composition_step_seconds: float | None = None
+    hypothesis_online_acceleration_enabled: bool = False
+    hypothesis_online_acceleration_minimum_support_count: int = 4
+    hypothesis_online_acceleration_maximum_mps2: float = 20.0
 
 
 @dataclass(frozen=True)
@@ -620,6 +623,31 @@ class OrpheusConfig:
             raise ValueError(
                 "runtime.hypothesis_velocity_nonregression_gate_enabled must be boolean"
             )
+        if not isinstance(runtime.hypothesis_online_acceleration_enabled, bool):
+            raise ValueError("runtime.hypothesis_online_acceleration_enabled must be boolean")
+        if (
+            not isinstance(runtime.hypothesis_online_acceleration_minimum_support_count, int)
+            or isinstance(runtime.hypothesis_online_acceleration_minimum_support_count, bool)
+            or runtime.hypothesis_online_acceleration_minimum_support_count <= 0
+        ):
+            raise ValueError(
+                "runtime.hypothesis_online_acceleration_minimum_support_count "
+                "must be a positive integer"
+            )
+        if (
+            isinstance(runtime.hypothesis_online_acceleration_maximum_mps2, bool)
+            or not isinstance(runtime.hypothesis_online_acceleration_maximum_mps2, Real)
+            or not math.isfinite(runtime.hypothesis_online_acceleration_maximum_mps2)
+            or runtime.hypothesis_online_acceleration_maximum_mps2 <= 0.0
+        ):
+            raise ValueError(
+                "runtime.hypothesis_online_acceleration_maximum_mps2 must be finite and positive"
+            )
+        if runtime.hypothesis_online_acceleration_enabled:
+            if not runtime.hypothesis_local_applicability_enabled:
+                raise ValueError("online acceleration requires local hypothesis applicability")
+            if not model.rgb.temporal_velocity_enabled:
+                raise ValueError("online acceleration requires causal RGB temporal velocity")
         gains = runtime.hypothesis_residual_correction_gain_by_axis
         if not isinstance(gains, (tuple, list)) or len(gains) != 3:
             raise ValueError(

@@ -290,6 +290,37 @@ def test_runtime_hypothesis_policy_is_fully_config_bound() -> None:
     ]
 
 
+def test_runtime_hypothesis_policy_binds_online_local_acceleration_candidate() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=[
+            "model.rgb.temporal_velocity_enabled=true",
+            "runtime.hypothesis_evidence_horizons_seconds=[0.05]",
+            "runtime.hypothesis_axis_independent_axes=[0]",
+            "runtime.hypothesis_local_applicability_enabled=true",
+            "runtime.hypothesis_composition_step_seconds=0.05",
+            "runtime.hypothesis_online_acceleration_enabled=true",
+            "runtime.hypothesis_online_acceleration_minimum_support_count=3",
+            "runtime.hypothesis_online_acceleration_maximum_mps2=12.0",
+        ],
+    )
+
+    policy = _expected_runtime_policy(config)
+    fingerprint = policy.pop("fingerprint_sha256")
+
+    assert fingerprint == _canonical_sha256(policy)
+    assert policy["policy_version"] == "evidence_bounded_entity_axis_regime_horizon_v6"
+    assert policy["online_acceleration_enabled"] is True
+    assert policy["candidates"][-1] == {
+        "name": "online_local_acceleration",
+        "parameters": {
+            "minimum_support_count": 3,
+            "maximum_acceleration_mps2": 12.0,
+            "minimum_delta_time_seconds": config.model.rgb.temporal_velocity_min_dt,
+        },
+    }
+
+
 def _validation_config():
     return load_config(
         "configs/axis_gated_updater_repair_cpu.yaml",

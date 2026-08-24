@@ -157,18 +157,30 @@ def enable_runtime_hypothesis_pool(
         BallisticContactDynamics,
         ConstantVelocityDynamics,
         HypothesisDynamicsPool,
+        OnlineLocalAccelerationDynamics,
         RuntimeHypothesisController,
     )
 
     runtime = config.runtime
+    candidates: list[object] = [
+        model.dynamics,
+        ConstantVelocityDynamics(),
+        ConstantVelocityDynamics(damping=0.05),
+        BallisticContactDynamics(),
+    ]
+    if runtime.hypothesis_online_acceleration_enabled:
+        candidates.append(
+            OnlineLocalAccelerationDynamics(
+                minimum_support_count=(
+                    runtime.hypothesis_online_acceleration_minimum_support_count
+                ),
+                maximum_acceleration=runtime.hypothesis_online_acceleration_maximum_mps2,
+                minimum_delta_time=config.model.rgb.temporal_velocity_min_dt,
+            )
+        )
     model.hypothesis_controller = RuntimeHypothesisController(
         HypothesisDynamicsPool(
-            (
-                model.dynamics,
-                ConstantVelocityDynamics(),
-                ConstantVelocityDynamics(damping=0.05),
-                BallisticContactDynamics(),
-            ),
+            tuple(candidates),
             evidence_decay=runtime.hypothesis_evidence_decay,
         ),
         evidence_horizons_seconds=runtime.hypothesis_evidence_horizons_seconds,
@@ -3476,7 +3488,11 @@ def _evaluate_checkpoint_impl(
     runtime_hypothesis_policy: dict[str, Any] | None = None
     if runtime_hypothesis_pool:
         runtime_hypothesis_policy = {
-            "policy_version": "evidence_bounded_entity_axis_regime_horizon_v5",
+            "policy_version": (
+                "evidence_bounded_entity_axis_regime_horizon_v6"
+                if config.runtime.hypothesis_online_acceleration_enabled
+                else "evidence_bounded_entity_axis_regime_horizon_v5"
+            ),
             "candidates": [
                 {"name": "learned", "parameters": {}},
                 {"name": "constant_velocity", "parameters": {"damping": 0.0}},
@@ -3488,7 +3504,27 @@ def _evaluate_checkpoint_impl(
                     "name": "ballistic_contact",
                     "parameters": {"ground_height": 0.0, "event_logit": 5.0},
                 },
-            ],
+            ]
+            + (
+                [
+                    {
+                        "name": "online_local_acceleration",
+                        "parameters": {
+                            "minimum_support_count": (
+                                config.runtime.hypothesis_online_acceleration_minimum_support_count
+                            ),
+                            "maximum_acceleration_mps2": (
+                                config.runtime.hypothesis_online_acceleration_maximum_mps2
+                            ),
+                            "minimum_delta_time_seconds": (
+                                config.model.rgb.temporal_velocity_min_dt
+                            ),
+                        },
+                    }
+                ]
+                if config.runtime.hypothesis_online_acceleration_enabled
+                else []
+            ),
             "evidence_horizons_seconds": list(config.runtime.hypothesis_evidence_horizons_seconds),
             "axis_independent_axes": list(config.runtime.hypothesis_axis_independent_axes),
             "axis_prior_strength": config.runtime.hypothesis_axis_prior_strength,
@@ -3515,6 +3551,11 @@ def _evaluate_checkpoint_impl(
             ),
             "robust_influence_delta": config.runtime.hypothesis_robust_influence_delta,
             "composition_step_seconds": config.runtime.hypothesis_composition_step_seconds,
+            **(
+                {"online_acceleration_enabled": True}
+                if config.runtime.hypothesis_online_acceleration_enabled
+                else {}
+            ),
             "unsupported_query_policy": "learned_fallback",
             "composition": (
                 (

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from world_model.belief import BeliefFactory, BeliefTrajectory
+from world_model.belief import BeliefFactory, BeliefTrajectory, MotionMode
 from world_model.dynamics import (
     BallisticContactDynamics,
     ConstantVelocityDynamics,
@@ -13,6 +13,7 @@ from world_model.dynamics import (
     HypothesisDynamicsPool,
     HypothesisRegime,
     HypothesisRolloutEngine,
+    OnlineLocalAccelerationDynamics,
     RolloutStep,
     RuntimeHypothesisController,
 )
@@ -875,6 +876,221 @@ def test_runtime_controller_uses_only_associated_measurements_and_splices_x() ->
     assert "hypothesis_axis_index" in forecast.auxiliary
     assert forecast.auxiliary["hypothesis_axis_index"].shape == (1, 1, 1, 3)
     torch.testing.assert_close(source.objects.position, belief.objects.position)
+
+
+def test_online_local_acceleration_is_support_gated_and_identity_bound() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    candidate = OnlineLocalAccelerationDynamics(
+        minimum_support_count=1,
+        maximum_acceleration=20.0,
+    )
+
+    unsupported = candidate.predict_step(source, torch.tensor([0.1]))
+    baseline = ConstantVelocityDynamics().predict_step(source, torch.tensor([0.1]))
+    torch.testing.assert_close(
+        unsupported.belief.objects.position,
+        baseline.belief.objects.position,
+        rtol=0,
+        atol=0,
+    )
+    assert not candidate.applicability_mask(source).any()
+
+    valid = torch.ones(1, 1, 3, dtype=torch.bool)
+    log_variance = torch.zeros(1, 1, 3)
+    candidate.assimilate_velocity_observation(
+        source,
+        torch.zeros(1, 1, 3),
+        valid,
+        log_variance,
+        torch.tensor([0.0]),
+    )
+    accelerated_objects = source.objects.clone()
+    accelerated_objects.velocity[0, 0] = torch.tensor([1.0, 2.0, 3.0])
+    accelerated = source.replace(
+        timestamp=torch.tensor([0.1]),
+        objects=accelerated_objects,
+    )
+    candidate.assimilate_velocity_observation(
+        accelerated,
+        accelerated.objects.velocity,
+        valid,
+        log_variance,
+        accelerated.timestamp,
+    )
+
+    assert candidate.applicability_mask(accelerated).all()
+    predicted = candidate.predict_step(accelerated, torch.tensor([0.1]))
+    assert predicted.belief.objects.velocity[0, 0].tolist() == pytest.approx([2.0, 4.0, 5.0])
+    assert predicted.belief.objects.position[0, 0].tolist() == pytest.approx([0.15, 0.3, 0.4])
+    assert predicted.auxiliary["online_local_acceleration_supported"].all()
+
+    reused_objects = accelerated.objects.clone()
+    reused_objects.object_id[0, 0] = 8
+    reused = accelerated.replace(objects=reused_objects)
+    assert not candidate.applicability_mask(reused).any()
+
+
+def test_online_local_acceleration_resets_across_nonfree_motion() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    belief = belief.replace(objects=objects)
+    candidate = OnlineLocalAccelerationDynamics(minimum_support_count=1)
+    valid = torch.ones_like(belief.objects.velocity, dtype=torch.bool)
+    log_variance = torch.zeros_like(belief.objects.velocity)
+    candidate.assimilate_velocity_observation(
+        belief,
+        torch.zeros_like(belief.objects.velocity),
+        valid,
+        log_variance,
+        belief.timestamp,
+    )
+    candidate.assimilate_velocity_observation(
+        belief,
+        torch.ones_like(belief.objects.velocity),
+        valid,
+        log_variance,
+        belief.timestamp + 0.1,
+    )
+    assert candidate.applicability_mask(belief).all()
+
+    contact = belief.clone()
+    contact.objects.motion_mode_logits.zero_()
+    contact.objects.motion_mode_logits[..., MotionMode.GROUND_CONTACT] = 5.0
+    candidate.assimilate_velocity_observation(
+        contact,
+        torch.ones_like(contact.objects.velocity),
+        valid,
+        log_variance,
+        contact.timestamp + 0.2,
+    )
+    assert not candidate.applicability_mask(contact).any()
+
+    candidate.assimilate_velocity_observation(
+        belief,
+        torch.full_like(belief.objects.velocity, 2.0),
+        valid,
+        log_variance,
+        belief.timestamp + 0.3,
+    )
+    assert not candidate.applicability_mask(belief).any()
+    assert candidate.support_count is not None
+    assert not candidate.support_count.any()
+
+
+def test_runtime_controller_updates_online_candidate_after_scoring_due_forecast() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    online = OnlineLocalAccelerationDynamics(minimum_support_count=1)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_FixedDynamics(1.0), online]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+        local_applicability_enabled=True,
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+    association = SimpleNamespace(
+        pair_mask=torch.tensor([[True]]),
+        belief_indices=torch.tensor([[0]], dtype=torch.int64),
+        measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+    )
+
+    controller.assimilate_observation(
+        source,
+        SimpleNamespace(
+            timestamp=torch.tensor([0.0]),
+            measurement_mask=torch.tensor([[True]]),
+            auxiliary={
+                "world_position": torch.zeros(1, 1, 3),
+                "world_velocity": torch.zeros(1, 1, 3),
+                "world_velocity_log_variance": torch.zeros(1, 1, 3),
+                "world_velocity_valid_mask": torch.tensor([[True]]),
+                "world_velocity_axis_valid_mask": torch.ones(1, 1, 3, dtype=torch.bool),
+            },
+        ),
+        association,
+    )
+    controller.schedule(source)
+    due_objects = source.objects.clone()
+    due_objects.velocity[0, 0, 0] = 1.0
+    due = source.replace(timestamp=torch.tensor([0.1]), objects=due_objects)
+    selection = controller.assimilate_observation(
+        due,
+        SimpleNamespace(
+            timestamp=torch.tensor([0.1]),
+            measurement_mask=torch.tensor([[True]]),
+            auxiliary={
+                "world_position": torch.zeros(1, 1, 3),
+                "world_velocity": due.objects.velocity.clone(),
+                "world_velocity_log_variance": torch.zeros(1, 1, 3),
+                "world_velocity_valid_mask": torch.tensor([[True]]),
+                "world_velocity_axis_valid_mask": torch.ones(1, 1, 3, dtype=torch.bool),
+            },
+        ),
+        association,
+    )
+
+    assert selection is not None
+    assert online.applicability_mask(due)[0, 0, 0]
+    forecast = controller.predict(due, [0.1])
+    assert forecast is not None
+    assert forecast.auxiliary["hypothesis_axis_index"][0, 0, 0, 0].item() == 1
+    assert forecast.positions[0, 0, 0, 0].item() == pytest.approx(0.15)
+    assert forecast.velocities[0, 0, 0, 0].item() == pytest.approx(2.0)
+
+
+def test_runtime_controller_keeps_exact_learned_fallback_without_online_support() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    online = OnlineLocalAccelerationDynamics(minimum_support_count=2)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_FixedDynamics(1.0), online]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+        local_applicability_enabled=True,
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+    controller.schedule(source)
+    due = source.replace(timestamp=torch.tensor([0.1]))
+    selection = controller.assimilate_observation(
+        due,
+        SimpleNamespace(
+            timestamp=due.timestamp,
+            measurement_mask=torch.tensor([[True]]),
+            auxiliary={"world_position": torch.zeros(1, 1, 3)},
+        ),
+        SimpleNamespace(
+            pair_mask=torch.tensor([[True]]),
+            belief_indices=torch.tensor([[0]], dtype=torch.int64),
+            measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+        ),
+    )
+
+    assert selection is not None
+    assert selection.entity_axis_scores is not None
+    assert selection.entity_axis_scores.argmin(dim=-1)[0, 0, 0].item() == 1
+    assert not online.applicability_mask(due).any()
+    forecast = controller.predict(due, [0.1])
+    assert forecast is not None
+    expected = _FixedDynamics(1.0).predict_step(due, torch.tensor([0.1]))
+    torch.testing.assert_close(
+        forecast.positions[:, 0],
+        expected.belief.objects.position,
+        rtol=0,
+        atol=0,
+    )
+    assert forecast.auxiliary["hypothesis_axis_index"][0, 0, 0, 0].item() == 0
 
 
 @pytest.mark.parametrize(

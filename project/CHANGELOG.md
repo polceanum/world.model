@@ -2,6 +2,25 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 specification 1.63 online local-acceleration candidate
+
+- Added a default-off parameter-free constant-acceleration runtime candidate
+  fitted causally from persistent-ID-associated RGB temporal velocity and its
+  uncertainty.
+- Added per-entity/axis minimum support, bounded acceleration, dynamic
+  applicability, and exact learned fallback. Identity reuse, inactivity,
+  occlusion, contact, non-free motion, and episode reset erase the local fit.
+- Added strict configuration and exact-resume semantics plus runtime/evaluator
+  construction. The disabled policy remains version 5; only the enabled
+  five-candidate intervention records version 6.
+- Focused affected coverage passes `437 passed, 3 skipped`; the final
+  repository passes `1308 passed, 20 skipped in 455.58s`. Ruff, the 225-file
+  format check, isolated compile, version, and diff gates pass.
+- Predeclared a single fixed-32 CPU go/no-go pair. Weak improvement or any
+  physical/uncertainty/event/identity/support guardrail failure stops the
+  hypothesis before MPS; CPU success permits only one matched MPS confirmation.
+  No accuracy or promotion result exists yet.
+
 ### 2026-08-24 terminal causal adaptive-residual diagnostic
 
 - Audited the existing runtime-pool, forecast-isolation, temporal-velocity,

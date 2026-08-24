@@ -153,6 +153,11 @@ def test_axis_composition_is_configured_only_for_attention_pilot() -> None:
         "runtime.hypothesis_robust_influence_delta=true",
         "runtime.hypothesis_composition_step_seconds=-1",
         "runtime.hypothesis_composition_step_seconds=0.05",
+        "runtime.hypothesis_online_acceleration_enabled=1",
+        "runtime.hypothesis_online_acceleration_minimum_support_count=0",
+        "runtime.hypothesis_online_acceleration_minimum_support_count=true",
+        "runtime.hypothesis_online_acceleration_maximum_mps2=0",
+        "runtime.hypothesis_online_acceleration_maximum_mps2=true",
     ],
 )
 def test_runtime_hypothesis_applicability_controls_are_strict(override: str) -> None:
@@ -191,6 +196,38 @@ def test_runtime_hypothesis_residual_correction_requires_matching_local_axes() -
                 "runtime.hypothesis_residual_correction_gain_by_axis=[0.25,0.5,0.0]",
             ],
         )
+
+
+def test_runtime_online_acceleration_requires_rgb_velocity_and_local_applicability() -> None:
+    with pytest.raises(ValueError, match="local hypothesis applicability"):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=[
+                "model.rgb.temporal_velocity_enabled=true",
+                "runtime.hypothesis_online_acceleration_enabled=true",
+            ],
+        )
+    with pytest.raises(ValueError, match="causal RGB temporal velocity"):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=[
+                "runtime.hypothesis_local_applicability_enabled=true",
+                "runtime.hypothesis_online_acceleration_enabled=true",
+            ],
+        )
+    config = load_config(
+        CONFIG_DIR / "toy_smoke.yaml",
+        overrides=[
+            "model.rgb.temporal_velocity_enabled=true",
+            "runtime.hypothesis_local_applicability_enabled=true",
+            "runtime.hypothesis_online_acceleration_enabled=true",
+            "runtime.hypothesis_online_acceleration_minimum_support_count=3",
+            "runtime.hypothesis_online_acceleration_maximum_mps2=12.0",
+        ],
+    )
+    assert config.runtime.hypothesis_online_acceleration_enabled
+    assert config.runtime.hypothesis_online_acceleration_minimum_support_count == 3
+    assert config.runtime.hypothesis_online_acceleration_maximum_mps2 == pytest.approx(12.0)
     with pytest.raises(ValueError, match="match a supported evidence horizon"):
         load_config(
             CONFIG_DIR / "toy_smoke.yaml",

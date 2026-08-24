@@ -144,6 +144,9 @@ runtime:
   hypothesis_residual_correction_gain_by_axis: [0.0, 0.0, 0.0]
   hypothesis_robust_influence_delta: 0.0
   hypothesis_composition_step_seconds: null
+  hypothesis_online_acceleration_enabled: false
+  hypothesis_online_acceleration_minimum_support_count: 4
+  hypothesis_online_acceleration_maximum_mps2: 20.0
 
 training:
   batch_size: 4

@@ -2447,6 +2447,9 @@ def test_disabled_runtime_hypothesis_policy_migrates_but_enabled_policy_is_stric
         "hypothesis_residual_correction_gain_by_axis",
         "hypothesis_robust_influence_delta",
         "hypothesis_composition_step_seconds",
+        "hypothesis_online_acceleration_enabled",
+        "hypothesis_online_acceleration_minimum_support_count",
+        "hypothesis_online_acceleration_maximum_mps2",
     ):
         legacy_runtime.pop(field_name)
 
@@ -2458,6 +2461,28 @@ def test_disabled_runtime_hypothesis_policy_migrates_but_enabled_policy_is_stric
     enabled.validate()
     with pytest.raises(ValueError, match="runtime"):
         validate_checkpoint_config(legacy_payload, enabled)
+
+    online = replace(
+        config,
+        model=replace(
+            config.model,
+            rgb=replace(config.model.rgb, temporal_velocity_enabled=True),
+        ),
+        runtime=replace(
+            config.runtime,
+            hypothesis_pool_enabled=True,
+            hypothesis_local_applicability_enabled=True,
+            hypothesis_online_acceleration_enabled=True,
+            hypothesis_online_acceleration_minimum_support_count=3,
+            hypothesis_online_acceleration_maximum_mps2=12.0,
+        ),
+    )
+    online.validate()
+    validate_checkpoint_config({"config": online.to_dict()}, online)
+    with pytest.raises(ValueError, match="runtime"):
+        validate_checkpoint_config(payload, online)
+    with pytest.raises(ValueError, match="runtime"):
+        validate_checkpoint_config(legacy_payload, online)
 
 
 def test_innovation_anchored_correction_is_semantic_with_legacy_false() -> None:

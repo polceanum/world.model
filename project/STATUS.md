@@ -1,5 +1,30 @@
 # Project status
 
+## Specification 1.63 online local-acceleration candidate — bounded qualification
+
+A new default-off runtime candidate fits entity/axis acceleration from the
+already accepted causal RGB temporal-velocity measurement. It is outside
+`WorldBelief`, owns no weights, uses no simulator input, is uncertainty
+weighted and acceleration bounded, and is erased on identity change,
+inactivity, occlusion, contact, non-free motion, and episode reset. Dynamic
+candidate applicability keeps every unsupported cell on the exact learned
+fallback. The disabled four-candidate evaluator policy remains version 5; only
+the explicit five-candidate intervention uses version 6.
+
+The implementation is intentionally a single bounded hypothesis after the
+terminal adaptive-residual decision. Focused construction, config,
+checkpoint, controller, fallback, reset, and report-policy coverage passes
+`437` tests with `3` expected backend skips. The final repository passes
+`1308` tests with `20` expected unavailable-backend skips in `455.58s`; Ruff,
+the `225`-file format check, isolated compile, version, and diff gates pass.
+The only authorized accuracy screen is one
+source-frozen sequential fixed-32 CPU learned-only/enabled pair on the
+protected checkpoint. It must use the fifth candidate non-vacuously, improve
+summed pooled position RMSE by at least `1e-5` metres, and pass every existing
+guardrail. Otherwise this branch stops without MPS or promotion. An active-
+Aqua MPS confirmation is permitted only after CPU success. Deployment remains
+the protected step-zero model.
+
 ## Causal adaptive-residual screen — rejected; current ladder stopped
 
 No production change follows the final runtime-pool screen.  A read-only

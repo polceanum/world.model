@@ -432,6 +432,9 @@ def _runtime_checkpoint_semantics(value: object) -> object:
         "hypothesis_residual_correction_gain_by_axis",
         "hypothesis_robust_influence_delta",
         "hypothesis_composition_step_seconds",
+        "hypothesis_online_acceleration_enabled",
+        "hypothesis_online_acceleration_minimum_support_count",
+        "hypothesis_online_acceleration_maximum_mps2",
     )
     for field_name in policy_fields:
         runtime.setdefault(field_name, getattr(defaults, field_name))

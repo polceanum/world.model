@@ -1,5 +1,35 @@
 # Design decisions
 
+## ADR-177 — Bound one observation-fitted transition candidate, then stop
+
+- **Date:** 2026-08-24
+- **Status:** implemented; bounded qualification pending
+- **Context:** Fixed analytic candidates and fixed/adaptive output residuals
+  either regressed broad guardrails or produced only marginal pooled gains.
+  The final adaptive probe nevertheless showed that earlier causal RGB
+  velocity residuals contain x/y information. Repeating coefficient or gain
+  searches would violate the diminishing-returns stop decision.
+- **Decision:** Add one qualitatively different, default-off runtime candidate:
+  a per-persistent-entity, per-world-axis weighted acceleration fit from the
+  existing RGB temporal-velocity measurement. Keep it outside `WorldBelief`
+  and checkpoints; bound its acceleration; require four supported updates;
+  reset on lifecycle identity change or any non-free regime; and dynamically
+  mask it so unsupported cells emit the exact learned fallback. Preserve the
+  disabled four-candidate policy fingerprint and version only the explicit
+  five-candidate intervention. Predeclare one fixed-32 CPU pair and reject on
+  weak improvement or any existing guardrail failure. Permit MPS only after a
+  CPU pass.
+- **Alternatives considered:** another fixed residual gain; an acceleration
+  threshold ladder; training a new adapter before proving useful causal input;
+  storing the fit in persistent belief; using simulator velocities; weakening
+  scenario/event/identity guardrails; or continuing after marginal gain.
+- **Consequences:** The experiment has a narrow causal route and a hard stop.
+  The normal runtime and historical policy remain unchanged by default. No
+  accuracy, latency, deployment, or promotion claim exists until the bounded
+  pair completes; failure terminates this hypothesis rather than spawning
+  nearby variants. Focused coverage passes `437/3`, and the final repository
+  gate passes `1308/20` with every static gate clean.
+
 ## ADR-176 — Stop causal residual and current-checkpoint objective iteration
 
 - **Date:** 2026-08-24

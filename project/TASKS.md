@@ -1,5 +1,26 @@
 # Tasks
 
+## Online local-acceleration candidate — specification 1.63
+
+- [x] Trace the causal RGB temporal-velocity measurement, association, regime,
+  reset, and forecast-only runtime-pool boundaries.
+- [x] Add a default-off uncertainty-weighted per-entity/axis acceleration
+  candidate with identity/non-free reset and exact learned fallback.
+- [x] Bind strict config, exact-resume semantics, evaluator policy versioning,
+  and normal runtime/evaluator construction.
+- [x] Pass the final affected CPU suite (`437 passed, 3 skipped`) and full
+  repository (`1308 passed, 20 skipped in 455.58s`), plus Ruff, 225-file
+  format, isolated compile, version, and diff gates.
+- [ ] Freeze, commit, and push the implementation source.
+- [ ] Run exactly one sequential source-frozen fixed-32 CPU learned-only versus
+  enabled pair. Require non-vacuous fifth-candidate use, at least `1e-5` metres
+  summed pooled position improvement, and every existing guardrail.
+- [ ] If and only if CPU passes, run one matched active-Aqua MPS confirmation.
+  Otherwise reject and stop without threshold, duration, interpolation, or
+  residual iteration.
+- [ ] Synchronize the final evidence decision, commit, and push it. Deployment
+  remains the protected step-zero model unless comprehensive promotion passes.
+
 ## Terminal causal-adaptation screen
 
 - [x] Audit the existing regime-local pool, forecast-only isolation, velocity

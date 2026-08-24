@@ -300,6 +300,293 @@ class ConstantVelocityDynamics:
         )
 
 
+class OnlineLocalAccelerationDynamics:
+    """Runtime-local constant-acceleration candidate fit from RGB velocity.
+
+    The candidate owns no persistent physical state.  It keeps only bounded
+    sufficient statistics keyed by the current persistent object ID and uses
+    causal temporal-velocity measurements supplied by the RGB observation
+    path.  Until enough same-identity free-motion evidence exists for one
+    entity-axis cell, :meth:`applicability_mask` keeps that cell on the learned
+    fallback.
+    """
+
+    def __init__(
+        self,
+        *,
+        minimum_support_count: int = 4,
+        maximum_acceleration: float = 20.0,
+        minimum_delta_time: float = 1.0e-3,
+    ) -> None:
+        if (
+            not isinstance(minimum_support_count, int)
+            or isinstance(minimum_support_count, bool)
+            or minimum_support_count <= 0
+        ):
+            raise ValueError("minimum_support_count must be a positive integer")
+        for name, value in (
+            ("maximum_acceleration", maximum_acceleration),
+            ("minimum_delta_time", minimum_delta_time),
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or not torch.isfinite(torch.as_tensor(value))
+                or value <= 0
+            ):
+                raise ValueError(f"{name} must be finite and positive")
+        self.minimum_support_count = int(minimum_support_count)
+        self.maximum_acceleration = float(maximum_acceleration)
+        self.minimum_delta_time = float(minimum_delta_time)
+        self.supported_hypothesis_regimes = (HypothesisRegime.FREE,)
+        self.object_ids: Tensor | None = None
+        self.acceleration: Tensor | None = None
+        self.acceleration_weight: Tensor | None = None
+        self.support_count: Tensor | None = None
+        self.last_velocity: Tensor | None = None
+        self.last_velocity_log_variance: Tensor | None = None
+        self.last_velocity_valid: Tensor | None = None
+        self.last_timestamp: Tensor | None = None
+
+    def reset_runtime_state(
+        self,
+        batch_size: int,
+        *,
+        max_objects: int,
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> None:
+        if batch_size <= 0 or max_objects <= 0:
+            raise ValueError("runtime-local candidate dimensions must be positive")
+        shape = (batch_size, max_objects, 3)
+        self.object_ids = torch.full(
+            (batch_size, max_objects),
+            -1,
+            device=device,
+            dtype=torch.int64,
+        )
+        self.acceleration = torch.zeros(shape, device=device, dtype=dtype)
+        self.acceleration_weight = torch.zeros(shape, device=device, dtype=dtype)
+        self.support_count = torch.zeros(shape, device=device, dtype=torch.int64)
+        self.last_velocity = torch.zeros(shape, device=device, dtype=dtype)
+        self.last_velocity_log_variance = torch.zeros(shape, device=device, dtype=dtype)
+        self.last_velocity_valid = torch.zeros(shape, device=device, dtype=torch.bool)
+        self.last_timestamp = torch.zeros(
+            (batch_size, max_objects),
+            device=device,
+            dtype=dtype,
+        )
+
+    def clear_runtime_state(self) -> None:
+        """Drop all episode-local sufficient statistics."""
+
+        self.object_ids = None
+        self.acceleration = None
+        self.acceleration_weight = None
+        self.support_count = None
+        self.last_velocity = None
+        self.last_velocity_log_variance = None
+        self.last_velocity_valid = None
+        self.last_timestamp = None
+
+    def _ensure_state(self, belief: WorldBelief) -> None:
+        expected = (belief.batch_size, belief.objects.max_objects)
+        if self.object_ids is None or self.object_ids.shape != expected:
+            self.reset_runtime_state(
+                belief.batch_size,
+                max_objects=belief.objects.max_objects,
+                device=belief.device,
+                dtype=belief.dtype,
+            )
+        assert self.object_ids is not None
+        assert self.acceleration is not None
+        assert self.acceleration_weight is not None
+        assert self.support_count is not None
+        assert self.last_velocity is not None
+        assert self.last_velocity_log_variance is not None
+        assert self.last_velocity_valid is not None
+        assert self.last_timestamp is not None
+        changed = self.object_ids != belief.objects.object_id
+        if bool(changed.any()):
+            axis_changed = changed.unsqueeze(-1)
+            self.acceleration = torch.where(
+                axis_changed, torch.zeros_like(self.acceleration), self.acceleration
+            )
+            self.acceleration_weight = torch.where(
+                axis_changed,
+                torch.zeros_like(self.acceleration_weight),
+                self.acceleration_weight,
+            )
+            self.support_count = torch.where(
+                axis_changed, torch.zeros_like(self.support_count), self.support_count
+            )
+            self.last_velocity = torch.where(
+                axis_changed, torch.zeros_like(self.last_velocity), self.last_velocity
+            )
+            self.last_velocity_log_variance = torch.where(
+                axis_changed,
+                torch.zeros_like(self.last_velocity_log_variance),
+                self.last_velocity_log_variance,
+            )
+            self.last_velocity_valid = torch.where(
+                axis_changed,
+                torch.zeros_like(self.last_velocity_valid),
+                self.last_velocity_valid,
+            )
+            self.last_timestamp = torch.where(
+                changed, torch.zeros_like(self.last_timestamp), self.last_timestamp
+            )
+            self.object_ids = belief.objects.object_id.detach().clone()
+
+    def assimilate_velocity_observation(
+        self,
+        belief: WorldBelief,
+        velocity: Tensor,
+        valid_axis_mask: Tensor,
+        log_variance: Tensor,
+        timestamp: Tensor,
+    ) -> None:
+        """Update bounded acceleration statistics from one associated RGB packet."""
+
+        self._ensure_state(belief)
+        expected = belief.objects.velocity.shape
+        if velocity.shape != expected or log_variance.shape != expected:
+            raise ValueError("local acceleration evidence must have shape [B,N,3]")
+        if valid_axis_mask.shape != expected or valid_axis_mask.dtype is not torch.bool:
+            raise ValueError("local acceleration validity must be boolean [B,N,3]")
+        if timestamp.shape != belief.timestamp.shape:
+            raise ValueError("local acceleration timestamp must have shape [B]")
+        if (
+            not torch.isfinite(velocity).all()
+            or not torch.isfinite(log_variance).all()
+            or not torch.isfinite(timestamp).all()
+        ):
+            raise ValueError("local acceleration evidence must be finite")
+        assert self.acceleration is not None
+        assert self.acceleration_weight is not None
+        assert self.support_count is not None
+        assert self.last_velocity is not None
+        assert self.last_velocity_log_variance is not None
+        assert self.last_velocity_valid is not None
+        assert self.last_timestamp is not None
+        mode = belief.objects.motion_mode_logits.argmax(dim=-1)
+        free = (mode == int(MotionMode.FREE)) & belief.objects.active
+        reset_entity = ~free
+        reset_axis = reset_entity.unsqueeze(-1)
+        self.acceleration = torch.where(
+            reset_axis,
+            torch.zeros_like(self.acceleration),
+            self.acceleration,
+        )
+        self.acceleration_weight = torch.where(
+            reset_axis,
+            torch.zeros_like(self.acceleration_weight),
+            self.acceleration_weight,
+        )
+        self.support_count = torch.where(
+            reset_axis,
+            torch.zeros_like(self.support_count),
+            self.support_count,
+        )
+        self.last_velocity_valid = torch.where(
+            reset_axis,
+            torch.zeros_like(self.last_velocity_valid),
+            self.last_velocity_valid,
+        )
+        self.last_timestamp = torch.where(
+            reset_entity,
+            torch.zeros_like(self.last_timestamp),
+            self.last_timestamp,
+        )
+        valid = valid_axis_mask & free.unsqueeze(-1)
+        delta_time = timestamp[:, None] - self.last_timestamp
+        eligible = (
+            valid & self.last_velocity_valid & (delta_time.unsqueeze(-1) >= self.minimum_delta_time)
+        )
+        safe_dt = delta_time.clamp_min(self.minimum_delta_time).unsqueeze(-1)
+        raw_acceleration = ((velocity - self.last_velocity) / safe_dt).clamp(
+            min=-self.maximum_acceleration,
+            max=self.maximum_acceleration,
+        )
+        current_variance = log_variance.clamp(-20.0, 10.0).exp()
+        previous_variance = self.last_velocity_log_variance.clamp(-20.0, 10.0).exp()
+        observation_weight = (
+            safe_dt.square() / (current_variance + previous_variance).clamp_min(1.0e-8)
+        ).clamp(max=1.0e3)
+        proposed_weight = self.acceleration_weight + observation_weight
+        proposed_acceleration = (
+            self.acceleration * self.acceleration_weight + raw_acceleration * observation_weight
+        ) / proposed_weight.clamp_min(1.0e-8)
+        self.acceleration = torch.where(eligible, proposed_acceleration, self.acceleration).detach()
+        self.acceleration_weight = torch.where(
+            eligible, proposed_weight, self.acceleration_weight
+        ).detach()
+        self.support_count = torch.where(
+            eligible, self.support_count + 1, self.support_count
+        ).detach()
+        self.last_velocity = torch.where(valid, velocity, self.last_velocity).detach()
+        self.last_velocity_log_variance = torch.where(
+            valid, log_variance, self.last_velocity_log_variance
+        ).detach()
+        self.last_velocity_valid = valid.detach()
+        observed_entity = valid.any(dim=-1)
+        self.last_timestamp = torch.where(
+            observed_entity,
+            timestamp[:, None].expand_as(self.last_timestamp),
+            self.last_timestamp,
+        ).detach()
+
+    def applicability_mask(self, belief: WorldBelief) -> Tensor:
+        """Return entity-axis cells with enough current-identity observations."""
+
+        self._ensure_state(belief)
+        assert self.support_count is not None
+        assert self.object_ids is not None
+        return (
+            belief.objects.active.unsqueeze(-1)
+            & (self.object_ids == belief.objects.object_id).unsqueeze(-1)
+            & (self.support_count >= self.minimum_support_count)
+        )
+
+    def predict_step(self, belief: WorldBelief, delta_time: Tensor) -> RolloutStep:
+        if delta_time.shape != belief.timestamp.shape:
+            raise ValueError("delta_time must have shape [B]")
+        self._ensure_state(belief)
+        assert self.acceleration is not None
+        supported = self.applicability_mask(belief)
+        objects = belief.objects.clone()
+        active = objects.active.unsqueeze(-1)
+        dt = delta_time[:, None, None]
+        applied_acceleration = torch.where(
+            supported, self.acceleration, torch.zeros_like(self.acceleration)
+        )
+        objects.position = objects.position + objects.velocity * dt * active
+        objects.position = objects.position + 0.5 * applied_acceleration * dt.square() * active
+        objects.velocity = objects.velocity + applied_acceleration * dt * active
+        objects.fast_log_variance = (
+            objects.fast_log_variance + delta_time[:, None, None] * 1.0e-3
+        ).clamp(-20.0, 10.0)
+        endpoint = belief.replace(
+            timestamp=belief.timestamp + delta_time,
+            objects=objects,
+        )
+        return RolloutStep(
+            belief=endpoint,
+            event_logits=belief.timestamp.new_full(
+                (
+                    belief.batch_size,
+                    objects.max_objects,
+                    objects.motion_mode_logits.shape[-1],
+                ),
+                -4.0,
+            ),
+            auxiliary={
+                "online_local_acceleration": applied_acceleration,
+                "online_local_acceleration_supported": supported,
+            },
+        )
+
+
 class BallisticContactDynamics:
     """Analytic gravity/drag hypothesis with explicit contact-event logits.
 
@@ -1663,6 +1950,7 @@ class HypothesisDynamicsPool:
         minimum_observability: float,
         minimum_confidence_margin: float,
         candidate_regime_mask: Tensor | None = None,
+        candidate_entity_axis_support: Tensor | None = None,
     ) -> HypothesisApplicability:
         """Resolve local choices, falling back to candidate zero when unsupported."""
 
@@ -1728,6 +2016,17 @@ class HypothesisDynamicsPool:
             if not torch.all(applicable[..., 0]):
                 raise ValueError("learned fallback candidate zero must support every regime")
             log_weights = log_weights.masked_fill(~applicable, torch.finfo(log_weights.dtype).min)
+        if candidate_entity_axis_support is not None:
+            if candidate_entity_axis_support.shape != log_weights.shape:
+                raise ValueError("candidate entity-axis support must have shape [B,N,3,H]")
+            if candidate_entity_axis_support.dtype is not torch.bool:
+                raise TypeError("candidate entity-axis support must be boolean")
+            if not torch.all(candidate_entity_axis_support[..., 0]):
+                raise ValueError("learned fallback candidate zero must support every entity-axis")
+            log_weights = log_weights.masked_fill(
+                ~candidate_entity_axis_support,
+                torch.finfo(log_weights.dtype).min,
+            )
         posterior = torch.softmax(log_weights, dim=-1)
         selected = posterior.argmax(dim=-1).to(torch.int64)
         if candidate_count == 1:
@@ -2016,6 +2315,29 @@ class RuntimeHypothesisController:
         return mask
 
     @staticmethod
+    def _candidate_entity_axis_support(
+        pool: HypothesisDynamicsPool,
+        belief: WorldBelief,
+    ) -> Tensor:
+        values: list[Tensor] = []
+        expected = (*belief.objects.active.shape, 3)
+        for candidate_index, model in enumerate(pool.dynamics_models):
+            accessor = getattr(model, "applicability_mask", None)
+            if accessor is None:
+                support = torch.ones(expected, device=belief.device, dtype=torch.bool)
+            else:
+                support = accessor(belief)
+                if not isinstance(support, Tensor) or support.shape != expected:
+                    raise ValueError("candidate applicability_mask must return boolean [B,N,3]")
+                if support.dtype is not torch.bool:
+                    raise TypeError("candidate applicability_mask must return torch.bool")
+                support = support.to(device=belief.device)
+            if candidate_index == 0 and not bool(support.all()):
+                raise ValueError("learned fallback candidate zero must support every entity-axis")
+            values.append(support)
+        return torch.stack(values, dim=-1)
+
+    @staticmethod
     def _trajectory_regime(
         source: WorldBelief,
         trajectory: BeliefTrajectory,
@@ -2101,6 +2423,13 @@ class RuntimeHypothesisController:
     def reset(self, batch_size: int, *, device: torch.device, dtype: torch.dtype) -> None:
         for pool in self.pools:
             pool.reset(batch_size, device=device, dtype=dtype)
+        seen_models: set[int] = set()
+        for model in self.pool.dynamics_models:
+            clear_runtime_state = getattr(model, "clear_runtime_state", None)
+            if clear_runtime_state is None or id(model) in seen_models:
+                continue
+            seen_models.add(id(model))
+            clear_runtime_state()
         self.pending.clear()
         self.runtime_dynamics_signature = None
         self.runtime_dynamics_training = None
@@ -2456,6 +2785,12 @@ class RuntimeHypothesisController:
         timestamp = getattr(measured, "timestamp", None)
         if not isinstance(timestamp, Tensor) or timestamp.shape != belief.timestamp.shape:
             return None
+        current_targets = self._associated_rgb_targets(
+            belief,
+            measured,
+            association,
+            belief.objects.object_id.detach().clone(),
+        )
         retained: list[PendingHypothesisEvidence] = []
         latest: HypothesisSelection | None = None
         for pending in self.pending:
@@ -2557,6 +2892,37 @@ class RuntimeHypothesisController:
                 ),
             )
         self.pending = retained
+        if current_targets is not None:
+            (
+                _,
+                _,
+                _,
+                target_velocities,
+                target_velocity_axis_mask,
+                target_velocity_log_variance,
+            ) = current_targets
+            if (
+                target_velocities is not None
+                and target_velocity_axis_mask is not None
+                and target_velocity_log_variance is not None
+            ):
+                seen_models: set[int] = set()
+                for model in self.pool.dynamics_models:
+                    assimilate_velocity = getattr(
+                        model,
+                        "assimilate_velocity_observation",
+                        None,
+                    )
+                    if assimilate_velocity is None or id(model) in seen_models:
+                        continue
+                    seen_models.add(id(model))
+                    assimilate_velocity(
+                        belief,
+                        target_velocities,
+                        target_velocity_axis_mask,
+                        target_velocity_log_variance,
+                        timestamp,
+                    )
         return latest
 
     def _learned_fallback_trajectory(
@@ -2724,6 +3090,9 @@ class RuntimeHypothesisController:
                     minimum_observability=self.minimum_observability,
                     minimum_confidence_margin=self.minimum_confidence_margin,
                     candidate_regime_mask=self.candidate_regime_mask.to(belief.device),
+                    candidate_entity_axis_support=(
+                        self._candidate_entity_axis_support(pool, belief)
+                    ),
                 )
                 active = learned_step.belief.objects.active
                 step_choice = torch.where(
@@ -3043,6 +3412,9 @@ class RuntimeHypothesisController:
                         minimum_observability=self.minimum_observability,
                         minimum_confidence_margin=self.minimum_confidence_margin,
                         candidate_regime_mask=self.candidate_regime_mask.to(belief.device),
+                        candidate_entity_axis_support=(
+                            self._candidate_entity_axis_support(pool, belief)
+                        ),
                     )
                     query_supported = supported_queries[:, query_index].view(-1, 1, 1)
                     for axis in self.axis_independent_axes:

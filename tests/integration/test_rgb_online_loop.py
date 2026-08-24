@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 import torch
 
+from world_model.dynamics import OnlineLocalAccelerationDynamics
 from world_model.observations import ObservationPacket
 from world_model.observations.rgb import RGBTemporalPositionHistory
 from world_model.runtime import OnlineWorldModel
@@ -82,6 +83,35 @@ def _rgb_packet(timestamp: float, shift: int = 0) -> ObservationPacket:
         },
         frame_id="camera:camera",
     )
+
+
+def test_runtime_constructs_online_acceleration_only_when_explicitly_enabled() -> None:
+    base = _small_rgb_config()
+    config = replace(
+        base,
+        model=replace(
+            base.model,
+            rgb=replace(base.model.rgb, temporal_velocity_enabled=True),
+        ),
+        runtime=replace(
+            base.runtime,
+            hypothesis_pool_enabled=True,
+            hypothesis_local_applicability_enabled=True,
+            hypothesis_online_acceleration_enabled=True,
+            hypothesis_online_acceleration_minimum_support_count=3,
+            hypothesis_online_acceleration_maximum_mps2=12.0,
+        ),
+    )
+    config.validate()
+
+    model = OnlineWorldModel.from_config(config, device="cpu")
+
+    assert model.hypothesis_controller is not None
+    candidates = model.hypothesis_controller.pool.dynamics_models
+    assert len(candidates) == 5
+    assert isinstance(candidates[-1], OnlineLocalAccelerationDynamics)
+    assert candidates[-1].minimum_support_count == 3
+    assert candidates[-1].maximum_acceleration == pytest.approx(12.0)
 
 
 def test_rgb_only_runtime_initialises_then_uses_cached_fast_path() -> None:

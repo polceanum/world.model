@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.62
+**Version:** 1.63
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate and bounded diminishing-returns gate amendment 24 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9003,6 +9003,56 @@ retune its weight, extend its duration, or compose its checkpoint. The final
 repository passes `1295` tests with `20` expected unavailable-backend skips in
 `447.03s`; Ruff, the `225`-file format check, isolated compile, version, and
 diff gates pass.
+
+---
+
+## 257. Runtime-local observation-fitted transition candidate
+
+Specification 1.63 permits one bounded runtime hypothesis that is genuinely
+different from the rejected fixed-coefficient and output-residual ladders. An
+optional online constant-acceleration candidate fits a weighted running
+acceleration independently for each persistent entity and world axis from the
+existing causal RGB temporal-velocity measurement, its validity mask, and its
+reported uncertainty. It owns no trainable parameter, persistent
+`WorldBelief` field, checkpoint tensor, simulator input, or oracle state.
+
+The candidate is disabled by default. Its three strict runtime semantics are
+`hypothesis_online_acceleration_enabled=false`,
+`hypothesis_online_acceleration_minimum_support_count=4`, and
+`hypothesis_online_acceleration_maximum_mps2=20.0`. Enabling it requires RGB
+temporal velocity and entity/axis/regime-local applicability. These fields are
+exact-resume bound when the runtime pool is enabled and normalize only under
+the complete disabled-policy legacy boundary. The evaluator policy version is
+unchanged for the disabled four-candidate pool and advances only for the
+enabled five-candidate intervention.
+
+Evidence is associated by the normal persistent-ID RGB measurement mapping.
+The fit is updated only after due forecasts have been scored, so a candidate
+may not receive credit for a trajectory issued before it had sufficient
+support. Identity reuse, inactivity, occlusion, contact, and every non-free
+motion mode erase the local fit. Each acceleration observation is uncertainty
+weighted and clipped to the configured physical bound. Before the configured
+support count is reached, and for every unsupported entity/axis/regime, the
+emitted forecast remains the exact learned candidate. Local fit state is
+cleared at episode reset and is never serialized.
+
+No threshold or duration ladder is authorized. Qualification consists of the
+implementation/fallback gates followed by one source-frozen, sequential
+learned-only versus enabled fixed-32 CPU comparison on the protected checkpoint
+and standard RGB-only manifest. The candidate must be selected non-vacuously,
+improve summed pooled position RMSE by at least `1e-5` metres, and pass every
+existing pooled and scenario/horizon position, velocity, uncertainty, event,
+identity, coverage, and support guardrail. Failure stops this hypothesis before
+MPS. CPU success authorizes exactly one matched active-Aqua MPS confirmation;
+it does not itself promote a default. This stopping boundary prevents marginal
+accuracy from restarting the exhausted coefficient, interpolation, or residual
+families.
+
+The frozen implementation gate passes `437` affected tests with `3` expected
+backend skips and `1308` repository tests with `20` expected backend skips in
+`455.58s`. Ruff, the `225`-file format check, isolated compile, specification
+version, and diff checks pass. This is implementation evidence only; the
+bounded accuracy pair remains pending.
 
 ---
 
