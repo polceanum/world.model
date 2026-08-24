@@ -14,9 +14,11 @@
   structured-centre correction remained mixed on fixed eight.
 - [x] Pass the final repository gate (`1383 passed`, `20 skipped`) and all
   Ruff/format/version/diff checks.
-- [ ] Keep the mechanism default-off and out of `main`. If revisited, permit only
-  one predeclared training-only distillation or learned-fusion qualification,
-  including fixed-manifest accuracy and active-device latency.
+- [x] Run the sole predeclared learned-fusion qualification: 16 fast-ROI-only
+  balanced updates narrowly clear pooled materiality but fail 83 broad
+  guardrails and worsen current/long-velocity accuracy.
+- [x] Close the photometric line. Keep the mechanism default-off and out of
+  `main`; do not run fixed-32, longer training, or adjacent fit/threshold sweeps.
 
 ## Shared chronological hypothesis horizons — specification 1.74
 

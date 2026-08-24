@@ -9946,6 +9946,18 @@ are clean. The fixed-32 report is
 `/private/tmp/20260824-spec175-photometric-fast-depth-fixed32.json`
 (`20896f63...`).
 
+The single permitted learned-fusion successor is also terminally rejected.
+Sixteen balanced CPU updates trained only the fast-ROI observer with the
+photometric measurement passing through the ordinary differentiable filter at
+constant `3e-5`. Fifteen updates required the local gradient cap. The fixed-eight
+score improves `0.211261211 -> 0.210224183`, narrowly clearing `0.001`, but
+current position worsens `0.121380 -> 0.123501 m`, current velocity worsens
+`0.767732 -> 0.776002 m/s`, 0.5--1.0-second velocity regresses, and 83 broad
+guardrails fail. This demonstrates that the exact-forward straight-through
+carrier is a biased, inefficient teacher rather than a trainable deployment
+solution. No fixed-32 escalation, longer run, threshold sweep, or further
+photometric successor is authorized.
+
 ---
 
 # Closing directive

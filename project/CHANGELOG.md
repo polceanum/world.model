@@ -17,6 +17,10 @@
   closed in favor of at most one learned-fusion/distillation qualification.
 - Passed the final repository gate (`1383 passed`, `20` expected skips in
   `536.52 s`) plus Ruff, format, version, and diff checks.
+- Rejected the sole 16-update learned-fusion successor: it narrowly improves
+  pooled fixed-eight score but worsens current/long-velocity accuracy, fails 83
+  broad guardrails, and clips 15/16 updates. Closed the photometric line without
+  fixed-32 escalation or further tuning.
 
 ### 2026-08-24 shared chronological hypothesis horizons (specification 1.74)
 

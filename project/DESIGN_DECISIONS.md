@@ -5842,3 +5842,9 @@
   `main`; otherwise this line terminates. The final repository gate is
   `1383 passed`, `20 skipped` in `536.52 s`; the fixed-32 report is
   `20896f63...`.
+  The one authorized fusion successor then trained only fast-ROI perception for
+  16 balanced updates. It improves the fixed-eight pooled score by `0.001037`
+  but fails 83 broad guardrails, worsens current position/velocity and long
+  velocity, and clips 15/16 updates. The straight-through carrier is therefore
+  rejected as a biased training surrogate and the entire photometric line is
+  closed without fixed-32 escalation.

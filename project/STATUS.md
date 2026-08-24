@@ -25,6 +25,14 @@ The final repository gate passes `1383` tests with `20` expected skips in
 `536.52 s`; Ruff, format, version, and diff checks are clean. The fixed-32
 report SHA-256 is `20896f639ac965add25997d34f5753ffb965aee3d9da9db69aa00d93f8d73e8b`.
 
+The one allowed learned-fusion follow-up is complete and rejected. A
+16-update, balanced, `fast_roi`-only CPU run at constant `3e-5` improves the
+fixed-eight selector by `0.001037`, but worsens current position and velocity,
+regresses long velocity, and fails 83 broad guardrails; 15/16 updates required
+gradient clipping. It is preserved at
+`/private/tmp/20260824-194729-spec175-photometric-fusion16`. The result closes
+the photometric line rather than authorizing fixed-32 or longer training.
+
 ## Shared chronological hypothesis horizons — specification 1.74 execution-qualified
 
 The runtime hypothesis scheduler previously restarted every candidate from the
