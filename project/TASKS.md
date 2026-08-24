@@ -4,10 +4,13 @@
 
 - [x] Add strict `all`/`global_detector` RGB pretraining ownership with
   legacy-`all` migration and exact-resume binding.
+- [x] Reject a nonempty detector-only RGB pretraining phase with zero aggregate
+  measurement weight during config validation, before validation artifacts or
+  an update.
 - [x] Prove a real generated-RGB measurement loss, backward, and AdamW step
   changes and owns state only inside the global detector.
 - [x] Pass focused config, schedule, RGB-supervision, and checkpoint coverage
-  (`530 passed, 1 skipped`).
+  (`531 passed, 1 skipped`).
 - [x] Pass the final repository (`1331 passed, 20 skipped in 462.32s`) plus
   Ruff, 225-file format, version, and diff gates.
 - [ ] From a clean pushed source, run exactly one 128-update balanced

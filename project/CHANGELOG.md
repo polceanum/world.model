@@ -8,9 +8,12 @@
   `global_detector` trains only the existing global proposal detector while
   freezing the shared backbone, fast ROI path, state/filter owners, and
   dynamics; historical `all` behavior is unchanged.
+- Reject nonempty detector-only RGB pretraining with a zero aggregate
+  measurement objective during config validation rather than after an
+  expensive initialization gate.
 - Added real backward/optimizer ownership coverage plus strict config and
   legacy checkpoint compatibility tests. Focused affected suites pass
-  `530 passed, 1 skipped`.
+  `531 passed, 1 skipped`.
 - Passed the final repository (`1331 passed, 20 skipped in 462.32s`) plus Ruff,
   the 225-file format check, version, and diff gates.
 - Declared one bounded 128-update, balanced three-object accuracy rung with a

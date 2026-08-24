@@ -1425,6 +1425,15 @@ class OrpheusConfig:
             raise ValueError(
                 "training.rgb_pretrain_trainable_scope must be 'all' or 'global_detector'"
             )
+        if (
+            self.training.rgb_pretrain_steps > 0
+            and self.training.rgb_pretrain_trainable_scope == "global_detector"
+            and float(self.training.loss_weights.get("measurement", 0.0)) <= 0.0
+        ):
+            raise ValueError(
+                "training.loss_weights.measurement must be positive when detector-only "
+                "rgb_pretrain_steps are enabled"
+            )
         if self.training.train_episodes <= 0 or self.training.validation_episodes <= 0:
             raise ValueError("training train_episodes and validation_episodes must be positive")
         if len(set(simulator.scenario_mixture)) != len(simulator.scenario_mixture):

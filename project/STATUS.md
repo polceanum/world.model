@@ -9,11 +9,13 @@ bounded training test of the existing global detector. Measurement pretraining
 now has a strict, exact-resume-bound `global_detector` scope that freezes the
 shared backbone, fast ROI path, filter, identifier, dynamics, and every other
 parameter owner. Historical and missing-checkpoint semantics remain `all`.
+Nonempty detector-only RGB pretraining now also fails during config validation
+unless the aggregate measurement objective has positive weight.
 
 A real generated RGB batch, complete measurement loss, backward, and AdamW
 step proves that nonzero gradients, changed tensors, and optimizer state are
 confined exactly to global-detector owners. Focused config, schedule,
-supervision, and checkpoint coverage passes `530` tests with one expected
+supervision, and checkpoint coverage passes `531` tests with one expected
 unavailable-MPS skip. The final repository passes `1331/20` in `462.32s` with
 Ruff, the 225-file format check, version, and diff gates clean. Runtime
 predictions and the protected deployment are unchanged.

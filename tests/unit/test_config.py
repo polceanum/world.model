@@ -558,6 +558,20 @@ def test_rgb_pretrain_trainable_scope_is_strict_and_legacy_all() -> None:
         )
 
 
+def test_rgb_pretrain_requires_a_positive_aggregate_measurement_weight() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"loss_weights\.measurement must be positive.*rgb_pretrain_steps",
+    ):
+        load_config(
+            CONFIG_DIR / "axis_gated_updater_repair_cpu.yaml",
+            overrides=[
+                "training.rgb_pretrain_steps=1",
+                "training.rgb_pretrain_trainable_scope=global_detector",
+            ],
+        )
+
+
 def test_closed_loop_trainable_scope_is_explicit() -> None:
     with pytest.raises(ValueError, match="closed_loop_trainable_scope"):
         load_config(

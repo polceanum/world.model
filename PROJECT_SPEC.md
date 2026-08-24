@@ -9199,7 +9199,10 @@ or deployed checkpoint.
 
 The field is strict: only `all` and `global_detector` are valid. Historical
 checkpoints missing it migrate only to `all`; every present value is bound by
-exact resume. A real RGB measurement-loss backward and AdamW step must show a
+exact resume. A positive aggregate measurement loss weight is mandatory when
+the detector-only measurement-pretraining phase is nonempty, so a zero-gradient
+protocol fails during configuration rather than after validation. A real RGB
+measurement-loss backward and AdamW step must show a
 finite, nonzero gradient owner set wholly inside
 `observation_modules.rgb.global_detector`, with the changed tensors and Adam
 state exactly equal to that owner set. Synthetic gradient assignment alone is
@@ -9222,7 +9225,7 @@ all existing guardrails pass, one active-Aqua confirmation. It is not itself
 promotion evidence.
 
 The implementation gate passes the focused config, schedule, RGB-supervision,
-and checkpoint suites (`530 passed, 1` expected unavailable-MPS skip). The
+and checkpoint suites (`531 passed, 1` expected unavailable-MPS skip). The
 real backward/optimizer regression passes independently. The final repository
 passes `1331` tests with `20` expected unavailable-backend skips in `462.32s`;
 Ruff, the `225`-file format check, version, and diff gates also pass. The

@@ -16,13 +16,16 @@
   rung and require at least ten percentage points of fixed-eight top-target-
   count recall improvement within `0.1` normalized image coordinates, without
   material confidence-threshold precision loss, before any fixed-32 or MPS work.
+- **Protocol guard:** A nonempty detector-only measurement-pretraining phase
+  requires a positive aggregate measurement loss weight; zero-weight
+  configurations fail before validation or training artifacts are accepted.
 - **Alternatives considered:** tune chromatic thresholds; admit noisy raw
   queries directly; train the shared backbone and risk established ROI/runtime
   behavior; alter lifecycle confidence; add a new detector architecture; or
   iterate durations and loss weights on the same manifest.
 - **Consequences:** Real backward and AdamW coverage proves exact detector-only
   gradient, tensor-change, and optimizer-state ownership. Focused affected
-  suites pass `530/1`; the final repository passes `1331/20` in `462.32s` with
+  suites pass `531/1`; the final repository passes `1331/20` in `462.32s` with
   every static gate clean. Runtime behavior and deployment are unchanged. The
   bounded accuracy rung remains a hard stopping gate: a miss closes the family,
   while a material pass authorizes only the standard fixed-32 comparison and
