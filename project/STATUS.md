@@ -1,5 +1,35 @@
 # Project status
 
+## Temporal RGB motion-support diagnostic — terminally rejected
+
+The next bounded accuracy audit moved away from the closed collision-training
+ladder and tested whether sparse causal RGB velocity evidence explained the
+remaining world-y velocity error. It used the clean specification-1.65 source,
+the exact step-zero model-state hash `88f2df4d...`, CPU float32, RGB-only
+runtime, and the fixed seeds `100000`--`100007`. Both candidate initializers
+changed only one checkpoint-bound configuration value and preserved every
+model tensor exactly.
+
+Increasing temporal history from five to seven samples was vacuous: valid
+objects and x/y/z coordinates remained `57`, and physical changes were only
+about `1e-5`--`1e-4`. Reducing the minimum raw samples from three to two did
+increase support `57 -> 127` (`3.603% -> 8.028%`) and improved current position
+RMSE `0.120845 -> 0.115316 m` plus 0.10-second velocity RMSE
+`0.619752 -> 0.590036 m/s`. It nevertheless failed the predeclared target and
+broad gate: current velocity worsened `0.758276 -> 0.767957 m/s`, including y
+`1.213990 -> 1.233066` and z `0.212671 -> 0.220847`; 0.25/0.50-second velocity
+also worsened; 0.10-second collision F1 fell `0.372093 -> 0.340426`; and
+current position Gaussian NLL/calibration worsened slightly.
+
+The candidate is therefore rejected before fixed-32 or MPS. More history does
+not add evidence, and admitting two-sample slopes trades short-position gains
+for worse current/mid-horizon motion and events. Do not tune history length,
+minimum samples, variance scale/floor/ceiling, or interpolate these settings.
+Reopen only with a distinct estimator or event-segmentation mechanism and
+independent evidence. The terminal report is
+`/private/tmp/20260824-spec166-temporal-rgb-motion-terminal.json` (SHA-256
+`bab18257...`). Deployment remains the protected step-zero model.
+
 ## Specification 1.65 event-frame-targeted training data — terminal training rejection
 
 Existing collision-owner gradients are unsupported at the longest horizons,

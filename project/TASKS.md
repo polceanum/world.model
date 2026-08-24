@@ -1,5 +1,22 @@
 # Tasks
 
+## Temporal RGB motion-support diagnostic — no specification change
+
+- [x] Leave the terminal collision-objective ladder closed and localize the
+  remaining current world-y velocity error in the causal RGB observer.
+- [x] Run a weights-identical fixed-eight history-size `5 -> 7` ablation.
+  Reject it as vacuous: every-axis temporal support remains exactly `57`.
+- [x] Run one final weights-identical minimum-sample `3 -> 2` ablation.
+  Support rises `57 -> 127` and position improves, but current y/z and pooled
+  velocity, 0.25/0.50-second velocity, 0.10-second collision F1, and
+  uncertainty diagnostics regress.
+- [x] Apply the declared broad gate and stop before fixed-32/MPS. Do not tune
+  history length, minimum samples, variance parameters, or interpolate this
+  observer. Require a distinct estimator/event-segmentation mechanism before
+  reopening.
+- [x] Record, commit, and push the terminal evidence boundary. Deployment
+  remains step zero.
+
 ## Event-frame-targeted training data — specification 1.65
 
 - [x] Add strict default-null ensured-pair event-frame and vertical-speed

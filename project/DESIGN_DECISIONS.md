@@ -1,5 +1,30 @@
 # Design decisions
 
+## ADR-181 — Reject broader admission of noisy temporal RGB slopes
+
+- **Date:** 2026-08-24
+- **Status:** diagnostic rejected; observation-support ladder terminal
+- **Context:** Current RGB evaluation has equal x/y/z temporal support but
+  substantially worse world-y velocity. The accepted temporal updates improve
+  y MAE slightly, so sparse support was a plausible separable cause after the
+  collision-training ladder closed.
+- **Decision:** Permit one weights-identical history-capacity ablation and, if
+  vacuous, one minimum-support ablation on the fixed eight-scenario cycle.
+  Require both increased support and targeted y/current-horizon improvement
+  without broad position, velocity, event, identity, lifecycle, or uncertainty
+  regression. Stop before fixed-32/MPS on failure.
+- **Alternatives considered:** tune temporal variance, history length, and
+  sample count as a grid; lower the support floor without uncertainty checks;
+  reopen collision losses; or promote on pooled position alone.
+- **Consequences:** History `5 -> 7` leaves support at exactly `57` and is
+  vacuous. Minimum samples `3 -> 2` raises support to `127` and improves
+  position, but current pooled/y/z velocity, mid-horizon velocity, 0.10-second
+  collision F1, and NLL/calibration regress. The candidate is rejected at
+  fixed eight. No production/config/checkpoint/default change is made and no
+  fixed-32/MPS rung follows. Nearby history/sample/variance tuning is closed;
+  only a distinct estimator or event-segmentation hypothesis may reopen the
+  problem. Terminal evidence is `bab18257...`; deployment remains step zero.
+
 ## ADR-180 — Add late-event data only behind an all-horizon gradient gate
 
 - **Date:** 2026-08-24

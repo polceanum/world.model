@@ -2,6 +2,22 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 terminal temporal RGB motion-support diagnostic
+
+- Tested one weights-identical five-to-seven-sample history ablation on the
+  fixed eight-scenario seed cycle. It added no temporal-velocity support and
+  changed physical metrics only negligibly, so it was rejected as vacuous.
+- Tested one final three-to-two minimum-sample ablation. It increased causal
+  x/y/z support from `57` to `127` and improved current position and
+  0.10-second velocity, but worsened current pooled/y/z velocity,
+  0.25/0.50-second velocity, 0.10-second collision F1, and current NLL/
+  calibration.
+- Rejected the branch before fixed-32 or MPS and prohibited a nearby
+  history/sample/variance ladder. The result indicates an estimator-quality
+  or event-segmentation limitation, not insufficient history capacity.
+  Runtime defaults, model weights, checkpoints, and deployment are unchanged;
+  terminal report SHA-256 is `bab18257...`.
+
 ### 2026-08-24 specification 1.65 event-frame-targeted training data
 
 - Added default-null ensured-pair event-frame and upward-speed ranges. Enabled
