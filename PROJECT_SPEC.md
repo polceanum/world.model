@@ -9168,6 +9168,21 @@ expected unavailable-backend skips in `465.25s`; Ruff, the `225`-file format
 check, isolated compile, version, and diff gates pass. These are mechanism
 gates, not accuracy evidence; the protected deployment remains unchanged.
 
+The required training gate is terminally negative. One final balanced
+feasibility profile used exactly two objects, surface gap `[1.8,3.4] m`,
+vertical launch `[3.8,4.2] m/s`, target frames 20--22, and at most 256 real
+solver attempts. Its eight ordered scenario seeds produced ensured-pair
+impacts at frames `21/22/22/20/20/21/22/20`, proving that the generator can
+place late physical events without floor confounding (`308d3cbf...`). The
+subsequent immutable five-horizon gradient probe nevertheless failed closed at
+the 1.00-second horizon because no supported
+`event_collision_node@1.000s` tensor existed. The terminal report is
+`/private/tmp/20260824-spec165-event-rich-horizon-gradient-terminal.json`
+(SHA-256 `c4195944...`). Under the predeclared rule this rejects training before
+any optimizer or MPS rung. Do not tune data ranges, sampling, event weights,
+ownership, or duration on this evidence; specification 1.65 remains useful
+default-off data capacity only.
+
 ---
 
 # Closing directive

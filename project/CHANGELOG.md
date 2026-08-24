@@ -19,9 +19,14 @@
 - Exposed already-built differentiable per-horizon node-event tensors through
   the audit support map, without changing loss construction or runtime output;
   schedule/objective coverage passes `195 passed`.
-- This is mechanism evidence only. A balanced event-rich all-horizon gradient
-  probe remains mandatory before one bounded training rung; no accuracy,
-  promotion, latency, or deployment claim is made.
+- Completed the terminal balanced event-rich gate. A two-object feasibility
+  profile placed all eight ensured-pair impacts at frames 20--22
+  (`308d3cbf...`), but the subsequent five-horizon gradient probe found no
+  supported `event_collision_node@1.000s` tensor. The predeclared every-horizon
+  requirement therefore fails (`c4195944...`).
+- Rejected the conditional training rung before any optimizer, validation, or
+  MPS execution. Retain the default-off data mechanism, do not tune nearby
+  ranges/sampling/weights/ownership/duration, and keep deployment at step zero.
 
 ### 2026-08-24 collision-horizon diagnostic closure
 

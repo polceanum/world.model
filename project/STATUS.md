@@ -1,6 +1,6 @@
 # Project status
 
-## Specification 1.65 event-frame-targeted training data — implementation gate
+## Specification 1.65 event-frame-targeted training data — terminal training rejection
 
 Existing collision-owner gradients are unsupported at the longest horizons,
 so specification 1.65 adds genuinely new data capacity rather than another
@@ -21,15 +21,30 @@ to null, while either enabled semantic is exact-resume incompatible.
 Focused config/simulator/checkpoint coverage passes `379 passed, 1 skipped`.
 The final repository passes `1325 passed, 20 skipped in 465.25s`; Ruff, the
 225-file format check, isolated compile, version, and diff gates pass. This is
-a data-mechanism gate only. Training remains unauthorized until one balanced
-event-rich gradient probe shows material, non-opposed collision-owner gradients
-at every configured horizon. Deployment remains step zero.
+a data-mechanism gate only; deployment remains step zero.
 
 The existing rollout code computed per-horizon node-event tensors but exposed
 only their detached scalar logs. `TrainingBatchResult.support_terms` now
 retains those already-built node tensors for gradient audit only; no objective,
 weight, prediction, or optimizer route changes. Full training-schedule and
 objective coverage passes `195 passed` after the instrumentation.
+
+The final bounded decision is negative. A feasibility run with exactly two
+objects, gap `[1.8,3.4] m`, upward speed `[3.8,4.2] m/s`, and requested event
+frames 20--22 produced pair impacts at frames `21/22/22/20/20/21/22/20` for
+the exact first balanced scenario batch. Its report is
+`/private/tmp/20260824-spec165-event-rich-feasibility.json` (SHA-256
+`308d3cbf...`). The subsequent immutable horizon-gradient run reached the
+1.00-second check but found no supported
+`event_collision_node@1.000s` loss. Because every configured horizon was
+required to be supported before aggregating or comparing gradients, this
+fails the predeclared gate and no partial rows are treated as evidence. The
+terminal report is
+`/private/tmp/20260824-spec165-event-rich-horizon-gradient-terminal.json`
+(SHA-256 `c4195944...`). No training, optimizer, validation, or MPS rung was
+launched. Do not search nearby ranges or tune sampler, weights, ownership, or
+duration; the default-off generator mechanism is retained and this collision
+training ladder is closed.
 
 ## Collision-horizon objective and sampler screen — terminally rejected
 

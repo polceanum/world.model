@@ -12,11 +12,12 @@
 - [x] Prove deterministic enabled frame-20--24 collision generation under
   normal gravity and pass combined config/simulator/checkpoint coverage
   (`379 passed, 1 skipped`).
-- [ ] Run one balanced immutable event-rich horizon-gradient probe. Require
-  material support and non-opposed collision-owner gradient at every horizon.
-- [ ] Only if that probe passes, run one bounded training/validation rung; do
-  not tune data ranges, weights, sampling probabilities, or duration after a
-  failed gate.
+- [x] Run one balanced immutable event-rich horizon-gradient probe. Reject:
+  the exact late-event batch is feasible, but the 1.00-second
+  `event_collision_node` loss remains unsupported (`c4195944...`).
+- [x] Do not run the conditional training/validation rung because the gradient
+  prerequisite failed. Close the ladder without tuning data ranges, weights,
+  sampling probabilities, ownership, or duration.
 - [x] Pass the final repository (`1325 passed, 20 skipped in 465.25s`) plus
   Ruff, 225-file format, isolated compile, version, and diff gates; synchronize
   and commit/push the coherent mechanism boundary. Deployment remains step zero.

@@ -3,7 +3,7 @@
 ## ADR-180 — Add late-event data only behind an all-horizon gradient gate
 
 - **Date:** 2026-08-24
-- **Status:** mechanism accepted; training pending gradient evidence
+- **Status:** mechanism retained default-off; training path terminally rejected
 - **Context:** Existing balanced data aligns ensured-pair impacts early. The
   retained horizon attribution has material short/mid gradients but
   effectively zero 0.75/1.00-second gradients, and future-window
@@ -21,10 +21,14 @@
   without privileged runtime input. Disabled cross-source generation is exact
   (`5c630359...`), enabled focused examples land at frames 20--24, and
   config/simulator/checkpoint coverage passes `379/1`. The final repository
-  gate is `1325/20 in 465.25s` with every static check clean. This is not
-  accuracy evidence. If any configured horizon remains unsupported or opposed
-  in the next probe, the intervention stops before training; otherwise exactly
-  one bounded rung may proceed. Deployment remains step zero.
+  gate is `1325/20 in 465.25s` with every static check clean. A final balanced
+  feasibility profile placed all eight ensured-pair impacts at frames 20--22,
+  but the immutable all-horizon gradient probe still had no supported
+  `event_collision_node@1.000s` tensor. The predeclared weakest-horizon gate
+  therefore fails before gradients can be aggregated. No training or MPS rung
+  follows, and the data ranges, sampler, weights, ownership, and duration must
+  not be tuned on this evidence. The terminal report is `c4195944...`;
+  deployment remains step zero.
 
 ## ADR-179 — Reject unsupported collision-horizon redistribution
 
