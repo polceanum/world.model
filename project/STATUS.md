@@ -1,5 +1,34 @@
 # Project status
 
+## Delayed causal RGB reliability — bounded diagnostic rejected
+
+A differentiable, image-only correction was tested after the radius-derived
+depth line failed its accuracy gate.  It learned a per-axis reliability signal
+from a fast RGB residual and a later independent global RGB observation, while
+leaving the current measurement tensor on the autograd path.  The frozen
+counterfactual first localized a real observation-side opportunity: FAST prior
+RMSE `0.116027 m` fell to `0.102694 m` with the smooth causal gain, and all
+eight scenario families improved.
+
+The least invasive runtime form changed only the position mean (no covariance
+contraction and no position-derived velocity update).  Fixed eight improved
+current position `0.116817 -> 0.105116 m` and velocity
+`0.770518 -> 0.658657 m/s`.  Full fixed 32 also improved the pooled selector
+`0.239528636 -> 0.228379237`, position `0.150565 -> 0.130905 m`, velocity
+`0.811882 -> 0.727229 m/s`, collision F1 `0.283747 -> 0.328733`, coverage,
+and identity stability.
+
+Promotion is nevertheless rejected: 153 rich guardrails fail.  Regressions
+are coherent in pooled z position/velocity, long-horizon collision F1, current
+calibration, and camera/damped/elastic/glancing/heavy/impulse/reference slices.
+This is a redistribution of error, not broad accuracy.  The experimental code
+was fully reverted and no further gain/variance/threshold variants are
+authorized.  The fixed-32 report is
+`/private/tmp/20260824-spec177-causal-axis-reliability-localization-only-fixed32.json`;
+the rejected patch is retained separately with SHA-256
+`3fc46d0b339199752e0159172cff19258c791ef1e75fd9ca55f0c92408e8161f`.
+`main` remains unchanged.
+
 ## Learned-radius-derived depth — specification 1.76 stable, accuracy rejected
 
 The fast RGB observer now has a default-off, fully differentiable camera-model

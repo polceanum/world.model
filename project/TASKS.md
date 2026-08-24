@@ -1,5 +1,21 @@
 # Tasks
 
+## Delayed causal RGB reliability — bounded diagnostic
+
+- [x] Decompose RGB observation error from equation rollout error using the
+  frozen fixed-eight manifest.
+- [x] Preserve a differentiable current-measurement path while deriving
+  reliability only from delayed independent RGB evidence.
+- [x] Test confidence/covariance, mean-only, and the least invasive
+  localization-only form; stop after the predeclared bounded sequence.
+- [x] Escalate the strong fixed-eight result once to the complete fixed-32 rich
+  guardrail contract.
+- [x] Reject promotion after 153 coherent slice/axis/event/calibration failures
+  despite broad pooled gains, and fully revert the runtime implementation.
+- [ ] Do not merge this mechanism to `main` or tune adjacent thresholds.  A
+  future proposal must predeclare separate z/contact/calibration ownership and
+  pass the complete guardrail contract, not only pooled score.
+
 ## Learned-radius-derived depth — specification 1.76
 
 - [x] Route the learned apparent-radius measurement through the calibrated

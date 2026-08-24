@@ -2,6 +2,23 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 delayed causal RGB reliability diagnostic
+
+- Localized a genuine differentiable observation-side signal: delayed global
+  RGB evidence can score current fast-RGB residuals without detaching the
+  measurement tensor used by the filter.
+- The least invasive fixed-32 candidate improved pooled selector by `4.7%`,
+  current position by `13.1%`, velocity by `10.4%`, collision F1 by `15.9%`,
+  and also improved coverage and identity stability.
+- Rejected the candidate because 153 rich guardrails fail coherently in z,
+  long-horizon collision, calibration, and scenario slices.  Removed the
+  experimental implementation and stopped the variant sequence rather than
+  optimizing to the pooled metric.
+- Preserved the fixed-32 diagnostic at
+  `/private/tmp/20260824-spec177-causal-axis-reliability-localization-only-fixed32.json`
+  and the rejected patch under SHA-256 `3fc46d0b339199752e0159172cff19258c791ef1e75fd9ca55f0c92408e8161f`.
+  No production/default behavior changed and `main` remains unchanged.
+
 ### 2026-08-24 learned-radius-derived depth (specification 1.76)
 
 - Added a default-off differentiable observation path that predicts apparent
