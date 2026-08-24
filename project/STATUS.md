@@ -1,5 +1,40 @@
 # Project status
 
+## Adaptive Gaussian local-model evidence — terminally mixed
+
+The runtime pool is structurally complete but its fixed analytic candidates
+have not earned deployment. One materially different temp-only adapter tested
+the missing core loop directly: per persistent entity, world axis, learned
+interaction regime, and exact forecast horizon, it used delayed associated RGB
+errors to fit a clipped online least-squares residual predictor. Four causal
+error pairs were required before use. It corrected only x/y forecast outputs,
+never mutated `WorldBelief`, and expanded learned predictive variance to the
+empirical corrected-error second moment when larger. Missing/stale evidence
+fell back exactly to learned dynamics.
+
+The fixed-eight CPU/RGB run is non-vacuous and finite: `9,777` causal pair
+updates, `7,875` supported corrections, `264` uncertainty expansions, maximum
+gain `1.0`, and maximum empirical second moment `0.08604 m^2`. It materially
+improves pooled position RMSE at 0.10 seconds
+(`0.142104 -> 0.129438 m`, `-8.91%`) and 0.25 seconds
+(`0.167849 -> 0.160124 m`, `-4.60%`), while NLL improves strongly at both.
+
+The broad gate nevertheless rejects it. Only `73/84` core cells improve or
+tie; 0.50/0.75-second pooled position worsens, 0.10/0.50-second calibration
+regresses, a 0.25-second identity mismatch appears, and 12 scenario-horizon
+position cells regress. The largest coherent failures are heavy/light,
+baseline, impulse, glancing, and damped-contact slices. Evidence is
+`/private/tmp/20260824-spec169-adaptive-gaussian-residual-fixed8.json`
+(`ee0dcf2c...`), diagnostics `a150e8ab...`, and final evaluator report
+`d2a4883d...`.
+
+Stop without tuning pair count, robust bound, gain, variance rule, horizon
+admission, or regime thresholds, and do not run fixed-32/MPS. The source
+implementation was temp-only and no production semantic is retained. The
+result localizes future work to causal event/change-point segmentation or a
+genuinely new local model; it does not authorize selecting only the successful
+horizons after observing this gate.
+
 ## Frozen DINOv2 typed-observation probe — terminally mixed
 
 After closing the hand-built dense detector family, one genuinely independent

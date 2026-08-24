@@ -1,5 +1,30 @@
 # Design decisions
 
+## ADR-190 — Require event-segmented evidence after adaptive residual rejection
+
+- **Date:** 2026-08-24
+- **Status:** diagnostic rejected; no production change
+- **Context:** Existing analytic pool members and fixed residual gains are
+  broadly rejected. The full objective still requires useful causal online
+  correction without weight updates, including calibrated uncertainty and
+  explicit no-evidence fallback.
+- **Decision:** Permit one temp-only per-entity/axis/regime/horizon Gaussian
+  residual adapter. Require four delayed associated RGB pairs; fit a clipped
+  online least-squares correction for x/y only; use the empirical corrected
+  error second moment only to expand learned variance; leave belief, velocity,
+  events, lifecycle, identity, weights, and unsupported cells learned/exact.
+  Require all 84 core and every scenario-horizon position cell to non-regress.
+- **Alternatives considered:** tune the retained fixed gain, select favorable
+  horizons, lower support, fit z despite its adverse causal probe, shrink or
+  inflate variance by a coefficient, mutate belief, or proceed to MPS on
+  pooled gains alone.
+- **Consequences:** The adapter is highly active and improves 0.10/0.25-second
+  pooled position by `8.91%/4.60%`, but fails 11 core cells and 12 scenario
+  position slices (`ee0dcf2c...`). Reject without tuning. The contact/impulse/
+  glancing concentration shows that future residual evidence must be segmented
+  at causal event/change points or replaced by a genuinely different local
+  model; post-hoc horizon admission is forbidden.
+
 ## ADR-189 — Reject frozen DINO features without center-support parity
 
 - **Date:** 2026-08-24

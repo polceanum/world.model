@@ -2,6 +2,22 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 terminal adaptive Gaussian local-model diagnostic
+
+- Exercised a temp-only per-entity/axis/regime/horizon causal residual model
+  with robust online mean correction, four-pair no-evidence fallback, and
+  empirical forecast-uncertainty expansion; persistent belief and weights were
+  untouched.
+- Verified `9,777` delayed RGB pair updates, `7,875` supported corrections,
+  and `264` variance expansions. Pooled 0.10/0.25-second position improves
+  `8.91%/4.60%` with strong NLL gains.
+- Rejected the adapter at `73/84` core cells and 12 scenario-horizon position
+  regressions, including mid-horizon, calibration, and identity failures
+  (`ee0dcf2c...`).
+- Stopped before production, fixed-32, MPS, or adjacent parameter/horizon
+  tuning. Future work requires event/change-point segmentation or a genuinely
+  different local model.
+
 ### 2026-08-24 terminal frozen-DINOv2 typed-observation probe
 
 - Bound the fully cached/offline `facebook/dinov2-small` weights and trained

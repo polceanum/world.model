@@ -1,5 +1,22 @@
 # Tasks
 
+## Adaptive Gaussian local-model evidence — terminal rejection
+
+- [x] Audit the deployed objective contract and confirm the runtime pool already
+  has entity/axis/regime/horizon evidence, explicit learned fallback, and
+  forecast-only isolation but lacks a broadly useful candidate.
+- [x] Run one temp-only causal online adapter with four-pair support, clipped
+  x/y least-squares residual prediction, and empirical uncertainty expansion;
+  keep `WorldBelief` and the protected checkpoint immutable.
+- [x] Prove non-vacuity: `9,777` pair updates, `7,875` supported corrections,
+  and `264` variance expansions.
+- [x] Apply the protected fixed-eight gate. Reject despite material 0.10/0.25-
+  second gains because only `73/84` core cells pass and 12 scenario-horizon
+  position cells regress (`ee0dcf2c...`).
+- [x] Stop without support/bound/gain/variance/horizon/regime tuning,
+  production integration, fixed-32, or MPS.
+- [x] Synchronize, commit, and push the terminal local-adapter evidence.
+
 ## Frozen DINOv2 typed-observation probe — terminal rejection
 
 - [x] Audit local-only foundation vision availability and bind the exact
