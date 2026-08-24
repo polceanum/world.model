@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.69
+**Version:** 1.70
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, opt-in dense multi-instance global-discovery, causal observation-model selection, terminal dense typed-attribute evidence, frozen-foundation-feature feasibility, adaptive Gaussian local-model evidence, event-epoch local-model evidence, and differentiable hard-runtime assimilation surrogate amendments 24 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, opt-in dense multi-instance global-discovery, causal observation-model selection, terminal dense typed-attribute evidence, frozen-foundation-feature feasibility, adaptive Gaussian local-model evidence, event-epoch local-model evidence, differentiable hard-runtime assimilation surrogate, and forward-exact soft-posterior gradient-carrier amendments 24 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9653,6 +9653,39 @@ be weight-tuned on fixed eight. The trace and broad estimator scope remain
 valid infrastructure; a subsequent bounded experiment must construct a
 differentiable post-assimilation posterior and propagate that state through the
 same equation-based rollout, not repeat an auxiliary association-loss sweep.
+
+---
+
+## 269. Train through a soft posterior while deploying the hard posterior
+
+When `training.closed_loop_soft_posterior_straight_through_enabled` is true,
+training evaluates a second analytic diagonal correction under the same gated
+soft assignment defined in section 268. The soft correction is attached to
+position, supported direct velocity, and their log variances only through a
+zero-valued straight-through carrier. The persistent forward value is therefore
+bit-exact to the complete hard posterior after Hungarian association,
+lifecycle, learned correction, direct velocity, and physical identification,
+while backward gradients from later observations and equation-based rollouts
+can cross an assignment boundary.
+
+The carrier may not introduce a learned transition, replace hard identity,
+birth or delete an object, or alter any deployed tensor. It uses the same
+measurement confidence, independent-axis provenance, robust analytic Kalman
+update, variance bounds, and admissibility gate as the runtime filter. It is
+installed into `RuntimeState` only during gradient-enabled training so the next
+causal frame and posterior rollout retain its graph; ordinary ingest,
+validation, evaluation, checkpoints, and deployment never request it.
+
+The switch is strict boolean, legacy-false, and exact-resume-bound. Enabling it
+requires a positive soft-association temperature and the
+`differentiable_state_estimator` scope. It adds no extra dynamics rollout and no
+new scalar objective: existing physical current/forecast losses provide the
+gradient, keeping training cost close to the hard recursive path. The CPU
+profile enables this carrier after the auxiliary-only paired qualification
+missed its long-horizon materiality bar. One bounded paired qualification
+against the otherwise identical auxiliary-only graph is required before any
+long campaign; failure closes this carrier without temperature or loss-weight
+tuning on the fixed manifest.
 
 ---
 

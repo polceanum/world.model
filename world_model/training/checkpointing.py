@@ -188,6 +188,7 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
     ("training", "closed_loop_prior_future_correction_enabled"): True,
     ("training", "closed_loop_batch_macro_physical_losses_enabled"): False,
     ("training", "closed_loop_soft_association_temperature"): None,
+    ("training", "closed_loop_soft_posterior_straight_through_enabled"): False,
     ("training", "loss_weights", "soft_association_state"): 0.0,
     ("training", "loss_weights", "soft_association_velocity"): 0.0,
     ("training", "loss_weights", "soft_association_exclusivity"): 0.0,

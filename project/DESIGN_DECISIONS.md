@@ -1,5 +1,29 @@
 # Design decisions
 
+## ADR-193 — Use a zero-value soft-posterior gradient carrier
+
+- **Date:** 2026-08-24
+- **Status:** implementation accepted; bounded accuracy pending
+- **Context:** The first soft-assignment auxiliary materially improves current
+  hard state but barely changes the five-horizon selector. Conditional hard
+  matches are differentiable, yet forecast gradients cannot express how a
+  nearby alternative assignment would change the assimilated state.
+- **Decision:** Evaluate the same robust analytic correction under gated soft
+  assignment and add only its zero-forward-value gradient carrier to the hard
+  posterior. Persist that graph during training so the next causal frame and
+  the existing analytic rollout train through it. Keep all hard values,
+  identities, lifecycle, contacts, physical equations, and deployment paths
+  exact; add neither a second rollout nor a learned mechanics replacement.
+- **Alternatives considered:** tune auxiliary weights/temperature; deploy soft
+  identity; differentiate integer lifecycle; replace mechanics with a neural
+  transition; add a second full soft rollout; or continue the rejected soft
+  auxiliary unchanged.
+- **Consequences:** Assignment-boundary gradients now reach RGB evidence from
+  real future physical losses at nearly the hard-path compute cost. The new
+  switch is legacy-false and exact-resume-bound. It receives one technical
+  smoke and one paired accuracy test; failure closes it without gate-manifest
+  tuning or a long campaign.
+
 ## ADR-192 — Relax hard assimilation for training, retain it for deployment
 
 - **Date:** 2026-08-24

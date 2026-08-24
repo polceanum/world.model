@@ -21,6 +21,7 @@ from scipy.optimize import linear_sum_assignment
 from torch import Tensor
 
 from world_model.belief import BeliefTrajectory, MotionMode, WorldBelief
+from world_model.filtering.analytic_update import diagonal_kalman_update
 from world_model.observations import (
     MeasurementSet,
     ObservationContext,
@@ -1337,21 +1338,7 @@ def _soft_association_surrogate_losses(
         return {}, {"soft_association_supported_coordinate_count": 0.0}
     if world_position.shape != (*measured.measurement_mask.shape, 3):
         raise ValueError("soft association world_position must have shape [B,M,3]")
-    cost = trace.association_cost_matrix
-    admissible = (
-        predicted.valid_mask.unsqueeze(-1)
-        & measured.measurement_mask.unsqueeze(1)
-        & torch.isfinite(cost)
-        & (cost <= model.associator.maximum_cost)
-    )
-    logits = (-cost / temperature).masked_fill(~admissible, -1.0e9)
-    weights = torch.softmax(logits, dim=-1) * admissible.to(dtype=cost.dtype)
-    row_mass = weights.sum(dim=-1, keepdim=True)
-    weights = torch.where(
-        row_mass > 0,
-        weights / row_mass.clamp_min(torch.finfo(weights.dtype).eps),
-        torch.zeros_like(weights),
-    )
+    weights, row_mass = _soft_association_weights(model, trace, temperature=temperature)
     expected_position = torch.einsum("bnm,bmd->bnd", weights, world_position)
 
     belief_indices = predicted.belief_indices
@@ -1359,7 +1346,7 @@ def _soft_association_surrogate_losses(
     target_velocity = gather_target_slots(aligned_target_velocity, belief_indices)
     target_matched = (
         gather_target_slots(
-            matched_belief_slots.to(dtype=cost.dtype).unsqueeze(-1),
+            matched_belief_slots.to(dtype=weights.dtype).unsqueeze(-1),
             belief_indices,
         )
         .squeeze(-1)
@@ -1432,6 +1419,232 @@ def _soft_association_surrogate_losses(
         "soft_association_supported_row_count": float(supported_rows.sum().detach().cpu()),
     }
     return losses, metrics
+
+
+def _soft_association_weights(
+    model: OnlineWorldModel,
+    trace: DifferentiableIngestTrace,
+    *,
+    temperature: float,
+) -> tuple[Tensor, Tensor]:
+    """Return gated row-normalized assignment probabilities and raw row mass."""
+
+    predicted = trace.predicted_measurements
+    measured = trace.measurements
+    cost = trace.association_cost_matrix
+    admissible = (
+        predicted.valid_mask.unsqueeze(-1)
+        & measured.measurement_mask.unsqueeze(1)
+        & torch.isfinite(cost)
+        & (cost <= model.associator.maximum_cost)
+    )
+    logits = (-cost / temperature).masked_fill(~admissible, -1.0e9)
+    unnormalised = torch.softmax(logits, dim=-1) * admissible.to(dtype=cost.dtype)
+    row_mass = unnormalised.sum(dim=-1, keepdim=True)
+    weights = torch.where(
+        row_mass > 0,
+        unnormalised / row_mass.clamp_min(torch.finfo(cost.dtype).eps),
+        torch.zeros_like(unnormalised),
+    )
+    return weights, row_mass
+
+
+def _soft_posterior_straight_through_belief(
+    model: OnlineWorldModel,
+    trace: DifferentiableIngestTrace,
+    *,
+    temperature: float,
+) -> tuple[WorldBelief, dict[str, float]]:
+    """Attach soft-assignment gradients to the exact hard posterior values.
+
+    The hard posterior remains the forward value, including its integer
+    identity/lifecycle decisions.  A zero-valued carrier supplies gradients
+    from the same analytic diagonal correction evaluated under the gated soft
+    assignment.  Subsequent recurrent propagation and rollout therefore train
+    the evidence behind assignment boundaries without substituting a soft
+    runtime or a learned dynamics model.
+    """
+
+    hard = trace.posterior
+    predicted = trace.predicted_measurements
+    measured = trace.measurements
+    world_position = measured.auxiliary.get("world_position")
+    world_position_lv = measured.auxiliary.get("world_position_log_variance")
+    if world_position is None or world_position_lv is None:
+        return hard, {
+            "soft_posterior_supported_row_count": 0.0,
+            "soft_posterior_position_coordinate_count": 0.0,
+            "soft_posterior_velocity_coordinate_count": 0.0,
+        }
+    expected_shape = (*measured.measurement_mask.shape, 3)
+    if world_position.shape != expected_shape or world_position_lv.shape != expected_shape:
+        raise ValueError("soft posterior world position and variance must be [B,M,3]")
+
+    weights, row_mass = _soft_association_weights(model, trace, temperature=temperature)
+    supported_rows = predicted.valid_mask & (row_mass.squeeze(-1) > 0)
+    batch_index, prediction_index = torch.nonzero(supported_rows, as_tuple=True)
+    if batch_index.numel() == 0:
+        return hard, {
+            "soft_posterior_supported_row_count": 0.0,
+            "soft_posterior_position_coordinate_count": 0.0,
+            "soft_posterior_velocity_coordinate_count": 0.0,
+        }
+    belief_index = predicted.belief_indices[batch_index, prediction_index]
+    row_weights = weights[batch_index, prediction_index]
+
+    def expected_mean_variance(value: Tensor, log_variance: Tensor) -> tuple[Tensor, Tensor]:
+        mean = torch.einsum("rm,rmd->rd", row_weights, value[batch_index])
+        second_moment = torch.einsum(
+            "rm,rmd->rd",
+            row_weights,
+            log_variance[batch_index].exp() + value[batch_index].square(),
+        )
+        variance = (second_moment - mean.square()).clamp_min(1.0e-10)
+        return mean, variance.log()
+
+    expected_position, expected_position_lv = expected_mean_variance(
+        world_position,
+        world_position_lv,
+    )
+    confidence = torch.einsum(
+        "rm,rm->r",
+        row_weights,
+        measured.existence_logits[batch_index].sigmoid(),
+    )
+    position_confidence = measured.auxiliary.get("position_confidence")
+    if position_confidence is not None:
+        if position_confidence.shape == measured.measurement_mask.shape:
+            quality = torch.einsum(
+                "rm,rm->r",
+                row_weights,
+                position_confidence[batch_index].clamp(0.0, 1.0),
+            )
+        elif position_confidence.shape in {
+            (*measured.measurement_mask.shape, 1),
+            expected_shape,
+        }:
+            quality = torch.einsum(
+                "rm,rmd->rd",
+                row_weights,
+                position_confidence[batch_index].clamp(0.0, 1.0),
+            )
+        else:
+            raise ValueError("soft posterior position_confidence has invalid shape")
+        position_update_confidence = torch.minimum(
+            confidence.unsqueeze(-1) if quality.ndim == 2 else confidence,
+            quality,
+        )
+    else:
+        position_update_confidence = confidence
+    independent_axis = measured.auxiliary.get("world_position_independent_axis_mask")
+    if independent_axis is not None:
+        if independent_axis.shape != expected_shape or independent_axis.dtype is not torch.bool:
+            raise ValueError("soft posterior independent axis support must be boolean [B,M,3]")
+        axis_support = (
+            torch.einsum(
+                "rm,rmd->rd",
+                row_weights,
+                independent_axis[batch_index].to(dtype=row_weights.dtype),
+            )
+            > 0.5
+        )
+        if position_update_confidence.ndim == 1:
+            position_update_confidence = position_update_confidence.unsqueeze(-1)
+        position_update_confidence = position_update_confidence * axis_support.to(
+            position_update_confidence.dtype
+        )
+    else:
+        axis_support = torch.ones_like(expected_position, dtype=torch.bool)
+
+    prior_objects = trace.predicted_belief.objects
+    hard_objects = hard.objects
+    updater_config = model.updater.config
+    analytic_position = diagonal_kalman_update(
+        prior_objects.position[batch_index, belief_index],
+        prior_objects.fast_log_variance[batch_index, belief_index, :3],
+        expected_position,
+        expected_position_lv,
+        confidence=position_update_confidence,
+        robust_clip_norm=updater_config.robust_clip_norm,
+        minimum_log_variance=updater_config.minimum_log_variance,
+        maximum_log_variance=updater_config.maximum_log_variance,
+    )
+    position = hard_objects.position.clone()
+    fast_log_variance = hard_objects.fast_log_variance.clone()
+    position_carrier = analytic_position.mean - analytic_position.mean.detach()
+    position_lv_carrier = analytic_position.log_variance - analytic_position.log_variance.detach()
+    position[batch_index, belief_index] = (
+        hard_objects.position[batch_index, belief_index] + position_carrier
+    )
+    fast_log_variance[batch_index, belief_index, :3] = (
+        hard_objects.fast_log_variance[batch_index, belief_index, :3] + position_lv_carrier
+    )
+
+    velocity = hard_objects.velocity
+    velocity_coordinate_count = 0
+    measured_velocity = measured.auxiliary.get("world_velocity")
+    measured_velocity_lv = measured.auxiliary.get("world_velocity_log_variance")
+    velocity_axis_valid = measured.auxiliary.get("world_velocity_axis_valid_mask")
+    if (
+        measured_velocity is not None
+        and measured_velocity_lv is not None
+        and velocity_axis_valid is not None
+    ):
+        if (
+            measured_velocity.shape != expected_shape
+            or measured_velocity_lv.shape != expected_shape
+            or velocity_axis_valid.shape != expected_shape
+            or velocity_axis_valid.dtype is not torch.bool
+        ):
+            raise ValueError("soft posterior velocity evidence must be typed [B,M,3]")
+        expected_velocity, expected_velocity_lv = expected_mean_variance(
+            measured_velocity,
+            measured_velocity_lv,
+        )
+        velocity_support = (
+            torch.einsum(
+                "rm,rmd->rd",
+                row_weights,
+                velocity_axis_valid[batch_index].to(dtype=row_weights.dtype),
+            )
+            > 0.5
+        )
+        velocity_confidence = confidence.unsqueeze(-1) * velocity_support.to(confidence.dtype)
+        analytic_velocity = diagonal_kalman_update(
+            prior_objects.velocity[batch_index, belief_index],
+            prior_objects.fast_log_variance[batch_index, belief_index, 3:6],
+            expected_velocity,
+            expected_velocity_lv,
+            confidence=velocity_confidence,
+            robust_clip_norm=updater_config.robust_clip_norm,
+            minimum_log_variance=updater_config.minimum_log_variance,
+            maximum_log_variance=updater_config.maximum_log_variance,
+        )
+        velocity = hard_objects.velocity.clone()
+        velocity[batch_index, belief_index] = (
+            hard_objects.velocity[batch_index, belief_index]
+            + analytic_velocity.mean
+            - analytic_velocity.mean.detach()
+        )
+        fast_log_variance[batch_index, belief_index, 3:6] = (
+            hard_objects.fast_log_variance[batch_index, belief_index, 3:6]
+            + analytic_velocity.log_variance
+            - analytic_velocity.log_variance.detach()
+        )
+        velocity_coordinate_count = int(velocity_support.sum().detach().cpu())
+
+    posterior = hard.replace(
+        objects=hard_objects.replace(
+            position=position,
+            velocity=velocity,
+            fast_log_variance=fast_log_variance,
+        )
+    )
+    return posterior, {
+        "soft_posterior_supported_row_count": float(batch_index.numel()),
+        "soft_posterior_position_coordinate_count": float(axis_support.sum().detach().cpu()),
+        "soft_posterior_velocity_coordinate_count": float(velocity_coordinate_count),
+    }
 
 
 def gather_target_pairs(target: Tensor, indices: Tensor) -> Tensor:
@@ -4929,16 +5142,22 @@ def run_closed_loop_batch(
     )
     compute_event_loss = float(loss_weights["event"]) != 0.0
     soft_association_temperature = config.training.closed_loop_soft_association_temperature
+    soft_posterior_straight_through = (
+        config.training.closed_loop_soft_posterior_straight_through_enabled
+    )
     soft_association_enabled = (
         model.training
         and torch.is_grad_enabled()
         and soft_association_temperature is not None
-        and any(
-            float(loss_weights.get(name, 0.0)) > 0.0
-            for name in (
-                "soft_association_state",
-                "soft_association_velocity",
-                "soft_association_exclusivity",
+        and (
+            soft_posterior_straight_through
+            or any(
+                float(loss_weights.get(name, 0.0)) > 0.0
+                for name in (
+                    "soft_association_state",
+                    "soft_association_velocity",
+                    "soft_association_exclusivity",
+                )
             )
         )
     )
@@ -5190,6 +5409,18 @@ def run_closed_loop_batch(
                 packet,
                 prepared=prepared_propagation,
             )
+        if ingest_trace is not None and soft_posterior_straight_through:
+            assert soft_association_temperature is not None
+            belief, soft_posterior_metrics = _soft_posterior_straight_through_belief(
+                model,
+                ingest_trace,
+                temperature=soft_association_temperature,
+            )
+            # The values remain the exact hard posterior, but this replacement
+            # preserves the soft gradient carrier for the next causal frame and
+            # every posterior rollout in the current TBPTT window.
+            model.state.belief = belief
+            _accumulate_float_metrics(parameter_supervision_metrics, soft_posterior_metrics)
         indices, matched = target_matcher.match(
             belief,
             batch["objects"]["position"][:, frame_index],

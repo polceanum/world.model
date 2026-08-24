@@ -1,5 +1,20 @@
 # Project status
 
+## Forward-exact soft posterior — specification 1.70 implemented
+
+The next structural repair is implemented without changing hard runtime
+values. A gated soft analytic Kalman correction contributes only a zero-valued
+straight-through gradient carrier to the complete hard posterior. That carrier
+is propagated by the same equation-based dynamics through subsequent causal
+frames and forecast losses, allowing assignment-boundary evidence to train the
+RGB estimator without replacing Hungarian identity, lifecycle, contacts, or
+the persistent forward state. It adds no second rollout or learned mechanics.
+
+Focused forward-exact/recursive-gradient, generated causal-loop, configuration,
+checkpoint, schedule, and objective gates pass `589` tests with one expected
+unavailable-MPS skip. A bounded one-update smoke and one frozen treatment versus
+auxiliary-only qualification remain pending; no long campaign is authorized.
+
 ## Differentiable physics assimilation — specification 1.69 implemented
 
 The training architecture now treats hard Hungarian assignment, lifecycle,

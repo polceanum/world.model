@@ -481,6 +481,11 @@ class TrainingConfig:
     # the same gated cost matrix to differentiable physical supervision while
     # deployment continues to use deterministic discrete assignments.
     closed_loop_soft_association_temperature: float | None = None
+    # Forward-exact, training-only gradient carrier from a gated soft analytic
+    # correction into the hard posterior. Integer identity/lifecycle and all
+    # deployed values remain hard; recursive rollout gradients follow the
+    # equation-based soft posterior surrogate across assignment boundaries.
+    closed_loop_soft_posterior_straight_through_enabled: bool = False
     # Optional group-robust physical objective for one-row-per-scenario
     # balanced batches. Each axis/horizon cell reduces the highest-loss
     # supported fraction of scenario rows instead of allowing easy regimes to
@@ -1586,6 +1591,13 @@ class OrpheusConfig:
         transition_steps = self.training.closed_loop_scope_transition_steps
         configured_scopes = {self.training.closed_loop_trainable_scope, late_scope}
         soft_temperature = self.training.closed_loop_soft_association_temperature
+        soft_posterior_straight_through = (
+            self.training.closed_loop_soft_posterior_straight_through_enabled
+        )
+        if not isinstance(soft_posterior_straight_through, bool):
+            raise ValueError(
+                "training.closed_loop_soft_posterior_straight_through_enabled must be boolean"
+            )
         if soft_temperature is not None and (
             isinstance(soft_temperature, bool)
             or not isinstance(soft_temperature, (int, float))
@@ -1613,6 +1625,17 @@ class OrpheusConfig:
             if "differentiable_state_estimator" not in configured_scopes:
                 raise ValueError(
                     "soft-association objectives require the "
+                    "differentiable_state_estimator trainable scope"
+                )
+        if soft_posterior_straight_through:
+            if soft_temperature is None:
+                raise ValueError(
+                    "soft posterior straight-through requires "
+                    "training.closed_loop_soft_association_temperature"
+                )
+            if "differentiable_state_estimator" not in configured_scopes:
+                raise ValueError(
+                    "soft posterior straight-through requires the "
                     "differentiable_state_estimator trainable scope"
                 )
         if (late_scope is None) != (transition_steps is None):

@@ -1,5 +1,19 @@
 # Tasks
 
+## Forward-exact soft posterior — specification 1.70
+
+- [x] Add a zero-forward-value soft analytic posterior carrier over the exact
+  gated assignment costs, without changing identity, lifecycle, contact, or
+  deployed belief tensors.
+- [x] Propagate its graph through the existing recurrent state and analytic
+  rollout rather than adding a second dynamics rollout or learned transition.
+- [x] Bind the strict legacy-false switch to configuration and exact resume.
+- [x] Pass focused forward-exact, recursive-gradient, causal-loop, config,
+  checkpoint, schedule, and objective tests (`589 passed`, one expected skip).
+- [ ] Complete one balanced technical update, then one frozen paired
+  qualification against the auxiliary-only graph; stop without tuning if the
+  hard five-horizon gain is not material.
+
 ## Differentiable physics assimilation — specification 1.69
 
 - [x] Expose one-packet live ingest tensors without changing or persisting the
@@ -21,7 +35,7 @@
   current soft-loss configuration: current hard position/velocity improve
   `2.35%/3.65%`, but the equal-horizon selector gain is only `0.000153` versus
   the frozen `0.001` bar. Do not tune its weights on fixed eight.
-- [ ] Replace the auxiliary-only association relaxation with one bounded
+- [x] Replace the auxiliary-only association relaxation with one bounded
   differentiable post-assimilation posterior/rollout surrogate, while retaining
   exact hard runtime behavior and equation-based propagation.
 

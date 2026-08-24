@@ -29,6 +29,7 @@ def test_real_rgb_causal_batch_backpropagates_through_soft_assimilation() -> Non
             rollout_anchors_per_window=1,
             closed_loop_trainable_scope="differentiable_state_estimator",
             closed_loop_soft_association_temperature=0.5,
+            closed_loop_soft_posterior_straight_through_enabled=True,
             loss_weights=loss_weights,
         ),
     )
@@ -57,6 +58,7 @@ def test_real_rgb_causal_batch_backpropagates_through_soft_assimilation() -> Non
     )
 
     assert result.metrics["soft_association_supported_coordinate_count"] > 0
+    assert result.metrics["soft_posterior_position_coordinate_count"] > 0
     assert "soft_association_state" in result.loss_terms
     assert torch.isfinite(result.total_loss)
     result.total_loss.backward()

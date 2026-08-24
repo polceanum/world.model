@@ -10,7 +10,10 @@ from world_model.observations import ObservationPacket
 from world_model.observations.rgb import RGBTemporalPositionHistory
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
-from world_model.training.loop import _soft_association_surrogate_losses
+from world_model.training.loop import (
+    _soft_association_surrogate_losses,
+    _soft_posterior_straight_through_belief,
+)
 from world_model.utils.config import OrpheusConfig
 
 
@@ -208,6 +211,47 @@ def test_differentiable_ingest_trace_preserves_hard_runtime_and_reaches_rgb_filt
         for parameter in traced.updater.parameters()
     )
     assert not hasattr(traced.state, "ingest_trace")
+
+
+def test_soft_posterior_carrier_is_forward_exact_and_rollout_differentiable() -> None:
+    torch.manual_seed(23)
+    base = _small_rgb_config()
+    config = replace(
+        base,
+        model=replace(
+            base.model,
+            rgb=replace(base.model.rgb, global_every_steps=1),
+        ),
+    )
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    model.train()
+    model.observation_modules["rgb"].requires_grad_(True)
+    model.ingest(_rgb_packet(0.0))
+    model.ingest(_rgb_packet(1.0 / 30.0, shift=1))
+    _, trace = model.ingest_with_trace(_rgb_packet(2.0 / 30.0, shift=2))
+    assert trace is not None
+    world_position = trace.measurements.auxiliary["world_position"]
+    world_position.retain_grad()
+
+    carried, metrics = _soft_posterior_straight_through_belief(
+        model,
+        trace,
+        temperature=0.5,
+    )
+    assert metrics["soft_posterior_position_coordinate_count"] > 0
+    for carried_value, hard_value in (
+        (carried.objects.position, trace.posterior.objects.position),
+        (carried.objects.velocity, trace.posterior.objects.velocity),
+        (carried.objects.fast_log_variance, trace.posterior.objects.fast_log_variance),
+    ):
+        assert torch.equal(carried_value, hard_value)
+
+    model.state.belief = carried
+    trajectory = model.dynamics.rollout(carried, [0.1], return_events=False)
+    trajectory.positions.square().sum().backward()
+    assert world_position.grad is not None
+    assert torch.isfinite(world_position.grad).all()
+    assert bool((world_position.grad != 0).any())
 
 
 def test_opt_in_runtime_pool_uses_rgb_measurements_without_oracle_state() -> None:

@@ -2,6 +2,19 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 forward-exact soft posterior (specification 1.70)
+
+- Added a training-only straight-through carrier from the gated soft assignment
+  into an analytic position/velocity posterior while preserving the complete
+  hard posterior bit-for-bit in forward execution.
+- Recursive observation and forecast losses now cross assignment boundaries
+  through the same equation-based dynamics without a second rollout, learned
+  transition replacement, or differentiable integer identity.
+- Added strict legacy-false configuration and exact-resume binding plus
+  forward-exact, recursive-gradient, causal-loop, and invalid-config tests.
+- Passed the focused combined gate (`589 passed`, one expected MPS skip); smoke
+  and paired hard-accuracy qualification remain pending.
+
 ### 2026-08-24 differentiable physics assimilation (specification 1.69)
 
 - Added non-persistent live ingest traces and a training-only gated soft

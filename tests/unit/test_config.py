@@ -9,7 +9,7 @@ from world_model.dynamics import DynamicsModel
 from world_model.observations.rgb.structured_centres import structured_disc_centres
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator.physics import PhysicsConfig
-from world_model.utils.config import load_config, save_resolved_config
+from world_model.utils.config import OrpheusConfig, load_config, save_resolved_config
 
 CONFIG_DIR = Path(__file__).parents[2] / "configs"
 
@@ -71,6 +71,46 @@ def test_soft_association_temperature_is_strictly_positive_finite_real(value: ob
                 closed_loop_soft_association_temperature=value,  # type: ignore[arg-type]
             ),
         ).validate()
+
+
+@pytest.mark.parametrize("value", [None, 0, 1, "true"])
+def test_soft_posterior_straight_through_requires_strict_boolean(value: object) -> None:
+    base = OrpheusConfig()
+    with pytest.raises(ValueError, match="soft_posterior_straight_through"):
+        replace(
+            base,
+            training=replace(
+                base.training,
+                closed_loop_soft_posterior_straight_through_enabled=value,  # type: ignore[arg-type]
+            ),
+        ).validate()
+
+
+def test_soft_posterior_straight_through_requires_temperature_and_scope() -> None:
+    base = OrpheusConfig()
+    enabled = replace(
+        base.training,
+        closed_loop_soft_posterior_straight_through_enabled=True,
+    )
+    with pytest.raises(ValueError, match="requires.*temperature"):
+        replace(base, training=enabled).validate()
+    with pytest.raises(ValueError, match="requires.*trainable scope"):
+        replace(
+            base,
+            training=replace(
+                enabled,
+                closed_loop_soft_association_temperature=0.5,
+            ),
+        ).validate()
+
+    replace(
+        base,
+        training=replace(
+            enabled,
+            closed_loop_soft_association_temperature=0.5,
+            closed_loop_trainable_scope="differentiable_state_estimator",
+        ),
+    ).validate()
 
 
 def test_sustained_v3_analytic_contacts_match_reference_solver_thresholds() -> None:
