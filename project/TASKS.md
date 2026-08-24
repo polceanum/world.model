@@ -13,14 +13,16 @@
   (`531 passed, 1 skipped`).
 - [x] Pass the final repository (`1331 passed, 20 skipped in 462.32s`) plus
   Ruff, 225-file format, version, and diff gates.
-- [ ] From a clean pushed source, run exactly one 128-update balanced
+- [x] From a clean pushed source, run exactly one 128-update balanced
   three-object detector-only rung from the immutable protected initializer.
-- [ ] Apply the predeclared fixed-eight raw-query gate: at least +10 percentage
+- [x] Apply the predeclared fixed-eight raw-query gate: at least +10 percentage
   points top-target-count recall within `0.1` normalized image coordinates, no
   more than -5 points confidence-threshold proposal precision, and no broad
-  structured/runtime regression.
-- [ ] Stop and record failure if that gate misses. Only a pass may proceed to
-  one fixed-32 physical comparison and conditional active-Aqua confirmation.
+  structured/runtime regression. It fails: recall `29.17% -> 19.79%` and
+  precision `30.77% -> 10.35%`.
+- [x] Stop and record the rejected candidate (`acd9a53b...`). Do not run
+  fixed-32 physical or MPS confirmation, and do not tune duration, learning
+  rate, loss weights, or confidence/admission on this manifest.
 
 ## Runtime-pool MPS dispatch diagnostic — no retained code change
 

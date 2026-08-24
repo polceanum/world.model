@@ -9229,8 +9229,25 @@ and checkpoint suites (`531 passed, 1` expected unavailable-MPS skip). The
 real backward/optimizer regression passes independently. The final repository
 passes `1331` tests with `20` expected unavailable-backend skips in `462.32s`;
 Ruff, the `225`-file format check, version, and diff gates also pass. The
-bounded training and accuracy gates remain pending; deployment remains the
-protected step-zero model.
+bounded gate is terminally negative. On clean commit `02ccf8b`, the sole CPU
+rung applied all `128` balanced updates with no skipped batch, maximum finite
+unclipped gradient norm `0.772205`, zero interaction gradient, and exactly `41`
+changed/Adam-owned tensors, all inside the global detector. The fixed-32
+measurement selector rejected it: score `1.2175323167` versus protected
+`1.2169759717`.
+
+The independent fixed-eight raw-query gate fails more strongly. Top-target-
+count recall within `0.1` normalized image coordinates falls from `56/192`
+(`29.17%`) to `38/192` (`19.79%`), missing the required improvement by a wide
+margin. Confidence-threshold precision falls from `44/143` (`30.77%`) to
+`53/512` (`10.35%`): training makes every one of the eight queries confident
+without localizing enough of them. Therefore no fixed-32 physical comparison,
+MPS confirmation, duration extension, learning-rate/loss-weight adjustment,
+or admission change is authorized. The mechanism remains available, the
+candidate is retained only as negative evidence, and deployment remains the
+protected step-zero model. The terminal report is
+`/private/tmp/20260824-spec166-detector-only-terminal.json` (SHA-256
+`acd9a53b...`).
 
 ---
 

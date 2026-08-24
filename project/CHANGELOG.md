@@ -21,6 +21,17 @@
   normalized image coordinates and confidence-threshold proposal precision may
   not materially regress. No runtime admission, lifecycle, split, model-shape,
   checkpoint, or deployment change is claimed.
+- Completed the sole clean-source CPU rung. All 128 updates applied with zero
+  retries, finite unclipped gradients, zero interaction gradient, and exact
+  41-tensor global-detector-only model/Adam ownership.
+- Rejected the candidate. The fixed-32 measurement selector score worsened
+  `1.2169759717 -> 1.2175323167`; fixed-eight raw top-target-count recall fell
+  `29.17% -> 19.79%`, and confidence-threshold precision fell `30.77% ->
+  10.35%` as all 512 query slots became confident. Closed the family before
+  fixed-32 physical or MPS work (`acd9a53b...`).
+- Retained two zero-update diagnostic failures: one sandbox worker shared-
+  memory failure and one zero aggregate measurement-weight failure. The latter
+  motivated the new fail-fast config guard; neither is accuracy evidence.
 
 ### 2026-08-24 terminal runtime-pool MPS dispatch diagnostic
 

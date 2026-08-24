@@ -3,7 +3,7 @@
 ## ADR-184 — Train only the existing global detector before changing discovery logic
 
 - **Date:** 2026-08-24
-- **Status:** mechanism accepted; one bounded accuracy rung pending
+- **Status:** mechanism retained; bounded accuracy candidate rejected
 - **Context:** Structured RGB components are accurate when visible discs are
   separated but merge under severe overlap. Hand-coded chromatic splitting
   worsened centroid error in every scenario, and frozen raw learned queries
@@ -27,9 +27,15 @@
   gradient, tensor-change, and optimizer-state ownership. Focused affected
   suites pass `531/1`; the final repository passes `1331/20` in `462.32s` with
   every static gate clean. Runtime behavior and deployment are unchanged. The
-  bounded accuracy rung remains a hard stopping gate: a miss closes the family,
-  while a material pass authorizes only the standard fixed-32 comparison and
-  conditional active-Aqua confirmation.
+  bounded accuracy rung remains a hard stopping gate. The sole clean-source
+  rung applies all 128 updates with exact 41-tensor detector-only model/Adam
+  ownership and no numerical failure, but the measurement selector worsens
+  `1.216976 -> 1.217532`. Fixed-eight raw recall falls `29.17% -> 19.79%` and
+  confidence-threshold precision falls `30.77% -> 10.35%` as every query
+  becomes confident. Reject the candidate and close this family before
+  fixed-32 physical or MPS work; do not tune duration, learning rate, loss
+  weights, or admission on this evidence. Terminal report SHA-256 is
+  `acd9a53b...`; deployment remains step zero.
 
 ## ADR-183 — Preserve sparse runtime-pool dispatch until it can be vectorized
 

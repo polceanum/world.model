@@ -20,13 +20,29 @@ unavailable-MPS skip. The final repository passes `1331/20` in `462.32s` with
 Ruff, the 225-file format check, version, and diff gates clean. Runtime
 predictions and the protected deployment are unchanged.
 
-One clean-source 128-update, balanced three-object rung is pending. It must
-improve frozen fixed-eight top-target-count raw-query recall within `0.1`
-normalized image coordinates by at least ten percentage points without losing
-more than five percentage points of confidence-threshold proposal precision or
-broadly regressing structured/runtime evidence. Failure closes this family;
-success permits only the existing fixed-32 physical gate and conditional MPS
-confirmation.
+The sole clean-source CPU rung is complete and rejected. All 128 balanced
+three-object updates applied with no retry; maximum finite gradient was
+`0.772205`, interaction gradient remained exactly zero, and checkpoint audit
+finds exactly 41 changed tensors and 41 Adam owners, all inside the global
+detector. The fixed-32 measurement selector retained the protected incumbent:
+candidate score `1.2175323167` versus reference `1.2169759717`.
+
+The frozen fixed-eight raw gate is decisively adverse. Top-target-count recall
+within `0.1` normalized coordinates falls `56/192 -> 38/192` (`29.17% ->
+19.79%`) instead of improving ten points. Confidence-threshold precision falls
+`44/143 -> 53/512` (`30.77% -> 10.35%`) because every raw query becomes
+confident. Do not extend duration, tune learning rate/objective weights, alter
+confidence/admission, or proceed to fixed-32 physical/MPS gates. The family is
+closed under the declared diminishing-returns rule. Terminal evidence is
+`/private/tmp/20260824-spec166-detector-only-terminal.json` (`acd9a53b...`);
+deployment remains step zero.
+
+Two precursor launch artifacts are diagnostic only: `20260824-045517...`
+failed before validation progress because sandboxed worker shared memory was
+forbidden, and `20260824-045703...` completed initialization but failed before
+update zero because the causal source profile had aggregate measurement weight
+zero. The new config guard prevents recurrence; neither artifact is accuracy
+or optimizer evidence.
 
 ## Runtime-pool MPS dispatch diagnostic — rejected and reverted
 
