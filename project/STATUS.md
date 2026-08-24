@@ -1,5 +1,29 @@
 # Project status
 
+## Forward-exact smooth contact derivative — rejected at stability gate
+
+One bounded diagnostic tested the remaining discontinuity in the otherwise
+differentiable equation path: pair/plane contact admission. The temporary
+resolver kept every hard contact, impulse, state, event, and validation output
+exact in the forward pass, while sigmoid/softplus gates supplied only a local
+backward derivative around the same physical thresholds. Focused hard-parity,
+near-contact gradient, configuration, dynamics, and contact coverage passed
+`355` tests with five expected unavailable-backend skips.
+
+The exact one-update balanced CPU pair used the same eight scenarios, draw
+seeds, initializer, loss `2.7087430954`, and 4,210/4,212 identical initial
+metrics; the only initial differences were elapsed time and RSS. The smooth
+contact derivative increased the raw recursive gradient from `1.875017` to
+`74.600310`, or `39.786x`, failing the predeclared `4x` stability ceiling.
+Both updates remained finite only because the existing local/global clipping
+reduced the applied treatment norm to `2.0`. The 16-update accuracy pair was
+not launched, temperatures were not tuned, and the implementation/config/tests
+were fully reverted. This confirms that hard contact admission is a real
+derivative gap but that a naive forward-exact straight-through relaxation is
+too high variance for this recursive graph. Evidence:
+`/private/tmp/20260824-spec173-contact-gradient-one-update-audit.json`
+(`f866d147...`).
+
 ## Smooth analytic shadow posterior — specification 1.72 terminally rejected
 
 A true training-only soft posterior now evaluates the same gated RGB

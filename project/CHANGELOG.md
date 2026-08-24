@@ -2,6 +2,17 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 forward-exact smooth contact derivative diagnostic
+
+- Tested a temporary backward-only smooth gate around the exact hard
+  pair/plane contact and collision thresholds; all deployed forward tensors
+  remained exact and focused coverage passed `355` tests with five skips.
+- Stopped at the predeclared one-update stability gate: the exact paired raw
+  gradient rose `1.875017 -> 74.600310` (`39.786x`), beyond the allowed `4x`.
+- Did not tune temperatures or launch the 16-update accuracy pair. Fully
+  reverted the production implementation and retained only the diagnostic
+  record (`f866d147...`).
+
 ### 2026-08-24 smooth analytic shadow posterior (specification 1.72)
 
 - Added a true training-only soft posterior under the existing gated RGB

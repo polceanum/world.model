@@ -1,5 +1,28 @@
 # Design decisions
 
+## ADR-196 — Reject a straight-through contact derivative before accuracy testing
+
+- **Date:** 2026-08-24
+- **Status:** diagnostic rejected; implementation reverted
+- **Context:** Analytic kinematics, physical parameters, filtering, and RGB
+  estimation already participate in autograd, but contact admission is a hard
+  boolean. A near-contact miss therefore gives no gradient indicating how a
+  state change would create the correct impulse.
+- **Decision:** Permit one bounded temporary resolver that preserves the exact
+  hard forward contact/impulse and substitutes bounded sigmoid/softplus
+  derivatives only in backward. Require exact forward parity and a paired
+  balanced one-update raw-gradient ratio no greater than `4x` before any
+  accuracy run. Forbid temperature tuning after seeing the result.
+- **Alternatives considered:** soften deployed contacts; replace the analytic
+  resolver with a neural transition; add another shadow rollout; tune earlier
+  posterior/reprojection surrogates; or ignore recursive gradient variance.
+- **Consequences:** The local derivative exists and hard outputs remain exact,
+  but the real recursive gradient is `74.600310` versus `1.875017` control
+  (`39.786x`). Stop before the 16-update pair and revert the mechanism. The
+  stable path remains direct differentiation through accepted analytic
+  equations plus explicit smooth event likelihoods, not another
+  straight-through discontinuity estimator.
+
 ## ADR-195 — Use a true smooth posterior as the differentiable training surrogate
 
 - **Date:** 2026-08-24
