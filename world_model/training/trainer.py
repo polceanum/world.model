@@ -4380,6 +4380,19 @@ def set_closed_loop_trainable_scope(
     if scope == "dynamics":
         model.dynamics.requires_grad_(True)
         return
+    if scope == "differentiable_state_estimator":
+        # End-to-end state estimation: RGB proposals and association features,
+        # the recurrent correction, and slow physical identification are
+        # optimized through the live causal graph. Equation-based dynamics
+        # remain frozen but differentiable with respect to state/parameters;
+        # a learned force residual is intentionally not asked to relearn basic
+        # mechanics during this phase.
+        model.observation_modules["rgb"].requires_grad_(True)
+        model.updater.requires_grad_(True)
+        if model.identifier is not None:
+            model.identifier.requires_grad_(True)
+        _freeze_disconnected_training_heads(model)
+        return
     if scope == "updater":
         model.updater.requires_grad_(True)
         _freeze_disconnected_training_heads(model)
@@ -4473,7 +4486,7 @@ def set_closed_loop_trainable_scope(
         "'updater_mean_y', 'fast_roi', "
         "'state_dynamics', "
         "'state_roi', 'state_relation_roi', 'state_dynamics_fast_roi', or "
-        "'state_dynamics_roi'"
+        "'state_dynamics_roi', or 'differentiable_state_estimator'"
     )
 
 

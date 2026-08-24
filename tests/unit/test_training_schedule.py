@@ -1256,6 +1256,27 @@ def test_state_dynamics_scope_freezes_rgb_and_trains_filter_dynamics_identifier(
     assert not _fast_measurement_has_trainable_perception_path(model.observation_modules["rgb"])
 
 
+def test_differentiable_state_estimator_scope_trains_observer_filter_and_identifier_only() -> None:
+    model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
+
+    set_closed_loop_trainable_scope(model, scope="differentiable_state_estimator")
+
+    assert any(
+        parameter.requires_grad for parameter in model.observation_modules["rgb"].parameters()
+    )
+    assert any(parameter.requires_grad for parameter in model.updater.parameters())
+    assert model.identifier is not None
+    assert any(parameter.requires_grad for parameter in model.identifier.parameters())
+    assert not any(parameter.requires_grad for parameter in model.dynamics.parameters())
+    assert not any(
+        parameter.requires_grad
+        for parameter in model.updater.learned_corrector.visibility_head.parameters()
+    )
+    assert not any(
+        parameter.requires_grad for parameter in model.identifier.variance_head.parameters()
+    )
+
+
 def test_updater_scope_isolates_correction_recovery() -> None:
     model = OnlineWorldModel.from_config(load_config("configs/tiny_overfit.yaml"))
 

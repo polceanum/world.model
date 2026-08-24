@@ -1,5 +1,25 @@
 # Tasks
 
+## Differentiable physics assimilation — specification 1.69
+
+- [x] Expose one-packet live ingest tensors without changing or persisting the
+  deterministic hard runtime result.
+- [x] Add a gated soft-assignment state/velocity surrogate and exclusivity
+  penalty over the exact Hungarian cost matrix.
+- [x] Add a broad state-estimator scope spanning RGB perception, recurrent
+  correction, and causal physical identification while freezing learned
+  residual dynamics.
+- [x] Preserve a legacy-exact null/zero path and bind the new configuration to
+  exact resume.
+- [x] Pass isolated hard-forward parity and real generated-batch gradient
+  reachability tests.
+- [x] Complete one bounded balanced eight-scenario CPU update with finite
+  gradients, zero retry, physical-parameter support, and hard post-validation.
+- [x] Pass the full repository gate (`1353 passed`, `20` expected skips in
+  `515.07s`) and final Ruff/format/compile/version/diff checks.
+- [ ] Run one predeclared short paired accuracy qualification; stop if broad
+  validation improvement is not material and do not tune on the gate manifest.
+
 ## Event-epoch adaptive local model — terminal rejection
 
 - [x] Preserve the prior adaptive Gaussian protocol and add exactly one causal

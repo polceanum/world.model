@@ -1,5 +1,32 @@
 # Project status
 
+## Differentiable physics assimilation — specification 1.69 implemented
+
+The training architecture now treats hard Hungarian assignment, lifecycle,
+and contact resolution as deployment inductive biases rather than gradient
+barriers. A one-packet ephemeral ingest trace exposes the live predicted
+belief, measurement, gated association costs, hard assignment, innovation,
+and posterior without persisting any graph-bearing object. A training-only
+soft assignment uses the same admissibility gates to supervise expected RGB
+world position/velocity and one-to-one column mass. The hard runtime forward is
+bit-exact against ordinary ingest and remains the validation/deployment path.
+
+The new `differentiable_state_estimator` scope trains RGB perception, recurrent
+filter correction, and causal drag/restitution identification end to end while
+keeping the equation-based dynamics and learned residual weights frozen. A real
+generated-batch regression proves finite gradients reach all three owner
+families. Legacy null/zero configuration does not call the trace API.
+
+The bounded one-update CPU smoke under `/private/tmp/20260824-111854-...`
+completed all eight scenarios with zero retry, 72 soft position coordinates,
+three velocity coordinates, 70 drag and seven restitution observations, loss
+`2.708743`, raw/applied norms `1.875017/1.017866`, exact-zero learned dynamics
+gradient, and about `1.88 GiB` peak RSS. The final repository gate passes
+`1353` tests with `20` expected unavailable-backend skips in `515.07s`; Ruff,
+format, compile, version, and diff checks are clean. This is technical evidence
+only; the single warmup update is not an accuracy or promotion result. A
+separately predeclared short accuracy qualification remains pending.
+
 ## Event-epoch adaptive local model — terminal rejection
 
 The only evidence-backed continuation of the adaptive Gaussian residual was a

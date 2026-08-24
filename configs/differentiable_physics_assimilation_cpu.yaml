@@ -1,0 +1,240 @@
+project:
+  name: orpheus-differentiable-physics-assimilation-cpu
+  seed: 59
+  output_dir: runs
+  deterministic: true
+
+device:
+  preference: mps
+  # The causal-only run keeps the qualified MPS preference recorded for any
+  # future measurement phase, but its complete active RGB/recursive graph uses
+  # CPU, which is materially faster for this graph.
+  closed_loop_preference: cpu
+  global_detector_cpu_on_mps: true
+  cuda_amp: false
+  mps_float32: true
+  compile: false
+
+simulator:
+  image_size: [64, 64]
+  frame_rate: 20
+  physics_rate: 120
+  sequence_frames: 40
+  min_objects: 2
+  max_objects: 5
+  radius_range: [0.21, 0.21]
+  ensured_pair_floor_clearance_frames: 2
+  ensured_pair_floor_clearance_margin_m: 0.03
+  ensured_pair_scene_resample_attempts: 32
+  camera_motion: combined
+  render_noise_std: 0.01
+  ensure_collision: true
+  scenario_mixture:
+    - reference_pairs
+    - baseline
+    - elastic_pairs
+    - damped_contacts
+    - impulse_perturbation
+    - camera_parallax
+    - glancing_impacts
+    - heavy_light_impacts
+
+model:
+  max_objects: 6
+  lifecycle:
+    birth_confidence: 0.55
+    birth_confirmations: 2
+    birth_confirmation_distance_m: 0.5
+    max_missed_steps: 12
+    max_occluded_steps: 60
+    existence_decay: 0.35
+    occlusion_existence_decay: 0.04
+  state:
+    geometry_dim: 8
+    appearance_dim: 32
+    residual_dynamics_dim: 16
+    modal_count: 4
+    modal_dim: 4
+    parameter_memory_dim: 64
+    global_dim: 16
+  rgb:
+    backbone_channels: [32, 64, 96, 144]
+    feature_dim: 96
+    proposal_queries: 8
+    global_every_steps: 3
+    roi_size: 20
+    fast_depth_residual_enabled: false
+    temporal_velocity_enabled: true
+    temporal_velocity_history_size: 5
+    temporal_velocity_min_samples: 3
+    temporal_velocity_variance_scale: 1.5
+    temporal_velocity_variance_floor: 0.04
+    temporal_velocity_variance_ceiling: 4.0
+    temporal_velocity_lateral_only: false
+    temporal_velocity_independent_raw_history_enabled: true
+    temporal_velocity_continuous_gravity_axis_enabled: true
+    temporal_velocity_post_event_gravity_axis_enabled: false
+    temporal_velocity_unobserved_variance: 10000.0
+    temporal_velocity_reset_on_collision: true
+    temporal_velocity_max_age_steps: null
+    temporal_velocity_post_event_max_samples: null
+    temporal_velocity_post_event_min_samples: 2
+    temporal_velocity_measurement_position_blend: 0.0
+    temporal_velocity_position_innovation_coupling: false
+    temporal_position_enabled: true
+    temporal_position_min_samples: 3
+    temporal_position_robust_threshold: 2.0
+    temporal_position_variance_scale: 8.0
+    temporal_position_variance_floor: 0.04
+    temporal_position_variance_ceiling: 0.5
+    temporal_position_depth_only: true
+    structured_disc_center_enabled: true
+    structured_disc_fast_depth_enabled: false
+    structured_disc_depth_relative_std: 0.08
+    structured_disc_depth_outlier_relative_threshold: null
+    structured_disc_depth_outlier_variance_scale: 9.0
+    structured_disc_position_confidence: 0.995
+  dynamics:
+    hidden_dim: 160
+    attention_residual_enabled: true
+    attention_relation_endpoint_binding_enabled: true
+    attention_width: 128
+    attention_heads: 4
+    attention_layers: 4
+    attention_feed_forward_width: 512
+    attention_dropout: 0.0
+    learned_effect_interval_seconds: null
+    pair_applicability_enabled: false
+    pair_applicability_lookahead_seconds: 0.05
+    pair_applicability_margin_m: 0.05
+    pair_applicability_gap_temperature_m: 0.025
+    pair_applicability_velocity_temperature_mps: 0.10
+    max_substep: 0.008333333333333333
+    contact_margin: 0.0
+    boundary_contact_tolerance: 0.0001
+    penetration_slop: 0.0001
+    contact_confidence_sigma: 0.0
+    pair_collision_speed_epsilon: 0.0000001
+    smooth_event_hazard_enabled: true
+    event_hazard_gap_temperature_m: 0.02
+    event_hazard_velocity_temperature_mps: 0.10
+    event_hazard_resolved_logit_floor: 2.0
+  filter:
+    hidden_dim: 192
+    innovation_anchored_correction: true
+    # Learned state repair remains limited to independently observed axes.
+    learned_correction_independent_axis_support: true
+  identification:
+    hidden_dim: 64
+
+runtime:
+  modality: rgb
+  enable_debug_oracle: false
+  hypothesis_pool_enabled: false
+
+training:
+  batch_size: 8
+  scenario_balanced_batches: true
+  steps: 3072
+  train_episodes: 24576
+  rgb_pretrain_steps: 0
+  learning_rate: 0.00001
+  closed_loop_learning_rate_scale: 1.0
+  closed_loop_learning_rate_schedule: warmup_cosine
+  closed_loop_learning_rate_warmup_steps: 256
+  closed_loop_learning_rate_cosine_decay_steps: 2304
+  closed_loop_learning_rate_minimum_scale: 0.1
+  closed_loop_global_trainable_steps: 0
+  # Train RGB state estimation, recurrent correction, and causal physical
+  # identification end to end. Equation-based dynamics remain the rollout
+  # prior and learned residual dynamics remain frozen in this phase.
+  closed_loop_trainable_scope: differentiable_state_estimator
+  closed_loop_late_trainable_scope: null
+  closed_loop_scope_transition_steps: null
+  closed_loop_event_loss_weights: {}
+  closed_loop_state_event_loss_weights: {}
+  fast_roi_pretrain_weight: 1.0
+  handoff_minimum_target_coverage: 0.05
+  handoff_minimum_forecast_coverage: 0.05
+  handoff_minimum_reference_coverage_ratio: 0.50
+  maximum_no_gradient_batches_per_update: 16
+  minimum_effective_gradient_norm: 0.000000000001
+  weight_decay: 0.0001
+  tbptt_steps: 4
+  rollout_anchors_per_window: 2
+  closed_loop_prior_future_correction_enabled: true
+  closed_loop_batch_macro_physical_losses_enabled: true
+  closed_loop_axiswise_correction_hinge_enabled: true
+  # Training-only relaxation of hard Hungarian identity assignment.
+  closed_loop_soft_association_temperature: 0.5
+  closed_loop_scenario_tail_fraction: 0.25
+  closed_loop_uncertainty_standardized_error_gradient_cap: 25.0
+  # Frozen step-zero scenario/axis/horizon replay is an 11.1% gradient-scale
+  # constraint at a 1 cm allowed-head perturbation on the first balanced draw.
+  closed_loop_protected_reference_nonregression_weight: 0.0
+  minimum_rollout_age_steps: 3
+  validation_rollout_anchors_per_episode: 8
+  validation_rollout_anchor_batch_size: 8
+  validation_minimum_predictable_target_count_per_scenario_horizon: 4
+  validation_minimum_matched_target_count_per_scenario_horizon: 2
+  validation_minimum_supported_episodes_per_scenario: 2
+  grad_clip_norm: 2.0
+  interaction_grad_clip_norm: 1.0
+  minimum_interaction_gradient_retention: 0.1
+  attention_node_grad_clip_norm: 1.0
+  attention_collision_grad_clip_norm: 1.0
+  attention_force_grad_clip_norm: 1.0
+  attention_impulse_grad_clip_norm: 1.0
+  attention_node_output_grad_clip_norm: 0.1
+  attention_collision_output_grad_clip_norm: 0.1
+  attention_force_output_grad_clip_norm: 0.1
+  attention_impulse_output_grad_clip_norm: 0.1
+  closed_loop_perception_grad_clip_norm: 1.0
+  checkpoint_every: 128
+  eval_every: 512
+  log_every: 8
+  validation_episodes: 32
+  num_workers: 2
+  fixed_dataset: false
+  measurement_validation_frames: 8
+  perturbation_probability: 0.25
+  perturbation_position_std: 0.12
+  perturbation_velocity_std: 0.20
+  collision_window_probability: 0.40
+  long_horizon_window_probability: 0.50
+  normalize_rollout_axes_over_configured_horizons: true
+  joint_collision_long_horizon_sampling: true
+  collision_positive_weight_max: 10.0
+  horizon_weights: [1.0, 1.0, 1.0, 1.0, 1.0]
+  loss_weights:
+    measurement: 0.25
+    state_position: 2.0
+    state_velocity: 2.0
+    rollout_position_x: 1.1666666666666667
+    rollout_position_y: 1.1666666666666667
+    rollout_position_z: 1.1666666666666667
+    rollout_velocity: 2.0
+    rollout_nll: 0.02
+    event: 0.0045
+    parameter: 0.25
+    existence: 0.2
+    uncertainty: 0.025
+    correction_position: 7.0
+    correction_velocity: 2.0
+    correction_regularization: 0.0
+    soft_association_state: 2.0
+    soft_association_velocity: 1.0
+    soft_association_exclusivity: 0.05
+
+evaluation:
+  horizons_seconds: [0.1, 0.25, 0.5, 0.75, 1.0]
+  episodes: 32
+  rgb_only: true
+  recovery_probe_enabled: false
+
+demo:
+  seed: 200000
+  max_frames: 40
+  future_horizon_seconds: 1.0
+  fps: 10
+

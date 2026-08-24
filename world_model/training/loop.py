@@ -28,13 +28,18 @@ from world_model.observations import (
     PredictedMeasurements,
     SensorContext,
 )
-from world_model.runtime import OnlineWorldModel, PreparedPropagation
+from world_model.runtime import (
+    DifferentiableIngestTrace,
+    OnlineWorldModel,
+    PreparedPropagation,
+)
 from world_model.training.event_windows import observation_window_query_plan
 from world_model.training.losses import (
     balanced_binary_cross_entropy,
     correction_error,
     gaussian_nll,
     masked_huber,
+    masked_mean,
     posterior_improvement_hinge,
     weighted_total,
 )
@@ -1305,6 +1310,128 @@ def gather_target_slots(target: Tensor, indices: Tensor) -> Tensor:
     while unmatched.ndim < gathered.ndim:
         unmatched = unmatched.unsqueeze(-1)
     return torch.where(unmatched, torch.zeros_like(gathered), gathered)
+
+
+def _soft_association_surrogate_losses(
+    model: OnlineWorldModel,
+    trace: DifferentiableIngestTrace,
+    *,
+    aligned_target_position: Tensor,
+    aligned_target_velocity: Tensor,
+    matched_belief_slots: Tensor,
+    temperature: float,
+) -> tuple[dict[str, Tensor], dict[str, float]]:
+    """Train the continuous evidence behind hard Hungarian association.
+
+    Runtime identity and lifecycle remain discrete.  This relaxation instead
+    differentiates the expected RGB world state under the same gated cost
+    matrix used by Hungarian matching.  It therefore teaches proposal values,
+    association features, projected priors, and recurrent state without
+    pretending that integer assignment indices have a derivative.
+    """
+
+    predicted = trace.predicted_measurements
+    measured = trace.measurements
+    world_position = measured.auxiliary.get("world_position")
+    if world_position is None:
+        return {}, {"soft_association_supported_coordinate_count": 0.0}
+    if world_position.shape != (*measured.measurement_mask.shape, 3):
+        raise ValueError("soft association world_position must have shape [B,M,3]")
+    cost = trace.association_cost_matrix
+    admissible = (
+        predicted.valid_mask.unsqueeze(-1)
+        & measured.measurement_mask.unsqueeze(1)
+        & torch.isfinite(cost)
+        & (cost <= model.associator.maximum_cost)
+    )
+    logits = (-cost / temperature).masked_fill(~admissible, -1.0e9)
+    weights = torch.softmax(logits, dim=-1) * admissible.to(dtype=cost.dtype)
+    row_mass = weights.sum(dim=-1, keepdim=True)
+    weights = torch.where(
+        row_mass > 0,
+        weights / row_mass.clamp_min(torch.finfo(weights.dtype).eps),
+        torch.zeros_like(weights),
+    )
+    expected_position = torch.einsum("bnm,bmd->bnd", weights, world_position)
+
+    belief_indices = predicted.belief_indices
+    target_position = gather_target_slots(aligned_target_position, belief_indices)
+    target_velocity = gather_target_slots(aligned_target_velocity, belief_indices)
+    target_matched = (
+        gather_target_slots(
+            matched_belief_slots.to(dtype=cost.dtype).unsqueeze(-1),
+            belief_indices,
+        )
+        .squeeze(-1)
+        .bool()
+    )
+    supported_rows = predicted.valid_mask & target_matched & (row_mass.squeeze(-1) > 0)
+    independent_axis = measured.auxiliary.get("world_position_independent_axis_mask")
+    if independent_axis is None:
+        position_axis_support = supported_rows.unsqueeze(-1).expand_as(expected_position)
+    else:
+        if independent_axis.shape != world_position.shape or independent_axis.dtype != torch.bool:
+            raise ValueError(
+                "soft association world_position_independent_axis_mask must be boolean [B,M,3]"
+            )
+        expected_axis_support = torch.einsum(
+            "bnm,bmd->bnd",
+            weights,
+            independent_axis.to(dtype=weights.dtype),
+        )
+        position_axis_support = supported_rows.unsqueeze(-1) & (expected_axis_support > 0.5)
+
+    losses: dict[str, Tensor] = {
+        "soft_association_state": masked_huber(
+            expected_position,
+            target_position,
+            position_axis_support,
+            batch_macro=True,
+        )
+    }
+    velocity = measured.auxiliary.get("world_velocity")
+    velocity_axis_valid = measured.auxiliary.get("world_velocity_axis_valid_mask")
+    velocity_support_count = 0
+    if velocity is not None and velocity_axis_valid is not None:
+        if velocity.shape != world_position.shape or velocity_axis_valid.shape != velocity.shape:
+            raise ValueError("soft association velocity tensors must have shape [B,M,3]")
+        if velocity_axis_valid.dtype != torch.bool:
+            raise TypeError("soft association velocity axis validity must be boolean")
+        expected_velocity = torch.einsum("bnm,bmd->bnd", weights, velocity)
+        expected_velocity_support = torch.einsum(
+            "bnm,bmd->bnd",
+            weights,
+            velocity_axis_valid.to(dtype=weights.dtype),
+        )
+        velocity_mask = supported_rows.unsqueeze(-1) & (expected_velocity_support > 0.5)
+        velocity_support_count = int(velocity_mask.sum().detach().cpu())
+        if velocity_support_count:
+            losses["soft_association_velocity"] = masked_huber(
+                expected_velocity,
+                target_velocity,
+                velocity_mask,
+                batch_macro=True,
+            )
+
+    # Sinkhorn is unnecessary at this tiny object count: a row-normalized
+    # expectation plus a column-cap penalty provides the useful one-to-one
+    # inductive bias without iterative normalization or extra rollout work.
+    column_mass = weights.sum(dim=1)
+    valid_columns = measured.measurement_mask
+    overflow = torch.relu(column_mass - 1.0)
+    losses["soft_association_exclusivity"] = masked_mean(
+        overflow.square(),
+        valid_columns,
+        batch_macro=True,
+    )
+    metrics = {
+        "soft_association_supported_coordinate_count": float(
+            position_axis_support.sum().detach().cpu()
+        ),
+        "soft_association_velocity_supported_coordinate_count": float(velocity_support_count),
+        "soft_association_supported_row_count": float(supported_rows.sum().detach().cpu()),
+    }
+    return losses, metrics
 
 
 def gather_target_pairs(target: Tensor, indices: Tensor) -> Tensor:
@@ -4284,6 +4411,9 @@ def _group_closed_loop_terms(
         "attention_node_complexity",
         "attention_node_activity",
         "attention_node_drift",
+        "soft_association_state",
+        "soft_association_velocity",
+        "soft_association_exclusivity",
     ):
         if name in details:
             terms[name] = details[name]
@@ -4392,6 +4522,9 @@ def _weighted_closed_loop_total(
         "attention_node_complexity",
         "attention_node_activity",
         "attention_node_drift",
+        "soft_association_state",
+        "soft_association_velocity",
+        "soft_association_exclusivity",
     }
     selected: dict[str, Tensor] = {
         name: value
@@ -4795,6 +4928,20 @@ def run_closed_loop_batch(
         active_trainable_scope=active_trainable_scope,
     )
     compute_event_loss = float(loss_weights["event"]) != 0.0
+    soft_association_temperature = config.training.closed_loop_soft_association_temperature
+    soft_association_enabled = (
+        model.training
+        and torch.is_grad_enabled()
+        and soft_association_temperature is not None
+        and any(
+            float(loss_weights.get(name, 0.0)) > 0.0
+            for name in (
+                "soft_association_state",
+                "soft_association_velocity",
+                "soft_association_exclusivity",
+            )
+        )
+    )
     if (
         isinstance(validation_rollout_anchor_batch_size, bool)
         or not isinstance(validation_rollout_anchor_batch_size, int)
@@ -5032,10 +5179,17 @@ def run_closed_loop_batch(
                         fast_supervised_frames += 1
                         fast_supervised_slots += int(valid_supervision.sum().detach().cpu())
 
-        belief = model.ingest(
-            packet,
-            prepared=prepared_propagation,
-        )
+        ingest_trace: DifferentiableIngestTrace | None = None
+        if soft_association_enabled:
+            belief, ingest_trace = model.ingest_with_trace(
+                packet,
+                prepared=prepared_propagation,
+            )
+        else:
+            belief = model.ingest(
+                packet,
+                prepared=prepared_propagation,
+            )
         indices, matched = target_matcher.match(
             belief,
             batch["objects"]["position"][:, frame_index],
@@ -5045,6 +5199,23 @@ def run_closed_loop_batch(
             batch["objects"]["position"][:, frame_index],
             indices,
         )
+        aligned_velocity = gather_target_slots(
+            batch["objects"]["velocity"][:, frame_index],
+            indices,
+        )
+        if ingest_trace is not None:
+            assert soft_association_temperature is not None
+            soft_losses, soft_metrics = _soft_association_surrogate_losses(
+                model,
+                ingest_trace,
+                aligned_target_position=aligned_position,
+                aligned_target_velocity=aligned_velocity,
+                matched_belief_slots=matched,
+                temperature=soft_association_temperature,
+            )
+            for name, value in soft_losses.items():
+                add(name, value)
+            _accumulate_float_metrics(parameter_supervision_metrics, soft_metrics)
         distance_gated_matched = _distance_gate_physical_matches(
             belief.objects.position,
             aligned_position,
@@ -5132,10 +5303,6 @@ def run_closed_loop_batch(
         distance_gated_target_object_frames += frame_target_count
         distance_gated_predicted_object_frames += frame_predicted_count
         distance_gated_matched_count += int(distance_gated_matched.sum().detach().cpu())
-        aligned_velocity = gather_target_slots(
-            batch["objects"]["velocity"][:, frame_index],
-            indices,
-        )
         if collect_protected_objective_cells:
             for axis_index, axis_name in enumerate(("x", "y", "z")):
                 add_protected(

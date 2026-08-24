@@ -476,6 +476,11 @@ class TrainingConfig:
     # False preserves vector-norm correction non-regression. New protocols may
     # require non-regression independently on each supported coordinate.
     closed_loop_axiswise_correction_hinge_enabled: bool = False
+    # Training-only relaxation of hard Hungarian association. ``None`` keeps
+    # the exact legacy runtime/training graph. A positive temperature exposes
+    # the same gated cost matrix to differentiable physical supervision while
+    # deployment continues to use deterministic discrete assignments.
+    closed_loop_soft_association_temperature: float | None = None
     # Optional group-robust physical objective for one-row-per-scenario
     # balanced batches. Each axis/horizon cell reduces the highest-loss
     # supported fraction of scenario rows instead of allowing easy regimes to
@@ -532,6 +537,9 @@ class TrainingConfig:
             "existence": 0.2,
             "uncertainty": 0.05,
             "correction": 0.02,
+            "soft_association_state": 0.0,
+            "soft_association_velocity": 0.0,
+            "soft_association_exclusivity": 0.0,
         }
     )
 
@@ -1559,6 +1567,7 @@ class OrpheusConfig:
             "state_relation_roi",
             "state_dynamics_fast_roi",
             "state_dynamics_roi",
+            "differentiable_state_estimator",
         }
         if self.training.closed_loop_trainable_scope not in valid_closed_loop_scopes:
             raise ValueError(
@@ -1570,10 +1579,42 @@ class OrpheusConfig:
                 "'updater_state_heads_xy_collision_node', "
                 "'updater_mean_y', 'fast_roi', "
                 "'state_dynamics', 'state_roi', 'state_relation_roi', "
-                "'state_dynamics_fast_roi', or 'state_dynamics_roi'"
+                "'state_dynamics_fast_roi', 'state_dynamics_roi', or "
+                "'differentiable_state_estimator'"
             )
         late_scope = self.training.closed_loop_late_trainable_scope
         transition_steps = self.training.closed_loop_scope_transition_steps
+        configured_scopes = {self.training.closed_loop_trainable_scope, late_scope}
+        soft_temperature = self.training.closed_loop_soft_association_temperature
+        if soft_temperature is not None and (
+            isinstance(soft_temperature, bool)
+            or not isinstance(soft_temperature, (int, float))
+            or not math.isfinite(soft_temperature)
+            or soft_temperature <= 0.0
+        ):
+            raise ValueError(
+                "training.closed_loop_soft_association_temperature must be null "
+                "or finite and positive"
+            )
+        soft_weight_names = (
+            "soft_association_state",
+            "soft_association_velocity",
+            "soft_association_exclusivity",
+        )
+        soft_weights = [
+            float(self.training.loss_weights.get(name, 0.0)) for name in soft_weight_names
+        ]
+        if any(weight > 0.0 for weight in soft_weights):
+            if soft_temperature is None:
+                raise ValueError(
+                    "positive soft-association loss weights require "
+                    "training.closed_loop_soft_association_temperature"
+                )
+            if "differentiable_state_estimator" not in configured_scopes:
+                raise ValueError(
+                    "soft-association objectives require the "
+                    "differentiable_state_estimator trainable scope"
+                )
         if (late_scope is None) != (transition_steps is None):
             raise ValueError(
                 "training.closed_loop_late_trainable_scope and "
@@ -1596,7 +1637,6 @@ class OrpheusConfig:
                 "training.closed_loop_event_loss_weights must map valid scopes "
                 "to finite nonnegative weights"
             )
-        configured_scopes = {self.training.closed_loop_trainable_scope, late_scope}
         state_event_loss_weights = self.training.closed_loop_state_event_loss_weights
         state_event_scope = "updater_state_heads_xy_collision_node"
         if any(scope != state_event_scope for scope in state_event_loss_weights) or any(

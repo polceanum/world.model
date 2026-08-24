@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from itertools import groupby
 from typing import TYPE_CHECKING
 
@@ -30,6 +30,7 @@ from world_model.filtering import (
     BeliefUpdaterConfig,
 )
 from world_model.fusion import (
+    AssociationResult,
     Associator,
     ObservationMode,
     ObservationScheduler,
@@ -42,10 +43,12 @@ from world_model.identification import (
     RecurrentParameterUpdater,
 )
 from world_model.observations import (
+    InnovationSet,
     MeasurementSet,
     ObservationContext,
     ObservationModule,
     ObservationPacket,
+    PredictedMeasurements,
     SensorContext,
 )
 from world_model.observations.registry import validate_module_mapping
@@ -67,6 +70,26 @@ if TYPE_CHECKING:
 
 class OutOfSequenceObservationError(ValueError):
     """The milestone-one filter rejects delayed observations explicitly."""
+
+
+@dataclass(frozen=True)
+class DifferentiableIngestTrace:
+    """Ephemeral live tensors around one hard runtime assimilation.
+
+    The persistent runtime still uses deterministic Hungarian association,
+    lifecycle transitions, and hard contact resolution.  Training may use
+    this trace to optimize a differentiable relaxation of those decisions.
+    The trace is never stored in :class:`RuntimeState` or a checkpoint.
+    """
+
+    predicted_belief: WorldBelief
+    predicted_measurements: PredictedMeasurements
+    measurements: MeasurementSet
+    association: AssociationResult
+    association_cost_matrix: Tensor
+    innovation: InnovationSet
+    posterior: WorldBelief
+    observation_mode: ObservationMode
 
 
 def _packet_batch_size(packet: ObservationPacket) -> int:
@@ -965,7 +988,9 @@ class OnlineWorldModel(nn.Module):
         posterior: WorldBelief,
         prediction_dt: Tensor,
         prior_interval_collision_mask: Tensor | None = None,
-    ) -> WorldBelief:
+        *,
+        collect_trace: bool = False,
+    ) -> tuple[WorldBelief, DifferentiableIngestTrace | None]:
         started = time.perf_counter()
         if self.identifier is not None:
             # Diagnostics describe this packet only.  A propagation-only
@@ -1035,7 +1060,7 @@ class OnlineWorldModel(nn.Module):
             )
             self.state.caches[packet.sensor_id] = new_cache
         else:
-            return posterior
+            return posterior, None
         measurements.validate()
         expected_measurement_timestamp = posterior.timestamp.new_full(
             posterior.timestamp.shape,
@@ -1062,7 +1087,13 @@ class OnlineWorldModel(nn.Module):
             )
         active_before = int(posterior.objects.active.sum().detach().cpu())
         predicted_belief = posterior
-        association = self.associator.match(posterior, measurements, predicted)
+        association_cost_matrix = self.associator.cost_matrix(measurements, predicted)
+        association = self.associator.match(
+            posterior,
+            measurements,
+            predicted,
+            cost_matrix=association_cost_matrix,
+        )
         innovation = module.innovation(measurements, predicted, association)
         surprise = self.surprise_classifier(innovation, association)
         posterior = self.updater.correct(
@@ -1198,17 +1229,34 @@ class OnlineWorldModel(nn.Module):
                 elapsed_milliseconds=(time.perf_counter() - started) * 1000.0,
             )
         )
-        return posterior
+        trace = None
+        if collect_trace:
+            trace = DifferentiableIngestTrace(
+                predicted_belief=predicted_belief,
+                predicted_measurements=predicted,
+                measurements=measurements,
+                association=association,
+                association_cost_matrix=association_cost_matrix,
+                innovation=innovation,
+                posterior=posterior,
+                observation_mode=mode,
+            )
+        return posterior, trace
 
-    def ingest(
+    def _ingest_packets(
         self,
         packets: ObservationPacket | Sequence[ObservationPacket],
         *,
-        prepared: PreparedPropagation | None = None,
-    ) -> WorldBelief:
+        prepared: PreparedPropagation | None,
+        collect_trace: bool,
+    ) -> tuple[WorldBelief, DifferentiableIngestTrace | None]:
+        """Shared ingest implementation with optional ephemeral trace capture."""
+
         packet_list = [packets] if isinstance(packets, ObservationPacket) else list(packets)
         if not packet_list:
             raise ValueError("ingest requires at least one observation packet")
+        if collect_trace and len(packet_list) != 1:
+            raise ValueError("differentiable ingest trace requires exactly one packet")
         if prepared is not None and len({packet.timestamp for packet in packet_list}) != 1:
             raise PreparedPropagationError(
                 "prepared propagation requires one observation timestamp group"
@@ -1216,6 +1264,7 @@ class OnlineWorldModel(nn.Module):
         device, dtype = self._model_device_dtype()
         packet_list = [_move_packet(packet, device=device, dtype=dtype) for packet in packet_list]
         packet_list.sort(key=lambda packet: packet.timestamp)
+        captured_trace: DifferentiableIngestTrace | None = None
         for timestamp, iterator in groupby(packet_list, key=lambda packet: packet.timestamp):
             group = list(iterator)
             if self.state.belief is None:
@@ -1283,12 +1332,15 @@ class OnlineWorldModel(nn.Module):
                 # Later modalities at the same timestamp correct that posterior
                 # without applying temporal position→velocity coupling twice.
                 packet_dt = dt if packet_index == 0 else torch.zeros_like(dt)
-                posterior = self._ingest_one(
+                posterior, packet_trace = self._ingest_one(
                     packet,
                     posterior,
                     packet_dt,
                     prior_interval_collision_mask,
+                    collect_trace=collect_trace,
                 )
+                if packet_trace is not None:
+                    captured_trace = packet_trace
             self.state.belief = posterior.with_timestamp(timestamp)
             self.state.ingest_count += 1
             if self.hypothesis_controller is not None:
@@ -1306,7 +1358,36 @@ class OnlineWorldModel(nn.Module):
                         "hypothesis scheduling mutated the persistent source belief"
                     )
         assert self.state.belief is not None
-        return self.state.belief
+        return self.state.belief, captured_trace
+
+    def ingest(
+        self,
+        packets: ObservationPacket | Sequence[ObservationPacket],
+        *,
+        prepared: PreparedPropagation | None = None,
+    ) -> WorldBelief:
+        belief, _ = self._ingest_packets(
+            packets,
+            prepared=prepared,
+            collect_trace=False,
+        )
+        return belief
+
+    def ingest_with_trace(
+        self,
+        packet: ObservationPacket,
+        *,
+        prepared: PreparedPropagation | None = None,
+    ) -> tuple[WorldBelief, DifferentiableIngestTrace | None]:
+        """Assimilate one packet and return a non-persistent live training trace."""
+
+        if not isinstance(packet, ObservationPacket):
+            raise TypeError("ingest_with_trace requires one ObservationPacket")
+        return self._ingest_packets(
+            packet,
+            prepared=prepared,
+            collect_trace=True,
+        )
 
     def initialize(
         self,

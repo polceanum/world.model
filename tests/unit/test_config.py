@@ -27,6 +27,52 @@ def test_profiles_resolve_and_validate(path: Path) -> None:
     assert config.simulator.split_ood_start == SPLIT_SEED_RANGES["ood"][0]
 
 
+def test_soft_association_requires_positive_temperature_and_differentiable_scope() -> None:
+    base = load_config(CONFIG_DIR / "tiny_overfit.yaml")
+    weights = {
+        **base.training.loss_weights,
+        "soft_association_state": 1.0,
+        "soft_association_exclusivity": 0.05,
+    }
+    enabled = replace(
+        base,
+        training=replace(
+            base.training,
+            closed_loop_trainable_scope="differentiable_state_estimator",
+            closed_loop_soft_association_temperature=0.5,
+            loss_weights=weights,
+        ),
+    )
+    enabled.validate()
+
+    with pytest.raises(ValueError, match="require.*temperature"):
+        replace(
+            enabled,
+            training=replace(
+                enabled.training,
+                closed_loop_soft_association_temperature=None,
+            ),
+        ).validate()
+    with pytest.raises(ValueError, match="differentiable_state_estimator"):
+        replace(
+            enabled,
+            training=replace(enabled.training, closed_loop_trainable_scope="updater"),
+        ).validate()
+
+
+@pytest.mark.parametrize("value", [True, 0.0, -0.5, float("nan"), float("inf"), "0.5"])
+def test_soft_association_temperature_is_strictly_positive_finite_real(value: object) -> None:
+    base = load_config(CONFIG_DIR / "tiny_overfit.yaml")
+    with pytest.raises(ValueError, match="soft_association_temperature"):
+        replace(
+            base,
+            training=replace(
+                base.training,
+                closed_loop_soft_association_temperature=value,  # type: ignore[arg-type]
+            ),
+        ).validate()
+
+
 def test_sustained_v3_analytic_contacts_match_reference_solver_thresholds() -> None:
     config = load_config(CONFIG_DIR / "sustained_accuracy_mps_v3.yaml")
     dynamics = config.model.dynamics

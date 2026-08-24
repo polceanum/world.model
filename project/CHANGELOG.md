@@ -2,6 +2,22 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 differentiable physics assimilation (specification 1.69)
+
+- Added non-persistent live ingest traces and a training-only gated soft
+  Hungarian surrogate for RGB world position, temporal velocity, and one-to-one
+  association evidence while preserving exact hard runtime behavior.
+- Added the `differentiable_state_estimator` scope for end-to-end RGB/filter/
+  physical-identifier learning with equation-based dynamics retained and learned
+  residual dynamics frozen.
+- Added strict legacy-off configuration, exact-resume defaults, a runnable CPU
+  profile, hard-forward parity, gradient reachability, and legacy no-trace tests.
+- Passed a bounded balanced one-update smoke with zero skipped draws, finite
+  loss/gradients, physical-parameter support, exact-zero learned-dynamics
+  gradients, and hard post-validation. No accuracy or promotion claim is made.
+- Passed the final repository gate (`1353 passed`, `20` expected skips in
+  `515.07s`) plus Ruff, format, compile, version, and diff validation.
+
 ### 2026-08-24 terminal event-epoch adaptive local-model diagnostic
 
 - Added one temp-only causal epoch boundary to the rejected adaptive Gaussian

@@ -187,6 +187,7 @@ training:
   closed_loop_prior_future_correction_enabled: true
   closed_loop_batch_macro_physical_losses_enabled: false
   closed_loop_axiswise_correction_hinge_enabled: false
+  closed_loop_soft_association_temperature: null
   closed_loop_scenario_tail_fraction: null
   closed_loop_uncertainty_standardized_error_gradient_cap: null
   closed_loop_protected_reference_nonregression_weight: 0.0
@@ -217,6 +218,9 @@ training:
     existence: 0.2
     uncertainty: 0.05
     correction: 0.02
+    soft_association_state: 0.0
+    soft_association_velocity: 0.0
+    soft_association_exclusivity: 0.0
 
 evaluation:
   horizons_seconds: [0.1, 0.25, 0.5, 1.0, 2.0]

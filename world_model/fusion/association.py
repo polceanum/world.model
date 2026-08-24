@@ -128,12 +128,26 @@ class Associator:
         belief: WorldBelief,
         measurements: MeasurementSet,
         predicted: PredictedMeasurements,
+        *,
+        cost_matrix: Tensor | None = None,
     ) -> AssociationResult:
         measurements.validate()
         predicted.validate()
         if belief.batch_size != predicted.values.shape[0]:
             raise ValueError("belief and predicted measurement batch sizes differ")
-        cost = self.cost_matrix(measurements, predicted)
+        cost = self.cost_matrix(measurements, predicted) if cost_matrix is None else cost_matrix
+        if (
+            cost.ndim != 3
+            or cost.shape[0] != predicted.values.shape[0]
+            or cost.shape[2] != measurements.values.shape[1]
+            or cost.shape[1] > predicted.values.shape[1]
+            or not cost.is_floating_point()
+        ):
+            raise ValueError("association cost_matrix must be floating [B,N,M]")
+        if cost.shape[1] < predicted.values.shape[1] and bool(
+            predicted.valid_mask[:, cost.shape[1] :].any()
+        ):
+            raise ValueError("association cost_matrix omitted valid predicted rows")
         batch, prediction_count, measurement_count = cost.shape
         belief_count = belief.objects.max_objects
         pair_capacity = min(prediction_count, measurement_count)

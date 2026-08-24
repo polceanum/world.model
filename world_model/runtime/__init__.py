@@ -5,6 +5,7 @@ from world_model.runtime.diagnostics import (
     RuntimeStepDiagnostics,
 )
 from world_model.runtime.online_world_model import (
+    DifferentiableIngestTrace,
     OnlineWorldModel,
     OutOfSequenceObservationError,
 )
@@ -20,6 +21,7 @@ from world_model.runtime.sequence_runner import (
 from world_model.runtime.state import RuntimeState
 
 __all__ = [
+    "DifferentiableIngestTrace",
     "OnlineSequenceRunner",
     "OnlineWorldModel",
     "OutOfSequenceObservationError",

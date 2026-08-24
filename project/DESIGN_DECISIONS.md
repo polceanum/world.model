@@ -1,5 +1,32 @@
 # Design decisions
 
+## ADR-192 — Relax hard assimilation for training, retain it for deployment
+
+- **Date:** 2026-08-24
+- **Status:** implementation and bounded wiring gate accepted; accuracy pending
+- **Context:** Narrow typed-head campaigns attempted to improve a system whose
+  dominant error is RGB state estimation. Hard assignment/lifecycle decisions
+  and frozen upstream owners left only about 0.08% of model scalars functionally
+  mutable, despite equation-driven dynamics already being close under oracle
+  state. Training hard indices is impossible and post-output residual families
+  repeatedly failed broad gates.
+- **Decision:** Keep Hungarian identity, lifecycle, and contact jumps as the
+  runtime shell, but expose an ephemeral live ingest trace. Optimize a gated
+  soft assignment over the exact hard cost matrix with physical state,
+  temporal velocity, and exclusivity losses. Train RGB perception, the full
+  recurrent updater, and the causal physical identifier together; keep analytic
+  dynamics differentiable in their inputs and freeze learned residual dynamics.
+- **Alternatives considered:** continue isolated output rows; replace Hungarian
+  with soft assignment at deployment; use a learned network instead of analytic
+  mechanics; differentiate integer lifecycle IDs; tune residual/history pools;
+  or unfreeze the complete dynamics stack immediately.
+- **Consequences:** Hard runtime numerics remain exact and the trace is never
+  persistent. Real causal gradients reach perception, filter, and identifier;
+  drag/restitution are trained through observable parameter and analytic rollout
+  losses. A balanced one-update CPU smoke is finite with zero retry and
+  exact-zero learned-residual gradient. This authorizes one bounded accuracy
+  qualification, not a long campaign or promotion.
+
 ## ADR-191 — Close residual-history models after event-epoch rejection
 
 - **Date:** 2026-08-24

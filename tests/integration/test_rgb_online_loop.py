@@ -10,6 +10,7 @@ from world_model.observations import ObservationPacket
 from world_model.observations.rgb import RGBTemporalPositionHistory
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator import generate_episode
+from world_model.training.loop import _soft_association_surrogate_losses
 from world_model.utils.config import OrpheusConfig
 
 
@@ -148,6 +149,65 @@ def test_runtime_exposes_detached_last_measurements_and_reset_clears_them() -> N
 
     model.reset()
     assert model.last_measurements is None
+
+
+def test_differentiable_ingest_trace_preserves_hard_runtime_and_reaches_rgb_filter() -> None:
+    torch.manual_seed(17)
+    config = _small_rgb_config()
+    traced = OnlineWorldModel.from_config(config, device="cpu")
+    ordinary = OnlineWorldModel.from_config(config, device="cpu")
+    ordinary.load_state_dict(traced.state_dict())
+    traced.observation_modules["rgb"].requires_grad_(True)
+    traced.updater.requires_grad_(True)
+
+    first_traced, first_trace = traced.ingest_with_trace(_rgb_packet(0.0))
+    first_ordinary = ordinary.ingest(_rgb_packet(0.0))
+    assert first_trace is not None
+    torch.testing.assert_close(
+        first_traced.objects.position,
+        first_ordinary.objects.position,
+        rtol=0.0,
+        atol=0.0,
+    )
+    assert torch.equal(first_traced.objects.object_id, first_ordinary.objects.object_id)
+
+    posterior, _ = traced.ingest_with_trace(_rgb_packet(1.0 / 30.0, shift=1))
+    ordinary_posterior = ordinary.ingest(_rgb_packet(1.0 / 30.0, shift=1))
+    posterior, trace = traced.ingest_with_trace(_rgb_packet(2.0 / 30.0, shift=2))
+    ordinary_posterior = ordinary.ingest(_rgb_packet(2.0 / 30.0, shift=2))
+    assert trace is not None
+    for traced_value, ordinary_value in (
+        (posterior.objects.position, ordinary_posterior.objects.position),
+        (posterior.objects.velocity, ordinary_posterior.objects.velocity),
+        (posterior.objects.fast_log_variance, ordinary_posterior.objects.fast_log_variance),
+    ):
+        torch.testing.assert_close(traced_value, ordinary_value, rtol=0.0, atol=0.0)
+    assert traced.last_measurements is not None
+    assert traced.last_measurements.auxiliary["world_position"].grad_fn is None
+    assert trace.measurements.auxiliary["world_position"].grad_fn is not None
+
+    active = trace.predicted_belief.objects.active
+    target_position = trace.predicted_belief.objects.position.detach() + 0.15
+    target_velocity = trace.predicted_belief.objects.velocity.detach() + 0.05
+    losses, metrics = _soft_association_surrogate_losses(
+        traced,
+        trace,
+        aligned_target_position=target_position,
+        aligned_target_velocity=target_velocity,
+        matched_belief_slots=active,
+        temperature=0.5,
+    )
+    assert metrics["soft_association_supported_coordinate_count"] > 0
+    sum(losses.values()).backward()
+    assert any(
+        parameter.grad is not None and torch.isfinite(parameter.grad).all()
+        for parameter in traced.observation_modules["rgb"].parameters()
+    )
+    assert any(
+        parameter.grad is not None and torch.isfinite(parameter.grad).all()
+        for parameter in traced.updater.parameters()
+    )
+    assert not hasattr(traced.state, "ingest_trace")
 
 
 def test_opt_in_runtime_pool_uses_rgb_measurements_without_oracle_state() -> None:

@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.68
+**Version:** 1.69
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, opt-in dense multi-instance global-discovery, causal observation-model selection, terminal dense typed-attribute evidence, frozen-foundation-feature feasibility, adaptive Gaussian local-model evidence, and event-epoch local-model evidence amendments 24 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, opt-in dense multi-instance global-discovery, causal observation-model selection, terminal dense typed-attribute evidence, frozen-foundation-feature feasibility, adaptive Gaussian local-model evidence, event-epoch local-model evidence, and differentiable hard-runtime assimilation surrogate amendments 24 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9588,6 +9588,61 @@ horizon admission, or adjacent thresholds, and do not advance this candidate
 to fixed-32 or MPS. A future runtime candidate must carry genuinely different
 causal model state and evidence rather than another partition of residual
 history.
+
+---
+
+## 268. Hard runtime decisions require differentiable training surrogates
+
+Hungarian identity assignment, lifecycle state changes, and resolved contact
+jumps remain deterministic runtime inductive biases. They must not be the only
+route by which the values feeding those decisions learn. Causal RGB training
+therefore exposes an ephemeral `DifferentiableIngestTrace` containing the live
+predicted belief, projected measurement, RGB measurement, full association
+cost matrix, hard association, innovation, and final hard posterior for exactly
+one packet. This object is training-local: it is never written to
+`RuntimeState`, measurement caches, diagnostics, or checkpoints.
+
+When `training.closed_loop_soft_association_temperature` is finite and positive,
+the trainer computes a gated row-softmax over the same cost matrix consumed by
+Hungarian matching. Invalid, low-confidence, source-incompatible, nonfinite,
+and above-maximum-cost pairs remain excluded. The expected RGB world position
+and supported temporal velocity receive physical target losses; column mass
+above one receives a small exclusivity penalty. This relaxes assignment values,
+not integer identities. Ordinary `ingest`, validation, evaluation, and
+deployment continue to use the exact hard runtime output.
+
+The `differentiable_state_estimator` scope trains the RGB observation module,
+the recurrent belief updater, and the causal physical identifier together.
+Equation-based gravity, drag, contact, and uncertainty propagation remain
+frozen parameter modules but preserve derivatives with respect to estimated
+state and identified physical parameters. Existing observable drag and
+restitution losses plus analytic rollout losses derive those parameters without
+asking a learned residual network to reproduce elementary mechanics. The
+learned dynamics residual remains frozen in this phase and may be reopened only
+for bounded residual model mismatch after state estimation qualifies.
+
+All new semantics are legacy-off and exact-resume-bound: null temperature and
+zero soft-association weights execute the historical path without requesting a
+trace. Positive soft-association weights require the differentiable estimator
+scope. The profile `configs/differentiable_physics_assimilation_cpu.yaml` uses
+CPU causal execution, the analytic rollout prior, temperature `0.5`, and
+explicit state/velocity/exclusivity weights. Training may use simulator state
+only after ingestion to form losses; no privileged state enters runtime
+association, lifecycle, correction, parameter updates, or prediction.
+
+The bounded production smoke at
+`/private/tmp/20260824-111854-20260824-spec169-differentiable-assimilation-one-update-smoke`
+completed one balanced eight-scenario update with no skipped draw. It recorded
+72 supported soft position coordinates, three supported temporal-velocity
+coordinates, 70 observable drag objects, and seven observable restitution
+objects. Loss and gradients were finite (`2.708743`, raw norm `1.875017`,
+applied norm `1.017866`); the learned attention/dynamics residual gradient was
+exactly zero and peak RSS was about `1.88 GiB`. This is graph, ownership, and
+throughput evidence only. The warmup-scale single update is not accuracy,
+promotion, or convergence evidence. The next experiment is one predeclared
+short paired qualification against the hard-runtime baseline; stop if broad
+fixed validation does not improve materially rather than iterating objective
+weights on the gate manifest.
 
 ---
 
