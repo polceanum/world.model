@@ -3,7 +3,7 @@
 ## ADR-175 — Constrain adaptation against the frozen causal reference
 
 - **Date:** 2026-08-23
-- **Status:** implementation accepted; qualification pending
+- **Status:** mechanism accepted; accuracy candidate rejected; terminal
 - **Context:** Specs 1.56–1.61 repeatedly improved pooled position/velocity but
   rotated strict regressions across scenario/axis/horizon event and identity
   slices. Post-hoc selector rejection protects deployment but does not shape
@@ -22,12 +22,16 @@
   yields an 11.1% gradient-scale constraint with all 328 cells aligned. The
   first retained pair exposed that optional reference construction shifted
   the candidate RNG before update one; exact draws/windows alone were not a
-  sufficient parity proof. The 32-update rung was not launched. Reference
-  setup now preserves/restores RNG and a fresh pair must prove exact first-
-  forward parity before the one authorized accuracy rung. No tuning ladder is
-  authorized. The initial implementation gate is `1295 passed, 20 skipped in
-  447.03s` plus clean Ruff, 225-file format, isolated compile, version, and
-  diff checks; initial source is pushed at `9b3ac1d`.
+  sufficient parity proof. Reference setup now preserves/restores RNG. The
+  repaired pair proves exact candidate forwards plus eight-tensor ownership
+  (`53873f5d...`). The sole step-32 rung activates the hinge on 29/32 updates
+  with zero skips and maximum norm `1.698026`, but preserves the same five
+  spec-1.61 failures at bit-identical values (`3aff0403...`). The marginal
+  selector improvement is slightly worse than spec 1.61. Reject and stop:
+  retain step zero and do not retune, extend, resume, or compose this objective.
+  The implementation gate is `1295 passed, 20 skipped in 447.03s` plus clean
+  Ruff, 225-file format, isolated compile, version, and diff checks; source is
+  pushed through the RNG repair at `45b796f`.
 
 ## ADR-174 — Protect recursive state heads with calibrated node-event descent
 

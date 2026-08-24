@@ -23,7 +23,17 @@
   and config were paired, but optional reference-model construction shifted
   global RNG and changed the first candidate forward despite a zero hinge.
   Frozen-reference setup now snapshots/restores candidate RNG, with a focused
-  adversarial construction test. Fresh paired qualification remains pending.
+  adversarial construction test. The repair is committed/pushed at `45b796f`.
+- Passed the repaired two-update pair (`53873f5d...`): configs differ only at
+  protected weight `1.0/0.0`; seeds, windows, candidate forward fields, and
+  update-one gradients are exact; the hinge activates on update two; both arms
+  change exactly the intended eight tensors with eight Adam owners.
+- Rejected the only bounded step-32 candidate (`3aff0403...`). All 32 updates
+  apply with zero skips and maximum gradient `1.698026`; protected loss is
+  active on 29 updates. The selector improves `1.40954e-5`, but collision F1
+  regresses and the exact same five spec-1.61 event/identity guardrails fail
+  with bit-identical values. Retain step zero and stop this objective without
+  retuning or extension.
 
 ### 2026-08-23 specification 1.61 protected state-event routing
 

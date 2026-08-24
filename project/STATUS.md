@@ -1,6 +1,6 @@
 # Project status
 
-## Specification 1.62 frozen-reference non-regression — implementation in qualification
+## Specification 1.62 frozen-reference non-regression — terminally rejected at step 32
 
 Repeated lateral-head/event objectives improved pooled state accuracy but
 failed scenario/event/identity guardrails. The new default-zero exact-resume
@@ -16,15 +16,23 @@ permitted-head perturbation activates `136` cells at protected/base gradient
 ratio `0.111032`. The profile fixes the one provisional weight at `1.0`.
 The final repository passes `1295 passed, 20 skipped in 447.03s`; Ruff, the
 225-file format check, isolated compile, version, and diff gates pass. The
-implementation was committed and pushed at `9b3ac1d`. The first retained
-two-update pair correctly matched seeds, scenarios, windows, and the sole
-config delta, but failed the stricter forward-parity gate: construction of the
-optional frozen model consumed global RNG before the first candidate forward.
-The run was stopped before the 32-update rung. Reference setup now preserves
-and restores the candidate RNG stream, with a focused construction regression;
-a fresh clean pair remains mandatory. Do not tune multiple weights or extend
-beyond the first bounded accuracy rung without materially fewer guardrail
-failures.
+initial implementation and RNG repair were committed/pushed at `9b3ac1d` and
+`45b796f`. The first pair exposed optional-model construction RNG drift and was
+retained/rejected. The repaired pair then proved exact seeds, windows, and all
+candidate-forward fields at both updates; configs differ only at weight
+`1.0/0.0`, both arms change exactly eight intended tensors with eight Adam
+owners, and the hinge moves from exact zero to `8.78259e-8` on update two
+(`53873f5d...`).
+
+The sole bounded step-32 rung is mechanically clean but accuracy-terminal.
+All 32 updates apply with zero skips, maximum norm `1.698026`, protected loss
+active on 29 updates, and exact eight-tensor ownership. Selector improves only
+`1.40954e-5` to `0.239514541`; position/velocity improve
+`1.66408e-5 m / 1.91507e-5 m/s`, while collision F1 worsens
+`0.283747 -> 0.281768`. The candidate fails the same five pooled,
+heavy-light, and reference-pairs event/identity guardrails as spec 1.61, with
+all five failure values bit-identical (`3aff0403...`). Reject the candidate,
+retain step zero, and do not retune or extend this objective.
 
 ## Specification 1.61 protected state-event routing — implementation gate 2026-08-23
 

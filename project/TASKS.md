@@ -19,10 +19,13 @@
   exposed pre-forward RNG drift from optional reference-model construction.
 - [x] Preserve/restore candidate RNG around frozen-reference construction and
   add a focused construction regression.
-- [ ] Commit/push the parity repair and run one fresh clean paired wiring smoke.
-- [ ] Run at most one bounded fixed-32 accuracy rung after exact forward parity.
-- [ ] Stop without further weight/duration tuning unless guardrail failures
-  contract materially while pooled accuracy remains non-regressive.
+- [x] Commit/push the parity repair (`45b796f`) and pass the fresh paired wiring
+  smoke (`53873f5d...`): exact candidate forwards and eight-tensor ownership.
+- [x] Run the sole bounded fixed-32 accuracy rung (`3aff0403...`).
+- [x] Reject and stop: the protected objective retains the same five exact
+  guardrail failures as spec 1.61 despite a marginal pooled improvement. Do
+  not tune its weight/duration or extend beyond step 32.
+- [x] Commit/push the terminal specification-1.62 evidence closure.
 
 ## Protected node-event state routing — specification 1.61
 

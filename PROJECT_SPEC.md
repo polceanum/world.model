@@ -8980,13 +8980,16 @@ from the immutable initializer preserves all `328` supported cells. Exact
 equality gives zero loss and zero regressed cells; a `1 cm` allowed mean-head
 perturbation activates `136` cells with protected/base gradient-norm ratio
 `0.111032`. The dedicated profile therefore uses the single provisional
-weight `1.0`. This is formulation and gradient-scale evidence only. A clean
-paired wiring smoke and bounded fixed-32 accuracy rung remain mandatory. The
-final repository passes `1295` tests with `20` expected unavailable-backend
-skips in `447.03s`; Ruff, the `225`-file format check, isolated compile,
-version, and diff gates pass. Stop
-without retuning if the protected constraint does not materially reduce the
-known event/identity guardrail failures.
+weight `1.0`. The repaired two-update pair proves exact candidate-forward
+parity, RNG continuation, and eight-tensor ownership (`53873f5d...`). The
+only authorized step-32 rung applies all updates with zero skips and activates
+the hinge on 29 updates, but it retains all five known spec-1.61 event/identity
+guardrail failures at bit-identical values (`3aff0403...`). The candidate is
+rejected, deployment remains step zero, and this objective is terminal: do not
+retune its weight, extend its duration, or compose its checkpoint. The final
+repository passes `1295` tests with `20` expected unavailable-backend skips in
+`447.03s`; Ruff, the `225`-file format check, isolated compile, version, and
+diff gates pass.
 
 ---
 
