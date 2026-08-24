@@ -1,5 +1,29 @@
 # Design decisions
 
+## ADR-188 — Close dense observation modeling after attribute-only rejection
+
+- **Date:** 2026-08-24
+- **Status:** diagnostic rejected; dense family terminal
+- **Context:** The dense detector's center branch had been trained, while its
+  typed attribute head remained at initialization. Attribute quality was the
+  last plausible bounded explanation for the detector's poor z, uncertainty,
+  precision, and identity behavior; the causal structured/dense pool had also
+  shown that the untrained dense candidate never won association evidence.
+- **Decision:** Permit exactly one 128-update CPU rung training only the typed
+  attribute-head weight and bias from the frozen dense candidate. Keep all six
+  center tensors and all other model tensors exact. Advance only if every
+  predeclared fixed-eight core metric and scenario-horizon position cell is
+  non-regressing; do not tune around failure.
+- **Alternatives considered:** jointly retrain center and attributes, change
+  learning rate/duration/loss weights, alter NMS/confidence/association,
+  selectively admit dense proposals, or proceed directly to fixed-32/MPS.
+- **Consequences:** Training is mechanically healthy and produces small pooled
+  current position/z/velocity/NLL gains, but only `62/84` core metrics
+  improve or tie, current calibration worsens, and 21 scenario-horizon
+  position cells regress. Reject (`7a262337...`), retain no source/config
+  change, and close this dense family. Further work requires a materially
+  different observation architecture with independent causal evidence.
+
 ## ADR-187 — Require better causal evidence before pooling observation models
 
 - **Date:** 2026-08-24

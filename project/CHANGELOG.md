@@ -2,6 +2,21 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 terminal dense typed-attribute diagnostic
+
+- Trained one bounded 128-update CPU attribute-only rung from the frozen dense
+  candidate. Exactly `dense_global_detector.attribute_head.{weight,bias}`
+  changed; all center and non-dense tensors remained exact. Training was finite
+  and clipping contained the maximum raw gradient (`70c65cb3...`).
+- Corrected a temp-only optimizer-packaging defect without changing or
+  retraining the learned model, producing candidate `f0c03690...`.
+- Rejected the candidate on the protected fixed-eight CPU/RGB gate: `62/84`
+  core metrics improve or tie, 22 regress, and 21 scenario-horizon position
+  cells regress despite small pooled current position/z/velocity/NLL gains
+  (`7a262337...`).
+- Closed the dense observation family without production changes, adjacent
+  tuning, fixed-32, MPS, deployment, or promotion work.
+
 ### 2026-08-24 terminal causal observation-model pool diagnostic
 
 - Measured only `14/944` ambiguous associated pairs (`1.48%`) on the protected

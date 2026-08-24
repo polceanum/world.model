@@ -1,5 +1,19 @@
 # Tasks
 
+## Dense typed-attribute completion — terminal rejection
+
+- [x] Train exactly one bounded 128-update CPU rung from the frozen dense
+  candidate with only the typed attribute-head weight and bias trainable; keep
+  all six center tensors and every other model tensor exact (`70c65cb3...`).
+- [x] Correct the temporary checkpoint-packaging defect without retraining and
+  validate the resulting candidate artifact (`f0c03690...`).
+- [x] Apply the protected fixed-eight CPU/RGB broad gate. Reject at only
+  `62/84` core metrics non-regressing and 21 scenario-horizon position
+  regressions (`7a262337...`).
+- [x] Stop without learning-rate/duration/loss/threshold/association tuning,
+  fixed-32, or MPS. Retain no production code or config change.
+- [x] Synchronize, commit, and push the terminal evidence boundary.
+
 ## Causal structured/dense observation-pool diagnostic — no specification change
 
 - [x] Measure whether deferred ambiguous-association branching has enough

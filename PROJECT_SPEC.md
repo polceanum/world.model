@@ -5,7 +5,7 @@
 **Status:** Living authoritative specification
 **Version:** 1.68
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, and opt-in dense multi-instance global-discovery amendments 24 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, opt-in dense multi-instance global-discovery, causal observation-model selection, and terminal dense typed-attribute evidence amendments 24 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9414,9 +9414,49 @@ is `/private/tmp/20260824-spec168-association-ambiguity-fixed8-final.json`
 (`e3fd7b6e...`) and
 `/private/tmp/20260824-spec169-measurement-pool-fixed8-v3.json`
 (`33f0e12e...`). The temporary implementation is fully reverted. Do not tune
-association margins, score weights, dense admission, or attributes on this
-manifest. Reopen only when a materially different observation candidate first
-proves strictly better causal evidence under a predeclared independent gate.
+association margins, score weights, or dense admission on this manifest. The
+single separately bounded typed-attribute completion in section 264 is the
+final diagnostic for this architecture; after its rejection, no further dense
+attribute work is authorized. Reopen only when a materially different
+observation candidate first proves strictly better causal evidence under a
+predeclared independent gate.
+
+---
+
+## 264. Dense typed-attribute completion is a terminal diagnostic
+
+The dense center branch's raw localization success did not establish that its
+untrained typed attribute head could support physical filtering. Exactly one
+bounded diagnostic may train only
+`dense_global_detector.attribute_head.{weight,bias}` for 128 balanced CPU
+updates from the frozen dense production candidate. The center trunk/head and
+every other model tensor must remain exact. No learning-rate, duration,
+objective, threshold, NMS, association, or admission sweep is permitted.
+
+That diagnostic is complete and rejected. Training is finite and exactly
+owned, but the protected fixed-eight CPU/RGB comparison passes only `62/84`
+core non-regression cells. Twenty-two core metrics regress, including five of
+six current/forecast position-NLL cells and current calibration error
+(`0.0261084 -> 0.0290640`), and 21 scenario-horizon position cells regress.
+The small gains in current position (`0.1208446 -> 0.1205859 m`), current z
+(`0.1355318 -> 0.1352241 m`), velocity
+(`0.7582763 -> 0.7582159 m/s`), and current NLL
+(`-0.5992216 -> -0.6094756`) are insufficient.
+
+The training report is
+`/private/tmp/20260824-spec168-dense-attribute-feasibility.json` (SHA-256
+`70c65cb3859989be1885fb33c1e75512f9823fb6b745d8245ef3a5c599a9f765`),
+the valid candidate checkpoint is
+`/private/tmp/20260824-spec168-dense-attribute-candidate-v2.pt` (SHA-256
+`f0c03690318cedbe45e1b4c8a11beed9e7bdb660c06d985a354f53d1f85dab9a`),
+and the comparison is
+`/private/tmp/20260824-spec168-dense-attribute-fixed8-comparison.json`
+(SHA-256
+`7a2623374406ffbc8a88447c8974cf5387bdc5f7a80186830b1d2b068f99e215`).
+No production semantic is retained. Do not run fixed-32 or MPS and do not
+iterate this family further. Deployment remains the protected step-zero model;
+future observation work requires materially different architecture and
+independently better causal evidence.
 
 ---
 

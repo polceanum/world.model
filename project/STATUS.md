@@ -1,5 +1,43 @@
 # Project status
 
+## Dense typed-attribute completion — terminally rejected
+
+One final bounded diagnostic tested the only credible explanation left by the
+dense center detector: its center heatmap was trained, but its typed
+radius/depth/colour/visibility/variance/appearance head was not. Starting from
+the frozen dense production candidate, exactly 128 balanced CPU updates trained
+only `dense_global_detector.attribute_head.{weight,bias}`. The six center
+branch tensors and the complete remainder of the model stayed exact. All 128
+updates completed; mean loss was `0.2142312`, final loss `-0.0181712`, and the
+maximum raw gradient `241.916` was contained by the existing clip. The
+feasibility report is
+`/private/tmp/20260824-spec168-dense-attribute-feasibility.json`
+(`70c65cb3...`); the valid weight-bearing candidate is
+`/private/tmp/20260824-spec168-dense-attribute-candidate-v2.pt`
+(`f0c03690...`). The first serialized candidate's empty optimizer groups were
+a temporary packaging error, corrected without retraining or changing model
+weights before evaluation.
+
+The predeclared protected fixed-eight CPU/RGB comparison is terminally mixed
+and fails. Only `62/84` core current/horizon physical metrics improve or tie;
+22 regress, including five of six position-NLL cells, current calibration
+error (`0.0261084 -> 0.0290640`), and several position/velocity cells. There
+are 21 scenario-horizon position regressions across baseline, camera,
+glancing, impulse, and reference-pairs. Small gains in current position
+(`0.1208446 -> 0.1205859 m`), z (`0.1355318 -> 0.1352241 m`), velocity
+(`0.7582763 -> 0.7582159 m/s`), and NLL
+(`-0.5992216 -> -0.6094756`) do not meet the broad non-regression gate.
+Evidence is
+`/private/tmp/20260824-spec168-dense-attribute-fixed8-comparison.json`
+(`7a262337...`), with candidate evaluator report `062c167d...` and protected
+reference `7adc77fe...`.
+
+Stop the dense observation family here. Do not tune attribute learning rate,
+duration, weights, thresholds, association, or admission, and do not run
+fixed-32/MPS. No production source or configuration change is retained;
+deployment remains the protected step-zero model. Reopen only for a materially
+different observation architecture with independently better causal evidence.
+
 ## Causal structured/dense observation pool — terminally vacuous diagnostic
 
 The dense detector's physical rejection suggested an identity-aware
