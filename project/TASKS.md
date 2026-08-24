@@ -1,5 +1,21 @@
 # Tasks
 
+## RGB global-discovery split diagnostic — no specification change
+
+- [x] Verify collision-edge temporal history reset and prepared interval
+  propagation (`4 passed, 61 deselected`); no reset/lifecycle defect exists.
+- [x] Attribute fixed-eight global discovery by structured components, frozen
+  learned proposals, visible targets, and scenario. Confirm a real merged-
+  component limitation under severe overlap.
+- [x] Reject learned fallback admission: raw learned assignments are broadly
+  less accurate than precise structured centres and would introduce duplicates.
+- [x] Run exactly one fixed chromatic split proposal. Reject it because centroid
+  error worsens in every scenario, heavy/light count does not improve, and two
+  frames overcount visible targets.
+- [x] Stop before production code, threshold/linkage search, fixed-32, MPS, or
+  training. Record, commit, and push the terminal evidence boundary; deployment
+  remains step zero (`03832e08...`).
+
 ## Temporal RGB motion-support diagnostic — no specification change
 
 - [x] Leave the terminal collision-objective ladder closed and localize the

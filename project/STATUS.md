@@ -1,5 +1,34 @@
 # Project status
 
+## RGB global-discovery split diagnostic — terminally rejected
+
+The post-motion-support audit first verified that collision-edge temporal
+history reset and prepared interval propagation are correct (`4 passed,
+61 deselected`). It then traced the fixed-eight RGB manifest at the exact
+step-zero model state. Structured row-background components are highly precise
+when objects remain separated, but severe overlap and unequal radii can merge
+multiple visible discs into one distance-transform basin. This is a real
+global-discovery coverage limitation, not a lifecycle or collision-reset bug.
+
+Neither available split owner passes a bounded repair gate. Frozen learned
+proposals are broadly inaccurate relative to the structured centres: for
+example, heavy/light global frames have `66/70` structured centres within
+`0.1 m`, while only `12/70` raw learned assignments are within `0.1 m`.
+A single fixed complete-linkage chromatic split recovers four camera centres
+and three elastic/reference centres, but increases aggregate centroid-distance
+error in every scenario, from `0.1093 -> 0.6826` even on baseline and
+`0.7746 -> 1.7790` on heavy/light; it recovers no heavy/light count and
+overcounts visible targets on two frames.
+
+The split candidate is rejected before production implementation, fixed-32,
+MPS, or training. Do not tune chromatic thresholds, clustering linkage, learned
+confidence, or fallback admission on this manifest. Reopen only with a
+distinctly trained or geometrically constrained multi-instance detector and
+independent evidence. The terminal report is
+`/private/tmp/20260824-spec166-global-discovery-terminal.json` (SHA-256
+`03832e08...`); deployment and runtime defaults remain unchanged at the
+protected step-zero model.
+
 ## Temporal RGB motion-support diagnostic — terminally rejected
 
 The next bounded accuracy audit moved away from the closed collision-training

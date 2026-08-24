@@ -1,5 +1,36 @@
 # Design decisions
 
+## ADR-182 — Reject unconstrained splitting of merged RGB components
+
+- **Date:** 2026-08-24
+- **Status:** diagnostic rejected; discovery-split ladder terminal
+- **Context:** After broader temporal-slope admission failed, fixed-eight RGB
+  traces showed that structured global centres are precise but severe overlap
+  and unequal radii can merge multiple visible discs into one distance basin.
+  Collision-edge history reset and prepared interval propagation were already
+  correct, so a separable global-discovery split was the remaining bounded
+  observation hypothesis.
+- **Decision:** Audit the existing learned proposals, then permit exactly one
+  fixed chromatic split proposal. Require recovered component count without
+  duplicate/overcount frames or broad centroid-localization regression. Stop
+  before implementation or a larger gate if either candidate fails.
+- **Alternatives considered:** admit all suppressed learned queries; tune
+  learned confidence; sweep chromatic thresholds/linkage/core masks; modify
+  temporal history again; or train a new detector before proving a viable
+  instance-separation signal.
+- **Consequences:** Frozen learned proposals are not a safe fallback—for
+  heavy/light global frames, structured centres place `66/70` within `0.1 m`,
+  versus only `12/70` raw learned assignments. The fixed chromatic proposal
+  adds eight centres over 320 frames but overcounts two frames, leaves
+  heavy/light count unchanged, and worsens aggregate centroid-distance error
+  in every scenario (baseline `0.1093 -> 0.6826`, heavy/light
+  `0.7746 -> 1.7790`). No production/config/checkpoint/default change is made;
+  no fixed-32, MPS, or training rung follows. Reopen only with a distinctly
+  trained or geometrically constrained multi-instance detector and independent
+  evidence. Terminal evidence is
+  `20260824-spec166-global-discovery-terminal.json` (`03832e08...`);
+  deployment remains step zero.
+
 ## ADR-181 — Reject broader admission of noisy temporal RGB slopes
 
 - **Date:** 2026-08-24

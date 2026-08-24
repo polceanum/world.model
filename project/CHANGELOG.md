@@ -2,6 +2,24 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 terminal RGB global-discovery split diagnostic
+
+- Verified collision-edge temporal-history reset and prepared interval
+  propagation (`4 passed, 61 deselected`), ruling out a reset/lifecycle defect.
+- Traced the fixed-eight RGB manifest and localized missing observations to
+  visible overlapping discs collapsing into too few structured distance basins.
+- Rejected the frozen learned detector as a split fallback because its raw
+  proposals are broadly inaccurate compared with assigned structured centres.
+- Rejected one fixed chromatic complete-linkage split: it recovered a few
+  camera/elastic/reference counts but worsened aggregate centroid distance in
+  every scenario, did not recover heavy/light count, and produced two visible-
+  target overcounts.
+- Stopped before production implementation, fixed-32, MPS, or training and
+  prohibited a threshold/linkage/confidence sweep on the same manifest.
+  Runtime defaults, model weights, checkpoints, and deployment are unchanged;
+  terminal evidence is `20260824-spec166-global-discovery-terminal.json`
+  (`03832e08...`).
+
 ### 2026-08-24 terminal temporal RGB motion-support diagnostic
 
 - Tested one weights-identical five-to-seven-sample history ablation on the
