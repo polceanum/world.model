@@ -8422,6 +8422,19 @@ and canonical x/y comparisons are `5ba37914...`, `8edf167c...`, and
 `acc9dd37...`. These are dirty-source diagnostic artifacts and establish no
 promotion or convergence claim.
 
+A final read-only adaptive diagnostic does not reopen this mechanism.  It
+estimated a bounded local least-squares gain only from causally prior residual
+pairs.  With four prior pairs, x/y next-residual MSE improved
+`19.81%/41.72%` across `3102/3498` samples per axis, but z worsened `1.10%`.
+One reset-bounded evidence subset worsened x by `5.75%`, and the temporary
+instrumentation did not establish complete scenario identity for every reset
+group.  The required every-scenario non-regression proof is therefore absent.
+Reports `6f656a50...` and `a6a00869...` are diagnostic only.  No adaptive
+runtime state, configuration, fixed-eight/MPS ladder, or deployment change is
+authorized.  Further work on this checkpoint may not tune residual gain,
+duration, interpolation, or the same analytic candidates; it requires a
+genuinely new independent-data or model-capacity hypothesis.
+
 The previously unrecorded specification-1.52 treatment completed fixed
 validation at steps 512 and 1024 before manual interruption at update 1044.
 Both candidates were rejected: selector score moved `0.23952864` to

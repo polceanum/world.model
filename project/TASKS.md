@@ -1,5 +1,19 @@
 # Tasks
 
+## Terminal causal-adaptation screen
+
+- [x] Audit the existing regime-local pool, forecast-only isolation, velocity
+  veto, and fixed causal residual before proposing another runtime change.
+- [x] Run one bounded prior-only adaptive residual probe on the fixed
+  manifest.  At minimum support four it covers `3102/3498` samples per axis,
+  improves x/y one-step MSE `19.81%/41.72%`, and worsens z `1.10%`.
+- [x] Apply the predeclared every-scenario go/no-go rule.  Reject because one
+  evidence reset group worsens x `5.75%` and the probe cannot establish valid
+  scenario attribution for every slice.
+- [x] Stop without production code, another threshold ladder, fixed-eight/MPS
+  evaluation, or checkpoint promotion.  Retain the step-zero deployment.
+- [x] Record, commit, and push the terminal diminishing-returns decision.
+
 ## Frozen-reference non-regression — specification 1.62
 
 - [x] Add default-zero, strict, exact-resume-bound protected-reference weight.

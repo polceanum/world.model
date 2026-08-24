@@ -2,6 +2,23 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 terminal causal adaptive-residual diagnostic
+
+- Audited the existing runtime-pool, forecast-isolation, temporal-velocity,
+  and fixed-residual mechanisms before proposing another intervention.
+- Ran one bounded fixed-manifest causal online least-squares residual probe.
+  Minimum support four covered `3102/3498` samples per axis and improved x/y
+  one-step MSE `19.81%/41.72%`, while z worsened `1.10%`.
+- Rejected the mechanism before implementation because a reset-bounded subset
+  worsened x `5.75%` and complete scenario attribution was not proven.  No
+  fixed-eight/MPS ladder, model checkpoint, runtime option, or deployment
+  change follows.
+- Marked the current checkpoint/objective/runtime-pool family terminal after
+  repeated marginal pooled gains continued to miss strict scenario/event/
+  identity guardrails.  Retain step-zero deployment and avoid further
+  coefficient, duration, interpolation, or residual sweeps without genuinely
+  new evidence or capacity.
+
 ### 2026-08-23 specification 1.62 frozen-reference non-regression
 
 - Added a default-zero exact-resume protected-reference weight and a frozen

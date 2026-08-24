@@ -1,5 +1,36 @@
 # Design decisions
 
+## ADR-176 — Stop causal residual and current-checkpoint objective iteration
+
+- **Date:** 2026-08-24
+- **Status:** diagnostic rejected; current ladder terminal
+- **Context:** The fixed residual in specification 1.55 improved pooled x/y
+  errors but failed many scenario, uncertainty, event, and identity
+  guardrails.  Specifications 1.61 and 1.62 later cleared the minimum pooled
+  selector delta by only about `1.4e-5` while retaining the same five
+  guardrail failures.  Another fixed gain or longer run would repeat an
+  already rejected search.
+- **Decision:** Permit one read-only causal screen of a qualitatively different
+  estimator: a bounded online least-squares gain keyed by entity, axis, regime,
+  and horizon, fit only from prior RGB residual pairs.  Require x and y to
+  improve in every scenario before implementation.  Otherwise stop the
+  runtime-pool/current-checkpoint ladder without adding configuration or
+  launching fixed-eight/MPS qualification.
+- **Alternatives considered:** tune the existing residual gain; scale the
+  short-horizon residual through the rollout; extend specification 1.62;
+  weaken scenario guardrails; infer success from pooled MSE; or introduce the
+  adaptive state before causal held-out evidence.
+- **Consequences:** The screen is promising only in aggregate.  With four
+  prior pairs, x/y one-step MSE improves `19.81%/41.72%` over `3102` samples,
+  while z worsens `1.10%`; one reset-bounded subset worsens x by `5.75%`, and
+  the instrumentation does not establish complete scenario attribution.
+  Therefore the every-scenario gate fails closed.  No production code,
+  checkpoint, MPS run, or deployment change follows.  Retain step zero and
+  reopen this direction only for genuinely new independent data or model
+  capacity, not another coefficient/duration/interpolation sweep.  Reports
+  are `6f656a50...` and `a6a00869...`; temporary probe source is
+  `72859fe7...`.
+
 ## ADR-175 — Constrain adaptation against the frozen causal reference
 
 - **Date:** 2026-08-23

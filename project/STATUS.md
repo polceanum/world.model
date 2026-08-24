@@ -1,5 +1,35 @@
 # Project status
 
+## Causal adaptive-residual screen — rejected; current ladder stopped
+
+No production change follows the final runtime-pool screen.  A read-only
+fixed-manifest probe fit a bounded per-entity/axis/regime/horizon least-squares
+gain only from earlier RGB residual pairs, then measured the next residual.
+With four prior pairs it covered `3102/3498` samples per axis and reduced
+one-step x/y MSE by `19.81%/41.72%`; z worsened `1.10%`.  The attempted
+slice pass also contained an evidence reset group whose x MSE worsened
+`5.75%`.  Reset ordering did not provide a validated scenario identity for
+that group, so the required every-scenario non-regression evidence is absent
+and the screen fails closed.
+
+This is not a new specification or a promotion candidate.  The existing
+fixed-gain residual already improved pooled metrics while failing scenario,
+calibration, event, and identity guardrails; fitting a larger local gain does
+not justify repeating that ladder.  No runtime option, fixed-eight/MPS run,
+checkpoint, or deployment behavior was created.  Combined with the
+specification-1.61/1.62 marginal `~1.4e-5` selector gains and unchanged five
+guardrail failures, this marks diminishing returns for the current protected
+checkpoint/objective/runtime-pool family.  Keep the step-zero deployment and
+stop further coefficient, duration, interpolation, residual, and analytic-
+candidate sweeps unless genuinely new independent data or model capacity
+changes the hypothesis.
+
+The aggregate and reset-bounded reports are
+`/private/tmp/20260824-spec163-adaptive-residual-probe-b.json` and
+`/private/tmp/20260824-spec163-adaptive-residual-probe-c.json`, SHA-256
+`6f656a50...` and `a6a00869...`; the temporary probe SHA-256 is
+`72859fe7...`.
+
 ## Specification 1.62 frozen-reference non-regression — terminally rejected at step 32
 
 Repeated lateral-head/event objectives improved pooled state accuracy but
