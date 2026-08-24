@@ -1,5 +1,28 @@
 # Design decisions
 
+## ADR-183 — Preserve sparse runtime-pool dispatch until it can be vectorized
+
+- **Date:** 2026-08-24
+- **Status:** optimization rejected and reverted
+- **Context:** Short-step composed forecasts transfer selected candidate IDs to
+  Python once per substep on MPS. Removing that synchronization looked like a
+  separable way to improve the runtime pool's failed rollout-latency ratio.
+  The existing candidate is physically ineligible, so only an exact-parity
+  microbenchmark—not another fixed-32 replay—was warranted.
+- **Decision:** Permit one active-Aqua comparison that eagerly evaluates all
+  built-in analytic alternatives while preserving the sparse candidate-count
+  semantics. Retain it only for material synchronized latency improvement with
+  exact forecast outputs.
+- **Alternatives considered:** run another ineligible paired fixed-32 replay;
+  make eager dispatch the default without measurement; add a device-specific
+  semantic flag; or tune composition step/horizon and confound accuracy.
+- **Consequences:** Forecast output and diagnostics are exact, but eager
+  evaluation raises median latency from `0.831007` to `1.069251 s` (+28.67%).
+  The code is fully reverted. Sparse dispatch remains authoritative; reopen
+  only with vectorized heterogeneous execution that avoids both host selection
+  and unused candidates. Terminal evidence is `75908cb5...`; no deployment,
+  checkpoint, fixed-32, or training change follows.
+
 ## ADR-182 — Reject unconstrained splitting of merged RGB components
 
 - **Date:** 2026-08-24

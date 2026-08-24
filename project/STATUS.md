@@ -1,5 +1,27 @@
 # Project status
 
+## Runtime-pool MPS dispatch diagnostic — rejected and reverted
+
+The remaining paired-latency requirement cannot rescue the existing
+specification-1.53 runtime-pool candidate: its completed active-Aqua fixed-32
+pair already changes the protected posterior and fails 598 physical
+guardrails. A smaller exact-parity throughput audit therefore tested the only
+obvious hot-loop repair before another costly replay.
+
+On active-Aqua MPS with custom Torch `2.9.0a0+gitcbe1a35`, batch one, three
+active objects, five query horizons, and `0.05 s` composition, sparse selected-
+candidate dispatch took a `0.831007 s` median over 12 synchronized repetitions.
+Replacing its per-substep host index transfer with eager evaluation of all
+three built-in analytic alternatives preserved output sums and candidate-count
+diagnostics exactly, but took `1.069251 s` (+28.67%).
+
+The candidate patch was reverted completely. Do not trade sparse dispatch for
+eager unused-candidate execution on this host. Reopen throughput only with a
+batched/vectorized heterogeneous dispatch that avoids both host selection and
+unused model execution. The terminal report is
+`/private/tmp/20260824-spec166-runtime-pool-dispatch-terminal.json` (SHA-256
+`75908cb5...`); deployment remains the learned-only step-zero model.
+
 ## RGB global-discovery split diagnostic — terminally rejected
 
 The post-motion-support audit first verified that collision-edge temporal

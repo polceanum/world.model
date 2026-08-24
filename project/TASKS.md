@@ -1,5 +1,17 @@
 # Tasks
 
+## Runtime-pool MPS dispatch diagnostic — no retained code change
+
+- [x] Confirm that the completed active-Aqua runtime-pool candidate is
+  physically ineligible, so a latency-only replay cannot promote it.
+- [x] Benchmark one exact-parity replacement of per-substep host-selected
+  dispatch with eager built-in analytic candidate evaluation.
+- [x] Reject and fully revert it: active-Aqua MPS median latency worsens
+  `0.831007 -> 1.069251 s` (+28.67%) despite exact output/diagnostic sums.
+- [x] Stop without fixed-32 or training. Require a genuinely vectorized design
+  that avoids both host synchronization and unused candidate execution before
+  reopening; record, commit, and push the boundary (`75908cb5...`).
+
 ## RGB global-discovery split diagnostic — no specification change
 
 - [x] Verify collision-edge temporal history reset and prepared interval

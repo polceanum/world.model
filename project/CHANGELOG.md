@@ -2,6 +2,18 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 terminal runtime-pool MPS dispatch diagnostic
+
+- Confirmed that paired latency cannot rehabilitate the existing physically
+  rejected runtime-pool candidate.
+- Benchmarked sparse host-selected composition against eager evaluation of all
+  built-in analytic alternatives on active-Aqua MPS. Exact output sums and
+  candidate-count diagnostics were preserved, but median latency worsened
+  `0.831007 -> 1.069251 s` (+28.67%).
+- Reverted the candidate completely and stopped before fixed-32 or training.
+  Future work requires batched/vectorized heterogeneous dispatch rather than
+  executing unused candidates. Terminal evidence SHA-256 is `75908cb5...`.
+
 ### 2026-08-24 terminal RGB global-discovery split diagnostic
 
 - Verified collision-edge temporal-history reset and prepared interval
