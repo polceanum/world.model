@@ -13,8 +13,9 @@
   owners; train only the existing global detector through the unchanged raw-
   centre/existence measurement objective. Bind the scope to exact resume with
   historical `all` migration. Permit one 128-update, balanced three-object
-  rung and require material fixed-eight raw-query recall improvement before
-  any fixed-32 or MPS work.
+  rung and require at least ten percentage points of fixed-eight top-target-
+  count recall improvement within `0.1` normalized image coordinates, without
+  material confidence-threshold precision loss, before any fixed-32 or MPS work.
 - **Alternatives considered:** tune chromatic thresholds; admit noisy raw
   queries directly; train the shared backbone and risk established ROI/runtime
   behavior; alter lifecycle confidence; add a new detector architecture; or

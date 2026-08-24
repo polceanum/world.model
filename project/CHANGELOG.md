@@ -14,8 +14,10 @@
 - Passed the final repository (`1331 passed, 20 skipped in 462.32s`) plus Ruff,
   the 225-file format check, version, and diff gates.
 - Declared one bounded 128-update, balanced three-object accuracy rung with a
-  material fixed-eight raw-query recall/precision gate. No runtime admission,
-  lifecycle, split, model-shape, checkpoint, or deployment change is claimed.
+  material fixed-eight raw-query gate: top-target-count recall uses `0.1`
+  normalized image coordinates and confidence-threshold proposal precision may
+  not materially regress. No runtime admission, lifecycle, split, model-shape,
+  checkpoint, or deployment change is claimed.
 
 ### 2026-08-24 terminal runtime-pool MPS dispatch diagnostic
 

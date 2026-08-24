@@ -9211,9 +9211,10 @@ episode from each of the eight declared scenarios per optimizer update. Run at
 most one 128-update detector-only measurement-pretraining rung. Evaluate raw
 learned query centres on a frozen eight-seed balanced manifest using a
 one-to-one assignment against visible projected targets. Continue beyond this
-rung only if recall within `0.1 m` improves by at least ten percentage points,
-precision within `0.1 m` does not fall by more than five percentage points,
-and structured/runtime physical evidence has no broad regression. Otherwise
+rung only if top-target-count recall within `0.1` normalized image coordinates
+improves by at least ten percentage points, confidence-threshold proposal
+precision at the same distance does not fall by more than five percentage
+points, and structured/runtime physical evidence has no broad regression. Otherwise
 close this family without changing fallback admission, lifecycle confidence,
 split thresholds, backbone ownership, duration, or loss weights. A passing
 raw-query gate authorizes one fixed-32 physical comparison and then, only if

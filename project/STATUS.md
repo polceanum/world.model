@@ -19,9 +19,10 @@ Ruff, the 225-file format check, version, and diff gates clean. Runtime
 predictions and the protected deployment are unchanged.
 
 One clean-source 128-update, balanced three-object rung is pending. It must
-improve frozen fixed-eight raw-query recall within `0.1 m` by at least ten
-percentage points without losing more than five percentage points of precision
-or broadly regressing structured/runtime evidence. Failure closes this family;
+improve frozen fixed-eight top-target-count raw-query recall within `0.1`
+normalized image coordinates by at least ten percentage points without losing
+more than five percentage points of confidence-threshold proposal precision or
+broadly regressing structured/runtime evidence. Failure closes this family;
 success permits only the existing fixed-32 physical gate and conditional MPS
 confirmation.
 

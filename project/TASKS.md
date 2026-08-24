@@ -13,7 +13,8 @@
 - [ ] From a clean pushed source, run exactly one 128-update balanced
   three-object detector-only rung from the immutable protected initializer.
 - [ ] Apply the predeclared fixed-eight raw-query gate: at least +10 percentage
-  points recall within `0.1 m`, no more than -5 points precision, and no broad
+  points top-target-count recall within `0.1` normalized image coordinates, no
+  more than -5 points confidence-threshold proposal precision, and no broad
   structured/runtime regression.
 - [ ] Stop and record failure if that gate misses. Only a pass may proceed to
   one fixed-32 physical comparison and conditional active-Aqua confirmation.
