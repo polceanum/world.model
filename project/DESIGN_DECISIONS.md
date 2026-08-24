@@ -1,5 +1,34 @@
 # Design decisions
 
+## ADR-179 — Reject unsupported collision-horizon redistribution
+
+- **Date:** 2026-08-24
+- **Status:** diagnostic rejected; collision-objective ladder terminal
+- **Context:** The node-only collision candidate was selector-identical to the
+  combined owner and later protected variants retained event/identity
+  failures. A shared collision-only stack or a different window sampler was
+  still conceivable only if all configured event horizons supplied useful,
+  compatible training evidence.
+- **Decision:** Reuse the immutable balanced horizon-gradient probe first, then
+  permit one data-only fixed 32-draw sampler screen. Require the candidate to
+  materially improve the weakest pair-positive horizon without reducing total
+  support. Do not implement a model, objective, or sampler unless both gates
+  pass.
+- **Alternatives considered:** train the shared relation stack immediately;
+  accumulate interval hazards differently; tune event/horizon weights;
+  increase the collision-window probability; extend TBPTT; accept higher
+  total positives despite an unsupported tail; or repeat the same manifest
+  until a favourable sample appears.
+- **Consequences:** The 0.75/1.00-second collision-row gradients are
+  effectively zero, with the one-second direction opposed to the aggregate at
+  cosine `-0.970971`. Future-horizon alignment increases total pair-positive
+  endpoints from `72` to `90`, but changes the five horizon counts from
+  `42/22/6/1/1` to `42/41/4/3/0`; no conditioned draw can align the one-second
+  endpoint. Both gates fail. No specification or behavior changes, no MPS or
+  training run follows, and this ladder may reopen only with new event-rich
+  data or supported non-opposed long-horizon capacity. Reports are
+  `abc2389...` and `00125968...`; deployment remains step zero.
+
 ## ADR-178 — Require evidence from the candidate being promoted
 
 - **Date:** 2026-08-24

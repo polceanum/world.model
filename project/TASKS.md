@@ -1,5 +1,21 @@
 # Tasks
 
+## Collision-horizon diagnostic closure — no specification change
+
+- [x] Reuse the immutable balanced horizon-gradient attribution rather than
+  repeat collision-owner training. The 0.75/1.00-second norms are effectively
+  zero and the one-second direction opposes the aggregate at cosine
+  `-0.970971`; reject a shared collision-only owner before implementation.
+- [x] Run one fixed 32-draw, eight-scenario-balanced event-only screen of
+  future-horizon collision-window alignment. Preserve exact seeds and avoid
+  model forward or source mutation.
+- [x] Apply the predeclared weakest-horizon rule. Reject: total pair-positive
+  endpoints improve `72 -> 90`, but horizon counts change
+  `42/22/6/1/1 -> 42/41/4/3/0`, losing all one-second support.
+- [x] Stop without sampler/config/objective implementation, training, MPS,
+  weighting, probability, or alignment-distribution tuning. Record, commit,
+  and push the negative evidence; deployment remains step zero.
+
 ## Candidate-specific promotion evidence — specification 1.64
 
 - [x] Derive promotion candidate names from the exact configured runtime policy

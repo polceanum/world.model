@@ -2,6 +2,23 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 collision-horizon diagnostic closure
+
+- Reused the retained balanced collision-gradient attribution. Short/mid
+  horizons have material aligned gradients, while 0.75/1.00-second norms are
+  effectively zero and the one-second direction opposes the aggregate
+  (`-0.970971` cosine). Rejected a shared collision-only objective before
+  implementation.
+- Ran one final fixed 32-draw event-only sampler screen over the exact balanced
+  scenario cycle. Allowing future collisions beyond the four-frame TBPTT
+  window increased total pair-positive endpoints `72 -> 90`, but redistributed
+  per-horizon support from `42/22/6/1/1` to `42/41/4/3/0`; the one-second
+  horizon lost all support and the predeclared gate failed.
+- Closed this avenue without production code, configuration, training, MPS,
+  checkpoint, or deployment changes. Do not tune sampling probabilities,
+  horizon weights, or alignment distributions on the same manifest; require
+  genuinely new event-rich data or supported long-horizon model capacity.
+
 ### 2026-08-24 specification 1.64 candidate-specific promotion evidence
 
 - Replaced the promotion comparator's fixed-four candidate accounting with

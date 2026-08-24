@@ -1,5 +1,38 @@
 # Project status
 
+## Collision-horizon objective and sampler screen — terminally rejected
+
+The required post-specification-1.60 horizon attribution was already available
+as an immutable balanced-draw artifact. Node-collision row gradient norms at
+`0.10/0.25/0.50/0.75/1.00 s` are
+`0.0590622/0.0682459/0.0674217/9.36e-17/7.98e-11`. The first three horizons
+align with the aggregate gradient, but the one-second gradient is both
+effectively absent and opposed (cosine `-0.970971`). A shared collision-only
+objective therefore cannot repair every horizon under the current aggregate
+loss. The retained report is
+`/private/tmp/20260823-spec160-horizon-gradient-probe-v3/report.json`
+(SHA-256 `abc2389...`). No new collision-owner scope was implemented.
+
+One final data-only screen tested whether future collision labels could be
+aligned uniformly to the configured rollout endpoints instead of always to
+the shortest endpoint. It reused exactly 32 balanced seed batches (each of the
+eight scenarios appears 32 times), generated simulator events without model
+forward, and compared the legacy shortest alignment with a future-horizon
+candidate. The candidate increased total pair-positive scene endpoints from
+`72` to `90`, but per-horizon counts changed from `42/22/6/1/1` to
+`42/41/4/3/0`; none of the 11 conditioned draws had a feasible one-second
+alignment. It therefore fails the predeclared weakest-horizon gate. The final
+report is `/private/tmp/20260824-spec164-future-horizon-sampler-screen.json`
+(SHA-256 `00125968...`); the temporary diagnostic is `f88d7393...`.
+
+This is a terminal diagnostic rejection, not specification 1.65. No runtime,
+training, sampler, model, configuration, checkpoint, or deployment behavior
+changes. Do not tune collision-window probabilities, horizon weights, or
+alignment distributions on this manifest. Reopen collision learning only with
+genuinely new event-rich data or a model/objective that supplies supported,
+non-opposed long-horizon gradients. The protected step-zero deployment remains
+unchanged.
+
 ## Specification 1.64 candidate-specific promotion evidence — implementation gate
 
 The runtime-pool comparator no longer treats activity from any historical
