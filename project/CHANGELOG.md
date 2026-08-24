@@ -2,6 +2,25 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 specification 1.64 candidate-specific promotion evidence
+
+- Replaced the promotion comparator's fixed-four candidate accounting with
+  names derived from the exact configured runtime policy.
+- Added complete direct, composed, and per-horizon partitions plus explicit
+  required-candidate usage. Aggregate activity from old analytic candidates
+  can no longer mask zero use of a newly introduced candidate.
+- Advanced paired promotion reports from schema v2 to v3 and bound the ordered
+  candidate and required-extension lists into the comparison protocol and
+  comprehensive-suite verifier.
+- Re-evaluated the immutable specification-1.63 metrics: the old pool records
+  `1685` non-learned selections, while `online_local_acceleration` records zero
+  direct and composed use at every horizon. The repaired gate adds the named
+  usage failure (`246 -> 247`) without changing the terminal rejection.
+- Focused affected coverage passes `352 passed, 3 skipped`; the final
+  repository passes `1312 passed, 20 skipped in 451.96s`, with Ruff, 225-file
+  format, isolated compile, version, and diff gates clean. Runtime forecasts,
+  `WorldBelief`, checkpoints, defaults, and deployment are unchanged.
+
 ### 2026-08-24 specification 1.63 online local-acceleration candidate
 
 - Added a default-off parameter-free constant-acceleration runtime candidate

@@ -37,7 +37,7 @@ from world_model.utils.config import OrpheusConfig, load_config
 from world_model.utils.io import atomic_write_text
 from world_model.utils.version import SIMULATOR_VERSION, SPECIFICATION_VERSION
 
-_CANDIDATES = (
+_BASE_CANDIDATES = (
     "learned",
     "constant_velocity",
     "damped_constant_velocity",
@@ -52,7 +52,7 @@ _REGIMES = (
     "externally_actuated",
 )
 _LATENCY_PREFIXES = ("rgb_global_update", "rgb_fast_update", "future_rollout")
-_SCHEMA_VERSION = "runtime_hypothesis_paired_promotion_v2"
+_SCHEMA_VERSION = "runtime_hypothesis_paired_promotion_v3"
 Direction = Literal["lower", "higher", "maximum_ratio"]
 
 
@@ -293,6 +293,8 @@ def compare_runtime_hypothesis_metrics(
     relative_tolerance: float = 1.0e-6,
     sharpness_maximum_ratio: float = 1.05,
     minimum_pooled_position_improvement_m: float = 1.0e-5,
+    candidate_names: Sequence[str] = _BASE_CANDIDATES,
+    required_candidate_names: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Compare a matched evaluator pair with complete forecast guardrails."""
 
@@ -306,6 +308,19 @@ def compare_runtime_hypothesis_metrics(
         raise ValueError("horizons, scenarios, and intervention axes must be nonempty")
     if any(axis not in (0, 1, 2) for axis in axes) or len(set(axes)) != len(axes):
         raise ValueError("intervention axes must be unique members of {0,1,2}")
+    candidate_names = tuple(candidate_names)
+    required_candidate_names = tuple(required_candidate_names)
+    if (
+        not candidate_names
+        or candidate_names[0] != "learned"
+        or any(not isinstance(name, str) or not name for name in candidate_names)
+        or len(set(candidate_names)) != len(candidate_names)
+    ):
+        raise ValueError("candidate_names must be unique nonempty names beginning with learned")
+    if len(set(required_candidate_names)) != len(required_candidate_names) or any(
+        name == "learned" or name not in candidate_names for name in required_candidate_names
+    ):
+        raise ValueError("required_candidate_names must be unique configured nonlearned candidates")
 
     failures: list[dict[str, Any]] = []
     deltas: list[dict[str, Any]] = []
@@ -577,6 +592,14 @@ def compare_runtime_hypothesis_metrics(
     total_nonlearned_composed = 0.0
     total_residual_applied = 0.0
     total_residual_absolute_sum = 0.0
+    candidate_usage = {
+        name: {
+            "selected": 0.0,
+            "composed_steps": 0.0,
+            "horizon_selected": {horizon: 0.0 for horizon in horizons},
+        }
+        for name in candidate_names
+    }
     for axis in axes:
         axis_name = axis_names[axis]
         selected = {
@@ -585,7 +608,7 @@ def compare_runtime_hypothesis_metrics(
                 f"runtime_hypothesis_axis_{axis_name}_{candidate_name}_count",
                 role="candidate",
             )
-            for candidate_name in _CANDIDATES
+            for candidate_name in candidate_names
         }
         supported = _number(
             candidate_metrics,
@@ -612,7 +635,7 @@ def compare_runtime_hypothesis_metrics(
                 f"runtime_hypothesis_axis_{axis_name}_{candidate_name}_composed_step_count",
                 role="candidate",
             )
-            for candidate_name in _CANDIDATES
+            for candidate_name in candidate_names
         }
         composed_total = _number(
             candidate_metrics,
@@ -649,8 +672,11 @@ def compare_runtime_hypothesis_metrics(
                     "passed": False,
                 }
             )
-        total_nonlearned += sum(selected[name] for name in _CANDIDATES[1:])
-        total_nonlearned_composed += sum(composed[name] for name in _CANDIDATES[1:])
+        for candidate_name in candidate_names:
+            candidate_usage[candidate_name]["selected"] += selected[candidate_name]
+            candidate_usage[candidate_name]["composed_steps"] += composed[candidate_name]
+        total_nonlearned += sum(selected[name] for name in candidate_names[1:])
+        total_nonlearned_composed += sum(composed[name] for name in candidate_names[1:])
         residual_applied = _number(
             candidate_metrics,
             f"runtime_hypothesis_axis_{axis_name}_residual_applied_count",
@@ -693,7 +719,7 @@ def compare_runtime_hypothesis_metrics(
                     f"runtime_hypothesis@{horizon}_axis_{axis_name}_{candidate_name}_count",
                     role="candidate",
                 )
-                for candidate_name in _CANDIDATES
+                for candidate_name in candidate_names
             }
             horizon_supported = _number(
                 candidate_metrics,
@@ -722,6 +748,10 @@ def compare_runtime_hypothesis_metrics(
                         "passed": False,
                     }
                 )
+            for candidate_name in candidate_names:
+                candidate_usage[candidate_name]["horizon_selected"][horizon] += horizon_selected[
+                    candidate_name
+                ]
         regime_total = sum(
             _number(
                 candidate_metrics,
@@ -756,6 +786,17 @@ def compare_runtime_hypothesis_metrics(
                 "passed": False,
             }
         )
+    for candidate_name in required_candidate_names:
+        usage = candidate_usage[candidate_name]
+        if usage["selected"] <= 0.0 and usage["composed_steps"] <= 0.0:
+            runtime_failures.append(
+                {
+                    "metric": f"runtime_hypothesis_candidate_{candidate_name}_use",
+                    "direction": "positive_selected_or_composed_candidate_use_required",
+                    "candidate": usage,
+                    "passed": False,
+                }
+            )
 
     if pooled_position_improvement < minimum_pooled_position_improvement_m:
         failures.append(
@@ -790,6 +831,9 @@ def compare_runtime_hypothesis_metrics(
         "runtime_nonlearned_composed_step_count": total_nonlearned_composed,
         "runtime_residual_applied_count": total_residual_applied,
         "runtime_residual_absolute_sum": total_residual_absolute_sum,
+        "runtime_candidate_names": list(candidate_names),
+        "runtime_required_candidate_names": list(required_candidate_names),
+        "runtime_candidate_usage": candidate_usage,
     }
 
 
@@ -901,6 +945,21 @@ def _expected_runtime_policy(config: OrpheusConfig) -> dict[str, Any]:
     }
     policy["fingerprint_sha256"] = _canonical_sha256(policy)
     return policy
+
+
+def _expected_runtime_candidate_names(config: OrpheusConfig) -> tuple[str, ...]:
+    candidates = _expected_runtime_policy(config).get("candidates")
+    if not isinstance(candidates, list):
+        raise ValueError("runtime hypothesis policy candidates are invalid")
+    names = tuple(
+        candidate.get("name") if isinstance(candidate, Mapping) else None
+        for candidate in candidates
+    )
+    if any(not isinstance(name, str) or not name for name in names) or len(set(names)) != len(
+        names
+    ):
+        raise ValueError("runtime hypothesis policy candidate names are invalid")
+    return tuple(str(name) for name in names)
 
 
 def _expected_runtime_environment(expected_device: str) -> dict[str, Any]:
@@ -1158,6 +1217,10 @@ def compare_evaluation_reports(
         raise ValueError("runtime intervention changed the online posterior trace")
 
     horizons = [f"{value:.3f}s" for value in config.evaluation.horizons_seconds]
+    candidate_names = _expected_runtime_candidate_names(config)
+    required_candidate_names = tuple(
+        name for name in candidate_names if name not in _BASE_CANDIDATES
+    )
     physical = compare_runtime_hypothesis_metrics(
         reference_arm.metrics,
         candidate_arm.metrics,
@@ -1168,6 +1231,8 @@ def compare_evaluation_reports(
         relative_tolerance=relative_tolerance,
         sharpness_maximum_ratio=sharpness_maximum_ratio,
         minimum_pooled_position_improvement_m=minimum_pooled_position_improvement_m,
+        candidate_names=candidate_names,
+        required_candidate_names=required_candidate_names,
     )
     latency = paired_latency_guardrail(
         reference_metrics=reference_arm.metrics,
@@ -1211,6 +1276,8 @@ def compare_evaluation_reports(
             "sharpness_maximum_ratio": sharpness_maximum_ratio,
             "latency_maximum_ratio": latency_maximum_ratio,
             "minimum_pooled_position_improvement_m": (minimum_pooled_position_improvement_m),
+            "runtime_candidate_names": list(candidate_names),
+            "required_runtime_candidate_names": list(required_candidate_names),
         },
         "primary_physical_metrics_sha256": {
             "reference": reference_arm.metadata["primary_physical_metrics_sha256"],

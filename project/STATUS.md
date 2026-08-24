@@ -1,5 +1,27 @@
 # Project status
 
+## Specification 1.64 candidate-specific promotion evidence — implementation gate
+
+The runtime-pool comparator no longer treats activity from any historical
+non-learned model as proof that a newly configured model was exercised.
+Candidate names now derive from the exact policy; direct, composed, and
+per-horizon partitions cover all of them; the protocol binds the ordered list
+and explicitly required extensions. Every required extension must have
+positive direct or composed use or promotion fails closed. The paired schema
+advances from v2 to v3, and the aggregate suite accepts v3 only.
+
+This repairs a real false-positive sub-gate in the specification-1.63
+evidence. Older analytic candidates supplied `1685` non-learned selections,
+but the online-acceleration candidate itself had `0` direct selections and `0`
+composed steps at every horizon. Re-evaluation now adds the named usage
+failure and raises the already-terminal physical failure count from `246` to
+`247`; no prediction or decision changes. Focused promotion/evaluator/rollout/
+config/recovery coverage passes `352 passed, 3 skipped`. The final repository
+passes `1312 passed, 20 skipped in 451.96s`; Ruff, the 225-file format check,
+isolated compile, version, and diff gates pass. Runtime behavior,
+belief/checkpoint state, deployment, and the no-more-acceleration-variants
+stop remain unchanged.
+
 ## Specification 1.63 online local-acceleration candidate — terminally rejected
 
 A new default-off runtime candidate fits entity/axis acceleration from the

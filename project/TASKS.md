@@ -1,5 +1,22 @@
 # Tasks
 
+## Candidate-specific promotion evidence — specification 1.64
+
+- [x] Derive promotion candidate names from the exact configured runtime policy
+  instead of the historical fixed-four tuple.
+- [x] Validate direct, composed, and every-horizon count partitions for every
+  configured candidate and bind the ordered names into the paired protocol.
+- [x] Require positive direct or composed use for each newly configured
+  candidate; unrelated incumbent activity cannot satisfy this gate.
+- [x] Advance the paired comparison schema to v3 and require v3 in the
+  four-split aggregate verifier.
+- [x] Re-evaluate the retained specification-1.63 metrics: the named online
+  candidate adds one fail-closed usage failure (`246 -> 247`) while preserving
+  the terminal accuracy rejection.
+- [x] Pass focused affected coverage (`352 passed, 3 skipped`) and the final
+  repository (`1312 passed, 20 skipped in 451.96s`) plus Ruff, 225-file format,
+  isolated compile, version, and diff gates; synchronize, commit, and push.
+
 ## Online local-acceleration candidate — specification 1.63
 
 - [x] Trace the causal RGB temporal-velocity measurement, association, regime,

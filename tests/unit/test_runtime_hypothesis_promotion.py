@@ -28,7 +28,7 @@ from world_model.evaluation.evaluator import (
 )
 from world_model.evaluation.seed_protocol import make_evaluation_seed_protocol
 from world_model.simulator.sphere_world import SphereWorldConfig
-from world_model.utils.config import load_config
+from world_model.utils.config import OrpheusConfig, load_config
 from world_model.utils.version import SIMULATOR_VERSION, SPECIFICATION_VERSION
 
 HORIZONS = ("0.100s",)
@@ -145,13 +145,26 @@ def _paired_metrics() -> tuple[dict[str, float], dict[str, float]]:
     return reference, candidate
 
 
-def _compare(reference: dict[str, float], candidate: dict[str, float]) -> dict[str, object]:
+def _compare(
+    reference: dict[str, float],
+    candidate: dict[str, float],
+    *,
+    candidate_names: tuple[str, ...] = (
+        "learned",
+        "constant_velocity",
+        "damped_constant_velocity",
+        "ballistic_contact",
+    ),
+    required_candidate_names: tuple[str, ...] = (),
+) -> dict[str, object]:
     return compare_runtime_hypothesis_metrics(
         reference,
         candidate,
         horizons=HORIZONS,
         scenarios=SCENARIOS,
         axes=(0,),
+        candidate_names=candidate_names,
+        required_candidate_names=required_candidate_names,
     )
 
 
@@ -250,6 +263,73 @@ def test_runtime_hypothesis_comparison_accepts_nonvacuous_causal_residual_use() 
     assert result["runtime_residual_applied_count"] == 6.0
 
 
+def test_runtime_hypothesis_comparison_requires_the_configured_new_candidate() -> None:
+    reference, candidate = _paired_metrics()
+    candidate_names = (
+        "learned",
+        "constant_velocity",
+        "damped_constant_velocity",
+        "ballistic_contact",
+        "online_local_acceleration",
+    )
+    candidate["runtime_hypothesis_axis_x_online_local_acceleration_count"] = 0.0
+    candidate["runtime_hypothesis_axis_x_online_local_acceleration_composed_step_count"] = 0.0
+    candidate["runtime_hypothesis@0.100s_axis_x_online_local_acceleration_count"] = 0.0
+
+    result = _compare(
+        reference,
+        candidate,
+        candidate_names=candidate_names,
+        required_candidate_names=("online_local_acceleration",),
+    )
+
+    assert result["physical_promotion_eligible"] is False
+    assert result["runtime_nonlearned_selection_count"] == 4.0
+    assert result["runtime_usage_failures"] == [
+        {
+            "metric": "runtime_hypothesis_candidate_online_local_acceleration_use",
+            "direction": "positive_selected_or_composed_candidate_use_required",
+            "candidate": {
+                "selected": 0.0,
+                "composed_steps": 0.0,
+                "horizon_selected": {"0.100s": 0.0},
+            },
+            "passed": False,
+        }
+    ]
+
+
+def test_runtime_hypothesis_comparison_accepts_direct_use_of_required_candidate() -> None:
+    reference, candidate = _paired_metrics()
+    candidate_names = (
+        "learned",
+        "constant_velocity",
+        "damped_constant_velocity",
+        "ballistic_contact",
+        "online_local_acceleration",
+    )
+    candidate["runtime_hypothesis_axis_x_learned_count"] = 1.0
+    candidate["runtime_hypothesis_axis_x_online_local_acceleration_count"] = 1.0
+    candidate["runtime_hypothesis_axis_x_learned_composed_step_count"] = 3.0
+    candidate["runtime_hypothesis_axis_x_online_local_acceleration_composed_step_count"] = 1.0
+    candidate["runtime_hypothesis@0.100s_axis_x_learned_count"] = 1.0
+    candidate["runtime_hypothesis@0.100s_axis_x_online_local_acceleration_count"] = 1.0
+
+    result = _compare(
+        reference,
+        candidate,
+        candidate_names=candidate_names,
+        required_candidate_names=("online_local_acceleration",),
+    )
+
+    assert result["physical_promotion_eligible"] is True
+    assert result["runtime_candidate_usage"]["online_local_acceleration"] == {
+        "selected": 1.0,
+        "composed_steps": 1.0,
+        "horizon_selected": {"0.100s": 1.0},
+    }
+
+
 def test_runtime_hypothesis_comparison_rejects_extra_nonruntime_metric() -> None:
     reference, candidate = _paired_metrics()
     candidate["silently_added_metric"] = 1.0
@@ -321,17 +401,20 @@ def test_runtime_hypothesis_policy_binds_online_local_acceleration_candidate() -
     }
 
 
-def _validation_config():
+def _validation_config(*, online_acceleration: bool = False):
+    overrides = [
+        "runtime.hypothesis_evidence_horizons_seconds=[0.05]",
+        "runtime.hypothesis_axis_independent_axes=[0]",
+        "runtime.hypothesis_local_applicability_enabled=true",
+        "runtime.hypothesis_composition_step_seconds=0.05",
+        "evaluation.horizons_seconds=[0.1]",
+        "training.horizon_weights=[1.0]",
+    ]
+    if online_acceleration:
+        overrides.append("runtime.hypothesis_online_acceleration_enabled=true")
     return load_config(
         "configs/axis_gated_updater_repair_cpu.yaml",
-        overrides=[
-            "runtime.hypothesis_evidence_horizons_seconds=[0.05]",
-            "runtime.hypothesis_axis_independent_axes=[0]",
-            "runtime.hypothesis_local_applicability_enabled=true",
-            "runtime.hypothesis_composition_step_seconds=0.05",
-            "evaluation.horizons_seconds=[0.1]",
-            "training.horizon_weights=[1.0]",
-        ],
+        overrides=overrides,
     )
 
 
@@ -342,8 +425,9 @@ def _arm_payload(
     split: str = "validation",
     seed_protocol: str = "standard",
     seed_offset: int | None = None,
+    config: OrpheusConfig | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
-    config = _validation_config()
+    config = _validation_config() if config is None else config
     scenarios = list(config.simulator.scenario_mixture)
     resolved_seed_protocol = make_evaluation_seed_protocol(
         name=seed_protocol,
@@ -558,7 +642,7 @@ def test_runtime_hypothesis_report_pair_binds_disjoint_manifests(
     )
 
     assert result["passed"] is True
-    assert result["schema_version"] == "runtime_hypothesis_paired_promotion_v2"
+    assert result["schema_version"] == "runtime_hypothesis_paired_promotion_v3"
     assert result["evaluation_runtime_environment"] == _expected_runtime_environment("cpu")
     assert result["runtime_hypothesis_pool_policy"] == _expected_runtime_policy(config)
     assert result["protocol"]["seed_manifest"][0] == expected_first
@@ -614,6 +698,64 @@ def test_runtime_hypothesis_report_pair_runs_complete_gate(tmp_path: Path) -> No
     assert result["latency_guardrail_passed"] is True
     assert result["comprehensive_promotion_eligible"] is True
     assert result["passed"] is True
+
+
+def test_runtime_hypothesis_report_pair_rejects_unused_configured_candidate(
+    tmp_path: Path,
+) -> None:
+    config = _validation_config(online_acceleration=True)
+    reference_metrics, candidate_metrics = _paired_metrics()
+    reference_metrics = _expand_scenario_metrics(reference_metrics)
+    candidate_metrics = _expand_scenario_metrics(candidate_metrics)
+    candidate_metrics.update(
+        {
+            "runtime_hypothesis_axis_x_online_local_acceleration_count": 0.0,
+            "runtime_hypothesis_axis_x_online_local_acceleration_composed_step_count": 0.0,
+            "runtime_hypothesis@0.100s_axis_x_online_local_acceleration_count": 0.0,
+        }
+    )
+    for metrics in (reference_metrics, candidate_metrics):
+        for prefix in ("rgb_global_update", "rgb_fast_update", "future_rollout"):
+            metrics[f"{prefix}_latency_mean_ms"] = 2.0
+            metrics[f"{prefix}_latency_sum_ms"] = 8.0
+            metrics[f"{prefix}_latency_sample_count"] = 4.0
+    reference_payload, source = _arm_payload(
+        runtime_pool=False,
+        supplied_metrics=reference_metrics,
+        config=config,
+    )
+    candidate_payload, _ = _arm_payload(
+        runtime_pool=True,
+        supplied_metrics=candidate_metrics,
+        config=config,
+    )
+    reference_path = tmp_path / "online-reference.json"
+    candidate_path = tmp_path / "online-candidate.json"
+    reference_path.write_text(json.dumps(reference_payload, allow_nan=False), encoding="utf-8")
+    candidate_path.write_text(json.dumps(candidate_payload, allow_nan=False), encoding="utf-8")
+
+    result = compare_evaluation_reports(
+        CapturedReport.capture(reference_path, role="reference"),
+        CapturedReport.capture(candidate_path, role="candidate"),
+        config=config,
+        current_source=source,
+        expected_device="cpu",
+    )
+
+    assert result["physical_promotion_eligible"] is False
+    assert result["protocol"]["required_runtime_candidate_names"] == ["online_local_acceleration"]
+    assert result["physical"]["runtime_usage_failures"] == [
+        {
+            "metric": "runtime_hypothesis_candidate_online_local_acceleration_use",
+            "direction": "positive_selected_or_composed_candidate_use_required",
+            "candidate": {
+                "selected": 0.0,
+                "composed_steps": 0.0,
+                "horizon_selected": {"0.100s": 0.0},
+            },
+            "passed": False,
+        }
+    ]
 
 
 def _complete_suite_comparisons(

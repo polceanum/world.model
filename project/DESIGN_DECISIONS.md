@@ -1,5 +1,31 @@
 # Design decisions
 
+## ADR-178 — Require evidence from the candidate being promoted
+
+- **Date:** 2026-08-24
+- **Status:** accepted; evidence-only repair
+- **Context:** The fixed-32 specification-1.63 candidate report contained five
+  candidates, but the promotion comparator still enumerated the historical
+  four. Its generic non-learned-use gate passed on `1685` selections of older
+  analytic models even though the new online-acceleration model had zero
+  direct selections and zero composed steps at every horizon. A positive
+  runtime-usage sub-gate therefore did not prove the intervention under test.
+- **Decision:** Derive candidate names from the exact policy, validate complete
+  direct/composed/per-horizon partitions, bind ordered and newly required names
+  into protocol v3, and require every configured extension to have positive
+  direct or composed use. Keep causal residual activity as a separate valid
+  intervention only when no new candidate is configured.
+- **Alternatives considered:** rely on aggregate non-learned counts; inspect
+  candidate use manually after promotion; hard-code a fifth name; require use
+  at every horizon; or rerun/tune the rejected acceleration model.
+- **Consequences:** Replaceable local models now carry their own fail-closed
+  non-vacuity evidence. The retained acceleration comparison gains one named
+  usage failure (`246 -> 247`) but remains terminal for its independent broad
+  accuracy and latency regressions. The repair changes no runtime prediction,
+  belief, checkpoint, default, or deployment behavior and does not authorize
+  another candidate run. Focused coverage passes `352/3`; the final repository
+  passes `1312/20 in 451.96s` with every static gate clean.
+
 ## ADR-177 — Bound one observation-fitted transition candidate, then stop
 
 - **Date:** 2026-08-24

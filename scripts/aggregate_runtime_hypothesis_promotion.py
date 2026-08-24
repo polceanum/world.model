@@ -23,7 +23,7 @@ from world_model.training.checkpointing import capture_git_metadata
 from world_model.utils.config import OrpheusConfig, load_config
 from world_model.utils.io import atomic_write_text
 
-_COMPARISON_SCHEMA = "runtime_hypothesis_paired_promotion_v2"
+_COMPARISON_SCHEMA = "runtime_hypothesis_paired_promotion_v3"
 _SUITE_SCHEMA = "runtime_hypothesis_comprehensive_suite_v1"
 _SPLIT_CONTRACTS: dict[str, tuple[str, str, int]] = {
     "standard_validation": ("validation", "standard", 0),
@@ -53,6 +53,14 @@ def _expected_protocol(
         training_validation_episodes=config.training.validation_episodes,
         seed_offset=seed_offset,
     )
+    policy = _expected_runtime_policy(config)
+    candidate_names = [candidate["name"] for candidate in policy["candidates"]]
+    base_candidates = {
+        "learned",
+        "constant_velocity",
+        "damped_constant_velocity",
+        "ballistic_contact",
+    }
     return {
         "split": resolved.split,
         "seed_protocol": resolved.name,
@@ -70,6 +78,10 @@ def _expected_protocol(
         "sharpness_maximum_ratio": 1.05,
         "latency_maximum_ratio": 1.10,
         "minimum_pooled_position_improvement_m": 1.0e-5,
+        "runtime_candidate_names": candidate_names,
+        "required_runtime_candidate_names": [
+            name for name in candidate_names if name not in base_candidates
+        ],
     }
 
 
