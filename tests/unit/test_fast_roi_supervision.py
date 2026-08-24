@@ -237,6 +237,66 @@ def test_global_proposals_pass_hungarian_aligned_metric_world_supervision() -> N
     )
 
 
+def test_global_existence_supervision_uses_raw_detector_logits() -> None:
+    batch = _batch()
+    target_values = torch.cat(
+        (
+            batch["labels"]["projected_center"][:, 0],
+            batch["labels"]["log_apparent_radius_normalized"][:, 0].unsqueeze(-1),
+            batch["labels"]["inverse_depth"][:, 0].unsqueeze(-1),
+            batch["labels"]["albedo"][:, 0],
+        ),
+        dim=-1,
+    )
+    measurements = _measurements(target_values)
+    runtime_logits = torch.full((1, 2), torch.logit(torch.tensor(0.995)))
+    raw_logits = torch.tensor([[-3.0, 2.0]], requires_grad=True)
+    measurements = replace(
+        measurements,
+        existence_logits=runtime_logits,
+        auxiliary={
+            **measurements.auxiliary,
+            "raw_existence_logits": raw_logits,
+        },
+    )
+    module = _StructuredRecordingLossModule()
+
+    losses = supervised_measurement_losses(module, measurements, batch, frame_index=0)
+
+    assert module.outputs["existence_logits"] is raw_logits
+    expected = torch.nn.functional.binary_cross_entropy_with_logits(
+        raw_logits,
+        torch.ones_like(raw_logits),
+    )
+    torch.testing.assert_close(losses["rgb_existence"], expected)
+    assert not torch.isclose(
+        losses["rgb_existence"],
+        torch.nn.functional.binary_cross_entropy_with_logits(
+            runtime_logits,
+            torch.ones_like(runtime_logits),
+        ),
+    )
+
+
+def test_global_raw_existence_logits_must_match_runtime_shape() -> None:
+    measurements = _measurements(torch.zeros((1, 2, 7)))
+    measurements = replace(
+        measurements,
+        auxiliary={
+            **measurements.auxiliary,
+            "raw_existence_logits": torch.zeros((1, 1)),
+        },
+    )
+
+    with pytest.raises(ValueError, match="raw_existence_logits must match"):
+        supervised_measurement_losses(
+            _RecordingLossModule(),
+            measurements,
+            _batch(),
+            frame_index=0,
+        )
+
+
 def test_global_exact_geometry_requires_reliable_visibility_and_an_in_frame_centre() -> None:
     batch = _batch()
     target_values = torch.cat(

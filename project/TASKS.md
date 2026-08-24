@@ -1,5 +1,25 @@
 # Tasks
 
+## Raw learned-existence supervision repair — specification 1.67
+
+- [x] Prove that structured runtime confidence was substituted into global
+  detector BCE and reduced the learned existence signal despite preserving a
+  straight-through derivative.
+- [x] Preserve runtime/association/lifecycle confidence exactly while routing
+  global detector BCE through the raw learned existence logits with strict
+  type/shape checks.
+- [x] Add focused runtime/raw-boundary and supervision regressions (`58`
+  structured-RGB/loss/supervision tests pass).
+- [x] Quantify the real fixed-eight failure: rejected-candidate raw negative
+  confidence `0.935359`, but old negative gradient only `0.006299`; repaired
+  supervision exposes `0.935359` (`1cc459c9...`).
+- [x] Pass final repository (`1334 passed, 20 skipped in 468.79s`) plus
+  Ruff, 225-file formatting, version, and diff gates.
+- [ ] Commit and push the clean specification-1.67 source.
+- [ ] Run exactly one fresh 128-update detector-only rung with every
+  specification-1.66 protocol and accuracy threshold unchanged. Stop
+  permanently on another miss; do not tune adjacent hyperparameters.
+
 ## Detector-only global discovery repair — specification 1.66
 
 - [x] Add strict `all`/`global_detector` RGB pretraining ownership with

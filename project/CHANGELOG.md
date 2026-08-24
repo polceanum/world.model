@@ -2,6 +2,26 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 specification 1.67 raw learned-existence supervision repair
+
+- Separated structured runtime existence confidence from the learned global
+  detector's BCE input. Runtime association, lifecycle, structured fallback,
+  measurement values, and physical predictions remain unchanged; supervised
+  positive/negative query classification now uses the raw detector logits.
+- Added strict raw-logit type/shape checks and focused real-module/supervision
+  coverage. Structured-RGB, RGB-loss, and fast/global supervision suites pass
+  `58` tests.
+- Passed the final repository (`1334 passed, 20 skipped in 468.79s`) plus
+  Ruff, the 225-file format check, version, and diff gates.
+- Recorded a fixed-eight, eight-anchor CPU attribution. The old substituted
+  path supplies mean absolute logit gradient `0.029132` both before and after
+  detector training. The rejected candidate's raw negative confidence is
+  `0.935359`, so corrected BCE exposes negative gradient `0.935359` rather
+  than `0.006299` (`1cc459c9...`).
+- Authorized one correctness-corrected 128-update rerun under the unchanged
+  specification-1.66 accuracy gate. Nearby duration, LR, loss-weight,
+  confidence, split, and admission tuning remain prohibited.
+
 ### 2026-08-24 specification 1.66 detector-only global discovery repair
 
 - Added strict, exact-resume-bound RGB measurement-pretraining ownership.

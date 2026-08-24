@@ -1,5 +1,41 @@
 # Project status
 
+## Raw learned-existence supervision repair — specification 1.67
+
+The rejected specification-1.66 detector run exposed a distinct supervision
+correctness defect rather than a nearby hyperparameter opportunity. Structured
+RGB evidence replaced learned existence logits with fixed runtime confidences
+before binary cross entropy. The forward loss therefore saw approximately
+`0.995` on supported components and `0.0001` on unsupported queries while only
+using a straight-through derivative. This made the learned positive/negative
+decision almost unsupervised even though the tensor remained differentiable.
+
+Global RGB measurements now retain the detector head's raw existence logits as
+typed ephemeral auxiliary evidence. Hungarian assignment, lifecycle, runtime
+confidence, structured fallback, and every physical measurement remain
+unchanged; only global detector BCE consumes the raw logits. Shape/type checks
+fail closed. Focused structured-RGB and supervision coverage passes `58`
+tests. The final repository passes `1334` tests with `20` expected
+unavailable-backend skips in `468.79s`; Ruff, the 225-file format check,
+version, and diff gates are clean.
+
+A frozen fixed-eight, eight-anchor CPU probe quantifies the defect. At the
+protected initializer, raw BCE has mean absolute logit gradient `0.418034`
+while the structured-substituted path supplies only `0.029132`. At the rejected
+step-128 detector candidate, raw negative confidence is `0.935359` and raw BCE
+is `1.849297`, yet the substituted BCE remains `0.238379` with the same
+`0.029132` gradient. The repair exposes a mean negative-query gradient
+`0.935359` instead of `0.006299`. Evidence is
+`/private/tmp/20260824-spec167-existence-gradient-probe.json` (`1cc459c9...`).
+
+This authorizes exactly one fresh 128-update rerun under the frozen
+specification-1.66 data, ownership, optimizer, and raw-query gates after the
+repository is clean and pushed. It does not authorize a learning-rate, loss-
+weight, duration, confidence, split, or admission sweep. If the corrected run
+still misses the declared material recall/precision gate, stop this detector
+family permanently and move to a genuinely different multi-instance model.
+Deployment remains the protected step-zero model.
+
 ## Detector-only global discovery repair — specification 1.66
 
 The terminal structured-split diagnostic identified a genuine overlapping-

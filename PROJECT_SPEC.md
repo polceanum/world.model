@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.66
+**Version:** 1.67
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, and detector-only multi-instance discovery repair amendment 24 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, and raw learned-existence supervision-boundary amendments 24 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9248,6 +9248,52 @@ candidate is retained only as negative evidence, and deployment remains the
 protected step-zero model. The terminal report is
 `/private/tmp/20260824-spec166-detector-only-terminal.json` (SHA-256
 `acd9a53b...`).
+
+---
+
+## 261. Raw learned-existence supervision boundary
+
+Specification 1.67 separates learned global-detector classification from
+structured runtime confidence without changing physical inference. The global
+RGB module must retain the detector head's pre-confidence, pre-structured raw
+existence logits as ephemeral auxiliary evidence. Structured component
+confidence, unsupported-query suppression, packet confidence, association,
+lifecycle, and the public `MeasurementSet.existence_logits` remain the runtime
+authority exactly as before.
+
+Global measurement supervision must use the raw learned logits for binary
+positive/negative query classification whenever that auxiliary field is
+present. It must reject non-tensor or shape-incompatible raw evidence. Target
+assignment continues to use runtime measurement values and runtime existence
+confidence; this repair is not permission to change Hungarian assignment or
+runtime admission. Fast ROI semantics remain unchanged because their
+existence logits are not replaced by the global structured-component path.
+
+The repair is motivated by a concrete straight-through loss defect. Evaluating
+BCE after substituting approximately `0.995` confidence for supported
+components and `0.0001` for unsupported queries preserves a derivative with
+respect to the learned logit, but evaluates that derivative at the substituted
+forward value. On the frozen eight-seed, eight-anchor three-object manifest,
+the protected initializer's mean absolute learned-logit residual is `0.418034`
+while the substituted path exposes only `0.029132`. After the rejected
+specification-1.66 rung, raw negative confidence is `0.935359`; corrected BCE
+therefore supplies mean negative residual `0.935359` rather than `0.006299`.
+The immutable diagnostic is
+`/private/tmp/20260824-spec167-existence-gradient-probe.json` (SHA-256
+`1cc459c9771f26a40af89051dae0eb95adeabde9c53578f3f074678a843d2f4a`).
+
+This correctness repair authorizes one and only one fresh 128-update
+detector-only rerun from the same protected initializer. It must preserve the
+specification-1.66 three-object balanced data, optimizer, ownership boundary,
+and fixed-eight gate: at least ten percentage points of top-target-count recall
+improvement within `0.1` normalized image coordinates, no more than five
+percentage points confidence-threshold precision regression, and no broad
+structured/runtime regression. It does not authorize duration, learning-rate,
+loss-weight, threshold, confidence, split, or admission tuning. A second miss
+closes this detector family permanently before fixed-32 physical or MPS work.
+The implementation gate passes the complete repository (`1334 passed, 20`
+expected unavailable-backend skips in `468.79s`) together with Ruff, the
+225-file format check, the version contract, and diff validation.
 
 ---
 

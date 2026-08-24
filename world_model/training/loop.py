@@ -1433,6 +1433,15 @@ def supervised_measurement_losses(
         "log_variance": measurements.log_variance,
         "existence_logits": measurements.existence_logits,
     }
+    raw_existence_logits = measurements.auxiliary.get("raw_existence_logits")
+    if raw_existence_logits is not None:
+        if not isinstance(raw_existence_logits, Tensor):
+            raise TypeError("measurements.auxiliary.raw_existence_logits must be a Tensor")
+        if raw_existence_logits.shape != measurements.existence_logits.shape:
+            raise ValueError(
+                "measurements.auxiliary.raw_existence_logits must match existence_logits"
+            )
+        outputs["existence_logits"] = raw_existence_logits
     raw_centre = measurements.auxiliary.get("raw_centre")
     if raw_centre is not None:
         if not isinstance(raw_centre, Tensor):

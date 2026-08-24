@@ -1,5 +1,33 @@
 # Design decisions
 
+## ADR-185 — Supervise raw learned existence while preserving structured runtime evidence
+
+- **Date:** 2026-08-24
+- **Status:** implementation retained; one bounded accuracy rerun pending
+- **Context:** The sole detector-only rung made every raw learned query
+  confident and failed the predeclared accuracy gate. Source tracing showed
+  that structured RGB confidence was substituted before detector BCE. The
+  forward BCE was therefore evaluated at near-perfect fixed confidence and
+  supplied a vanishing straight-through gradient rather than supervising the
+  detector head's actual positive/negative decision.
+- **Decision:** Retain structured confidence for runtime association,
+  lifecycle, and physical measurement semantics. Carry the raw detector
+  existence logits as ephemeral measurement auxiliary evidence and use them
+  only for global detector BCE, with strict type and shape validation.
+- **Alternatives considered:** tune existence weight or LR; train longer;
+  lower birth confidence; remove structured fail-closed runtime behavior; or
+  accept the first detector failure as architectural despite the proven loss
+  defect.
+- **Consequences:** Runtime outputs stay exact while the rejected candidate's
+  negative-query gradient changes from `0.006299` to the truthful `0.935359`.
+  The protected initializer's mean absolute existence gradient changes from
+  `0.029132` to `0.418034`. One fresh 128-update rerun is warranted under the
+  unchanged data, ownership, optimizer, and accuracy gate. No adjacent tuning
+  ladder is authorized; a second material miss terminates this detector family.
+  Probe evidence SHA-256 is `1cc459c9...`. The final repository passes
+  `1334/20` in `468.79s` with every static gate clean; deployment remains step
+  zero.
+
 ## ADR-184 — Train only the existing global detector before changing discovery logic
 
 - **Date:** 2026-08-24

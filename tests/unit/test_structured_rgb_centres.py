@@ -1017,10 +1017,17 @@ def test_rgb_module_keeps_global_and_fast_raw_centres_differentiable(
         ),
     )
     global_raw = global_measurement.auxiliary["raw_centre"]
+    raw_existence_logits = global_measurement.auxiliary["raw_existence_logits"]
     torch.testing.assert_close(
         global_measurement.auxiliary["position_confidence"],
         torch.tensor([[0.9975]]),
     )
+    torch.testing.assert_close(
+        global_measurement.existence_logits,
+        torch.full_like(global_measurement.existence_logits, torch.logit(torch.tensor(0.9975))),
+    )
+    assert not torch.equal(raw_existence_logits, global_measurement.existence_logits)
+    assert raw_existence_logits.requires_grad
     assert global_measurement.auxiliary["world_position_independent_axis_mask"].tolist() == [
         [[True, True, True]]
     ]

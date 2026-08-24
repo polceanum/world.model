@@ -815,7 +815,8 @@ class RGBObservationModule(ObservationModule):
             dtype=image.dtype,
         ).clamp(1.0e-4, 1.0)
         confidence_bias = torch.log(packet_confidence)
-        existence_logits = output.existence_logits + confidence_bias
+        raw_existence_logits = output.existence_logits
+        existence_logits = raw_existence_logits + confidence_bias
         position_confidence = existence_logits.sigmoid()
         if self.config.structured_disc_center_enabled:
             # A connected foreground component is direct RGB entity evidence,
@@ -950,6 +951,12 @@ class RGBObservationModule(ObservationModule):
                 "query_features": output.query_features,
                 "attention": output.attention,
                 "raw_centre": raw_centre,
+                # Structured RGB evidence is allowed to replace runtime
+                # confidence, but detector supervision must still see the
+                # learned head's own positive/negative decision.  Otherwise
+                # BCE is evaluated at the near-perfect structured confidence
+                # and supplies only a vanishing straight-through gradient.
+                "raw_existence_logits": raw_existence_logits,
                 "structured_centre_valid": structured_valid,
                 "structured_centre_ambiguous": structured_ambiguous,
                 "structured_depth_valid": structured_depth_valid,
