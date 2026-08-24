@@ -2435,6 +2435,8 @@ def test_rgb_runtime_controls_are_semantic_with_legacy_defaults() -> None:
         "structured_disc_min_pixels",
         "structured_disc_max_assignment_distance",
         "structured_disc_center_std_pixels",
+        "structured_disc_photometric_fast_depth_enabled",
+        "structured_disc_photometric_maximum_fit_rms",
     ):
         legacy_rgb.pop(field_name)
 
@@ -2457,6 +2459,9 @@ def test_rgb_runtime_controls_are_semantic_with_legacy_defaults() -> None:
                 structured_disc_min_pixels=6,
                 structured_disc_max_assignment_distance=0.5,
                 structured_disc_center_std_pixels=1.0,
+                structured_disc_fast_depth_enabled=True,
+                structured_disc_photometric_fast_depth_enabled=True,
+                structured_disc_photometric_maximum_fit_rms=0.03,
             ),
         ),
     )

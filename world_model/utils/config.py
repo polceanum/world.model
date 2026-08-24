@@ -189,6 +189,8 @@ class RGBConfig:
     structured_disc_max_assignment_distance: float = 0.75
     structured_disc_center_std_pixels: float = 0.75
     structured_disc_fast_depth_enabled: bool = False
+    structured_disc_photometric_fast_depth_enabled: bool = False
+    structured_disc_photometric_maximum_fit_rms: float = 0.035
     structured_disc_depth_relative_std: float | None = None
     structured_disc_depth_outlier_relative_threshold: float | None = None
     structured_disc_depth_outlier_variance_scale: float = 9.0
@@ -1148,6 +1150,27 @@ class OrpheusConfig:
             or not 0.0 < model.rgb.structured_disc_depth_relative_std <= 1.0
         ):
             raise ValueError("model.rgb.structured_disc_depth_relative_std must lie in (0, 1]")
+        if not isinstance(model.rgb.structured_disc_photometric_fast_depth_enabled, bool):
+            raise ValueError(
+                "model.rgb.structured_disc_photometric_fast_depth_enabled must be boolean"
+            )
+        if model.rgb.structured_disc_photometric_fast_depth_enabled and not (
+            model.rgb.structured_disc_center_enabled
+            and model.rgb.structured_disc_fast_depth_enabled
+        ):
+            raise ValueError(
+                "model.rgb.structured_disc_photometric_fast_depth_enabled requires "
+                "structured centre and fast depth"
+            )
+        if (
+            isinstance(model.rgb.structured_disc_photometric_maximum_fit_rms, bool)
+            or not isinstance(model.rgb.structured_disc_photometric_maximum_fit_rms, Real)
+            or not math.isfinite(model.rgb.structured_disc_photometric_maximum_fit_rms)
+            or model.rgb.structured_disc_photometric_maximum_fit_rms <= 0.0
+        ):
+            raise ValueError(
+                "model.rgb.structured_disc_photometric_maximum_fit_rms must be finite and positive"
+            )
         if model.rgb.structured_disc_depth_outlier_relative_threshold is not None and (
             not math.isfinite(model.rgb.structured_disc_depth_outlier_relative_threshold)
             or model.rgb.structured_disc_depth_outlier_relative_threshold <= 0.0

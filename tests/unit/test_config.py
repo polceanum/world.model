@@ -132,6 +132,56 @@ def test_rgb_reprojection_requires_differentiable_rgb_state_estimator() -> None:
     ).validate()
 
 
+def test_photometric_fast_depth_is_strict_and_requires_structured_depth() -> None:
+    base = OrpheusConfig()
+    with pytest.raises(ValueError, match="must be boolean"):
+        replace(
+            base,
+            model=replace(
+                base.model,
+                rgb=replace(
+                    base.model.rgb,
+                    structured_disc_photometric_fast_depth_enabled=1,
+                ),
+            ),
+        ).validate()
+    with pytest.raises(ValueError, match="requires structured centre and fast depth"):
+        replace(
+            base,
+            model=replace(
+                base.model,
+                rgb=replace(
+                    base.model.rgb,
+                    structured_disc_photometric_fast_depth_enabled=True,
+                    structured_disc_fast_depth_enabled=False,
+                ),
+            ),
+        ).validate()
+    with pytest.raises(ValueError, match="maximum_fit_rms"):
+        replace(
+            base,
+            model=replace(
+                base.model,
+                rgb=replace(
+                    base.model.rgb,
+                    structured_disc_photometric_maximum_fit_rms=True,
+                ),
+            ),
+        ).validate()
+    replace(
+        base,
+        model=replace(
+            base.model,
+            rgb=replace(
+                base.model.rgb,
+                structured_disc_center_enabled=True,
+                structured_disc_fast_depth_enabled=True,
+                structured_disc_photometric_fast_depth_enabled=True,
+            ),
+        ),
+    ).validate()
+
+
 def test_soft_shadow_physical_requires_temperature_and_differentiable_scope() -> None:
     base = OrpheusConfig()
     weights = {**base.training.loss_weights, "soft_shadow_physical": 1.0}

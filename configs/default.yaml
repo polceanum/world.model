@@ -68,6 +68,8 @@ model:
     temporal_velocity_independent_raw_history_enabled: false
     temporal_velocity_continuous_gravity_axis_enabled: false
     structured_disc_center_enabled: true
+    structured_disc_photometric_fast_depth_enabled: false
+    structured_disc_photometric_maximum_fit_rms: 0.035
     roi_uncertainty_scale: 2.5
     global_uncertainty_threshold: 4.0
     surprise_threshold: 8.0

@@ -2,6 +2,22 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 photometric RGB geometry (specification 1.75)
+
+- Added a default-off RGB-only inverse-rendering fit for complete structured
+  sphere silhouettes, with residual qualification and exact-forward
+  straight-through gradients into learned fast-ROI radius/depth heads.
+- Added strict configuration and legacy-resume binding plus fit accuracy,
+  occlusion rejection, and gradient coverage.
+- Confirmed with oracle anchors that observation error, not equation rollout,
+  dominates short-horizon accuracy.
+- Rejected direct runtime substitution after a full fixed-32 gate: pooled score,
+  velocity, and collision F1 improve, but 291 broad guardrails fail. Defaults
+  stay off, no `main` merge is authorized, and further threshold tuning is
+  closed in favor of at most one learned-fusion/distillation qualification.
+- Passed the final repository gate (`1383 passed`, `20` expected skips in
+  `536.52 s`) plus Ruff, format, version, and diff checks.
+
 ### 2026-08-24 shared chronological hypothesis horizons (specification 1.74)
 
 - Added opt-in complete-state chronological rollout reuse for semigroup-safe

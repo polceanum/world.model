@@ -22,6 +22,9 @@ from world_model.observations.rgb import (
 )
 from world_model.observations.rgb import module as rgb_module
 from world_model.observations.rgb.structured_centres import (
+    PhotometricDiscGeometryOutput,
+    StructuredROICentreOutput,
+    photometric_disc_geometry,
     structured_disc_centres,
     structured_disc_centres_in_rois,
 )
@@ -67,6 +70,32 @@ def _paint_block(
         height=image.shape[-2],
         dtype=image.dtype,
     )
+
+
+def _paint_renderer_sphere(
+    image: torch.Tensor,
+    *,
+    centre_x: float,
+    centre_y: float,
+    radius: float,
+    colour: tuple[float, float, float],
+) -> None:
+    height, width = image.shape[-2:]
+    pixel_y, pixel_x = torch.meshgrid(
+        torch.arange(height, dtype=image.dtype),
+        torch.arange(width, dtype=image.dtype),
+        indexing="ij",
+    )
+    radial_squared = ((pixel_x - centre_x).square() + (pixel_y - centre_y).square()) / (
+        radius * radius
+    )
+    complete = radial_squared <= 1.0
+    radial = radial_squared.clamp_min(0.0).sqrt()
+    support = (((1.0 - radial) * radius + 0.5).clamp(0.0, 1.0)) * complete
+    shade = (0.48 + 0.52 * (1.0 - radial_squared).clamp_min(0.0).sqrt()).clamp(0.0, 1.0)
+    sphere = torch.tensor(colour, dtype=image.dtype).view(1, 3, 1, 1) * shade
+    alpha = support.view(1, 1, height, width)
+    image.mul_(1.0 - alpha).add_(sphere * alpha)
 
 
 def _global_structured_measurement(
@@ -963,6 +992,177 @@ def test_roi_refinement_rejects_invalid_shapes() -> None:
             rois,
             valid_mask=torch.ones((1, 1), dtype=torch.bool),
         )
+
+
+def test_photometric_disc_geometry_recovers_renderer_radius() -> None:
+    size = 48
+    image = torch.zeros((1, 3, size, size), dtype=torch.float32)
+    _paint_renderer_sphere(
+        image,
+        centre_x=25.2,
+        centre_y=21.7,
+        radius=4.35,
+        colour=(0.82, 0.31, 0.17),
+    )
+    proposal = _normalized_pixel(
+        x=25.0,
+        y=22.0,
+        width=size,
+        height=size,
+    ).view(1, 1, 2)
+
+    result = photometric_disc_geometry(
+        image,
+        proposal,
+        valid_mask=torch.tensor([[True]]),
+    )
+
+    assert result.valid_mask.tolist() == [[True]]
+    torch.testing.assert_close(result.radius_pixels, torch.tensor([[4.35]]), atol=2.0e-3, rtol=0)
+    assert result.fit_rms.item() < 1.0e-4
+
+
+def test_photometric_disc_geometry_rejects_occluded_profile_and_invalid_inputs() -> None:
+    size = 48
+    image = torch.zeros((1, 3, size, size), dtype=torch.float32)
+    _paint_renderer_sphere(
+        image,
+        centre_x=24.0,
+        centre_y=24.0,
+        radius=4.5,
+        colour=(0.8, 0.2, 0.1),
+    )
+    image[:, :, 20:29, 24:30] = torch.tensor([0.1, 0.6, 0.9]).view(1, 3, 1, 1)
+    proposal = _normalized_pixel(x=24.0, y=24.0, width=size, height=size).view(1, 1, 2)
+
+    result = photometric_disc_geometry(
+        image,
+        proposal,
+        valid_mask=torch.tensor([[True]]),
+    )
+    assert result.valid_mask.tolist() == [[False]]
+    assert result.radius_pixels.tolist() == [[0.0]]
+
+    with pytest.raises(ValueError, match="maximum_fit_rms"):
+        photometric_disc_geometry(
+            image,
+            proposal,
+            valid_mask=torch.tensor([[True]]),
+            maximum_fit_rms=0.0,
+        )
+    with pytest.raises(ValueError, match=r"\[B,N\]"):
+        photometric_disc_geometry(
+            image,
+            proposal,
+            valid_mask=torch.tensor([True]),
+        )
+
+
+def test_photometric_fast_depth_preserves_forward_fit_and_raw_head_gradients(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    size = 32
+    intrinsics = torch.tensor(
+        [
+            [30.0, 0.0, (size - 1) / 2.0],
+            [0.0, 30.0, (size - 1) / 2.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    world_from_camera = torch.eye(4)
+    image = torch.zeros((1, 3, size, size))
+    packet = ObservationPacket(
+        modality="rgb",
+        sensor_id="camera",
+        timestamp=0.1,
+        payload=image,
+        calibration={
+            "intrinsics": intrinsics.unsqueeze(0),
+            "world_from_camera": world_from_camera.unsqueeze(0),
+        },
+        frame_id="camera:camera",
+    )
+    module = RGBObservationModule(
+        RGBObservationConfig(
+            max_objects=1,
+            birth_extra_queries=0,
+            backbone_channels=(8, 16, 24, 32),
+            feature_dim=16,
+            appearance_dim=8,
+            roi_size=8,
+            roi_hidden_dim=16,
+            structured_disc_center_enabled=True,
+            structured_disc_fast_depth_enabled=True,
+            structured_disc_photometric_fast_depth_enabled=True,
+            structured_disc_depth_relative_std=0.05,
+            default_world_radius=0.21,
+        )
+    )
+    belief = BeliefFactory(max_objects=1, geometry_dim=1, appearance_dim=8).create(
+        intrinsics=intrinsics.unsqueeze(0),
+        world_from_camera=world_from_camera.unsqueeze(0),
+    )
+    belief = belief.replace(
+        objects=belief.objects.replace(
+            active=torch.tensor([[True]]),
+            object_id=torch.tensor([[3]]),
+            position=torch.tensor([[[0.0, 0.0, 3.0]]]),
+            geometry=torch.tensor([[[0.21]]]),
+            fast_log_variance=torch.full_like(belief.objects.fast_log_variance, -8.0),
+        )
+    )
+    predicted = module.project(
+        belief,
+        SensorContext(
+            sensor_id=packet.sensor_id,
+            timestamp=packet.timestamp,
+            calibration=packet.calibration,
+            frame_id=packet.frame_id,
+            image_size=(size, size),
+        ),
+    )
+
+    monkeypatch.setattr(
+        rgb_module,
+        "structured_disc_centres_in_rois",
+        lambda *args, **kwargs: StructuredROICentreOutput(
+            centres=predicted.values[..., :2],
+            radius_pixels=torch.tensor([[2.0]]),
+            valid_mask=torch.tensor([[True]]),
+            ambiguous_mask=torch.tensor([[False]]),
+            ownership_margin=torch.tensor([[1.0]]),
+            depth_valid_mask=torch.tensor([[True]]),
+            component_pixel_count=torch.tensor([[12]]),
+        ),
+    )
+    monkeypatch.setattr(
+        rgb_module,
+        "photometric_disc_geometry",
+        lambda *args, **kwargs: PhotometricDiscGeometryOutput(
+            radius_pixels=torch.tensor([[2.1]]),
+            valid_mask=torch.tensor([[True]]),
+            fit_rms=torch.tensor([[0.01]]),
+        ),
+    )
+    measured, _ = module.encode_measurements([packet], belief, predicted, None)
+
+    expected_log_radius = math.log(2.1 / (0.5 * size))
+    expected_inverse_depth = 2.1 / (30.0 * 0.21)
+    torch.testing.assert_close(
+        measured.values[..., 2],
+        torch.tensor([[expected_log_radius]]),
+        rtol=0,
+        atol=1.0e-6,
+    )
+    torch.testing.assert_close(
+        measured.values[..., 3],
+        torch.tensor([[expected_inverse_depth]]),
+        rtol=0,
+        atol=1.0e-6,
+    )
+    measured.values[..., 2:4].sum().backward()
+    assert module.roi_updater.delta_head.bias.grad is not None
+    assert module.roi_updater.delta_head.bias.grad[2:4].abs().sum() > 0
 
 
 def test_rgb_module_keeps_global_and_fast_raw_centres_differentiable(

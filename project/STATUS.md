@@ -1,5 +1,30 @@
 # Project status
 
+## Photometric RGB geometry — specification 1.75 mechanism retained, runtime use rejected
+
+An oracle-anchor fixed-eight decomposition reduces 0.1-second position RMSE
+from `0.140636` to `0.005056 m`, localizing the dominant short-horizon error to
+RGB state estimation rather than the equation rollout. A new default-off
+photometric sphere fit uses only RGB, the structured image centre, and the
+renderer's radial shading profile; accepted exact radius/depth values carry
+straight-through gradients to the learned fast-ROI heads. Held-out qualified
+radius error is `0.333%` mean and `0.598%` p95.
+
+The full fixed-32 runtime-substitution gate is rejected despite a pooled score
+gain `0.239528636 -> 0.237682466`, velocity gain
+`0.811882 -> 0.748072 m/s`, and collision-F1 gain
+`0.283747 -> 0.310811`: 291 broad guardrails fail, chiefly NLL, local velocity,
+calibration, and scenario slices. The one principled ownership correction
+(fit around complete unambiguous structured centres) still has mixed fixed-eight
+behavior, so threshold tuning is closed. The implementation stays disabled and
+is not eligible for `main`; a future attempt is limited to training-only
+distillation or learned uncertainty-aware fusion with one predeclared accuracy
+and latency gate.
+
+The final repository gate passes `1383` tests with `20` expected skips in
+`536.52 s`; Ruff, format, version, and diff checks are clean. The fixed-32
+report SHA-256 is `20896f639ac965add25997d34f5753ffb965aee3d9da9db69aa00d93f8d73e8b`.
+
 ## Shared chronological hypothesis horizons — specification 1.74 execution-qualified
 
 The runtime hypothesis scheduler previously restarted every candidate from the

@@ -5815,3 +5815,30 @@
   qualified. This is execution qualification only. No optimizer update,
   prediction-accuracy improvement, checkpoint promotion, or convergence has
   been demonstrated.
+## ADR-199 — Retain photometric sphere geometry as a teacher, reject direct substitution
+
+- **Date:** 2026-08-24
+- **Status:** mechanism retained default-off; runtime candidate rejected
+- **Context:** Oracle-anchor evaluation made the simple equation rollout nearly
+  exact at short horizons, while the learned RGB posterior remained much less
+  accurate. Connected-component radii and multiview triangulation were either
+  biased or ill-conditioned. The synthetic renderer exposes a known radial
+  sphere profile that can be fitted from RGB without privileged state.
+- **Decision:** Add a residual-qualified inverse-rendering fit for complete,
+  ownership-resolved structured discs. Preserve exact fitted radius/depth in the
+  optional forward and attach straight-through gradients to learned fast-ROI
+  values. Keep all defaults false and stop runtime promotion unless the full
+  physical gate passes. After the sole principled correction to use the
+  image-derived structured centre, prohibit threshold sweeps.
+- **Alternatives considered:** simulator depth; perfect masks; repeated circle
+  thresholds; naive multiview ray triangulation; replacing the dynamics;
+  weakening slice guardrails; or accepting pooled metrics alone.
+- **Consequences:** The isolated fit recovers qualified radius to `0.333%` mean
+  relative error, but direct fixed-32 deployment improves pooled score by only
+  `0.001846` while failing 291 scenario/axis/horizon guardrails. The feature is
+  useful differentiable teacher infrastructure, not a deployment fix. A future
+  attempt is bounded to training-only student distillation or learned
+  uncertainty-aware fusion and must pass one fixed accuracy/latency gate before
+  `main`; otherwise this line terminates. The final repository gate is
+  `1383 passed`, `20 skipped` in `536.52 s`; the fixed-32 report is
+  `20896f63...`.

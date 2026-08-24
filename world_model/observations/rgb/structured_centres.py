@@ -16,8 +16,15 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn.functional as F
-from scipy.ndimage import distance_transform_edt, label, maximum_filter
-from scipy.optimize import linear_sum_assignment
+from scipy.ndimage import (
+    binary_dilation,
+    binary_erosion,
+    distance_transform_edt,
+    label,
+    maximum_filter,
+    sobel,
+)
+from scipy.optimize import least_squares, linear_sum_assignment
 from torch import Tensor
 
 from world_model.observations.rgb.roi_updater import make_roi_grid, sample_rois
@@ -46,6 +53,15 @@ class StructuredROICentreOutput:
     ownership_margin: Tensor
     depth_valid_mask: Tensor
     component_pixel_count: Tensor
+
+
+@dataclass(frozen=True)
+class PhotometricDiscGeometryOutput:
+    """Renderer-fitted apparent radii qualified from RGB residuals."""
+
+    radius_pixels: Tensor
+    valid_mask: Tensor
+    fit_rms: Tensor
 
 
 def _validate_controls(
@@ -537,9 +553,253 @@ def structured_disc_centres_in_rois(
     )
 
 
+def _photometric_disc_fit(
+    image: np.ndarray,
+    row_background: np.ndarray,
+    foreground_strength: np.ndarray,
+    proposal_xy: tuple[float, float],
+    *,
+    threshold: float,
+    maximum_fit_rms: float,
+) -> tuple[float, float] | None:
+    """Fit the known sphere image profile without using simulator labels."""
+
+    height, width = foreground_strength.shape
+    foreground = foreground_strength > threshold
+    components, component_count = label(
+        foreground,
+        structure=np.ones((3, 3), dtype=np.int8),
+    )
+    if component_count == 0:
+        return None
+    proposal_x, proposal_y = proposal_xy
+    foreground_y, foreground_x = np.nonzero(foreground)
+    nearest = int(
+        np.argmin(np.square(foreground_x - proposal_x) + np.square(foreground_y - proposal_y))
+    )
+    component_index = int(components[foreground_y[nearest], foreground_x[nearest]])
+    component = components == component_index
+    if int(component.sum()) < 8:
+        return None
+    if component[0].any() or component[-1].any() or component[:, 0].any() or component[:, -1].any():
+        return None
+
+    boundary_band = binary_dilation(component, iterations=1) & ~binary_erosion(
+        component,
+        iterations=1,
+    )
+    gradient_x = sobel(foreground_strength, axis=1, mode="nearest") / 8.0
+    gradient_y = sobel(foreground_strength, axis=0, mode="nearest") / 8.0
+    gradient = np.sqrt(np.square(gradient_x) + np.square(gradient_y))
+    band_gradient = gradient[boundary_band]
+    if band_gradient.size < 12 or float(band_gradient.max()) <= 0.0:
+        return None
+    selected_edge = boundary_band & (gradient >= 0.35 * float(band_gradient.max()))
+    edge_y, edge_x = np.nonzero(selected_edge)
+    if edge_x.size < 12:
+        return None
+    points = np.column_stack((edge_x, edge_y)).astype(np.float64)
+    weights = gradient[selected_edge].astype(np.float64)
+    design = np.column_stack(
+        (
+            2.0 * points[:, 0],
+            2.0 * points[:, 1],
+            np.ones(points.shape[0]),
+        )
+    )
+    target = np.square(points).sum(axis=1)
+    root_weight = np.sqrt(weights / weights.max())
+    solution, *_ = np.linalg.lstsq(
+        design * root_weight[:, None],
+        target * root_weight,
+        rcond=None,
+    )
+    centre_x, centre_y, constant = (float(value) for value in solution)
+    radius_squared = constant + centre_x * centre_x + centre_y * centre_y
+    if not math.isfinite(radius_squared) or radius_squared <= 0.0:
+        return None
+    radius = math.sqrt(radius_squared)
+    radial = np.sqrt(np.square(points[:, 0] - centre_x) + np.square(points[:, 1] - centre_y))
+    residual_pixels = float(np.sqrt(np.average(np.square(radial - radius), weights=weights)))
+    angles = np.mod(
+        np.arctan2(points[:, 1] - centre_y, points[:, 0] - centre_x),
+        2.0 * math.pi,
+    )
+    angular_bins = np.floor(angles * 24.0 / (2.0 * math.pi)).astype(np.int64).clip(0, 23)
+    angular_coverage = float(np.unique(angular_bins).size / 24.0)
+    centre_distance = math.hypot(centre_x - proposal_x, centre_y - proposal_y)
+    if radius < 1.5 or residual_pixels > 0.6 or angular_coverage < 0.75 or centre_distance > radius:
+        return None
+
+    margin = 2.0
+    left = max(0, int(math.floor(centre_x - radius - margin)))
+    right = min(width, int(math.ceil(centre_x + radius + margin + 1.0)))
+    top = max(0, int(math.floor(centre_y - radius - margin)))
+    bottom = min(height, int(math.ceil(centre_y + radius + margin + 1.0)))
+    if left == 0 or top == 0 or right == width or bottom == height:
+        return None
+    pixel_y, pixel_x = np.meshgrid(
+        np.arange(top, bottom, dtype=np.float64),
+        np.arange(left, right, dtype=np.float64),
+        indexing="ij",
+    )
+    observed = image[:, top:bottom, left:right]
+    local_background = np.broadcast_to(row_background[:, top:bottom], observed.shape)
+    centre_pixel = image[
+        :,
+        int(round(centre_y)),
+        int(round(centre_x)),
+    ]
+    initial_albedo = np.clip(centre_pixel, 0.05, 1.0)
+
+    def _render(parameters: np.ndarray) -> np.ndarray:
+        candidate_x, candidate_y, candidate_radius = parameters[:3]
+        albedo = parameters[3:, None, None]
+        radial_squared = (
+            np.square(pixel_x - candidate_x) + np.square(pixel_y - candidate_y)
+        ) / max(candidate_radius * candidate_radius, 1.0e-8)
+        complete_disc = radial_squared <= 1.0
+        radial_distance = np.sqrt(np.maximum(radial_squared, 0.0))
+        soft_width = 1.0 / max(candidate_radius, 1.0e-4)
+        soft_support = np.clip((1.0 - radial_distance) / soft_width + 0.5, 0.0, 1.0) * complete_disc
+        shade = np.clip(
+            0.48 + 0.52 * np.sqrt(np.maximum(1.0 - radial_squared, 0.0)),
+            0.0,
+            1.0,
+        )
+        alpha = soft_support[None]
+        return local_background * (1.0 - alpha) + albedo * shade[None] * alpha
+
+    def _residual(parameters: np.ndarray) -> np.ndarray:
+        return (_render(parameters) - observed).reshape(-1)
+
+    lower = np.asarray(
+        (
+            centre_x - 0.75,
+            centre_y - 0.75,
+            max(1.25, radius - 0.75),
+            0.0,
+            0.0,
+            0.0,
+        ),
+        dtype=np.float64,
+    )
+    upper = np.asarray(
+        (
+            centre_x + 0.75,
+            centre_y + 0.75,
+            radius + 0.75,
+            1.0,
+            1.0,
+            1.0,
+        ),
+        dtype=np.float64,
+    )
+    fit = least_squares(
+        _residual,
+        np.concatenate(((centre_x, centre_y, radius), initial_albedo)),
+        bounds=(lower, upper),
+        method="trf",
+        max_nfev=80,
+        ftol=1.0e-10,
+        xtol=1.0e-10,
+        gtol=1.0e-10,
+    )
+    fit_radius = float(fit.x[2])
+    fit_centre_distance = math.hypot(
+        float(fit.x[0]) - proposal_x,
+        float(fit.x[1]) - proposal_y,
+    )
+    fit_rms = float(np.sqrt(np.mean(np.square(fit.fun))))
+    if (
+        not fit.success
+        or not math.isfinite(fit_radius)
+        or not math.isfinite(fit_rms)
+        or fit_radius < 1.25
+        or fit_centre_distance > fit_radius
+        or fit_rms > maximum_fit_rms
+    ):
+        return None
+    return fit_radius, fit_rms
+
+
+def photometric_disc_geometry(
+    image: Tensor,
+    proposal_centres: Tensor,
+    *,
+    valid_mask: Tensor,
+    threshold: float = 0.04,
+    maximum_fit_rms: float = 0.035,
+) -> PhotometricDiscGeometryOutput:
+    """Recover complete apparent sphere scale from the known RGB image model.
+
+    The fit consumes only RGB pixels and a source-conditioned image-space
+    prior. It runs detached on CPU and rejects partial/merged silhouettes by
+    the residual of the renderer's exact support and radial shading profile.
+    Callers can retain learned gradients with a straight-through residual.
+    """
+
+    if image.ndim != 4 or image.shape[1] != 3:
+        raise ValueError("photometric disc input must have shape [B,3,H,W]")
+    if proposal_centres.ndim != 3 or proposal_centres.shape[-1] != 2:
+        raise ValueError("proposal_centres must have shape [B,N,2]")
+    if image.shape[0] != proposal_centres.shape[0]:
+        raise ValueError("image and proposal batch dimensions must match")
+    if valid_mask.shape != proposal_centres.shape[:2] or valid_mask.dtype != torch.bool:
+        raise ValueError("valid_mask must be boolean [B,N]")
+    if not 0.0 < threshold < 2.0:
+        raise ValueError("photometric disc threshold must lie in (0,2)")
+    if not math.isfinite(maximum_fit_rms) or maximum_fit_rms <= 0.0:
+        raise ValueError("maximum_fit_rms must be finite and positive")
+
+    output_radius = proposal_centres.new_zeros(proposal_centres.shape[:2])
+    output_rms = proposal_centres.new_full(
+        proposal_centres.shape[:2],
+        torch.finfo(proposal_centres.dtype).max,
+    )
+    output_valid = torch.zeros_like(valid_mask)
+    height, width = image.shape[-2:]
+    cpu_image = image.detach().to(device="cpu", dtype=torch.float64)
+    cpu_proposals = proposal_centres.detach().to(device="cpu", dtype=torch.float64)
+    cpu_valid = valid_mask.detach().to(device="cpu")
+    for batch_index in range(image.shape[0]):
+        image_array = cpu_image[batch_index].numpy()
+        row_background = np.median(image_array, axis=-1, keepdims=True)
+        foreground_strength = np.linalg.norm(image_array - row_background, axis=0)
+        for slot in torch.nonzero(cpu_valid[batch_index], as_tuple=False).flatten().tolist():
+            proposal = cpu_proposals[batch_index, slot]
+            if not bool(torch.isfinite(proposal).all()):
+                continue
+            proposal_pixels = (
+                0.5 * (float(proposal[0]) + 1.0) * max(width - 1, 1),
+                0.5 * (float(proposal[1]) + 1.0) * max(height - 1, 1),
+            )
+            fit = _photometric_disc_fit(
+                image_array,
+                row_background,
+                foreground_strength,
+                proposal_pixels,
+                threshold=threshold,
+                maximum_fit_rms=maximum_fit_rms,
+            )
+            if fit is None:
+                continue
+            radius, fit_rms = fit
+            output_radius[batch_index, slot] = radius
+            output_rms[batch_index, slot] = fit_rms
+            output_valid[batch_index, slot] = True
+    return PhotometricDiscGeometryOutput(
+        radius_pixels=output_radius,
+        valid_mask=output_valid,
+        fit_rms=output_rms,
+    )
+
+
 __all__ = [
+    "PhotometricDiscGeometryOutput",
     "StructuredCentreOutput",
     "StructuredROICentreOutput",
+    "photometric_disc_geometry",
     "structured_disc_centres",
     "structured_disc_centres_in_rois",
 ]

@@ -414,6 +414,12 @@ class OnlineWorldModel(nn.Module):
                     structured_disc_fast_depth_enabled=(
                         rgb_config.structured_disc_fast_depth_enabled
                     ),
+                    structured_disc_photometric_fast_depth_enabled=(
+                        rgb_config.structured_disc_photometric_fast_depth_enabled
+                    ),
+                    structured_disc_photometric_maximum_fit_rms=(
+                        rgb_config.structured_disc_photometric_maximum_fit_rms
+                    ),
                     structured_disc_depth_relative_std=(
                         rgb_config.structured_disc_depth_relative_std
                     ),

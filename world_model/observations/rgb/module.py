@@ -43,6 +43,7 @@ from world_model.observations.rgb.projector import (
 )
 from world_model.observations.rgb.roi_updater import FastROIUpdater
 from world_model.observations.rgb.structured_centres import (
+    photometric_disc_geometry,
     structured_disc_centres,
     structured_disc_centres_in_rois,
 )
@@ -152,6 +153,8 @@ class RGBObservationConfig:
     structured_disc_max_assignment_distance: float = 0.75
     structured_disc_center_std_pixels: float = 0.75
     structured_disc_fast_depth_enabled: bool = False
+    structured_disc_photometric_fast_depth_enabled: bool = False
+    structured_disc_photometric_maximum_fit_rms: float = 0.035
     structured_disc_depth_relative_std: float | None = None
     structured_disc_depth_outlier_relative_threshold: float | None = None
     structured_disc_depth_outlier_variance_scale: float = 9.0
@@ -481,6 +484,21 @@ class RGBObservationConfig:
             or not 0.0 < self.structured_disc_depth_relative_std <= 1.0
         ):
             raise ValueError("structured_disc_depth_relative_std must lie in (0, 1]")
+        if not isinstance(self.structured_disc_photometric_fast_depth_enabled, bool):
+            raise TypeError("structured_disc_photometric_fast_depth_enabled must be boolean")
+        if self.structured_disc_photometric_fast_depth_enabled and not (
+            self.structured_disc_center_enabled and self.structured_disc_fast_depth_enabled
+        ):
+            raise ValueError("photometric fast depth requires structured centre and fast depth")
+        if (
+            isinstance(self.structured_disc_photometric_maximum_fit_rms, bool)
+            or not isinstance(self.structured_disc_photometric_maximum_fit_rms, (int, float))
+            or not math.isfinite(self.structured_disc_photometric_maximum_fit_rms)
+            or self.structured_disc_photometric_maximum_fit_rms <= 0.0
+        ):
+            raise ValueError(
+                "structured_disc_photometric_maximum_fit_rms must be finite and positive"
+            )
         if self.structured_disc_depth_outlier_relative_threshold is not None and (
             not math.isfinite(self.structured_disc_depth_outlier_relative_threshold)
             or self.structured_disc_depth_outlier_relative_threshold <= 0.0
@@ -1095,10 +1113,29 @@ class RGBObservationModule(ObservationModule):
             structured_ownership_margin = structured.ownership_margin
             structured_count = structured.valid_mask.sum(dim=-1)
             if self.config.structured_disc_fast_depth_enabled:
-                normalized_radius = (structured.radius_pixels / (0.5 * min(image_size))).clamp_min(
+                structured_radius_pixels = structured.radius_pixels
+                structured_depth_mask = structured.depth_valid_mask
+                if self.config.structured_disc_photometric_fast_depth_enabled:
+                    photometric = photometric_disc_geometry(
+                        image,
+                        structured.centres,
+                        valid_mask=(structured.depth_valid_mask & ~structured.ambiguous_mask),
+                        threshold=self.config.structured_disc_threshold,
+                        maximum_fit_rms=(self.config.structured_disc_photometric_maximum_fit_rms),
+                    )
+                    structured_radius_pixels = photometric.radius_pixels
+                    structured_depth_mask = photometric.valid_mask
+                normalized_radius = (structured_radius_pixels / (0.5 * min(image_size))).clamp_min(
                     1.0e-4
                 )
-                structured_log_radius = normalized_radius.log().unsqueeze(-1)
+                analytic_log_radius = normalized_radius.log().unsqueeze(-1)
+                if self.config.structured_disc_photometric_fast_depth_enabled:
+                    structured_log_radius = (
+                        output.values[..., 2:3]
+                        + (analytic_log_radius - output.values[..., 2:3]).detach()
+                    )
+                else:
+                    structured_log_radius = analytic_log_radius
                 analytic_inverse_depth = self._structured_inverse_depth(
                     structured_log_radius,
                     intrinsics,
@@ -1106,7 +1143,11 @@ class RGBObservationModule(ObservationModule):
                     self.config.default_world_radius,
                     torch.zeros_like(values[..., 3:4]),
                 ).unsqueeze(-1)
-                depth_valid = structured.depth_valid_mask.unsqueeze(-1)
+                if self.config.structured_disc_photometric_fast_depth_enabled:
+                    analytic_inverse_depth = analytic_inverse_depth + (
+                        output.values[..., 3:4] - output.values[..., 3:4].detach()
+                    )
+                depth_valid = structured_depth_mask.unsqueeze(-1)
                 values = values.clone()
                 values[..., 2:3] = torch.where(
                     depth_valid,
@@ -1118,7 +1159,7 @@ class RGBObservationModule(ObservationModule):
                     analytic_inverse_depth,
                     values[..., 3:4],
                 )
-                structured_depth_valid = structured.depth_valid_mask
+                structured_depth_valid = structured_depth_mask
         measurement_log_variance = output.log_variance.clamp(
             self.config.measurement_log_variance_min,
             self.config.measurement_log_variance_max,

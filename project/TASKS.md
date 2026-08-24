@@ -1,5 +1,23 @@
 # Tasks
 
+## Photometric RGB geometry — specification 1.75
+
+- [x] Localize short-horizon error with an oracle-anchor decomposition; confirm
+  the analytic rollout is near the equations when initialized from correct state.
+- [x] Implement an RGB-only inverse-rendering fit with complete-silhouette and
+  residual qualification plus straight-through learned-head gradients.
+- [x] Add strict configuration, legacy resume, exact default-off, fit-accuracy,
+  occlusion-rejection, and gradient tests.
+- [x] Run the full fixed-32 physical gate and reject direct runtime substitution
+  after 291 broad guardrail failures despite pooled velocity/score improvements.
+- [x] Stop threshold and component-selection iteration after the sole principled
+  structured-centre correction remained mixed on fixed eight.
+- [x] Pass the final repository gate (`1383 passed`, `20 skipped`) and all
+  Ruff/format/version/diff checks.
+- [ ] Keep the mechanism default-off and out of `main`. If revisited, permit only
+  one predeclared training-only distillation or learned-fusion qualification,
+  including fixed-manifest accuracy and active-device latency.
+
 ## Shared chronological hypothesis horizons — specification 1.74
 
 - [x] Identify independent source-to-horizon learned rollouts as the dominant
