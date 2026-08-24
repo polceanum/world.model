@@ -604,6 +604,18 @@ class DynamicsModel(nn.Module):
         ratio = interval / self.config.max_substep
         return max(1, int(math.floor(ratio + 1.0e-12)))
 
+    @property
+    def shared_horizon_rollout_safe(self) -> bool:
+        """Whether query boundaries cannot alter learned-effect cadence.
+
+        With a proposal on every physical tick, splitting one rollout at
+        evidence horizons preserves the same chronological state transition.
+        Multi-rate proposal holding resets at a query boundary and therefore
+        retains the historical independent-horizon schedule.
+        """
+
+        return self._learned_effect_stride() == 1
+
     def _substep(
         self,
         belief: WorldBelief,

@@ -1,5 +1,30 @@
 # Design decisions
 
+## ADR-198 — Share only semigroup-safe hypothesis horizon execution
+
+- **Date:** 2026-08-24
+- **Status:** execution mechanism qualified; default off; accuracy not promoted
+- **Context:** Five independent evidence horizons restarted the learned
+  candidate from one posterior, executing 312 physical ticks where one
+  chronological trajectory needs 120. Naive heterogeneous-row batching changed
+  per-row substep grids and failed physical parity.
+- **Decision:** Retain complete chronological `RolloutStep` results and derive
+  each source-to-horizon interval result with prefix event/contact reductions.
+  Advertise explicit candidate capability; use it for CV, damped CV, online
+  local acceleration, and stride-one learned dynamics. Fail closed to serial
+  execution for ballistic contact, unknown candidates, and multirate learned
+  dynamics. Make the policy strict, legacy-false, exact-resume-bound, and
+  fingerprinted.
+- **Alternatives considered:** batch unequal elapsed rows; eagerly evaluate all
+  candidates; sparse candidate dispatch only; lower horizon count; enable
+  multirate proposal holding; or weaken physical parity.
+- **Consequences:** Active-Aqua MPS preserves discrete tensors exactly, bounds
+  full-state float delta at `4.77e-7`, and improves median scheduler time
+  `2.602x`. The pool remains accuracy-ineligible from prior fixed-manifest
+  evidence, so this mechanism stays default-off and does not merge to `main`.
+  The final gate is `1379 passed`, `20` expected skips in `537.96 s`, with all
+  static checks clean.
+
 ## ADR-197 — Separate semantic gradient ownership without changing physical execution
 
 - **Date:** 2026-08-24

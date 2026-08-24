@@ -259,6 +259,7 @@ class ConstantVelocityDynamics:
             raise ValueError("damping must be finite and nonnegative")
         self.damping = float(damping)
         self.supported_hypothesis_regimes = (HypothesisRegime.FREE,)
+        self.shared_horizon_rollout_safe = True
 
     def predict_step(self, belief: WorldBelief, delta_time: Tensor) -> RolloutStep:
         if delta_time.shape != belief.timestamp.shape:
@@ -339,6 +340,7 @@ class OnlineLocalAccelerationDynamics:
         self.maximum_acceleration = float(maximum_acceleration)
         self.minimum_delta_time = float(minimum_delta_time)
         self.supported_hypothesis_regimes = (HypothesisRegime.FREE,)
+        self.shared_horizon_rollout_safe = True
         self.object_ids: Tensor | None = None
         self.acceleration: Tensor | None = None
         self.acceleration_weight: Tensor | None = None
@@ -608,6 +610,9 @@ class BallisticContactDynamics:
             HypothesisRegime.GROUND_CONTACT,
             HypothesisRegime.PAIR_CONTACT,
         )
+        # Contact resolution is path dependent at query boundaries, so this
+        # candidate must retain independent source-to-horizon evaluation.
+        self.shared_horizon_rollout_safe = False
 
     def predict_step(self, belief: WorldBelief, delta_time: Tensor) -> RolloutStep:
         if delta_time.shape != belief.timestamp.shape:
@@ -2174,6 +2179,7 @@ class RuntimeHypothesisController:
         residual_correction_gain_by_axis: Sequence[float] = (0.0, 0.0, 0.0),
         robust_influence_delta: float = 0.0,
         composition_step_seconds: float | None = None,
+        shared_horizon_rollout_enabled: bool = False,
     ) -> None:
         if not evidence_horizons_seconds or any(
             horizon <= 0 or not torch.isfinite(torch.as_tensor(horizon))
@@ -2192,6 +2198,8 @@ class RuntimeHypothesisController:
             raise ValueError("local_applicability_enabled must be boolean")
         if not isinstance(velocity_nonregression_gate_enabled, bool):
             raise ValueError("velocity_nonregression_gate_enabled must be boolean")
+        if not isinstance(shared_horizon_rollout_enabled, bool):
+            raise ValueError("shared_horizon_rollout_enabled must be boolean")
         if len(residual_correction_gain_by_axis) != 3:
             raise ValueError("residual_correction_gain_by_axis must contain exactly three values")
         for value in residual_correction_gain_by_axis:
@@ -2279,6 +2287,7 @@ class RuntimeHypothesisController:
         self.composition_step_seconds = (
             None if composition_step_seconds is None else float(composition_step_seconds)
         )
+        self.shared_horizon_rollout_enabled = shared_horizon_rollout_enabled
         self.composition_horizon_index: int | None = None
         if self.composition_step_seconds is not None:
             matching = [
@@ -2541,6 +2550,103 @@ class RuntimeHypothesisController:
             auxiliary={name: value.unsqueeze(1) for name, value in step.auxiliary.items()},
         ).validate()
 
+    @staticmethod
+    def _shared_horizon_safe(model: object) -> bool:
+        capability = getattr(model, "shared_horizon_rollout_safe", False)
+        if callable(capability):
+            capability = capability()
+        return capability is True
+
+    @staticmethod
+    def _prefix_step_from_segments(
+        segments: Sequence[RolloutStep],
+        horizon_index: int,
+    ) -> RolloutStep:
+        """Reconstruct one source-to-horizon step from chronological segments."""
+
+        prefix = segments[: horizon_index + 1]
+        endpoint = prefix[-1]
+        event_logits = endpoint.event_logits.clone()
+        event_logits[..., MotionMode.COLLISION] = torch.stack(
+            [item.event_logits[..., MotionMode.COLLISION] for item in prefix],
+            dim=1,
+        ).amax(dim=1)
+
+        interval_or = {
+            "interval_pair_contact",
+            "pair_collision",
+            "interval_boundary_contact",
+            "boundary_collision",
+            "interval_ground_contact",
+            "ground_collision",
+            "collision_event",
+        }
+        interval_max = {"pair_impulse", "max_penetration"}
+        endpoint_collision_logits = {"pair_event_logits", "boundary_event_logits"}
+        auxiliary: dict[str, Tensor] = {}
+        for name in endpoint.auxiliary:
+            values = torch.stack([item.auxiliary[name] for item in prefix], dim=1)
+            if name in interval_or:
+                auxiliary[name] = values.any(dim=1)
+            elif name in interval_max:
+                auxiliary[name] = values.amax(dim=1)
+            elif name in endpoint_collision_logits:
+                endpoint_value = values[:, -1]
+                auxiliary[name] = torch.stack(
+                    (
+                        endpoint_value[..., 0],
+                        values[..., 1].amax(dim=1),
+                    ),
+                    dim=-1,
+                )
+            elif name == "learned_effect_evaluation_count":
+                auxiliary[name] = values.sum(dim=1)
+            else:
+                auxiliary[name] = values[:, -1]
+        return RolloutStep(
+            belief=endpoint.belief,
+            event_logits=event_logits,
+            auxiliary=auxiliary,
+        )
+
+    def _scheduled_steps_by_candidate(
+        self,
+        belief: WorldBelief,
+    ) -> tuple[tuple[RolloutStep, ...], ...]:
+        models = self.pool.dynamics_models
+        scheduled: list[tuple[RolloutStep, ...]] = []
+        for model in models:
+            if self._shared_horizon_safe(model):
+                current = belief.clone()
+                previous_horizon = 0.0
+                segments: list[RolloutStep] = []
+                for horizon in self.evidence_horizons_seconds:
+                    delta_time = current.timestamp.new_full(
+                        current.timestamp.shape,
+                        horizon - previous_horizon,
+                    )
+                    segment = model.predict_step(current, delta_time)
+                    current = segment.belief
+                    segments.append(segment)
+                    previous_horizon = horizon
+                scheduled.append(
+                    tuple(
+                        self._prefix_step_from_segments(segments, horizon_index)
+                        for horizon_index in range(len(self.evidence_horizons_seconds))
+                    )
+                )
+            else:
+                scheduled.append(
+                    tuple(
+                        model.predict_step(
+                            belief.clone(),
+                            belief.timestamp.new_full(belief.timestamp.shape, horizon),
+                        )
+                        for horizon in self.evidence_horizons_seconds
+                    )
+                )
+        return tuple(scheduled)
+
     def schedule(
         self,
         belief: WorldBelief,
@@ -2567,27 +2673,39 @@ class RuntimeHypothesisController:
                 )
             )
         ]
+        shared_steps = (
+            self._scheduled_steps_by_candidate(belief)
+            if self.shared_horizon_rollout_enabled
+            else None
+        )
         for horizon_index, (horizon, pool) in enumerate(
             zip(self.evidence_horizons_seconds, self.pools, strict=True)
         ):
-            delta_time = belief.timestamp.new_full(
-                belief.timestamp.shape,
-                horizon,
-            )
-            learned_step = pool.dynamics_models[0].predict_step(
-                belief.clone(),
-                delta_time,
+            learned_step = (
+                shared_steps[0][horizon_index]
+                if shared_steps is not None
+                else pool.dynamics_models[0].predict_step(
+                    belief.clone(),
+                    belief.timestamp.new_full(belief.timestamp.shape, horizon),
+                )
             )
             learned_trajectory = self._trajectory_from_step(learned_step)
             learned_regime = self._trajectory_regime(belief, learned_trajectory)[:, 0]
             alternative_trajectories = (
-                pool.rollout_engine.rollout_dynamics(
-                    pool.dynamics_models[1:],
-                    belief,
-                    [horizon],
+                [
+                    self._trajectory_from_step(candidate_steps[horizon_index])
+                    for candidate_steps in shared_steps[1:]
+                ]
+                if shared_steps is not None
+                else (
+                    pool.rollout_engine.rollout_dynamics(
+                        pool.dynamics_models[1:],
+                        belief,
+                        [horizon],
+                    )
+                    if len(pool.dynamics_models) > 1
+                    else []
                 )
-                if len(pool.dynamics_models) > 1
-                else []
             )
             trajectories = (learned_trajectory, *alternative_trajectories)
             self.pending.append(

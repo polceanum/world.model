@@ -301,6 +301,7 @@ def test_axis_composition_is_configured_only_for_attention_pilot() -> None:
     assert attention.runtime.hypothesis_evidence_horizons_seconds == (0.05,)
     assert attention.runtime.hypothesis_axis_independent_axes == (0,)
     assert not attention.runtime.hypothesis_local_applicability_enabled
+    assert not attention.runtime.hypothesis_shared_horizon_rollout_enabled
 
 
 @pytest.mark.parametrize(
@@ -333,6 +334,7 @@ def test_axis_composition_is_configured_only_for_attention_pilot() -> None:
         "runtime.hypothesis_online_acceleration_minimum_support_count=true",
         "runtime.hypothesis_online_acceleration_maximum_mps2=0",
         "runtime.hypothesis_online_acceleration_maximum_mps2=true",
+        "runtime.hypothesis_shared_horizon_rollout_enabled=1",
     ],
 )
 def test_runtime_hypothesis_applicability_controls_are_strict(override: str) -> None:

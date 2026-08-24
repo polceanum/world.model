@@ -209,6 +209,7 @@ def enable_runtime_hypothesis_pool(
         residual_correction_gain_by_axis=(runtime.hypothesis_residual_correction_gain_by_axis),
         robust_influence_delta=runtime.hypothesis_robust_influence_delta,
         composition_step_seconds=runtime.hypothesis_composition_step_seconds,
+        shared_horizon_rollout_enabled=runtime.hypothesis_shared_horizon_rollout_enabled,
     )
 
 
@@ -3500,6 +3501,12 @@ def _evaluate_checkpoint_impl(
     if runtime_hypothesis_pool:
         runtime_hypothesis_policy = {
             "policy_version": (
+                "evidence_bounded_entity_axis_regime_horizon_v8"
+                if config.runtime.hypothesis_online_acceleration_enabled
+                else "evidence_bounded_entity_axis_regime_horizon_v7"
+            )
+            if config.runtime.hypothesis_shared_horizon_rollout_enabled
+            else (
                 "evidence_bounded_entity_axis_regime_horizon_v6"
                 if config.runtime.hypothesis_online_acceleration_enabled
                 else "evidence_bounded_entity_axis_regime_horizon_v5"
@@ -3562,6 +3569,9 @@ def _evaluate_checkpoint_impl(
             ),
             "robust_influence_delta": config.runtime.hypothesis_robust_influence_delta,
             "composition_step_seconds": config.runtime.hypothesis_composition_step_seconds,
+            "shared_horizon_rollout_enabled": (
+                config.runtime.hypothesis_shared_horizon_rollout_enabled
+            ),
             **(
                 {"online_acceleration_enabled": True}
                 if config.runtime.hypothesis_online_acceleration_enabled

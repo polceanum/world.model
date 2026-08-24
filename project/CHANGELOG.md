@@ -2,6 +2,21 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-24 shared chronological hypothesis horizons (specification 1.74)
+
+- Added opt-in complete-state chronological rollout reuse for semigroup-safe
+  runtime hypothesis candidates.
+- Preserved source-to-horizon contact, collision, impulse, event-logit, and
+  learned-evaluation-count semantics at every evidence horizon.
+- Kept ballistic contact, unknown candidates, and multirate learned dynamics on
+  the historical independent schedule.
+- Bound the strict legacy-false switch into exact resume and evaluator policy.
+- Active-Aqua MPS full-state parity is `4.77e-7`; median scheduling improved
+  `26.3703 -> 10.1347 s` (`2.602x`). This is execution-only evidence; defaults
+  and deployment remain unchanged.
+- Passed the final repository gate (`1379 passed`, `20` expected skips in
+  `537.96 s`) plus Ruff, format, compile, version, and diff checks.
+
 ### 2026-08-24 modular differentiable gradient ownership (specification 1.73)
 
 - Added an opt-in backward-only owner partition for the differentiable state

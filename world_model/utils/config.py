@@ -337,6 +337,10 @@ class RuntimeConfig:
     hypothesis_online_acceleration_enabled: bool = False
     hypothesis_online_acceleration_minimum_support_count: int = 4
     hypothesis_online_acceleration_maximum_mps2: float = 20.0
+    # Opt-in execution optimization: semigroup-safe candidates share one
+    # chronological rollout across all evidence horizons. Unsafe candidates
+    # retain the historical independent-horizon schedule.
+    hypothesis_shared_horizon_rollout_enabled: bool = False
 
 
 @dataclass(frozen=True)
@@ -655,6 +659,8 @@ class OrpheusConfig:
             )
         if not isinstance(runtime.hypothesis_online_acceleration_enabled, bool):
             raise ValueError("runtime.hypothesis_online_acceleration_enabled must be boolean")
+        if not isinstance(runtime.hypothesis_shared_horizon_rollout_enabled, bool):
+            raise ValueError("runtime.hypothesis_shared_horizon_rollout_enabled must be boolean")
         if (
             not isinstance(runtime.hypothesis_online_acceleration_minimum_support_count, int)
             or isinstance(runtime.hypothesis_online_acceleration_minimum_support_count, bool)

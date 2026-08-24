@@ -2515,6 +2515,7 @@ def test_disabled_runtime_hypothesis_policy_migrates_but_enabled_policy_is_stric
         "hypothesis_online_acceleration_enabled",
         "hypothesis_online_acceleration_minimum_support_count",
         "hypothesis_online_acceleration_maximum_mps2",
+        "hypothesis_shared_horizon_rollout_enabled",
     ):
         legacy_runtime.pop(field_name)
 

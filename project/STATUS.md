@@ -1,5 +1,26 @@
 # Project status
 
+## Shared chronological hypothesis horizons — specification 1.74 execution-qualified
+
+The runtime hypothesis scheduler previously restarted every candidate from the
+same posterior for each of five evidence horizons, making the learned candidate
+execute 312 physical ticks instead of one chronological 120-tick trajectory.
+An opt-in, protocol-bound scheduler now shares a rollout only for candidates
+whose transition is semigroup-safe. It retains complete `RolloutStep` beliefs,
+reconstructs cumulative event/contact auxiliaries, and falls back to the exact
+legacy schedule for ballistic contact, unknown candidates, and learned
+multi-rate proposal holding.
+
+Focused CPU tests cover complete modal-state and auxiliary parity, interval
+collision semantics, fallback cadence, strict configuration, legacy resume,
+and policy fingerprints. The active-Aqua MPS production probe reports maximum
+full-state delta `4.76837158203125e-7` and median `26.3702643 -> 10.1346879 s`
+(`2.6019809x`). The switch is default-off. This does not repair the runtime
+pool's prior fixed-manifest accuracy failures, so it is research execution
+infrastructure only and does not authorize a `main` merge. The final repository
+gate passes `1379` tests with `20` expected skips in `537.96 s`; all static
+gates are clean.
+
 ## Modular differentiable gradient ownership — specification 1.73 rejected for accuracy
 
 The causal forward was already differentiable through RGB measurements,

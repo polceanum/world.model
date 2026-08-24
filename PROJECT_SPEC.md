@@ -3,11 +3,12 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.73
+**Version:** 1.74
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, opt-in dense multi-instance global-discovery, causal observation-model selection, terminal dense typed-attribute evidence, frozen-foundation-feature feasibility, adaptive Gaussian local-model evidence, event-epoch local-model evidence, differentiable hard-runtime assimilation surrogate, and forward-exact soft-posterior gradient-carrier amendments 24 August 2026
 **Amendment 24 August 2026:** RGB-only analytic silhouette reprojection and smooth analytic shadow-posterior training
 **Amendment 24 August 2026:** modular differentiable backward ownership and bounded accuracy rejection
+**Amendment 24 August 2026:** semigroup-safe shared chronological hypothesis horizons
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9849,6 +9850,44 @@ The audit is
 (`c977bc3f...`). The final repository gate passes `1374` tests with `20`
 expected unavailable-backend skips in `519.18 s`; Ruff, format, compile,
 version, and diff checks are clean.
+
+---
+
+## 273. Share only semigroup-safe chronological hypothesis horizons
+
+The runtime-local hypothesis controller may opt into one chronological rollout
+per semigroup-safe candidate across its ordered evidence horizons instead of
+restarting that candidate from the source posterior at every horizon. This is
+an execution optimization only: it changes no candidate, evidence target,
+score, applicability rule, selected state, or persistent `WorldBelief`.
+
+The implementation must retain each complete `RolloutStep`, including modal
+state and every typed belief field. For each horizon it reconstructs the same
+source-to-horizon interval contract: contacts and collision masks are prefix
+ORs, impulses and penetration are prefix maxima, event collision logits are
+prefix maxima while contact logits remain endpoint values, learned-effect
+evaluation counts are prefix sums, and other diagnostics use the endpoint.
+Unknown candidates, path-dependent contact resolvers, and learned dynamics
+with multi-rate proposal holding must fail closed to the historical
+independent-horizon schedule.
+
+`runtime.hypothesis_shared_horizon_rollout_enabled` is a strict boolean,
+legacy-false, exact-resume-bound, and included in the evaluator policy
+fingerprint. Constant-velocity and runtime-local constant-acceleration
+candidates are semigroup-safe. `BallisticContactDynamics` is explicitly unsafe
+because contact jumps depend on query boundaries. `DynamicsModel` is safe only
+when its learned-effect stride is one.
+
+An active-Aqua MPS production-path probe over horizons
+`[0.1, 0.25, 0.5, 0.75, 1.0]` and the learned, constant-velocity, damped, and
+ballistic candidates preserved all discrete state exactly and bounded the
+maximum full-state float delta at `4.76837158203125e-7`. Median schedule time
+fell from `26.3702643 s` to `10.1346879 s`, a `2.6019809x` speedup. This is
+execution evidence, not accuracy or promotion evidence. The switch remains
+default-off, and the previously inaccurate runtime-pool candidates remain
+ineligible for deployment or a merge to `main`. The final repository gate
+passes `1379` tests with `20` expected unavailable-backend skips in `537.96 s`;
+Ruff, format, compile, version, and diff checks are clean.
 
 ---
 

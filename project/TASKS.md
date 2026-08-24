@@ -1,5 +1,22 @@
 # Tasks
 
+## Shared chronological hypothesis horizons — specification 1.74
+
+- [x] Identify independent source-to-horizon learned rollouts as the dominant
+  runtime-pool dispatch duplication.
+- [x] Reject heterogeneous-row horizon batching because it changes the physical
+  integration grid.
+- [x] Implement complete-state chronological reuse for semigroup-safe candidates
+  with exact interval-event reconstruction and serial fail-closed fallback.
+- [x] Bind the strict legacy-false switch into checkpoint and evaluator policy.
+- [x] Pass focused CPU parity/config/resume/policy tests and active-Aqua MPS
+  full-state parity (`4.77e-7`) plus timing (`2.602x`).
+- [x] Pass the final repository gate (`1379 passed`, `20 skipped`) and all
+  Ruff/format/compile/version/diff checks.
+- [ ] Keep the switch default-off and do not merge to `main`: execution is
+  qualified, but the existing runtime-pool candidate family remains accuracy-
+  ineligible under the fixed-manifest guardrails.
+
 ## Modular differentiable gradient ownership — specification 1.73
 
 - [x] Keep the hard causal forward and analytic physics equations unchanged.

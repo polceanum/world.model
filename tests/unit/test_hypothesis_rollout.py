@@ -438,6 +438,27 @@ class _CountingFixedDynamics(_FixedDynamics):
         return super().predict_step(belief, delta_time)
 
 
+class _RecordingConstantVelocity(ConstantVelocityDynamics):
+    def __init__(self) -> None:
+        super().__init__()
+        self.elapsed: list[float] = []
+
+    def predict_step(self, belief, delta_time):
+        self.elapsed.append(float(delta_time[0]))
+        return super().predict_step(belief, delta_time)
+
+
+class _RecordingUnsafeDynamics(_FixedDynamics):
+    def __init__(self) -> None:
+        super().__init__(0.0)
+        self.elapsed: list[float] = []
+        self.shared_horizon_rollout_safe = False
+
+    def predict_step(self, belief, delta_time):
+        self.elapsed.append(float(delta_time[0]))
+        return super().predict_step(belief, delta_time)
+
+
 class _IncrementXStateDynamics:
     def __init__(self, increment: float, *, collision: bool = False) -> None:
         self.increment = increment
@@ -876,6 +897,161 @@ def test_runtime_controller_uses_only_associated_measurements_and_splices_x() ->
     assert "hypothesis_axis_index" in forecast.auxiliary
     assert forecast.auxiliary["hypothesis_axis_index"].shape == (1, 1, 1, 3)
     torch.testing.assert_close(source.objects.position, belief.objects.position)
+
+
+def test_runtime_controller_shares_only_semigroup_safe_horizon_rollouts() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.velocity[0, 0, 0] = 1.0
+    source = belief.replace(objects=objects)
+    safe = _RecordingConstantVelocity()
+    unsafe = _RecordingUnsafeDynamics()
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([safe, unsafe]),
+        evidence_horizons_seconds=(0.1, 0.25, 0.5),
+        axis_independent_axes=(0,),
+        shared_horizon_rollout_enabled=True,
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+
+    controller.schedule(source)
+
+    assert safe.elapsed == pytest.approx([0.1, 0.15, 0.25])
+    assert unsafe.elapsed == pytest.approx([0.1, 0.25, 0.5])
+    assert [float(item.trajectories[0].positions[0, 0, 0, 0]) for item in controller.pending] == (
+        pytest.approx([0.1, 0.25, 0.5])
+    )
+
+
+def test_shared_horizon_reconstruction_matches_stride_one_dynamics() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    objects.position[0, 0] = torch.tensor([0.0, 1.0, 0.0])
+    objects.velocity[0, 0] = torch.tensor([0.4, 0.1, -0.2])
+    source = belief.replace(objects=objects)
+    model = DynamicsModel.from_belief(
+        source,
+        max_substep=0.05,
+        learned_effect_interval_seconds=None,
+    ).eval()
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.zero_()
+    horizons = (0.05, 0.1)
+    current = source.clone()
+    segments = []
+    previous = 0.0
+    for horizon in horizons:
+        segment = model.predict_step(current, torch.tensor([horizon - previous]))
+        segments.append(segment)
+        current = segment.belief
+        previous = horizon
+
+    assert model.shared_horizon_rollout_safe
+    for horizon_index, horizon in enumerate(horizons):
+        reconstructed = RuntimeHypothesisController._prefix_step_from_segments(
+            segments,
+            horizon_index,
+        )
+        direct = model.predict_step(source.clone(), torch.tensor([horizon]))
+        torch.testing.assert_close(
+            reconstructed.belief.objects.position,
+            direct.belief.objects.position,
+            rtol=1.0e-6,
+            atol=1.0e-6,
+        )
+        torch.testing.assert_close(
+            reconstructed.belief.objects.velocity,
+            direct.belief.objects.velocity,
+            rtol=1.0e-6,
+            atol=1.0e-6,
+        )
+        torch.testing.assert_close(
+            reconstructed.belief.objects.fast_log_variance,
+            direct.belief.objects.fast_log_variance,
+            rtol=1.0e-6,
+            atol=1.0e-6,
+        )
+        torch.testing.assert_close(
+            reconstructed.belief.objects.modal_state,
+            direct.belief.objects.modal_state,
+            rtol=1.0e-6,
+            atol=1.0e-6,
+        )
+        torch.testing.assert_close(
+            reconstructed.event_logits,
+            direct.event_logits,
+            rtol=1.0e-6,
+            atol=1.0e-6,
+        )
+        assert reconstructed.auxiliary.keys() == direct.auxiliary.keys()
+        for name in direct.auxiliary:
+            torch.testing.assert_close(
+                reconstructed.auxiliary[name],
+                direct.auxiliary[name],
+                rtol=1.0e-6,
+                atol=1.0e-6,
+            )
+
+    multirate = DynamicsModel.from_belief(
+        source,
+        max_substep=0.05,
+        learned_effect_interval_seconds=0.1,
+    )
+    assert not multirate.shared_horizon_rollout_safe
+
+
+def test_shared_horizon_reconstruction_preserves_interval_event_semantics() -> None:
+    source = BeliefFactory(max_objects=1).create()
+    first_belief = source.clone()
+    first_belief.objects.modal_state.fill_(1.0)
+    second_belief = source.clone()
+    second_belief.objects.modal_state.fill_(2.0)
+    first_event = source.objects.motion_mode_logits.new_full((1, 1, len(MotionMode)), -4.0)
+    second_event = first_event.clone()
+    first_event[..., MotionMode.COLLISION] = 5.0
+    second_event[..., MotionMode.COLLISION] = -3.0
+    first = RolloutStep(
+        belief=first_belief,
+        event_logits=first_event,
+        auxiliary={
+            "interval_pair_contact": torch.tensor([[[True]]]),
+            "pair_collision": torch.tensor([[[True]]]),
+            "pair_impulse": torch.tensor([[[2.0]]]),
+            "pair_event_logits": torch.tensor([[[[1.0, 7.0]]]]),
+            "learned_effect_evaluation_count": torch.tensor([2]),
+            "mean_penetration": torch.tensor([1.0]),
+        },
+    )
+    second = RolloutStep(
+        belief=second_belief,
+        event_logits=second_event,
+        auxiliary={
+            "interval_pair_contact": torch.tensor([[[False]]]),
+            "pair_collision": torch.tensor([[[False]]]),
+            "pair_impulse": torch.tensor([[[1.0]]]),
+            "pair_event_logits": torch.tensor([[[[3.0, 4.0]]]]),
+            "learned_effect_evaluation_count": torch.tensor([3]),
+            "mean_penetration": torch.tensor([2.0]),
+        },
+    )
+
+    reconstructed = RuntimeHypothesisController._prefix_step_from_segments(
+        (first, second),
+        1,
+    )
+
+    assert reconstructed.event_logits[..., MotionMode.COLLISION].item() == pytest.approx(5.0)
+    assert reconstructed.auxiliary["interval_pair_contact"].item()
+    assert reconstructed.auxiliary["pair_collision"].item()
+    assert reconstructed.auxiliary["pair_impulse"].item() == pytest.approx(2.0)
+    assert reconstructed.auxiliary["pair_event_logits"].tolist() == [[[[3.0, 7.0]]]]
+    assert reconstructed.auxiliary["learned_effect_evaluation_count"].item() == 5
+    assert reconstructed.auxiliary["mean_penetration"].item() == pytest.approx(2.0)
+    assert reconstructed.belief.objects.modal_state.eq(2.0).all()
 
 
 def test_online_local_acceleration_is_support_gated_and_identity_bound() -> None:

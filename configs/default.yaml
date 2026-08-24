@@ -150,6 +150,7 @@ runtime:
   hypothesis_online_acceleration_enabled: false
   hypothesis_online_acceleration_minimum_support_count: 4
   hypothesis_online_acceleration_maximum_mps2: 20.0
+  hypothesis_shared_horizon_rollout_enabled: false
 
 training:
   batch_size: 4

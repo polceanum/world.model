@@ -872,6 +872,12 @@ def _expected_protocol(
 def _expected_runtime_policy(config: OrpheusConfig) -> dict[str, Any]:
     policy: dict[str, Any] = {
         "policy_version": (
+            "evidence_bounded_entity_axis_regime_horizon_v8"
+            if config.runtime.hypothesis_online_acceleration_enabled
+            else "evidence_bounded_entity_axis_regime_horizon_v7"
+        )
+        if config.runtime.hypothesis_shared_horizon_rollout_enabled
+        else (
             "evidence_bounded_entity_axis_regime_horizon_v6"
             if config.runtime.hypothesis_online_acceleration_enabled
             else "evidence_bounded_entity_axis_regime_horizon_v5"
@@ -930,6 +936,9 @@ def _expected_runtime_policy(config: OrpheusConfig) -> dict[str, Any]:
         ),
         "robust_influence_delta": config.runtime.hypothesis_robust_influence_delta,
         "composition_step_seconds": config.runtime.hypothesis_composition_step_seconds,
+        "shared_horizon_rollout_enabled": (
+            config.runtime.hypothesis_shared_horizon_rollout_enabled
+        ),
         **(
             {"online_acceleration_enabled": True}
             if config.runtime.hypothesis_online_acceleration_enabled

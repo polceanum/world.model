@@ -401,6 +401,20 @@ def test_runtime_hypothesis_policy_binds_online_local_acceleration_candidate() -
     }
 
 
+def test_runtime_hypothesis_policy_binds_shared_horizon_execution() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["runtime.hypothesis_shared_horizon_rollout_enabled=true"],
+    )
+
+    policy = _expected_runtime_policy(config)
+    fingerprint = policy.pop("fingerprint_sha256")
+
+    assert fingerprint == _canonical_sha256(policy)
+    assert policy["policy_version"] == "evidence_bounded_entity_axis_regime_horizon_v7"
+    assert policy["shared_horizon_rollout_enabled"] is True
+
+
 def _validation_config(*, online_acceleration: bool = False):
     overrides = [
         "runtime.hypothesis_evidence_horizons_seconds=[0.05]",
