@@ -17,8 +17,14 @@
   bundle (`578 passed`, four expected unavailable-MPS skips).
 - [x] Pass the complete repository gate (`1341 passed`, `20` expected skips in
   `469.30s`) plus Ruff, format, compile, version, and diff validation.
-- [ ] Run one clean fixed-eight production-path repetition. Require the same
-  material gate before fixed-32/MPS.
+- [x] Pass one clean fixed-eight production-path repetition exactly at
+  `181/192` recall and `181/181` precision with non-dense state bit-exact
+  (`2da16c96...`).
+- [x] Run the authorized fixed-32 CPU/RGB physical decision. It is terminally
+  mixed and fails: current z/position, NLL/calibration, precision, identity,
+  and 14 scenario-horizon position cells regress (`b85385a6...`).
+- [x] Stop this fixed architecture without tuning or MPS; retain it
+  opt-in/default-off and keep deployment unchanged.
 
 ## Raw learned-existence supervision repair — specification 1.67
 

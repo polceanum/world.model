@@ -3,7 +3,7 @@
 ## ADR-186 — Advance one dense center model after query-detector termination
 
 - **Date:** 2026-08-24
-- **Status:** production implementation complete; fixed-eight gate pending
+- **Status:** implementation retained opt-in; fixed-32 rejects promotion
 - **Context:** Correct raw existence supervision repairs confidence but leaves
   the existing DETR-like query detector at `28.13%` top-count recall, below its
   protected `29.17%` baseline. That family is terminal. A future attempt must
@@ -32,8 +32,15 @@
   allowed only from explicit legacy-false model semantics; exact resume across
   the mode boundary is rejected. The 578-pass focused gate is green, and the
   full repository passes 1341 tests with 20 expected skips in 469.30s plus
-  Ruff/format/compile/version/diff. No production-path accuracy, physical, or
-  MPS claim exists yet.
+  Ruff/format/compile/version/diff. Those gates establish implementation
+  integrity, not physical accuracy or MPS suitability.
+- **Final evidence:** The production fixed-eight gate exactly reproduces
+  `181/192` recall and `181/181` precision with non-dense state bit-exact
+  (`2da16c96...`). Fixed-32 then rejects the architecture (`b85385a6...`): all
+  five pooled forecast-position horizons and current velocity improve slightly,
+  but current position/z, NLL/calibration, precision, identity stability, and
+  14 scenario-horizon position cells regress. Retain the default-off research
+  implementation, preserve deployment, and stop without MPS or tuning.
 
 ## ADR-185 — Supervise raw learned existence while preserving structured runtime evidence
 

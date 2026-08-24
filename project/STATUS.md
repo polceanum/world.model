@@ -32,10 +32,21 @@ The final repository gate passes `1341` tests with `20` expected unavailable-
 backend skips in `469.30s`; Ruff, format, compile, version, and diff checks are
 green.
 
-This is still not runtime or promotion evidence. One clean fixed-eight
-production-path repetition is pending. Do not tune
-the successful architecture. Require the unchanged +10/-5 point material gate
-and all-scenario support before any fixed-32 physical or active-Aqua MPS work.
+The clean production-path fixed-eight repetition passes exactly at `181/192`
+recall and `181/181` precision with all eight scenarios supported and every
+non-dense tensor bit-exact (`2da16c96...`). The subsequent fixed-32 CPU/RGB-only
+physical gate is terminally mixed and fails (`b85385a6...`). All five pooled
+forecast-position horizons improve by `0.28%..0.98%` and current velocity by
+`2.41%`, but current position worsens `1.74%` because z worsens `6.04%`;
+current NLL/calibration and precision worsen, identity-switch rate doubles from
+`0.000563` to `0.001130`, and 14 scenario-horizon position cells regress.
+
+Stop this accuracy iteration. Keep the implementation opt-in/default-off as
+research capacity, keep deployment unchanged, and do not tune LR, duration,
+width, loss, threshold, NMS, attributes, or admission. No active-Aqua MPS or
+promotion gate is justified. A future discovery attempt requires a materially
+different, predeclared architecture/objective and should only begin if the
+remaining accuracy gap is operationally important.
 
 ## Raw learned-existence supervision repair — specification 1.67
 

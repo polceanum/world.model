@@ -9368,6 +9368,29 @@ Failure closes this fixed architecture without LR, duration, width, loss,
 threshold, NMS, or admission tuning. Success alone authorizes a fixed-32
 physical gate and then active-Aqua MPS evidence; it is not itself promotion.
 
+The clean production-path fixed-eight repetition passes exactly: `181/192`
+top-count and confidence-threshold true positives, `94.27%` recall, and
+`181/181` precision, with all eight scenarios supported and every non-dense
+model tensor bit-exact. The report is
+`/private/tmp/20260824-spec168-dense-production-fixed8.json` (SHA-256
+`2da16c96f5294e3bbc69e63220b663e5854bee90ca19351bdc86c8ac1a457b7c`)
+and its temporary weight-only candidate is `3d1a3e09...`.
+
+The authorized fixed-32 CPU/RGB-only physical comparison is terminally mixed
+and therefore fails. Against the same seeds `100000..100031`, the dense
+candidate improves every pooled forecast-position horizon by `0.28%..0.98%`
+and current velocity by `2.41%`, but worsens current position by `1.74%`, driven
+by a `6.04%` current-z regression. Current Gaussian NLL and calibration error
+worsen, current detection precision falls `0.50%`, distance-gated identity-
+switch rate doubles from `0.000563` to `0.001130`, and 14 scenario-horizon
+position cells regress. Only 55 of 84 declared core comparison cells improve
+or tie. The physical comparison is
+`/private/tmp/20260824-spec168-dense-physical-comparison.json` (SHA-256
+`b85385a6693945013aee35649375e0335120126b173fc9cd2f5ea93b9f45a320`).
+The opt-in/default-off implementation remains as validated research capacity,
+but this frozen architecture is not promoted or tuned. Active-Aqua MPS,
+deployment, and additional training are not authorized from this result.
+
 ---
 
 # Closing directive

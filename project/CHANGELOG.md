@@ -21,7 +21,14 @@
   false config/exact-resume semantics, and whole-prefix deterministic
   weight-only growth. Focused gate: 578 passed and four unavailable-MPS skips;
   full repository gate: 1341 passed and 20 expected skips in 469.30s, with
-  Ruff/format/compile/version/diff clean. The fixed-eight gate remains pending.
+  Ruff/format/compile/version/diff clean.
+- Passed the clean production fixed-eight gate exactly at `181/192` recall and
+  `181/181` precision with all non-dense tensors bit-exact (`2da16c96...`).
+- Stopped before MPS after the fixed-32 physical gate failed. Pooled forecast
+  position and velocity improve modestly, but current z/position, NLL,
+  calibration, precision, identity stability, and 14 scenario-horizon position
+  cells regress (`b85385a6...`). The mode remains opt-in/default-off and is not
+  deployed or promoted; no tuning is authorized.
 
 ### 2026-08-24 specification 1.67 raw learned-existence supervision repair
 
