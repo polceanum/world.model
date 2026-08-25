@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pytest
 import torch
 from torch import Tensor
 
@@ -68,7 +69,7 @@ def _planes() -> tuple[ContactPlane, ...]:
     )
 
 
-def _resolver() -> SphereContactResolver:
+def _resolver(*, differentiable_contact_gradients_enabled: bool = False) -> SphereContactResolver:
     return SphereContactResolver(
         _planes(),
         contact_margin=0.0,
@@ -80,6 +81,9 @@ def _resolver() -> SphereContactResolver:
         collision_speed_epsilon=1.0e-7,
         boundary_collision_speed_epsilon=0.1,
         contact_confidence_sigma=0.0,
+        differentiable_contact_gradients_enabled=(differentiable_contact_gradients_enabled),
+        differentiable_contact_gap_temperature=0.02,
+        differentiable_contact_velocity_temperature=0.10,
     )
 
 
@@ -299,6 +303,173 @@ def test_iterative_compound_contact_remains_differentiable() -> None:
     assert objects.velocity.grad is not None
     assert torch.isfinite(objects.position.grad).all()
     assert torch.isfinite(objects.velocity.grad).all()
+
+
+def test_differentiable_contact_carrier_is_forward_bit_exact() -> None:
+    objects = _objects(
+        position=torch.tensor([[-0.86, 0.13, 0.0], [-0.54, 0.13, 0.01], [0.20, 1.0, 0.0]]),
+        velocity=torch.tensor([[-1.1, -0.8, 0.7], [-0.35, -0.1, -0.15], [0.25, 0.0, 0.0]]),
+        radius=torch.tensor([0.2, 0.2, 0.15]),
+        mass=torch.tensor([1.7, 1.2, 0.8]),
+        restitution=torch.tensor([0.55, 0.4, 0.7]),
+        friction=torch.tensor([0.3, 0.15, 0.05]),
+    )
+
+    hard = _resolver()(objects)
+    carried = _resolver(differentiable_contact_gradients_enabled=True)(objects)
+
+    for name in (
+        "position",
+        "velocity",
+        "motion_mode_logits",
+        "fast_log_variance",
+    ):
+        torch.testing.assert_close(
+            getattr(carried.objects, name),
+            getattr(hard.objects, name),
+            rtol=0.0,
+            atol=0.0,
+        )
+    for name in (
+        "pair_contact",
+        "interval_pair_contact",
+        "pair_collision",
+        "boundary_contact",
+        "interval_boundary_contact",
+        "boundary_collision",
+        "ground_contact",
+        "interval_ground_contact",
+        "ground_collision",
+        "pair_impulse",
+        "max_penetration",
+        "mean_penetration",
+        "action_reaction_residual",
+    ):
+        torch.testing.assert_close(
+            getattr(carried, name),
+            getattr(hard, name),
+            rtol=0.0,
+            atol=0.0,
+        )
+
+
+def test_differentiable_pair_carrier_reaches_material_before_hard_contact() -> None:
+    objects = _objects(
+        position=torch.tensor([[-0.205, 1.0, 0.0], [0.205, 1.0, 0.0]]),
+        velocity=torch.tensor([[0.8, 0.0, 0.0], [-0.8, 0.0, 0.0]]),
+        radius=torch.tensor([0.2, 0.2]),
+        mass=torch.tensor([1.0, 1.0]),
+        restitution=torch.tensor([0.4, 0.6]),
+        friction=torch.tensor([0.0, 0.0]),
+    )
+    objects.position.requires_grad_()
+    objects.velocity.requires_grad_()
+    objects.geometry.requires_grad_()
+    objects.restitution_logit.requires_grad_()
+
+    result = _resolver(differentiable_contact_gradients_enabled=True)(objects)
+    assert not result.pair_contact.any()
+    assert not result.pair_collision.any()
+    torch.testing.assert_close(result.objects.velocity, objects.velocity, rtol=0.0, atol=0.0)
+    result.objects.velocity[0, 0, 0].backward()
+
+    for name, gradient in (
+        ("position", objects.position.grad),
+        ("velocity", objects.velocity.grad),
+        ("geometry", objects.geometry.grad),
+        ("restitution", objects.restitution_logit.grad),
+    ):
+        assert gradient is not None
+        assert torch.isfinite(gradient).all(), name
+    assert objects.geometry.grad[..., 0].abs().sum() > 0.0
+    assert objects.restitution_logit.grad.abs().sum() > 0.0
+
+
+def test_differentiable_boundary_carrier_reaches_material_before_hard_contact() -> None:
+    objects = _objects(
+        position=torch.tensor([[-0.79, 1.0, 0.0]]),
+        velocity=torch.tensor([[-0.8, 0.0, 0.0]]),
+        radius=torch.tensor([0.2]),
+        mass=torch.tensor([1.0]),
+        restitution=torch.tensor([0.5]),
+        friction=torch.tensor([0.0]),
+    )
+    objects.position.requires_grad_()
+    objects.velocity.requires_grad_()
+    objects.geometry.requires_grad_()
+    objects.restitution_logit.requires_grad_()
+
+    result = _resolver(differentiable_contact_gradients_enabled=True)(objects)
+    assert not result.boundary_contact.any()
+    assert not result.boundary_collision.any()
+    torch.testing.assert_close(result.objects.velocity, objects.velocity, rtol=0.0, atol=0.0)
+
+    result.objects.velocity[0, 0, 0].backward()
+
+    for name, gradient in (
+        ("position", objects.position.grad),
+        ("velocity", objects.velocity.grad),
+        ("geometry", objects.geometry.grad),
+        ("restitution", objects.restitution_logit.grad),
+    ):
+        assert gradient is not None
+        assert torch.isfinite(gradient).all(), name
+    assert objects.geometry.grad[..., 0].abs().sum() > 0.0
+    assert objects.restitution_logit.grad.abs().sum() > 0.0
+
+
+def test_differentiable_contact_carrier_is_disabled_in_eval() -> None:
+    objects = _objects(
+        position=torch.tensor([[-0.205, 1.0, 0.0], [0.205, 1.0, 0.0]]),
+        velocity=torch.tensor([[0.8, 0.0, 0.0], [-0.8, 0.0, 0.0]]),
+        radius=torch.tensor([0.2, 0.2]),
+        mass=torch.ones(2),
+        restitution=torch.full((2,), 0.5),
+        friction=torch.zeros(2),
+    )
+    objects.geometry.requires_grad_()
+    resolver = _resolver(differentiable_contact_gradients_enabled=True).eval()
+
+    result = resolver(objects)
+    result.objects.velocity.square().sum().backward()
+
+    assert objects.geometry.grad is not None
+    torch.testing.assert_close(objects.geometry.grad, torch.zeros_like(objects.geometry.grad))
+
+
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(),
+    reason="requires an active Aqua MPS device",
+)
+def test_differentiable_contact_carrier_has_finite_mps_backward() -> None:
+    source = _objects(
+        position=torch.tensor([[-0.205, 1.0, 0.0], [0.205, 1.0, 0.0]]),
+        velocity=torch.tensor([[0.8, 0.0, 0.0], [-0.8, 0.0, 0.0]]),
+        radius=torch.tensor([0.2, 0.2]),
+        mass=torch.ones(2),
+        restitution=torch.tensor([0.4, 0.6]),
+        friction=torch.zeros(2),
+    ).to("mps")
+    objects = source.replace(
+        position=source.position.detach().clone().requires_grad_(),
+        velocity=source.velocity.detach().clone().requires_grad_(),
+        geometry=source.geometry.detach().clone().requires_grad_(),
+        restitution_logit=(source.restitution_logit.detach().clone().requires_grad_()),
+    )
+    resolver = _resolver(differentiable_contact_gradients_enabled=True).to("mps")
+
+    result = resolver(objects)
+    result.objects.velocity[0, 0, 0].backward()
+    torch.mps.synchronize()
+
+    for gradient in (
+        objects.position.grad,
+        objects.velocity.grad,
+        objects.geometry.grad,
+        objects.restitution_logit.grad,
+    ):
+        assert gradient is not None
+        assert torch.isfinite(gradient).all()
 
 
 def test_interval_contact_does_not_become_stale_endpoint_mode() -> None:

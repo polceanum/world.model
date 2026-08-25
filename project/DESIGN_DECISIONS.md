@@ -1,5 +1,32 @@
 # Design decisions
 
+## ADR-209 — Differentiate hard analytic contacts with exact-forward carriers
+
+- **Date:** 2026-08-25
+- **Status:** mechanism qualified; bounded accuracy pending
+- **Context:** Continuous state and analytic rollouts are differentiable, but
+  Boolean gap/velocity contact masks provide no pre-threshold gradient to
+  geometry or material parameters.  Earlier auxiliary association and learned
+  rollout surrogates did not materially improve hard validation.
+- **Decision:** Preserve the hard resolver as the sole forward/deployment
+  physics.  In training only, attach smooth gap/velocity probabilities and
+  smooth positive-part derivatives to the same pair/plane impulse, friction,
+  restitution, and penetration equations.  Keep the switch strict,
+  default/legacy false, and exact-resume-bound; reuse calibrated hazard
+  temperatures rather than introduce tunable duplicate scales.
+- **Alternatives considered:** replace the resolver with a learned simulator;
+  treat hard masks as differentiable; run another soft-association weight
+  sweep; change the runtime collision threshold; or relax validation
+  guardrails.
+- **Consequences:** Enabled/disabled forward tensors and losses are bit-exact.
+  Near-miss material gradients are finite and nonzero.  On the real balanced
+  batch, rollout/correction gradient norms become `0.11255240/0.05841256`
+  versus `0.04474605/0.01491602`; compute rises about `14.9%`.  One bounded
+  paired accuracy gate decides continuation, with no adjacent tuning after
+  failure and fixed-32 required before `main` after success. The repository
+  gate passes `1435` tests with `20` expected skips in `535.20 s`; a separate
+  active-Aqua MPS backward also passes.
+
 ## ADR-198 — Share only semigroup-safe hypothesis horizon execution
 
 - **Date:** 2026-08-24

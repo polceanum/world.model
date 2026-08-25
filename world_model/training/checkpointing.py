@@ -189,6 +189,7 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
     ("training", "validation_rollout_anchors_per_episode"): None,
     ("training", "validation_rollout_anchor_batch_size"): 1,
     ("training", "single_rollout_anchor_policy"): "earliest",
+    ("model", "dynamics", "differentiable_contact_gradients_enabled"): False,
     ("training", "rgb_pretrain_trainable_scope"): "all",
     ("model", "rgb", "dense_global_detector_enabled"): False,
     ("training", "closed_loop_prior_future_correction_enabled"): True,

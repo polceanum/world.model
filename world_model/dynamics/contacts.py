@@ -15,6 +15,31 @@ from world_model.dynamics.graph import InteractionOutput
 _TANGENT_DIRECTION_EPSILON = 1.0e-7
 
 
+def _straight_through_positive(value: Tensor, temperature: float) -> Tensor:
+    """Return exact ``clamp_min(0)`` values with a smooth positive derivative."""
+
+    hard = value.clamp_min(0.0)
+    scaled = value / temperature
+    soft = torch.nn.functional.softplus(scaled) * temperature
+    return hard.detach() + (soft - soft.detach())
+
+
+def _straight_through_safe_sqrt(value: Tensor) -> Tensor:
+    """Return exact square-root values with a finite derivative at zero."""
+
+    hard = value.sqrt()
+    epsilon = torch.finfo(value.dtype).eps
+    soft = (value + epsilon * epsilon).sqrt()
+    return hard.detach() + (soft - soft.detach())
+
+
+def _straight_through_safe_norm(value: Tensor, *, dim: int) -> Tensor:
+    """Return exact vector norms with a finite derivative at the zero vector."""
+
+    squared = value.square().sum(dim=dim)
+    return _straight_through_safe_sqrt(squared)
+
+
 def _safe_tangent_direction(tangential: Tensor, tangent_speed: Tensor) -> Tensor:
     """Return a finite tangent direction, including an exact rest contact.
 
@@ -85,6 +110,9 @@ class SphereContactResolver(nn.Module):
         max_impulse_multiplier_residual: float = 0.25,
         max_impulse_additive_residual: float = 0.1,
         contact_confidence_sigma: float = 0.0,
+        differentiable_contact_gradients_enabled: bool = False,
+        differentiable_contact_gap_temperature: float = 0.02,
+        differentiable_contact_velocity_temperature: float = 0.10,
     ) -> None:
         super().__init__()
         selected = tuple(planes or (ContactPlane((0.0, 1.0, 0.0)),))
@@ -127,6 +155,22 @@ class SphereContactResolver(nn.Module):
         self.max_position_correction = max_position_correction
         self.max_impulse_multiplier_residual = max_impulse_multiplier_residual
         self.max_impulse_additive_residual = max_impulse_additive_residual
+        if not isinstance(differentiable_contact_gradients_enabled, bool):
+            raise ValueError("differentiable contact-gradient flag must be boolean")
+        for name, value in (
+            ("differentiable_contact_gap_temperature", differentiable_contact_gap_temperature),
+            (
+                "differentiable_contact_velocity_temperature",
+                differentiable_contact_velocity_temperature,
+            ),
+        ):
+            if isinstance(value, bool) or not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{name} must be finite and positive")
+        self.differentiable_contact_gradients_enabled = differentiable_contact_gradients_enabled
+        self.differentiable_contact_gap_temperature = float(differentiable_contact_gap_temperature)
+        self.differentiable_contact_velocity_temperature = float(
+            differentiable_contact_velocity_temperature
+        )
         if contact_confidence_sigma < 0:
             raise ValueError("contact_confidence_sigma must be nonnegative")
         if collision_speed_epsilon < 0 or not math.isfinite(collision_speed_epsilon):
@@ -306,8 +350,14 @@ class SphereContactResolver(nn.Module):
         graph: InteractionOutput | None,
     ) -> tuple[ObjectBeliefTensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
         batch, count = objects.active.shape
+        smooth_gradients = self.training and self.differentiable_contact_gradients_enabled
         rel_position = objects.position[:, None, :, :] - objects.position[:, :, None, :]
-        distance = torch.linalg.vector_norm(rel_position, dim=-1).clamp_min(1e-7)
+        hard_distance = torch.linalg.vector_norm(rel_position, dim=-1).clamp_min(1e-7)
+        if smooth_gradients:
+            smooth_distance = (rel_position.square().sum(dim=-1) + 1.0e-14).sqrt()
+            distance = hard_distance.detach() + (smooth_distance - smooth_distance.detach())
+        else:
+            distance = hard_distance
         normal = rel_position / distance.unsqueeze(-1)
         rel_velocity = objects.velocity[:, None, :, :] - objects.velocity[:, :, None, :]
         relative_normal_velocity = (rel_velocity * normal).sum(dim=-1)
@@ -321,10 +371,29 @@ class SphereContactResolver(nn.Module):
         gap = distance - radius[:, :, None] - radius[:, None, :]
         position_variance = objects.fast_log_variance[..., :3].exp()
         relative_variance = position_variance[:, :, None, :] + position_variance[:, None, :, :]
-        gap_sigma = (relative_variance * normal.square()).sum(dim=-1).sqrt()
+        gap_variance = (relative_variance * normal.square()).sum(dim=-1)
+        gap_sigma = (
+            _straight_through_safe_sqrt(gap_variance) if smooth_gradients else gap_variance.sqrt()
+        )
         confident_gap = gap + self.contact_confidence_sigma * gap_sigma
         contact_upper = active_pair & upper & (confident_gap < self.contact_margin)
         collision_upper = contact_upper & (relative_normal_velocity < -self.collision_speed_epsilon)
+
+        soft_contact: Tensor | None = None
+        soft_collision: Tensor | None = None
+        if smooth_gradients:
+            valid_upper = (active_pair & upper).to(dtype=objects.position.dtype)
+            soft_contact = (
+                torch.sigmoid(
+                    (self.contact_margin - confident_gap)
+                    / self.differentiable_contact_gap_temperature
+                )
+                * valid_upper
+            )
+            soft_collision = soft_contact * torch.sigmoid(
+                (-relative_normal_velocity - self.collision_speed_epsilon)
+                / self.differentiable_contact_velocity_temperature
+            )
 
         inverse_mass = objects.mass.squeeze(-1).reciprocal()
         inverse_mass_sum = (inverse_mass[:, :, None] + inverse_mass[:, None, :]).clamp_min(1e-8)
@@ -332,23 +401,54 @@ class SphereContactResolver(nn.Module):
             objects.restitution.squeeze(-1)[:, :, None],
             objects.restitution.squeeze(-1)[:, None, :],
         )
-        impulse = (-(1.0 + restitution) * relative_normal_velocity / inverse_mass_sum).clamp_min(
-            0.0
+        raw_impulse = -(1.0 + restitution) * relative_normal_velocity / inverse_mass_sum
+        hard_impulse = raw_impulse.clamp_min(0.0)
+        soft_impulse = (
+            _straight_through_positive(
+                raw_impulse,
+                self.differentiable_contact_velocity_temperature,
+            )
+            if smooth_gradients
+            else hard_impulse
         )
         if graph is not None:
             multiplier = 1.0 + self.max_impulse_multiplier_residual * torch.tanh(
                 graph.impulse_multiplier_raw
             )
             additive = self.max_impulse_additive_residual * torch.tanh(graph.impulse_additive_raw)
-            impulse = (impulse * multiplier + additive).clamp_min(0.0)
-        impulse = impulse * collision_upper
+            hard_impulse = (hard_impulse * multiplier + additive).clamp_min(0.0)
+            soft_impulse = (
+                _straight_through_positive(
+                    soft_impulse * multiplier + additive,
+                    self.differentiable_contact_velocity_temperature,
+                )
+                if smooth_gradients
+                else hard_impulse
+            )
+        if smooth_gradients:
+            assert soft_collision is not None
+            hard_applied_impulse = hard_impulse * collision_upper
+            soft_applied_impulse = soft_impulse * soft_collision
+            impulse = hard_applied_impulse.detach() + (
+                soft_applied_impulse - soft_applied_impulse.detach()
+            )
+        else:
+            impulse = hard_impulse * collision_upper
 
         rel_tangent = rel_velocity - relative_normal_velocity.unsqueeze(-1) * normal
-        tangent_speed = torch.linalg.vector_norm(rel_tangent, dim=-1)
+        tangent_speed = (
+            _straight_through_safe_norm(rel_tangent, dim=-1)
+            if smooth_gradients
+            else torch.linalg.vector_norm(rel_tangent, dim=-1)
+        )
         tangent_direction = _safe_tangent_direction(rel_tangent, tangent_speed)
-        friction = torch.sqrt(
-            objects.friction.squeeze(-1)[:, :, None].clamp_min(0.0)
-            * objects.friction.squeeze(-1)[:, None, :].clamp_min(0.0)
+        friction_product = objects.friction.squeeze(-1)[:, :, None].clamp_min(
+            0.0
+        ) * objects.friction.squeeze(-1)[:, None, :].clamp_min(0.0)
+        friction = (
+            _straight_through_safe_sqrt(friction_product)
+            if smooth_gradients
+            else friction_product.sqrt()
         )
         friction_impulse = torch.minimum(
             friction * impulse,
@@ -362,22 +462,32 @@ class SphereContactResolver(nn.Module):
         momentum_change = pair_momentum.sum(dim=2)
         velocity = objects.velocity + momentum_change * inverse_mass.unsqueeze(-1)
 
-        correction_scale = (
-            self.penetration_fraction
-            * (penetration - self.penetration_slop).clamp_min(0.0)
-            / inverse_mass_sum
+        raw_penetration_correction = penetration - self.penetration_slop
+        hard_correction_scale = (
+            self.penetration_fraction * raw_penetration_correction.clamp_min(0.0) / inverse_mass_sum
         ).clamp_max(self.max_position_correction)
+        if smooth_gradients:
+            assert soft_contact is not None
+            soft_correction_scale = (
+                self.penetration_fraction
+                * _straight_through_positive(
+                    raw_penetration_correction,
+                    self.differentiable_contact_gap_temperature,
+                )
+                / inverse_mass_sum
+            ).clamp_max(self.max_position_correction)
+            hard_applied_correction = hard_correction_scale * contact_upper
+            soft_applied_correction = soft_correction_scale * soft_contact
+            correction_scale = hard_applied_correction.detach() + (
+                soft_applied_correction - soft_applied_correction.detach()
+            )
+        else:
+            correction_scale = hard_correction_scale * contact_upper
         position_first_upper = (
-            -correction_scale.unsqueeze(-1)
-            * inverse_mass[:, :, None, None]
-            * normal
-            * contact_upper.unsqueeze(-1)
+            -correction_scale.unsqueeze(-1) * inverse_mass[:, :, None, None] * normal
         )
         position_second_upper = (
-            correction_scale.unsqueeze(-1)
-            * inverse_mass[:, None, :, None]
-            * normal
-            * contact_upper.unsqueeze(-1)
+            correction_scale.unsqueeze(-1) * inverse_mass[:, None, :, None] * normal
         )
         # Unlike an impulse, positional projection is not equal-and-opposite:
         # each body's displacement is weighted by its own inverse mass.
@@ -436,25 +546,114 @@ class SphereContactResolver(nn.Module):
             normal_velocity = (velocity * normal).sum(dim=-1)
             collision = contact & (normal_velocity < -self.boundary_collision_speed_epsilon)
             resting_inward = contact & (normal_velocity < 0.0) & ~collision
-            penetration = (-gap).clamp_min(0.0) * contact
+            smooth_gradients = self.training and self.differentiable_contact_gradients_enabled
+            soft_contact: Tensor | None = None
+            soft_collision_probability: Tensor | None = None
+            soft_resting_probability: Tensor | None = None
+            if smooth_gradients:
+                active = objects.active.to(dtype=objects.position.dtype)
+                soft_contact = (
+                    torch.sigmoid(
+                        (self.boundary_contact_tolerance - confident_gap)
+                        / self.differentiable_contact_gap_temperature
+                    )
+                    * active
+                )
+                inward_probability = torch.sigmoid(
+                    -normal_velocity / self.differentiable_contact_velocity_temperature
+                )
+                collision_probability = torch.sigmoid(
+                    (-normal_velocity - self.boundary_collision_speed_epsilon)
+                    / self.differentiable_contact_velocity_temperature
+                )
+                soft_collision_probability = soft_contact * collision_probability
+                soft_resting_probability = (
+                    soft_contact * inward_probability * (1.0 - collision_probability)
+                )
+            raw_penetration = -gap
+            hard_penetration = raw_penetration.clamp_min(0.0) * contact
+            if smooth_gradients:
+                assert soft_contact is not None
+                soft_penetration = (
+                    _straight_through_positive(
+                        raw_penetration,
+                        self.differentiable_contact_gap_temperature,
+                    )
+                    * soft_contact
+                )
+                penetration = hard_penetration.detach() + (
+                    soft_penetration - soft_penetration.detach()
+                )
+            else:
+                penetration = hard_penetration
 
-            collision_delta = (
-                -(1.0 + objects.restitution.squeeze(-1)) * normal_velocity
-            ).clamp_min(0.0) * collision
-            resting_delta = (-normal_velocity).clamp_min(0.0) * resting_inward
-            delta_normal_speed = collision_delta + resting_delta
+            raw_collision_delta = -(1.0 + objects.restitution.squeeze(-1)) * normal_velocity
+            raw_resting_delta = -normal_velocity
+            if smooth_gradients:
+                assert soft_collision_probability is not None
+                assert soft_resting_probability is not None
+                soft_collision_delta = (
+                    _straight_through_positive(
+                        raw_collision_delta,
+                        self.differentiable_contact_velocity_temperature,
+                    )
+                    * soft_collision_probability
+                )
+                soft_resting_delta = (
+                    _straight_through_positive(
+                        raw_resting_delta,
+                        self.differentiable_contact_velocity_temperature,
+                    )
+                    * soft_resting_probability
+                )
+                hard_delta_normal_speed = (
+                    raw_collision_delta.clamp_min(0.0) * collision
+                    + raw_resting_delta.clamp_min(0.0) * resting_inward
+                )
+                soft_delta_normal_speed = soft_collision_delta + soft_resting_delta
+                delta_normal_speed = hard_delta_normal_speed.detach() + (
+                    soft_delta_normal_speed - soft_delta_normal_speed.detach()
+                )
+            else:
+                collision_delta = raw_collision_delta.clamp_min(0.0) * collision
+                resting_delta = raw_resting_delta.clamp_min(0.0) * resting_inward
+                delta_normal_speed = collision_delta + resting_delta
             velocity = velocity + delta_normal_speed.unsqueeze(-1) * normal
 
             tangential = velocity - (velocity * normal).sum(dim=-1).unsqueeze(-1) * normal
-            tangent_speed = torch.linalg.vector_norm(tangential, dim=-1)
-            reduction = torch.minimum(
-                tangent_speed,
-                objects.friction.squeeze(-1).clamp_min(0.0) * delta_normal_speed,
+            tangent_speed = (
+                _straight_through_safe_norm(tangential, dim=-1)
+                if smooth_gradients
+                else torch.linalg.vector_norm(tangential, dim=-1)
             )
+            friction = objects.friction.squeeze(-1).clamp_min(0.0)
+            if smooth_gradients:
+                assert soft_collision_probability is not None
+                hard_reduction = (
+                    torch.minimum(
+                        tangent_speed.detach(),
+                        friction.detach() * hard_delta_normal_speed,
+                    )
+                    * collision
+                )
+                soft_reduction = (
+                    torch.minimum(
+                        tangent_speed,
+                        friction * soft_delta_normal_speed,
+                    )
+                    * soft_collision_probability
+                )
+                reduction = hard_reduction.detach() + (soft_reduction - soft_reduction.detach())
+            else:
+                reduction = (
+                    torch.minimum(
+                        tangent_speed,
+                        friction * delta_normal_speed,
+                    )
+                    * collision
+                )
             velocity = velocity + (
-                -_safe_tangent_direction(tangential, tangent_speed)
-                * reduction.unsqueeze(-1)
-                * collision.unsqueeze(-1)
+                -_safe_tangent_direction(tangential, tangent_speed) * reduction.unsqueeze(-1)
             )
 
             # Simulator boundaries are hard constraints: project the complete

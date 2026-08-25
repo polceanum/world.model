@@ -2,6 +2,22 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-25 forward-exact differentiable analytic contacts (specification 1.83)
+
+- Added a default/legacy-false exact-resume contact-gradient carrier that keeps
+  hard pair/plane forward physics bit-identical and differentiates the same
+  mass/restitution/friction impulse and penetration equations through smooth
+  gap/velocity probabilities.
+- Added finite-gradient protection for zero distance, tangent, friction, and
+  near-contact positive parts; evaluation disables the carrier.
+- Passed `665` focused tests with four expected backend skips.  A real balanced
+  batch keeps every forward loss exact while increasing rollout gradient
+  `0.04474605 -> 0.11255240` at about `14.9%` compute overhead.
+- Passed the complete repository gate (`1435 passed`, `20` expected skips in
+  `535.20 s`) plus a separate active-Aqua MPS backward and all static gates.
+- Accuracy qualification remains pending and bounded to one pair plus, only on
+  success, one fixed-32 gate before `main`.
+
 ### 2026-08-25 causally owned exact-recursive training anchor (specification 1.82)
 
 - Added strict legacy/default `earliest` and opt-in `latest_full_horizon`

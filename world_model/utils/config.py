@@ -242,6 +242,8 @@ class DynamicsConfig:
     contact_confidence_sigma: float = 0.0
     pair_collision_speed_epsilon: float = 1.0e-7
     boundary_collision_speed_epsilon: float = 0.1
+    # Exact hard contact values with smooth impulse/projection derivatives.
+    differentiable_contact_gradients_enabled: bool = False
     # False is the exact historical hard-logit event semantic.  New protocols
     # may opt into continuous analytic hazards plus learned pair calibration;
     # physical contact jumps remain hard and fail-safe in both modes.
@@ -823,6 +825,10 @@ class OrpheusConfig:
                 raise ValueError(f"model.dynamics.{name} must be finite and nonnegative")
         if not isinstance(model.dynamics.smooth_event_hazard_enabled, bool):
             raise ValueError("model.dynamics.smooth_event_hazard_enabled must be boolean")
+        if not isinstance(model.dynamics.differentiable_contact_gradients_enabled, bool):
+            raise ValueError(
+                "model.dynamics.differentiable_contact_gradients_enabled must be boolean"
+            )
         for name, value in (
             (
                 "event_hazard_gap_temperature_m",

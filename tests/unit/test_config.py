@@ -1481,6 +1481,41 @@ def test_smooth_event_hazard_is_explicit_and_roundtrips(tmp_path: Path) -> None:
     assert restored.to_dict() == enabled.to_dict()
 
 
+def test_differentiable_contact_gradients_are_explicit_and_roundtrip(tmp_path: Path) -> None:
+    legacy = load_config(CONFIG_DIR / "default.yaml")
+    enabled = load_config(
+        CONFIG_DIR / "default.yaml",
+        overrides=["model.dynamics.differentiable_contact_gradients_enabled=true"],
+    )
+    resolved_path = tmp_path / "differentiable-contact-resolved.yaml"
+
+    save_resolved_config(enabled, resolved_path)
+    restored = load_config(resolved_path)
+    dynamics = DynamicsModel.from_config(enabled)
+
+    assert not legacy.model.dynamics.differentiable_contact_gradients_enabled
+    assert enabled.model.dynamics.differentiable_contact_gradients_enabled
+    assert dynamics.events.resolver.differentiable_contact_gradients_enabled
+    assert restored.to_dict() == enabled.to_dict()
+
+
+@pytest.mark.parametrize("value", [0, 1, None, "true"])
+def test_differentiable_contact_gradients_require_strict_boolean(value: object) -> None:
+    source = load_config(CONFIG_DIR / "default.yaml")
+    changed = replace(
+        source,
+        model=replace(
+            source.model,
+            dynamics=replace(
+                source.model.dynamics,
+                differentiable_contact_gradients_enabled=value,  # type: ignore[arg-type]
+            ),
+        ),
+    )
+    with pytest.raises(ValueError, match="differentiable_contact_gradients_enabled"):
+        changed.validate()
+
+
 @pytest.mark.parametrize(
     "override",
     [

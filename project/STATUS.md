@@ -1,5 +1,26 @@
 # Project status
 
+## Forward-exact differentiable analytic contacts — specification 1.83
+
+Hard collision/contact values remain the deployed physics, but the same
+mass/restitution/friction impulse and penetration-projection equations now have
+an optional smooth training derivative across gap and velocity thresholds.
+The default/legacy-false carrier is exact-resume-bound, inactive in evaluation,
+and introduces no learned transition or simulator input.
+
+Focused verification passes `665` tests with four expected backend skips.
+The exact balanced-batch forward is bit-identical; rollout/correction gradient
+norms increase `0.04474605 -> 0.11255240` and
+`0.01491602 -> 0.05841256`, respectively, with six finite intended owners.
+Compute increases about `14.9%` and peak RSS about `107 MB`.  This is not yet
+accuracy evidence.  One bounded source-frozen pair is pending; do not merge to
+`main`, tune temperatures, or extend duration unless that pair and a subsequent
+fixed-32 gate pass.
+
+The complete repository gate passes `1435` tests with `20` expected skips in
+`535.20 s`; the active-Aqua MPS carrier backward passes separately. Ruff,
+format, compile, version, and diff checks are clean.
+
 ## Causally owned exact-recursive training anchor — specification 1.82
 
 The historical single rollout anchor was the earliest eligible TBPTT frame.

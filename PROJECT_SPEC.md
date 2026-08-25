@@ -3,7 +3,7 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.82
+**Version:** 1.83
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, opt-in dense multi-instance global-discovery, causal observation-model selection, terminal dense typed-attribute evidence, frozen-foundation-feature feasibility, adaptive Gaussian local-model evidence, event-epoch local-model evidence, differentiable hard-runtime assimilation surrogate, and forward-exact soft-posterior gradient-carrier amendments 24 August 2026
 **Amendment 24 August 2026:** RGB-only analytic silhouette reprojection and smooth analytic shadow-posterior training
@@ -16,6 +16,7 @@
 **Amendment 25 August 2026:** raw apparent-radius student supervision through analytic RGB geometry
 **Amendment 25 August 2026:** training-only closed-form free-motion equation supervision
 **Amendment 25 August 2026:** causal latest-full-horizon recursive training-anchor ownership
+**Amendment 25 August 2026:** forward-exact differentiable analytic contact impulses
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -10361,6 +10362,48 @@ This closes the path without anchor, learning-rate, loss-weight, duration, or
 fixed-32 iteration. Legacy `earliest` remains the default and the candidate is
 not eligible for `main`. The complete repository gate passes `1425` tests with
 `20` expected backend skips in `531.58 s`.
+
+## 282. Differentiate the analytic contact law without changing hard runtime physics
+
+Hard pair and boundary contact masks remain necessary deployment inductive
+biases, but a Boolean threshold cannot be the only route by which pre-contact
+state, geometry, restitution, and friction learn.  Specification 1.83 adds
+`model.dynamics.differentiable_contact_gradients_enabled`, a strict Boolean
+with default and legacy value `false`.  When it is enabled while the contact
+resolver is in training mode, the resolver retains every historical hard
+position, velocity, impulse, event, and diagnostic value while attaching the
+derivative of the same analytic impulse/projection law under smooth gap and
+normal-velocity probabilities.  Evaluation and deployment never request the
+carrier.
+
+The surrogate uses the configured event-hazard gap and velocity temperatures;
+it introduces no learned simulator, oracle input, persistent state, or new
+parameter.  Pair and plane impulses retain mass, restitution, friction,
+normal, penetration, and solver-iteration structure.  Smooth positive parts
+replace zero-gradient clamps only in backward.  Exact hard values are detached
+and receive zero-valued carriers, so enabled and disabled forward tensors must
+be bit-identical.  Zero-distance, zero-tangent, zero-friction, inactive-pair,
+and near-boundary gradients must remain finite.  Exact resume binds the flag
+with legacy `false`.
+
+Focused contact/config/resume/objective/schedule verification passes `665`
+tests with four expected unavailable-backend skips.  On the exact balanced
+eight-scenario batch, all forward losses are bit-identical while recursive
+rollout gradient norm rises `0.04474605 -> 0.11255240`, correction gradient
+norm rises `0.01491602 -> 0.05841256`, and all six permitted updater-head
+gradients remain finite and below the global clip.  Compute rises
+`14.9099 -> 17.1284 s` and peak RSS `971313152 -> 1078648832` bytes.  This is
+mechanism and affordability evidence only.  One source-frozen paired short
+accuracy gate must decide the candidate; failure closes the path without
+temperature, weight, duration, or adjacent-scope tuning, while success still
+requires fixed-32 evidence before any merge to `main`.
+
+The complete repository gate passes `1435` tests with `20` expected backend
+skips in `535.20 s`; the focused active-Aqua MPS backward passes separately.
+Ruff, the `229`-file format check, isolated compile, version, and diff checks
+are clean.
+
+---
 
 # Closing directive
 

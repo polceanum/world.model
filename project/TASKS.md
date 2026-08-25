@@ -1,5 +1,22 @@
 # Tasks
 
+## Forward-exact differentiable analytic contacts — specification 1.83
+
+- [x] Keep every hard pair/plane contact, impulse, event, and rollout value
+  bit-identical while attaching smooth analytic contact derivatives.
+- [x] Reach pre-contact geometry and restitution with finite gradients; cover
+  zero distance/tangent/friction and evaluation-disabled behavior.
+- [x] Bind a strict default/legacy-false flag through configuration and exact
+  resume.
+- [x] Pass the focused gate (`665 passed`, four expected backend skips).
+- [x] Establish real balanced-batch materiality and affordability without
+  clipping or extra learned parameters.
+- [x] Pass the complete repository gate (`1435 passed`, `20` expected skips in
+  `535.20 s`) and the separate active-Aqua MPS backward.
+- [ ] Run exactly one source-frozen paired short accuracy gate.
+- [ ] If and only if it passes, run fixed-32 before merging to `main`; otherwise
+  stop without temperature, weight, duration, or scope iteration.
+
 ## Causally owned exact-recursive training anchor — specification 1.82
 
 - [x] Prove the historical earliest single anchor has exactly zero rollout

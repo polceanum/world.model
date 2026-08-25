@@ -99,6 +99,7 @@ model:
     contact_confidence_sigma: 0.25
     pair_collision_speed_epsilon: 0.0001
     boundary_collision_speed_epsilon: 0.1
+    differentiable_contact_gradients_enabled: false
     smooth_event_hazard_enabled: false
     event_hazard_gap_temperature_m: 0.02
     event_hazard_velocity_temperature_mps: 0.10

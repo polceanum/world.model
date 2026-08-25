@@ -113,6 +113,8 @@ class DynamicsConfig:
     contact_confidence_sigma: float = 0.0
     pair_collision_speed_epsilon: float = 1.0e-7
     boundary_collision_speed_epsilon: float = 0.1
+    # Forward-exact hard contact resolution with a smooth training derivative.
+    differentiable_contact_gradients_enabled: bool = False
     # Historical event logits were hard +/- constants with learned pair
     # residuals added afterward.  The opt-in hazard path keeps hard analytic
     # resolution for jumps while exposing continuous, calibratable logits.
@@ -209,6 +211,8 @@ class DynamicsConfig:
                 raise ValueError(f"{name} must be finite and nonnegative")
         if not isinstance(self.smooth_event_hazard_enabled, bool):
             raise ValueError("smooth_event_hazard_enabled must be boolean")
+        if not isinstance(self.differentiable_contact_gradients_enabled, bool):
+            raise ValueError("differentiable_contact_gradients_enabled must be boolean")
         for name, value in (
             ("event_hazard_gap_temperature_m", self.event_hazard_gap_temperature_m),
             (
@@ -302,6 +306,13 @@ class DynamicsModel(nn.Module):
             contact_confidence_sigma=self.config.contact_confidence_sigma,
             collision_speed_epsilon=self.config.pair_collision_speed_epsilon,
             boundary_collision_speed_epsilon=(self.config.boundary_collision_speed_epsilon),
+            differentiable_contact_gradients_enabled=(
+                self.config.differentiable_contact_gradients_enabled
+            ),
+            differentiable_contact_gap_temperature=(self.config.event_hazard_gap_temperature_m),
+            differentiable_contact_velocity_temperature=(
+                self.config.event_hazard_velocity_temperature_mps
+            ),
             solver_iterations=self.config.solver_iterations,
         )
         self.events = EventModel(
@@ -425,6 +436,9 @@ class DynamicsModel(nn.Module):
             contact_confidence_sigma=float(dynamics.contact_confidence_sigma),
             pair_collision_speed_epsilon=(float(dynamics.pair_collision_speed_epsilon)),
             boundary_collision_speed_epsilon=(float(dynamics.boundary_collision_speed_epsilon)),
+            differentiable_contact_gradients_enabled=bool(
+                dynamics.differentiable_contact_gradients_enabled
+            ),
             smooth_event_hazard_enabled=bool(dynamics.smooth_event_hazard_enabled),
             event_hazard_gap_temperature_m=float(dynamics.event_hazard_gap_temperature_m),
             event_hazard_velocity_temperature_mps=float(
