@@ -2,6 +2,22 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-25 quality-conditioned photometric fusion feasibility
+
+- Tested a 483-parameter RGB-quality model whose only learned output is
+  per-axis measurement log variance; posterior means remain the deployed
+  analytic diagonal Gaussian fusion equation.
+- On 32 disjoint validation seeds, improved one-step posterior RMSE
+  `0.104533 -> 0.060048 m`, improved every scenario, and improved Gaussian NLL
+  by `1.67796`, with maximum raw gradient `1.24566`.
+- Rejected the candidate under its frozen calibration gate. Axis-wise
+  training-derived temperature calibration yields coverage90 `0.909741`
+  versus baseline `0.904379`, increasing calibration error
+  `0.004379 -> 0.009741`; scalar calibration also misses the bar.
+- Stopped after the declared uncalibrated/scalar/axis sequence. No production
+  code, configuration, version, or runtime semantic remains, and no `main`
+  merge follows.
+
 ### 2026-08-25 cached differentiable RGB depth feasibility
 
 - Rejected a cached 193-parameter residual on the existing FAST hidden state:

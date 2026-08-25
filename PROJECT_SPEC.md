@@ -10446,6 +10446,47 @@ and `/private/tmp/orpheus-spec184-direct-crop-depth-feasibility.json`
 
 ---
 
+## 284. Quality-conditioned geometric fusion requires calibration parity
+
+A differentiable observation surrogate should preserve the physical
+inductive bias rather than replace it with an unconstrained point predictor.
+The permitted form is: RGB-derived geometric hypothesis and quality evidence,
+bounded learned measurement variance, then the deployed differentiable
+diagonal Gaussian update. Hard association may select training rows outside
+the backward graph; simulator state may align targets offline but is forbidden
+from model inputs and runtime inference.
+
+The bounded post-1.83 feasibility test uses a 483-parameter quality model over
+photometric fit RMS, typed prior/measurement variance, normalized innovation,
+confidence, structured depth validity, and component count. It uses ordered
+seeds `100000..100031` for training and disjoint `100032..100063` for
+validation, cycling all eight declared scenarios. The mean remains analytic.
+The frozen gate requires at least `0.002 m` pooled RMSE improvement, no scenario
+RMSE regression beyond `0.001 m`, pooled NLL improvement, no scenario NLL
+regression beyond `0.01`, no pooled coverage90-calibration regression, and raw
+gradient norm below `2.0`.
+
+Accuracy and proper-score cells pass materially: held-out RMSE improves
+`0.10453315 -> 0.06004849 m`, MAE improves
+`0.06649210 -> 0.02396242 m`, every scenario improves, and Gaussian NLL
+improves `-1.54351044 -> -3.22146964`. Maximum raw gradient norm is `1.245662`.
+The candidate is nevertheless rejected because axis-wise training-derived
+temperature calibration produces coverage90 `0.90974087`, calibration error
+`0.00974087`, against baseline coverage90 `0.90437889`, error `0.00437889`.
+The uncalibrated and scalar-temperature variants also fail that same frozen
+cell. Do not weaken the gate or continue temperature/network/loss/data tuning.
+
+No production source, configuration, checkpoint, runtime, or version semantic
+survives. The immutable final report is
+`/private/tmp/orpheus-spec184-quality-fusion-axis-calibrated-feasibility.json`
+with SHA-256
+`3746581eeda3392ba860105fa6b75f74fae4015a9eb8801a66111290113d3de6`.
+This is evidence that image-quality weighting can substantially improve the
+analytic mean, but it is not evidence for calibrated persistent uncertainty or
+permission to merge to `main`.
+
+---
+
 # Closing directive
 
 Project Orpheus should emerge from the first serious implementation as a small but real online world-model system:

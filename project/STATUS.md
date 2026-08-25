@@ -1,5 +1,29 @@
 # Project status
 
+## Quality-conditioned photometric fusion — terminally rejected
+
+A bounded post-1.83 diagnostic tested the independently specified successor to
+the rejected point-depth regressors: a 483-parameter quality model predicts
+per-axis measurement variance from normal RGB photometric geometry, fit RMS,
+typed prior uncertainty, and measurement disagreement; the posterior mean
+remains the deployed diagonal analytic Gaussian update. Simulator state is
+used only to align accepted associations for offline supervision.
+
+The disjoint 32-train/32-validation, eight-scenario result is a strong accuracy
+diagnostic. Held-out one-step posterior RMSE improves
+`0.104533 -> 0.060048 m`, every scenario improves, Gaussian NLL improves
+`-1.543510 -> -3.221470`, and maximum raw gradient norm is finite/unclipped at
+`1.24566`. The candidate nevertheless fails its frozen uncertainty gate:
+axis-wise training-derived temperature calibration gives empirical 90%
+coverage `0.909741` (error `0.009741`) versus baseline `0.904379` (error
+`0.004379`). Scalar calibration also fails (`0.910635`).
+
+Stop this family without another temperature, network, loss, or data sweep.
+No production semantic survived and nothing is eligible for `main`. The final
+report SHA-256 is
+`3746581eeda3392ba860105fa6b75f74fae4015a9eb8801a66111290113d3de6`;
+the uncalibrated/scalar reports are retained as intermediate evidence.
+
 ## Cached differentiable RGB depth feasibility — terminally rejected
 
 Two bounded post-1.83 diagnostics tested whether the remaining observation

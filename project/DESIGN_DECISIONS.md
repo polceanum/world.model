@@ -1,5 +1,33 @@
 # Design decisions
 
+## ADR-211 — Reject quality-weighted photometric fusion without calibration parity
+
+- **Date:** 2026-08-25
+- **Status:** accuracy mechanism promising; uncertainty gate rejected; terminal
+- **Context:** The deployed geometric observer supplies photometric sphere
+  depth and a fit residual, but uses fixed measurement uncertainty. The prior
+  cached point regressors failed to generalize, while oracle-state rollouts
+  show the analytic physics is already close to exact.
+- **Decision:** Train exactly one small model to map RGB-only photometric
+  quality, typed prior uncertainty, and innovation evidence to bounded
+  per-axis measurement log variance. Preserve the analytic diagonal Gaussian
+  mean update. Evaluate on 32 disjoint seeds across all eight scenarios, then
+  permit only mathematically derived pooled and per-axis Gaussian temperature
+  checks before terminating the family.
+- **Alternatives considered:** another point residual; differentiate Hungarian
+  or lifecycle transitions; replace analytic dynamics; tune photometric
+  thresholds; relax calibration; or launch recursive training before an
+  offline representation gate.
+- **Consequences:** Held-out posterior RMSE improves
+  `0.104533 -> 0.060048 m`, every scenario improves, NLL improves
+  `-1.543510 -> -3.221470`, and gradients remain finite/unclipped. Yet the
+  strongest axis-calibrated candidate worsens coverage90 calibration error
+  `0.004379 -> 0.009741`; the scalar candidate also fails. The frozen gate
+  therefore rejects runtime integration. Stop without another adjacent fit,
+  retain no production semantic, and do not merge to `main`. Final report
+  SHA-256:
+  `3746581eeda3392ba860105fa6b75f74fae4015a9eb8801a66111290113d3de6`.
+
 ## ADR-210 — Reject cached point-depth regressors without uncertainty calibration
 
 - **Date:** 2026-08-25

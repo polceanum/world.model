@@ -1,5 +1,21 @@
 # Tasks
 
+## Quality-conditioned photometric fusion — post-1.83 diagnostic
+
+- [x] Keep the geometric mean inside the deployed differentiable diagonal
+  Gaussian update; learn only bounded measurement quality/variance.
+- [x] Use normal RGB photometric fit evidence and typed prior disagreement,
+  with simulator targets restricted to offline accepted-association alignment.
+- [x] Run one disjoint 32-train/32-validation eight-scenario gate with a frozen
+  accuracy, proper-score, calibration, per-scenario, and gradient contract.
+- [x] Confirm material held-out point/NLL improvement and every-scenario point
+  improvement with finite unclipped gradients.
+- [x] Reject production integration because uncalibrated, scalar-calibrated,
+  and axis-calibrated posterior uncertainty all miss the frozen calibration
+  non-regression bar.
+- [x] Stop without another temperature, architecture, loss, duration, or data
+  sweep; do not merge the candidate to `main`.
+
 ## Cached differentiable RGB depth feasibility — post-1.83 diagnostic
 
 - [x] Collect real belief-slot-aligned FAST tensors once and keep hard
