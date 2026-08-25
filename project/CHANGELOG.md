@@ -16,8 +16,13 @@
   `1.659x` lower compute time, about `31%` lower RSS, and a meaningful finite
   rollout gradient.
 - Completed a two-update end-to-end technical smoke with exact six-head model
-  and Adam ownership. Accuracy qualification and any `main` merge remain
-  pending one bounded paired short gate.
+  and Adam ownership.
+- Completed and rejected the sole paired 16-update accuracy gate. Exact draws,
+  six-head ownership, and finite unclipped updates pass, but selector worsens
+  `0.2129164218 -> 0.2137913762`; current/short-horizon z RMSE and 0.75-second
+  collision F1 fail pooled guardrails. Stop without adjacent tuning or
+  fixed-32 escalation; keep the switch default off and do not merge to `main`.
+  Paired audit SHA-256: `bc1e86879cdb720f...`.
 - Passed the final repository gate (`1417 passed`, `20` expected skips in
   `530.62 s`) with Ruff, formatting, version, and diff checks clean.
 

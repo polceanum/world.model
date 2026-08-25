@@ -17,11 +17,11 @@
   model/Adam ownership and finite unclipped updates.
 - [x] Pass the final repository gate (`1417 passed`, `20` expected skips in
   `530.62 s`) plus Ruff, formatting, version, and diff integrity.
-- [ ] Run exactly one source-frozen paired short accuracy gate. Stop the line if
-  selector or any broad guardrail fails; do not sweep anchors, weights,
-  censoring, or duration.
-- [ ] Merge to `main` only after paired fixed-manifest accuracy, full repository
-  tests, clean provenance, and push/PR review all pass.
+- [x] Run exactly one source-frozen paired short accuracy gate. Exact pairing,
+  ownership, and numerical gates pass, but selector worsens by `0.0008749543`
+  and four pooled z/event guardrails fail.
+- [x] Stop without anchor, weight, censoring, duration, or fixed-32 iteration;
+  keep the rejected switch default off and do not merge it to `main`.
 
 ## Bounded photometric global depth — specification 1.80
 

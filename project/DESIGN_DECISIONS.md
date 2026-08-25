@@ -6043,7 +6043,8 @@
 ## ADR-207 — Supervise free motion through the deployed closed-form equations
 
 - **Date:** 2026-08-25
-- **Status:** implementation and technical smoke accepted; accuracy pending
+- **Status:** implementation retained default off; sole accuracy candidate
+  rejected
 - **Context:** The hybrid runtime contains necessary discrete identity,
   lifecycle, and contact decisions, while its continuous physics path is
   differentiable. The historical one-anchor 120 Hz recursive rollout retained
@@ -6063,7 +6064,9 @@
 - **Consequences:** Real-batch compute improves `1.659x`, RSS falls about `31%`,
   recursive forecast calls fall to zero, and rollout gradient norm becomes
   `0.00897988` rather than zero. A two-update trainer smoke changes exactly the
-  six permitted heads with finite Adam state. This is not accuracy evidence;
-  one paired short fixed-manifest gate is mandatory, and failure closes the
-  path without a sweep or `main` merge. The final repository gate passes
-  `1417` tests with `20` expected skips in `530.62 s`.
+  six permitted heads with finite Adam state. The only paired 16-update gate
+  confirms exact draws/ownership and finite unclipped optimization, but worsens
+  selector `0.2129164218 -> 0.2137913762` and fails four pooled z/event
+  guardrails. Close the path without a sweep, fixed-32 run, or `main` merge.
+  The final repository gate passes `1417` tests with `20` expected skips in
+  `530.62 s`; paired audit SHA-256 is `bc1e86879cdb720f...`.

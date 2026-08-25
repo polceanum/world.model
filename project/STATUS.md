@@ -25,8 +25,18 @@ One two-update trainer smoke completed in `217.07 s`; both balanced updates
 were finite/unclipped, exactly six intended tensors changed, and Adam owns
 exactly those six. Eight-episode exact hybrid pre/post metrics differ only at
 approximately `1e-7`, as expected from warm-up LR. This is technical evidence,
-not accuracy. A single paired short fixed-manifest accuracy gate remains before
-any `main` merge; failure ends this path without parameter/duration sweeps.
+not accuracy.
+
+The sole source-frozen paired 16-update accuracy gate is now complete and
+rejected. Both arms used exactly the same 16 balanced update batches plus the
+same unsupported draw, remained finite/unclipped, and changed/optimized exactly
+the six permitted heads. The control selector is `0.2129164218`; the equation
+treatment is worse at `0.2137913762` (delta `+0.0008749543`, lower is better).
+Treatment also fails four pooled guardrails: current z and 0.10/0.25-second z
+RMSE plus 0.75-second collision F1. The audit SHA-256 is `bc1e86879cdb720f...`.
+Stop without anchor, loss-weight, censoring, duration, or fixed-32 iteration.
+The implementation remains default off on the research branch and is not
+eligible for `main`.
 
 ## Bounded photometric global depth — specification 1.80
 

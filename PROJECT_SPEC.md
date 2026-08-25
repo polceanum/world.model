@@ -10296,16 +10296,25 @@ Final repository verification passes `1417` tests with `20` expected
 unavailable-backend skips in `530.62 s`; Ruff, formatting, specification-
 version, compile, and diff-integrity checks are clean.
 
-The next and only accuracy escalation is a source-frozen paired short run from
-the same initializer: treatment uses four equation anchors and no detached
-prior-future rollout; control retains the historical one recursive anchor and
-prior diagnostic. Require identical balanced draws, exact ownership, finite
-updates, and a fixed-manifest selector improvement without scenario/axis/
-horizon, event, identity, uncertainty, support, provenance, or latency
-regression. Stop without adjacent anchor, weight, duration, or censoring sweeps
-if that gate fails. Merge to `main` requires that accuracy gate plus the full
-repository suite; the present default-off implementation alone is not a
-promotion.
+The sole source-frozen paired short accuracy gate is complete. Treatment used
+four equation anchors with no detached prior-future rollout; control retained
+the historical one recursive anchor and prior diagnostic. Both arms consumed
+the exact same 16 balanced update batches plus the same unsupported draw,
+remained finite and unclipped, and changed/optimized exactly the six intended
+heads. The starting 340 physical metrics are exact between arms.
+
+The accuracy decision fails. Control selector `0.2129164218451423` is better
+than treatment `0.21379137616719412` (treatment regression
+`0.000874954322051813`, while the required gain was `0.00001`). Treatment
+fails four pooled guardrails: current z RMSE `0.13628249 -> 0.14087174 m`, z
+RMSE at 0.10 seconds `0.14871003 -> 0.15272389 m`, z RMSE at 0.25 seconds
+`0.16473021 -> 0.16823504 m`, and collision F1 at 0.75 seconds
+`0.16216216 -> 0.11428571`. The canonical paired audit is
+`/private/tmp/20260825-033825-spec181-free-motion-paired16-audit.json`
+(SHA-256 `bc1e86879cdb720f2057c2b9ba473fd8d8602be4ac272265b45de672cc50a181`).
+This closes the path without anchor, weight, duration, censoring, or fixed-32
+iteration. The mechanism remains default off as research evidence and is not
+eligible for `main`.
 
 # Closing directive
 
