@@ -58,6 +58,30 @@ def test_raw_centre_shape_must_match_measurement_centres() -> None:
         raise AssertionError("mismatched raw centre shape was accepted")
 
 
+def test_raw_radius_loss_trains_student_when_structured_forward_is_exact() -> None:
+    outputs, targets, masks = _loss_inputs()
+    outputs["raw_log_radius"] = torch.tensor([[[-0.25]]], requires_grad=True)
+    masks["raw_log_radius"] = torch.ones((1, 1), dtype=torch.bool)
+
+    losses = rgb_measurement_losses(outputs, targets, masks)
+    losses["rgb_raw_log_radius"].backward()
+
+    assert losses["rgb_geometry"].item() == 0.0
+    assert losses["rgb_raw_log_radius"].item() > 0.0
+    gradient = outputs["raw_log_radius"].grad
+    assert gradient is not None
+    assert torch.count_nonzero(gradient) == 1
+
+
+def test_raw_radius_output_requires_explicit_structured_support() -> None:
+    outputs, targets, masks = _loss_inputs()
+    outputs["raw_log_radius"] = torch.tensor([[[-0.25]]], requires_grad=True)
+
+    losses = rgb_measurement_losses(outputs, targets, masks)
+
+    assert "rgb_raw_log_radius" not in losses
+
+
 def test_measurement_nll_calibrates_variance_without_duplicate_mean_gradient() -> None:
     prediction = torch.tensor(
         [[[1.0, -1.0, 0.5, 0.2, 0.8, 0.3, 0.1]]],

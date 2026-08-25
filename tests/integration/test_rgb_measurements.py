@@ -145,6 +145,57 @@ def test_global_rgb_measurements_are_finite_and_state_free() -> None:
     assert measured.source_object_ids is None
 
 
+def test_structured_global_measurement_exposes_raw_radius_student_target() -> None:
+    intrinsics, world_from_camera = _calibration()
+    module = RGBObservationModule(
+        RGBObservationConfig(
+            max_objects=2,
+            birth_extra_queries=1,
+            backbone_channels=(8, 16, 24, 32),
+            feature_dim=16,
+            appearance_dim=8,
+            roi_size=8,
+            roi_hidden_dim=16,
+            structured_disc_center_enabled=True,
+            structured_disc_raw_radius_supervision_enabled=True,
+        )
+    )
+    image = torch.zeros(3, 32, 32)
+    image[0, 10:18, 12:20] = 1.0
+    packet = ObservationPacket(
+        modality="rgb",
+        sensor_id="camera",
+        timestamp=0.0,
+        payload=image,
+        calibration={
+            "intrinsics": intrinsics,
+            "world_from_camera": world_from_camera,
+        },
+        frame_id="camera:camera",
+    )
+
+    measured = module.initialise_measurements(
+        [packet],
+        ObservationContext(
+            timestamp=0.0,
+            calibration=packet.calibration,
+            frame_id=packet.frame_id,
+            max_objects=2,
+            device=torch.device("cpu"),
+        ),
+    )
+
+    raw_radius = measured.auxiliary["raw_log_radius"]
+    support = measured.auxiliary["raw_log_radius_supervision_mask"]
+    assert raw_radius.shape == measured.values[..., 2:3].shape
+    assert support.shape == measured.measurement_mask.shape
+    assert support.dtype is torch.bool
+    torch.testing.assert_close(
+        support,
+        measured.auxiliary["structured_centre_valid"],
+    )
+
+
 def test_grid_sample_roi_path_and_projector_shapes() -> None:
     feature = torch.arange(16.0).reshape(1, 1, 4, 4)
     rois = torch.tensor([[[-1.0, -1.0, 1.0, 1.0]]])

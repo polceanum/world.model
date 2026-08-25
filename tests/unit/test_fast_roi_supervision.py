@@ -106,6 +106,8 @@ def _measurements(
     mask: Tensor | None = None,
     world_position: Tensor | None = None,
     world_position_log_variance: Tensor | None = None,
+    raw_log_radius: Tensor | None = None,
+    raw_log_radius_mask: Tensor | None = None,
 ) -> MeasurementSet:
     batch, measurements, dimensions = values.shape
     if mask is None:
@@ -117,6 +119,9 @@ def _measurements(
         auxiliary["world_position"] = world_position
     if world_position_log_variance is not None:
         auxiliary["world_position_log_variance"] = world_position_log_variance
+    if raw_log_radius is not None or raw_log_radius_mask is not None:
+        auxiliary["raw_log_radius"] = raw_log_radius
+        auxiliary["raw_log_radius_supervision_mask"] = raw_log_radius_mask
     return MeasurementSet(
         modality="rgb",
         sensor_id="camera0",
@@ -131,6 +136,32 @@ def _measurements(
         supported_state_fields=("position",),
         auxiliary=auxiliary,
     )
+
+
+def test_structured_raw_radius_supervision_follows_slot_identity_and_support() -> None:
+    batch = _batch()
+    raw_radius = torch.tensor([[[-0.25], [-0.5]]], requires_grad=True)
+    measurements = _measurements(
+        torch.zeros((1, 2, 7)),
+        raw_log_radius=raw_radius,
+        raw_log_radius_mask=torch.tensor([[True, False]]),
+    )
+    module = _StructuredRecordingLossModule()
+
+    losses = supervised_slot_measurement_losses(
+        module,
+        measurements,
+        batch,
+        frame_index=0,
+        target_indices=torch.tensor([[1, 0]], dtype=torch.int64),
+        matched_slots=torch.tensor([[True, True]]),
+    )
+    losses["rgb_raw_log_radius"].backward()
+
+    assert module.masks["raw_log_radius"].tolist() == [[True, False]]
+    assert raw_radius.grad is not None
+    assert raw_radius.grad[0, 0, 0] != 0
+    assert raw_radius.grad[0, 1, 0] == 0
 
 
 def test_fast_roi_targets_follow_belief_slot_assignment_not_measurement_order() -> None:

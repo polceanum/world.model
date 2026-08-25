@@ -3,7 +3,7 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.78
+**Version:** 1.79
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, opt-in dense multi-instance global-discovery, causal observation-model selection, terminal dense typed-attribute evidence, frozen-foundation-feature feasibility, adaptive Gaussian local-model evidence, event-epoch local-model evidence, differentiable hard-runtime assimilation surrogate, and forward-exact soft-posterior gradient-carrier amendments 24 August 2026
 **Amendment 24 August 2026:** RGB-only analytic silhouette reprojection and smooth analytic shadow-posterior training
@@ -13,6 +13,7 @@
 **Amendment 24 August 2026:** calibrated learned-radius depth and complete normal-runtime hypothesis-policy routing
 **Amendment 25 August 2026:** differentiable continuous observation hypotheses and equation-rollout marginal likelihood
 **Amendment 25 August 2026:** independent-axis runtime-hypothesis evidence ownership
+**Amendment 25 August 2026:** raw apparent-radius student supervision through analytic RGB geometry
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -10151,6 +10152,41 @@ candidate reports are respectively
 `/private/tmp/20260825-003550-20260825-spec180-axis-aware-pool-candidate-fixed8/evaluation.json`
 (`b7e6f47c...`). Focused verification passes `68` tests with two expected
 backend skips plus four RGB/runtime/checkpoint integration tests.
+
+---
+
+## 278. Supervise the learned radius before structured analytic substitution
+
+Structured RGB geometry may replace a learned apparent-radius value in the
+runtime forward, but it must not erase the student's direct training signal.
+The expression `learned + (structured - learned).detach()` preserves a formal
+derivative while evaluating the ordinary geometry loss at the teacher value.
+When the teacher is accurate, that loss is near zero and does not train the
+learned radius toward either the label or the teacher. The existing raw-centre
+auxiliary already avoids this failure for image centre; apparent radius now
+receives the same treatment.
+
+The RGB module may opt into
+`model.rgb.structured_disc_raw_radius_supervision_enabled`. It is a strict,
+default/legacy-false, exact-resume-bound boolean and requires structured disc
+centres. The module exposes the raw learned log radius and an explicit
+structured-support mask. Global supervision uses structured assigned rows;
+FAST supervision uses only rows whose structured scale actually replaced the
+learned scale. The new Smooth-L1 term is evaluated directly against the
+training-only projected-radius label and reaches only the existing RGB student
+graph. It does not change the deployed measurement, filter, dynamics,
+association, lifecycle, or rollout and adds no inference or rollout work.
+
+This is a bounded research candidate until accuracy evidence exists. First
+require nonzero supported raw-radius loss and finite radius-head gradients on
+one real balanced batch. If that passes, run exactly one paired 16-update
+CPU/RGB treatment/control from the same immutable initializer; the arms may
+differ only at this boolean. The treatment must improve the frozen equal-weight
+five-horizon position selector by at least `0.001` while preserving all current,
+axis, velocity, event, identity, uncertainty, support, and ownership
+guardrails. Failure stops the candidate without a weight, duration, threshold,
+or fixed-32 sweep. Focused implementation verification passes `440` tests with
+four expected unavailable-backend skips.
 
 ---
 

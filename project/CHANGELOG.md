@@ -2,6 +2,20 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-25 raw apparent-radius student supervision (specification 1.79)
+
+- Added an opt-in raw learned-radius auxiliary and exact structured-support
+  mask so analytic/structured forward substitution cannot suppress the RGB
+  student's direct label error.
+- Added a supported Smooth-L1 raw-radius term for global and FAST measurement
+  supervision without changing deployed measurements or rollout cost.
+- Added strict default/legacy-false configuration and exact-resume binding plus
+  raw-gradient, missing-support, slot-identity, module-output, and migration
+  regressions.
+- Passed the focused affected gate (`440 passed`, four expected backend skips).
+  Accuracy remains pending under one bounded gradient probe and, if supported,
+  one paired 16-update gate with a `0.001` selector materiality floor.
+
 ### 2026-08-25 independent-axis runtime-hypothesis evidence (specification 1.78)
 
 - Added exact position-axis provenance to hypothesis scoring, pool

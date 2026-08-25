@@ -592,7 +592,27 @@ def test_temporal_rgb_velocity_is_opt_in_and_typed() -> None:
     assert default.model.rgb.temporal_position_variance_ceiling is None
     assert default.model.rgb.temporal_position_depth_only
     assert default.model.rgb.structured_disc_center_enabled
+    assert not default.model.rgb.structured_disc_raw_radius_supervision_enabled
     assert default.model.rgb.structured_disc_depth_outlier_relative_threshold is None
+
+    enabled_raw_radius = load_config(
+        CONFIG_DIR / "toy_smoke.yaml",
+        overrides=["model.rgb.structured_disc_raw_radius_supervision_enabled=true"],
+    )
+    assert enabled_raw_radius.model.rgb.structured_disc_raw_radius_supervision_enabled
+    with pytest.raises(ValueError, match="must be boolean"):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=["model.rgb.structured_disc_raw_radius_supervision_enabled=1"],
+        )
+    with pytest.raises(ValueError, match="requires structured disc centres"):
+        load_config(
+            CONFIG_DIR / "toy_smoke.yaml",
+            overrides=[
+                "model.rgb.structured_disc_center_enabled=false",
+                "model.rgb.structured_disc_raw_radius_supervision_enabled=true",
+            ],
+        )
 
     enabled = load_config(
         CONFIG_DIR / "toy_smoke.yaml",

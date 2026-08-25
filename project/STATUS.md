@@ -1,5 +1,23 @@
 # Project status
 
+## Raw apparent-radius student supervision — specification 1.79
+
+Structured analytic radius substitution no longer has to hide the learned
+student's error. A strict default/legacy-false switch exposes the raw learned
+log radius plus exact structured-support mask and adds a direct Smooth-L1
+training term against projected-radius labels. Global rows use assigned
+structured components; FAST rows are eligible only when structured scale
+actually replaced the learned value. Runtime measurements, equations, hard
+identity/lifecycle/contact state, and rollout cost are unchanged.
+
+Focused configuration, RGB, loss, fast-ROI, differentiable-assimilation, and
+checkpoint coverage passes `440` tests with four expected unavailable-backend
+skips. The bounded accuracy protocol is pending: one real gradient/support
+probe, then at most one paired 16-update CPU/RGB treatment/control if the probe
+is meaningful. Promotion requires at least `0.001` five-horizon selector gain
+with every broad guardrail intact; otherwise the path stops without tuning or
+fixed-32 escalation.
+
 ## Independent-axis runtime-hypothesis evidence — specification 1.78
 
 The runtime local-model pool now scores only world axes independently measured

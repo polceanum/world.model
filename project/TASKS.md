@@ -1,5 +1,19 @@
 # Tasks
 
+## Raw apparent-radius student supervision — specification 1.79
+
+- [x] Preserve the raw learned log radius and exact substitution-support mask
+  before structured analytic forward replacement.
+- [x] Add a direct supported student loss without changing runtime forward,
+  dynamics, or inference cost.
+- [x] Bind the strict default/legacy-false switch to configuration and exact
+  resume; pass the focused gate (`440 passed`, four expected skips).
+- [ ] Run one real balanced support/gradient attribution.
+- [ ] If and only if attribution is meaningful, run one paired 16-update
+  CPU/RGB accuracy gate; stop without tuning or fixed-32 if selector gain is
+  below `0.001` or any broad guardrail fails.
+- [ ] Merge to `main` only after the declared accuracy gate passes.
+
 ## Independent-axis runtime-hypothesis evidence — specification 1.78
 
 - [x] Thread exact per-world-axis RGB provenance through runtime-hypothesis

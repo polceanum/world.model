@@ -154,6 +154,7 @@ class RGBObservationConfig:
     structured_disc_max_assignment_distance: float = 0.75
     structured_disc_center_std_pixels: float = 0.75
     structured_disc_fast_depth_enabled: bool = False
+    structured_disc_raw_radius_supervision_enabled: bool = False
     structured_disc_photometric_fast_depth_enabled: bool = False
     structured_disc_photometric_maximum_fit_rms: float = 0.035
     structured_disc_depth_relative_std: float | None = None
@@ -176,6 +177,13 @@ class RGBObservationConfig:
                 "fast_radius_derived_depth_enabled is mutually exclusive with "
                 "fast_depth_residual_enabled and structured_disc_fast_depth_enabled"
             )
+        if not isinstance(self.structured_disc_raw_radius_supervision_enabled, bool):
+            raise TypeError("structured_disc_raw_radius_supervision_enabled must be boolean")
+        if (
+            self.structured_disc_raw_radius_supervision_enabled
+            and not self.structured_disc_center_enabled
+        ):
+            raise ValueError("raw radius supervision requires structured disc centres")
         if self.temporal_velocity_history_size < 3:
             raise ValueError("temporal_velocity_history_size must be at least three")
         if not 2 <= self.temporal_velocity_min_samples <= self.temporal_velocity_history_size:
@@ -723,6 +731,7 @@ class RGBObservationModule(ObservationModule):
             dtype=torch.int64,
         )
         log_radius = output.log_radius
+        raw_log_radius = output.log_radius
         if self.config.structured_disc_center_enabled:
             structured = structured_disc_centres(
                 image,
@@ -999,6 +1008,14 @@ class RGBObservationModule(ObservationModule):
                 "query_features": output.query_features,
                 "attention": output.attention,
                 "raw_centre": raw_centre,
+                **(
+                    {
+                        "raw_log_radius": raw_log_radius,
+                        "raw_log_radius_supervision_mask": structured_valid,
+                    }
+                    if self.config.structured_disc_raw_radius_supervision_enabled
+                    else {}
+                ),
                 # Structured RGB evidence is allowed to replace runtime
                 # confidence, but detector supervision must still see the
                 # learned head's own positive/negative decision.  Otherwise
@@ -1073,6 +1090,7 @@ class RGBObservationModule(ObservationModule):
         )
         values = output.values
         raw_centre = output.values[..., :2]
+        raw_log_radius = output.values[..., 2:3]
         if not (
             self.config.fast_depth_residual_enabled or self.config.fast_radius_derived_depth_enabled
         ):
@@ -1297,6 +1315,14 @@ class RGBObservationModule(ObservationModule):
             "event_features": output.event_features,
             "appearance_gate": output.appearance_gate,
             "raw_centre": raw_centre,
+            **(
+                {
+                    "raw_log_radius": raw_log_radius,
+                    "raw_log_radius_supervision_mask": structured_depth_valid,
+                }
+                if self.config.structured_disc_raw_radius_supervision_enabled
+                else {}
+            ),
             "structured_centre_valid": structured_valid,
             "structured_centre_ambiguous": structured_ambiguous,
             "structured_centre_ownership_margin": structured_ownership_margin,

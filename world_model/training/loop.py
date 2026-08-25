@@ -1813,6 +1813,18 @@ def supervised_measurement_losses(
         if not isinstance(raw_centre, Tensor):
             raise TypeError("measurements.auxiliary.raw_centre must be a Tensor")
         outputs["raw_centre"] = raw_centre
+    raw_log_radius = measurements.auxiliary.get("raw_log_radius")
+    raw_log_radius_mask = measurements.auxiliary.get("raw_log_radius_supervision_mask")
+    if raw_log_radius is not None or raw_log_radius_mask is not None:
+        if not isinstance(raw_log_radius, Tensor) or not isinstance(raw_log_radius_mask, Tensor):
+            raise TypeError("raw radius supervision requires tensor value and mask")
+        if raw_log_radius.shape != measurements.values[..., 2:3].shape:
+            raise ValueError("raw_log_radius must match the measurement radius")
+        if raw_log_radius_mask.shape != measurements.measurement_mask.shape:
+            raise ValueError("raw_log_radius_supervision_mask must match measurement_mask")
+        if raw_log_radius_mask.dtype is not torch.bool:
+            raise TypeError("raw_log_radius_supervision_mask must be boolean")
+        outputs["raw_log_radius"] = raw_log_radius
     visibility_logits = measurements.auxiliary.get("visibility_logits")
     if visibility_logits is None:
         visibility_logits = measurements.auxiliary.get("visibility_logit")
@@ -1847,6 +1859,8 @@ def supervised_measurement_losses(
         "visibility_valid": matched,
         "geometry": matched & aligned_geometry_support,
     }
+    if isinstance(raw_log_radius_mask, Tensor):
+        masks["raw_log_radius"] = matched & aligned_geometry_support & raw_log_radius_mask
     losses = module.training_losses(outputs, targets, masks)
     dense_center_logits = measurements.auxiliary.get("dense_center_logits")
     if dense_center_logits is not None:
@@ -1995,6 +2009,18 @@ def supervised_slot_measurement_losses(
         if not isinstance(raw_centre, Tensor):
             raise TypeError("measurements.auxiliary.raw_centre must be a Tensor")
         outputs["raw_centre"] = raw_centre
+    raw_log_radius = measurements.auxiliary.get("raw_log_radius")
+    raw_log_radius_mask = measurements.auxiliary.get("raw_log_radius_supervision_mask")
+    if raw_log_radius is not None or raw_log_radius_mask is not None:
+        if not isinstance(raw_log_radius, Tensor) or not isinstance(raw_log_radius_mask, Tensor):
+            raise TypeError("raw radius supervision requires tensor value and mask")
+        if raw_log_radius.shape != measurements.values[..., 2:3].shape:
+            raise ValueError("raw_log_radius must match the measurement radius")
+        if raw_log_radius_mask.shape != measurements.measurement_mask.shape:
+            raise ValueError("raw_log_radius_supervision_mask must match measurement_mask")
+        if raw_log_radius_mask.dtype is not torch.bool:
+            raise TypeError("raw_log_radius_supervision_mask must be boolean")
+        outputs["raw_log_radius"] = raw_log_radius
     visibility_logits = measurements.auxiliary.get("visibility_logits")
     if visibility_logits is None:
         visibility_logits = measurements.auxiliary.get("visibility_logit")
@@ -2040,6 +2066,8 @@ def supervised_slot_measurement_losses(
         "nll": crop_evidence,
         "appearance": crop_evidence,
     }
+    if isinstance(raw_log_radius_mask, Tensor):
+        masks["raw_log_radius"] = exact_geometry & raw_log_radius_mask
     losses = module.training_losses(outputs, targets, masks)
     if not losses:
         raise RuntimeError("RGB observation module returned no training losses")

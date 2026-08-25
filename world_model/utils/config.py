@@ -190,6 +190,7 @@ class RGBConfig:
     structured_disc_max_assignment_distance: float = 0.75
     structured_disc_center_std_pixels: float = 0.75
     structured_disc_fast_depth_enabled: bool = False
+    structured_disc_raw_radius_supervision_enabled: bool = False
     structured_disc_photometric_fast_depth_enabled: bool = False
     structured_disc_photometric_maximum_fit_rms: float = 0.035
     structured_disc_depth_relative_std: float | None = None
@@ -1160,6 +1161,18 @@ class OrpheusConfig:
             raise ValueError(
                 "model.rgb.fast_radius_derived_depth_enabled is mutually exclusive with "
                 "fast_depth_residual_enabled and structured_disc_fast_depth_enabled"
+            )
+        if not isinstance(model.rgb.structured_disc_raw_radius_supervision_enabled, bool):
+            raise ValueError(
+                "model.rgb.structured_disc_raw_radius_supervision_enabled must be boolean"
+            )
+        if (
+            model.rgb.structured_disc_raw_radius_supervision_enabled
+            and not model.rgb.structured_disc_center_enabled
+        ):
+            raise ValueError(
+                "model.rgb.structured_disc_raw_radius_supervision_enabled requires "
+                "structured disc centres"
             )
         if not isinstance(model.rgb.structured_disc_photometric_fast_depth_enabled, bool):
             raise ValueError(

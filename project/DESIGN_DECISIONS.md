@@ -5986,3 +5986,25 @@
   `1.2513x/1.2360x/1.6683x`. Retain the safety fix, leave the runtime pool off,
   stop without fixed-32 or tuning, and do not merge it to `main`. Evidence:
   reference `41e97466...`, candidate `b7e6f47c...`.
+
+## ADR-205 — Train the raw RGB radius student outside structured substitution
+
+- **Date:** 2026-08-25
+- **Status:** implementation accepted; bounded accuracy gate pending
+- **Context:** The structured centre path already supervises the raw learned
+  centre separately, but apparent radius was supervised only after
+  straight-through structured substitution. An accurate teacher therefore
+  made the geometry loss near zero without teaching the raw radius head.
+- **Decision:** Add a strict default/legacy-false model switch that exposes the
+  raw log radius and exact substitution-support mask. Optimize a direct
+  Smooth-L1 student term on eligible global/FAST rows. Keep all runtime values,
+  analytic equations, hard decisions, and inference work unchanged.
+- **Alternatives considered:** another recursive surrogate; replace analytic
+  dynamics; train an unconstrained depth residual; use simulator state at
+  runtime; rely on the formally nonzero straight-through derivative; or launch
+  a long campaign before measuring support.
+- **Consequences:** Focused verification passes `440/4`. One real balanced
+  gradient probe may authorize exactly one paired 16-update CPU/RGB gate. It
+  must improve the equal-horizon position selector by `0.001` with every broad
+  guardrail intact; otherwise stop without parameter, duration, or fixed-32
+  iteration and do not merge to `main`.

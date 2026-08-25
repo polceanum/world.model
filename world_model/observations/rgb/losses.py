@@ -104,6 +104,19 @@ def rgb_measurement_losses(
                 raw_centre[geometry_matched],
                 target[..., :2][geometry_matched],
             )
+    raw_log_radius = outputs.get("raw_log_radius")
+    if raw_log_radius is not None:
+        if raw_log_radius.shape != predicted[..., 2:3].shape:
+            raise ValueError("raw_log_radius must match the measurement radius")
+        raw_radius_matched = supervision_mask(
+            "raw_log_radius",
+            torch.zeros_like(matched),
+        )
+        if raw_radius_matched.any():
+            losses["rgb_raw_log_radius"] = F.smooth_l1_loss(
+                raw_log_radius[raw_radius_matched],
+                target[..., 2:3][raw_radius_matched],
+            )
     if "world_position" in outputs and "world_position" in targets:
         predicted_world = outputs["world_position"]
         target_world = targets["world_position"]
