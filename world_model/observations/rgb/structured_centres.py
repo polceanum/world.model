@@ -24,7 +24,7 @@ from scipy.ndimage import (
     maximum_filter,
     sobel,
 )
-from scipy.optimize import least_squares, linear_sum_assignment
+from scipy.optimize import linear_sum_assignment
 from torch import Tensor
 
 from world_model.observations.rgb.roi_updater import make_roi_grid, sample_rois
@@ -557,21 +557,19 @@ def _photometric_disc_fit(
     image: np.ndarray,
     row_background: np.ndarray,
     foreground_strength: np.ndarray,
+    components: np.ndarray,
+    component_count: int,
+    gradient: np.ndarray,
     proposal_xy: tuple[float, float],
     *,
-    threshold: float,
     maximum_fit_rms: float,
 ) -> tuple[float, float] | None:
     """Fit the known sphere image profile without using simulator labels."""
 
     height, width = foreground_strength.shape
-    foreground = foreground_strength > threshold
-    components, component_count = label(
-        foreground,
-        structure=np.ones((3, 3), dtype=np.int8),
-    )
     if component_count == 0:
         return None
+    foreground = components > 0
     proposal_x, proposal_y = proposal_xy
     foreground_y, foreground_x = np.nonzero(foreground)
     nearest = int(
@@ -588,9 +586,6 @@ def _photometric_disc_fit(
         component,
         iterations=1,
     )
-    gradient_x = sobel(foreground_strength, axis=1, mode="nearest") / 8.0
-    gradient_y = sobel(foreground_strength, axis=0, mode="nearest") / 8.0
-    gradient = np.sqrt(np.square(gradient_x) + np.square(gradient_y))
     band_gradient = gradient[boundary_band]
     if band_gradient.size < 12 or float(band_gradient.max()) <= 0.0:
         return None
@@ -645,75 +640,82 @@ def _photometric_disc_fit(
     )
     observed = image[:, top:bottom, left:right]
     local_background = np.broadcast_to(row_background[:, top:bottom], observed.shape)
-    centre_pixel = image[
-        :,
-        int(round(centre_y)),
-        int(round(centre_x)),
-    ]
-    initial_albedo = np.clip(centre_pixel, 0.05, 1.0)
+    fit_x = centre_x
+    fit_y = centre_y
+    fit_radius = radius
+    fit_rms = math.inf
+    # The renderer has only three geometric degrees of freedom. A fixed
+    # coarse-to-fine grid is faster and more predictable than a general
+    # nonlinear solver at this tiny image scale. For every geometry candidate,
+    # RGB albedo is the clamped analytic least-squares solution.
+    coarse_offsets = np.asarray((-1.0, -0.5, 0.0, 0.5, 1.0), dtype=np.float64)
+    fine_offsets = np.asarray((-1.0, 0.0, 1.0), dtype=np.float64)
 
-    def _render(parameters: np.ndarray) -> np.ndarray:
-        candidate_x, candidate_y, candidate_radius = parameters[:3]
-        albedo = parameters[3:, None, None]
-        radial_squared = (
-            np.square(pixel_x - candidate_x) + np.square(pixel_y - candidate_y)
-        ) / max(candidate_radius * candidate_radius, 1.0e-8)
+    def candidate_error(
+        candidate_x: np.ndarray,
+        candidate_y: np.ndarray,
+        candidate_radius: np.ndarray,
+    ) -> np.ndarray:
+        x = candidate_x[:, None, None]
+        y = candidate_y[:, None, None]
+        radius_value = np.maximum(1.25, candidate_radius)[:, None, None]
+        radial_squared = (np.square(pixel_x[None] - x) + np.square(pixel_y[None] - y)) / np.maximum(
+            np.square(radius_value), 1.0e-8
+        )
         complete_disc = radial_squared <= 1.0
         radial_distance = np.sqrt(np.maximum(radial_squared, 0.0))
-        soft_width = 1.0 / max(candidate_radius, 1.0e-4)
-        soft_support = np.clip((1.0 - radial_distance) / soft_width + 0.5, 0.0, 1.0) * complete_disc
+        soft_width = 1.0 / np.maximum(radius_value, 1.0e-4)
+        alpha = np.clip((1.0 - radial_distance) / soft_width + 0.5, 0.0, 1.0) * complete_disc
         shade = np.clip(
             0.48 + 0.52 * np.sqrt(np.maximum(1.0 - radial_squared, 0.0)),
             0.0,
             1.0,
         )
-        alpha = soft_support[None]
-        return local_background * (1.0 - alpha) + albedo * shade[None] * alpha
+        base = local_background[None] * (1.0 - alpha[:, None])
+        coefficient = shade * alpha
+        denominator = np.square(coefficient).sum(axis=(-2, -1)).clip(min=1.0e-12)
+        albedo = (coefficient[:, None] * (observed[None] - base)).sum(axis=(-2, -1)) / denominator[
+            :, None
+        ]
+        albedo = np.clip(albedo, 0.0, 1.0)
+        rendered = base + albedo[:, :, None, None] * coefficient[:, None]
+        return np.square(rendered - observed[None]).mean(axis=(1, 2, 3))
 
-    def _residual(parameters: np.ndarray) -> np.ndarray:
-        return (_render(parameters) - observed).reshape(-1)
+    def radius_step(scale: float, offsets: np.ndarray) -> None:
+        nonlocal fit_x, fit_y, fit_radius, fit_rms
+        candidates = np.maximum(1.25, fit_radius + offsets * scale)
+        errors = candidate_error(
+            np.full_like(candidates, fit_x),
+            np.full_like(candidates, fit_y),
+            candidates,
+        )
+        best = int(errors.argmin())
+        fit_radius = float(candidates[best])
+        fit_rms = math.sqrt(float(errors[best]))
 
-    lower = np.asarray(
-        (
-            centre_x - 0.75,
-            centre_y - 0.75,
-            max(1.25, radius - 0.75),
-            0.0,
-            0.0,
-            0.0,
-        ),
-        dtype=np.float64,
+    # The edge-circle solve already fixes the centre to subpixel precision;
+    # one small photometric coordinate correction removes its residual bias.
+    centre_candidates = fit_x + coarse_offsets * 0.1
+    errors = candidate_error(
+        centre_candidates,
+        np.full_like(centre_candidates, fit_y),
+        np.full_like(centre_candidates, fit_radius),
     )
-    upper = np.asarray(
-        (
-            centre_x + 0.75,
-            centre_y + 0.75,
-            radius + 0.75,
-            1.0,
-            1.0,
-            1.0,
-        ),
-        dtype=np.float64,
+    fit_x = float(centre_candidates[int(errors.argmin())])
+    centre_candidates = fit_y + coarse_offsets * 0.1
+    errors = candidate_error(
+        np.full_like(centre_candidates, fit_x),
+        centre_candidates,
+        np.full_like(centre_candidates, fit_radius),
     )
-    fit = least_squares(
-        _residual,
-        np.concatenate(((centre_x, centre_y, radius), initial_albedo)),
-        bounds=(lower, upper),
-        method="trf",
-        max_nfev=80,
-        ftol=1.0e-10,
-        xtol=1.0e-10,
-        gtol=1.0e-10,
-    )
-    fit_radius = float(fit.x[2])
-    fit_centre_distance = math.hypot(
-        float(fit.x[0]) - proposal_x,
-        float(fit.x[1]) - proposal_y,
-    )
-    fit_rms = float(np.sqrt(np.mean(np.square(fit.fun))))
+    fit_y = float(centre_candidates[int(errors.argmin())])
+
+    radius_step(0.5, coarse_offsets)
+    radius_step(0.1, coarse_offsets)
+    radius_step(0.02, fine_offsets)
+    fit_centre_distance = math.hypot(fit_x - proposal_x, fit_y - proposal_y)
     if (
-        not fit.success
-        or not math.isfinite(fit_radius)
+        not math.isfinite(fit_radius)
         or not math.isfinite(fit_rms)
         or fit_radius < 1.25
         or fit_centre_distance > fit_radius
@@ -766,6 +768,14 @@ def photometric_disc_geometry(
         image_array = cpu_image[batch_index].numpy()
         row_background = np.median(image_array, axis=-1, keepdims=True)
         foreground_strength = np.linalg.norm(image_array - row_background, axis=0)
+        foreground = foreground_strength > threshold
+        components, component_count = label(
+            foreground,
+            structure=np.ones((3, 3), dtype=np.int8),
+        )
+        gradient_x = sobel(foreground_strength, axis=1, mode="nearest") / 8.0
+        gradient_y = sobel(foreground_strength, axis=0, mode="nearest") / 8.0
+        gradient = np.sqrt(np.square(gradient_x) + np.square(gradient_y))
         for slot in torch.nonzero(cpu_valid[batch_index], as_tuple=False).flatten().tolist():
             proposal = cpu_proposals[batch_index, slot]
             if not bool(torch.isfinite(proposal).all()):
@@ -778,8 +788,10 @@ def photometric_disc_geometry(
                 image_array,
                 row_background,
                 foreground_strength,
+                components,
+                component_count,
+                gradient,
                 proposal_pixels,
-                threshold=threshold,
                 maximum_fit_rms=maximum_fit_rms,
             )
             if fit is None:

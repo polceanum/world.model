@@ -3,7 +3,7 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.79
+**Version:** 1.80
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, measured phase-device policy, comprehensive promotion evidence, immutable paired replay, fail-closed convergence semantics, axis-gated learned correction, batch-macro physical objectives, axiswise correction hinges, provenance-bound updater composition, exact-resume snapshot/publication ownership hardening, immutable-initializer/paired-wiring qualification, and common rich fixed-32 step-zero equivalence amendments 21 August 2026; regime-local hypothesis applicability and bounded recursive composition amendment 22 August 2026; forecast-only hypothesis isolation, learned-uncertainty ownership, exact abstention, RGB temporal-velocity veto, output-only causal residual diagnostics, exact lateral updater-head ownership, and scenario-axis-horizon tail-risk objective amendments 23 August 2026; runtime-local observation-fitted transition candidate, bounded diminishing-returns gate, event-frame-targeted training data, detector-only multi-instance discovery repair, raw learned-existence supervision-boundary, opt-in dense multi-instance global-discovery, causal observation-model selection, terminal dense typed-attribute evidence, frozen-foundation-feature feasibility, adaptive Gaussian local-model evidence, event-epoch local-model evidence, differentiable hard-runtime assimilation surrogate, and forward-exact soft-posterior gradient-carrier amendments 24 August 2026
 **Amendment 24 August 2026:** RGB-only analytic silhouette reprojection and smooth analytic shadow-posterior training
@@ -10199,6 +10199,47 @@ is not eligible for `main`; the default-off correctness mechanism remains on
 the research branch. Focused implementation verification passes `440` tests
 with four expected unavailable-backend skips. Treatment/control physical
 reports have SHA-256 `ce1c0cc0...` and `fd58bfae...` respectively.
+
+---
+
+## 279. RGB photometric radius as a bounded analytic surrogate
+
+At 64-pixel resolution, connected-component area is not a sufficiently precise
+apparent-radius estimator for metric depth. On the fixed-eight RGB manifest,
+the hard area estimate has mean/median absolute radius error
+`2.8208%/1.7453%`; even rows marked depth-valid produce mean/median metric
+position error `0.13737/0.09672 m`. Exact labelled pinhole backprojection is
+accurate to `4.87e-7 m`, localizing the error before the filter and dynamics.
+
+The global RGB path may opt into
+`model.rgb.structured_disc_photometric_global_depth_enabled`. It is strict,
+default/legacy false, exact-resume-bound, and requires structured disc centres.
+For each complete RGB component, a weighted edge-circle solve supplies the
+subpixel centre and initial radius. Two fixed, small coordinate corrections
+and a bounded scalar-radius search refine that estimate against the renderer's
+sphere shading/support equation; per-candidate albedo is solved analytically.
+The residual gate rejects partial or merged discs.
+Accepted radii enter the calibrated pinhole equation and use a
+straight-through residual to the learned raw-radius head. No simulator label,
+object truth, or oracle state enters runtime. Rejected rows retain the legacy
+area estimate, and the disabled path adds no auxiliary fields or work.
+
+The bounded diagnostic is promising but not promotable. Accepted subset rows
+reduce metric position error by several-fold. A source-diagnostic fixed-eight
+replay improves the five-horizon position-RMSE sum by `0.00901614 m`, above the
+`0.001` materiality floor, and paired current-source global latency is
+`1.0659x`, below `1.10x`. However the unadapted filter worsens current position
+by `0.006295 m` and regresses collision F1 at 0.25, 0.5, and 1.0 seconds.
+
+Exactly one clean-source paired adaptation is authorized: `16` balanced causal
+CPU/RGB updater-head updates per arm from the same immutable initializer, with
+arms differing only at this boolean. Treatment must preserve the material
+five-horizon gain, remove current/velocity/event/identity/uncertainty
+regressions, retain exact ownership/support, and keep all three latency ratios
+at or below `1.10x`. Failure stops the candidate without search-grid,
+threshold, weight, duration, or fixed-32 iteration. The pre-adaptation report
+SHA-256 is `6e11c04a...`; it is diagnostic because loading the older checkpoint
+required bypassing only its new semantic-config comparison.
 
 ---
 

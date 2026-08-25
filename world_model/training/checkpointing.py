@@ -115,6 +115,7 @@ _RGB_LEGACY_DEFAULT_FIELDS = (
     "structured_disc_center_std_pixels",
     "structured_disc_fast_depth_enabled",
     "structured_disc_raw_radius_supervision_enabled",
+    "structured_disc_photometric_global_depth_enabled",
     "structured_disc_photometric_fast_depth_enabled",
     "structured_disc_photometric_maximum_fit_rms",
     "structured_disc_depth_relative_std",

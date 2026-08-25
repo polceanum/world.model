@@ -6013,3 +6013,27 @@
   collision/identity/coverage metrics are exact. Stop without parameter,
   duration, threshold, or fixed-32 iteration. Keep the switch default off and
   do not merge this candidate to `main`.
+
+## ADR-206 — Refine apparent radius with a bounded RGB sphere surrogate
+
+- **Date:** 2026-08-25
+- **Status:** implementation accepted default off; one paired adaptation pending
+- **Context:** The analytic dynamics are not the dominant error source. Exact
+  pinhole backprojection matches world labels within `4.87e-7 m`, whereas
+  pixel-count radius at 64 pixels has `2.8208%` mean absolute error and turns
+  into decimetre-scale depth error.
+- **Decision:** Retain connected components for hard entity support and
+  identity, but refine complete-disc radius with a fixed RGB-only sphere model:
+  weighted edge circle, bounded scalar radius search, analytic albedo, and
+  photometric residual rejection. Feed accepted radius through the calibrated
+  equation and attach a straight-through gradient to the learned radius head.
+- **Alternatives considered:** replace analytic dynamics; learn an
+  unconstrained inverse-depth residual; use simulator labels at runtime; retain
+  nonlinear least-squares; increase image resolution; or tune the hard pixel
+  threshold. The bounded scalar surrogate is cheaper, keeps the physical
+  equation explicit, and rejects unsupported images.
+- **Consequences:** The unadapted fixed-eight diagnostic gains `0.00901614 m`
+  across five position horizons at `1.0659x` matched global latency, but worsens
+  current position and collision cells. Authorize one 16-update paired
+  updater-head adaptation only. Any remaining broad regression ends the path
+  without adjacent tuning or fixed-32 escalation.

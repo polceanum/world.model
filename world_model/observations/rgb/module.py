@@ -155,6 +155,7 @@ class RGBObservationConfig:
     structured_disc_center_std_pixels: float = 0.75
     structured_disc_fast_depth_enabled: bool = False
     structured_disc_raw_radius_supervision_enabled: bool = False
+    structured_disc_photometric_global_depth_enabled: bool = False
     structured_disc_photometric_fast_depth_enabled: bool = False
     structured_disc_photometric_maximum_fit_rms: float = 0.035
     structured_disc_depth_relative_std: float | None = None
@@ -184,6 +185,13 @@ class RGBObservationConfig:
             and not self.structured_disc_center_enabled
         ):
             raise ValueError("raw radius supervision requires structured disc centres")
+        if not isinstance(self.structured_disc_photometric_global_depth_enabled, bool):
+            raise TypeError("structured_disc_photometric_global_depth_enabled must be boolean")
+        if (
+            self.structured_disc_photometric_global_depth_enabled
+            and not self.structured_disc_center_enabled
+        ):
+            raise ValueError("photometric global depth requires structured disc centres")
         if self.temporal_velocity_history_size < 3:
             raise ValueError("temporal_velocity_history_size must be at least three")
         if not 2 <= self.temporal_velocity_min_samples <= self.temporal_velocity_history_size:
@@ -730,6 +738,8 @@ class RGBObservationModule(ObservationModule):
             device=image.device,
             dtype=torch.int64,
         )
+        photometric_depth_valid: Tensor | None = None
+        photometric_fit_rms: Tensor | None = None
         log_radius = output.log_radius
         raw_log_radius = output.log_radius
         if self.config.structured_disc_center_enabled:
@@ -744,8 +754,24 @@ class RGBObservationModule(ObservationModule):
             # residual retains gradients for the learned discovery head while
             # using the directly observed pixel centroid in the forward pass.
             centre = output.centre + (structured.centres - output.centre).detach()
+            structured_radius_pixels = structured.radius_pixels
+            if self.config.structured_disc_photometric_global_depth_enabled:
+                photometric = photometric_disc_geometry(
+                    image,
+                    structured.centres,
+                    valid_mask=(structured.valid_mask & ~structured.ambiguous_mask),
+                    threshold=self.config.structured_disc_threshold,
+                    maximum_fit_rms=self.config.structured_disc_photometric_maximum_fit_rms,
+                )
+                structured_radius_pixels = torch.where(
+                    photometric.valid_mask,
+                    photometric.radius_pixels,
+                    structured_radius_pixels,
+                )
+                photometric_depth_valid = photometric.valid_mask
+                photometric_fit_rms = photometric.fit_rms
             normalized_radius = (
-                structured.radius_pixels / (0.5 * min(image.shape[-2], image.shape[-1]))
+                structured_radius_pixels / (0.5 * min(image.shape[-2], image.shape[-1]))
             ).clamp_min(1.0e-4)
             structured_log_radius = normalized_radius.log().unsqueeze(-1)
             log_radius = torch.where(
@@ -1030,6 +1056,14 @@ class RGBObservationModule(ObservationModule):
                 "structured_centre_valid": structured_valid,
                 "structured_centre_ambiguous": structured_ambiguous,
                 "structured_depth_valid": structured_depth_valid,
+                **(
+                    {
+                        "photometric_global_depth_valid": photometric_depth_valid,
+                        "photometric_global_fit_rms": photometric_fit_rms,
+                    }
+                    if photometric_depth_valid is not None and photometric_fit_rms is not None
+                    else {}
+                ),
                 "structured_component_count": structured_count,
                 "structured_learned_fallback": learned_fallback,
                 "structured_runtime_supported": runtime_supported,

@@ -1,5 +1,22 @@
 # Tasks
 
+## Bounded photometric global depth — specification 1.80
+
+- [x] Localize the observation error: exact labelled pinhole backprojection is
+  sub-micrometre, while hard 64-pixel component area creates percent-level
+  radius error and decimetre-scale world error.
+- [x] Add a strict default/legacy-false global photometric radius surrogate
+  with residual rejection, analytic albedo, bounded cost, and a
+  straight-through raw-radius gradient carrier.
+- [x] Establish a material pre-adaptation fixed-eight gain (`0.00901614 m`
+  five-horizon sum) and matched global latency below `1.10x`; record the
+  current-state and collision regressions that prevent immediate promotion.
+- [ ] Run exactly one clean-source paired 16-update causal updater-head
+  adaptation. Stop without threshold, grid, weight, duration, or fixed-32
+  tuning if any broad guardrail remains.
+- [ ] Merge to `main` only after the paired adaptation and complete repository
+  gates pass.
+
 ## Raw apparent-radius student supervision — specification 1.79
 
 - [x] Preserve the raw learned log radius and exact substitution-support mask

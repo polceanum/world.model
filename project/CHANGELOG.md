@@ -2,6 +2,22 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-25 bounded photometric global depth (specification 1.80)
+
+- Localized the dominant simple-scene error to 64-pixel radius quantization:
+  exact pinhole backprojection is sub-micrometre, while component-area radius
+  has `2.8208%` mean absolute error and decimetre-scale world error.
+- Added a strict default/legacy-false global RGB sphere-radius surrogate with
+  a weighted edge circle, small bounded coordinate corrections, a scalar
+  radius search, analytic albedo, residual
+  rejection, and straight-through learned-radius gradient.
+- Replaced unbounded nonlinear fitting with deterministic bounded work and
+  preserved the disabled path without extra fields or execution.
+- Recorded a source-diagnostic fixed-eight horizon-sum gain of `0.00901614 m`
+  at `1.0659x` matched global latency. Current position and collision
+  regressions block promotion; exactly one clean paired 16-update updater-head
+  adaptation remains before the stop rule.
+
 ### 2026-08-25 raw apparent-radius student supervision (specification 1.79)
 
 - Added an opt-in raw learned-radius auxiliary and exact structured-support

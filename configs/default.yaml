@@ -70,6 +70,7 @@ model:
     temporal_velocity_continuous_gravity_axis_enabled: false
     structured_disc_center_enabled: true
     structured_disc_raw_radius_supervision_enabled: false
+    structured_disc_photometric_global_depth_enabled: false
     structured_disc_photometric_fast_depth_enabled: false
     structured_disc_photometric_maximum_fit_rms: 0.035
     roi_uncertainty_scale: 2.5

@@ -1,5 +1,25 @@
 # Project status
 
+## Bounded photometric global depth — specification 1.80
+
+The dominant simple-scene error is localized before the dynamics equations.
+Exact pinhole backprojection is accurate to `4.87e-7 m`, but the 64-pixel
+connected-component area radius has `2.8208%` mean absolute error and induces
+`0.16954 m` mean world-position error (`0.13737 m` even on depth-valid rows).
+A default-off RGB-only photometric sphere surrogate now refines one scalar
+radius using a weighted edge circle, two small coordinate corrections, a
+bounded radius search, analytic albedo, and a residual rejection gate. Accepted values enter the same analytic
+pinhole equation while a straight-through carrier retains the learned-radius
+gradient; legacy false adds no work or auxiliary state.
+
+The frozen pre-adaptation diagnostic is material and cheap but not yet safe.
+Five-horizon position sum improves `1.060929074 -> 1.051912931 m`
+(`0.00901614 m`), and matched global/fast/rollout latency ratios are
+`1.0659x/approximately 1.0x/approximately 1.0x`. Current position worsens
+`0.123066566 -> 0.129361537 m`, and collision F1 regresses at 0.25, 0.5, and
+1.0 seconds. Exactly one clean-source paired 16-update updater-head adaptation
+is pending; failure stops without tuning or fixed-32.
+
 ## Raw apparent-radius student supervision — specification 1.79
 
 Structured analytic radius substitution no longer has to hide the learned
