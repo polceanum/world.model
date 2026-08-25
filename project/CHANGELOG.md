@@ -14,9 +14,12 @@
 - Replaced unbounded nonlinear fitting with deterministic bounded work and
   preserved the disabled path without extra fields or execution.
 - Recorded a source-diagnostic fixed-eight horizon-sum gain of `0.00901614 m`
-  at `1.0659x` matched global latency. Current position and collision
-  regressions block promotion; exactly one clean paired 16-update updater-head
-  adaptation remains before the stop rule.
+  at `1.0659x` matched global latency.
+- Completed the sole clean paired 16-update updater-head adaptation. Exact
+  configs/draws/ownership passed and horizon-sum gain reached `0.01692219 m`,
+  but current position, coverage, precision, coverage90, long-horizon NLL, and
+  1-second collision F1 failed. The candidate is stopped, default off, and not
+  eligible for `main`; paired audit SHA-256 `7aaf8b245...`.
 
 ### 2026-08-25 raw apparent-radius student supervision (specification 1.79)
 

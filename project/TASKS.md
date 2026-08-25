@@ -11,11 +11,11 @@
 - [x] Establish a material pre-adaptation fixed-eight gain (`0.00901614 m`
   five-horizon sum) and matched global latency below `1.10x`; record the
   current-state and collision regressions that prevent immediate promotion.
-- [ ] Run exactly one clean-source paired 16-update causal updater-head
-  adaptation. Stop without threshold, grid, weight, duration, or fixed-32
-  tuning if any broad guardrail remains.
-- [ ] Merge to `main` only after the paired adaptation and complete repository
-  gates pass.
+- [x] Run exactly one clean-source paired 16-update causal updater-head
+  adaptation. Exact pairing/ownership passed, but current position, coverage,
+  precision, calibration, long-horizon NLL, and 1-second collision F1 failed.
+- [x] Stop without threshold, grid, weight, duration, or fixed-32 tuning; keep
+  the rejected switch default off and do not merge it to `main`.
 
 ## Raw apparent-radius student supervision — specification 1.79
 

@@ -6017,7 +6017,7 @@
 ## ADR-206 — Refine apparent radius with a bounded RGB sphere surrogate
 
 - **Date:** 2026-08-25
-- **Status:** implementation accepted default off; one paired adaptation pending
+- **Status:** rejected after the sole paired adaptation; default off, no merge
 - **Context:** The analytic dynamics are not the dominant error source. Exact
   pinhole backprojection matches world labels within `4.87e-7 m`, whereas
   pixel-count radius at 64 pixels has `2.8208%` mean absolute error and turns
@@ -6033,7 +6033,9 @@
   threshold. The bounded scalar surrogate is cheaper, keeps the physical
   equation explicit, and rejects unsupported images.
 - **Consequences:** The unadapted fixed-eight diagnostic gains `0.00901614 m`
-  across five position horizons at `1.0659x` matched global latency, but worsens
-  current position and collision cells. Authorize one 16-update paired
-  updater-head adaptation only. Any remaining broad regression ends the path
-  without adjacent tuning or fixed-32 escalation.
+  across five position horizons at `1.0659x` matched global latency. The sole
+  paired adaptation preserves a larger `0.01692219 m` horizon-sum gain with
+  exact draws and six-head ownership, but still worsens current position,
+  coverage, precision, calibration, long-horizon NLL, and 1-second collision
+  F1. End the path without adjacent tuning or fixed-32 escalation; retain the
+  implementation only as default-off research evidence on its branch.

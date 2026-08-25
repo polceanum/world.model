@@ -12,13 +12,22 @@ bounded radius search, analytic albedo, and a residual rejection gate. Accepted 
 pinhole equation while a straight-through carrier retains the learned-radius
 gradient; legacy false adds no work or auxiliary state.
 
-The frozen pre-adaptation diagnostic is material and cheap but not yet safe.
+The frozen pre-adaptation diagnostic was material and cheap but not safe.
 Five-horizon position sum improves `1.060929074 -> 1.051912931 m`
 (`0.00901614 m`), and matched global/fast/rollout latency ratios are
 `1.0659x/approximately 1.0x/approximately 1.0x`. Current position worsens
 `0.123066566 -> 0.129361537 m`, and collision F1 regresses at 0.25, 0.5, and
-1.0 seconds. Exactly one clean-source paired 16-update updater-head adaptation
-is pending; failure stops without tuning or fixed-32.
+1.0 seconds.
+
+The sole clean-source paired 16-update updater-head adaptation is complete and
+rejected. Both arms used the same initializer, exact `17` draws/one retry, and
+exact six-head ownership. Treatment retained a `0.01692219 m` horizon-sum gain
+and slightly better current velocity, but current position, coverage,
+precision, coverage90, 0.5--1.0-second NLL, and 1-second collision F1 regressed.
+The consolidated audit SHA-256 is
+`7aaf8b245b7e55fea44ba20b0769d235e47dba09846f548af753d91e0f4c4375`.
+Stop this candidate without tuning or fixed-32; keep it default off and do not
+merge it to `main`.
 
 ## Raw apparent-radius student supervision — specification 1.79
 

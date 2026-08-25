@@ -10231,15 +10231,22 @@ replay improves the five-horizon position-RMSE sum by `0.00901614 m`, above the
 `1.0659x`, below `1.10x`. However the unadapted filter worsens current position
 by `0.006295 m` and regresses collision F1 at 0.25, 0.5, and 1.0 seconds.
 
-Exactly one clean-source paired adaptation is authorized: `16` balanced causal
-CPU/RGB updater-head updates per arm from the same immutable initializer, with
-arms differing only at this boolean. Treatment must preserve the material
-five-horizon gain, remove current/velocity/event/identity/uncertainty
-regressions, retain exact ownership/support, and keep all three latency ratios
-at or below `1.10x`. Failure stops the candidate without search-grid,
-threshold, weight, duration, or fixed-32 iteration. The pre-adaptation report
-SHA-256 is `6e11c04a...`; it is diagnostic because loading the older checkpoint
-required bypassing only its new semantic-config comparison.
+The one authorized clean-source paired adaptation is complete: `16` balanced
+causal CPU/RGB updater-head updates per arm from the same immutable initializer,
+with arms differing only at this boolean. Configs, all `17` attempted draws
+(including one shared unsupported retry), and six-head optimizer ownership are
+exactly paired. Treatment preserves a material `0.01692219 m` five-horizon
+position-RMSE-sum gain and slightly improves current velocity, but worsens
+current position by `0.00094901 m`, target coverage by `0.0100`, prediction
+precision by `0.0102564`, and position coverage90 by `0.00127315`. Gaussian NLL
+regresses at 0.5, 0.75, and 1.0 seconds, and 1-second collision F1 falls
+`0.2375 -> 0.145833`. The candidate is therefore rejected and stopped without
+search-grid, threshold, weight, duration, or fixed-32 iteration. The paired
+audit SHA-256 is
+`7aaf8b245b7e55fea44ba20b0769d235e47dba09846f548af753d91e0f4c4375`.
+The earlier pre-adaptation report SHA-256 is `6e11c04a...`; it is diagnostic
+because loading the older checkpoint required bypassing only its new
+semantic-config comparison.
 
 ---
 
