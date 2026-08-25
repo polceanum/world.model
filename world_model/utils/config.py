@@ -485,6 +485,10 @@ class TrainingConfig:
     # False preserves vector-norm correction non-regression. New protocols may
     # require non-regression independently on each supported coordinate.
     closed_loop_axiswise_correction_hinge_enabled: bool = False
+    # Training-only closed-form free-motion supervision. Supported intervals
+    # use the same differentiable gravity/linear-drag equations as deployed
+    # dynamics without retaining the 120 Hz hybrid recursion.
+    closed_loop_free_motion_equation_surrogate_enabled: bool = False
     # Keep the forward causal graph unchanged while assigning backward
     # ownership by subsystem: direct RGB objectives train perception, and
     # physical state/rollout objectives train the recurrent filter and slow
@@ -1952,6 +1956,7 @@ class OrpheusConfig:
         for field_name in (
             "closed_loop_batch_macro_physical_losses_enabled",
             "closed_loop_axiswise_correction_hinge_enabled",
+            "closed_loop_free_motion_equation_surrogate_enabled",
             "closed_loop_modular_gradient_ownership_enabled",
         ):
             if not isinstance(getattr(self.training, field_name), bool):

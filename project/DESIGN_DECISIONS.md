@@ -6039,3 +6039,31 @@
   coverage, precision, calibration, long-horizon NLL, and 1-second collision
   F1. End the path without adjacent tuning or fixed-32 escalation; retain the
   implementation only as default-off research evidence on its branch.
+
+## ADR-207 — Supervise free motion through the deployed closed-form equations
+
+- **Date:** 2026-08-25
+- **Status:** implementation and technical smoke accepted; accuracy pending
+- **Context:** The hybrid runtime contains necessary discrete identity,
+  lifecycle, and contact decisions, while its continuous physics path is
+  differentiable. The historical one-anchor 120 Hz recursive rollout retained
+  substantial compute/memory but supplied exactly zero gradient to the six
+  selected updater heads on the audited real balanced batch.
+- **Decision:** Add a default/legacy-false training-only path that evaluates the
+  same closed-form gravity/linear-drag equations directly from each corrected
+  posterior. Use labels only to exclude object intervals with discrete events;
+  keep exact hybrid runtime and validation unchanged. The bounded candidate
+  uses all four TBPTT anchors and omits the detached prior-future diagnostic.
+- **Alternatives considered:** train through hard contact/association as if
+  differentiable; replace equations with a learned simulator; retain dead
+  recursive rollout compute; scene-wide censoring; or tune another RGB depth
+  residual. Scene-wide censoring was measured and rejected as unnecessarily
+  sparse; per-object support is causally valid because any transferred impulse
+  appears in that object's own event labels.
+- **Consequences:** Real-batch compute improves `1.659x`, RSS falls about `31%`,
+  recursive forecast calls fall to zero, and rollout gradient norm becomes
+  `0.00897988` rather than zero. A two-update trainer smoke changes exactly the
+  six permitted heads with finite Adam state. This is not accuracy evidence;
+  one paired short fixed-manifest gate is mandatory, and failure closes the
+  path without a sweep or `main` merge. The final repository gate passes
+  `1417` tests with `20` expected skips in `530.62 s`.

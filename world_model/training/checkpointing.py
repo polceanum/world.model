@@ -201,6 +201,7 @@ _RESUME_LEGACY_DEFAULTS: dict[tuple[str, ...], Any] = {
     ("training", "loss_weights", "soft_shadow_physical"): 0.0,
     ("training", "loss_weights", "observation_hypothesis_nll"): 0.0,
     ("training", "closed_loop_axiswise_correction_hinge_enabled"): False,
+    ("training", "closed_loop_free_motion_equation_surrogate_enabled"): False,
     ("training", "closed_loop_modular_gradient_ownership_enabled"): False,
     ("training", "closed_loop_scenario_tail_fraction"): None,
     ("training", "closed_loop_uncertainty_standardized_error_gradient_cap"): None,

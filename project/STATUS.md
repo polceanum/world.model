@@ -1,5 +1,33 @@
 # Project status
 
+## Differentiable free-motion equation supervision — specification 1.81
+
+The continuous RGB/filter/uncertainty/analytic-dynamics graph is
+differentiable, but hard identity, lifecycle, and contact transitions are not.
+More importantly, the historical one-anchor recursive rollout was expensive
+and contributed exactly zero updater-head gradient on the audited real
+balanced batch. A new strict default/legacy-false training switch evaluates
+the deployed gravity/linear-drag equations directly for object intervals with
+no labelled discrete transition. Exact hybrid validation and deployment are
+unchanged.
+
+The bounded four-anchor/no-prior diagnostic is materially cheaper and finally
+supplies rollout learning signal: `14.5724 -> 8.7820 s` compute (`1.659x`),
+`961,093,632 -> 663,441,408` bytes peak RSS, zero recursive forecast calls,
+and rollout gradient norm `0.00897988` versus state `0.0688126`. Focused
+production/config/exact-resume verification passes `453` tests with one
+expected unavailable-MPS skip.
+
+The final repository gate passes `1417` tests with `20` expected unavailable-
+backend skips in `530.62 s`; Ruff, format, version, and diff checks are clean.
+
+One two-update trainer smoke completed in `217.07 s`; both balanced updates
+were finite/unclipped, exactly six intended tensors changed, and Adam owns
+exactly those six. Eight-episode exact hybrid pre/post metrics differ only at
+approximately `1e-7`, as expected from warm-up LR. This is technical evidence,
+not accuracy. A single paired short fixed-manifest accuracy gate remains before
+any `main` merge; failure ends this path without parameter/duration sweeps.
+
 ## Bounded photometric global depth — specification 1.80
 
 The dominant simple-scene error is localized before the dynamics equations.

@@ -3001,6 +3001,86 @@ def future_scene_predictable_mask(
     return ~scene_intervened
 
 
+def future_free_motion_object_mask(
+    batch: Mapping[str, Any],
+    *,
+    anchor_index: int,
+    target_index: int,
+) -> Tensor:
+    """Return target objects whose interval obeys the free-motion equations.
+
+    This mask is a training-target contract, never a runtime input. An object is
+    eligible only when its complete future interval has no discrete contact,
+    collision, external actuation, creation, or removal event. Other objects'
+    events do not invalidate it: any causal impulse transfer to this object
+    necessarily appears in this object's own contact/collision label.
+    """
+
+    events = batch.get("events")
+    if not isinstance(events, Mapping):
+        raise ValueError("free-motion equation supervision requires batch.events")
+    object_event: Tensor | None = None
+    for name in ("contact", "collision", "externally_actuated", "created", "removed"):
+        value = events.get(name)
+        if not isinstance(value, Tensor) or value.ndim != 3:
+            raise ValueError(f"events.{name} must have shape [B,T,N]")
+        if not 0 <= anchor_index < target_index < value.shape[1]:
+            raise ValueError("free-motion anchor/target indices are outside the event sequence")
+        occurred = value[:, anchor_index + 1 : target_index + 1].bool().any(dim=1)
+        object_event = occurred if object_event is None else object_event | occurred
+    assert object_event is not None
+    return ~object_event
+
+
+def _free_motion_equation_trajectory(
+    model: OnlineWorldModel,
+    belief: WorldBelief,
+    query_seconds: tuple[float, ...],
+) -> BeliefTrajectory:
+    """Evaluate differentiable closed-form free motion from one posterior.
+
+    Means use the deployed analytic kinematics module directly. Position
+    uncertainty follows diagonal linear propagation, while the remaining fast
+    uncertainty is retained from the posterior. Every query starts at the same
+    anchor, so cost follows observation horizons rather than the 120 Hz grid.
+    """
+
+    objects = belief.objects
+    integrated = [
+        model.dynamics.analytic.integrate(objects, belief.gravity, seconds)
+        for seconds in query_seconds
+    ]
+    timestamps = torch.stack(
+        [belief.timestamp + belief.timestamp.new_tensor(seconds) for seconds in query_seconds],
+        dim=1,
+    )
+    variance_values: list[Tensor] = []
+    for seconds in query_seconds:
+        value = objects.fast_log_variance
+        if seconds > 0.0:
+            log_time_squared = value.new_tensor(2.0 * math.log(seconds))
+            position_log_variance = torch.logaddexp(
+                value[..., :3],
+                value[..., 3:6] + log_time_squared,
+            )
+            value = torch.cat((position_log_variance, value[..., 3:]), dim=-1)
+        variance_values.append(value)
+    return BeliefTrajectory(
+        timestamps=timestamps,
+        positions=torch.stack([item.position for item in integrated], dim=1),
+        velocities=torch.stack([item.velocity for item in integrated], dim=1),
+        orientations=torch.stack([item.orientation for item in integrated], dim=1),
+        motion_mode_logits=torch.stack(
+            [item.motion_mode_logits for item in integrated],
+            dim=1,
+        ),
+        fast_log_variance=torch.stack(variance_values, dim=1),
+        active_mask=torch.stack([item.active for item in integrated], dim=1),
+        event_logits=None,
+        auxiliary={},
+    ).validate()
+
+
 def future_predictable_mask(
     batch: Mapping[str, Any],
     *,
@@ -4014,7 +4094,20 @@ def _rollout_loss_result(
             raise ValueError(
                 "smooth event-hazard training requires events.pair_collision [B,T,N,N]"
             )
-    if trajectory is None:
+    free_motion_equation_surrogate = (
+        trajectory is None
+        and config.training.closed_loop_free_motion_equation_surrogate_enabled
+        and getattr(model, "training", False)
+        and torch.is_grad_enabled()
+        and not compute_event_loss
+    )
+    if free_motion_equation_surrogate:
+        trajectory = _free_motion_equation_trajectory(
+            model,
+            belief,
+            event_query_plan.query_seconds,
+        )
+    elif trajectory is None:
         request_pair_event_logits = smooth_event_hazard_enabled and compute_event_loss
         trajectory = model.dynamics.rollout(
             belief,
@@ -4093,6 +4186,19 @@ def _rollout_loss_result(
             anchor_index=frame_index,
             target_index=target_index,
         )
+        external_predictable = predictable
+        free_motion_targets: Tensor | None = None
+        if free_motion_equation_surrogate:
+            free_motion_targets = future_free_motion_object_mask(
+                batch,
+                anchor_index=frame_index,
+                target_index=target_index,
+            )
+            tracked_free_motion = gather_target_slots(
+                free_motion_targets.unsqueeze(-1),
+                indices,
+            ).squeeze(-1)
+            predictable = predictable & tracked_free_motion
         point_valid = valid & predictable
         mature = belief.objects.age_steps >= config.training.minimum_rollout_age_steps
         loss_valid = point_valid & mature
@@ -4116,13 +4222,15 @@ def _rollout_loss_result(
             batch_macro=batch_macro,
             batch_tail_fraction=scenario_tail_fraction,
         )
+        distribution_valid = valid if not free_motion_equation_surrogate else point_valid
         position_nll = _axis_separable_gaussian_nll(
             target_positions[:, query_index],
             target_position,
             target_position_log_variance[:, query_index],
-            # An unseen intervention has no deterministic point target, but
-            # its outcome still teaches the predictive distribution to widen.
-            valid,
+            # Exact recursive forecasts retain hidden interventions as
+            # distributional outcomes. The free-motion surrogate instead
+            # excludes every non-equation interval from both mean and scale.
+            distribution_valid,
             detach_mean_error=True,
             batch_macro=batch_macro,
             batch_tail_fraction=scenario_tail_fraction,
@@ -4177,7 +4285,7 @@ def _rollout_loss_result(
                         target_velocity[:, :, axis_index],
                         loss_valid,
                     )
-        if valid.any():
+        if distribution_valid.any():
             position_nll_weights.append(horizon_weights[query_index])
             position_nll_losses.append(position_nll)
             horizon_losses[rollout_horizon_loss_key("rollout_position_nll", seconds)] = position_nll
@@ -4203,11 +4311,10 @@ def _rollout_loss_result(
             mean=target_positions[:, query_index],
             target=target_position,
             log_variance=target_position_log_variance[:, query_index],
-            # Coverage is a stochastic calibration diagnostic, like the
-            # proper forecast NLL above. Hidden interventions are excluded
-            # from deterministic point RMSE but remain valid realised samples
-            # for whether the predictive distribution widened enough.
-            mask=valid,
+            # Exact recursive coverage retains hidden interventions as
+            # realised stochastic outcomes. Equation-surrogate support was
+            # already restricted above to intervals governed by free motion.
+            mask=distribution_valid,
         )
         _add_squared_error_metrics(
             physical_metrics,
@@ -4230,7 +4337,7 @@ def _rollout_loss_result(
             mean=target_positions[:, query_index],
             target=target_position,
             log_variance=target_position_log_variance[:, query_index],
-            mask=valid,
+            mask=distribution_valid,
         )
         _add_squared_error_metrics(
             physical_metrics,
@@ -4258,14 +4365,29 @@ def _rollout_loss_result(
         physical_metrics[f"physical_rollout_predictable_target_count{horizon_suffix}"] = float(
             point_valid.sum().detach().cpu()
         )
+        if free_motion_equation_surrogate:
+            physical_metrics[f"free_motion_equation_supported_target_count{horizon_suffix}"] = (
+                float(point_valid.sum().detach().cpu())
+            )
+            physical_metrics[f"free_motion_equation_censored_tracked_count{horizon_suffix}"] = (
+                float((valid & ~predictable).sum().detach().cpu())
+            )
         physical_metrics[f"physical_forecast_predictable_target_count{horizon_suffix}"] = float(
-            (batch["objects"]["active"][:, target_index].bool() & scene_predictable[:, None])
+            (
+                batch["objects"]["active"][:, target_index].bool()
+                & scene_predictable[:, None]
+                & (
+                    torch.ones_like(batch["objects"]["active"][:, target_index], dtype=torch.bool)
+                    if free_motion_targets is None
+                    else free_motion_targets
+                )
+            )
             .sum()
             .detach()
             .cpu()
         )
         physical_metrics[f"physical_rollout_censored_external_actuation_count{horizon_suffix}"] = (
-            float((valid & ~predictable).sum().detach().cpu())
+            float((valid & ~external_predictable).sum().detach().cpu())
         )
         target_ids = batch["objects"].get("id")
         if collect_promotion_metrics:

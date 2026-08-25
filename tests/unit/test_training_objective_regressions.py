@@ -24,6 +24,7 @@ from world_model.training.loop import (
     _belief_state_losses,
     _correction_non_regression_loss,
     _current_correction_objective_support,
+    _free_motion_equation_trajectory,
     _future_predictable_mask,
     _group_closed_loop_terms,
     _rollout_loss_result,
@@ -32,6 +33,7 @@ from world_model.training.loop import (
     _update_geometric_identity_metrics,
     _validate_scenario_tail_training_batch,
     _weighted_closed_loop_total,
+    future_free_motion_object_mask,
     future_scene_predictable_mask,
     gather_target_pairs,
     match_belief_to_targets,
@@ -1056,6 +1058,12 @@ def _rollout_batch(*, externally_actuated: Tensor) -> dict[str, Any]:
             "velocity": torch.zeros(batch, frames, objects, 3),
         },
         "events": {
+            "contact": torch.zeros(
+                batch,
+                frames,
+                objects,
+                dtype=torch.bool,
+            ),
             "collision": torch.zeros(
                 batch,
                 frames,
@@ -1063,6 +1071,18 @@ def _rollout_batch(*, externally_actuated: Tensor) -> dict[str, Any]:
                 dtype=torch.bool,
             ),
             "externally_actuated": externally_actuated,
+            "created": torch.zeros(
+                batch,
+                frames,
+                objects,
+                dtype=torch.bool,
+            ),
+            "removed": torch.zeros(
+                batch,
+                frames,
+                objects,
+                dtype=torch.bool,
+            ),
         },
     }
 
@@ -1439,6 +1459,147 @@ def test_scene_predictability_censors_only_batches_with_unseen_actuation() -> No
 
     assert scene.tolist() == [False, True]
     assert targets.tolist() == [[False, False], [True, True]]
+
+
+@pytest.mark.parametrize(
+    "event_name",
+    ("contact", "collision", "externally_actuated", "created", "removed"),
+)
+def test_free_motion_support_censors_every_discrete_transition(event_name: str) -> None:
+    batch = _rollout_batch(externally_actuated=torch.zeros(2, 3, 2, dtype=torch.bool))
+    batch["events"][event_name][0, 1, 0] = True
+
+    supported = future_free_motion_object_mask(
+        batch,
+        anchor_index=0,
+        target_index=2,
+    )
+
+    assert supported.tolist() == [[False, True], [True, True]]
+
+
+def test_free_motion_equation_trajectory_is_exact_and_differentiable() -> None:
+    from world_model.dynamics.analytic import AnalyticKinematics
+
+    belief = _active_belief(
+        positions=torch.tensor([[[0.2, 1.5, -0.3]]]),
+        age_steps=torch.full((1, 1), 5, dtype=torch.int64),
+    )
+    position = belief.objects.position.detach().clone().requires_grad_()
+    velocity = torch.tensor([[[1.2, -0.4, 0.8]]], requires_grad=True)
+    log_drag = belief.objects.log_drag.detach().clone().requires_grad_()
+    fast_log_variance = belief.objects.fast_log_variance.detach().clone().requires_grad_()
+    belief = belief.replace(
+        objects=belief.objects.replace(
+            position=position,
+            velocity=velocity,
+            log_drag=log_drag,
+            fast_log_variance=fast_log_variance,
+        )
+    )
+    analytic = AnalyticKinematics()
+    model = SimpleNamespace(dynamics=SimpleNamespace(analytic=analytic))
+
+    trajectory = _free_motion_equation_trajectory(model, belief, (0.0, 0.25, 1.0))
+    expected = analytic.integrate(belief.objects, belief.gravity, 1.0)
+
+    torch.testing.assert_close(trajectory.positions[:, -1], expected.position, rtol=0, atol=0)
+    torch.testing.assert_close(trajectory.velocities[:, -1], expected.velocity, rtol=0, atol=0)
+    assert torch.equal(trajectory.active_mask[:, 0], belief.objects.active)
+    objective = (
+        trajectory.positions[:, -1].square().sum()
+        + trajectory.velocities[:, -1].square().sum()
+        + trajectory.fast_log_variance[:, -1, ..., :3].sum()
+    )
+    objective.backward()
+    for value in (position, velocity, log_drag, fast_log_variance):
+        assert value.grad is not None
+        assert torch.isfinite(value.grad).all()
+        assert value.grad.abs().sum() > 0
+
+
+def test_training_free_motion_surrogate_skips_recursive_rollout_and_censors_contact() -> None:
+    from world_model.dynamics.analytic import AnalyticKinematics
+
+    class _NoRecursiveDynamics:
+        def __init__(self) -> None:
+            self.analytic = AnalyticKinematics()
+            self.rollout_calls = 0
+
+        def rollout(self, *_args: Any, **_kwargs: Any) -> BeliefTrajectory:
+            self.rollout_calls += 1
+            raise AssertionError("free-motion training must not call recursive rollout")
+
+    config = _single_horizon_config()
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            closed_loop_free_motion_equation_surrogate_enabled=True,
+        ),
+    )
+    batch = _rollout_batch(externally_actuated=torch.zeros(2, 2, 1, dtype=torch.bool))
+    batch["events"]["contact"][0, 1, 0] = True
+    belief = _active_belief(
+        positions=torch.zeros(2, 1, 3),
+        age_steps=torch.full((2, 1), 5, dtype=torch.int64),
+    )
+    position = belief.objects.position.detach().clone().requires_grad_()
+    belief = belief.replace(objects=belief.objects.replace(position=position))
+    dynamics = _NoRecursiveDynamics()
+
+    result = _rollout_loss_result(
+        SimpleNamespace(training=True, dynamics=dynamics),
+        belief,
+        batch,
+        config,
+        frame_index=0,
+        indices=torch.zeros(2, 1, dtype=torch.int64),
+        matched=torch.ones(2, 1, dtype=torch.bool),
+        compute_event_loss=False,
+    )
+
+    assert dynamics.rollout_calls == 0
+    assert result.physical_metrics["physical_rollout_position@0.050s_coordinate_count"] == 3.0
+    assert result.physical_metrics["free_motion_equation_supported_target_count@0.050s"] == 1.0
+    assert result.physical_metrics["free_motion_equation_censored_tracked_count@0.050s"] == 1.0
+    assert (
+        result.physical_metrics["physical_rollout_position@0.050s_calibration_coordinate_count"]
+        == 3.0
+    )
+    result.losses["rollout_position"].backward()
+    assert position.grad is not None and torch.isfinite(position.grad).all()
+
+
+def test_free_motion_surrogate_never_changes_eval_rollout() -> None:
+    config = _single_horizon_config()
+    config = replace(
+        config,
+        training=replace(
+            config.training,
+            closed_loop_free_motion_equation_surrogate_enabled=True,
+        ),
+    )
+    dynamics = _StaticRolloutDynamics()
+    batch = _rollout_batch(externally_actuated=torch.zeros(1, 2, 1, dtype=torch.bool))
+    belief = _active_belief(
+        positions=torch.zeros(1, 1, 3),
+        age_steps=torch.full((1, 1), 5, dtype=torch.int64),
+    )
+
+    result = _rollout_loss_result(
+        SimpleNamespace(training=False, dynamics=dynamics),
+        belief,
+        batch,
+        config,
+        frame_index=0,
+        indices=torch.zeros(1, 1, dtype=torch.int64),
+        matched=torch.ones(1, 1, dtype=torch.bool),
+        compute_event_loss=False,
+    )
+
+    assert result.trajectory is not None
+    torch.testing.assert_close(result.trajectory.positions[:, -1], belief.objects.position)
 
 
 def test_mature_mask_excludes_cold_deterministic_targets_but_reports_both() -> None:

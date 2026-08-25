@@ -1378,6 +1378,7 @@ def test_closed_loop_physical_objective_repairs_are_legacy_false_and_roundtrip(
     [
         "closed_loop_batch_macro_physical_losses_enabled",
         "closed_loop_axiswise_correction_hinge_enabled",
+        "closed_loop_free_motion_equation_surrogate_enabled",
         "closed_loop_modular_gradient_ownership_enabled",
     ],
 )

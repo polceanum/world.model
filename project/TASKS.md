@@ -1,5 +1,28 @@
 # Tasks
 
+## Differentiable free-motion equation supervision — specification 1.81
+
+- [x] Prove the real one-anchor recursive rollout contributes zero gradient to
+  the six selected updater heads while retaining a costly 120 Hz graph.
+- [x] Add a strict default/legacy-false, exact-resume-bound training surrogate
+  using deployed closed-form gravity/linear-drag equations and diagonal
+  position-variance propagation.
+- [x] Censor contact/collision/actuation/lifecycle intervals per object while
+  keeping validation, deployment, event-owned training, and legacy execution
+  on the exact hybrid rollout.
+- [x] Establish a bounded real-batch gain: zero recursive forecast calls,
+  `1.659x` compute improvement, about `31%` lower RSS, and finite nonzero
+  rollout gradients to all six owners.
+- [x] Complete one two-update eight-scenario trainer smoke with exact six-tensor
+  model/Adam ownership and finite unclipped updates.
+- [x] Pass the final repository gate (`1417 passed`, `20` expected skips in
+  `530.62 s`) plus Ruff, formatting, version, and diff integrity.
+- [ ] Run exactly one source-frozen paired short accuracy gate. Stop the line if
+  selector or any broad guardrail fails; do not sweep anchors, weights,
+  censoring, or duration.
+- [ ] Merge to `main` only after paired fixed-manifest accuracy, full repository
+  tests, clean provenance, and push/PR review all pass.
+
 ## Bounded photometric global depth — specification 1.80
 
 - [x] Localize the observation error: exact labelled pinhole backprojection is

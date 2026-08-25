@@ -1031,6 +1031,7 @@ def test_training_resume_binds_observation_hypothesis_nll_with_legacy_zero_defau
     [
         "closed_loop_batch_macro_physical_losses_enabled",
         "closed_loop_axiswise_correction_hinge_enabled",
+        "closed_loop_free_motion_equation_surrogate_enabled",
         "closed_loop_modular_gradient_ownership_enabled",
         "closed_loop_scenario_tail_fraction",
         "closed_loop_uncertainty_standardized_error_gradient_cap",

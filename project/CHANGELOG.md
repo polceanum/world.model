@@ -2,6 +2,25 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-25 differentiable free-motion equation supervision (specification 1.81)
+
+- Added a strict default/legacy-false training-only closed-form rollout using
+  the deployed gravity/linear-drag equations and diagonal position uncertainty.
+- Added per-object fail-closed support that excludes contact, collision,
+  actuation, creation, and removal intervals without changing runtime inputs.
+- Kept exact recursive validation, deployment, event-owned training, and legacy
+  execution unchanged.
+- Diagnosed the historical one-anchor recursive objective as zero-gradient for
+  the six selected updater heads on the real balanced batch.
+- Qualified four cheap equation anchors with zero recursive forecast calls,
+  `1.659x` lower compute time, about `31%` lower RSS, and a meaningful finite
+  rollout gradient.
+- Completed a two-update end-to-end technical smoke with exact six-head model
+  and Adam ownership. Accuracy qualification and any `main` merge remain
+  pending one bounded paired short gate.
+- Passed the final repository gate (`1417 passed`, `20` expected skips in
+  `530.62 s`) with Ruff, formatting, version, and diff checks clean.
+
 ### 2026-08-25 bounded photometric global depth (specification 1.80)
 
 - Localized the dominant simple-scene error to 64-pixel radius quantization:
