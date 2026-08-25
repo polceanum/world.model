@@ -2,6 +2,22 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-25 cached differentiable RGB depth feasibility
+
+- Rejected a cached 193-parameter residual on the existing FAST hidden state:
+  held-out inverse-depth MAE worsened `0.00437444 -> 0.00534338` and six of
+  eight scenario slices regressed.
+- Rejected one materially different 13,081-parameter direct-RGB-crop student.
+  It fit training metric depth `0.108027 -> 0.030624 m` with stable gradients,
+  but held-out worsened `0.135346 -> 0.167506 m` and every scenario regressed.
+- Kept hard assignment/lifecycle/contact and recursive rollout outside both
+  backward graphs, proving cheap cached optimization is viable mechanically
+  but these point-estimate representations do not generalize.
+- Reverted the temporary production depth scope.  No runtime/config/version
+  semantic remains, no `main` merge follows, and future observation work must
+  jointly learn geometric hypotheses and calibrated quality/uncertainty before
+  analytic fusion.
+
 ### 2026-08-25 forward-exact differentiable analytic contacts (specification 1.83)
 
 - Added a default/legacy-false exact-resume contact-gradient carrier that keeps

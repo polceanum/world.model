@@ -1,5 +1,35 @@
 # Project status
 
+## Cached differentiable RGB depth feasibility — terminally rejected
+
+Two bounded post-1.83 diagnostics tested whether the remaining observation
+error could be repaired cheaply without differentiating hard assignment,
+lifecycle, contact, or recursive rollout.  Both collected real source-bound
+FAST rows once, used simulator state only for offline target alignment, and
+optimized a small continuous surrogate on cached tensors.
+
+The existing 192-value FAST hidden representation cannot support a useful
+linear depth residual.  A 193-parameter head trained on 684 rows is finite but
+worsens held-out inverse-depth MAE `0.00437444 -> 0.00534338` and regresses six
+of eight scenarios.  Report SHA-256:
+`3c3d572a74a2f2d09479bf9c6a397781fef243b554468619113d99b09abc0892`.
+
+A materially different 13,081-parameter student then consumed direct 20x20 RGB
+crops plus the analytic prior.  It fits 2,540 training rows strongly
+(`0.108027 -> 0.030624 m` metric-depth MAE) with maximum raw gradient
+`1.15055`, but fails on 2,571 disjoint rows: held-out MAE worsens
+`0.135346 -> 0.167506 m` and every scenario regresses.  Report SHA-256:
+`f41b18b2977cf361b8e532be9aa50a3124f936cfd9001705a57d44bdf82278b2`.
+
+No production source survived either diagnostic.  Do not add a depth row,
+deeper crop student, epoch/LR sweep, or longer causal campaign from this
+evidence.  The dynamics diagnosis remains unchanged: oracle state gives about
+`0.005 m` 0.1-second error, so equations are not the main ceiling.  A future
+observation architecture must emit a geometric hypothesis together with
+quality-conditioned uncertainty from broad cached sequences and demonstrate
+disjoint per-scenario calibration before runtime integration.  Nothing here is
+eligible for `main`.
+
 ## Forward-exact differentiable analytic contacts — specification 1.83
 
 Hard collision/contact values remain the deployed physics, but the same

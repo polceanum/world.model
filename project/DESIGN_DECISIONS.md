@@ -1,5 +1,33 @@
 # Design decisions
 
+## ADR-210 — Reject cached point-depth regressors without uncertainty calibration
+
+- **Date:** 2026-08-25
+- **Status:** diagnostics rejected; no production semantic
+- **Context:** Oracle state makes the analytic rollout nearly exact, while the
+  hard online tracker makes causal image training expensive.  A cheap surrogate
+  should therefore learn continuous observation evidence from cached,
+  belief-slot-aligned RGB rows rather than differentiate integer assignment or
+  lifecycle state.
+- **Decision:** Test exactly two bounded representations before production
+  integration: the deployed FAST hidden state with a linear residual, then one
+  direct 20x20 RGB-crop CNN conditioned on the analytic prior.  Use disjoint
+  ordered eight-scenario manifests and require pooled plus every-scenario
+  improvement with finite unclipped gradients.  Stop the family after both
+  fail; do not tune their learning rate, duration, width, or data volume.
+- **Alternatives considered:** continue the clipped online depth-only run;
+  differentiate Hungarian IDs; replace analytic dynamics; relax broad
+  guardrails; increase image resolution; or deploy a fitted point estimate
+  without calibrated uncertainty.
+- **Consequences:** The linear head worsens held-out inverse-depth MAE
+  `0.00437444 -> 0.00534338`.  The direct-crop model overfits: training
+  metric-depth MAE improves `0.108027 -> 0.030624 m`, but disjoint MAE worsens
+  `0.135346 -> 0.167506 m` and all eight scenarios regress.  No source change
+  is retained and no `main` merge is permitted.  Any successor must jointly
+  represent geometric hypotheses and quality-conditioned uncertainty, prove
+  calibration on broad cached sequences, and only then enter the analytic
+  filter/runtime.
+
 ## ADR-209 — Differentiate hard analytic contacts with exact-forward carriers
 
 - **Date:** 2026-08-25

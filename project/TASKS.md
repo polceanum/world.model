@@ -1,5 +1,21 @@
 # Tasks
 
+## Cached differentiable RGB depth feasibility — post-1.83 diagnostic
+
+- [x] Collect real belief-slot-aligned FAST tensors once and keep hard
+  assignment/lifecycle/contact/rollout outside the backward graph.
+- [x] Reject a 193-parameter residual on the frozen FAST hidden representation
+  after held-out inverse-depth MAE and six scenarios regress.
+- [x] Test one materially different direct-20x20-RGB crop student with the
+  analytic prior; reject it after strong training fit but pooled and all-eight-
+  scenario held-out metric-depth regressions.
+- [x] Revert the temporary production depth scope and stop without LR, epoch,
+  width, data-volume, or adjacent-head tuning.
+- [ ] Before another observation implementation, require an independently
+  specified hypothesis-plus-quality/uncertainty model, broad cached-sequence
+  calibration, and disjoint scenario non-regression.  Do not merge either
+  rejected surrogate to `main`.
+
 ## Forward-exact differentiable analytic contacts — specification 1.83
 
 - [x] Keep every hard pair/plane contact, impulse, event, and rollout value

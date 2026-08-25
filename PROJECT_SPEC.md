@@ -10412,6 +10412,40 @@ are clean.
 
 ---
 
+## 283. Cached observation surrogates must generalize before runtime integration
+
+Hard assignment, lifecycle, and contact are valid deployment inductive biases;
+they do not need to appear in the backward graph of an observation learner.
+A permitted cheap training route may collect belief-slot-aligned RGB evidence
+once, use training-only target alignment, and optimize a continuous observer on
+cached tensors.  Runtime inference must still consume only RGB, calibration,
+the persistent belief, and learned parameters.
+
+Two bounded post-1.83 diagnostics fail the prerequisite representation gate.
+A linear residual over the deployed 192-value FAST hidden state worsens
+held-out inverse-depth MAE `0.00437444 -> 0.00534338` and regresses six of
+eight scenarios.  A materially different 13,081-parameter model over direct
+20x20 RGB crops plus the analytic prior fits training metric-depth MAE
+`0.108027 -> 0.030624 m`, but worsens disjoint MAE
+`0.135346 -> 0.167506 m` and every scenario.  Both remain finite and exclude
+the hybrid runtime from backward, so the failure is observation representation
+and generalization rather than differentiability or optimizer stability.
+
+No production semantic is retained and neither model is eligible for `main`.
+Do not follow with depth-head, width, epoch, learning-rate, or data-volume
+tuning.  A successor must be independently specified as a geometric-hypothesis
+and quality-conditioned-uncertainty model, be trained from broad cached
+sequences, and pass disjoint pooled/per-scenario point, NLL, calibration,
+coverage, identity, event, and latency gates before entering the analytic
+filter.  The immutable reports are
+`/private/tmp/orpheus-spec184-cached-depth-feasibility.json` (SHA-256
+`3c3d572a74a2f2d09479bf9c6a397781fef243b554468619113d99b09abc0892`)
+and `/private/tmp/orpheus-spec184-direct-crop-depth-feasibility.json`
+(SHA-256
+`f41b18b2977cf361b8e532be9aa50a3124f936cfd9001705a57d44bdf82278b2`).
+
+---
+
 # Closing directive
 
 Project Orpheus should emerge from the first serious implementation as a small but real online world-model system:
