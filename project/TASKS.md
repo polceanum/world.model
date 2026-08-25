@@ -54,6 +54,10 @@
   Reject it after statistically selected reference-pairs y corrections worsen
   true error; the delayed RGB proxy is biased, so do not tune confidence or
   support thresholds.
+- [x] Test one analytic independent-axis Kalman mask and reject it after the
+  fixed-eight selector, position, z, collision F1, and `59` guardrails regress
+  despite improved velocity. Fully revert it and close adjacent coordinate
+  mask/gain/variance variants.
 
 ## Learned-radius-derived depth — specification 1.76
 

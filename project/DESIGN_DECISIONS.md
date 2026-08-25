@@ -5939,3 +5939,27 @@
   exactly the six intended finite head/Adam states and preserve 219 other
   entries bitwise. Report `e536dfbb...` closes this architecture without more
   duration or a control run; no checkpoint is promoted or merged.
+
+## ADR-203 — Do not suppress the analytic filter by learned-axis provenance
+
+- **Date:** 2026-08-25
+- **Status:** feasibility rejected; implementation reverted
+- **Context:** Source-bound FAST ROI measurements explicitly mark world axes
+  independently supported by RGB. The learned residual already respects that
+  mask, while the ordinary analytic Kalman update continues to consume the
+  complete prior-conditioned measurement. A strict analytic mask was the last
+  simple way to test whether this mismatch caused the remaining z error.
+- **Decision:** Run one paired zero-update fixed-eight comparison from the
+  immutable initializer, then stop without training or parameter tuning unless
+  the hard selector and complete guardrails improve. Preserve differentiability
+  on supported axes and exact prior fallback on unsupported axes during the
+  temporary test.
+- **Alternatives considered:** tune Kalman gain or covariance; add a partial
+  mask; repeat delayed reliability; extend training; weaken scenario/axis/event
+  guardrails; or replace the equation rollout.
+- **Consequences:** Velocity improves `0.773836 -> 0.758561 m/s`, but selector
+  worsens `0.212869 -> 0.214059`, position worsens
+  `0.120845 -> 0.123870 m`, z worsens `0.135532 -> 0.142390 m`, collision F1
+  falls `0.215247 -> 0.206278`, and `59` guardrails fail. Revert the code and
+  close single-Gaussian coordinate suppression. Report `db75d8ea...`; no
+  checkpoint or implementation is eligible for `main`.

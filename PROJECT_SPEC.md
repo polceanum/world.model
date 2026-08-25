@@ -10092,6 +10092,19 @@ merge to `main`. The immutable paired report is
 `/private/tmp/20260825-spec177-hypothesis-paired16-audit.json` with SHA-256
 `de410f10e2671bc85fcefac23d8e385504b69e12cde02a7e41622f5286d12c24`.
 
+A final bounded feasibility check also rejects masking the ordinary analytic
+Kalman correction to the learned residual's independently observed world-axis
+support. The temporary implementation preserved a differentiable analytic
+update on supported coordinates and exact prior fallback elsewhere, but the
+fixed-eight selector worsened `0.212868618 -> 0.214058560`. Current position
+worsened `0.120844624 -> 0.123870210 m`, including z
+`0.135531781 -> 0.142390478 m`, and collision F1 fell
+`0.215246637 -> 0.206278027`; improved velocity does not offset `59` complete
+guardrail failures. The implementation and configuration field were fully
+reverted. No mask, gain, variance, or duration follow-up is authorized; the
+result strengthens the conclusion that the RGB ambiguity cannot be repaired by
+another single-Gaussian coordinate suppression rule.
+
 The exact repository gate for this implementation passes `1394` tests with
 `20` expected unavailable-backend skips in `514.16 s`.
 

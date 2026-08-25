@@ -84,6 +84,16 @@ the rejected patch is retained separately with SHA-256
 `3fc46d0b339199752e0159172cff19258c791ef1e75fd9ca55f0c92408e8161f`.
 `main` remains unchanged.
 
+The last adjacent single-Gaussian feasibility check is also closed. Limiting
+the analytic Kalman position and position-derived velocity update to the
+existing independent-axis provenance improved pooled velocity
+`0.773836 -> 0.758561 m/s`, but worsened the fixed-eight selector
+`0.212869 -> 0.214059`, current position `0.120845 -> 0.123870 m`, z
+`0.135532 -> 0.142390 m`, and collision F1 `0.215247 -> 0.206278`, with `59`
+guardrail failures. The tested code was fully reverted and the branch returned
+to its clean specification-1.77 state. Report SHA-256: `db75d8ea...`; harness
+SHA-256: `127f81bc...`.
+
 Three bounded successors also fail before production integration.  Installing
 the existing smooth analytic association posterior as actual continuous state
 is non-vacuous (`963` supported rows) but catastrophic on fixed eight: selector

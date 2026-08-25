@@ -26,6 +26,10 @@
 - Applied the bounded stop rule: no fixed-32, adjacent-weight, or duration
   sweep. The mechanism remains default off on the research branch and is not
   merged to `main`. Paired report SHA-256: `de410f10e2671bc85fcefac23d8e385504b69e12cde02a7e41622f5286d12c24`.
+- Rejected and fully reverted the final adjacent analytic-axis mask. It improves
+  velocity but worsens selector `0.212869 -> 0.214059`, position
+  `0.120845 -> 0.123870 m`, z `0.135532 -> 0.142390 m`, collision F1, and `59`
+  guardrails. Report SHA-256: `db75d8ea42a0658ac9b2c7df0125ac74173b6c08f0948173965b8e3b0b11cecb`.
 
 ### 2026-08-25 recovered axis-gated long-treatment decision
 
