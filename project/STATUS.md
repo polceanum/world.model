@@ -12,11 +12,19 @@ identity/lifecycle/contact state, and rollout cost are unchanged.
 
 Focused configuration, RGB, loss, fast-ROI, differentiable-assimilation, and
 checkpoint coverage passes `440` tests with four expected unavailable-backend
-skips. The bounded accuracy protocol is pending: one real gradient/support
-probe, then at most one paired 16-update CPU/RGB treatment/control if the probe
-is meaningful. Promotion requires at least `0.001` five-horizon selector gain
-with every broad guardrail intact; otherwise the path stops without tuning or
-fixed-32 escalation.
+skips. The bounded accuracy protocol is terminally rejected. A causal probe
+correctly showed that `state_roi` freezes the owning global detector, so the
+authorized comparison moved to its actual Stage-B measurement owner. Both
+CPU arms completed the same `16` balanced updates without skips, retries, or
+gradient clipping. The treatment's measurement selector is slightly worse
+(`1.520777263 -> 1.520777422`). On the fixed-eight physical replay, the
+five-horizon position-RMSE sum improves only
+`1.060929074 -> 1.060926267 m` (`0.00000280775 m`, mean
+`0.00000056155 m`), far below the declared `0.001` floor. Current position
+improves `0.00000077681 m`; velocity is mixed at comparable scale, while
+collision F1, identity switches, and forecast coverage are exact. The switch
+therefore remains default off; no duration, weight, fixed-32, or `main`
+promotion follows.
 
 ## Independent-axis runtime-hypothesis evidence — specification 1.78
 

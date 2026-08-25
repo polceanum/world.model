@@ -8,11 +8,15 @@
   dynamics, or inference cost.
 - [x] Bind the strict default/legacy-false switch to configuration and exact
   resume; pass the focused gate (`440 passed`, four expected skips).
-- [ ] Run one real balanced support/gradient attribution.
-- [ ] If and only if attribution is meaningful, run one paired 16-update
-  CPU/RGB accuracy gate; stop without tuning or fixed-32 if selector gain is
-  below `0.001` or any broad guardrail fails.
-- [ ] Merge to `main` only after the declared accuracy gate passes.
+- [x] Run real owner-scoped probes. The causal probe correctly finds the global
+  detector frozen in `state_roi`; the Stage-B probe reaches the radius head and
+  authorizes one paired measurement-owner comparison.
+- [x] Run exactly one paired 16-update CPU/RGB accuracy gate. Reject after the
+  measurement selector worsens by `0.000000159` and the fixed-eight physical
+  five-horizon sum improves only `0.00000280775 m`, below `0.001`.
+- [x] Stop without tuning, duration extension, or fixed-32. The `main` merge
+  gate fails; retain the correctness mechanism default off on the research
+  branch.
 
 ## Independent-axis runtime-hypothesis evidence — specification 1.78
 

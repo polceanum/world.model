@@ -10177,16 +10177,28 @@ training-only projected-radius label and reaches only the existing RGB student
 graph. It does not change the deployed measurement, filter, dynamics,
 association, lifecycle, or rollout and adds no inference or rollout work.
 
-This is a bounded research candidate until accuracy evidence exists. First
-require nonzero supported raw-radius loss and finite radius-head gradients on
-one real balanced batch. If that passes, run exactly one paired 16-update
-CPU/RGB treatment/control from the same immutable initializer; the arms may
-differ only at this boolean. The treatment must improve the frozen equal-weight
-five-horizon position selector by at least `0.001` while preserving all current,
-axis, velocity, event, identity, uncertainty, support, and ownership
-guardrails. Failure stops the candidate without a weight, duration, threshold,
-or fixed-32 sweep. Focused implementation verification passes `440` tests with
-four expected unavailable-backend skips.
+This was evaluated as a bounded research candidate. The first causal probe
+correctly found that `state_roi` freezes the global detector that owns the raw
+radius head; no false ownership claim was made. A Stage-B measurement probe
+then established nonzero supported loss and finite gradients in the real
+owner. Exactly one paired 16-update CPU/RGB measurement-owner comparison ran
+from the same immutable initializer, with identical balanced draws and arms
+differing only at this boolean. Both arms completed without skipped/retried
+updates or clipping.
+
+The candidate fails the predeclared accuracy gate. Its measurement selector is
+slightly worse (`1.520777263 -> 1.520777422`). On an identical fixed-eight
+physical replay the treatment improves the five-horizon position-RMSE sum from
+`1.060929074` to `1.060926267 m`, a gain of only `0.00000280775 m` (mean
+`0.00000056155 m`) versus the required `0.001`. Current position changes from
+`0.123066566` to `0.123065789 m`; velocity changes are mixed at approximately
+micrometre-per-second scale, and collision F1, identity-switch rate, and
+forecast coverage are exact. This is genuine but immaterial movement. The
+candidate stops without a weight, duration, threshold, or fixed-32 sweep and
+is not eligible for `main`; the default-off correctness mechanism remains on
+the research branch. Focused implementation verification passes `440` tests
+with four expected unavailable-backend skips. Treatment/control physical
+reports have SHA-256 `ce1c0cc0...` and `fd58bfae...` respectively.
 
 ---
 

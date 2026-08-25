@@ -13,8 +13,18 @@
   raw-gradient, missing-support, slot-identity, module-output, and migration
   regressions.
 - Passed the focused affected gate (`440 passed`, four expected backend skips).
-  Accuracy remains pending under one bounded gradient probe and, if supported,
-  one paired 16-update gate with a `0.001` selector materiality floor.
+- Confirmed ownership rather than pretending the causal scope was trainable:
+  `state_roi` freezes the global detector, while a Stage-B measurement probe
+  produces a supported raw-radius loss and finite owner gradients.
+- Completed the sole paired 16-update measurement-owner comparison with exact
+  balanced draws and no skips, retries, or clipping. Treatment slightly
+  worsens the measurement selector (`+0.000000159`).
+- Rejected the candidate after fixed-eight physical replay improves the
+  five-horizon position-RMSE sum by only `0.00000280775 m` (mean
+  `0.00000056155 m`) versus the `0.001` floor; collision F1, identity switches,
+  and forecast coverage are exact. No tuning, extension, fixed-32, or `main`
+  promotion follows. Physical report SHAs are `ce1c0cc0...` treatment and
+  `fd58bfae...` control.
 
 ### 2026-08-25 independent-axis runtime-hypothesis evidence (specification 1.78)
 

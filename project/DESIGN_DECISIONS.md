@@ -5990,7 +5990,7 @@
 ## ADR-205 — Train the raw RGB radius student outside structured substitution
 
 - **Date:** 2026-08-25
-- **Status:** implementation accepted; bounded accuracy gate pending
+- **Status:** implementation accepted default off; bounded accuracy candidate rejected
 - **Context:** The structured centre path already supervises the raw learned
   centre separately, but apparent radius was supervised only after
   straight-through structured substitution. An accurate teacher therefore
@@ -6003,8 +6003,13 @@
   dynamics; train an unconstrained depth residual; use simulator state at
   runtime; rely on the formally nonzero straight-through derivative; or launch
   a long campaign before measuring support.
-- **Consequences:** Focused verification passes `440/4`. One real balanced
-  gradient probe may authorize exactly one paired 16-update CPU/RGB gate. It
-  must improve the equal-horizon position selector by `0.001` with every broad
-  guardrail intact; otherwise stop without parameter, duration, or fixed-32
-  iteration and do not merge to `main`.
+- **Consequences:** Focused verification passes `440/4`. The causal probe
+  correctly identifies that `state_roi` freezes the owning global detector;
+  Stage-B measurement training supplies the real nonzero radius-head gradient.
+  The sole paired 16-update comparison completes cleanly, but worsens the
+  measurement selector by `0.000000159`. Its fixed-eight physical replay gains
+  only `0.00000280775 m` in the five-horizon position sum versus the `0.001`
+  requirement; current position moves by less than one micrometre and broad
+  collision/identity/coverage metrics are exact. Stop without parameter,
+  duration, threshold, or fixed-32 iteration. Keep the switch default off and
+  do not merge this candidate to `main`.
