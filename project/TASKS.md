@@ -13,9 +13,11 @@
   clipping or extra learned parameters.
 - [x] Pass the complete repository gate (`1435 passed`, `20` expected skips in
   `535.20 s`) and the separate active-Aqua MPS backward.
-- [ ] Run exactly one source-frozen paired short accuracy gate.
-- [ ] If and only if it passes, run fixed-32 before merging to `main`; otherwise
-  stop without temperature, weight, duration, or scope iteration.
+- [x] Run exactly one source-frozen paired short accuracy gate. Exact draws and
+  six-head ownership pass, but treatment clips step 15, worsens selector by
+  `0.0000271504`, and fails the pooled 0.5-second collision-F1 guardrail.
+- [x] Stop without temperature, weight, duration, scope, or fixed-32 iteration;
+  retain the rejected carrier default off and do not merge it to `main`.
 
 ## Causally owned exact-recursive training anchor — specification 1.82
 

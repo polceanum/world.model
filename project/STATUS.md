@@ -12,10 +12,15 @@ Focused verification passes `665` tests with four expected backend skips.
 The exact balanced-batch forward is bit-identical; rollout/correction gradient
 norms increase `0.04474605 -> 0.11255240` and
 `0.01491602 -> 0.05841256`, respectively, with six finite intended owners.
-Compute increases about `14.9%` and peak RSS about `107 MB`.  This is not yet
-accuracy evidence.  One bounded source-frozen pair is pending; do not merge to
-`main`, tune temperatures, or extend duration unless that pair and a subsequent
-fixed-32 gate pass.
+Compute increases about `14.9%` and peak RSS about `107 MB`.  The sole bounded
+source-frozen paired 16-update accuracy gate is complete and rejected.  Exact
+draw pairing and six-head ownership pass, but treatment clips step 15, worsens
+the selector `0.2136538232 -> 0.2136809736` (delta `+0.0000271504`, lower is
+better), and fails the pooled 0.5-second collision-F1 guardrail
+`0.1250000 -> 0.1224490`.  Stop without temperature, weight, duration, scope,
+or fixed-32 iteration; keep the carrier default off and do not merge it to
+`main`.  Audit SHA-256:
+`5798ba043247e261d9eddea66fbbdb7366d06183e9fd2868749e851e59d22d27`.
 
 The complete repository gate passes `1435` tests with `20` expected skips in
 `535.20 s`; the active-Aqua MPS carrier backward passes separately. Ruff,

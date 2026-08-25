@@ -15,8 +15,12 @@
   `0.04474605 -> 0.11255240` at about `14.9%` compute overhead.
 - Passed the complete repository gate (`1435 passed`, `20` expected skips in
   `535.20 s`) plus a separate active-Aqua MPS backward and all static gates.
-- Accuracy qualification remains pending and bounded to one pair plus, only on
-  success, one fixed-32 gate before `main`.
+- Completed and rejected the sole paired 16-update accuracy gate. Exact draws
+  and six-head ownership pass, but treatment clips step 15, worsens selector
+  `0.2136538232 -> 0.2136809736`, and fails the pooled 0.5-second collision-F1
+  guardrail `0.1250000 -> 0.1224490`. Stop without adjacent tuning or fixed-32;
+  keep the carrier default off and do not merge it to `main`. Audit SHA-256:
+  `5798ba043247e261d9eddea66fbbdb7366d06183e9fd2868749e851e59d22d27`.
 
 ### 2026-08-25 causally owned exact-recursive training anchor (specification 1.82)
 

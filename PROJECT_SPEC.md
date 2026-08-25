@@ -10393,10 +10393,17 @@ rollout gradient norm rises `0.04474605 -> 0.11255240`, correction gradient
 norm rises `0.01491602 -> 0.05841256`, and all six permitted updater-head
 gradients remain finite and below the global clip.  Compute rises
 `14.9099 -> 17.1284 s` and peak RSS `971313152 -> 1078648832` bytes.  This is
-mechanism and affordability evidence only.  One source-frozen paired short
-accuracy gate must decide the candidate; failure closes the path without
-temperature, weight, duration, or adjacent-scope tuning, while success still
-requires fixed-32 evidence before any merge to `main`.
+mechanism and affordability evidence only.  The sole source-frozen paired
+16-update accuracy gate is complete.  Both arms use the same draws and change
+exactly the six permitted heads, but treatment clips step 15, worsens selector
+`0.2136538232 -> 0.2136809736` (delta `+0.0000271504`, lower is better), and
+fails the pooled 0.5-second collision-F1 guardrail
+`0.1250000 -> 0.1224490`.  The terminal decision is rejection without
+temperature, weight, duration, adjacent-scope, or fixed-32 iteration; the
+carrier remains default off and is not eligible for `main`.  The paired audit
+is `/private/tmp/20260825-051854-spec183-contact-carrier-paired16-audit.json`
+with SHA-256
+`5798ba043247e261d9eddea66fbbdb7366d06183e9fd2868749e851e59d22d27`.
 
 The complete repository gate passes `1435` tests with `20` expected backend
 skips in `535.20 s`; the focused active-Aqua MPS backward passes separately.
