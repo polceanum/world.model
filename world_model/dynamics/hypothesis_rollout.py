@@ -752,6 +752,7 @@ class HypothesisRolloutEngine:
         target_positions: Tensor,
         target_mask: Tensor,
         *,
+        target_position_axis_mask: Tensor | None = None,
         target_position_log_variance: Tensor | None = None,
         target_velocities: Tensor | None = None,
         target_velocity_axis_mask: Tensor | None = None,
@@ -787,6 +788,13 @@ class HypothesisRolloutEngine:
             raise ValueError("target_mask must have shape [B,T,N]")
         if target_mask.dtype is not torch.bool:
             raise TypeError("target_mask must use torch.bool")
+        if target_position_axis_mask is not None:
+            if target_position_axis_mask.shape != target_positions.shape:
+                raise ValueError("target_position_axis_mask must match target_positions")
+            if target_position_axis_mask.dtype is not torch.bool:
+                raise TypeError("target_position_axis_mask must use torch.bool")
+            if bool(torch.any(target_position_axis_mask & ~target_mask.unsqueeze(-1))):
+                raise ValueError("target_position_axis_mask must be a subset of target_mask")
         if target_position_log_variance is not None:
             if target_position_log_variance.shape != target_positions.shape:
                 raise ValueError("target_position_log_variance must match target_positions")
@@ -868,30 +876,41 @@ class HypothesisRolloutEngine:
             if target_collision.dtype is not torch.bool:
                 raise TypeError("target_collision must use torch.bool")
 
-        mask = target_mask.unsqueeze(-1)
-        evidence_mask = target_mask.any(dim=(1, 2))
-        axis_evidence_mask = evidence_mask.unsqueeze(-1).expand(-1, target_positions.shape[-1])
-        entity_axis_evidence_mask = (
-            target_mask.any(dim=1)
-            .unsqueeze(-1)
-            .expand(
-                -1,
-                -1,
-                target_positions.shape[-1],
-            )
+        legacy_position_axis_mask = target_position_axis_mask is None
+        position_axis_mask = (
+            target_mask.unsqueeze(-1).expand_as(target_positions)
+            if target_position_axis_mask is None
+            else target_position_axis_mask
         )
+        mask = position_axis_mask
+        position_evidence_mask = position_axis_mask.any(dim=(1, 2, 3))
+        evidence_mask = (
+            target_mask.any(dim=(1, 2)) if legacy_position_axis_mask else position_evidence_mask
+        )
+        axis_evidence_mask = position_axis_mask.any(dim=(1, 2))
+        entity_axis_evidence_mask = position_axis_mask.any(dim=1)
         uses_velocity_evidence = bool(velocity_weight or velocity_nonregression_gate_enabled)
         if uses_velocity_evidence:
             assert target_velocity_axis_mask is not None
             velocity_axis_evidence_mask = target_velocity_axis_mask.any(dim=(1, 2))
             velocity_entity_axis_evidence_mask = target_velocity_axis_mask.any(dim=1)
+            if not legacy_position_axis_mask and velocity_weight:
+                evidence_mask = evidence_mask | target_velocity_axis_mask.any(dim=(1, 2, 3))
             axis_evidence_mask = axis_evidence_mask & velocity_axis_evidence_mask
             entity_axis_evidence_mask = (
                 entity_axis_evidence_mask & velocity_entity_axis_evidence_mask
             )
-        valid_count = mask.sum(dim=(1, 2, 3)).clamp_min(1).to(target_positions.dtype)
-        axis_valid_count = target_mask.sum(dim=(1, 2)).clamp_min(1).to(target_positions.dtype)
-        entity_valid_count = target_mask.sum(dim=1).clamp_min(1).to(target_positions.dtype)
+        if not legacy_position_axis_mask and (lifecycle_weight or event_weight):
+            evidence_mask = evidence_mask | target_mask.any(dim=(1, 2))
+        # Preserve the historical global score scale: it is a sum over world
+        # coordinates per observed object, not a mean over coordinates.  The
+        # explicit axis mask removes unsupported terms without changing the
+        # temperature of legacy all-axis evidence.
+        valid_count = target_mask.sum(dim=(1, 2)).clamp_min(1).to(target_positions.dtype)
+        axis_valid_count = (
+            position_axis_mask.sum(dim=(1, 2)).clamp_min(1).to(target_positions.dtype)
+        )
+        entity_valid_count = position_axis_mask.sum(dim=1).clamp_min(1).to(target_positions.dtype)
         measurement_variance = (
             target_position_log_variance.clamp(-20.0, 10.0).exp()
             if target_position_log_variance is not None
@@ -924,12 +943,8 @@ class HypothesisRolloutEngine:
                 point_loss = residual.square() / variance + log_variance
             else:
                 point_loss = residual.square()
-            axis_position_scores.append(
-                (point_loss * mask).sum(dim=(1, 2)) / axis_valid_count.unsqueeze(-1)
-            )
-            entity_axis_position_scores.append(
-                (point_loss * mask).sum(dim=1) / entity_valid_count.unsqueeze(-1)
-            )
+            axis_position_scores.append((point_loss * mask).sum(dim=(1, 2)) / axis_valid_count)
+            entity_axis_position_scores.append((point_loss * mask).sum(dim=1) / entity_valid_count)
             point_loss = point_loss * resolved_axis_weights.view(1, 1, 1, -1)
             position_score = (point_loss * mask).sum(dim=(1, 2, 3)) / valid_count
             position_scores.append(position_score)
@@ -1522,6 +1537,7 @@ class HypothesisDynamicsPool:
         target_mask: Tensor,
         *,
         trajectories: Sequence[BeliefTrajectory] | None = None,
+        target_position_axis_mask: Tensor | None = None,
         target_position_log_variance: Tensor | None = None,
         target_velocities: Tensor | None = None,
         target_velocity_axis_mask: Tensor | None = None,
@@ -1553,6 +1569,7 @@ class HypothesisDynamicsPool:
             trajectories,
             target_positions,
             target_mask,
+            target_position_axis_mask=target_position_axis_mask,
             target_position_log_variance=target_position_log_variance,
             target_velocities=target_velocities,
             target_velocity_axis_mask=target_velocity_axis_mask,
@@ -1585,11 +1602,22 @@ class HypothesisDynamicsPool:
                     ],
                     dim=-1,
                 )
-                predictive_mask = target_mask.unsqueeze(-1).unsqueeze(-1)
-                predictive_count = target_mask.sum(dim=1).clamp_min(1).to(target_positions.dtype)
-                entity_axis_predictive_variance = (predictive_variance * predictive_mask).sum(
-                    dim=1
-                ) / predictive_count.unsqueeze(-1).unsqueeze(-1)
+                if target_position_axis_mask is None:
+                    predictive_mask = target_mask.unsqueeze(-1).unsqueeze(-1)
+                    predictive_count = (
+                        target_mask.sum(dim=1).clamp_min(1).to(target_positions.dtype)
+                    )
+                    entity_axis_predictive_variance = (predictive_variance * predictive_mask).sum(
+                        dim=1
+                    ) / predictive_count.unsqueeze(-1).unsqueeze(-1)
+                else:
+                    predictive_mask = target_position_axis_mask.unsqueeze(-1)
+                    predictive_count = (
+                        target_position_axis_mask.sum(dim=1).clamp_min(1).to(target_positions.dtype)
+                    )
+                    entity_axis_predictive_variance = (predictive_variance * predictive_mask).sum(
+                        dim=1
+                    ) / predictive_count.unsqueeze(-1)
             self._update_regime_evidence(
                 belief,
                 selection,
@@ -1612,6 +1640,7 @@ class HypothesisDynamicsPool:
         *,
         trajectory_samples: Sequence[Sequence[BeliefTrajectory]],
         risk_penalty: float = 0.0,
+        target_position_axis_mask: Tensor | None = None,
         target_position_log_variance: Tensor | None = None,
         target_collision: Tensor | None = None,
         position_weight: float = 1.0,
@@ -1634,6 +1663,7 @@ class HypothesisDynamicsPool:
             target_mask,
             risk_penalty=risk_penalty,
             temperature=self.temperature,
+            target_position_axis_mask=target_position_axis_mask,
             target_position_log_variance=target_position_log_variance,
             target_collision=target_collision,
             position_weight=position_weight,
@@ -2737,6 +2767,7 @@ class RuntimeHypothesisController:
         tuple[
             Tensor,
             Tensor,
+            Tensor,
             Tensor | None,
             Tensor | None,
             Tensor | None,
@@ -2750,6 +2781,11 @@ class RuntimeHypothesisController:
         positions = auxiliary.get("world_position") if isinstance(auxiliary, dict) else None
         position_log_variance = (
             auxiliary.get("world_position_log_variance") if isinstance(auxiliary, dict) else None
+        )
+        position_axis_valid = (
+            auxiliary.get("world_position_independent_axis_mask")
+            if isinstance(auxiliary, dict)
+            else None
         )
         velocity = auxiliary.get("world_velocity") if isinstance(auxiliary, dict) else None
         velocity_log_variance = (
@@ -2783,6 +2819,31 @@ class RuntimeHypothesisController:
         assert isinstance(measurement_indices, Tensor)
         expected = (*measurement_mask.shape, 3)
         if positions.shape != expected or source_object_ids.shape != belief.objects.object_id.shape:
+            return None
+        source_belief_indices = getattr(measured, "source_belief_indices", None)
+        source_measurement_object_ids = getattr(measured, "source_object_ids", None)
+        source_fields_present = (
+            source_belief_indices is not None or source_measurement_object_ids is not None
+        )
+        if source_fields_present and (
+            not isinstance(source_belief_indices, Tensor)
+            or not isinstance(source_measurement_object_ids, Tensor)
+            or source_belief_indices.shape != measurement_mask.shape
+            or source_measurement_object_ids.shape != measurement_mask.shape
+        ):
+            return None
+        if position_axis_valid is None:
+            # Historical global observations are direct image evidence.  A
+            # source-bound FAST ROI is conditioned on the predicted belief and
+            # must fail closed when the producer omitted axis provenance.
+            position_axis_valid = torch.zeros_like(positions, dtype=torch.bool)
+            if not source_fields_present:
+                position_axis_valid.fill_(True)
+        elif (
+            not isinstance(position_axis_valid, Tensor)
+            or position_axis_valid.shape != expected
+            or position_axis_valid.dtype is not torch.bool
+        ):
             return None
         if position_log_variance is not None and (
             not isinstance(position_log_variance, Tensor)
@@ -2821,6 +2882,10 @@ class RuntimeHypothesisController:
             else None
         )
         target_mask = torch.zeros_like(belief.objects.active)
+        target_position_axis_mask = torch.zeros_like(
+            belief.objects.position,
+            dtype=torch.bool,
+        )
         target_velocity = (
             belief.objects.velocity.new_zeros(belief.objects.velocity.shape)
             if isinstance(velocity, Tensor)
@@ -2857,6 +2922,11 @@ class RuntimeHypothesisController:
                 ):
                     continue
                 target[batch_index, slot] = positions[batch_index, measurement_index]
+                assert isinstance(position_axis_valid, Tensor)
+                target_position_axis_mask[batch_index, slot] = position_axis_valid[
+                    batch_index,
+                    measurement_index,
+                ]
                 if target_log_variance is not None:
                     assert isinstance(position_log_variance, Tensor)
                     target_log_variance[batch_index, slot] = position_log_variance[
@@ -2886,6 +2956,7 @@ class RuntimeHypothesisController:
         return (
             target,
             target_mask,
+            target_position_axis_mask,
             target_log_variance,
             target_velocity,
             target_velocity_axis_mask,
@@ -2928,6 +2999,7 @@ class RuntimeHypothesisController:
             (
                 target_positions,
                 target_mask,
+                target_position_axis_mask,
                 target_position_log_variance,
                 target_velocities,
                 target_velocity_axis_mask,
@@ -2942,6 +3014,8 @@ class RuntimeHypothesisController:
                 target_velocity_axis_mask is None or not bool(target_velocity_axis_mask.any())
             ):
                 continue
+            if not bool(target_position_axis_mask.any()) and not uses_velocity_evidence:
+                continue
             if self.local_applicability_enabled and pending.entity_regime is None:
                 raise RuntimeError("local hypothesis evidence is missing its scheduled regime")
             entity_axis_observability = (
@@ -2950,7 +3024,7 @@ class RuntimeHypothesisController:
                 else 1.0 / (1.0 + target_position_log_variance.clamp(-20.0, 10.0).exp())
             )
             entity_axis_observability = torch.where(
-                target_mask.unsqueeze(-1),
+                target_position_axis_mask,
                 entity_axis_observability,
                 torch.zeros_like(entity_axis_observability),
             )
@@ -2970,6 +3044,7 @@ class RuntimeHypothesisController:
                 target_positions.unsqueeze(1),
                 target_mask.unsqueeze(1),
                 trajectories=pending.trajectories,
+                target_position_axis_mask=target_position_axis_mask.unsqueeze(1),
                 target_position_log_variance=(
                     target_position_log_variance.unsqueeze(1)
                     if target_position_log_variance is not None
@@ -3001,7 +3076,7 @@ class RuntimeHypothesisController:
                 ),
                 learned_position_residual=(
                     torch.where(
-                        target_mask.unsqueeze(-1),
+                        target_position_axis_mask,
                         target_positions - pending.trajectories[0].positions[:, 0],
                         torch.zeros_like(target_positions),
                     )
@@ -3012,6 +3087,7 @@ class RuntimeHypothesisController:
         self.pending = retained
         if current_targets is not None:
             (
+                _,
                 _,
                 _,
                 _,

@@ -1,5 +1,18 @@
 # Tasks
 
+## Independent-axis runtime-hypothesis evidence — specification 1.78
+
+- [x] Thread exact per-world-axis RGB provenance through runtime-hypothesis
+  scoring, evidence, applicability, variance, and residual correction.
+- [x] Fail closed for source-bound packets with missing provenance while
+  retaining global/unbound and omitted-mask legacy behavior.
+- [x] Prove exact legacy/all-axis parity and explicit supported/unsupported-axis
+  selection behavior in focused tests.
+- [x] Run one bounded fixed-eight RGB/CPU comparison and stop after materiality
+  and all three latency ceilings fail.
+- [x] Keep the runtime pool disabled and out of `main`; retain only the
+  evidence-integrity repair on the research branch.
+
 ## Differentiable continuous observation hypotheses — specification 1.77
 
 - [x] Prove that the remaining RGB ambiguity is primarily prior-versus-

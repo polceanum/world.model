@@ -5963,3 +5963,26 @@
   falls `0.215247 -> 0.206278`, and `59` guardrails fail. Revert the code and
   close single-Gaussian coordinate suppression. Report `db75d8ea...`; no
   checkpoint or implementation is eligible for `main`.
+
+## ADR-204 — Score local-model hypotheses only on independently observed RGB axes
+
+- **Date:** 2026-08-25
+- **Status:** evidence-integrity repair retained; runtime candidate rejected
+- **Context:** Source-conditioned FAST measurements can copy depth from the
+  predicted belief while independently observing only image-plane coordinates.
+  The pool previously scored all reconstructed world coordinates, allowing a
+  candidate to receive apparent evidence from its own prior.
+- **Decision:** Carry a strict position-axis target mask through hypothesis
+  rollout scoring, assimilation, applicability, uncertainty, and residual
+  correction. Source-bound packets without provenance abstain; global/unbound
+  packets preserve all-axis compatibility. Require explicit masks to be
+  subsets of scalar target support and prove omitted-mask tensor parity.
+- **Alternatives considered:** continue scoring copied axes; infer support from
+  finite values; tune evidence thresholds; disable only residual correction;
+  or accept pooled gains without latency qualification.
+- **Consequences:** The bounded fixed-eight candidate is non-vacuous but its
+  five-horizon pooled position gain sums to only `0.0000024393 m`, below the
+  `0.00001 m` floor, while global/fast/rollout latency ratios are
+  `1.2513x/1.2360x/1.6683x`. Retain the safety fix, leave the runtime pool off,
+  stop without fixed-32 or tuning, and do not merge it to `main`. Evidence:
+  reference `41e97466...`, candidate `b7e6f47c...`.

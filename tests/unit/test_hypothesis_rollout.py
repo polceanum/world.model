@@ -72,6 +72,86 @@ def test_selector_chooses_best_candidate_per_batch() -> None:
     assert torch.allclose(axis_weights.sum(dim=-1), torch.ones(1, 3))
 
 
+def test_selector_explicit_all_axis_position_support_is_exact_legacy() -> None:
+    target = torch.zeros(1, 2, 1, 3)
+    target_mask = torch.ones(1, 2, 1, dtype=torch.bool)
+    trajectories = [_trajectory(0.5), _trajectory(0.0)]
+
+    legacy = HypothesisRolloutEngine.score(
+        trajectories,
+        target,
+        target_mask,
+        uncertainty_aware=False,
+    )
+    explicit = HypothesisRolloutEngine.score(
+        trajectories,
+        target,
+        target_mask,
+        target_position_axis_mask=target_mask.unsqueeze(-1).expand_as(target),
+        uncertainty_aware=False,
+    )
+
+    for name in (
+        "scores",
+        "selected_index",
+        "posterior_weights",
+        "axis_scores",
+        "entity_axis_scores",
+        "evidence_mask",
+        "axis_evidence_mask",
+        "entity_axis_evidence_mask",
+    ):
+        legacy_value = getattr(legacy, name)
+        explicit_value = getattr(explicit, name)
+        assert isinstance(legacy_value, torch.Tensor)
+        assert isinstance(explicit_value, torch.Tensor)
+        assert torch.equal(legacy_value, explicit_value), name
+
+
+def test_selector_position_axis_support_updates_only_supported_axes() -> None:
+    target = torch.zeros(1, 2, 1, 3)
+    target_mask = torch.ones(1, 2, 1, dtype=torch.bool)
+    position_axis_mask = torch.zeros_like(target, dtype=torch.bool)
+    position_axis_mask[..., 0] = True
+    x_winner = _trajectory(0.0)
+    other_axis_winner = _trajectory(0.0)
+    x_winner.positions[..., 1:] = 5.0
+    other_axis_winner.positions[..., 0] = 1.0
+
+    selection = HypothesisRolloutEngine.score(
+        [x_winner, other_axis_winner],
+        target,
+        target_mask,
+        target_position_axis_mask=position_axis_mask,
+        uncertainty_aware=False,
+    )
+
+    assert selection.selected_index.tolist() == [0]
+    assert selection.axis_evidence_mask is not None
+    assert selection.axis_evidence_mask.tolist() == [[True, False, False]]
+    assert selection.entity_axis_evidence_mask is not None
+    assert selection.entity_axis_evidence_mask[0, 0].tolist() == [True, False, False]
+    assert selection.axis_scores is not None
+    assert selection.axis_scores[0, 0, 0] < selection.axis_scores[0, 0, 1]
+    assert selection.axis_scores[0, 1:].eq(0).all()
+
+
+def test_selector_position_axis_support_rejects_axes_outside_target_mask() -> None:
+    target = torch.zeros(1, 2, 1, 3)
+    target_mask = torch.zeros(1, 2, 1, dtype=torch.bool)
+    position_axis_mask = torch.zeros_like(target, dtype=torch.bool)
+    position_axis_mask[..., 0] = True
+
+    with pytest.raises(ValueError, match="subset of target_mask"):
+        HypothesisRolloutEngine.score(
+            [_trajectory(0.0)],
+            target,
+            target_mask,
+            target_position_axis_mask=position_axis_mask,
+            uncertainty_aware=False,
+        )
+
+
 def test_selector_requires_axis_valid_rgb_velocity_before_replacing_velocity() -> None:
     target_position = torch.zeros(1, 2, 1, 3)
     target_velocity = torch.zeros_like(target_position)
@@ -897,6 +977,81 @@ def test_runtime_controller_uses_only_associated_measurements_and_splices_x() ->
     assert "hypothesis_axis_index" in forecast.auxiliary
     assert forecast.auxiliary["hypothesis_axis_index"].shape == (1, 1, 1, 3)
     torch.testing.assert_close(source.objects.position, belief.objects.position)
+
+
+def test_runtime_controller_source_bound_missing_axis_provenance_abstains() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+    controller.schedule(source)
+    due = source.replace(timestamp=torch.tensor([0.1]))
+    measured = SimpleNamespace(
+        timestamp=due.timestamp,
+        measurement_mask=torch.tensor([[True]]),
+        auxiliary={"world_position": torch.zeros(1, 1, 3)},
+        source_belief_indices=torch.tensor([[0]], dtype=torch.int64),
+        source_object_ids=torch.tensor([[7]], dtype=torch.int64),
+    )
+    association = SimpleNamespace(
+        pair_mask=torch.tensor([[True]]),
+        belief_indices=torch.tensor([[0]], dtype=torch.int64),
+        measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+    )
+
+    selection = controller.assimilate_observation(due, measured, association)
+
+    assert selection is None
+    assert controller.pool.evidence_seen is not None
+    assert not controller.pool.evidence_seen.any()
+    assert controller.pool.entity_axis_evidence_seen is not None
+    assert not controller.pool.entity_axis_evidence_seen.any()
+
+
+def test_runtime_controller_source_bound_position_evidence_uses_declared_axes() -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    objects = belief.objects.clone()
+    objects.active[0, 0] = True
+    objects.object_id[0, 0] = 7
+    source = belief.replace(objects=objects)
+    controller = RuntimeHypothesisController(
+        HypothesisDynamicsPool([_FixedDynamics(1.0), _FixedDynamics(0.0)]),
+        evidence_horizons_seconds=(0.1,),
+        axis_independent_axes=(0,),
+    )
+    controller.reset(1, device=source.device, dtype=source.dtype)
+    controller.schedule(source)
+    due = source.replace(timestamp=torch.tensor([0.1]))
+    measured = SimpleNamespace(
+        timestamp=due.timestamp,
+        measurement_mask=torch.tensor([[True]]),
+        auxiliary={
+            "world_position": torch.zeros(1, 1, 3),
+            "world_position_independent_axis_mask": torch.tensor([[[True, False, False]]]),
+        },
+        source_belief_indices=torch.tensor([[0]], dtype=torch.int64),
+        source_object_ids=torch.tensor([[7]], dtype=torch.int64),
+    )
+    association = SimpleNamespace(
+        pair_mask=torch.tensor([[True]]),
+        belief_indices=torch.tensor([[0]], dtype=torch.int64),
+        measurement_indices=torch.tensor([[0]], dtype=torch.int64),
+    )
+
+    selection = controller.assimilate_observation(due, measured, association)
+
+    assert selection is not None
+    assert selection.entity_axis_evidence_mask is not None
+    assert selection.entity_axis_evidence_mask[0, 0].tolist() == [True, False, False]
+    assert controller.pool.entity_axis_evidence_seen is not None
+    assert controller.pool.entity_axis_evidence_seen[0, 0].tolist() == [True, False, False]
 
 
 def test_runtime_controller_shares_only_semigroup_safe_horizon_rollouts() -> None:

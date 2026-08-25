@@ -1,5 +1,24 @@
 # Project status
 
+## Independent-axis runtime-hypothesis evidence — specification 1.78
+
+The runtime local-model pool now scores only world axes independently measured
+by the incoming RGB packet. The axis mask is propagated through rollout
+scoring, evidence accounting, local applicability, residual correction, and
+predictive variance. Source-bound FAST packets without provenance abstain;
+global/unbound packets retain legacy all-axis behavior, and the omitted-mask
+path is tensor-exact with an explicit all-axis mask.
+
+The fixed-eight RGB/CPU gate is terminally rejected for deployment. It is
+non-vacuous (68 supported x cells, 42 learned selections, 26
+constant-velocity selections), but total pooled position improvement across
+the five horizons is only `0.0000024393 m`, below `0.00001 m`. Global, fast,
+and rollout latency ratios are `1.2513x`, `1.2360x`, and `1.6683x`, all above
+the `1.10x` ceiling. The pool remains disabled and is not eligible for
+`main`; the evidence-ownership fix is retained as research safety
+infrastructure. Reports: `41e97466...` reference and `b7e6f47c...` candidate.
+Focused verification passes `68/2` plus four integration tests.
+
 ## Differentiable continuous observation hypotheses — specification 1.77
 
 The observation bottleneck is now represented without asking a hard selector

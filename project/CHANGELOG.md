@@ -2,6 +2,20 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-25 independent-axis runtime-hypothesis evidence (specification 1.78)
+
+- Added exact position-axis provenance to hypothesis scoring, pool
+  assimilation, runtime applicability, uncertainty, and residual correction.
+- Source-bound FAST RGB packets now abstain when axis provenance is absent;
+  global/unbound packets and omitted masks preserve legacy all-axis semantics.
+- Added exact legacy parity, unsupported-axis, source-bound abstention, and
+  explicit-axis runtime regressions (`68 passed`, two expected skips, plus four
+  focused integration tests).
+- Rejected deployment after the non-vacuous fixed-eight candidate improved the
+  five-horizon pooled position sum only `0.0000024393 m` and incurred
+  `1.2513x/1.2360x/1.6683x` global/fast/rollout latency. The pool remains off
+  and out of `main`; reports are `41e97466...` and `b7e6f47c...`.
+
 ### 2026-08-25 differentiable continuous observation hypotheses (specification 1.77)
 
 - Added typed current-state and trajectory hypothesis sets that preserve the
