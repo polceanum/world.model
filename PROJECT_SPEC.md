@@ -10343,12 +10343,24 @@ than `0`, with finite gradients in every mean/variance/gate owner. Compute is
 essentially unchanged (`14.6582 s` versus historical `14.5724 s`) because both
 paths retain one posterior and one detached-prior recursive rollout. The latest
 anchor retains all five 0.10/0.25/0.50/0.75/1.00-second targets. This is
-ownership evidence, not accuracy evidence. One paired 16-update
-earliest-versus-latest gate from the same immutable initializer is authorized;
-failure closes the path without anchor, learning-rate, loss-weight, or duration
-iteration. Fixed-32 and `main` require a material selector improvement with no
-pooled or scenario guardrail regression. The complete repository gate passes
-`1425` tests with `20` expected backend skips in `531.58 s`.
+ownership evidence, not accuracy evidence.
+
+The sole paired 16-update earliest-versus-latest gate is complete. Both arms
+use the same immutable initializer, source, 16 balanced update batches plus the
+same unsupported draw, and exact six-head optimizer ownership. All applied
+updates are finite and unclipped. Control selector is `0.2129164218451423`;
+latest-full-horizon treatment is worse at `0.21365382315683373` (regression
+`0.0007374013116914213`, while the required improvement was `0.00001`).
+Treatment fails current z RMSE `0.13628249 -> 0.14067056 m`, z RMSE at 0.10
+seconds `0.14871003 -> 0.15251651 m`, z RMSE at 0.25 seconds
+`0.16473021 -> 0.16805990 m`, and collision F1 at 0.75 seconds
+`0.16216216 -> 0.11428571`. The canonical audit is
+`/private/tmp/20260825-042418-spec182-latest-anchor-paired16-audit.json`
+(SHA-256 `46391b4f057c277ee638719337169d37a8da7d00b4e03793da2f51d35354ae23`).
+This closes the path without anchor, learning-rate, loss-weight, duration, or
+fixed-32 iteration. Legacy `earliest` remains the default and the candidate is
+not eligible for `main`. The complete repository gate passes `1425` tests with
+`20` expected backend skips in `531.58 s`.
 
 # Closing directive
 

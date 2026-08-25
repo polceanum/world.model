@@ -6043,7 +6043,7 @@
 ## ADR-208 — Move the exact recursive loss to the latest full-horizon posterior
 
 - **Date:** 2026-08-25
-- **Status:** implementation and ownership probe accepted; accuracy pending
+- **Status:** ownership repair proven; sole accuracy candidate rejected
 - **Context:** The historical bounded single-anchor rule selected the earliest
   eligible frame for horizon coverage. That posterior precedes corrections
   owned inside the TBPTT window, producing exactly zero rollout gradient to
@@ -6060,10 +6060,13 @@
   same recursive workload and retains every available horizon.
 - **Consequences:** The real balanced probe retains five horizons and restores
   rollout gradient `0.04474605` at `14.6582 s`, versus zero at `14.5724 s` for
-  the earliest anchor. All six head gradients are finite. One paired 16-update
-  gate is authorized; failure stops without tuning or fixed-32/`main`. The
-  complete repository gate passes `1425` tests with `20` expected skips in
-  `531.58 s`.
+  the earliest anchor. All six head gradients are finite. The sole paired
+  16-update gate then worsens selector `0.2129164218 -> 0.2136538232` and fails
+  current/short-horizon z plus 0.75-second collision F1. Close the line without
+  anchor/LR/loss-weight/duration iteration or fixed-32/`main`; legacy
+  `earliest` remains the default. The complete repository gate passes `1425`
+  tests with `20` expected skips in `531.58 s`; audit SHA-256 is
+  `46391b4f057c277e...`.
 
 ## ADR-207 — Supervise free motion through the deployed closed-form equations
 

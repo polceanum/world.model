@@ -10,10 +10,11 @@
   gradient `0.04474605` to all six owners at unchanged compute.
 - [x] Pass the focused gate (`609 passed`, one expected MPS skip) and complete
   repository gate (`1425 passed`, `20` expected skips in `531.58 s`).
-- [ ] Run exactly one source-frozen paired 16-update earliest-versus-latest
-  accuracy gate; stop without tuning if selector or guardrails fail.
-- [ ] Escalate once to fixed-32 and consider `main` only if the short gate is
-  materially positive and non-regressive.
+- [x] Run exactly one source-frozen paired 16-update earliest-versus-latest
+  accuracy gate. Pairing/ownership/numerics pass, but selector worsens by
+  `0.0007374013` and four pooled z/event guardrails fail.
+- [x] Stop without anchor, LR, loss-weight, duration, or fixed-32 iteration;
+  retain legacy `earliest` and do not merge this candidate to `main`.
 
 ## Differentiable free-motion equation supervision — specification 1.81
 

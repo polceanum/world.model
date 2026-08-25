@@ -16,9 +16,17 @@ all six heads. Compute is unchanged within noise (`14.6582 s` versus
 or `WorldBelief` behavior changes. Focused configuration, schedule, objective,
 and exact-resume verification passes `609` tests with one expected unavailable-
 MPS skip. The complete repository gate passes `1425` tests with `20` expected
-backend skips in `531.58 s`. One paired 16-update earliest-versus-latest
-accuracy gate remains; failure stops this line without tuning or fixed-32
-escalation.
+backend skips in `531.58 s`.
+
+The sole source-frozen paired 16-update accuracy gate is complete and rejected.
+Both arms used the exact same 16 balanced update batches plus the same
+unsupported draw, stayed finite/unclipped, and changed/optimized exactly the
+six permitted heads. The control selector is `0.2129164218`; latest-full-
+horizon treatment is worse at `0.2136538232` (delta `+0.0007374013`, lower is
+better). Treatment fails current z, 0.10/0.25-second z, and 0.75-second
+collision-F1 guardrails. Audit SHA-256: `46391b4f057c277e...`. Stop without
+anchor, LR, loss-weight, duration, or fixed-32 iteration; retain legacy
+`earliest` and do not merge the candidate to `main`.
 
 ## Differentiable free-motion equation supervision — specification 1.81
 

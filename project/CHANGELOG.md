@@ -11,8 +11,13 @@
 - Restored real-batch exact-recursive rollout gradient from `0` to `0.04474605`
   across all six updater heads without changing deployed dynamics or compute.
 - Passed `609` focused tests with one expected unavailable-MPS skip and the
-  complete repository gate (`1425 passed`, `20` expected skips in `531.58 s`);
-  paired short accuracy and any fixed-32/`main` escalation remain pending.
+  complete repository gate (`1425 passed`, `20` expected skips in `531.58 s`).
+- Completed and rejected the sole paired 16-update gate. Exact draws,
+  six-head ownership, and finite unclipped updates pass, but selector worsens
+  `0.2129164218 -> 0.2136538232`; current/short-horizon z and 0.75-second
+  collision F1 fail. Stop without adjacent tuning or fixed-32; retain legacy
+  `earliest` and do not merge the candidate to `main`. Audit SHA-256:
+  `46391b4f057c277e...`.
 
 ### 2026-08-25 differentiable free-motion equation supervision (specification 1.81)
 
