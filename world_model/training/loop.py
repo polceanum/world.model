@@ -2928,8 +2928,11 @@ def _select_rollout_anchor_frames(
 
     Every frame is still ingested and receives current-state supervision.
     Bounding anchors only avoids repeated expensive recursive rollouts. The
-    earliest eligible frame is retained because it supports the widest horizon
-    set; additional anchors are spread across the remaining causal window.
+    Historical single-anchor execution retains the earliest eligible frame.
+    The opt-in latest-full-horizon policy instead selects the latest causal
+    posterior among frames with maximum configured-horizon support, restoring
+    recurrent ownership without discarding any horizon available to the
+    earliest anchor. Additional anchors remain spread across the window.
     """
 
     if rollout_anchors_per_window is not None and rollout_anchors_per_window <= 0:
@@ -2943,6 +2946,23 @@ def _select_rollout_anchor_frames(
     if rollout_anchors_per_window is None or rollout_anchors_per_window >= len(candidates):
         return tuple(candidates)
     if rollout_anchors_per_window == 1:
+        if config.training.single_rollout_anchor_policy == "latest_full_horizon":
+            offset_counts = [
+                len(_valid_rollout_offsets(config, frame_index, total_frames)[0])
+                for frame_index in candidates
+            ]
+            maximum_offset_count = max(offset_counts)
+            return (
+                max(
+                    frame_index
+                    for frame_index, offset_count in zip(
+                        candidates,
+                        offset_counts,
+                        strict=True,
+                    )
+                    if offset_count == maximum_offset_count
+                ),
+            )
         return (candidates[0],)
     last = len(candidates) - 1
     selected_indices = [

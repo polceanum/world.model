@@ -2,6 +2,18 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-25 causally owned exact-recursive training anchor (specification 1.82)
+
+- Added strict legacy/default `earliest` and opt-in `latest_full_horizon`
+  single-anchor policies, bound to exact resume.
+- Preserved the historical maximum configured-horizon count while selecting
+  the latest causally corrected posterior among tied frames.
+- Restored real-batch exact-recursive rollout gradient from `0` to `0.04474605`
+  across all six updater heads without changing deployed dynamics or compute.
+- Passed `609` focused tests with one expected unavailable-MPS skip and the
+  complete repository gate (`1425 passed`, `20` expected skips in `531.58 s`);
+  paired short accuracy and any fixed-32/`main` escalation remain pending.
+
 ### 2026-08-25 differentiable free-motion equation supervision (specification 1.81)
 
 - Added a strict default/legacy-false training-only closed-form rollout using

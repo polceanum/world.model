@@ -1,5 +1,25 @@
 # Project status
 
+## Causally owned exact-recursive training anchor — specification 1.82
+
+The historical single rollout anchor was the earliest eligible TBPTT frame.
+On the real balanced updater-head batch it retained the full recursive graph
+but supplied exactly zero rollout gradient because it preceded every correction
+owned by the active heads. A strict `single_rollout_anchor_policy` now keeps
+legacy/default `earliest` behavior and adds opt-in `latest_full_horizon`: choose
+the latest frame tied for maximum configured-horizon support.
+
+The exact recursive real-batch probe retains all five horizons and measures
+rollout gradient norm `0.04474605` instead of zero, with finite gradients in
+all six heads. Compute is unchanged within noise (`14.6582 s` versus
+`14.5724 s`), and no deployed equation, event/contact transition, validation,
+or `WorldBelief` behavior changes. Focused configuration, schedule, objective,
+and exact-resume verification passes `609` tests with one expected unavailable-
+MPS skip. The complete repository gate passes `1425` tests with `20` expected
+backend skips in `531.58 s`. One paired 16-update earliest-versus-latest
+accuracy gate remains; failure stops this line without tuning or fixed-32
+escalation.
+
 ## Differentiable free-motion equation supervision — specification 1.81
 
 The continuous RGB/filter/uncertainty/analytic-dynamics graph is

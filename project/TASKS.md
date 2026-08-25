@@ -1,5 +1,20 @@
 # Tasks
 
+## Causally owned exact-recursive training anchor — specification 1.82
+
+- [x] Prove the historical earliest single anchor has exactly zero rollout
+  gradient to the selected heads on a real balanced batch.
+- [x] Add strict legacy/default `earliest` and opt-in
+  `latest_full_horizon` semantics with exact-resume binding.
+- [x] Preserve maximum horizon support while restoring exact-recursive rollout
+  gradient `0.04474605` to all six owners at unchanged compute.
+- [x] Pass the focused gate (`609 passed`, one expected MPS skip) and complete
+  repository gate (`1425 passed`, `20` expected skips in `531.58 s`).
+- [ ] Run exactly one source-frozen paired 16-update earliest-versus-latest
+  accuracy gate; stop without tuning if selector or guardrails fail.
+- [ ] Escalate once to fixed-32 and consider `main` only if the short gate is
+  materially positive and non-regressive.
+
 ## Differentiable free-motion equation supervision — specification 1.81
 
 - [x] Prove the real one-anchor recursive rollout contributes zero gradient to

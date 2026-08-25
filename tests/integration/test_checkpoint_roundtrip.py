@@ -1125,6 +1125,29 @@ def test_training_resume_binds_physical_objective_repairs_with_legacy_default(
         validate_training_resume_config(legacy_payload, changed)
 
 
+def test_training_resume_binds_single_rollout_anchor_policy_with_legacy_earliest() -> None:
+    config = _small_config()
+    checkpoint_config = config.to_dict()
+    checkpoint_config["training"].pop("single_rollout_anchor_policy")
+    legacy_payload = {
+        "config": checkpoint_config,
+        "simulator_version": SIMULATOR_VERSION,
+    }
+
+    validate_training_resume_config(legacy_payload, config)
+
+    changed = replace(
+        config,
+        training=replace(
+            config.training,
+            single_rollout_anchor_policy="latest_full_horizon",
+        ),
+    )
+    changed.validate()
+    with pytest.raises(ValueError, match=r"training\.single_rollout_anchor_policy"):
+        validate_training_resume_config(legacy_payload, changed)
+
+
 @pytest.mark.parametrize(
     ("field_name", "value"),
     [

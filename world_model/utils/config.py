@@ -472,6 +472,11 @@ class TrainingConfig:
     # frame in a TBPTT window. Long-running profiles may bound the expensive
     # recursive rollouts while still ingesting and supervising every frame.
     rollout_anchors_per_window: int | None = None
+    # With one bounded rollout anchor, ``earliest`` preserves the historical
+    # widest-horizon choice. ``latest_full_horizon`` selects the latest causal
+    # posterior with the same maximum configured-horizon support, so recurrent
+    # corrections inside the TBPTT window can own the exact recursive loss.
+    single_rollout_anchor_policy: str = "earliest"
     # Historical causal training builds one detached prior rollout at every
     # scored post-initial anchor so it can optimize future correction
     # improvement.  This is an explicit objective/compute protocol: disabling
@@ -1948,6 +1953,13 @@ class OrpheusConfig:
             and self.training.rollout_anchors_per_window <= 0
         ):
             raise ValueError("training.rollout_anchors_per_window must be positive or null")
+        if self.training.single_rollout_anchor_policy not in {
+            "earliest",
+            "latest_full_horizon",
+        }:
+            raise ValueError(
+                "training.single_rollout_anchor_policy must be 'earliest' or 'latest_full_horizon'"
+            )
         if not isinstance(
             self.training.closed_loop_prior_future_correction_enabled,
             bool,

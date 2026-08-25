@@ -1768,6 +1768,27 @@ def test_rollout_anchors_per_window_accepts_bounded_training_value() -> None:
     assert config.training.rollout_anchors_per_window == 2
 
 
+@pytest.mark.parametrize("policy", ["earliest", "latest_full_horizon"])
+def test_single_rollout_anchor_policy_roundtrips(policy: str, tmp_path: Path) -> None:
+    config = load_config(
+        CONFIG_DIR / "tiny_overfit.yaml",
+        overrides=[f"training.single_rollout_anchor_policy={policy}"],
+    )
+    resolved = tmp_path / "anchor-policy.yaml"
+    save_resolved_config(config, resolved)
+
+    assert load_config(resolved).training.single_rollout_anchor_policy == policy
+
+
+@pytest.mark.parametrize("policy", ["latest", "true", "null", "3"])
+def test_single_rollout_anchor_policy_rejects_unknown_values(policy: str) -> None:
+    with pytest.raises(ValueError, match="single_rollout_anchor_policy"):
+        load_config(
+            CONFIG_DIR / "tiny_overfit.yaml",
+            overrides=[f"training.single_rollout_anchor_policy={policy}"],
+        )
+
+
 def test_validation_rollout_anchors_must_be_positive_or_null() -> None:
     with pytest.raises(
         ValueError,

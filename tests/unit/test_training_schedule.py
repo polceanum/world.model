@@ -2822,6 +2822,33 @@ def test_rollout_anchor_limit_spreads_work_and_preserves_earliest_anchor() -> No
     ) == (0,)
 
 
+def test_latest_single_rollout_anchor_preserves_maximum_horizon_support() -> None:
+    config = load_config(
+        "configs/tiny_overfit.yaml",
+        overrides=["training.single_rollout_anchor_policy=latest_full_horizon"],
+    )
+
+    # Frames 0--5 all support the three configured tiny horizons, so the
+    # latest corrected posterior owns the exact recursive objective.
+    assert _select_rollout_anchor_frames(
+        config,
+        window_start=0,
+        window_stop=6,
+        total_frames=16,
+        rollout_anchors_per_window=1,
+    ) == (5,)
+
+    # Near the episode boundary, later frames lose horizon support. The policy
+    # must keep the latest frame tied with the earliest anchor's maximum count.
+    assert _select_rollout_anchor_frames(
+        config,
+        window_start=10,
+        window_stop=15,
+        total_frames=16,
+        rollout_anchors_per_window=1,
+    ) == (10,)
+
+
 def test_rollout_anchor_limit_rejects_nonpositive_values() -> None:
     config = load_config("configs/tiny_overfit.yaml")
 

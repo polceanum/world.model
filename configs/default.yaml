@@ -190,6 +190,7 @@ training:
   normalize_rollout_axes_over_configured_horizons: true
   joint_collision_long_horizon_sampling: true
   minimum_rollout_age_steps: 0
+  single_rollout_anchor_policy: earliest
   closed_loop_prior_future_correction_enabled: true
   closed_loop_batch_macro_physical_losses_enabled: false
   closed_loop_axiswise_correction_hinge_enabled: false
