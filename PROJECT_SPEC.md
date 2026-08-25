@@ -8177,9 +8177,9 @@ reproduce their identities or fail paired-protocol qualification.
 
 This is a technical ownership, finiteness, throughput, and exact-resume gate,
 not an accuracy or convergence result. The step-512 and step-1024 fixed-
-manifest selectors remain the first scientific continuation decisions. The
-control arm remains unstarted until the treatment satisfies those declared
-boundaries.
+manifest selectors are the first scientific continuation decisions. The
+control arm remains unauthorized unless the treatment satisfies those
+declared boundaries.
 
 The same immutable comparison was repeated at durable step `256` before the
 first accuracy gate. That `last.pt` is `12,593,239` bytes with SHA-256
@@ -8191,6 +8191,29 @@ optimizer tensors are finite. The independent report at
 `5de67a367d58a52ef31327c4107af5afa40253e8a02912f8352b2b9e7e6a398e`.
 This repeated gate proves ownership continuity only; step `512` remains the
 first trained fixed-manifest scientific decision.
+
+The retained run did reach both mandatory selectors before its later manual
+interruption. Step `512` worsens selector `0.239528636 -> 0.241173130` and
+current position `0.150564564 -> 0.153704671 m`; step `1024` worsens them
+further to `0.241556908` and `0.154829942 m`. Velocity improves to
+`0.799894126/0.793195483 m/s` and aggregate collision F1 improves to
+`0.292072323/0.293222683`, but this is a coherent tradeoff rather than broad
+accuracy: z position rises `0.177703944 -> 0.187665575 -> 0.191639685 m`.
+Production guardrail failures grow from `121` at step `512` to `148` at step
+`1024`, including `10/15` pooled failures. Both checkpoints change exactly the
+six declared head tensors, own exactly six finite Adam states at the matching
+step, and preserve the other `219` model entries bitwise. The terminal
+`KeyboardInterrupt` occurred after `1043` completed updates and is not a
+numerical failure.
+
+Both declared treatment gates therefore fail. The long control, continuation
+to `3072`, paired latency, and promotion replay are not authorized; their only
+possible role would be to spend compute after the candidate itself has already
+failed the protected fixed-32 reference. The terminal audit is
+`/private/tmp/20260825-spec152-long-treatment-terminal-audit.json` with SHA-256
+`e536dfbba4174a30de2bcd2324e38db8b7ca11d5c7916bf5a92cfec81ed57bc4`.
+This closes the six-head axis-gated repair without changing the protected
+initializer or deploying either trained checkpoint.
 
 ---
 

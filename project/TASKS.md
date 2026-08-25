@@ -888,8 +888,10 @@
   changed head tensors, exactly six Adam owners at step `256`, `219` exact
   frozen model entries/buffers, and finite model/optimizer state. This remains
   an ownership/finiteness milestone, not accuracy evidence.
-- [ ] Reach and audit the treatment's fixed-manifest selectors at steps 512
-  and 1024 before authorizing the long control.
+- [x] Reach and audit the treatment's fixed-manifest selectors at steps 512
+  and 1024. Reject both: selector worsens
+  `0.239528636 -> 0.241173130 -> 0.241556908`, z drift grows, and guardrail
+  failures increase `121 -> 148` despite exact six-head ownership.
 - [x] Establish the common rich fixed-32 step-zero baseline from the retained
   pre-update artifacts in both `20260821-151249` arms; no rerun is required.
   Bind initializer file/model SHA-256
@@ -910,10 +912,10 @@
   `0.90425`, `0.9463631606488749`, `0.2837465564738292`,
   `0.0008092797410304828`, and `0.8435185185185186`. Latency support and
   comprehensive eligibility remain false.
-- [ ] Run both sequential long arms under the fixed contract for `3072`
-  updates with selectors every `512`. Require both selectors `512` and `1024`
-  unless integrity/nonfinite failure forces a truthful stop; continue long
-  enough for a stable causal difference rather than selecting on smoke noise.
+- [x] Apply the long-pair authorization boundary. The treatment fails both
+  required selectors, so do not launch the control or continue to `3072`;
+  preserve the protected initializer and stop this repair rather than spend
+  compute measuring a rejected candidate longer.
 - [x] Run the exact final frozen-source gate:
   `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. conda run --no-capture-output -n
   orpheus pytest -q` reported `1163 passed, 17 skipped in 461.37s (0:07:41)`.
@@ -922,10 +924,10 @@
   `evaluate.py`, `monitor.py`, and `scripts` passed; the final source/version
   selection passed `6`; the version contract passed `1` in `0.78s`; diff
   check was clean; and independent review returned PASS with no blockers.
-- [ ] Apply the complete version-7/version-16 physical selector, real paired
-  active-Aqua latency, and disjoint RGB-only validation/test/OOD gates to any
-  eligible candidate. Keep the protected step-zero incumbent deployed and
-  claim neither promotion, plateau, nor convergence until every gate passes.
+- [x] Evaluate eligibility for version-7/version-16 paired latency and disjoint
+  gates. The treatment is ineligible after its fixed-32 failures, so no latency
+  or OOD promotion run is authorized and the protected step-zero incumbent
+  remains deployed.
 
 ## Comprehensive promotion evidence — specification 1.51
 

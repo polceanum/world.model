@@ -1741,10 +1741,10 @@ forensic limitation is explicit in the report. The completed forward's raw,
 progress, failure, and contract bytes are retained exactly and are the only
 numerical inputs to finalization.
 
-### Active long treatment and step-128/256 checkpoints
+### Long treatment recovered through step 1024 — terminally rejected
 
-Treatment `runs/20260822-192031-spec152-axis-gated-3072-treatment` is active
-from clean commit `f08200f...`. Its step-zero fixed-32 evidence matches the
+Treatment `runs/20260822-192031-spec152-axis-gated-3072-treatment` ran from
+clean commit `f08200f...`. Its step-zero fixed-32 evidence matches the
 common section-244 baseline exactly. The durable step-128 checkpoint SHA-256
 is `c33cdeaf812f40a44d7149747a17e42bd022182ab26a62e0facda70922f8e285`
 (`12,593,239` bytes).
@@ -1759,8 +1759,7 @@ the later control.
 All 16 logged applied blocks through step 128 contain all eight scenarios,
 finite and unclipped gradients, zero perception/interaction gradient, causal
 trajectory support `714..1088`, objective-family support `6..10`, and RSS at
-most `1,045,860,352` bytes. This is a technical milestone only. Treatment
-continues toward fixed selectors 512 and 1024; control remains unstarted.
+most `1,045,860,352` bytes. This is a technical milestone only.
 
 The independently captured step-256 audit also passes. `last.pt` is
 `12,593,239` bytes with SHA-256
@@ -1773,6 +1772,28 @@ finite. The audit script SHA-256 is `622d8721...`; report
 `5de67a367d58a52ef31327c4107af5afa40253e8a02912f8352b2b9e7e6a398e`.
 This is repeated technical continuity only; no trained fixed-manifest accuracy
 result exists before step `512`.
+
+The retained artifacts prove that the treatment subsequently reached both
+mandatory rich fixed-32 selectors. Step `512` worsens selector
+`0.239528636 -> 0.241173130` and current position
+`0.150564564 -> 0.153704671 m`; step `1024` worsens them to `0.241556908` and
+`0.154829942 m`. Although velocity improves from `0.811882110` to
+`0.799894126/0.793195483 m/s` and collision F1 improves from `0.283746556` to
+`0.292072323/0.293222683`, z position degrades
+`0.177703944 -> 0.187665575 -> 0.191639685 m`. Guardrail failures grow
+`121 -> 148`, with `10 -> 15` pooled failures and broad scenario, NLL,
+calibration, event, and identity regressions.
+
+Both numbered checkpoints are mechanically exact: only the six declared
+mean/variance/gate head tensors changed, exactly six Adam states own them at
+steps `512/1024`, the other `219` model entries are bit-exact, and all state is
+finite. Training completed `1043` updates before a manual `KeyboardInterrupt`;
+the stop was not numerical. Because the treatment itself fails both mandatory
+selectors, the long control and continuation to `3072` are not authorized.
+The terminal report is
+`/private/tmp/20260825-spec152-long-treatment-terminal-audit.json` (SHA-256
+`e536dfbba4174a30de2bcd2324e38db8b7ca11d5c7916bf5a92cfec81ed57bc4`).
+Neither checkpoint is promoted; the protected initializer remains deployment.
 
 ## Specification 1.51 comprehensive promotion evidence — 2026-08-21
 

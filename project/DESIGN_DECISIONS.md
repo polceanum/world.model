@@ -5911,3 +5911,31 @@
   retain default zero and do not merge to `main`. The exact implementation
   gate remains `1394 passed`, `20` expected skips in `514.16 s`; paired evidence
   is `de410f10...`.
+
+## ADR-202 — Stop the axis-gated six-head repair at its mandatory selectors
+
+- **Date:** 2026-08-25
+- **Status:** terminally rejected; protected initializer retained
+- **Context:** Specification 1.52 had passed immutable initialization,
+  two-update wiring, zero-update semantic non-vacuity, and step-128/256
+  ownership gates. Project memory still called its long treatment active and
+  the required step-512/1024 selectors pending, although both numbered
+  checkpoints and their complete rich validation records were retained.
+- **Decision:** Audit the existing artifacts rather than relaunch or invent a
+  new objective. Treat step 512 and 1024 as the predeclared treatment
+  authorization gates. Stop without a long control, continuation to step 3072,
+  paired latency, or disjoint promotion if the treatment fails either fixed-32
+  selector against the protected initializer.
+- **Alternatives considered:** resume the interrupted treatment; launch the
+  equally long control before reading retained validation; select on improved
+  velocity/collision alone; weaken z/NLL/scenario guardrails; or start another
+  correction-weight/scope variant.
+- **Consequences:** Step-512/1024 selector worsens
+  `0.239528636 -> 0.241173130 -> 0.241556908`; current position worsens
+  `0.150564564 -> 0.153704671 -> 0.154829942 m`; z worsens
+  `0.177703944 -> 0.187665575 -> 0.191639685 m`; and guardrail failures grow
+  `121 -> 148`. Velocity and collision F1 improve, confirming a genuine
+  objective tradeoff rather than infrastructure failure. Both checkpoints own
+  exactly the six intended finite head/Adam states and preserve 219 other
+  entries bitwise. Report `e536dfbb...` closes this architecture without more
+  duration or a control run; no checkpoint is promoted or merged.

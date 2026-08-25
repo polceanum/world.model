@@ -27,6 +27,21 @@
   sweep. The mechanism remains default off on the research branch and is not
   merged to `main`. Paired report SHA-256: `de410f10e2671bc85fcefac23d8e385504b69e12cde02a7e41622f5286d12c24`.
 
+### 2026-08-25 recovered axis-gated long-treatment decision
+
+- Audited the retained specification-1.52 treatment at its previously
+  undocumented step-512 and step-1024 rich fixed-32 selectors.
+- Rejected both checkpoints: selector worsens
+  `0.239528636 -> 0.241173130 -> 0.241556908`, current/z position regresses,
+  and guardrail failures grow `121 -> 148` despite improved velocity and
+  collision F1.
+- Verified both checkpoints change only the six declared updater heads, own
+  exactly six finite Adam states, and preserve 219 other model entries. The
+  later `KeyboardInterrupt` is not a model or optimizer failure.
+- Closed the long control, continuation-to-3072, latency, and promotion rungs
+  under the declared stop rule. Terminal audit SHA-256:
+  `e536dfbba4174a30de2bcd2324e38db8b7ca11d5c7916bf5a92cfec81ed57bc4`.
+
 ### 2026-08-24 delayed causal RGB reliability diagnostic
 
 - Localized a genuine differentiable observation-side signal: delayed global
