@@ -76,6 +76,8 @@ tempCodeRunnerFile.py
 .streamlit/secrets.toml
 .abstra/
 runs/
+.archive/
+tmp/
 data/cache/
 checkpoints/
 demo_outputs/

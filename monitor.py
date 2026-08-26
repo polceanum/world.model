@@ -218,8 +218,6 @@ def _pid_command_matches_evaluator(pid: int | None) -> bool | None:
         for marker in (
             "evaluate.py",
             "evaluate_hypothesis_pool.py",
-            "evaluate_modular_candidate.py",
-            "replay_promotion_mps.py",
         )
     )
 

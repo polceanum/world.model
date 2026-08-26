@@ -17,6 +17,11 @@ from world_model.dynamics.contacts import (
     SphereContactResolver,
 )
 from world_model.dynamics.events import EventModel, EventOutput
+from world_model.dynamics.free_motion_fit import (
+    FreeMotionFitResult,
+    fit_free_motion,
+    free_motion_position_velocity,
+)
 from world_model.dynamics.graph import InteractionGraph, InteractionOutput
 from world_model.dynamics.hypothesis_rollout import (
     BallisticContactDynamics,
@@ -53,6 +58,7 @@ __all__ = [
     "DynamicsModel",
     "EventModel",
     "EventOutput",
+    "FreeMotionFitResult",
     "InteractionGraph",
     "InteractionOutput",
     "HypothesisRolloutEngine",
@@ -72,6 +78,8 @@ __all__ = [
     "UncertaintyDynamics",
     "UncertaintyOutput",
     "apply_pair_applicability",
+    "fit_free_motion",
+    "free_motion_position_velocity",
     "geodesic_orientation_loss",
     "integrate_quaternion",
     "normalize_quaternion",

@@ -2,6 +2,48 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-26 clean generalization foundation and temporal free-motion rung
+
+- Advanced the authoritative contract to specification 1.52. Generalization
+  now follows a predeclared ladder that adds one independently measurable
+  complexity at a time and increases learned capacity only after an equation-
+  led lower rung has a localized plateau.
+- Archived the qualified toy evidence, one exact compatibility checkpoint,
+  historical ledgers, all non-checkpoint run metadata, and a complete source
+  bundle under the ignored local pre-generalization archive. Protected the
+  exact qualified source with GitHub tag
+  `archive/minimal-differentiable-toy-v2-f8d66da`, then removed the 7.6-GiB
+  stale run/checkpoint tree, generated caches/demos, four unreferenced rejected
+  profiles, and three campaign-specific tools from active use.
+- Added a batched differentiable free-motion fit for timestamped positions
+  under known constant gravity and linear drag. The exact signed-time basis,
+  per-row normalized soft weighting, finite invalid-row contract, covariance
+  diagnostics, and cancellation-stable small-drag series remain in ordinary
+  Torch autograd; float16 and bfloat16 fail closed.
+- Added the frozen CPU temporal rung: 16 RGB history frames at 20 Hz estimate
+  anchor position/velocity, and existing `AnalyticKinematics` answers
+  `0.1/0.25/0.5/1.0/2.0 s` queries. There is no learned transition and only
+  the four mask-head scalars train for 32 batch-four AdamW updates. Continuous
+  photometric confidence and mask-conditioned anchor-proximity reliability
+  weight all predeclared frames; Boolean renderer validity is diagnostic only.
+- Bound architecture attempt 2 of 2, exact config SHA-256
+  `cb40cf08...25cd8`, disjoint development/selector/confirmation/final seed
+  namespaces, accuracy and trivial-baseline ratios, two-second gradients,
+  semigroup consistency, perception/state-only latency, memory, checkpoint,
+  and provenance gates before any protected access.
+- Focused temporal implementation validation passes `61` tests; the broader
+  config/checkpoint/temporal compatibility selection passes `245` tests. An
+  independent static protocol review also passed. These are implementation
+  checks only: no clean-source development artifact exists yet, the protected
+  selector/confirmation/final namespaces remain unopened, and no temporal or
+  general-world-model convergence is claimed.
+- The frozen cleanup/temporal source passes `1075` repository tests with `16`
+  expected inactive-MPS skips in `425.70 s`. Ruff lint passes, all `224`
+  Python files are format-clean, compileall and the specification-version
+  contract pass, and `git diff --check` is clean. These gates authorize a clean
+  source commit and development run; they do not authorize protected access or
+  claim long-horizon accuracy.
+
 ### 2026-08-26 convergence-first differentiable toy
 
 - Advanced the authoritative contract to specification 1.51 and paused broad

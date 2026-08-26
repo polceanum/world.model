@@ -4334,3 +4334,61 @@
   truth in its forward path, and preserves finite nonzero mask-head gradients.
   More complex learned residuals remain gated on an independently measurable
   failure of this equation-led baseline.
+
+## ADR-156 — Remove failed campaign surfaces before ordered generalization
+
+- **Date:** 2026-08-26
+- **Status:** accepted
+- **Context:** The active workspace had accumulated 254 historical run
+  directories, 660 redundant checkpoints, rejected campaign profiles, and
+  one-off recovery tools. Keeping that 7.6-GiB surface active made it too easy
+  to resume superseded protocols or mistake terminal experiments for supported
+  workflows while attempting to scale the qualified one-sphere unit.
+- **Decision:** Preserve compact evidence before cleanup: retain the qualified
+  report and legacy artifact, one exact compatibility checkpoint, all
+  non-checkpoint run metadata, a complete source bundle, and the historical
+  ledgers. Protect the exact qualified research source with GitHub tag
+  `archive/minimal-differentiable-toy-v2-f8d66da`. Remove the superseded run
+  tree, duplicate checkpoints, generated demos/caches, four unreferenced
+  rejected profiles, and three campaign-specific tools from the active
+  surface. Scale through the predeclared capability order in
+  `project/GENERALIZATION_LADDER.md`, adding one independently measurable
+  complexity per rung and capacity only after a smaller structured model has a
+  localized plateau.
+- **Consequences:** The active run directory is empty and the ignored local
+  archive is approximately 33 MiB; full history remains recoverable from Git
+  commit `c16acc99`, the archive tag, and the verified local bundle. Historical
+  commands are no longer presented as launch recommendations. Cleanup is not
+  accuracy evidence, and later rungs must still pass their own accuracy,
+  calibration, event/identity, gradient, memory, throughput, and long-horizon
+  gates before promotion.
+
+## ADR-157 — Fit temporal state with differentiable equations before adding dynamics capacity
+
+- **Date:** 2026-08-26
+- **Status:** accepted implementation; protected qualification pending
+- **Context:** The specification-1.51 toy established accurate differentiable
+  RGB geometry and a short analytic rollout, but not velocity identification
+  from an image history or two-second consistency. A learned transition would
+  add capacity before demonstrating whether the known constant-gravity,
+  linear-drag equations already solve this isolated regime.
+- **Decision:** Estimate anchor position and velocity with a batched weighted
+  `2 x 2` normal-equation fit to the exact signed-time free-motion basis. Keep
+  the solve, continuous RGB confidence, continuous mask-conditioned temporal
+  reliability, and `AnalyticKinematics` rollout in ordinary Torch autograd;
+  the renderer's Boolean validity remains diagnostic only. Normalize soft
+  weights per row, return finite zero outputs for invalid rows, and use a
+  cancellation-stable series around zero drag-time. Freeze a CPU-float32 rung
+  with 16 history frames, five horizons through 2.0 seconds, 32 batch-four
+  AdamW updates, only four trainable mask scalars, and disjoint development,
+  selector, confirmation, and final seed namespaces. Require a clean source
+  commit, an independently hashed development report/checkpoint pair, exact
+  config/source/protocol agreement, and a durable selector-before-confirmation-
+  before-final access ledger.
+- **Consequences:** Focused implementation, mathematical, checkpoint, and
+  protocol tests pass, including finite gradients, invalid-row behavior,
+  weight-scale invariance, float32 semigroup accuracy, and protected-access
+  fail-closed checks. No development artifact has yet been produced from clean
+  committed source, and selector, confirmation, and final data remain
+  unopened. Therefore this decision establishes the trainable path and frozen
+  experiment, not convergence or promotion.

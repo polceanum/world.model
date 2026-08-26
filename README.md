@@ -104,70 +104,52 @@ load_model_weights("runs/minimal_differentiable_toy_v2/model.pt", model=model,
 estimator. The ladder exists to close identifiability and gradient correctness
 before another complexity rung enters that production path.
 
-The former specification-1.46 grounded and earlier multi-day accuracy commands
-are intentionally no longer presented as launch instructions. They are
-historical evidence only; broad training stays paused until the next isolated
-complexity rung preserves the minimal gates.
+### Temporal and long-horizon qualification
 
-For an immutable promotion decision for a legacy CPU-fallback candidate, run
-the full trainer manifest once for the protected reference and candidate on an
-active-Aqua MPS session:
+The first generalization rung fits one anchor state from sixteen RGB frames,
+then evaluates cheap analytic rollouts through two seconds. Development may use
+only the frozen development manifests and emits a review checkpoint without
+opening selector, confirmation, or final data:
 
 ```bash
-python scripts/replay_promotion_mps.py \
-  --config configs/attention_pilot_mps.yaml \
-  --reference runs/<run>/checkpoints/best_rollout.pt \
-  --candidate runs/<run>/checkpoints/validation_step_000128.pt \
-  --output runs/$(date -u +%Y%m%d-%H%M%S)-mps-promotion-replay
+conda run -n orpheus python scripts/run_temporal_free_motion_ladder.py \
+  --phase development \
+  --config configs/temporal_free_motion_toy_cpu.yaml \
+  --report runs/temporal_free_motion_toy_v1/development_report.json \
+  --checkpoint runs/temporal_free_motion_toy_v1/development_model.pt
 ```
 
-The command is a gate, not a generic benchmark: it exits successfully only
-when the candidate improves on MPS while passing the existing per-axis,
-per-horizon, lifecycle, identity, collision/event, calibration, and support
-guardrails. Its report records both checkpoint SHA-256s and the validation
-protocol hash. New `attention_pilot_mps` runs already execute their selector
-directly on MPS.
-
-For checkpoint selection without reusing trainer-validation or test seeds:
+Run this only from a clean committed source tree. The development report binds
+the checkpoint SHA-256; independently compute and review both that checkpoint
+digest and the report's own digest. The same clean commit may then consume the
+protected sets exactly once:
 
 ```bash
-python evaluate.py \
-  --config configs/tiny_overfit.yaml \
-  --checkpoint <path> \
-  --split validation \
-  --seed-protocol fresh_validation \
-  --seed-offset 64 \
-  --set evaluation.episodes=16
+conda run -n orpheus python scripts/run_temporal_free_motion_ladder.py \
+  --phase qualification \
+  --config configs/temporal_free_motion_toy_cpu.yaml \
+  --report runs/temporal_free_motion_toy_v1/qualification_report.json \
+  --checkpoint runs/temporal_free_motion_toy_v1/development_model.pt \
+  --development-report runs/temporal_free_motion_toy_v1/development_report.json \
+  --reviewed-checkpoint-sha256 <reviewed-checkpoint-sha256> \
+  --reviewed-report-sha256 <reviewed-report-sha256>
 ```
 
-Use one disjoint validation offset for candidate selection and a later untouched
-offset for confirmation; do not select checkpoints on the reserved test split.
+The qualification command creates a durable access ledger before generating
+protected examples and stops at the first failed split. It never trains or
+changes the reviewed weights. This rung is still a standalone identifiability
+test; the next rung must reproduce it through the public online belief API
+before any scene or network-capacity expansion.
 
-To collect exact-timestamp causal RGB event windows and fit the experimental
-uncertainty-aware gate:
+The former grounded, attention, change-point, and multi-day accuracy commands
+are historical evidence only and have been removed from the active workflow.
+Their records remain in Git history and the ignored, local pre-generalization
+archive. Broad training stays paused until the current isolated
+temporal/long-horizon rung preserves the minimal gates.
 
-```bash
-python scripts/train_rgb_change_point_gate.py \
-  --config configs/scaled_curriculum.yaml \
-  --checkpoint <path> \
-  --device mps \
-  --train-episodes 8 \
-  --validation-episodes 8 \
-  --validation-seed-offset 256 \
-  --gate-type mlp \
-  --hidden-features 8 \
-  --fit-outgoing-proposal \
-  --proposal-hidden-features 8
-```
-
-The output contains cached feature tensors, a report, resolved config, and a
-weights-identical checkpoint with explicit gate coefficients. The scaled
-profile keeps both the gate and outgoing proposal disabled: current learned
-candidates did not pass the paired downstream velocity gate. The proposal is
-consumed on the exact causal frame selected by its gate; later post-event
-samples return to the ordinary estimator. Cached tensors can be supplied with
-`--train-cache` and `--validation-cache` to refit without rerunning RGB
-perception.
+The general evaluator still supports explicit disjoint manifests for a
+compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not
+be presented as promotion of the standalone minimal estimator.
 
 For the deterministic convergence/debug run:
 
@@ -208,30 +190,16 @@ python monitor.py --once --json
 
 Generated training, evaluation, and demo directory basenames begin with a UTC
 `YYYYMMDD-HHMMSS-` timestamp, so ordinary filename sorting puts the newest
-artifact last. Explicit `--run-name` and `--output` values are treated as
-human-readable labels; the command's JSON result contains the actual path.
-Superseded demos are retained under `demo_outputs/archive/`.
-
-The current local RGB-only selection bundle is
-`runs/20260727-193657-selected-contact-confidence-v1/`; the latest visual
-result is
-`demo_outputs/20260727-193538-contact-confidence-v1/online_correction.gif`.
-These generated artifacts are gitignored. The seven-regime interaction
-curriculum is configured in `configs/tiny_interactions.yaml`.
-
-The user-provided locally built PyTorch in the existing environment is
-MPS-enabled. The corrected
-two-phase smoke at
-`runs/20260801-231521-audit-v2-final-verified-smoke/` exercised one hybrid RGB
-update, two persistent causal updates, selector validation, checkpoint
-round-trip, and byte-preserving no-op resume. It is wiring evidence, not an
-accuracy or convergence result. See `project/STATUS.md` for exact values.
+artifact last. Explicit `--run-name` and `--output` values are human-readable
+labels; the command's JSON result contains the actual path. Historical local
+runs and demos were archived and removed before the generalization program.
 
 ## Documentation
 
 - [Authoritative specification](PROJECT_SPEC.md)
 - [Current status](project/STATUS.md)
 - [Architecture](project/ARCHITECTURE.md)
+- [Generalization ladder](project/GENERALIZATION_LADDER.md)
 - [Data contracts](project/DATA_CONTRACTS.md)
 - [Predictive abstractions](project/PREDICTIVE_ABSTRACTIONS.md)
 - [Getting started](docs/getting_started.md)
