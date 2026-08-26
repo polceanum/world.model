@@ -108,6 +108,7 @@ def _global_structured_measurement(
     packet_confidence: float = 1.0,
     existence_requires_grad: bool = False,
     photometric_global_depth: bool = False,
+    raw_radius_supervision: bool = False,
     radius_requires_grad: bool = False,
 ) -> tuple[MeasurementSet, GlobalDetectorOutput]:
     query_count = proposal_centres.shape[1]
@@ -120,6 +121,7 @@ def _global_structured_measurement(
             appearance_dim=8,
             structured_disc_center_enabled=True,
             structured_disc_photometric_global_depth_enabled=photometric_global_depth,
+            structured_disc_raw_radius_supervision_enabled=raw_radius_supervision,
             structured_disc_depth_relative_std=0.05,
             structured_disc_position_confidence=structured_confidence,
         )
@@ -185,7 +187,7 @@ def _global_structured_measurement(
     return measurement, detector_output
 
 
-def test_photometric_global_depth_preserves_fit_and_raw_radius_gradient(
+def test_photometric_global_depth_is_hard_but_raw_radius_remains_trainable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     size = 32
@@ -214,6 +216,7 @@ def test_photometric_global_depth_preserves_fit_and_raw_radius_gradient(
         image=image,
         proposal_centres=proposal,
         photometric_global_depth=True,
+        raw_radius_supervision=True,
         radius_requires_grad=True,
     )
 
@@ -236,8 +239,11 @@ def test_photometric_global_depth_preserves_fit_and_raw_radius_gradient(
         measurement.auxiliary["photometric_global_fit_rms"],
         torch.tensor([[0.01]]),
     )
-    measurement.values[..., 2:4].sum().backward()
+    measurement.values[..., 2:4].sum().backward(retain_graph=True)
     assert detector.log_radius.grad is not None
+    assert detector.log_radius.grad.abs().sum() == 0
+    detector.log_radius.grad.zero_()
+    measurement.auxiliary["raw_log_radius"].sum().backward()
     assert detector.log_radius.grad.abs().sum() > 0
 
 
@@ -1120,7 +1126,7 @@ def test_photometric_disc_geometry_rejects_occluded_profile_and_invalid_inputs()
         )
 
 
-def test_photometric_fast_depth_preserves_forward_fit_and_raw_head_gradients(
+def test_photometric_fast_depth_is_hard_but_raw_head_remains_trainable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     size = 32
@@ -1155,7 +1161,8 @@ def test_photometric_fast_depth_preserves_forward_fit_and_raw_head_gradients(
             roi_hidden_dim=16,
             structured_disc_center_enabled=True,
             structured_disc_fast_depth_enabled=True,
-            structured_disc_photometric_fast_depth_enabled=True,
+                structured_disc_photometric_fast_depth_enabled=True,
+                structured_disc_raw_radius_supervision_enabled=True,
             structured_disc_depth_relative_std=0.05,
             default_world_radius=0.21,
         )
@@ -1222,9 +1229,13 @@ def test_photometric_fast_depth_preserves_forward_fit_and_raw_head_gradients(
         rtol=0,
         atol=1.0e-6,
     )
-    measured.values[..., 2:4].sum().backward()
+    measured.values[..., 2:4].sum().backward(retain_graph=True)
     assert module.roi_updater.delta_head.bias.grad is not None
-    assert module.roi_updater.delta_head.bias.grad[2:4].abs().sum() > 0
+    assert module.roi_updater.delta_head.bias.grad[2:4].abs().sum() == 0
+    module.zero_grad(set_to_none=True)
+    measured.auxiliary["raw_log_radius"].sum().backward()
+    assert module.roi_updater.delta_head.bias.grad is not None
+    assert module.roi_updater.delta_head.bias.grad[2:3].abs().sum() > 0
 
 
 def test_rgb_module_keeps_global_and_fast_raw_centres_differentiable(

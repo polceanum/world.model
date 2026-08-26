@@ -333,7 +333,7 @@ def _analytic_position_posterior(
     )
 
 
-def test_independent_axis_support_false_preserves_exact_legacy_bits() -> None:
+def test_analytic_filter_never_fuses_source_bound_nonindependent_axes() -> None:
     belief, global_measured, predicted, association = _rgb_position_update_case()
     global_measured = _all_axis_position_measurement(global_measured)
     source_measured = _source_bound_position_measurement(
@@ -355,13 +355,8 @@ def test_independent_axis_support_false_preserves_exact_legacy_bits() -> None:
     updater = BeliefUpdater(
         fast_state_dim=belief.objects.fast_state_dim,
         num_motion_modes=NUM_MOTION_MODES,
-        config=BeliefUpdaterConfig(
-            innovation_anchored_correction=True,
-            learned_correction_independent_axis_support=False,
-            learned_residual_scale=0.5,
-        ),
+        config=BeliefUpdaterConfig(enable_learned_corrector=False),
     )
-    _force_nonzero_learned_fast_outputs(updater)
 
     global_posterior = updater.correct(
         prior=belief,
@@ -380,11 +375,13 @@ def test_independent_axis_support_false_preserves_exact_legacy_bits() -> None:
         dt=1.0,
     )
 
-    assert torch.equal(source_posterior.objects.position, global_posterior.objects.position)
-    assert torch.equal(source_posterior.objects.velocity, global_posterior.objects.velocity)
+    assert not torch.equal(global_posterior.objects.position, belief.objects.position)
+    assert not torch.equal(global_posterior.objects.velocity, belief.objects.velocity)
+    assert torch.equal(source_posterior.objects.position, belief.objects.position)
+    assert torch.equal(source_posterior.objects.velocity, belief.objects.velocity)
     assert torch.equal(
         source_posterior.objects.fast_log_variance,
-        global_posterior.objects.fast_log_variance,
+        belief.objects.fast_log_variance,
     )
 
 
@@ -447,8 +444,12 @@ def test_rotated_no_depth_fast_roi_has_only_analytic_state_correction() -> None:
         dt=1.0,
     )
 
-    assert not torch.equal(analytic.objects.position, belief.objects.position)
-    assert not torch.equal(analytic.objects.velocity, belief.objects.velocity)
+    assert torch.equal(analytic.objects.position, belief.objects.position)
+    assert torch.equal(analytic.objects.velocity, belief.objects.velocity)
+    assert torch.equal(
+        analytic.objects.fast_log_variance,
+        belief.objects.fast_log_variance,
+    )
     assert torch.equal(posterior.objects.position, analytic.objects.position)
     assert torch.equal(posterior.objects.velocity, analytic.objects.velocity)
     assert torch.equal(

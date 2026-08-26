@@ -299,15 +299,19 @@ class BeliefUpdater(nn.Module):
         correction_confidence = packed.new_zeros(correction_evidence.shape)
         position_slice = packing["position"]
         learned_state_support: Tensor | None = None
-        position_causal_axis_support: Tensor | None = None
+        # Analytic fusion must never treat a source-conditioned copy of the
+        # prior as fresh evidence.  RGB FAST measurements explicitly carry
+        # the independently observed world axes; absent provenance on a bound
+        # row fails closed.  This is an estimator correctness rule, not an
+        # optional learned-corrector policy.
+        position_causal_axis_support = self._position_causal_axis_support(
+            measured,
+            innovation,
+            association,
+            batch_index,
+            pair_index,
+        )
         if self.config.learned_correction_independent_axis_support:
-            position_causal_axis_support = self._position_causal_axis_support(
-                measured,
-                innovation,
-                association,
-                batch_index,
-                pair_index,
-            )
             learned_state_support = torch.ones_like(
                 correction_confidence,
                 dtype=torch.bool,
@@ -325,12 +329,19 @@ class BeliefUpdater(nn.Module):
         if position_learned_confidence.ndim == confidence.ndim:
             position_learned_confidence = position_learned_confidence.unsqueeze(-1)
         correction_confidence[..., position_slice] = position_learned_confidence
+        analytic_position_confidence = position_confidence
+        if analytic_position_confidence.ndim == confidence.ndim:
+            analytic_position_confidence = analytic_position_confidence.unsqueeze(-1)
+        analytic_position_confidence = (
+            analytic_position_confidence
+            * position_causal_axis_support.to(analytic_position_confidence.dtype)
+        )
         analytic_position = diagonal_kalman_update(
             prior_position,
             prior_position_lv,
             position_measurement,
             position_measurement_lv,
-            confidence=position_confidence,
+            confidence=analytic_position_confidence,
             robust_clip_norm=self.config.robust_clip_norm,
             minimum_log_variance=self.config.minimum_log_variance,
             maximum_log_variance=self.config.maximum_log_variance,
@@ -402,7 +413,6 @@ class BeliefUpdater(nn.Module):
             ) * velocity_supported.to(confidence.dtype)
         elif "velocity_from_position" in measured.supported_state_fields:
             if learned_state_support is not None:
-                assert position_causal_axis_support is not None
                 learned_state_support[..., velocity_slice] = position_causal_axis_support
             elapsed = elapsed_by_batch[batch_index]
             valid_elapsed = elapsed > self.config.minimum_velocity_dt
@@ -433,9 +443,9 @@ class BeliefUpdater(nn.Module):
             )
             velocity_measurement_lv = velocity_measurement_variance.clamp_min(1.0e-10).log()
             elapsed_confidence = valid_elapsed.to(confidence.dtype)
-            if position_confidence.ndim == elapsed_confidence.ndim + 1:
+            if analytic_position_confidence.ndim == elapsed_confidence.ndim + 1:
                 elapsed_confidence = elapsed_confidence.unsqueeze(-1)
-            velocity_confidence = position_confidence * elapsed_confidence
+            velocity_confidence = analytic_position_confidence * elapsed_confidence
             analytic_velocity = diagonal_kalman_update(
                 prior_velocity,
                 log_variance[batch_index, belief_index, velocity_slice],
