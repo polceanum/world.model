@@ -58,9 +58,11 @@ passes (`109 passed`). The one-shot
 final set will not be rerun merely to re-embed provenance. The final repository
 gate passes `1029 passed, 16 skipped in 421.17 s`; every skip is an expected
 inactive MPS/Aqua hardware check. Whole-tree Ruff check, Ruff format-check
-(`222 files`), compileall, version-contract, and diff checks pass. Only the
-clean commit/push and fast-forward main merge remain. No heterogeneous-scene
-convergence or checkpoint promotion is claimed.
+(`222 files`), compileall, version-contract, and diff checks pass. Clean commit
+`7344e67dcd0c019451b079129b578eac2d161b4b` was pushed to both
+`agent/minimal-differentiable-toy-promotion` and `main`; both GitHub refs were
+read back at that exact identity. No heterogeneous-scene convergence or
+checkpoint promotion is claimed.
 
 ## Specification 1.50 objective-ownership and measured-execution repair — 2026-08-21
 

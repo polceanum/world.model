@@ -32,8 +32,8 @@
 - [x] Run final gates: repository pytest passes `1029` with `16` expected
   inactive-MPS/Aqua skips; Ruff check/format, compileall, version-contract, and
   diff checks pass.
-- [ ] Commit and push the clean promotion branch, verify remote identity, then
-  merge it to `main` only if every final gate remains green.
+- [x] Commit and push the clean promotion branch, verify remote identity, and
+  fast-forward GitHub `main` after every final gate remained green (`7344e67`).
 - [ ] Scale exactly one independently measurable complexity at a time; stop
   any new family at its predeclared selector/confirmation gate and do not tune
   against the final set.

@@ -48,6 +48,9 @@
   inactive-MPS/Aqua skips in `421.17 s`. Whole-tree Ruff check, Ruff
   format-check (`222 files`), compileall, specification-version contract, and
   diff checks pass.
+- Published clean commit `7344e67` to the promotion branch and fast-forwarded
+  GitHub `main` from `a4549f3`; both remote refs were read back at the exact
+  promoted commit. No rejected research-branch history was merged.
 
 ### 2026-08-21 objective ownership, zero-output execution, and live training progress
 
