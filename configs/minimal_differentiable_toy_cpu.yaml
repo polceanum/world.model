@@ -1,0 +1,101 @@
+project:
+  name: orpheus-minimal-differentiable-toy-cpu
+  seed: 0
+  output_dir: runs
+  deterministic: true
+
+device:
+  preference: cpu
+  closed_loop_preference: cpu
+  cuda_amp: false
+  compile: false
+
+# This is deliberately an identifiability and convergence unit, not a broad
+# benchmark.  There is one always-visible sphere, one fixed calibrated camera,
+# no observation noise, no contact, and no hidden physical parameter variation.
+simulator:
+  image_size: [48, 48]
+  frame_rate: 20
+  physics_rate: 120
+  sequence_frames: 16
+  min_objects: 1
+  max_objects: 1
+  gravity: [0.0, 0.0, 0.0]
+  radius_range: [0.21, 0.21]
+  mass_range: [1.0, 1.0]
+  restitution_range: [0.7, 0.7]
+  drag_range: [0.05, 0.05]
+  friction_range: [0.2, 0.2]
+  initial_speed_range: [0.1, 0.1]
+  camera_motion: fixed
+  render_noise_std: 0.0
+  ensure_collision: false
+  scenario_mixture: [baseline]
+
+model:
+  max_objects: 1
+  lifecycle:
+    birth_confidence: 0.5
+    birth_confirmations: 1
+  state:
+    geometry_dim: 1
+    appearance_dim: 8
+    residual_dynamics_dim: 4
+    modal_count: 1
+    modal_dim: 2
+    parameter_memory_dim: 8
+    global_dim: 4
+  rgb:
+    backbone_channels: [8, 12, 16, 20]
+    feature_dim: 16
+    proposal_queries: 1
+    global_every_steps: 1
+    roi_size: 8
+    structured_disc_center_enabled: false
+    temporal_velocity_enabled: false
+  dynamics:
+    hidden_dim: 16
+    max_substep: 0.008333333333333333
+    attention_residual_enabled: false
+    differentiable_contact_gradients_enabled: false
+  filter:
+    hidden_dim: 16
+    innovation_anchored_correction: true
+    learned_correction_independent_axis_support: true
+  identification:
+    hidden_dim: 8
+
+runtime:
+  modality: rgb
+  enable_debug_oracle: false
+  hypothesis_pool_enabled: false
+
+# The dedicated ladder runner owns the exact three-rung schedule.  These fields
+# make the ordinary project configuration tell the same 60 + 12 update story.
+training:
+  batch_size: 8
+  steps: 72
+  learning_rate: 0.002
+  closed_loop_learning_rate_scale: 0.1
+  weight_decay: 0.0
+  grad_clip_norm: 2.0
+  rgb_pretrain_steps: 60
+  train_episodes: 8
+  validation_episodes: 8
+  fixed_dataset: true
+  tbptt_steps: 4
+  checkpoint_every: 72
+  eval_every: 72
+  log_every: 12
+  horizon_weights: [1.0]
+
+evaluation:
+  horizons_seconds: [0.1]
+  episodes: 8
+  rgb_only: true
+
+demo:
+  seed: 200000
+  max_frames: 16
+  future_horizon_seconds: 0.1
+  fps: 10
