@@ -4463,7 +4463,8 @@
 ## ADR-160 — Freeze a uniform parameter-free RGB-D temporal protocol before access
 
 - **Date:** 2026-08-26
-- **Status:** accepted frozen source contract; all manifests unopened
+- **Status:** accepted frozen source contract; first development later audited
+  by ADR-161
 - **Context:** ADR-159 established accurate differentiable metric RGB-D
   position without consuming simulator truth, while ADR-158 showed that a
   learned monocular reliability taper could discard most of a 16-frame
@@ -4495,12 +4496,49 @@
   or opening protected data while implementation details were still mutable.
 - **Consequences:** The combined seed-free implementation, mathematical, VJP,
   ablation, checkpoint, hash, and durable-access gate is
-  `103 passed`, an independent review passes, and the final repository gate is
-  `1129 passed, 16 skipped in 428.18 s`. Development
+  `103 passed`, an independent review passes, and the historical pre-repair
+  repository gate is `1129 passed, 16 skipped in 428.18 s`. At this
+  source-freeze boundary, development
   `41000000--41000023`, selector
   `42000000--42000023`, confirmation `43000000--43000023`, and final
-  `44000000--44000047` all remain unopened. This accepts only the immutable
+  `44000000--44000047` were all unopened. This accepts only the immutable
   protocol and implementation surface; it is not development evidence or a
   temporal/long-horizon convergence claim. A later online bridge must use one
   batched composite `rgbd` packet, a modality-qualified sensor key, raw metric
   causal history, and fail-closed missing depth before any capacity scaling.
+
+## ADR-161 — Invalidate the first development artifacts after comparator repair
+
+- **Date:** 2026-08-26
+- **Status:** accepted source-integrity repair; fresh v2 development rerun
+  pending and protected data unopened
+- **Context:** The first development run used clean commit `8e68035` and seeds
+  `41000000--41000023`. All `82` reported scalar metrics were finite and all
+  frozen gates passed. Current
+  position/velocity RMSE was `0.00279934 m`/`0.00207092 m/s`; horizon position
+  RMSE was `0.00286018/0.00297530/0.00322108/0.00385564/0.00539692 m`;
+  perception and rollout time was `0.235061 s`/`0.00391524 s`. The report,
+  checkpoint, and manifest SHA-256 digests were respectively
+  `9cbea9f25181769ee5b6a87b097e738a29cdb9b386c8018b3044f07d58aa03e2`,
+  `6acd88edd203cdebb2b0820bad388e06a4c610ea1c659ff9f8ea6d701ad28059`, and
+  `b92f1e3f12475986ebd2971ad2de70187432c0941caa0335ea53e82abc3c1d01`.
+- **Decision:** Treat the numerical result as a historical conditional pass,
+  not as qualifying evidence. Audit found one source-integrity defect: the
+  artifact verifier used raw Python equality for tuple/list structures after
+  JSON roundtrip. Compare the canonical JSON SHA instead and bind the behavior
+  with a regression test. Because this repair changes source, forbid the old
+  report/checkpoint pair from opening protected qualification. Require a fresh
+  clean-source development rerun to fresh v2 artifact paths and independent
+  exact-digest review before any protected ledger is created.
+- **Alternatives considered:** accept the numerically passing pre-repair
+  artifacts; special-case tuple/list equality only at the observed field;
+  mutate or relabel the old artifacts; or create the protected ledger before a
+  same-source development rerun.
+- **Consequences:** The repaired source passes the combined focused gate at
+  `104 passed` and the complete repository gate at
+  `1130 passed, 16 skipped in 414.82 s`. Selector `42000000--42000023`,
+  confirmation `43000000--43000023`, and final `44000000--44000047` remain
+  unopened, and no protected ledger exists. No fresh development rerun,
+  protected result, temporal convergence, or long-horizon convergence is
+  claimed. Specification 1.54, simulator v7, and the frozen config/protocol
+  hashes remain unchanged.

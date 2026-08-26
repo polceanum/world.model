@@ -51,17 +51,26 @@
   uncertainty/calibration, gradients, memory, and latency before generation.
 - [x] Implement the parameter-free 16-frame uniform-WLS RGB-D temporal source,
   empty-state checkpoint/access contracts, VJP and ablation gates; record the
-  combined seed-free gate `103 passed` and independent review without
-  opening any manifest.
-- [x] Pass the final source-integrity repository gate: `1129 passed, 16`
-  expected inactive-device skips in `428.18 s`.
-- [ ] Materialize the fresh development manifest `41000000--41000023` only
-  after clean-source authorization; stop unless every frozen gate passes and
-  the zero-optimizer report/checkpoint pair is independently reviewed.
-- [ ] If development passes, qualify selector `42000000--42000023`, then
+  repaired-source combined seed-free gate `104 passed`. That gate itself opens
+  no episode manifest.
+- [x] Pass the repaired-source repository gate:
+  `1130 passed, 16 skipped in 414.82 s`.
+- [x] Run the first development manifest `41000000--41000023` on clean commit
+  `8e68035`; record its `82` finite reported scalar metrics, all-gates pass,
+  and exact report, checkpoint, and manifest digests in the authoritative
+  evidence record.
+- [x] Audit the first artifacts, identify raw tuple/list equality after JSON
+  roundtrip as the only source-integrity defect, and repair comparison with a
+  canonical JSON SHA plus regression coverage. Keep protected data unopened
+  and create no protected ledger.
+- [ ] Rerun development from the repaired clean source to fresh v2 report and
+  checkpoint paths. The pre-repair report/checkpoint pair must not qualify
+  protected access even though its finite metrics passed.
+- [ ] If the fresh v2 development rerun passes and its exact artifacts are
+  independently reviewed, qualify selector `42000000--42000023`, then
   confirmation `43000000--43000023`, then one-shot final
-  `44000000--44000047` under the exclusive durable access ledger. All remain
-  unopened at the specification-1.54 boundary.
+  `44000000--44000047` under the exclusive durable access ledger. All three
+  protected manifests remain unopened and the ledger is absent.
 - [ ] Bridge the qualified observation and temporal estimator into the
   public one-slot `OnlineWorldModel` observation/belief/rollout workflow using
   one batched composite `rgbd` packet and modality-qualified sensor key.

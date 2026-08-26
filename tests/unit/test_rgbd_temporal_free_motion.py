@@ -463,6 +463,21 @@ def test_complete_development_and_checkpoint_evidence_validates_without_access()
     )
 
 
+def test_reviewed_development_json_round_trip_preserves_protocol_evidence() -> None:
+    report, development, checkpoint_digest = _passing_development_evidence()
+    reviewed_report = json.loads(json.dumps(report, allow_nan=False))
+
+    assert reviewed_report["protocol"] != temporal_protocol()
+    validated = temporal_runner._validate_development_evidence(
+        reviewed_report,
+        checkpoint_digest=checkpoint_digest,
+        clean_source=_mock_clean_source(),
+    )
+
+    assert validated == reviewed_report["development"]
+    assert validated == development
+
+
 @pytest.mark.parametrize(
     ("path", "invalid_value"),
     (

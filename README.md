@@ -56,9 +56,11 @@ Its trainable reliability taper discarded most of the 16-frame history and
 could not identify velocity accurately enough for long rollouts. Protected
 selector, confirmation, and final manifests were never opened. The next
 generalization rung now has a passing parameter-free RGB-D metric measurement
-core plus a frozen, reviewed parameter-free temporal protocol. Every fresh
-41m/42m/43m/44m manifest remains unopened; this is not a third monocular-taper
-attempt, development evidence, or a convergence claim.
+core plus a frozen, reviewed parameter-free temporal protocol. The first 41m
+development run passed its frozen metrics, but a representation-sensitive
+post-run comparator required a source repair and invalidated those artifacts
+for qualification. Protected 42m/43m/44m data remains unopened; this is not a
+third monocular-taper attempt or a convergence claim.
 
 ## Quick start
 
@@ -162,8 +164,8 @@ full suite passes `1091` tests with `16` expected inactive-device skips.
 
 ### Frozen parameter-free RGB-D temporal protocol
 
-Specification 1.54 freezes the next standalone qualification without opening
-any episode manifest. The exact config SHA-256 is
+Specification 1.54 froze the standalone qualification before its first
+episode access. The exact config SHA-256 is
 `5667cdb3603682b8d80a3e42793d25e36989269df1afacfa9b1028f2451101e9`; the
 canonical protocol payload SHA-256, computed before inserting its
 self-reporting digest field, is
@@ -182,12 +184,31 @@ diagnostic OLS covariance, memory, and separated observation/rollout latency.
 Protected access is durably ordered selector -> confirmation -> final after a
 separately reviewed passing development artifact.
 
-The combined seed-free protocol gate is `103 passed`, independent review
-passes, and the final repository gate is `1129 passed, 16 skipped in 428.18 s`.
-Development and every protected split remain unopened, so no temporal accuracy
-or long-horizon convergence is claimed. The next implementation rung after
-qualification is a composite batched `rgbd` packet and one-slot public online
-bridge; capacity and scene complexity remain frozen until then.
+The first development run used clean commit `8e68035` and seeds
+`41000000--41000023`. All `82` reported scalar metrics were finite and all
+frozen gates passed, with current
+position/velocity RMSE `0.00279934 m`/`0.00207092 m/s`, horizon position RMSE
+`0.00286018/0.00297530/0.00322108/0.00385564/0.00539692 m`, perception time
+`0.235061 s`, and rollout time `0.00391524 s`. Its report, checkpoint, and
+manifest SHA-256 digests are respectively
+`9cbea9f25181769ee5b6a87b097e738a29cdb9b386c8018b3044f07d58aa03e2`,
+`6acd88edd203cdebb2b0820bad388e06a4c610ea1c659ff9f8ea6d701ad28059`, and
+`b92f1e3f12475986ebd2971ad2de70187432c0941caa0335ea53e82abc3c1d01`.
+
+That is historical conditional development evidence only. Audit found a raw
+Python tuple/list equality check after JSON roundtrip; the repaired verifier
+uses a canonical JSON SHA comparison plus regression coverage. Because that
+repair changes source, the old report/checkpoint pair must not qualify
+protected access. A fresh clean-source development rerun to fresh v2 artifact
+paths is pending. Selector, confirmation, and final 42m/43m/44m manifests
+remain unopened, and no protected ledger exists.
+
+The repaired source passes the combined focused gate at `104 passed` and the
+full gate at `1130 passed, 16 skipped in 414.82 s`. No fresh v2 rerun,
+protected result, temporal-convergence, or long-horizon-convergence claim
+exists. The next implementation rung after qualification is a composite
+batched `rgbd` packet and one-slot public online bridge; capacity and scene
+complexity remain frozen until then.
 
 The former grounded, attention, change-point, and multi-day accuracy commands
 are historical evidence only and have been removed from the active workflow.

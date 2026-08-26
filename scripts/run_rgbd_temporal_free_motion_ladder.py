@@ -299,7 +299,9 @@ def _validate_development_evidence(
         raise ValueError("development evidence must prove zero optimizer updates")
     if development_report.get("stopped_after") != "development":
         raise ValueError("reviewed evidence must stop after the development split")
-    if development_report.get("protocol") != temporal_protocol():
+    if _canonical_sha256(development_report.get("protocol")) != _canonical_sha256(
+        temporal_protocol()
+    ):
         raise ValueError("reviewed development protocol differs from frozen source")
     if development_report.get("config_sha256") != FROZEN_CONFIG_SHA256:
         raise ValueError("reviewed development config hash differs from frozen config")

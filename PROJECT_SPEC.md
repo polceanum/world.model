@@ -7854,16 +7854,17 @@ The frozen, disjoint manifests are:
 - confirmation `43000000--43000023`; and
 - one-shot final `44000000--44000047`.
 
-At this specification boundary every one of these manifests is unopened.
-Neither development nor protected episodes have been generated, and no
+At the source-freeze boundary every one of these manifests was unopened.
+Neither development nor protected episodes had been generated, and no
 accuracy, development-pass, protected-pass, temporal-convergence, or
-long-horizon-convergence result exists. The combined seed-free implementation
-and protocol gate is `103 passed`, an independent review passes, and the final
-repository gate is `1129 passed, 16 expected inactive-device skips in
-428.18 s`. This is source-contract evidence only.
+long-horizon-convergence result existed. The combined seed-free implementation
+and protocol gate was `103 passed`, an independent review passed, and the
+historical pre-repair repository gate was `1129 passed, 16 expected
+inactive-device skips in 428.18 s`. This was source-contract evidence only;
+section 246 records the later first development access and audit.
 
-Development, when separately authorized, requires fresh report/checkpoint
-paths and one clean exact source. A passing development report must bind the
+Each development access requires fresh report/checkpoint paths and one clean
+exact source. A passing development report must bind the
 empty-state checkpoint, config and protocol hashes, seed-manifest hash, zero
 optimizer updates, source fingerprints, complete metrics, and the statement
 that protected data remains unopened. Protected qualification may begin only
@@ -7886,6 +7887,42 @@ measurements for bounded causal history and `DirectVelocityEvidence`, keep
 missing depth fail-closed, preserve selected continuous gradients, and update
 checkpoint/evaluator/demo schemas truthfully. None of those online-integration
 changes is part of the frozen standalone protocol.
+
+## 246. Invalidate the first development artifacts after source-integrity repair
+
+The first development run used clean source commit `8e68035` and exactly the
+declared development seeds `41000000--41000023`. All `82` reported scalar
+metrics were finite and all frozen gates passed. Current position and velocity RMSE were `0.00279934 m` and
+`0.00207092 m/s`. Position RMSE at `0.10/0.25/0.50/1.00/2.00 s` was
+`0.00286018/0.00297530/0.00322108/0.00385564/0.00539692 m`. Measured
+perception and state-only rollout time was `0.235061 s` and `0.00391524 s`.
+The exact evidence digests are:
+
+- report SHA-256
+  `9cbea9f25181769ee5b6a87b097e738a29cdb9b386c8018b3044f07d58aa03e2`;
+- checkpoint SHA-256
+  `6acd88edd203cdebb2b0820bad388e06a4c610ea1c659ff9f8ea6d701ad28059`; and
+- development-manifest SHA-256
+  `b92f1e3f12475986ebd2971ad2de70187432c0941caa0335ea53e82abc3c1d01`.
+
+These artifacts record a historical conditional development pass only. The
+post-run audit found one source-integrity defect: the verifier compared raw
+Python tuple/list structures after JSON roundtrip. The repaired source compares
+the canonical JSON SHA and binds that behavior with a regression test. Because
+the repair changes source relative to commit `8e68035`, the old report and
+checkpoint must not qualify or authorize protected access, regardless of
+their passing finite metrics. They may not be mutated, relabelled, or copied
+into a fresh evidence path.
+
+The repaired source passes the combined focused gate at `104 passed` and the
+complete repository gate at `1130 passed, 16 skipped in 414.82 s`. A fresh
+clean-source development rerun to fresh v2 report/checkpoint paths is pending.
+It must use the unchanged specification-1.54 config and protocol hashes and be
+independently reviewed by exact digest before qualification. Selector
+`42000000--42000023`, confirmation `43000000--43000023`, and final
+`44000000--44000047` remain unopened. No protected ledger has been created,
+and no fresh development, protected, temporal-convergence, or long-horizon-
+convergence result is claimed.
 
 # Closing directive
 

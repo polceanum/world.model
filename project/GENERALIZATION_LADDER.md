@@ -65,7 +65,7 @@ diagnostic recovered most position gates, but future velocity remained
 test still failed. The physics/oracle path was correct. This family is closed,
 its protected manifests stay unopened, and its code is not an active workflow.
 
-### 2. Observable-depth/RGB-D temporal state — protocol frozen; all data unopened
+### 2. Observable-depth/RGB-D temporal state — first development audited; protected unopened
 
 Retain the same one-sphere, fixed-camera, contact-free analytic world, but
 measure metric depth as an observable input rather than asking a learned
@@ -88,7 +88,9 @@ self-reporting digest field,
 `4e334e9d7942ea3f2416c0a9f5ca8e327d1d0a1e9131074f20c051ebd3163ad7`.
 It reserves development `41000000--41000023`, selector
 `42000000--42000023`, confirmation `43000000--43000023`, and final
-`44000000--44000047`; every namespace remains unopened.
+`44000000--44000047`. Every namespace was unopened at the protocol-freeze
+boundary; the first development namespace has since been materialized once,
+while all protected namespaces remain unopened.
 
 The estimator owns zero parameters, buffers, persistent tensor state, and
 optimizer updates. It measures all sixteen frames independently, fits anchor
@@ -102,13 +104,29 @@ observation/rollout latency. An exclusive ledger records protected access in
 selector -> confirmation -> final order only after an independently reviewed
 passing clean-source development artifact.
 
-The combined seed-free source/protocol gate is `103 passed`, independent review
-passes, and the final repository gate is `1129 passed, 16 skipped in 428.18 s`.
-No development episode or protected split has been generated, so this is not
-development evidence or a temporal/long-horizon convergence claim. The former
-two monocular attempts do not reset; this is a new modality and structural
-capability, not a third tuning attempt. Capacity remains fixed until this rung
-qualifies.
+On clean commit `8e68035`, the first development run over
+`41000000--41000023` produced `82` finite reported scalar metrics and passed
+all frozen gates. Current
+position/velocity RMSE was `0.00279934 m`/`0.00207092 m/s`; horizon position
+RMSE was `0.00286018/0.00297530/0.00322108/0.00385564/0.00539692 m`; perception
+and rollout time was `0.235061 s`/`0.00391524 s`. Report, checkpoint, and
+manifest SHA-256 digests are
+`9cbea9f25181769ee5b6a87b097e738a29cdb9b386c8018b3044f07d58aa03e2`,
+`6acd88edd203cdebb2b0820bad388e06a4c610ea1c659ff9f8ea6d701ad28059`, and
+`b92f1e3f12475986ebd2971ad2de70187432c0941caa0335ea53e82abc3c1d01`.
+
+Audit found a raw Python tuple/list equality check after JSON roundtrip. The
+current source replaces it with canonical JSON SHA comparison and regression
+coverage. That repair changes source, so the first run is a historical
+conditional pass and its old artifacts cannot qualify protected access. A
+fresh clean-source development rerun to fresh v2 paths is pending. The current
+repaired surface passes `104` focused tests and the complete gate at
+`1130 passed, 16 skipped in 414.82 s`; no protected ledger exists.
+
+No fresh rerun, protected result, or temporal/long-horizon convergence claim
+exists. The former two monocular attempts do not reset; this is a new modality
+and structural capability, not a third tuning attempt. Capacity remains fixed
+until this rung qualifies.
 
 ### 3. Public one-slot online integration
 
