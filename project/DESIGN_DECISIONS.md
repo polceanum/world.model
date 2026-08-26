@@ -4289,3 +4289,48 @@
   qualified. This is execution qualification only. No optimizer update,
   prediction-accuracy improvement, checkpoint promotion, or convergence has
   been demonstrated.
+
+## ADR-154 — Close an identifiable differentiable toy before scaling
+
+- **Date:** 2026-08-26
+- **Status:** accepted; minimal ladder qualified
+- **Context:** Repeated heterogeneous campaigns remained difficult to
+  interpret because perception, association, lifecycle, filtering, contact,
+  learned residuals, and long recursive graphs changed together. A direct
+  audit also found hard RGB component values carrying fabricated
+  straight-through derivatives. Simple dynamics should not require a large
+  model or multi-day optimization.
+- **Decision:** Stop broad scaling and require a deterministic three-rung unit:
+  exact oracle-state analytic motion, RGB-only metric state, then a short
+  RGB-derived analytic rollout. Fix one visible sphere and every identifiable
+  physical parameter; exclude contact, lifecycle ambiguity, camera motion,
+  and noise. Use disjoint train/selector/confirmation/final manifests and
+  materialize the final set once. A failed family stops without gate changes.
+- **Consequences:** Frozen source `f8d66da` passed with final state and rollout
+  RMSE `0.007644 m` and `0.007991 m`, versus `0.05 m` limits. This is a
+  convergence and gradient proof for the toy only. It does not promote the
+  accumulated research branch or establish heterogeneous-scene accuracy.
+
+## ADR-155 — Derive RGB geometry through a differentiable physical surrogate
+
+- **Date:** 2026-08-26
+- **Status:** accepted for the minimal path
+- **Context:** The rejected v1 toy used a learned colour-conditioned radius
+  calibrator. It overfit its eight training seeds and amplified a roughly
+  `0.1 px` soft-centre bias into large monocular depth error. Supplying the
+  exact centre to the same inverse renderer reduced radius error to `0.25%`,
+  localizing the issue to sequential centre/radius inference rather than the
+  dynamics equations.
+- **Decision:** Jointly infer centre and log-radius with four ordinary-autograd
+  finite-difference Gauss--Newton stages. Use a smooth form of the public
+  renderer, candidate-independent full-frame RGB residuals, analytic nuisance
+  albedo, a dtype-scaled positive damping term, and bounded trust updates.
+  Keep hard connected-component values detached and expose raw learned
+  geometry separately. Prevent source-bound copied world axes from entering
+  analytic position or position-derived-velocity fusion.
+- **Consequences:** A seed-free 100-profile renderer grid passes centre/radius
+  limits with finite-difference gradient agreement. The deployed toy uses 29
+  profile renders per frame, has no arbitrary Gibbs temperature or simulator
+  truth in its forward path, and preserves finite nonzero mask-head gradients.
+  More complex learned residuals remain gated on an independently measurable
+  failure of this equation-led baseline.

@@ -1025,8 +1025,15 @@ def test_rgb_module_keeps_global_and_fast_raw_centres_differentiable(
         [[True, True, True]]
     ]
     assert global_raw.requires_grad
+    global_measurement.values[..., :4].sum().backward(retain_graph=True)
+    assert module.global_detector.centre_head.weight.grad is not None
+    assert module.global_detector.centre_head.weight.grad.abs().sum() == 0
+    assert module.global_detector.radius_head.weight.grad is not None
+    assert module.global_detector.radius_head.weight.grad.abs().sum() == 0
+    module.zero_grad(set_to_none=True)
     global_raw.sum().backward()
     assert module.global_detector.centre_head.weight.grad is not None
+    assert module.global_detector.centre_head.weight.grad.abs().sum() > 0
 
     module.zero_grad(set_to_none=True)
     belief = BeliefFactory(max_objects=1, geometry_dim=1, appearance_dim=8).create(
@@ -1078,8 +1085,13 @@ def test_rgb_module_keeps_global_and_fast_raw_centres_differentiable(
     ]
     assert torch.isfinite(fast_measurement.auxiliary["world_position"]).all()
     assert fast_raw.requires_grad
+    fast_measurement.values[..., :4].sum().backward(retain_graph=True)
+    assert module.roi_updater.delta_head.bias.grad is not None
+    assert module.roi_updater.delta_head.bias.grad[:4].abs().sum() == 0
+    module.zero_grad(set_to_none=True)
     fast_raw.sum().backward()
     assert module.roi_updater.delta_head.bias.grad is not None
+    assert module.roi_updater.delta_head.bias.grad[:2].abs().sum() > 0
 
 
 def test_zero_residual_fast_roi_is_not_an_independent_temporal_sample() -> None:

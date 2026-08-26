@@ -1,5 +1,67 @@
 # Project status
 
+## Specification 1.51 convergence-first differentiable toy — 2026-08-26
+
+Broad campaign iteration is paused. The clean promotion starts from public
+`main` commit `a4549f3` and contains only a minimal equation-led RGB toy plus
+gradient-truth repairs; the 100+ commits of rejected campaign machinery and
+terminal evidence are not merged wholesale.
+
+The fixed toy has one always-visible sphere, a calibrated fixed camera, no
+noise, gravity, contact, lifecycle ambiguity, or hidden parameter variation.
+Its deployed path is ordinary autograd throughout: soft RGB moments -> four
+finite-difference Gauss--Newton centre/radius refinements -> known-radius
+pinhole backprojection -> temporal velocity -> existing analytic kinematics.
+Hard connected-component rows no longer borrow learned-head derivatives, and
+source-bound copied axes no longer enter analytic position/velocity fusion.
+
+Frozen source `f8d66da17983aa0269649fff69cc13cec5ad1311` passed the single
+predeclared v2 ladder. The report at the time of qualification had SHA-256
+`2b525a73e65fbd8db4a9cd826b7835293463826bcc7c42daffd03339ca1c5f0d`;
+the legacy ad-hoc state-dict artifact had SHA-256
+`f9329ea4fc1f97789a6c93268c61b2c00dc2d798b3e410e4e0937111c5cd60dc`.
+The final previously untouched eight-seed set achieved:
+
+- RGB world-position RMSE `0.00764440699 m`;
+- centre RMSE `0.00522461 px`;
+- apparent-radius relative RMSE `0.00219904` (`0.2199%`);
+- `0.1 s` rollout RMSE `0.00799061917 m`; and
+- finite/fit/measurement validity `1.0`.
+
+All declared thresholds passed by wide margins, both 60-update measurement and
+12-update rollout phases had finite nonzero gradients, and the only four
+learned mask-head scalars changed from initialization. The equation-derived
+solver supplies nearly all accuracy and training preserves it; this is the
+desired low-cost inductive bias, not evidence that a large learned model was
+needed.
+
+The frozen `f9329e...` file is an ad-hoc state-dict artifact from the qualified
+research runner, not a project checkpoint, and remains unchanged. The clean
+runner now writes a versioned atomic step-72 weights-only checkpoint with
+config, protocol, final metrics, RNG, device, and captured source provenance;
+a synthetic-only round-trip loads it through `load_model_weights`, and the
+successful report binds its SHA-256. The dedicated command and reload recipe
+are documented in `README.md`. This standalone identifiability harness does
+not replace the normal
+`train.py`/`evaluate.py`/`demo.py` `OnlineWorldModel` workflow.
+
+Real historical compatibility also passes without evaluation data. The clean
+bytes strictly parsed the embedded configuration, constructed a CPU
+`OnlineWorldModel`, and loaded all 177 finite state keys from the 740,491-byte
+specification-1.39/simulator-v4 checkpoint
+`validation_step_000000.pt` (SHA-256 `61ad6691148b...5475`) through
+`load_model_weights(..., expected_config=config)`. No dataset, rollout,
+selector, final manifest, or output artifact was touched.
+
+Expanded clean-port toy, gradient-truth, and checkpoint-round-trip validation
+passes (`109 passed`). The one-shot
+final set will not be rerun merely to re-embed provenance. The final repository
+gate passes `1029 passed, 16 skipped in 421.17 s`; every skip is an expected
+inactive MPS/Aqua hardware check. Whole-tree Ruff check, Ruff format-check
+(`222 files`), compileall, version-contract, and diff checks pass. Only the
+clean commit/push and fast-forward main merge remain. No heterogeneous-scene
+convergence or checkpoint promotion is claimed.
+
 ## Specification 1.50 objective-ownership and measured-execution repair — 2026-08-21
 
 The first specification-1.49 sustained launch proved that the model was finite

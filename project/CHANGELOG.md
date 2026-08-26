@@ -2,6 +2,53 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-26 convergence-first differentiable toy
+
+- Advanced the authoritative contract to specification 1.51 and paused broad
+  heterogeneous scaling until a deterministic one-sphere RGB-to-rollout unit
+  passed explicit oracle, measurement, and rollout gates.
+- Added a parameter-free differentiable inverse-rendering layer. Four unrolled
+  finite-difference Gauss--Newton stages jointly refine image centre and
+  log-radius using the public silhouette/shading equations, analytic RGB
+  albedo, a fixed full-frame residual, and bounded trust updates. Known-radius
+  backprojection and analytic free-motion integration remain in ordinary
+  autograd.
+- Removed the rejected colour-conditioned radius calibrator. The v1 evidence
+  is retained by source/report hash rather than silently reinterpreted.
+- Removed fabricated straight-through derivatives from supported hard RGB
+  component centres/radii. Raw learned centres remain available for direct
+  supervision, while hard forward values are correctly detached.
+- Made analytic filter fusion respect independently observed world axes.
+  Source-bound copied coordinates no longer update position, derive velocity,
+  or contract fast-state variance; missing provenance fails closed.
+- The frozen v2 ladder passed its single final test with `0.007644 m` RGB state
+  RMSE, `0.005225 px` centre RMSE, `0.2199%` radius RMSE, `0.007991 m` short-
+  rollout RMSE, and complete validity. The report/ad-hoc-state-artifact
+  SHA-256 values are `2b525a73...c5f0d` and `f9329ea4...60dc`. This qualifies
+  only the minimal path, not heterogeneous accuracy or the rejected research
+  branch.
+- Rebuilt the promotion patch from public `main`; no rejected campaign config,
+  tool, checkpoint, run artifact, or terminal history is imported. Focused
+  expanded clean-port and checkpoint-round-trip validation is `109 passed`;
+  the final repository gate remained pending at that focused-validation
+  boundary.
+- Made future ladder outputs atomic, versioned project checkpoints with step,
+  resolved config, protocol/final metrics, device, RNG, and launch-source
+  provenance; successful reports bind the checkpoint SHA-256. Covered
+  weights-only reload without touching held-out data.
+  The frozen `f9329e...` file is retained truthfully as the older ad-hoc
+  state-dict evidence artifact rather than rewritten. Documented the dedicated
+  qualification command and its boundary from the normal OnlineWorldModel
+  train/evaluate/demo workflow.
+- Strictly loaded a real 740,491-byte specification-1.39/simulator-v4
+  checkpoint into the matching CPU `OnlineWorldModel` with its embedded config
+  and all 177 finite state keys. This compatibility probe used no dataset,
+  rollout, selector/final manifest, or output write.
+- Final frozen-code validation passes `1029` tests with `16` expected
+  inactive-MPS/Aqua skips in `421.17 s`. Whole-tree Ruff check, Ruff
+  format-check (`222 files`), compileall, specification-version contract, and
+  diff checks pass.
+
 ### 2026-08-21 objective ownership, zero-output execution, and live training progress
 
 - Advanced the authoritative contract to specification 1.50. Fast-ROI

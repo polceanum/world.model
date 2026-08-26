@@ -683,17 +683,22 @@ class RGBObservationModule(ObservationModule):
                 minimum_pixels=self.config.structured_disc_min_pixels,
                 maximum_assignment_distance=(self.config.structured_disc_max_assignment_distance),
             )
-            # The RGB component operation is detached.  This straight-through
-            # residual retains gradients for the learned discovery head while
-            # using the directly observed pixel centroid in the forward pass.
-            centre = output.centre + (structured.centres - output.centre).detach()
+            # Connected components are a detached runtime prior. Do not attach
+            # the learned head's derivative to a forward value that the head
+            # cannot change. Raw learned geometry remains available in the
+            # auxiliary fields for direct supervision.
+            centre = torch.where(
+                structured.valid_mask.unsqueeze(-1),
+                structured.centres.detach(),
+                output.centre,
+            )
             normalized_radius = (
                 structured.radius_pixels / (0.5 * min(image.shape[-2], image.shape[-1]))
             ).clamp_min(1.0e-4)
             structured_log_radius = normalized_radius.log().unsqueeze(-1)
             log_radius = torch.where(
                 structured.valid_mask.unsqueeze(-1),
-                output.log_radius + (structured_log_radius - output.log_radius).detach(),
+                structured_log_radius.detach(),
                 output.log_radius,
             )
             structured_valid = structured.valid_mask
@@ -1056,7 +1061,11 @@ class RGBObservationModule(ObservationModule):
                 minimum_pixels=self.config.structured_disc_min_pixels,
                 maximum_assignment_distance=(self.config.structured_disc_max_assignment_distance),
             )
-            centre = values[..., :2] + (structured.centres - values[..., :2]).detach()
+            centre = torch.where(
+                structured.valid_mask.unsqueeze(-1),
+                structured.centres.detach(),
+                values[..., :2],
+            )
             values = torch.cat((centre, values[..., 2:]), dim=-1)
             structured_valid = structured.valid_mask
             structured_ambiguous = structured.ambiguous_mask
@@ -1066,7 +1075,7 @@ class RGBObservationModule(ObservationModule):
                 normalized_radius = (structured.radius_pixels / (0.5 * min(image_size))).clamp_min(
                     1.0e-4
                 )
-                structured_log_radius = normalized_radius.log().unsqueeze(-1)
+                structured_log_radius = normalized_radius.log().unsqueeze(-1).detach()
                 analytic_inverse_depth = self._structured_inverse_depth(
                     structured_log_radius,
                     intrinsics,

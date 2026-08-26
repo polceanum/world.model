@@ -38,56 +38,18 @@ oracle. RGB-only operation must not consume oracle state.
 
 ## Current status
 
-The first complete RGB-only vertical slice is runnable and tested. It includes
-the simulator, typed persistent belief, hybrid dynamics, oracle debug path,
-global/ROI RGB measurements, association and innovation, fast correction,
-occlusion-aware lifecycle, observability-gated parameter updates, training,
-held-out evaluation, and demo export. Evaluation now supports explicit
-fresh-validation seed manifests, current velocity/correction evidence, and
-collision-conditioned model/baseline errors.
+Broad heterogeneous campaigns are paused. The current specification first
+requires a cheap, identifiable RGB-to-state-to-rollout unit to converge before
+association, lifecycle, contact, camera motion, or learned dynamics are added
+back. That unit now passes with `0.007644 m` final RGB state RMSE and
+`0.007991 m` short-rollout RMSE through an ordinary differentiable
+inverse-rendering, calibrated-backprojection, and analytic-kinematics graph.
 
-Accuracy-v3 added an optional, RGB-only structured centre measurement for the
-synthetic disc world. It estimates the row-wise background from pixels, labels
-foreground components, separates touching discs with distance-transform peaks,
-and assigns centres to learned proposals with Hungarian matching. This is a
-synthetic-world image prior, not simulator-state input; the modality-independent
-belief and online filter contracts are unchanged. The sphere profiles enable
-it, with a stricter `0.08` foreground threshold in the noisy `toy_hard` and
-`cloud_single_gpu` profiles.
-
-Accuracy-v4 continues the selected perception state for 64 causal closed-loop
-RGB updates and promotes the validation-selected step-648 rollout checkpoint.
-On paired confirmation seeds it improves every forecast horizon and collision
-F1 over step 584, with tiny mixed current-state, velocity, and perturbation
-tradeoffs.
-
-This remains implementation evidence, not a completed research milestone. The
-frozen step-648 checkpoint was evaluated on 32 reserved-test episodes, seeds
-`200064–200095`. It measured `0.0893 / 0.1169 m` current position MAE/RMSE,
-`0.7923 m/s` velocity RMSE, `0.1383 / 0.1777 / 0.2329 m` forecast RMSE at
-0.1/0.25/0.5 seconds, `45.30%` perturbation recovery, collision F1 `0.6400`,
-100% distance-gated detection, zero ID switches, and 90% forecast coverage of
-`86.95%`. RGB-only runtime used four global and 12 ROI-local updates in the
-demo and improved current/future error after observations. Collision F1
-remains below the recommended `0.75` gate, useful online physical-parameter
-identification is not established, and the full MPS schedule has not run. See
-[`project/STATUS.md`](project/STATUS.md) for exact commands, current metrics,
-and limitations.
-
-A bounded three-sample, persistent-ID RGB motion history is implemented as an
-opt-in experiment. On 16 fresh validation episodes it improved velocity RMSE
-but regressed localization and aggregate forecasts, so it remains disabled in
-the public profiles. A controlled continuation raised collision F1 to 0.1216
-but worsened the primary physical metrics and was likewise not promoted.
-
-The scaled profile now also keeps scarce global scale anchors in a separate
-persistent-ID ring, so centre-only ROI updates cannot evict the multi-frame
-depth evidence. A robust axis-local trajectory estimate corrects only the
-calibrated camera-depth component of `WorldBelief`. With unchanged model
-weights, current position and every recursive 0.1–1.0-second position horizon
-improved on two disjoint paired MPS blocks. Velocity and collision F1 regressed,
-so this is a position/depth improvement rather than a claim that event dynamics
-are solved; exact metrics and reports are in `project/STATUS.md`.
+The full `OnlineWorldModel` train/evaluate/demo path remains runnable, but no
+older multi-day campaign is a current launch recommendation or promotion
+incumbent. Historical experiments and their limitations remain in
+[`project/STATUS.md`](project/STATUS.md); the minimal qualification workflow is
+below.
 
 ## Quick start
 
@@ -103,59 +65,49 @@ python demo.py --config configs/toy_mps.yaml --checkpoint <path>
 pytest
 ```
 
-The current specification-1.46 grounded campaign is:
+### Minimal differentiable convergence qualification
+
+The one-sphere convergence ladder is a deliberately isolated developer
+qualification, not a second deployment model. Run it through its dedicated
+command with fresh output paths:
 
 ```bash
-python train.py \
-  --config configs/grounded_convergence_mps.yaml \
-  --initialize-from \
-    runs/20260814-101500-attention-node-z-recovery-512/checkpoints/best_rollout.pt \
-  --run-name "$(date -u +%Y%m%d-%H%M%S)-grounded-convergence-mps" \
-  --device mps
+conda run -n orpheus python scripts/run_minimal_toy_ladder.py \
+  --config configs/minimal_differentiable_toy_cpu.yaml \
+  --report runs/minimal_differentiable_toy_v2/report.json \
+  --checkpoint runs/minimal_differentiable_toy_v2/model.pt
 ```
 
-It uses simulator-v6 clean interaction windows, independent raw structured RGB
-history with current-time gravity compensation, a balanced eight-scenario
-batch at every update, and 9,216 causal updates (73,728 episode draws). The
-first 3,072 updates train state/ROI anchoring; the remaining schedule adds only
-relation/shared interaction capacity. Warmup, cosine decay, repeated fixed
-32-episode validation, and a final low-rate tail make this a convergence run,
-not a short architecture probe. The protected checkpoint is transferred by
-weights only because simulator, observation, and semantic protocols changed.
-Run matched step-zero diagnostics before launching; pair applicability is
-explicit and the runtime hypothesis pool remains disabled.
+The successful JSON report is the complete oracle, train, selector,
+confirmation, and one-shot final evaluation record. A failed report stops at
+the first rejected rung. The checkpoint is an atomic, versioned
+weights-only project checkpoint at step 72; it is suitable for initialization,
+not exact optimizer resume. The report records its SHA-256 digest. Reload it
+into the matching minimal estimator with:
 
-The older multi-day shared-model accuracy campaign was:
+```python
+from world_model.training.checkpointing import load_model_weights
+from world_model.training.minimal_toy import DifferentiableToyStateEstimator
+from world_model.utils.config import load_config
 
-```bash
-python train.py \
-  --config configs/sustained_accuracy_mps_v3.yaml \
-  --initialize-from \
-    runs/20260730-192625-scaled-sustained-e2e-v1/checkpoints/best_measurement.pt \
-  --run-name "$(date -u +%Y%m%d-%H%M%S)-scaled-sustained-v3" \
-  --device mps
+config = load_config("configs/minimal_differentiable_toy_cpu.yaml")
+model = DifferentiableToyStateEstimator(
+    image_size=config.simulator.image_size,
+    world_radius_m=config.simulator.radius_range[0],
+)
+load_model_weights("runs/minimal_differentiable_toy_v2/model.pt", model=model,
+                   expected_config=config)
 ```
 
-This profile runs 8,192 paired global/fast RGB updates followed by 8,192
-supported causal updates over the balanced eight-scenario pool. It uses
-40-frame mature forecast anchors, keeps the imported reference separate from
-the mutable training state, skips unsupported causal draws instead of
-consuming empty optimizer steps, and applies an interaction-local clip before
-the whole-model clip. Promotion checks velocity, detection, lifecycle, events,
-identity, every axis/horizon, calibration, coverage, and scenario support.
-The v1/v2 profiles and runs remain audit controls; neither is a convergence
-result. See `project/ACCURACY_AUDIT.md` and `project/TRAINING.md` for exact
-evidence and the required medium qualification before a sustained launch.
+`train.py`, `evaluate.py`, and `demo.py` remain the supported
+`OnlineWorldModel` workflow and must not be used with this deliberately smaller
+estimator. The ladder exists to close identifiability and gradient correctness
+before another complexity rung enters that production path.
 
-The historical v3 profile runs the convolutional RGB backbone and ROI path on MPS, pins
-the small global proposal transformer to CPU through differentiable copies,
-and switches the full persistent model to CPU at the causal boundary. The
-proposal fallback avoids a reproduced PyTorch 2.10 MPS NaN-gradient kernel on
-finite full-resolution features; a matched benchmark found the branch-heavy
-online filter/dynamics backward pass substantially faster on CPU on this Mac.
-`--resume` preserves both configured phase devices and the exact absolute
-sample/RNG/source protocol. Use `--initialize-from` for a changed device,
-objective, curriculum, or source implementation.
+The former specification-1.46 grounded and earlier multi-day accuracy commands
+are intentionally no longer presented as launch instructions. They are
+historical evidence only; broad training stays paused until the next isolated
+complexity rung preserves the minimal gates.
 
 For an immutable promotion decision for a legacy CPU-fallback candidate, run
 the full trainer manifest once for the protected reference and candidate on an

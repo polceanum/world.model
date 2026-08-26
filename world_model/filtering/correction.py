@@ -119,6 +119,66 @@ class BeliefUpdater(nn.Module):
         )
 
     @staticmethod
+    def _position_causal_axis_support(
+        measured: MeasurementSet,
+        innovation: InnovationSet,
+        association: AssociationResult,
+        batch_index: Tensor,
+        pair_index: Tensor,
+    ) -> Tensor:
+        """Return independently observed world axes for associated rows.
+
+        The typed measurement is authoritative. Source-conditioned rows that
+        omit axis provenance fail closed because a copied prior coordinate is
+        not a new observation. Legacy unbound/global measurements retain
+        all-axis support.
+        """
+
+        independent_axis = measured.auxiliary.get("world_position_independent_axis_mask")
+        if independent_axis is not None:
+            expected_shape = (*measured.values.shape[:2], 3)
+            if independent_axis.shape != expected_shape or independent_axis.dtype != torch.bool:
+                raise ValueError("measured world-position independence must be boolean [B,M,3]")
+            measurement_index = association.measurement_indices[
+                batch_index,
+                pair_index,
+            ]
+            return independent_axis[batch_index, measurement_index]
+
+        source_bound = innovation.auxiliary.get("measured_source_bound")
+        if source_bound is not None:
+            if (
+                source_bound.shape != association.pair_mask.shape
+                or source_bound.dtype != torch.bool
+            ):
+                raise ValueError("measured source-bound mask must be boolean [B,P]")
+            selected_source_bound = source_bound[batch_index, pair_index]
+        else:
+            selected_source_bound = torch.zeros(
+                (batch_index.numel(),),
+                dtype=torch.bool,
+                device=batch_index.device,
+            )
+
+        source_fields_present = (
+            measured.source_belief_indices is not None or measured.source_object_ids is not None
+        )
+        if source_fields_present:
+            if measured.source_belief_indices is None or measured.source_object_ids is None:
+                raise ValueError(
+                    "source-conditioned measurements require both source identity fields"
+                )
+            selected_source_bound = torch.ones_like(selected_source_bound)
+
+        if source_bound is not None or source_fields_present:
+            return ~selected_source_bound.unsqueeze(-1).expand(-1, 3)
+        return torch.ones(
+            (batch_index.numel(), 3),
+            dtype=torch.bool,
+            device=batch_index.device,
+        )
+
+    @staticmethod
     def _normalise_dt(prior: WorldBelief, dt: float | Tensor) -> Tensor:
         value = torch.as_tensor(
             dt,
@@ -234,24 +294,49 @@ class BeliefUpdater(nn.Module):
         correction_evidence = packed.new_zeros((batch_index.numel(), packed.shape[-1]))
         correction_confidence = packed.new_zeros(correction_evidence.shape)
         position_slice = packing["position"]
+        position_causal_axis_support = self._position_causal_axis_support(
+            measured,
+            innovation,
+            association,
+            batch_index,
+            pair_index,
+        )
         prior_position = packed[batch_index, belief_index, position_slice]
         prior_position_lv = log_variance[batch_index, belief_index, position_slice]
+        causal_position_measurement = torch.where(
+            position_causal_axis_support,
+            position_measurement,
+            prior_position,
+        )
+        causal_position_measurement_lv = torch.where(
+            position_causal_axis_support,
+            position_measurement_lv,
+            prior_position_lv,
+        )
         position_standard_deviation = (
-            (prior_position_lv.exp() + position_measurement_lv.exp()).clamp_min(1.0e-8).sqrt()
+            (prior_position_lv.exp() + causal_position_measurement_lv.exp())
+            .clamp_min(1.0e-8)
+            .sqrt()
         )
         correction_evidence[..., position_slice] = (
-            (position_measurement - prior_position) / position_standard_deviation
+            (causal_position_measurement - prior_position) / position_standard_deviation
         ).clamp(-self.config.robust_clip_norm, self.config.robust_clip_norm)
         position_learned_confidence = position_confidence
         if position_learned_confidence.ndim == confidence.ndim:
             position_learned_confidence = position_learned_confidence.unsqueeze(-1)
-        correction_confidence[..., position_slice] = position_learned_confidence
+        analytic_position_confidence = position_learned_confidence * (
+            position_causal_axis_support.to(position_learned_confidence.dtype)
+        )
+        # The same causal-axis support owns both analytic and learned
+        # innovation-anchored updates. A copied/source-bound coordinate is not
+        # evidence for either a learned mean shift or variance contraction.
+        correction_confidence[..., position_slice] = analytic_position_confidence
         analytic_position = diagonal_kalman_update(
             prior_position,
             prior_position_lv,
-            position_measurement,
-            position_measurement_lv,
-            confidence=position_confidence,
+            causal_position_measurement,
+            causal_position_measurement_lv,
+            confidence=analytic_position_confidence,
             robust_clip_norm=self.config.robust_clip_norm,
             minimum_log_variance=self.config.minimum_log_variance,
             maximum_log_variance=self.config.maximum_log_variance,
@@ -325,7 +410,7 @@ class BeliefUpdater(nn.Module):
             elapsed = elapsed_by_batch[batch_index]
             valid_elapsed = elapsed > self.config.minimum_velocity_dt
             safe_elapsed = elapsed.clamp_min(self.config.minimum_velocity_dt)
-            position_residual = position_measurement - prior_position
+            position_residual = causal_position_measurement - prior_position
             raw_velocity_delta = position_residual / safe_elapsed.unsqueeze(-1)
             delta_norm = torch.linalg.vector_norm(
                 raw_velocity_delta,
@@ -345,15 +430,15 @@ class BeliefUpdater(nn.Module):
             # A finite difference amplifies position noise by 1/dt². The
             # additional scale keeps this indirect observation conservative.
             velocity_measurement_variance = (
-                position_measurement_lv.exp()
+                causal_position_measurement_lv.exp()
                 / safe_elapsed.unsqueeze(-1).square()
                 * self.config.velocity_from_position_variance_scale
             )
             velocity_measurement_lv = velocity_measurement_variance.clamp_min(1.0e-10).log()
             elapsed_confidence = valid_elapsed.to(confidence.dtype)
-            if position_confidence.ndim == elapsed_confidence.ndim + 1:
+            if analytic_position_confidence.ndim == elapsed_confidence.ndim + 1:
                 elapsed_confidence = elapsed_confidence.unsqueeze(-1)
-            velocity_confidence = position_confidence * elapsed_confidence
+            velocity_confidence = analytic_position_confidence * elapsed_confidence
             analytic_velocity = diagonal_kalman_update(
                 prior_velocity,
                 log_variance[batch_index, belief_index, velocity_slice],

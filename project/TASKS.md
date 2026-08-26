@@ -1,5 +1,43 @@
 # Tasks
 
+## Convergence-first differentiable toy — specification 1.51
+
+- [x] Stop heterogeneous campaign iteration and define a deterministic,
+  collision-free one-sphere ladder with fixed physical parameters.
+- [x] Prove oracle-state analytic position/velocity accuracy and a real
+  velocity gradient through the deployed kinematics.
+- [x] Remove fabricated straight-through gradients from hard structured RGB
+  centres/radii while retaining separately supervised raw learned geometry.
+- [x] Prevent source-bound copied world axes from entering analytic Kalman or
+  position-derived-velocity fusion.
+- [x] Replace the rejected learned radius calibrator with a parameter-free,
+  four-stage differentiable Gauss--Newton inverse of the public renderer.
+- [x] Pass the seed-free 100-profile renderer grid and finite-difference
+  gradient checks.
+- [x] Pass the single disjoint train/selector/confirmation/final ladder at
+  frozen source `f8d66da`; preserve the report/ad-hoc-state-artifact hashes and
+  do not rerun the final manifest for metadata.
+- [x] Rebuild the promotion change from public `main` without importing the
+  rejected research-campaign history; the expanded focused clean-port and
+  checkpoint-round-trip suite passes (`109`).
+- [x] Make future standalone ladder artifacts atomic, project-compatible
+  weights-only checkpoints, bind their SHA-256 in successful reports, and
+  verify a synthetic-only load round trip without rematerializing the final
+  manifest.
+- [x] Document the dedicated qualification/reload path and its explicit
+  boundary from the normal OnlineWorldModel train/evaluate/demo workflow.
+- [x] Validate a real historical checkpoint/config path: strict CPU load of
+  the finite specification-1.39/simulator-v4 step-zero artifact passed without
+  reading any dataset, selector, or final manifest.
+- [x] Run final gates: repository pytest passes `1029` with `16` expected
+  inactive-MPS/Aqua skips; Ruff check/format, compileall, version-contract, and
+  diff checks pass.
+- [ ] Commit and push the clean promotion branch, verify remote identity, then
+  merge it to `main` only if every final gate remains green.
+- [ ] Scale exactly one independently measurable complexity at a time; stop
+  any new family at its predeclared selector/confirmation gate and do not tune
+  against the final set.
+
 ## Objective ownership and measured execution — specification 1.50
 
 - [x] Detach and clone the prior plus detach the modality cache for the

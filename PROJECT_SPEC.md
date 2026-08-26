@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.50
+**Version:** 1.51
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy amendment 26 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -7480,6 +7480,105 @@ change. Throughput diagnostics authorize device/cadence protocol choices only;
 they do not constitute accuracy promotion or convergence evidence.
 
 ---
+
+# Part XLIII — Convergence-first differentiable-system amendment
+
+## 235. Scale only after an identifiable toy closes end to end
+
+Broad heterogeneous campaigns must not substitute for a failed minimal
+identifiability test. Before adding lifecycle, association, contact, camera
+motion, hidden parameter variation, or learned interaction residuals, a fixed
+one-sphere unit must pass three ordered rungs:
+
+1. oracle position and velocity through the deployed analytic free-motion
+   equations, with position and velocity RMSE at most `1e-5` and a nonzero
+   velocity gradient;
+2. RGB-only state estimation through calibrated backprojection, with world
+   position RMSE at most `0.05 m`, centre RMSE at most `0.5 px`, apparent-
+   radius relative RMSE at most `2%`, and complete finite measurement support;
+3. RGB-derived velocity and a `0.1 s` analytic rollout, with position RMSE at
+   most `0.05 m`, while retaining every state gate.
+
+The toy fixes one visible sphere, radius, camera, gravity, drag, and sampling
+cadence and excludes contact and interventions. Privileged labels are allowed
+only in supervised losses and gates. Train, selector, confirmation, and final
+manifests are disjoint; the final set is materialized once and only after the
+earlier rungs pass. A failed architecture family stops rather than weakening
+its gate or repeatedly inspecting the final set.
+
+## 236. Encode renderer physics as an ordinary differentiable inverse
+
+For the minimal RGB unit, apparent centre and radius are inferred jointly from
+pixels by four unrolled finite-difference Gauss--Newton stages over
+`(centre_x, centre_y, log_radius)`. Each stage evaluates the current hypothesis
+and symmetric perturbations on all three coordinates, eliminates RGB albedo by
+differentiable least squares, forms a full-frame residual Jacobian, solves a
+damped `3 x 3` normal equation, and applies a componentwise bounded trust
+update. The smooth renderer surrogate matches the public one-pixel silhouette
+and radial sphere-shading equations. It consumes no simulator label, state,
+seed, connected component, argmin, detached optimizer, or straight-through
+replacement.
+
+The physical sphere radius, camera calibration, and drag coefficient are
+declared identifiable toy priors. Known-radius pinhole backprojection and the
+existing analytic kinematics remain tensor equations in the autograd graph.
+The only learned toy owner is a soft RGB mask head; measurement and rollout
+losses reach it through image moments, every Gauss--Newton stage,
+backprojection, temporal differencing, and analytic integration. Learned
+residual dynamics are excluded until this equation-led path no longer explains
+the error.
+
+## 237. Hard runtime priors do not receive fabricated derivatives
+
+Connected-component RGB centres and radii are legitimate detached runtime
+priors, but their valid forward values must not borrow the derivative of an
+unrelated learned head. Supported hard rows therefore use detached structured
+geometry directly; raw learned centre outputs remain available separately for
+direct supervision. Invalid rows retain the learned fallback and its ordinary
+gradient.
+
+Likewise, a source-conditioned measurement may fuse only world axes marked as
+independently observed. Copied prior coordinates have zero analytic Kalman and
+position-derived-velocity confidence and cannot contract posterior variance.
+An explicit typed axis mask is authoritative; a source-bound row without that
+provenance fails closed, while legacy unbound/global measurements retain all-
+axis compatibility.
+
+## 238. Minimal-toy qualification and promotion boundary
+
+Frozen source `f8d66da17983aa0269649fff69cc13cec5ad1311` passed the exact v2
+ladder. The report SHA-256 is
+`2b525a73e65fbd8db4a9cd826b7835293463826bcc7c42daffd03339ca1c5f0d`
+and the legacy ad-hoc state-dict artifact SHA-256 is
+`f9329ea4fc1f97789a6c93268c61b2c00dc2d798b3e410e4e0937111c5cd60dc`.
+Final RGB state/centre/radius error was `0.007644 m`, `0.005225 px`, and
+`0.2199%`; final `0.1 s` rollout error was `0.007991 m`; validity was `1.0`.
+All four mask-head scalars changed from initialization and both training phases
+had finite nonzero gradients. This proves the toy path, not heterogeneous
+scene convergence or promotion of the accumulated research branch.
+
+Promotion starts from the public `main` commit and contains only this minimal
+path plus the gradient-truth repairs. Rejected campaign profiles, tools,
+checkpoints, and terminal project-memory history remain on their research
+branches or content-addressed external evidence; they are not imported and
+then deleted. The next scale rung may add exactly one independently measurable
+complexity and must preserve these gates before broader training resumes.
+
+This unit is a standalone developer qualification invoked with
+`conda run -n orpheus python scripts/run_minimal_toy_ladder.py --config
+configs/minimal_differentiable_toy_cpu.yaml --report <fresh-report> --checkpoint
+<fresh-checkpoint>`. Its successful report is the complete selector,
+confirmation, and one-shot-final evaluation output; a failed report ends at
+the first rejected rung. The dedicated estimator is intentionally
+smaller than `OnlineWorldModel`, so the general `train.py`, `evaluate.py`, and
+`demo.py` commands do not accept its artifacts. Future ladder outputs use the
+ordinary atomic project checkpoint schema at step 72, bind the resolved config,
+protocol, final metrics, versions, device, RNG, and captured source provenance,
+record the resulting checkpoint SHA-256 in the successful report, and load
+through `load_model_weights` into `DifferentiableToyStateEstimator`. They are
+weights-only initializers, not exact training resumes. The frozen `f9329e...`
+artifact predates that packaging repair and remains immutable scientific
+evidence rather than being relabelled as a compatible checkpoint.
 
 # Closing directive
 

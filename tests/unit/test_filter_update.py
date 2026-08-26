@@ -202,6 +202,71 @@ def _rgb_position_update_case() -> tuple[
     return belief, measurement, predicted, association
 
 
+def test_source_bound_copied_position_axes_never_fuse_as_new_evidence() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(enable_learned_corrector=False),
+    )
+
+    unbound_innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    unbound = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=unbound_innovation,
+        dt=1.0,
+    )
+    assert not torch.equal(unbound.objects.position, belief.objects.position)
+    assert not torch.equal(unbound.objects.velocity, belief.objects.velocity)
+    assert not torch.equal(
+        unbound.objects.fast_log_variance[..., :6],
+        belief.objects.fast_log_variance[..., :6],
+    )
+
+    for independent_axis_mask in (
+        torch.zeros((1, 1, 3), dtype=torch.bool),
+        None,
+    ):
+        auxiliary = dict(measured.auxiliary)
+        if independent_axis_mask is not None:
+            auxiliary["world_position_independent_axis_mask"] = independent_axis_mask
+        source_bound = replace(
+            measured,
+            auxiliary=auxiliary,
+            source_belief_indices=torch.tensor([[0]]),
+            source_object_ids=torch.tensor([[3]]),
+        )
+        source_innovation = build_innovation(
+            measured=source_bound,
+            predicted=predicted,
+            association=association,
+            modality_index=0,
+        )
+        posterior = updater.correct(
+            prior=belief,
+            measured=source_bound,
+            predicted=predicted,
+            association=association,
+            innovation=source_innovation,
+            dt=1.0,
+        )
+
+        assert torch.equal(posterior.objects.position, belief.objects.position)
+        assert torch.equal(posterior.objects.velocity, belief.objects.velocity)
+        assert torch.equal(
+            posterior.objects.fast_log_variance,
+            belief.objects.fast_log_variance,
+        )
+
+
 def test_weak_association_does_not_confirm_track_lifecycle() -> None:
     belief, measured, predicted, association = _rgb_position_update_case()
     measured = replace(
@@ -278,6 +343,113 @@ def _force_nonzero_learned_fast_outputs(updater: BeliefUpdater) -> None:
         corrector.variance_head.bias.fill_(1.0)
         corrector.gate_head.weight.zero_()
         corrector.gate_head.bias.fill_(8.0)
+
+
+@pytest.mark.parametrize("include_axis_mask", [True, False])
+def test_source_bound_unsupported_axes_block_learned_mean_and_variance(
+    include_axis_mask: bool,
+) -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    auxiliary = dict(measured.auxiliary)
+    if include_axis_mask:
+        auxiliary["world_position_independent_axis_mask"] = torch.zeros(
+            (1, 1, 3),
+            dtype=torch.bool,
+        )
+    source_bound = replace(
+        measured,
+        auxiliary=auxiliary,
+        source_belief_indices=torch.tensor([[0]]),
+        source_object_ids=torch.tensor([[3]]),
+    )
+    innovation = build_innovation(
+        measured=source_bound,
+        predicted=predicted,
+        association=association,
+        modality_index=0,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(
+            innovation_anchored_correction=True,
+            learned_residual_scale=0.5,
+        ),
+    )
+    _force_nonzero_learned_fast_outputs(updater)
+    corrector = updater.learned_corrector
+    assert corrector is not None
+    with torch.no_grad():
+        corrector.variance_head.bias[:6].fill_(-1.0)
+
+    posterior = updater.correct(
+        prior=belief,
+        measured=source_bound,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+    )
+
+    assert torch.equal(posterior.objects.position, belief.objects.position)
+    assert torch.equal(posterior.objects.velocity, belief.objects.velocity)
+    assert torch.equal(
+        posterior.objects.fast_log_variance[..., :6],
+        belief.objects.fast_log_variance[..., :6],
+    )
+
+
+def test_unsupported_position_values_cannot_suppress_a_supported_axis() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(
+            innovation_anchored_correction=True,
+            learned_residual_scale=0.5,
+        ),
+    )
+    _force_nonzero_learned_fast_outputs(updater)
+
+    def corrected(unsupported_y: float, unsupported_z: float):
+        world_position = measured.auxiliary["world_position"].clone()
+        world_position[..., 1] = unsupported_y
+        world_position[..., 2] = unsupported_z
+        partial = replace(
+            measured,
+            auxiliary={
+                **measured.auxiliary,
+                "world_position": world_position,
+                "world_position_independent_axis_mask": torch.tensor([[[True, False, False]]]),
+            },
+            source_belief_indices=torch.tensor([[0]]),
+            source_object_ids=torch.tensor([[3]]),
+        )
+        innovation = build_innovation(
+            measured=partial,
+            predicted=predicted,
+            association=association,
+            modality_index=0,
+        )
+        return updater.correct(
+            prior=belief,
+            measured=partial,
+            predicted=predicted,
+            association=association,
+            innovation=innovation,
+            dt=1.0,
+        )
+
+    ordinary = corrected(0.0, 0.0)
+    adversarial = corrected(1000.0, -1000.0)
+
+    assert ordinary.objects.position[0, 0, 0] > 0.5
+    assert torch.equal(adversarial.objects.position, ordinary.objects.position)
+    assert torch.equal(adversarial.objects.velocity, ordinary.objects.velocity)
+    assert torch.equal(
+        adversarial.objects.fast_log_variance[..., :6],
+        ordinary.objects.fast_log_variance[..., :6],
+    )
 
 
 def test_innovation_anchored_corrector_is_axis_local_and_support_masked() -> None:
