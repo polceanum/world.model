@@ -23,17 +23,31 @@ from world_model.datasets.collate import collate_episodes
 from world_model.dynamics import AnalyticKinematics
 from world_model.observations.rgb.projector import backproject_rgb_measurements
 from world_model.observations.rgb.soft_geometry import (
+    PHOTOMETRIC_CANDIDATES_PER_STAGE,
+    PHOTOMETRIC_CENTRE_TRUST_STEPS_PIXELS,
+    PHOTOMETRIC_DAMPING_FORMULA,
+    PHOTOMETRIC_RADIUS_SCALE_BRACKET,
+    PHOTOMETRIC_RESIDUAL_NORMALIZATION,
+    PHOTOMETRIC_TRUST_TRANSFORM,
     SoftDiscGeometryOutput,
+    SoftPhotometricRadiusOutput,
     soft_disc_geometry_from_rgb,
+    soft_photometric_disc_radius,
 )
 from world_model.simulator.episode import Episode, generate_episode
 from world_model.utils.config import OrpheusConfig
 from world_model.utils.seeds import seed_everything
 
-TRAIN_SEEDS = tuple(range(8))
-SELECTOR_SEEDS = tuple(range(100_000, 100_004))
-CONFIRMATION_SEEDS = tuple(range(100_004, 100_008))
-FINAL_TEST_SEEDS = tuple(range(200_000, 200_008))
+TRAIN_SEEDS = tuple(range(8, 16))
+SELECTOR_SEEDS = tuple(range(100_008, 100_012))
+CONFIRMATION_SEEDS = tuple(range(100_012, 100_016))
+FINAL_TEST_SEEDS = tuple(range(200_008, 200_016))
+
+ARCHITECTURE_VERSION = 2
+REJECTED_V1_COMMIT = "578c3770f49293d5390ae74ab5c73b4ebc50e9ca"
+REJECTED_V1_REPORT_SHA256 = (
+    "a9cafaad5bd7fcabaebfdd815a89b6fe125284ca270a00b1a782def3bf683ce1"
+)
 
 MEASUREMENT_UPDATES = 60
 ROLLOUT_UPDATES = 12
@@ -76,16 +90,17 @@ class ToyStateEstimate:
     radius_pixels: Tensor
     slot_mask_logits: Tensor
     geometry: SoftDiscGeometryOutput
+    photometric_radius: SoftPhotometricRadiusOutput
 
 
 class DifferentiableToyStateEstimator(nn.Module):
     """Minimal learned RGB owner around differentiable geometric moments.
 
     The per-pixel head softly reweights observable foreground evidence.  A
-    bounded feature-conditioned radius calibration accounts for antialiasing
-    and shading bias before the known physical sphere radius supplies metric
-    depth.  There is no connected component, CPU assignment, detached forward
-    replacement, or straight-through estimator in this path.
+    parameter-free differentiable inverse-rendering fit handles antialiasing,
+    shading, and per-frame albedo before the known physical sphere radius
+    supplies metric depth.  There is no connected component, CPU assignment,
+    detached forward replacement, or straight-through estimator in this path.
     """
 
     def __init__(
@@ -115,12 +130,6 @@ class DifferentiableToyStateEstimator(nn.Module):
         nn.init.zeros_(self.mask_head.weight)
         nn.init.constant_(self.mask_head.bias, 4.0)
 
-        # Features: log radius, continuous confidence, normalized centre, and
-        # the three foreground-weighted colour channels.
-        self.radius_calibrator = nn.Linear(7, 1)
-        nn.init.zeros_(self.radius_calibrator.weight)
-        nn.init.zeros_(self.radius_calibrator.bias)
-
     def forward(
         self,
         image: Tensor,
@@ -147,27 +156,13 @@ class DifferentiableToyStateEstimator(nn.Module):
             foreground_temperature=self.foreground_temperature,
             minimum_mass=self.minimum_mass,
         )
-        effective_mask = geometry.effective_masks
-        safe_mass = geometry.mass.clamp_min(1.0e-8)
-        weighted_colour = torch.einsum(
-            "bshw,bchw->bsc",
-            effective_mask,
+        photometric_radius = soft_photometric_disc_radius(
             image,
-        ) / safe_mass.unsqueeze(-1)
-        radius_features = torch.cat(
-            (
-                geometry.radius_pixels.clamp_min(1.0e-6).log().unsqueeze(-1),
-                geometry.confidence.unsqueeze(-1),
-                geometry.centres,
-                weighted_colour,
-            ),
-            dim=-1,
+            geometry.centres,
+            geometry.radius_pixels,
         )
-        # The calibration is identity at initialization and cannot escape the
-        # physically plausible +/-15% antialiasing correction range.
-        raw_correction = self.radius_calibrator(radius_features).squeeze(-1)
-        log_radius_correction = 0.15 * torch.tanh(raw_correction / 0.15)
-        radius_pixels = geometry.radius_pixels * log_radius_correction.exp()
+        radius_pixels = photometric_radius.radius_pixels
+        centres = photometric_radius.centres
 
         focal_pixels = 0.5 * (intrinsics[:, 0, 0] + intrinsics[:, 1, 1])
         inverse_depth = radius_pixels / (
@@ -176,7 +171,7 @@ class DifferentiableToyStateEstimator(nn.Module):
         normalised_radius = radius_pixels / (0.5 * min(self.image_size))
         values = torch.cat(
             (
-                geometry.centres,
+                centres,
                 normalised_radius.clamp_min(1.0e-8).log().unsqueeze(-1),
                 inverse_depth.unsqueeze(-1),
                 image.new_zeros((batch, 1, 3)),
@@ -191,10 +186,11 @@ class DifferentiableToyStateEstimator(nn.Module):
         )
         return ToyStateEstimate(
             world_position=world_position,
-            centres=geometry.centres,
+            centres=centres,
             radius_pixels=radius_pixels,
             slot_mask_logits=slot_mask_logits,
             geometry=geometry,
+            photometric_radius=photometric_radius,
         )
 
 
@@ -339,6 +335,29 @@ def rollout_learning_rate(config: OrpheusConfig) -> float:
         config.training.learning_rate
         * config.training.closed_loop_learning_rate_scale
     )
+
+
+def photometric_solver_protocol() -> dict[str, Any]:
+    """Return the immutable v2 inverse-rendering solver contract."""
+
+    maximum_log_radius_step = max(
+        abs(math.log(PHOTOMETRIC_RADIUS_SCALE_BRACKET[0])),
+        abs(math.log(PHOTOMETRIC_RADIUS_SCALE_BRACKET[1])),
+    )
+    return {
+        "type": "four_stage_finite_difference_gauss_newton",
+        "candidates_per_stage": PHOTOMETRIC_CANDIDATES_PER_STAGE,
+        "centre_trust_steps_pixels": list(PHOTOMETRIC_CENTRE_TRUST_STEPS_PIXELS),
+        "log_radius_trust_steps": [
+            maximum_log_radius_step / (2**stage_index)
+            for stage_index in range(len(PHOTOMETRIC_CENTRE_TRUST_STEPS_PIXELS))
+        ],
+        "damping": PHOTOMETRIC_DAMPING_FORMULA,
+        "trust_transform": PHOTOMETRIC_TRUST_TRANSFORM,
+        "residual_normalization": PHOTOMETRIC_RESIDUAL_NORMALIZATION,
+        "candidate_support": "candidate_independent_full_frame",
+        "nuisance_albedo": "analytic_least_squares_clamped_0_1",
+    }
 
 
 def _belief_objects(
@@ -518,8 +537,54 @@ def measurement_metrics(
         ),
         "radius_relative_rmse": float(relative_radius_error.square().mean().sqrt()),
         "minimum_confidence": float(estimate.geometry.confidence.min()),
+        "minimum_photometric_confidence": float(
+            estimate.photometric_radius.confidence.min()
+        ),
+        "maximum_photometric_fit_rms": float(
+            estimate.photometric_radius.fit_mse.max().sqrt()
+        ),
+        "maximum_photometric_initial_fit_rms": float(
+            estimate.photometric_radius.stage_fit_mse[..., 0].max().sqrt()
+        ),
+        "maximum_photometric_stage_fit_ratio": float(
+            estimate.photometric_radius.stage_fit_ratio.max()
+        ),
+        "maximum_photometric_stage_trust_fraction": float(
+            estimate.photometric_radius.stage_max_trust_fraction.max()
+        ),
+        "maximum_photometric_support_fraction": float(
+            estimate.photometric_radius.support_fraction.max()
+        ),
+        "photometric_finite_fraction": float(
+            estimate.photometric_radius.all_stage_finite_mask
+            .to(torch.float32)
+            .mean()
+        ),
+        "photometric_final_fit_valid_fraction": float(
+            estimate.photometric_radius.final_fit_valid_mask
+            .to(torch.float32)
+            .mean()
+        ),
+        "photometric_monotonic_fraction": float(
+            estimate.photometric_radius.stage_monotonic_mask
+            .to(torch.float32)
+            .mean()
+        ),
+        "photometric_support_valid_fraction": float(
+            estimate.photometric_radius.support_valid_mask.to(torch.float32).mean()
+        ),
+        "photometric_valid_fraction": float(
+            estimate.photometric_radius.valid_mask.to(torch.float32).mean()
+        ),
         "minimum_foreground_mass": float(estimate.geometry.mass.min()),
-        "valid_fraction": float(estimate.geometry.valid_mask.to(torch.float32).mean()),
+        "valid_fraction": float(
+            (
+                estimate.geometry.valid_mask
+                & estimate.photometric_radius.valid_mask
+            )
+            .to(torch.float32)
+            .mean()
+        ),
     }
 
 
@@ -647,6 +712,9 @@ def run_minimal_toy_ladder(
     torch.set_num_threads(1)
     report: dict[str, Any] = {
         "protocol": {
+            "architecture_version": ARCHITECTURE_VERSION,
+            "rejected_v1_commit": REJECTED_V1_COMMIT,
+            "rejected_v1_report_sha256": REJECTED_V1_REPORT_SHA256,
             "train_seeds": list(TRAIN_SEEDS),
             "selector_seeds": list(SELECTOR_SEEDS),
             "confirmation_seeds": list(CONFIRMATION_SEEDS),
@@ -654,6 +722,7 @@ def run_minimal_toy_ladder(
             "measurement_updates": MEASUREMENT_UPDATES,
             "rollout_updates": ROLLOUT_UPDATES,
             "gates": asdict(gates),
+            "photometric_solver": photometric_solver_protocol(),
             "final_test_policy": "one shot after selector and confirmation pass",
         },
         "rungs": {},
@@ -780,6 +849,7 @@ def run_minimal_toy_ladder(
 
 
 __all__ = [
+    "ARCHITECTURE_VERSION",
     "CONFIRMATION_SEEDS",
     "ConvergenceGateError",
     "DEFAULT_GATES",
@@ -794,6 +864,7 @@ __all__ = [
     "measurement_metrics",
     "measurement_learning_rate",
     "measurement_objective",
+    "photometric_solver_protocol",
     "rollout_learning_rate",
     "rollout_metrics",
     "run_minimal_toy_ladder",

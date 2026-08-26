@@ -1,5 +1,5 @@
 project:
-  name: orpheus-minimal-differentiable-toy-cpu
+  name: orpheus-minimal-differentiable-toy-v2-cpu
   seed: 0
   output_dir: runs
   deterministic: true

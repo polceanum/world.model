@@ -33,12 +33,12 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path("runs/minimal_differentiable_toy/report.json"),
+        default=Path("runs/minimal_differentiable_toy_v2/report.json"),
     )
     parser.add_argument(
         "--checkpoint",
         type=Path,
-        default=Path("runs/minimal_differentiable_toy/model.pt"),
+        default=Path("runs/minimal_differentiable_toy_v2/model.pt"),
     )
     return parser.parse_args()
 
