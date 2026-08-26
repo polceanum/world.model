@@ -56,8 +56,9 @@ Its trainable reliability taper discarded most of the 16-frame history and
 could not identify velocity accurately enough for long rollouts. Protected
 selector, confirmation, and final manifests were never opened. The next
 generalization rung now has a passing parameter-free RGB-D metric measurement
-core. Its temporal state protocol is still pending; this is not a third
-monocular-taper attempt or a convergence claim.
+core plus a frozen, reviewed parameter-free temporal protocol. Every fresh
+41m/42m/43m/44m manifest remains unopened; this is not a third monocular-taper
+attempt, development evidence, or a convergence claim.
 
 ## Quick start
 
@@ -156,11 +157,37 @@ closed with zero finite gradients, and float16/bfloat16 are rejected. The
 focused result is `29 passed`, with independent review passing.
 
 This result used no episode seed namespace or protected data. It qualifies a
-single-frame RGB-D metric observation primitive only. The next active work is
-to predeclare and qualify an RGB-D temporal-state protocol with fresh disjoint
-manifests and bounded attempts; no temporal or long-horizon convergence is yet
-claimed. The post-deletion/core full suite passes `1091` tests with `16`
-expected inactive-device skips.
+single-frame RGB-D metric observation primitive only. The post-deletion/core
+full suite passes `1091` tests with `16` expected inactive-device skips.
+
+### Frozen parameter-free RGB-D temporal protocol
+
+Specification 1.54 freezes the next standalone qualification without opening
+any episode manifest. The exact config SHA-256 is
+`5667cdb3603682b8d80a3e42793d25e36989269df1afacfa9b1028f2451101e9`; the
+canonical protocol payload SHA-256, computed before inserting its
+self-reporting digest field, is
+`4e334e9d7942ea3f2416c0a9f5ca8e327d1d0a1e9131074f20c051ebd3163ad7`.
+Fresh manifests are development `41000000--41000023`, selector
+`42000000--42000023`, confirmation `43000000--43000023`, and one-shot final
+`44000000--44000047`.
+
+The estimator measures all 16 RGB-D frames independently, applies uniform
+weights in the differentiable exact free-motion WLS fit, and queries existing
+analytic dynamics at `0.1/0.25/0.5/1.0/2.0 s`. It has zero parameters,
+buffers, optimizer state, and optimizer updates. The frozen gates cover
+current/per-axis/horizon state, trivial baselines, semigroup consistency,
+fixed-output VJPs to both RGB and depth, RGB-only and missing-depth ablations,
+diagnostic OLS covariance, memory, and separated observation/rollout latency.
+Protected access is durably ordered selector -> confirmation -> final after a
+separately reviewed passing development artifact.
+
+The combined seed-free protocol gate is `103 passed`, independent review
+passes, and the final repository gate is `1129 passed, 16 skipped in 428.18 s`.
+Development and every protected split remain unopened, so no temporal accuracy
+or long-horizon convergence is claimed. The next implementation rung after
+qualification is a composite batched `rgbd` packet and one-slot public online
+bridge; capacity and scene complexity remain frozen until then.
 
 The former grounded, attention, change-point, and multi-day accuracy commands
 are historical evidence only and have been removed from the active workflow.

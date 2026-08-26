@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.53
+**Version:** 1.54
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, and seed-free RGB-D metric-measurement amendments 26 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -7778,10 +7778,114 @@ perspective-correction, invalid-row, dtype, and gradient contracts.
 
 This qualifies only the single-frame RGB-D metric observation core. It does
 not estimate velocity, train a temporal model, open any protected split, or
-establish long-horizon convergence. A new RGB-D temporal protocol with fresh
-disjoint manifests, gates, and bounded attempts remains pending. The complete
-post-deletion/core repository suite passes `1091` tests with `16` expected
-inactive-device skips.
+establish long-horizon convergence. At this stage the new RGB-D temporal
+protocol, fresh disjoint manifests, gates, and bounded attempts were still
+pending; section 245 now freezes that source contract without opening data.
+The complete post-deletion/core repository suite passes `1091` tests with `16`
+expected inactive-device skips.
+
+---
+
+# Part XLV — Parameter-free RGB-D temporal-protocol amendment
+
+## 245. Freeze metric temporal state before any development episode is opened
+
+The first RGB-D temporal rung is a standalone parameter-free qualification,
+not an `OnlineWorldModel` integration and not a training campaign. Its exact
+configuration is `configs/rgbd_temporal_free_motion_cpu.yaml`, SHA-256
+`5667cdb3603682b8d80a3e42793d25e36989269df1afacfa9b1028f2451101e9`.
+The canonical protocol payload, before its self-reporting `protocol_sha256`
+field is inserted, has SHA-256
+`4e334e9d7942ea3f2416c0a9f5ca8e327d1d0a1e9131074f20c051ebd3163ad7`, as
+returned in that field by `temporal_protocol()`. Any bytewise config change or
+canonical protocol change creates a different experiment and may not reuse
+these manifests or evidence.
+
+The rung retains one always-visible sphere, fixed canonical camera, known
+radius `0.21 m`, zero gravity, known linear drag `0.05`, zero render noise,
+and no contact, lifecycle change, or intervention. It consumes all sixteen
+RGB-D observations at frame indices `0--15` and anchors state at frame `15`.
+The RGB-D metric measurement is evaluated independently at each timestamp;
+all sixteen rows then enter the existing differentiable exact free-motion
+`2 x 2` WLS fit with uniform weight. Photometric confidence and Boolean
+validity are diagnostics and fail-closed gates only. They may not taper,
+select, impute, or otherwise change a valid temporal row's fit weight. The
+deployed state is queried only through `AnalyticKinematics` at
+`0.10/0.25/0.50/1.00/2.00 s`, corresponding to target frames
+`17/20/25/35/55` at `20 Hz`.
+
+The estimator owns zero learned parameters, zero learned bytes, zero tensor
+buffers, an empty state dict, and zero optimizer updates. The shared config's
+positive `training.steps` and learning-rate fields are schema placeholders and
+do not authorize or describe optimization. The parameter-free checkpoint, if
+development later passes, is a step-zero empty-state evidence container with
+no optimizer or scheduler state. Its only explicit persistent runtime output
+is the caller-owned anchor position and velocity, `24` float32 bytes per
+sphere.
+
+Every split independently applies the predeclared gates. Current position and
+velocity RMSE must be at most `0.010 m` and `0.010 m/s`, with per-axis limits
+`0.012 m` and `0.015 m/s`. Position RMSE at the five horizons must be at most
+`0.011/0.012/0.015/0.020/0.030 m`; the corresponding per-axis limits are
+`0.014/0.015/0.018/0.024/0.035 m`. Every horizon velocity RMSE and per-axis
+velocity RMSE must be at most `0.010 m/s` and `0.015 m/s`. The protocol also
+binds metric-measurement, oracle/simulator, residual, conditioning, semigroup,
+stationary, zero-velocity, two-frame, latency, state, and process-memory
+limits. The RGB-only known-radius reconstruction is an ablation only and must
+be detectably worse: RGB-D current-velocity and two-second-position RMSE must
+be at most `0.90` of its errors. Zero or partially missing depth is never an
+RGB-only fallback; one missing history row invalidates the complete temporal
+estimate, which must return finite zeros with missing-depth valid fraction
+`0.0`.
+
+The WLS residual covariance is reported only under an explicit i.i.d.
+diagnostic model. Systematic inverse-rendering error has not been proved
+Gaussian, so this rung has no posterior-calibration, coverage, or proper-score
+claim. Gradient qualification uses fixed-output vector--Jacobian products,
+not supervised MSE at a potentially exact solution. World-axis coefficients
+`[0.5, -0.75, 1.25]` probe anchor position, anchor velocity, and position and
+velocity at every declared horizon. Each probe must have finite nonzero RGB
+and depth gradient L1 norm in `[1e-12, 1e8]`.
+
+The frozen, disjoint manifests are:
+
+- development `41000000--41000023`;
+- selector `42000000--42000023`;
+- confirmation `43000000--43000023`; and
+- one-shot final `44000000--44000047`.
+
+At this specification boundary every one of these manifests is unopened.
+Neither development nor protected episodes have been generated, and no
+accuracy, development-pass, protected-pass, temporal-convergence, or
+long-horizon-convergence result exists. The combined seed-free implementation
+and protocol gate is `103 passed`, an independent review passes, and the final
+repository gate is `1129 passed, 16 expected inactive-device skips in
+428.18 s`. This is source-contract evidence only.
+
+Development, when separately authorized, requires fresh report/checkpoint
+paths and one clean exact source. A passing development report must bind the
+empty-state checkpoint, config and protocol hashes, seed-manifest hash, zero
+optimizer updates, source fingerprints, complete metrics, and the statement
+that protected data remains unopened. Protected qualification may begin only
+from externally reviewed exact report/checkpoint digests under the same clean
+source. Before any protected materialization, an exclusive durable ledger is
+reserved; it records access before generation and permits only
+selector -> confirmation -> final order. Failure at any stage stops before
+the next split, while errors retain truthful receipts. Reports, checkpoints,
+the ledger, and each atomic temporary path must be distinct and fresh.
+
+Only after this standalone rung passes may the public temporal bridge be
+implemented. Its minimum packet is one composite `rgbd` observation with
+batched RGB `[B,3,H,W]`, depth `[B,1,H,W]`, batched calibration, explicit
+`image_size`, and a modality-qualified sensor key. Separate same-timestamp RGB
+and depth packets are forbidden for that first bridge: current runtime batch
+inference is ambiguous for unbatched mapping tensors, cache/history/scheduler
+state is keyed only by `sensor_id`, and only the first packet in a timestamp
+group receives elapsed-time evidence. The bridge must use raw metric
+measurements for bounded causal history and `DirectVelocityEvidence`, keep
+missing depth fail-closed, preserve selected continuous gradients, and update
+checkpoint/evaluator/demo schemas truthfully. None of those online-integration
+changes is part of the frozen standalone protocol.
 
 # Closing directive
 

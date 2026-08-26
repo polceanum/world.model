@@ -63,7 +63,7 @@ thresholds, run a third variant, or materialize selector, confirmation, or
 final seeds. The config, runner, estimator, and dedicated tests were removed
 from the active source tree after archiving the report.
 
-## Next temporal rung
+## Frozen RGB-D temporal rung — do not materialize yet
 
 The seed-free single-frame foundation for the next rung now passes. Simulator
 v7 provides observable `[T, 1, H, W]` metric surface depth from the same exact
@@ -76,16 +76,54 @@ finite gradients to centre, RGB, and depth. Focused validation is `29 passed`
 and independent review passes, without an episode seed namespace or protected
 access.
 
-This is not a training or convergence result. The next permitted training work
-is a new observable-depth/RGB-D temporal state fit, not another monocular
-reliability-taper variant. Before any episode generation,
-freeze a new config and protocol that declares fresh development, selector,
-confirmation, and final manifests; at most two architecture attempts; RGB-D
-noise/calibration and missing-depth behavior; an RGB-only ablation; per-axis
-current/velocity/horizon limits; trivial-baseline and semigroup gates;
-uncertainty coverage; gradient ownership; parameters/state/RSS; and separated
-RGB-D-observation versus state-only rollout latency. Runtime may consume only
-RGB-D, calibration, timestamps, and declared priors—never simulator state.
+This is not a training or convergence result. Specification 1.54 freezes the
+new observable-depth temporal protocol at config SHA-256
+`5667cdb3603682b8d80a3e42793d25e36989269df1afacfa9b1028f2451101e9`
+and canonical protocol payload SHA-256, computed before inserting its
+self-reporting digest field,
+`4e334e9d7942ea3f2416c0a9f5ca8e327d1d0a1e9131074f20c051ebd3163ad7`.
+The source/config contract can be inspected without generating data:
+
+```bash
+conda run -n orpheus python scripts/run_rgbd_temporal_free_motion_ladder.py \
+  --phase protocol \
+  --config configs/rgbd_temporal_free_motion_cpu.yaml
+```
+
+Do not run `--phase development` or `--phase qualification` at this boundary.
+Development `41000000--41000023`, selector `42000000--42000023`, confirmation
+`43000000--43000023`, and one-shot final `44000000--44000047` are all fresh
+and unopened.
+
+The estimator is parameter-free: its parameter/buffer/state-dict counts and
+optimizer updates are zero. It measures sixteen RGB-D frames, gives every row
+uniform weight in the differentiable exact free-motion WLS fit, and queries
+state at `0.1/0.25/0.5/1.0/2.0 s`. Confidence and Boolean validity are
+diagnostic/fail-closed only. The protocol gates current and per-axis state,
+every horizon, stationary/zero-velocity/two-frame baselines, semigroup,
+resources, fixed-output VJPs to RGB and depth, an explicitly worse RGB-only
+control, and zero-validity missing depth. Its finite OLS covariance is only an
+i.i.d. residual diagnostic; no calibrated posterior, coverage, or proper-score
+claim is made.
+
+The combined seed-free implementation gate is `103 passed`, independent review
+passes, and the final repository gate is `1129 passed, 16 skipped in 428.18 s`.
+That does not authorize a development run or establish accuracy. When
+development is later authorized, it requires fresh
+report/checkpoint paths and a clean exact source. A passing zero-optimizer
+development artifact must then be independently reviewed by exact digest
+before protected access.
+The qualification runner reserves an exclusive durable ledger and records
+materialization before it evaluates selector, confirmation, and final in that
+order; the first failure stops later access.
+
+Only after this standalone rung qualifies should it enter the public runtime.
+The first bridge must use one batched composite `rgbd` packet carrying
+`[B,3,H,W]` RGB and `[B,1,H,W]` depth plus calibration and explicit image
+size. A modality-qualified sensor key avoids current cache/history/scheduler
+collisions. Separate same-timestamp RGB and depth packets are outside the
+qualified contract. Runtime may consume only RGB-D, calibration, timestamps,
+and declared priors—never simulator state.
 
 The complete `1075 passed, 16 skipped` repository gate belongs to the clean
 pre-failure source commit above. After deletion of the rejected experiment and

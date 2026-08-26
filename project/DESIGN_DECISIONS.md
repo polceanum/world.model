@@ -4432,7 +4432,8 @@
 ## ADR-159 — Establish metric RGB-D observation before temporal fitting
 
 - **Date:** 2026-08-26
-- **Status:** accepted seed-free measurement core; temporal protocol pending
+- **Status:** accepted seed-free measurement core; temporal protocol later
+  frozen by ADR-160
 - **Context:** ADR-158 localized the failed monocular family to temporal
   observation/weighting while the analytic free-motion equations remained
   correct. Before spending another attempt budget on velocity fitting, metric
@@ -4455,5 +4456,51 @@
   `29 passed` and independent review passes. No episode seed namespace or
   protected split was accessed. This accepts the single-frame metric core
   only; fresh temporal manifests/protocol, velocity and horizon gates, and
-  convergence remain pending. The post-deletion/core full suite passes `1091`
-  tests with `16` expected inactive-device skips.
+  convergence were left pending by this decision. ADR-160 freezes the temporal
+  source contract without opening data. The post-deletion/core full suite
+  passes `1091` tests with `16` expected inactive-device skips.
+
+## ADR-160 — Freeze a uniform parameter-free RGB-D temporal protocol before access
+
+- **Date:** 2026-08-26
+- **Status:** accepted frozen source contract; all manifests unopened
+- **Context:** ADR-159 established accurate differentiable metric RGB-D
+  position without consuming simulator truth, while ADR-158 showed that a
+  learned monocular reliability taper could discard most of a 16-frame
+  history and destroy velocity identification. The next experiment therefore
+  needs to test the simplest metric temporal sufficient statistic before any
+  trainable weighting, learned transition, online fusion, or model-capacity
+  increase is considered.
+- **Decision:** Freeze a standalone one-sphere CPU-float32 protocol with exact
+  config SHA-256
+  `5667cdb3603682b8d80a3e42793d25e36989269df1afacfa9b1028f2451101e9`
+  and canonical protocol payload SHA-256, computed before insertion of its
+  self-reporting digest field,
+  `4e334e9d7942ea3f2416c0a9f5ca8e327d1d0a1e9131074f20c051ebd3163ad7`.
+  Measure all 16 frames independently with RGB-D, give every row uniform
+  weight in the differentiable exact free-motion WLS fit, and query
+  `AnalyticKinematics` at `0.1/0.25/0.5/1.0/2.0 s`. The estimator owns no
+  parameters, buffers, optimizer, learned transition, confidence taper, or
+  hidden temporal state. Bind current/per-axis/horizon/velocity, trivial-
+  baseline, semigroup, resource, missing-depth, RGB-only-ablation, and fixed-
+  output RGB/depth VJP gates. Treat OLS covariance as an i.i.d. residual
+  diagnostic rather than a calibrated posterior. Reserve fresh development,
+  selector, confirmation, and final namespaces at 41m/42m/43m/44m and require
+  clean-source development evidence plus externally reviewed report/checkpoint
+  digests before an exclusive durable ledger permits selector, confirmation,
+  then final access.
+- **Alternatives considered:** a third learned monocular weighting attempt;
+  confidence-weighted or validity-selected metric history; two-frame velocity;
+  a learned recurrent transition; immediate `OnlineWorldModel` integration;
+  or opening protected data while implementation details were still mutable.
+- **Consequences:** The combined seed-free implementation, mathematical, VJP,
+  ablation, checkpoint, hash, and durable-access gate is
+  `103 passed`, an independent review passes, and the final repository gate is
+  `1129 passed, 16 skipped in 428.18 s`. Development
+  `41000000--41000023`, selector
+  `42000000--42000023`, confirmation `43000000--43000023`, and final
+  `44000000--44000047` all remain unopened. This accepts only the immutable
+  protocol and implementation surface; it is not development evidence or a
+  temporal/long-horizon convergence claim. A later online bridge must use one
+  batched composite `rgbd` packet, a modality-qualified sensor key, raw metric
+  causal history, and fail-closed missing depth before any capacity scaling.

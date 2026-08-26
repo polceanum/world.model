@@ -4,7 +4,7 @@
 
 The pre-generalization public base is GitHub `main` commit
 `c16acc99ef13757fc8f88528bfd0d66db4a2f4fd`. Broad heterogeneous training
-remains paused. The active contract is specification 1.53; the accepted
+remains paused. The active contract is specification 1.54; the accepted
 convergence base remains the specification-1.51 differentiable one-sphere
 RGB-to-state-to-rollout unit, not any older campaign checkpoint.
 
@@ -88,10 +88,10 @@ seeds `34000000--34000031` remain unopened. The failed config, runner,
 estimator, and tests have been removed from the active tree. Do not retry this
 family or access its protected data.
 
-The next structural rung is observable-depth/RGB-D temporal state under a new
-predeclared protocol, not a third monocular reliability-taper attempt. Its
-single-frame metric measurement core now passes as recorded below. After the
-temporal rung passes, scaling remains ordered: public `OnlineWorldModel`
+The next structural rung is observable-depth/RGB-D temporal state under the
+new frozen protocol recorded below, not a third monocular reliability-taper
+attempt. Its single-frame metric measurement core now passes as recorded
+below. After the temporal rung passes, scaling remains ordered: public `OnlineWorldModel`
 integration; moving camera; identifiable drag; variable metric scale; two
 non-contact objects; variable set size; identity/occlusion; analytic contact;
 observable material parameters; known actions and counterfactual planning;
@@ -119,8 +119,47 @@ Invalid finite or extreme rows fail closed with finite zero outputs and zero
 gradients; float16 and bfloat16 are rejected. Focused validation is
 `29 passed`, and independent review passes. This proof consumed no episode seed
 namespace and no protected data. It establishes only single-frame RGB-D metric
-state: the new temporal protocol, velocity and long-horizon gates, and all
-convergence claims remain pending.
+state: temporal execution, velocity and long-horizon qualification, and every
+convergence claim remain pending. The source protocol itself is frozen below.
+
+### Frozen RGB-D temporal protocol — all manifests unopened
+
+Specification 1.54 now freezes the standalone parameter-free temporal rung.
+The exact config SHA-256 is
+`5667cdb3603682b8d80a3e42793d25e36989269df1afacfa9b1028f2451101e9`, and
+the canonical protocol payload SHA-256 before insertion of its self-reporting
+digest field is
+`4e334e9d7942ea3f2416c0a9f5ca8e327d1d0a1e9131074f20c051ebd3163ad7`.
+The disjoint manifests are development `41000000--41000023`, selector
+`42000000--42000023`, confirmation `43000000--43000023`, and final
+`44000000--44000047`. All four remain unopened: no development or protected
+episode has been generated.
+
+The estimator has zero learned parameters, tensor buffers, optimizer state,
+and optimizer updates. It independently measures all sixteen RGB-D frames,
+fits anchor position/velocity with uniform differentiable exact free-motion
+WLS, and uses `AnalyticKinematics` for
+`0.1/0.25/0.5/1.0/2.0 s` queries. Confidence and validity cannot taper or
+select temporal rows. Fixed-output VJPs must reach both RGB and depth for
+anchor and every horizon state. The frozen RGB-only ablation must degrade,
+while missing depth must invalidate the complete estimate without falling
+back to RGB. OLS covariance is an i.i.d. residual diagnostic only, not a
+calibrated posterior claim.
+
+Protected access can begin only from a clean, passing, independently reviewed
+development report/checkpoint pair. An exclusive ledger must record access
+before materialization in selector -> confirmation -> final order and stop on
+the first failure. The combined seed-free implementation/protocol gate is
+`103 passed`, independent review passes, and the final repository gate is
+`1129 passed, 16 skipped in 428.18 s`. This is source-contract evidence only:
+no development accuracy, protected result, temporal convergence, or
+long-horizon convergence is claimed.
+
+The later online rung must use one batched composite `rgbd` packet and a
+modality-qualified sensor key before it touches `MeasurementSet`, causal
+history, checkpoints, evaluator, or demo. The standalone protocol does not
+claim that public bridge, and no model capacity or scene complexity should be
+added before temporal qualification.
 
 ## Validation state
 
@@ -133,6 +172,11 @@ contract passed; and `git diff --check` was clean. This is preserved
 pre-failure source-integrity evidence, not evidence for the post-deletion/core
 tree. The complete post-deletion/core gate passes `1091` tests with `16`
 expected inactive-device skips in `418.49 s`.
+
+The newer four-file RGB-D temporal protocol surface has the proportional
+`103 passed` focused gate, independent review, and a final complete repository
+gate of `1129 passed, 16 skipped in 428.18 s`. The older `1091` result remains
+the historical single-frame-core boundary.
 
 No accepted long-horizon temporal, multi-object, contact, multimodal, or planning
 convergence claim exists yet.

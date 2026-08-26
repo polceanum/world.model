@@ -45,14 +45,26 @@
   review without allocating an episode seed namespace or protected access.
 - [x] Pass the complete post-deletion/core repository gate: `1091 passed, 16`
   expected inactive-device skips in `418.49 s`.
-- [ ] Freeze a new observable-depth/RGB-D temporal-state protocol with fresh
+- [x] Freeze a new observable-depth/RGB-D temporal-state protocol with fresh
   disjoint manifests, at most two new architecture attempts, RGB-only and
   missing-modality ablations, per-axis/current/horizon/velocity/baseline gates,
   uncertainty/calibration, gradients, memory, and latency before generation.
-- [ ] Implement and qualify that RGB-D temporal state rung without simulator
-  truth at runtime or a trainable hard-selection/taper path.
+- [x] Implement the parameter-free 16-frame uniform-WLS RGB-D temporal source,
+  empty-state checkpoint/access contracts, VJP and ablation gates; record the
+  combined seed-free gate `103 passed` and independent review without
+  opening any manifest.
+- [x] Pass the final source-integrity repository gate: `1129 passed, 16`
+  expected inactive-device skips in `428.18 s`.
+- [ ] Materialize the fresh development manifest `41000000--41000023` only
+  after clean-source authorization; stop unless every frozen gate passes and
+  the zero-optimizer report/checkpoint pair is independently reviewed.
+- [ ] If development passes, qualify selector `42000000--42000023`, then
+  confirmation `43000000--43000023`, then one-shot final
+  `44000000--44000047` under the exclusive durable access ledger. All remain
+  unopened at the specification-1.54 boundary.
 - [ ] Bridge the qualified observation and temporal estimator into the
-  public one-slot `OnlineWorldModel` observation/belief/rollout workflow.
+  public one-slot `OnlineWorldModel` observation/belief/rollout workflow using
+  one batched composite `rgbd` packet and modality-qualified sensor key.
 - [ ] Add one complexity per later rung: camera motion; drag identification;
   variable scale; multi-object sets; identity/occlusion; contact;
   material parameters; known actions/planning; richer modalities/geometry.

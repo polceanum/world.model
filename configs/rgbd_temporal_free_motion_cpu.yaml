@@ -1,0 +1,107 @@
+project:
+  name: orpheus-rgbd-temporal-free-motion-v1-cpu
+  seed: 41000000
+  output_dir: runs
+  deterministic: true
+
+device:
+  preference: cpu
+  closed_loop_preference: cpu
+  cuda_amp: false
+  compile: false
+
+# Structural RGB-D temporal rung.  One always-visible sphere moves without
+# contact or intervention under known constant gravity/linear drag.  The
+# estimator has no learned parameters and no optimizer; `training.steps: 1`
+# exists only because the shared OrpheusConfig schema requires a positive
+# value.  The dedicated runner asserts and records zero optimizer updates.
+simulator:
+  image_size: [64, 64]
+  frame_rate: 20
+  physics_rate: 120
+  sequence_frames: 56
+  min_objects: 1
+  max_objects: 1
+  gravity: [0.0, 0.0, 0.0]
+  radius_range: [0.21, 0.21]
+  mass_range: [1.0, 1.0]
+  restitution_range: [0.7, 0.7]
+  drag_range: [0.05, 0.05]
+  friction_range: [0.2, 0.2]
+  initial_speed_range: [0.035, 0.035]
+  camera_motion: fixed
+  render_noise_std: 0.0
+  ensure_collision: false
+  external_impulse_probability: 0.0
+  scenario_mixture: [baseline]
+
+model:
+  max_objects: 1
+  lifecycle:
+    birth_confidence: 0.5
+    birth_confirmations: 1
+  state:
+    geometry_dim: 1
+    appearance_dim: 1
+    residual_dynamics_dim: 1
+    modal_count: 0
+    modal_dim: 1
+    parameter_memory_dim: 1
+    global_dim: 1
+  rgb:
+    backbone_channels: [8, 12, 16, 20]
+    feature_dim: 16
+    proposal_queries: 1
+    global_every_steps: 1
+    roi_size: 8
+    structured_disc_center_enabled: false
+    temporal_velocity_enabled: false
+  dynamics:
+    hidden_dim: 16
+    max_substep: 0.008333333333333333
+    attention_residual_enabled: false
+  filter:
+    hidden_dim: 16
+    innovation_anchored_correction: true
+  identification:
+    hidden_dim: 8
+
+# This standalone qualification does not claim OnlineWorldModel integration.
+# `rgb` is retained solely because the shared config schema has not yet added
+# the later public RGB-D observation registration rung.
+runtime:
+  modality: rgb
+  enable_debug_oracle: false
+  hypothesis_pool_enabled: false
+
+training:
+  batch_size: 4
+  steps: 1
+  learning_rate: 0.000001
+  closed_loop_learning_rate_scale: 1.0
+  weight_decay: 0.0
+  grad_clip_norm: 1.0
+  rgb_pretrain_steps: 0
+  train_episodes: 24
+  validation_episodes: 24
+  fixed_dataset: true
+  tbptt_steps: 16
+  checkpoint_every: 1
+  eval_every: 1
+  log_every: 1
+  horizon_weights: [1.0, 1.0, 1.0, 1.0, 1.0]
+
+evaluation:
+  horizons_seconds: [0.1, 0.25, 0.5, 1.0, 2.0]
+  episodes: 24
+  # Keep the generic evaluator on its no-oracle RGB path.  The dedicated
+  # standalone runner consumes observable depth through its own frozen API.
+  rgb_only: true
+  confidence_level: 0.90
+
+demo:
+  # Generic visualization seed, outside every qualification namespace.
+  seed: 200000
+  max_frames: 56
+  future_horizon_seconds: 2.0
+  fps: 10

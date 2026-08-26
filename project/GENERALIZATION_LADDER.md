@@ -65,7 +65,7 @@ diagnostic recovered most position gates, but future velocity remained
 test still failed. The physics/oracle path was correct. This family is closed,
 its protected manifests stay unopened, and its code is not an active workflow.
 
-### 2. Observable-depth/RGB-D temporal state — metric core passed; protocol next
+### 2. Observable-depth/RGB-D temporal state — protocol frozen; all data unopened
 
 Retain the same one-sphere, fixed-camera, contact-free analytic world, but
 measure metric depth as an observable input rather than asking a learned
@@ -80,14 +80,35 @@ A parameter-free RGB-centre plus bilinear-depth measurement passed a seed-free
 instance map. Focused validation is `29 passed` and independent review passes;
 no episode seed namespace or protected split was accessed.
 
-This single-frame metric core is not temporal convergence. Freeze a new
-protocol before generation: RGB-D rendering and noise/calibration contract,
-fresh disjoint development and protected seed
-namespaces, update/attempt budget, RGB-only ablation, per-axis current and
-future state gates, trivial baselines, modality-missing behavior, gradients,
-uncertainty/calibration, memory, and separated observation/rollout latency.
-The former two monocular attempts do not reset; this is a new modality and
-structural capability, not a third tuning attempt.
+This single-frame metric core is not temporal convergence. Specification 1.54
+freezes the next standalone protocol at config SHA-256
+`5667cdb3603682b8d80a3e42793d25e36989269df1afacfa9b1028f2451101e9`
+and canonical protocol payload SHA-256, computed before insertion of its
+self-reporting digest field,
+`4e334e9d7942ea3f2416c0a9f5ca8e327d1d0a1e9131074f20c051ebd3163ad7`.
+It reserves development `41000000--41000023`, selector
+`42000000--42000023`, confirmation `43000000--43000023`, and final
+`44000000--44000047`; every namespace remains unopened.
+
+The estimator owns zero parameters, buffers, persistent tensor state, and
+optimizer updates. It measures all sixteen frames independently, fits anchor
+position/velocity with uniform differentiable exact free-motion WLS, and
+queries analytic state at `0.1/0.25/0.5/1.0/2.0 s`. Neither confidence nor
+validity may taper or select valid temporal rows. Gates cover current and
+per-axis state, every horizon, trivial baselines, semigroup consistency,
+fixed-output RGB/depth VJPs, an explicitly degraded RGB-only control,
+fail-closed missing depth, diagnostic OLS covariance, memory, and separated
+observation/rollout latency. An exclusive ledger records protected access in
+selector -> confirmation -> final order only after an independently reviewed
+passing clean-source development artifact.
+
+The combined seed-free source/protocol gate is `103 passed`, independent review
+passes, and the final repository gate is `1129 passed, 16 skipped in 428.18 s`.
+No development episode or protected split has been generated, so this is not
+development evidence or a temporal/long-horizon convergence claim. The former
+two monocular attempts do not reset; this is a new modality and structural
+capability, not a third tuning attempt. Capacity remains fixed until this rung
+qualifies.
 
 ### 3. Public one-slot online integration
 
@@ -97,6 +118,14 @@ checkpoint, evaluator, and demo contracts. Reproduce the accepted temporal
 metrics while ingesting frames causally and prove bounded update cost and
 persistent-state memory. The standalone ladder remains a diagnostic oracle, not a second
 production architecture.
+
+The first bridge uses one composite batched `rgbd` packet containing
+`[B,3,H,W]` RGB, `[B,1,H,W]` depth, batched calibration, and explicit image
+size. It uses a modality-qualified sensor key because current cache, temporal-
+history, and scheduler maps otherwise collide on `sensor_id`; separate
+same-timestamp RGB/depth packets also make elapsed-time ownership order-
+dependent. The bridge must fit only raw associated metric positions, keep
+missing depth fail-closed, and synchronize checkpoint/evaluator/demo schemas.
 
 ### 4. Observable nuisance variables and additional useful modalities
 
