@@ -51,6 +51,14 @@ incumbent. Historical experiments and their limitations remain in
 [`project/STATUS.md`](project/STATUS.md); the minimal qualification workflow is
 below.
 
+The first temporal extension is also closed as a terminal development failure.
+Its trainable reliability taper discarded most of the 16-frame history and
+could not identify velocity accurately enough for long rollouts. Protected
+selector, confirmation, and final manifests were never opened. The next
+generalization rung now has a passing parameter-free RGB-D metric measurement
+core. Its temporal state protocol is still pending; this is not a third
+monocular-taper attempt or a convergence claim.
+
 ## Quick start
 
 Use the existing `orpheus` environment. PyTorch is an externally managed
@@ -104,70 +112,65 @@ load_model_weights("runs/minimal_differentiable_toy_v2/model.pt", model=model,
 estimator. The ladder exists to close identifiability and gradient correctness
 before another complexity rung enters that production path.
 
-The former specification-1.46 grounded and earlier multi-day accuracy commands
-are intentionally no longer presented as launch instructions. They are
-historical evidence only; broad training stays paused until the next isolated
-complexity rung preserves the minimal gates.
+### Terminal temporal experiment and next rung
 
-For an immutable promotion decision for a legacy CPU-fallback candidate, run
-the full trainer manifest once for the protected reference and candidate on an
-active-Aqua MPS session:
+The frozen attempt-2 monocular temporal experiment stopped at development on
+clean source commit `8889818619121351d342490786331e854364532c`. Its audit
+missed 10 accuracy/baseline gates: current position/velocity RMSE was
+`0.016128 m`/`0.070461 m/s`, and position RMSE at
+`0.1/0.25/0.5/1.0/2.0 s` was
+`0.022907/0.033205/0.050360/0.084191/0.149501 m`. Physics, oracle, gradients,
+semigroup, resource, and geometry diagnostics passed, so the failure is in
+temporal observation/weighting rather than the rollout equations.
 
-```bash
-python scripts/replay_promotion_mps.py \
-  --config configs/attention_pilot_mps.yaml \
-  --reference runs/<run>/checkpoints/best_rollout.pt \
-  --candidate runs/<run>/checkpoints/validation_step_000128.pt \
-  --output runs/$(date -u +%Y%m%d-%H%M%S)-mps-promotion-replay
-```
+The learned taper reached `10.0338 /s`: the oldest-to-anchor weight ratio was
+only `0.000534`, with `77.63%` of mass on the last three frames and `91.71%`
+on the last five. A development-only confidence-weight diagnostic improved
+current position/velocity to `0.00842 m`/`0.01660 m/s` and the five horizon
+errors to `0.01000/0.01239/0.01638/0.02430/0.03963 m`, but future velocity
+remained `0.01652 -> 0.01502 m/s` against the `0.01 m/s` gate and the early
+zero-velocity-baseline ratios still failed. Attempt 2 of 2 is therefore
+exhausted. Do not rerun it or access its protected manifests.
 
-The command is a gate, not a generic benchmark: it exits successfully only
-when the candidate improves on MPS while passing the existing per-axis,
-per-horizon, lifecycle, identity, collision/event, calibration, and support
-guardrails. Its report records both checkpoint SHA-256s and the validation
-protocol hash. New `attention_pilot_mps` runs already execute their selector
-directly on MPS.
+The immutable failed development report is retained under the ignored local
+archive with SHA-256
+`be488d045e259c0804a2a2b24215fa4eb3025d69f6113d8dbefe21d72f827554`.
+The removed config, runner, estimator, and tests are no longer supported
+entry points.
 
-For checkpoint selection without reusing trainer-validation or test seeds:
+### Seed-free RGB-D metric core
 
-```bash
-python evaluate.py \
-  --config configs/tiny_overfit.yaml \
-  --checkpoint <path> \
-  --split validation \
-  --seed-protocol fresh_validation \
-  --seed-offset 64 \
-  --set evaluation.episodes=16
-```
+Simulator v7 now exposes observable metric surface depth as
+`[T, 1, H, W]`, with zero meaning no return. Exact ray--sphere intersection
+uses the same nearest surface winner for depth, instance, visibility, and RGB.
+The parameter-free measurement consumes an RGB-derived differentiable
+subpixel centre, bilinearly samples depth, applies perspective radius
+correction using the known radius and canonical camera, and never reads labels,
+state, instance maps, or object IDs.
 
-Use one disjoint validation offset for candidate selection and a later untouched
-offset for confirmation; do not select checkpoints on the reserved test split.
+A seed-free 18-case public-renderer grid passes with maximum/RMSE position
+error `0.00613210 m`/`0.00336217 m` and maximum/RMSE centre error
+`0.0272064 px`/`0.00802947 px`. Finite gradient norms to centre, RGB, and depth
+are `0.673917`, `0.0718314`, and `6.92869`. Invalid finite/extreme rows fail
+closed with zero finite gradients, and float16/bfloat16 are rejected. The
+focused result is `29 passed`, with independent review passing.
 
-To collect exact-timestamp causal RGB event windows and fit the experimental
-uncertainty-aware gate:
+This result used no episode seed namespace or protected data. It qualifies a
+single-frame RGB-D metric observation primitive only. The next active work is
+to predeclare and qualify an RGB-D temporal-state protocol with fresh disjoint
+manifests and bounded attempts; no temporal or long-horizon convergence is yet
+claimed. The post-deletion/core full suite passes `1091` tests with `16`
+expected inactive-device skips.
 
-```bash
-python scripts/train_rgb_change_point_gate.py \
-  --config configs/scaled_curriculum.yaml \
-  --checkpoint <path> \
-  --device mps \
-  --train-episodes 8 \
-  --validation-episodes 8 \
-  --validation-seed-offset 256 \
-  --gate-type mlp \
-  --hidden-features 8 \
-  --fit-outgoing-proposal \
-  --proposal-hidden-features 8
-```
+The former grounded, attention, change-point, and multi-day accuracy commands
+are historical evidence only and have been removed from the active workflow.
+Their records remain in Git history and the ignored, local pre-generalization
+archive. Broad training stays paused while the observable-depth/RGB-D rung is
+specified and qualified without weakening the accepted minimal gates.
 
-The output contains cached feature tensors, a report, resolved config, and a
-weights-identical checkpoint with explicit gate coefficients. The scaled
-profile keeps both the gate and outgoing proposal disabled: current learned
-candidates did not pass the paired downstream velocity gate. The proposal is
-consumed on the exact causal frame selected by its gate; later post-event
-samples return to the ordinary estimator. Cached tensors can be supplied with
-`--train-cache` and `--validation-cache` to refit without rerunning RGB
-perception.
+The general evaluator still supports explicit disjoint manifests for a
+compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not
+be presented as promotion of the standalone minimal estimator.
 
 For the deterministic convergence/debug run:
 
@@ -208,30 +211,16 @@ python monitor.py --once --json
 
 Generated training, evaluation, and demo directory basenames begin with a UTC
 `YYYYMMDD-HHMMSS-` timestamp, so ordinary filename sorting puts the newest
-artifact last. Explicit `--run-name` and `--output` values are treated as
-human-readable labels; the command's JSON result contains the actual path.
-Superseded demos are retained under `demo_outputs/archive/`.
-
-The current local RGB-only selection bundle is
-`runs/20260727-193657-selected-contact-confidence-v1/`; the latest visual
-result is
-`demo_outputs/20260727-193538-contact-confidence-v1/online_correction.gif`.
-These generated artifacts are gitignored. The seven-regime interaction
-curriculum is configured in `configs/tiny_interactions.yaml`.
-
-The user-provided locally built PyTorch in the existing environment is
-MPS-enabled. The corrected
-two-phase smoke at
-`runs/20260801-231521-audit-v2-final-verified-smoke/` exercised one hybrid RGB
-update, two persistent causal updates, selector validation, checkpoint
-round-trip, and byte-preserving no-op resume. It is wiring evidence, not an
-accuracy or convergence result. See `project/STATUS.md` for exact values.
+artifact last. Explicit `--run-name` and `--output` values are human-readable
+labels; the command's JSON result contains the actual path. Historical local
+runs and demos were archived and removed before the generalization program.
 
 ## Documentation
 
 - [Authoritative specification](PROJECT_SPEC.md)
 - [Current status](project/STATUS.md)
 - [Architecture](project/ARCHITECTURE.md)
+- [Generalization ladder](project/GENERALIZATION_LADDER.md)
 - [Data contracts](project/DATA_CONTRACTS.md)
 - [Predictive abstractions](project/PREDICTIVE_ABSTRACTIONS.md)
 - [Getting started](docs/getting_started.md)

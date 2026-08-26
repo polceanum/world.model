@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.51
+**Version:** 1.53
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy amendment 26 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, and seed-free RGB-D metric-measurement amendments 26 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -7579,6 +7579,209 @@ through `load_model_weights` into `DifferentiableToyStateEstimator`. They are
 weights-only initializers, not exact training resumes. The frozen `f9329e...`
 artifact predates that packaging repair and remains immutable scientific
 evidence rather than being relabelled as a compatible checkpoint.
+
+---
+
+# Part XLIV — Staged generalization and temporal-identification amendment
+
+## 239. Remove failed campaign surface before scaling the qualified core
+
+The qualified one-sphere source and its exact report remain scientific
+evidence, but superseded multi-day run directories, duplicate checkpoints,
+rejected launch profiles, one-off campaign tools, and terminal active-memory
+ledgers are not part of the supported generalization surface. Before the next
+rung, protect the qualified source with a remote annotated tag and complete Git
+bundle, archive the exact report and compatibility fixture plus compact
+non-checkpoint metadata, then remove the duplicated run/checkpoint tree,
+generated demos, caches, and zero-live-reference campaign entry points. Keep
+reusable tensor contracts, analytic physics, checkpoint integrity, evaluation
+metrics, and smoke fixtures.
+
+Scaling follows `project/GENERALIZATION_LADDER.md`. Each rung adds one
+independently measurable capability, freezes disjoint development, selector,
+confirmation, and one-shot final manifests before access, and permits at most
+two architecture attempts. State, velocity, uncertainty, event, identity,
+gradient, memory, latency, and long-horizon gates from accepted lower rungs do
+not disappear when capacity or modalities grow. A larger model is justified
+only by a localized residual that the smaller structured path cannot represent;
+parameter count alone is not a capability rung.
+
+## 240. Fit free motion as a differentiable sufficient statistic
+
+For collision-free constant-gravity motion with known nonnegative linear drag
+`d`, estimate position and velocity at an explicit anchor time from timestamped
+RGB-derived positions. With signed elapsed time `tau`, use
+
+\[
+A_d(\tau)=\frac{1-e^{-d\tau}}{d},\qquad
+B_d(\tau)=\frac{d\tau-(1-e^{-d\tau})}{d^2},
+\]
+
+and fit
+
+\[
+x(\tau)=x_a+A_d(\tau)v_a+B_d(\tau)g
+\]
+
+by a batched weighted `2 x 2` Torch normal solve for each object slot. The
+zero-drag limits are `A_0=tau` and `B_0=tau^2/2`. Evaluate the two phi functions
+with a sufficiently deep Horner series in the cancellation region so float32
+direct and composed two-second rollouts agree within `1e-5`; use the direct
+exponential form only outside that stable region.
+
+Normalize each positive row's soft weights before the solve so estimate,
+conditioning, and validity are invariant to a uniform confidence scale, while
+retaining the original weight total as a diagnostic. Boolean support is
+reserved for caller-declared admissibility, never an input-derived learned
+selection in the claimed RGB path. Invalid or ill-conditioned rows return
+finite zero state, prediction, residual, and covariance tensors behind an
+explicit validity flag. Valid rows retain ordinary gradients to positions,
+timestamps, gravity, drag, anchor time, and continuous weights. Float32 and
+float64 are the supported solve dtypes; low precision fails explicitly rather
+than reaching an unsupported backend solve.
+
+## 241. The first scale rung extends time before scene complexity
+
+The temporal free-motion rung keeps one always-visible sphere, a fixed
+calibrated camera, known radius, zero gravity, known drag `0.05`, no noise,
+contact, lifecycle change, or intervention, and a geometrically bounded speed.
+It consumes sixteen RGB frames at `20 Hz` through the qualified differentiable
+inverse renderer, fits anchor state at frame 15, and queries the existing
+analytic tensor dynamics at `0.10/0.25/0.50/1.00/2.00 s`. The only learned
+owner remains the three mask weights and bias. Continuous photometric
+confidence is multiplied by a continuous mask-conditioned anchor-proximity
+reliability; renderer validity is diagnostic and never a hard temporal
+selection.
+
+Architecture attempt two is the terminal allowed family. It uses exactly 32
+batch-four AdamW development updates at learning rate `2e-4`, zero weight
+decay, and gradient clip `2`. The frozen manifests are:
+
+- development train `31000000--31000031`;
+- development audit `31100000--31100015`;
+- selector `32000000--32000015`;
+- confirmation `33000000--33000015`; and
+- one-shot final `34000000--34000031`.
+
+The gates require current position/velocity RMSE at most `0.012 m`/`0.02 m/s`;
+position RMSE at the five horizons at most
+`0.012/0.014/0.018/0.025/0.040 m`; future velocity RMSE at most `0.01 m/s`;
+centre/radius error at most `0.5 px`/`2%`; complete validity; position and
+velocity semigroup disagreement at most `1e-5`; and a two-second loss gradient
+of absolute magnitude at least `1e-7` to every mask scalar. At every horizon,
+position and velocity errors must be no more than half those of stationary and
+zero-velocity baselines using the same inferred anchor. Direct-equation anchor
+accuracy remains `1e-5`; repeated float32 simulator targets use a separately
+labelled `5e-4` numerical-roundoff limit rather than being misreported as an
+equation error.
+
+Perception latency measures one complete 16-frame RGB-to-anchor pass and must
+stay below `2 s` on the declared one-thread CPU protocol. State-only five-query
+rollout excludes pixels and fitting and must stay below `0.05 s`. Total learned
+parameters remain four, persistent state and process RSS are recorded, and
+process high-water/delta limits are `2.5 GB`/`1.5 GB`.
+
+## 242. Protected temporal evidence is immutable and fail-fast
+
+Development outputs are atomic, weights-only project checkpoints and finite
+JSON reports from a clean exact source. They bind the complete resolved config,
+protocol, model-state hashes, changed owners, resource evidence, development
+audit, source fingerprints, and checkpoint SHA-256. Qualification reads the
+reviewed report and checkpoint bytes once, requires externally supplied exact
+digests, validates exact clean source/config/protocol/model/report agreement,
+and never constructs an optimizer.
+
+Before each protected split is generated, an exclusive durable ledger records
+that materialization has started. Selector failure stops before confirmation;
+confirmation failure stops before final; unexpected errors retain truthful
+access receipts. Successful final evidence requires all three receipts, an
+unchanged model and source, and a fresh non-aliasing report path. The source is
+committed and independently reviewed before development artifacts are emitted;
+passing tests alone is not a convergence or promotion claim.
+
+The pre-artifact specification-1.52 source gate is `1075 passed` with `16`
+expected inactive-MPS skips in `425.70 s`, plus Ruff lint, format-check over
+`224` Python files, compileall, specification-version, and diff-integrity
+passes. Protected temporal manifests remain unopened at this boundary.
+
+## 243. Stop the failed monocular temporal family and make metric depth observable
+
+Clean source commit `8889818619121351d342490786331e854364532c` executed
+architecture attempt 2 of the maximum 2 through development only. Its immutable
+failed report has SHA-256
+`be488d045e259c0804a2a2b24215fa4eb3025d69f6113d8dbefe21d72f827554`
+and records `protected_data_materialized: false`. Current position and velocity
+RMSE were `0.016128 m` and `0.070461 m/s`; position RMSE at
+`0.10/0.25/0.50/1.00/2.00 s` was
+`0.022907/0.033205/0.050360/0.084191/0.149501 m`. Ten accuracy and
+trivial-baseline gates failed even though the direct physics/oracle,
+simulator-consistency, gradient, geometry, semigroup, latency, and memory
+checks were correct.
+
+The learned anchor-proximity taper reached `10.0338 /s`. Its oldest-frame
+weight was only `0.000534` of the anchor weight, while `77.63%` of normalized
+mass fell on the last three frames and `91.71%` on the last five. A
+development-only confidence-weight diagnostic improved current
+position/velocity RMSE to `0.00842 m`/`0.01660 m/s` and the five horizon
+position errors to `0.01000/0.01239/0.01638/0.02430/0.03963 m`. It did not
+qualify: future velocity remained `0.01652 -> 0.01502 m/s` against the
+`0.01 m/s` gate, and early zero-velocity-baseline ratios still exceeded
+`0.5`.
+
+This monocular family is terminal. Do not weaken its gates, create a third
+weighting attempt, or materialize selector, confirmation, or final seeds. Its
+failed config, runner, estimator, and dedicated tests are removed from active
+source after the report is archived; the general differentiable free-motion
+primitive remains reusable. The next structural rung must use observable
+metric depth/RGB-D for temporal state under a new predeclared protocol, new
+disjoint manifests, and a new bounded attempt budget. That protocol must also
+declare RGB-only and missing-depth ablations, per-axis current/velocity/horizon
+accuracy, trivial baselines, uncertainty coverage, gradient ownership, memory,
+and separated observation/rollout latency before episode generation.
+
+The `1075 passed, 16 skipped` gate above remains exact evidence for the clean
+pre-failure commit only. After removing the rejected experiment and adding the
+RGB-D core, the complete post-deletion tree passes `1091` tests with `16`
+expected inactive-device skips in `418.49 s`.
+
+## 244. Establish observable RGB-D metric state before temporal training
+
+Simulator protocol `sphere_world_v7` extends the public renderer with
+observable metric surface depth shaped `[T, 1, H, W]`; zero means no return.
+For every pixel, exact ray--sphere intersection selects one consistent nearest
+winner for depth, instance assignment, visibility, and RGB. These outputs may
+not be produced by separate ordering rules that disagree at silhouettes,
+overlap, or occlusion. Existing v6 evidence remains historical evidence for
+its own observation contract, not a matched v7 control.
+
+The seed-free RGB-D metric measurement is parameter-free. It consumes the
+RGB-derived differentiable subpixel centre, samples the observable depth map
+with differentiable bilinear interpolation, and uses only known sphere radius
+and the canonical camera calibration to recover metric centre position. It
+must apply the perspective radius correction between visible surface depth and
+sphere-centre depth. Simulator labels, world state, instance maps, object IDs,
+and privileged visibility are forbidden inputs to this measurement path.
+
+Supported float32/float64 rows retain ordinary gradients to RGB centre
+evidence and sampled depth. Invalid finite or geometrically extreme input rows fail
+closed with finite zero outputs and finite zero gradients; they may not leak a
+clamped but physically false state. Float16 and bfloat16 are rejected
+explicitly rather than entering numerically unsupported geometry.
+
+The frozen seed-free public-renderer grid contains 18 cases and consumes no
+episode seed namespace or protected manifest. Its maximum/RMSE world-position
+error is `0.00613210 m`/`0.00336217 m`; maximum/RMSE RGB-centre error is
+`0.0272064 px`/`0.00802947 px`. Finite gradient norms are `0.673917` to centre,
+`0.0718314` to RGB, and `6.92869` to depth. The focused gate is `29 passed`,
+and independent review passes the renderer ownership, privileged-input,
+perspective-correction, invalid-row, dtype, and gradient contracts.
+
+This qualifies only the single-frame RGB-D metric observation core. It does
+not estimate velocity, train a temporal model, open any protected split, or
+establish long-horizon convergence. A new RGB-D temporal protocol with fresh
+disjoint manifests, gates, and bounded attempts remains pending. The complete
+post-deletion/core repository suite passes `1091` tests with `16` expected
+inactive-device skips.
 
 # Closing directive
 

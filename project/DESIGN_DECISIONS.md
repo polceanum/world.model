@@ -4334,3 +4334,126 @@
   truth in its forward path, and preserves finite nonzero mask-head gradients.
   More complex learned residuals remain gated on an independently measurable
   failure of this equation-led baseline.
+
+## ADR-156 — Remove failed campaign surfaces before ordered generalization
+
+- **Date:** 2026-08-26
+- **Status:** accepted
+- **Context:** The active workspace had accumulated 254 historical run
+  directories, 660 redundant checkpoints, rejected campaign profiles, and
+  one-off recovery tools. Keeping that 7.6-GiB surface active made it too easy
+  to resume superseded protocols or mistake terminal experiments for supported
+  workflows while attempting to scale the qualified one-sphere unit.
+- **Decision:** Preserve compact evidence before cleanup: retain the qualified
+  report and legacy artifact, one exact compatibility checkpoint, all
+  non-checkpoint run metadata, a complete source bundle, and the historical
+  ledgers. Protect the exact qualified research source with GitHub tag
+  `archive/minimal-differentiable-toy-v2-f8d66da`. Remove the superseded run
+  tree, duplicate checkpoints, generated demos/caches, four unreferenced
+  rejected profiles, and three campaign-specific tools from the active
+  surface. Scale through the predeclared capability order in
+  `project/GENERALIZATION_LADDER.md`, adding one independently measurable
+  complexity per rung and capacity only after a smaller structured model has a
+  localized plateau.
+- **Consequences:** The active run directory is empty and the ignored local
+  archive is approximately 33 MiB; full history remains recoverable from Git
+  commit `c16acc99`, the archive tag, and the verified local bundle. Historical
+  commands are no longer presented as launch recommendations. Cleanup is not
+  accuracy evidence, and later rungs must still pass their own accuracy,
+  calibration, event/identity, gradient, memory, throughput, and long-horizon
+  gates before promotion.
+
+## ADR-157 — Fit temporal state with differentiable equations before adding dynamics capacity
+
+- **Date:** 2026-08-26
+- **Status:** terminal development failure; superseded by ADR-158
+- **Context:** The specification-1.51 toy established accurate differentiable
+  RGB geometry and a short analytic rollout, but not velocity identification
+  from an image history or two-second consistency. A learned transition would
+  add capacity before demonstrating whether the known constant-gravity,
+  linear-drag equations already solve this isolated regime.
+- **Decision:** Estimate anchor position and velocity with a batched weighted
+  `2 x 2` normal-equation fit to the exact signed-time free-motion basis. Keep
+  the solve, continuous RGB confidence, continuous mask-conditioned temporal
+  reliability, and `AnalyticKinematics` rollout in ordinary Torch autograd;
+  the renderer's Boolean validity remains diagnostic only. Normalize soft
+  weights per row, return finite zero outputs for invalid rows, and use a
+  cancellation-stable series around zero drag-time. Freeze a CPU-float32 rung
+  with 16 history frames, five horizons through 2.0 seconds, 32 batch-four
+  AdamW updates, only four trainable mask scalars, and disjoint development,
+  selector, confirmation, and final seed namespaces. Require a clean source
+  commit, an independently hashed development report/checkpoint pair, exact
+  config/source/protocol agreement, and a durable selector-before-confirmation-
+  before-final access ledger.
+- **Consequences:** Focused implementation, mathematical, checkpoint, and
+  protocol tests passed, including finite gradients, invalid-row behavior,
+  weight-scale invariance, float32 semigroup accuracy, and protected-access
+  fail-closed checks. Clean commit `888981861912...` then failed the
+  development audit. Selector, confirmation, and final data remain unopened.
+  The exact free-motion primitive remains reusable, but the experiment did not
+  establish temporal convergence or promotion.
+
+## ADR-158 — Reject collapsed monocular temporal weighting and make depth observable
+
+- **Date:** 2026-08-26
+- **Status:** accepted terminal rejection and next-rung boundary
+- **Context:** Architecture attempt 2 of the declared maximum 2 trained only
+  four mask-head scalars over the frozen 16-frame monocular protocol. Its clean
+  development audit reported current position/velocity RMSE
+  `0.016128 m`/`0.070461 m/s` and five horizon position errors
+  `0.022907/0.033205/0.050360/0.084191/0.149501 m`, for 10 failed gates. The
+  exact physics/oracle path was correct. The learned reliability taper reached
+  `10.0338 /s`, an oldest/anchor ratio of `0.000534`, and concentrated
+  `77.63%`/`91.71%` of weight on the last three/five frames. A confidence-only
+  development diagnostic improved current position/velocity to
+  `0.00842 m`/`0.01660 m/s` and horizon position to
+  `0.01000/0.01239/0.01638/0.02430/0.03963 m`, but future velocity was still
+  `0.01652 -> 0.01502 m/s` against `0.01 m/s` and early zero-velocity-baseline
+  gates still failed.
+- **Decision:** Treat report SHA-256
+  `be488d045e259c0804a2a2b24215fa4eb3025d69f6113d8dbefe21d72f827554`
+  from clean source commit `8889818619121351d342490786331e854364532c` as the
+  immutable terminal evidence. Do not weaken gates, run a third monocular
+  weighting variant, or access selector, confirmation, or final manifests.
+  Remove the failed config, runner, estimator, and dedicated tests from the
+  active surface while retaining the general differentiable free-motion
+  primitive. The next structural rung adds observable metric depth/RGB-D under
+  a fresh predeclared protocol and fresh disjoint manifests; RGB-only becomes
+  an ablation rather than the path used to establish temporal observability.
+- **Consequences:** Protected temporal data remains unopened, the
+  specification-1.51 minimal RGB toy remains the accepted base, and no
+  long-horizon convergence is claimed. The complete `1075 passed, 16 skipped`
+  source gate is preserved only as evidence for the pre-failure commit; the
+  post-deletion tree requires a new full gate. RGB-D must still prove runtime
+  observability, missing-modality behavior, accuracy, calibration, gradients,
+  memory, and observation/rollout throughput before online integration or
+  capacity scaling.
+
+## ADR-159 — Establish metric RGB-D observation before temporal fitting
+
+- **Date:** 2026-08-26
+- **Status:** accepted seed-free measurement core; temporal protocol pending
+- **Context:** ADR-158 localized the failed monocular family to temporal
+  observation/weighting while the analytic free-motion equations remained
+  correct. Before spending another attempt budget on velocity fitting, metric
+  depth must be a real observable with a differentiable state path and a
+  renderer contract that cannot disagree across modalities.
+- **Decision:** Advance the simulator to `sphere_world_v7` and emit observable
+  metric surface depth `[T, 1, H, W]`, with zero meaning no return. Use exact
+  ray--sphere intersection and one nearest winner for depth, instance,
+  visibility, and RGB. Recover metric centre position without parameters from
+  the RGB-derived differentiable subpixel centre, differentiable bilinear
+  depth, known sphere radius, perspective radius correction, and canonical
+  camera calibration. Do not consume labels, world state, instance maps, IDs,
+  or privileged visibility. Fail invalid finite or geometrically extreme rows
+  closed with finite zero outputs and gradients; support float32/float64 and
+  explicitly reject float16/bfloat16.
+- **Consequences:** A seed-free 18-case public-renderer grid passes with
+  maximum/RMSE position error `0.00613210 m`/`0.00336217 m`, maximum/RMSE
+  centre error `0.0272064 px`/`0.00802947 px`, and finite centre/RGB/depth
+  gradient norms `0.673917`/`0.0718314`/`6.92869`. Focused validation is
+  `29 passed` and independent review passes. No episode seed namespace or
+  protected split was accessed. This accepts the single-frame metric core
+  only; fresh temporal manifests/protocol, velocity and horizon gates, and
+  convergence remain pending. The post-deletion/core full suite passes `1091`
+  tests with `16` expected inactive-device skips.

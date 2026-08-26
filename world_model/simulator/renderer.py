@@ -94,17 +94,6 @@ def render_spheres(
     geometrically_valid = (
         state.active & positive_depth & (depth > radius + 1.0e-4) & torch.isfinite(apparent_radius)
     )
-    in_view = (
-        (centers_pixels[:, 0] + apparent_radius >= 0)
-        & (centers_pixels[:, 0] - apparent_radius <= width - 1)
-        & (centers_pixels[:, 1] + apparent_radius >= 0)
-        & (centers_pixels[:, 1] - apparent_radius <= height - 1)
-    )
-    projected_valid = geometrically_valid & in_view
-    apparent_radius = torch.where(
-        projected_valid, apparent_radius, torch.zeros_like(apparent_radius)
-    )
-    inverse_depth = torch.where(projected_valid, safe_depth.reciprocal(), torch.zeros_like(depth))
     center_normalized = torch.stack(
         (
             2.0 * centers_pixels[:, 0] / max(width - 1, 1) - 1.0,
@@ -112,6 +101,59 @@ def render_spheres(
         ),
         dim=-1,
     )
+    pixel_y, pixel_x = torch.meshgrid(
+        torch.arange(height, dtype=dtype, device=device),
+        torch.arange(width, dtype=dtype, device=device),
+        indexing="ij",
+    )
+    # Intersect each camera ray p(z) = z * (qx, qy, 1) with every sphere.
+    # The public renderer remains deliberately non-differentiable in its hard
+    # visibility choice, but depth, instance ownership, and RGB visibility all
+    # use this same physically metric ordering rather than the old
+    # orthographic ``z_c - r * front_shape`` approximation.
+    ray_x = (pixel_x - camera.intrinsics[0, 2]) / camera.intrinsics[0, 0]
+    ray_y = (pixel_y - camera.intrinsics[1, 2]) / camera.intrinsics[1, 1]
+    ray_norm_squared = 1.0 + ray_x.square() + ray_y.square()
+    ray_dot_center = (
+        ray_x.unsqueeze(0) * points_camera[:, 0, None, None]
+        + ray_y.unsqueeze(0) * points_camera[:, 1, None, None]
+        + points_camera[:, 2, None, None]
+    )
+    center_norm_squared = points_camera.square().sum(dim=-1)[:, None, None]
+    center_cross_ray = torch.stack(
+        (
+            points_camera[:, 1, None, None] - points_camera[:, 2, None, None] * ray_y.unsqueeze(0),
+            points_camera[:, 2, None, None] * ray_x.unsqueeze(0) - points_camera[:, 0, None, None],
+            points_camera[:, 0, None, None] * ray_y.unsqueeze(0)
+            - points_camera[:, 1, None, None] * ray_x.unsqueeze(0),
+        ),
+        dim=-1,
+    )
+    # b^2 - a*c is cancellation-prone for distant small spheres.  The
+    # equivalent a*r^2 - ||centre x ray||^2 form preserves the small
+    # discriminant, and c/(b + sqrt(discriminant)) evaluates the near root
+    # without subtracting two nearly equal positive values.
+    discriminant = ray_norm_squared.unsqueeze(0) * radius[:, None, None].square() - (
+        center_cross_ray.square().sum(dim=-1)
+    )
+    square_root = discriminant.clamp_min(0.0).sqrt()
+    near_root_denominator = ray_dot_center + square_root
+    quadratic_constant = center_norm_squared - radius[:, None, None].square()
+    metric_surface_depth = quadratic_constant / near_root_denominator.clamp_min(1.0e-12)
+    full_mask = (
+        geometrically_valid[:, None, None]
+        & (discriminant >= 0.0)
+        & (near_root_denominator > 0.0)
+        & (metric_surface_depth > 0.0)
+        & torch.isfinite(metric_surface_depth)
+    )
+    # Exact visibility also owns the projected-valid diagnostic.  This avoids
+    # approximate focal-radius bounds disagreeing with a real edge hit.
+    projected_valid = geometrically_valid & full_mask.any(dim=(-2, -1))
+    apparent_radius = torch.where(
+        projected_valid, apparent_radius, torch.zeros_like(apparent_radius)
+    )
+    inverse_depth = torch.where(projected_valid, safe_depth.reciprocal(), torch.zeros_like(depth))
     center_normalized = torch.where(
         projected_valid.unsqueeze(-1),
         center_normalized,
@@ -123,31 +165,31 @@ def render_spheres(
         torch.zeros_like(centers_pixels),
     )
 
-    pixel_y, pixel_x = torch.meshgrid(
-        torch.arange(height, dtype=dtype, device=device),
-        torch.arange(width, dtype=dtype, device=device),
-        indexing="ij",
-    )
+    # Preserve the renderer's public one-pixel appearance profile while making
+    # exact visibility authoritative.  Pixels admitted only by the exact
+    # off-axis silhouette receive the same half-covered edge value as a
+    # projected-disc boundary; an exact-visible pixel can never become fully
+    # transparent merely because the projected approximation missed it.
     delta_x = pixel_x.unsqueeze(0) - centers_pixels[:, 0, None, None]
     delta_y = pixel_y.unsqueeze(0) - centers_pixels[:, 1, None, None]
-    safe_radius = apparent_radius.clamp_min(1.0e-4)
-    radial_squared = (delta_x.square() + delta_y.square()) / safe_radius[:, None, None].square()
-    full_mask = (radial_squared <= 1.0) & projected_valid[:, None, None]
-    # One-pixel smooth silhouette support for anti-aliased RGB.
-    radial_distance = torch.sqrt(radial_squared.clamp_min(0.0))
-    soft_width = edge_softness_pixels / safe_radius[:, None, None]
-    soft_support = ((1.0 - radial_distance) / soft_width.clamp_min(1.0e-4) + 0.5).clamp(0.0, 1.0)
-    soft_support = torch.where(
-        projected_valid[:, None, None],
-        soft_support,
-        torch.zeros_like(soft_support),
+    safe_apparent_radius = apparent_radius.clamp_min(1.0e-4)
+    appearance_radial_squared = (delta_x.square() + delta_y.square()) / safe_apparent_radius[
+        :, None, None
+    ].square()
+    radial_distance = torch.sqrt(appearance_radial_squared.clamp_min(0.0))
+    soft_width = edge_softness_pixels / safe_apparent_radius[:, None, None]
+    approximate_soft_support = ((1.0 - radial_distance) / soft_width.clamp_min(1.0e-4) + 0.5).clamp(
+        0.0, 1.0
     )
-
-    front_shape = torch.sqrt((1.0 - radial_squared).clamp_min(0.0))
-    surface_depth = depth[:, None, None] - radius[:, None, None] * front_shape
-    infinity = torch.full_like(surface_depth, torch.inf)
-    surface_depth = torch.where(full_mask, surface_depth, infinity)
-    depth_buffer, winning_slot = surface_depth.min(dim=0)
+    soft_support = torch.where(
+        full_mask,
+        approximate_soft_support.clamp_min(0.5),
+        torch.zeros_like(approximate_soft_support),
+    )
+    front_shape = torch.sqrt((1.0 - appearance_radial_squared).clamp_min(0.0))
+    infinity = torch.full_like(metric_surface_depth, torch.inf)
+    ordered_surface_depth = torch.where(full_mask, metric_surface_depth, infinity)
+    depth_buffer, winning_slot = ordered_surface_depth.min(dim=0)
     has_object = torch.isfinite(depth_buffer)
     instance_slot_map = torch.where(
         has_object,

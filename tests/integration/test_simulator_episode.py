@@ -40,6 +40,11 @@ def test_episode_is_padded_labelled_and_physically_exercises_contacts() -> None:
 
     assert episode["rgb"].shape == (20, 3, 32, 40)
     assert episode["rgb"].dtype == torch.float32
+    assert episode["depth"].shape == (20, 1, 32, 40)
+    assert episode["depth"].dtype == torch.float32
+    assert torch.isfinite(episode["depth"]).all()
+    assert torch.all(episode["depth"] >= 0.0)
+    assert episode["depth"].gt(0.0).any()
     assert episode["objects"]["position"].shape == (20, 4, 3)
     assert episode["objects"]["id"].dtype == torch.int64
     assert episode["objects"]["active"].dtype == torch.bool
@@ -77,6 +82,7 @@ def test_fixed_seed_generation_is_exactly_repeatable_and_seed_sensitive() -> Non
     different = generate_episode(config, seed=8)
 
     torch.testing.assert_close(first["rgb"], repeated["rgb"], rtol=0, atol=0)
+    torch.testing.assert_close(first["depth"], repeated["depth"], rtol=0, atol=0)
     torch.testing.assert_close(
         first["objects"]["position"],
         repeated["objects"]["position"],
@@ -430,6 +436,7 @@ def test_dataset_splits_and_collation_preserve_batch_time_object_order() -> None
     assert dataset[0]["rgb"].abs().sum() > 0
     batch = collate_episodes([dataset[0], dataset[1]])
     assert batch["rgb"].shape == (2, 20, 3, 32, 40)
+    assert batch["depth"].shape == (2, 20, 1, 32, 40)
     assert batch["timestamps"].shape == (2, 20)
     assert batch["objects"]["position"].shape == (2, 20, 4, 3)
     assert batch["seed"].tolist() == list(train_manifest.seeds)
