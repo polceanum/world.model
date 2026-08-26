@@ -4366,7 +4366,7 @@
 ## ADR-157 — Fit temporal state with differentiable equations before adding dynamics capacity
 
 - **Date:** 2026-08-26
-- **Status:** accepted implementation; protected qualification pending
+- **Status:** terminal development failure; superseded by ADR-158
 - **Context:** The specification-1.51 toy established accurate differentiable
   RGB geometry and a short analytic rollout, but not velocity identification
   from an image history or two-second consistency. A learned transition would
@@ -4386,9 +4386,74 @@
   config/source/protocol agreement, and a durable selector-before-confirmation-
   before-final access ledger.
 - **Consequences:** Focused implementation, mathematical, checkpoint, and
-  protocol tests pass, including finite gradients, invalid-row behavior,
+  protocol tests passed, including finite gradients, invalid-row behavior,
   weight-scale invariance, float32 semigroup accuracy, and protected-access
-  fail-closed checks. No development artifact has yet been produced from clean
-  committed source, and selector, confirmation, and final data remain
-  unopened. Therefore this decision establishes the trainable path and frozen
-  experiment, not convergence or promotion.
+  fail-closed checks. Clean commit `888981861912...` then failed the
+  development audit. Selector, confirmation, and final data remain unopened.
+  The exact free-motion primitive remains reusable, but the experiment did not
+  establish temporal convergence or promotion.
+
+## ADR-158 — Reject collapsed monocular temporal weighting and make depth observable
+
+- **Date:** 2026-08-26
+- **Status:** accepted terminal rejection and next-rung boundary
+- **Context:** Architecture attempt 2 of the declared maximum 2 trained only
+  four mask-head scalars over the frozen 16-frame monocular protocol. Its clean
+  development audit reported current position/velocity RMSE
+  `0.016128 m`/`0.070461 m/s` and five horizon position errors
+  `0.022907/0.033205/0.050360/0.084191/0.149501 m`, for 10 failed gates. The
+  exact physics/oracle path was correct. The learned reliability taper reached
+  `10.0338 /s`, an oldest/anchor ratio of `0.000534`, and concentrated
+  `77.63%`/`91.71%` of weight on the last three/five frames. A confidence-only
+  development diagnostic improved current position/velocity to
+  `0.00842 m`/`0.01660 m/s` and horizon position to
+  `0.01000/0.01239/0.01638/0.02430/0.03963 m`, but future velocity was still
+  `0.01652 -> 0.01502 m/s` against `0.01 m/s` and early zero-velocity-baseline
+  gates still failed.
+- **Decision:** Treat report SHA-256
+  `be488d045e259c0804a2a2b24215fa4eb3025d69f6113d8dbefe21d72f827554`
+  from clean source commit `8889818619121351d342490786331e854364532c` as the
+  immutable terminal evidence. Do not weaken gates, run a third monocular
+  weighting variant, or access selector, confirmation, or final manifests.
+  Remove the failed config, runner, estimator, and dedicated tests from the
+  active surface while retaining the general differentiable free-motion
+  primitive. The next structural rung adds observable metric depth/RGB-D under
+  a fresh predeclared protocol and fresh disjoint manifests; RGB-only becomes
+  an ablation rather than the path used to establish temporal observability.
+- **Consequences:** Protected temporal data remains unopened, the
+  specification-1.51 minimal RGB toy remains the accepted base, and no
+  long-horizon convergence is claimed. The complete `1075 passed, 16 skipped`
+  source gate is preserved only as evidence for the pre-failure commit; the
+  post-deletion tree requires a new full gate. RGB-D must still prove runtime
+  observability, missing-modality behavior, accuracy, calibration, gradients,
+  memory, and observation/rollout throughput before online integration or
+  capacity scaling.
+
+## ADR-159 — Establish metric RGB-D observation before temporal fitting
+
+- **Date:** 2026-08-26
+- **Status:** accepted seed-free measurement core; temporal protocol pending
+- **Context:** ADR-158 localized the failed monocular family to temporal
+  observation/weighting while the analytic free-motion equations remained
+  correct. Before spending another attempt budget on velocity fitting, metric
+  depth must be a real observable with a differentiable state path and a
+  renderer contract that cannot disagree across modalities.
+- **Decision:** Advance the simulator to `sphere_world_v7` and emit observable
+  metric surface depth `[T, 1, H, W]`, with zero meaning no return. Use exact
+  ray--sphere intersection and one nearest winner for depth, instance,
+  visibility, and RGB. Recover metric centre position without parameters from
+  the RGB-derived differentiable subpixel centre, differentiable bilinear
+  depth, known sphere radius, perspective radius correction, and canonical
+  camera calibration. Do not consume labels, world state, instance maps, IDs,
+  or privileged visibility. Fail invalid finite or geometrically extreme rows
+  closed with finite zero outputs and gradients; support float32/float64 and
+  explicitly reject float16/bfloat16.
+- **Consequences:** A seed-free 18-case public-renderer grid passes with
+  maximum/RMSE position error `0.00613210 m`/`0.00336217 m`, maximum/RMSE
+  centre error `0.0272064 px`/`0.00802947 px`, and finite centre/RGB/depth
+  gradient norms `0.673917`/`0.0718314`/`6.92869`. Focused validation is
+  `29 passed` and independent review passes. No episode seed namespace or
+  protected split was accessed. This accepts the single-frame metric core
+  only; fresh temporal manifests/protocol, velocity and horizon gates, and
+  convergence remain pending. The post-deletion/core full suite passes `1091`
+  tests with `16` expected inactive-device skips.

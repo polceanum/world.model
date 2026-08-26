@@ -30,64 +30,67 @@ Do not rerun its published final manifest merely to regenerate provenance.
 Future runs require fresh output paths and produce atomic, versioned,
 weights-only project checkpoints whose SHA-256 is bound in the report.
 
-## Current temporal rung
+## Closed monocular temporal rung
 
-The runner and config are frozen, and focused implementation/static gates pass.
-No development artifact has yet been created from clean committed source, and
-all protected namespaces remain unopened. Commit the reviewed tree and run all
-repository gates first; the runner rejects a dirty checkout and requires the
-same clean source provenance throughout both phases.
+Do not launch the former temporal runner or qualification workflow. Clean
+source commit `8889818619121351d342490786331e854364532c` completed the frozen
+32-update development phase and failed its 16-seed audit. The immutable report
+is retained at ignored local path
+`.archive/20260826-pre-generalization/temporal-free-motion-attempt-2/development_report.json`
+with SHA-256
+`be488d045e259c0804a2a2b24215fa4eb3025d69f6113d8dbefe21d72f827554`.
+It records `passed: false`, `review_ready: false`,
+`stopped_after: development_audit`, and
+`protected_data_materialized: false`.
 
-Development is the only permitted first launch. Use fresh, non-aliasing output
-paths that do not already exist:
+The trained audit failed 10 gates. Current position/velocity RMSE was
+`0.016128 m`/`0.070461 m/s`, and horizon position RMSE at
+`0.1/0.25/0.5/1.0/2.0 s` was
+`0.022907/0.033205/0.050360/0.084191/0.149501 m`. The fit assigned only
+`0.000534` as much weight to the oldest frame as the anchor and concentrated
+`77.63%`/`91.71%` of its mass on the last three/five frames through a learned
+`10.0338 /s` taper. Thus the trainable weighting collapsed temporal extent
+even though the exact free-motion oracle, simulator comparison, semigroup,
+gradient, geometry, memory, and latency checks were correct.
 
-```bash
-conda run -n orpheus python scripts/run_temporal_free_motion_ladder.py \
-  --phase development \
-  --config configs/temporal_free_motion_toy_cpu.yaml \
-  --report runs/temporal_free_motion_toy_v1/development_report.json \
-  --checkpoint runs/temporal_free_motion_toy_v1/development_model.pt
-```
+A confidence-only development diagnostic produced current position/velocity
+RMSE `0.00842 m`/`0.01660 m/s` and horizon position RMSE
+`0.01000/0.01239/0.01638/0.02430/0.03963 m`. That does not qualify the family:
+future velocity remained `0.01652 -> 0.01502 m/s` against the `0.01 m/s` gate,
+and the early zero-velocity-baseline ratios still exceeded `0.5`. This was the
+terminal second of two monocular architecture attempts. Do not change its
+thresholds, run a third variant, or materialize selector, confirmation, or
+final seeds. The config, runner, estimator, and dedicated tests were removed
+from the active source tree after archiving the report.
 
-This phase alone materializes development-train seeds
-`31000000--31000031` and development-audit seeds
-`31100000--31100015`. It performs exactly 32 batch-four AdamW updates and
-writes an atomic project-compatible weights-only checkpoint plus a report that
-must state `protected_data_materialized: false`. Inspect both artifacts and
-independently record their full SHA-256 values before proceeding.
+## Next temporal rung
 
-Only if the development report passes and is review-ready may the same clean
-source commit run the one protected qualification command:
+The seed-free single-frame foundation for the next rung now passes. Simulator
+v7 provides observable `[T, 1, H, W]` metric surface depth from the same exact
+nearest ray--sphere winner used by RGB, visibility, and instance output. A
+parameter-free measurement uses the RGB-derived subpixel centre,
+differentiable bilinear depth, known radius, canonical camera, and perspective
+radius correction; it consumes no labels, simulator state, instance maps, or
+object IDs. Its 18-case grid reaches `0.00336217 m` position RMSE and has
+finite gradients to centre, RGB, and depth. Focused validation is `29 passed`
+and independent review passes, without an episode seed namespace or protected
+access.
 
-```bash
-conda run -n orpheus python scripts/run_temporal_free_motion_ladder.py \
-  --phase qualification \
-  --config configs/temporal_free_motion_toy_cpu.yaml \
-  --report runs/temporal_free_motion_toy_v1/qualification_report.json \
-  --checkpoint runs/temporal_free_motion_toy_v1/development_model.pt \
-  --development-report \
-    runs/temporal_free_motion_toy_v1/development_report.json \
-  --reviewed-checkpoint-sha256 <independently-reviewed-checkpoint-sha256> \
-  --reviewed-report-sha256 <independently-reviewed-report-sha256>
-```
+This is not a training or convergence result. The next permitted training work
+is a new observable-depth/RGB-D temporal state fit, not another monocular
+reliability-taper variant. Before any episode generation,
+freeze a new config and protocol that declares fresh development, selector,
+confirmation, and final manifests; at most two architecture attempts; RGB-D
+noise/calibration and missing-depth behavior; an RGB-only ablation; per-axis
+current/velocity/horizon limits; trivial-baseline and semigroup gates;
+uncertainty coverage; gradient ownership; parameters/state/RSS; and separated
+RGB-D-observation versus state-only rollout latency. Runtime may consume only
+RGB-D, calibration, timestamps, and declared priors—never simulator state.
 
-Qualification reads each reviewed artifact once, verifies its supplied
-64-hex SHA-256 plus exact config/source/protocol/model/report agreement, and
-loads no optimizer state. Before protected access it exclusively creates
-`runs/temporal_free_motion_toy_v1/qualification_attempt_2_access.json`.
-That ledger makes architecture attempt 2 of 2 one-shot: do not delete or reuse
-it to retry a failed family. Access is fail-fast and ordered as 16 selector
-seeds, 16 confirmation seeds, then 32 final seeds; a failed earlier gate keeps
-later data unopened. Do not edit code or documentation between development and
-qualification.
-
-The frozen rung uses 16 RGB observations over 0.75 seconds, a differentiable
-exact linear-drag least-squares anchor-state fit, and analytic rollouts at
-`0.1/0.25/0.5/1.0/2.0 s`. Every protected split must meet current
-position/velocity, per-horizon position, future-velocity, centre/radius,
-validity, trivial-baseline, semigroup, two-second per-mask-scalar gradient,
-memory, and separated perception/state-only latency gates. Passing unit or
-development checks is not convergence evidence.
+The complete `1075 passed, 16 skipped` repository gate belongs to the clean
+pre-failure source commit above. After deletion of the rejected experiment and
+addition of the RGB-D core, the new complete source gate passes `1091` tests
+with `16` expected inactive-device skips in `418.49 s`.
 
 The broad `train.py`, `evaluate.py`, and `demo.py` workflow remains available
 for `OnlineWorldModel` smoke/integration checks, but no older sustained profile

@@ -51,6 +51,14 @@ incumbent. Historical experiments and their limitations remain in
 [`project/STATUS.md`](project/STATUS.md); the minimal qualification workflow is
 below.
 
+The first temporal extension is also closed as a terminal development failure.
+Its trainable reliability taper discarded most of the 16-frame history and
+could not identify velocity accurately enough for long rollouts. Protected
+selector, confirmation, and final manifests were never opened. The next
+generalization rung now has a passing parameter-free RGB-D metric measurement
+core. Its temporal state protocol is still pending; this is not a third
+monocular-taper attempt or a convergence claim.
+
 ## Quick start
 
 Use the existing `orpheus` environment. PyTorch is an externally managed
@@ -104,48 +112,61 @@ load_model_weights("runs/minimal_differentiable_toy_v2/model.pt", model=model,
 estimator. The ladder exists to close identifiability and gradient correctness
 before another complexity rung enters that production path.
 
-### Temporal and long-horizon qualification
+### Terminal temporal experiment and next rung
 
-The first generalization rung fits one anchor state from sixteen RGB frames,
-then evaluates cheap analytic rollouts through two seconds. Development may use
-only the frozen development manifests and emits a review checkpoint without
-opening selector, confirmation, or final data:
+The frozen attempt-2 monocular temporal experiment stopped at development on
+clean source commit `8889818619121351d342490786331e854364532c`. Its audit
+missed 10 accuracy/baseline gates: current position/velocity RMSE was
+`0.016128 m`/`0.070461 m/s`, and position RMSE at
+`0.1/0.25/0.5/1.0/2.0 s` was
+`0.022907/0.033205/0.050360/0.084191/0.149501 m`. Physics, oracle, gradients,
+semigroup, resource, and geometry diagnostics passed, so the failure is in
+temporal observation/weighting rather than the rollout equations.
 
-```bash
-conda run -n orpheus python scripts/run_temporal_free_motion_ladder.py \
-  --phase development \
-  --config configs/temporal_free_motion_toy_cpu.yaml \
-  --report runs/temporal_free_motion_toy_v1/development_report.json \
-  --checkpoint runs/temporal_free_motion_toy_v1/development_model.pt
-```
+The learned taper reached `10.0338 /s`: the oldest-to-anchor weight ratio was
+only `0.000534`, with `77.63%` of mass on the last three frames and `91.71%`
+on the last five. A development-only confidence-weight diagnostic improved
+current position/velocity to `0.00842 m`/`0.01660 m/s` and the five horizon
+errors to `0.01000/0.01239/0.01638/0.02430/0.03963 m`, but future velocity
+remained `0.01652 -> 0.01502 m/s` against the `0.01 m/s` gate and the early
+zero-velocity-baseline ratios still failed. Attempt 2 of 2 is therefore
+exhausted. Do not rerun it or access its protected manifests.
 
-Run this only from a clean committed source tree. The development report binds
-the checkpoint SHA-256; independently compute and review both that checkpoint
-digest and the report's own digest. The same clean commit may then consume the
-protected sets exactly once:
+The immutable failed development report is retained under the ignored local
+archive with SHA-256
+`be488d045e259c0804a2a2b24215fa4eb3025d69f6113d8dbefe21d72f827554`.
+The removed config, runner, estimator, and tests are no longer supported
+entry points.
 
-```bash
-conda run -n orpheus python scripts/run_temporal_free_motion_ladder.py \
-  --phase qualification \
-  --config configs/temporal_free_motion_toy_cpu.yaml \
-  --report runs/temporal_free_motion_toy_v1/qualification_report.json \
-  --checkpoint runs/temporal_free_motion_toy_v1/development_model.pt \
-  --development-report runs/temporal_free_motion_toy_v1/development_report.json \
-  --reviewed-checkpoint-sha256 <reviewed-checkpoint-sha256> \
-  --reviewed-report-sha256 <reviewed-report-sha256>
-```
+### Seed-free RGB-D metric core
 
-The qualification command creates a durable access ledger before generating
-protected examples and stops at the first failed split. It never trains or
-changes the reviewed weights. This rung is still a standalone identifiability
-test; the next rung must reproduce it through the public online belief API
-before any scene or network-capacity expansion.
+Simulator v7 now exposes observable metric surface depth as
+`[T, 1, H, W]`, with zero meaning no return. Exact ray--sphere intersection
+uses the same nearest surface winner for depth, instance, visibility, and RGB.
+The parameter-free measurement consumes an RGB-derived differentiable
+subpixel centre, bilinearly samples depth, applies perspective radius
+correction using the known radius and canonical camera, and never reads labels,
+state, instance maps, or object IDs.
+
+A seed-free 18-case public-renderer grid passes with maximum/RMSE position
+error `0.00613210 m`/`0.00336217 m` and maximum/RMSE centre error
+`0.0272064 px`/`0.00802947 px`. Finite gradient norms to centre, RGB, and depth
+are `0.673917`, `0.0718314`, and `6.92869`. Invalid finite/extreme rows fail
+closed with zero finite gradients, and float16/bfloat16 are rejected. The
+focused result is `29 passed`, with independent review passing.
+
+This result used no episode seed namespace or protected data. It qualifies a
+single-frame RGB-D metric observation primitive only. The next active work is
+to predeclare and qualify an RGB-D temporal-state protocol with fresh disjoint
+manifests and bounded attempts; no temporal or long-horizon convergence is yet
+claimed. The post-deletion/core full suite passes `1091` tests with `16`
+expected inactive-device skips.
 
 The former grounded, attention, change-point, and multi-day accuracy commands
 are historical evidence only and have been removed from the active workflow.
 Their records remain in Git history and the ignored, local pre-generalization
-archive. Broad training stays paused until the current isolated
-temporal/long-horizon rung preserves the minimal gates.
+archive. Broad training stays paused while the observable-depth/RGB-D rung is
+specified and qualified without weakening the accepted minimal gates.
 
 The general evaluator still supports explicit disjoint manifests for a
 compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not

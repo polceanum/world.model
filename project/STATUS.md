@@ -2,10 +2,11 @@
 
 ## Active generalization program — 2026-08-26
 
-The canonical checkout is synchronized with GitHub `main` at
+The pre-generalization public base is GitHub `main` commit
 `c16acc99ef13757fc8f88528bfd0d66db4a2f4fd`. Broad heterogeneous training
-remains paused. The accepted base is the specification-1.51 differentiable
-one-sphere RGB-to-state-to-rollout unit, not any older campaign checkpoint.
+remains paused. The active contract is specification 1.53; the accepted
+convergence base remains the specification-1.51 differentiable one-sphere
+RGB-to-state-to-rollout unit, not any older campaign checkpoint.
 
 The qualified unit achieved, on its single previously untouched final set:
 
@@ -42,10 +43,10 @@ Historical status, task, training, and accuracy records remain in Git commit
 `c16acc99` and the ignored local pre-generalization archive; active tracked
 memory is intentionally concise.
 
-### Current rung: temporal free-motion and long-horizon consistency
+### Terminal result: monocular temporal free motion
 
-The next isolated rung keeps the already identifiable one-sphere, fixed
-camera/radius/gravity/drag, and contact-free world. It changes only temporal
+The closed isolated rung kept the already identifiable one-sphere, fixed
+camera/radius/gravity/drag, and contact-free world. It changed only temporal
 estimation and horizon:
 
 1. fit anchor position and velocity from a bounded RGB-derived history with a
@@ -56,44 +57,82 @@ estimation and horizon:
    gradient reachability, calibration diagnostics, and separated perception/
    state-rollout throughput.
 
-The solver and fail-fast ladder are implemented and frozen on
-`agent/general-world-model-rung-1`. The exact differentiable free-motion basis
-uses a cancellation-stable float32 path, per-row normalized weights, and
-finite zero outputs for invalid rows. The temporal estimator has only four
-trainable mask-head scalars; there is no learned transition. Architecture
-attempt 2 of the declared maximum 2 and resolved-config SHA-256
-`cb40cf08178453f1b0045afd293e82237b31e19b3f38b3136cce95830bd25cd8`
-are immutable.
+The exact differentiable free-motion basis itself passed its oracle and
+semigroup gates. The terminal architecture attempt 2 of 2 then ran its
+development-only protocol from clean commit
+`8889818619121351d342490786331e854364532c` and failed 10 accuracy and
+trivial-baseline gates. Audit current position/velocity RMSE was
+`0.016128 m`/`0.070461 m/s`; horizon position RMSE at
+`0.1/0.25/0.5/1.0/2.0 s` was
+`0.022907/0.033205/0.050360/0.084191/0.149501 m`. Oracle state, direct
+equations, simulator agreement, gradients, geometry, semigroup consistency,
+latency, and memory remained correct, localizing the failure to temporal
+measurement/weighting rather than rollout physics.
 
-Focused temporal implementation validation passes `61` tests, and the broader
-config/checkpoint/temporal compatibility selection passes `245` tests. Static
-independent review passes the frozen access, provenance, baseline, gradient,
-and artifact contracts. No development artifact has yet been generated from a
-clean committed source. Selector seeds `32000000--32000015`, confirmation
-seeds `33000000--33000015`, and final seeds `34000000--34000031` remain
-unopened. The published specification-1.51 final set will not be reused.
+The learned reliability taper reached `10.0338 /s`, reducing the
+oldest-to-anchor weight ratio to `0.000534`; `77.63%` of fit mass fell on the
+last three frames and `91.71%` on the last five. A confidence-only
+development diagnostic improved current position/velocity to
+`0.00842 m`/`0.01660 m/s` and the five horizon position errors to
+`0.01000/0.01239/0.01638/0.02430/0.03963 m`. It still failed: future velocity
+was `0.01652 -> 0.01502 m/s` versus the `0.01 m/s` limit, and the early
+zero-velocity-baseline ratios exceeded `0.5`.
 
-The next action is to freeze the current bytes in a clean commit, run the
-development-only 32-update/16-audit workflow, and independently inspect and
-hash its report and checkpoint. Protected qualification may run once only if
-that development evidence passes without any source change.
+The immutable failed report is archived locally at ignored path
+`.archive/20260826-pre-generalization/temporal-free-motion-attempt-2/development_report.json`
+with SHA-256
+`be488d045e259c0804a2a2b24215fa4eb3025d69f6113d8dbefe21d72f827554`.
+It states `protected_data_materialized: false`. Selector seeds
+`32000000--32000015`, confirmation seeds `33000000--33000015`, and final
+seeds `34000000--34000031` remain unopened. The failed config, runner,
+estimator, and tests have been removed from the active tree. Do not retry this
+family or access its protected data.
 
-After this rung passes, scaling remains ordered: public `OnlineWorldModel`
-integration; moving camera; identifiable drag; RGB-D metric scale; two
+The next structural rung is observable-depth/RGB-D temporal state under a new
+predeclared protocol, not a third monocular reliability-taper attempt. Its
+single-frame metric measurement core now passes as recorded below. After the
+temporal rung passes, scaling remains ordered: public `OnlineWorldModel`
+integration; moving camera; identifiable drag; variable metric scale; two
 non-contact objects; variable set size; identity/occlusion; analytic contact;
 observable material parameters; known actions and counterfactual planning;
 then richer modalities/geometry. Model capacity grows only after a smaller
 structured rung demonstrably plateaus.
 
+### Passing seed-free RGB-D metric core
+
+Simulator protocol `sphere_world_v7` exposes observable metric surface depth
+as `[T, 1, H, W]`, with zero denoting no return. Exact ray--sphere intersection
+selects one consistent nearest winner for depth, instance, visibility, and
+RGB. The parameter-free metric measurement combines an RGB-derived
+differentiable subpixel centre with differentiable bilinear depth, known sphere
+radius, perspective radius correction, and the canonical camera. Labels,
+simulator state, instance maps, and object IDs are not inputs.
+
+The seed-free 18-case public-renderer grid passes with:
+
+- maximum/RMSE position error `0.00613210 m`/`0.00336217 m`;
+- maximum/RMSE centre error `0.0272064 px`/`0.00802947 px`; and
+- finite centre/RGB/depth gradient norms
+  `0.673917`/`0.0718314`/`6.92869`.
+
+Invalid finite or extreme rows fail closed with finite zero outputs and zero
+gradients; float16 and bfloat16 are rejected. Focused validation is
+`29 passed`, and independent review passes. This proof consumed no episode seed
+namespace and no protected data. It establishes only single-frame RGB-D metric
+state: the new temporal protocol, velocity and long-horizon gates, and all
+convergence claims remain pending.
+
 ## Validation state
 
-The current cleanup/temporal source passes the complete repository gate:
+The pre-failure clean source at commit `8889818619121351d342490786331e854364532c`
+passed the complete repository gate:
 `1075 passed, 16` expected inactive-MPS skips in `425.70 s`. Ruff lint passes;
-all `224` Python files are already formatted; compileall over production,
-tests, scripts, and entry points passes; the explicit specification-version
-contract passes; and `git diff --check` is clean. This qualifies source
-integrity only. A clean committed development artifact, protected temporal
-qualification, and any general-world-model convergence claim remain pending.
+all `224` Python files were formatted; compileall over production,
+tests, scripts, and entry points passed; the explicit specification-version
+contract passed; and `git diff --check` was clean. This is preserved
+pre-failure source-integrity evidence, not evidence for the post-deletion/core
+tree. The complete post-deletion/core gate passes `1091` tests with `16`
+expected inactive-device skips in `418.49 s`.
 
-No general multi-object, contact, long-horizon, multimodal, or planning
+No accepted long-horizon temporal, multi-object, contact, multimodal, or planning
 convergence claim exists yet.

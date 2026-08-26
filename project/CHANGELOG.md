@@ -2,6 +2,33 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-26 seed-free RGB-D metric core
+
+- Advanced the authoritative contract to specification 1.53 and simulator
+  protocol `sphere_world_v7` for observable metric surface depth shaped
+  `[T, 1, H, W]`, with zero denoting no return.
+- Used exact ray--sphere intersection and one consistent nearest winner for
+  depth, instance assignment, visibility, and RGB, preventing cross-output
+  ordering disagreement at silhouettes and overlaps.
+- Added a parameter-free RGB-D metric measurement from the RGB-derived
+  differentiable subpixel centre, differentiable bilinear depth, known radius,
+  perspective radius correction, and canonical camera. The path consumes no
+  labels, simulator state, instance maps, or object IDs.
+- Made invalid finite/extreme rows fail closed with finite zero outputs and
+  gradients; float16 and bfloat16 reject explicitly. Supported paths retain
+  gradients to centre, RGB, and depth.
+- The seed-free 18-case public-renderer grid passes with maximum/RMSE position
+  error `0.00613210 m`/`0.00336217 m`, maximum/RMSE centre error
+  `0.0272064 px`/`0.00802947 px`, and finite centre/RGB/depth gradient norms
+  `0.673917`/`0.0718314`/`6.92869`. Focused validation is `29 passed`; an
+  independent review passes. No episode seed namespace or protected manifest
+  was accessed.
+- The complete post-deletion/core repository gate passes `1091` tests with
+  `16` expected inactive-device skips in `418.49 s`.
+- This qualifies only the single-frame RGB-D metric core. A new predeclared
+  RGB-D temporal protocol and temporal/long-horizon convergence remain
+  pending.
+
 ### 2026-08-26 clean generalization foundation and temporal free-motion rung
 
 - Advanced the authoritative contract to specification 1.52. Generalization
@@ -33,16 +60,35 @@
   and provenance gates before any protected access.
 - Focused temporal implementation validation passes `61` tests; the broader
   config/checkpoint/temporal compatibility selection passes `245` tests. An
-  independent static protocol review also passed. These are implementation
-  checks only: no clean-source development artifact exists yet, the protected
-  selector/confirmation/final namespaces remain unopened, and no temporal or
-  general-world-model convergence is claimed.
-- The frozen cleanup/temporal source passes `1075` repository tests with `16`
+  independent static protocol review also passed. Clean source commit
+  `8889818619121351d342490786331e854364532c` then completed development and
+  failed its audit with 10 accuracy/baseline failures: current
+  position/velocity RMSE `0.016128 m`/`0.070461 m/s` and five horizon position
+  errors `0.022907/0.033205/0.050360/0.084191/0.149501 m`.
+- Preserved the terminal development report under the ignored local archive
+  with SHA-256
+  `be488d045e259c0804a2a2b24215fa4eb3025d69f6113d8dbefe21d72f827554`.
+  Its physics/oracle, semigroup, gradient, geometry, latency, and memory checks
+  passed, and it records that protected data was not materialized.
+- Diagnosed temporal-weight collapse: the learned taper was `10.0338 /s`, its
+  oldest/anchor ratio `0.000534`, and its last-three/last-five mass
+  `77.63%`/`91.71%`. A confidence-only development diagnostic reduced current
+  position/velocity to `0.00842 m`/`0.01660 m/s` and horizon errors to
+  `0.01000/0.01239/0.01638/0.02430/0.03963 m`, but future velocity remained
+  `0.01652 -> 0.01502 m/s` versus `0.01 m/s` and the early zero-velocity
+  baselines still failed.
+- Exhausted attempt 2 of 2 without opening selector, confirmation, or final
+  manifests. Removed the failed config, runner, estimator, and tests from the
+  active tree. The next structural rung is observable-depth/RGB-D temporal
+  state under a fresh predeclared protocol, not a third monocular attempt.
+- The frozen pre-failure cleanup/temporal source passed `1075` repository
+  tests with `16`
   expected inactive-MPS skips in `425.70 s`. Ruff lint passes, all `224`
   Python files are format-clean, compileall and the specification-version
-  contract pass, and `git diff --check` is clean. These gates authorize a clean
-  source commit and development run; they do not authorize protected access or
-  claim long-horizon accuracy.
+  contract passed, and `git diff --check` was clean. This result belongs to
+  commit `888981861912...`. The later post-deletion/core tree passes `1091`
+  tests with `16` expected inactive-device skips; no long-horizon convergence
+  is claimed.
 
 ### 2026-08-26 convergence-first differentiable toy
 

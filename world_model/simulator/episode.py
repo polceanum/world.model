@@ -117,11 +117,12 @@ def generate_episode(
     config: SphereWorldConfig | Mapping[str, Any] | Any,
     seed: int,
 ) -> Episode:
-    """Generate one deterministic, padded, fully labelled RGB episode."""
+    """Generate one deterministic, padded, fully labelled RGB-D episode."""
 
     resolved = SphereWorldConfig.from_config(config)
     world = SphereWorld(resolved, seed)
     rgb_frames: list[Tensor] = []
+    depth_frames: list[Tensor] = []
     state_records: list[dict[str, Tensor]] = []
     label_records: list[dict[str, Tensor]] = []
     event_records: list[dict[str, Tensor]] = []
@@ -145,6 +146,7 @@ def generate_episode(
             image_size=resolved.image_size,
         )
         rgb_frames.append(rendered.rgb)
+        depth_frames.append(rendered.depth_buffer.unsqueeze(0))
         state_records.append(_state_record(world, rendered.visible_fraction))
         label_records.append(labels)
         interval_start = max(0.0, timestamp - resolved.observation_dt)
@@ -185,6 +187,7 @@ def generate_episode(
 
     episode: Episode = {
         "rgb": torch.stack(rgb_frames).to(torch.float32),
+        "depth": torch.stack(depth_frames).to(torch.float32),
         "timestamps": timestamps,
         "frame_mask": torch.ones(resolved.sequence_frames, dtype=torch.bool),
         "camera": {
@@ -225,6 +228,7 @@ def validate_episode(
 
     required = {
         "rgb",
+        "depth",
         "timestamps",
         "frame_mask",
         "camera",
@@ -237,6 +241,7 @@ def validate_episode(
     if missing:
         raise ValueError(f"episode is missing required keys: {sorted(missing)}")
     rgb = episode["rgb"]
+    depth = episode["depth"]
     timestamps = episode["timestamps"]
     objects = episode["objects"]
     if not isinstance(rgb, Tensor) or rgb.ndim != 4 or rgb.shape[1] != 3:
@@ -250,6 +255,12 @@ def validate_episode(
         raise ValueError("rgb must be finite torch.float32")
     if bool(torch.any((rgb < 0) | (rgb > 1))):
         raise ValueError("rgb values must lie in [0, 1]")
+    if not isinstance(depth, Tensor) or depth.shape != (time, 1, height, width):
+        raise ValueError("depth must have shape [T, 1, H, W]")
+    if depth.dtype != torch.float32 or not bool(torch.isfinite(depth).all()):
+        raise ValueError("depth must be finite torch.float32")
+    if bool(torch.any(depth < 0)):
+        raise ValueError("depth values must be nonnegative, with zero reserved for no return")
     active = objects["active"]
     object_id = objects["id"]
     if active.ndim != 2 or active.shape[0] != time:
