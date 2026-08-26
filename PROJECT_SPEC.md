@@ -7915,14 +7915,80 @@ their passing finite metrics. They may not be mutated, relabelled, or copied
 into a fresh evidence path.
 
 The repaired source passes the combined focused gate at `104 passed` and the
-complete repository gate at `1130 passed, 16 skipped in 414.82 s`. A fresh
-clean-source development rerun to fresh v2 report/checkpoint paths is pending.
-It must use the unchanged specification-1.54 config and protocol hashes and be
-independently reviewed by exact digest before qualification. Selector
-`42000000--42000023`, confirmation `43000000--43000023`, and final
-`44000000--44000047` remain unopened. No protected ledger has been created,
-and no fresh development, protected, temporal-convergence, or long-horizon-
-convergence result is claimed.
+complete repository gate at `1130 passed, 16 skipped in 414.82 s`. At this
+post-repair boundary, a fresh clean-source development rerun to fresh v2
+report/checkpoint paths was pending, all protected manifests were unopened,
+and no protected ledger existed. Section 247 records the subsequent exact
+rerun and one-shot qualification without changing specification 1.54 or the
+frozen config/protocol hashes.
+
+## 247. Accept the standalone RGB-D temporal qualification and consume final once
+
+The qualified runtime source is exactly commit
+`df0235a92a81d3c1d2ba4e69e64d639562e3dfe8`, config SHA-256
+`5667cdb3603682b8d80a3e42793d25e36989269df1afacfa9b1028f2451101e9`, and
+canonical protocol-payload SHA-256
+`4e334e9d7942ea3f2416c0a9f5ca8e327d1d0a1e9131074f20c051ebd3163ad7`.
+The fresh v2 development report and empty-state checkpoint passed exact-digest
+audit at SHA-256
+`4cf1657ee95645c8c647433a8be660520e9cdc1a5e6ac106d85bd24547b4e740` and
+`fd663e5fa52dded8156a3178070966e3458d93a7b5a49dd5dcb2cc0d6278514e`.
+Its scientific state errors match the historical v1 run; measured perception
+latency is `0.233866867 s`, state-only rollout latency is `0.003934262 s`, and
+maximum resident set size is `545804288` bytes.
+
+Protected qualification then ran exactly once under the exclusive ledger in
+selector -> confirmation -> final order, with every access recorded before
+materialization. Qualification-report bytes have SHA-256
+`7e4cface087620f058ade4cc83ac5fd197685ba26c8f0afb5089d8f7e646fe0d`;
+the canonical report summary has SHA-256
+`7e9954ae34ce55b6923765de0c084d5075f238bd012554eeb44049a0db161658`;
+and ledger bytes have SHA-256
+`9fc139291dfb34b10125321d06fdf06ab68ed65df32f62c273a95e5ca7aa7b8b`.
+The bound seed-manifest SHA-256 values are:
+
+- development: `b92f1e3f12475986ebd2971ad2de70187432c0941caa0335ea53e82abc3c1d01`;
+- selector: `56cb85d9a30129f6e7153075b7334fd4737986f1c9679650533d20e7e0763cf8`;
+- confirmation: `eb61687ec0a8508a563b6e7c3dfb67b4393a6eaa9d35b2788eaa373d79e5df16`;
+  and
+- final: `42e0320bf6f62b78c881951ec78486714b4432a1592fe2a5047027e2bbd0339f`.
+
+Every split passed with `82` finite reported metrics, every one of the `103`
+frozen gate comparisons passed, and failures, optimizer updates, learned
+parameters, and persistent module state remained zero. The qualified accuracy
+table is:
+
+| split | current position (mm) | current velocity (mm/s) | position RMSE at 0.1/0.25/0.5/1/2 s (mm) |
+| --- | ---: | ---: | --- |
+| development v2 | 2.799 | 2.071 | 2.860 / 2.975 / 3.221 / 3.856 / 5.397 |
+| selector | 3.073 | 1.991 | 3.159 / 3.306 / 3.589 / 4.254 / 5.774 |
+| confirmation | 3.078 | 1.644 | 3.078 / 3.094 / 3.162 / 3.431 / 4.328 |
+| final | 2.905 | 2.226 | 2.954 / 3.056 / 3.290 / 3.934 / 5.560 |
+
+Final two-second position RMSE is `18.5%` of its `30 mm` gate and only `3%`
+above development, so the protected result shows no horizon collapse. Across
+the qualification, five-horizon state-only rollout latency is
+`3.80--3.95 ms`, perception latency is `232--237 ms`, maximum RSS is `554 MB`,
+RGB and depth VJP L1 norms remain finite and nonzero in `0.1156--3.6564`, and
+semigroup error is at most `2.384e-7 m` position and `3.725e-9 m/s` velocity.
+All trivial baselines pass, and RGB-D remains far more accurate than the frozen
+RGB-only known-radius ablation.
+
+The final split has now been consumed and must never be rerun. OLS covariance
+remains an i.i.d. residual diagnostic only; this qualification makes no
+posterior-calibration, coverage, or proper-score claim. Evidence is
+tamper-evident through exact SHA binding, but the files remain owner-writable;
+that operational caveat is nonblocking and must not be described as immutable
+filesystem enforcement.
+
+This qualifies the standalone parameter-free RGB-D temporal rung at its
+declared horizons. It does not qualify the public `OnlineWorldModel` bridge,
+additional scene complexity, learned capacity, or broader world-model
+convergence. The next rung is the composite batched RGB-D online bridge already
+bounded in section 245; capacity scaling remains prohibited until that bridge
+reproduces the qualified behavior. The current full source gate remains
+`1130 passed, 16 skipped in 414.82 s`; this documentation amendment creates no
+new full-test claim.
 
 # Closing directive
 

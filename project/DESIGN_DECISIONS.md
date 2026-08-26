@@ -4542,3 +4542,33 @@
   protected result, temporal convergence, or long-horizon convergence is
   claimed. Specification 1.54, simulator v7, and the frozen config/protocol
   hashes remain unchanged.
+
+## ADR-162 — Accept the one-shot standalone RGB-D temporal qualification
+
+- **Date:** 2026-08-26
+- **Status:** accepted; final consumed and public composite RGB-D bridge next
+- **Context:** Qualified source
+  `df0235a92a81d3c1d2ba4e69e64d639562e3dfe8` reran development to fresh v2
+  artifacts under the unchanged config/protocol hashes. Report/checkpoint
+  SHA-256 are
+  `4cf1657ee95645c8c647433a8be660520e9cdc1a5e6ac106d85bd24547b4e740` and
+  `fd663e5fa52dded8156a3178070966e3458d93a7b5a49dd5dcb2cc0d6278514e`.
+- **Decision:** Accept the exactly-once ledgered selector -> confirmation ->
+  final qualification. Qualification-report bytes, canonical summary, and
+  ledger SHA-256 are
+  `7e4cface087620f058ade4cc83ac5fd197685ba26c8f0afb5089d8f7e646fe0d`,
+  `7e9954ae34ce55b6923765de0c084d5075f238bd012554eeb44049a0db161658`, and
+  `9fc139291dfb34b10125321d06fdf06ab68ed65df32f62c273a95e5ca7aa7b8b`.
+  Every split has `82` finite metrics; all `103` comparisons pass with zero
+  failures, optimizer updates, or learned state. Current position/velocity for
+  development, selector, confirmation, and final is respectively
+  `2.799/2.071`, `3.073/1.991`, `3.078/1.644`, and `2.905/2.226` mm and mm/s;
+  two-second position is `5.397/5.774/4.328/5.560 mm`.
+- **Consequences:** Final two-second error is `18.5%` of gate and `3%` above
+  development; runtime, VJP, semigroup, trivial-baseline, and RGB-only gates
+  pass without collapse. Final is consumed and must not be rerun. OLS
+  covariance remains diagnostic, not calibrated. SHA-bound evidence remains
+  owner-writable, a nonblocking caveat. This qualifies only the standalone
+  rung; the composite RGB-D public `OnlineWorldModel` bridge is next, with no
+  capacity scaling. The existing full gate remains
+  `1130 passed, 16 skipped in 414.82 s`; no newer full-test claim is made.

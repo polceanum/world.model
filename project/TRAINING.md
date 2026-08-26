@@ -63,7 +63,7 @@ thresholds, run a third variant, or materialize selector, confirmation, or
 final seeds. The config, runner, estimator, and dedicated tests were removed
 from the active source tree after archiving the report.
 
-## Frozen RGB-D temporal rung — first development invalidated; fresh v2 rerun pending
+## Qualified RGB-D temporal rung — one-shot final consumed
 
 The seed-free single-frame foundation for the next rung now passes. Simulator
 v7 provides observable `[T, 1, H, W]` metric surface depth from the same exact
@@ -93,8 +93,9 @@ conda run -n orpheus python scripts/run_rgbd_temporal_free_motion_ladder.py \
 At the specification-freeze boundary, development `41000000--41000023`,
 selector `42000000--42000023`, confirmation `43000000--43000023`, and
 one-shot final `44000000--44000047` were all fresh and unopened. Development
-has since been materialized once. Do not run `--phase qualification`; every
-protected split remains unopened and no protected ledger exists.
+v1 was later invalidated as recorded below. Fresh v2 development and the
+ledgered protected sequence have now completed. Do not run
+`--phase qualification` again: final is consumed.
 
 The estimator is parameter-free: its parameter/buffer/state-dict counts and
 optimizer updates are zero. It measures sixteen RGB-D frames, gives every row
@@ -126,16 +127,45 @@ The repaired source compares the canonical JSON SHA and adds regression
 coverage, which changes the source relative to commit `8e68035`. Therefore the
 old report/checkpoint pair must not authorize protected access. Rerun
 development from a fresh clean repaired source to fresh v2 report/checkpoint
-paths, then obtain independent exact-digest review.
+paths, then obtain independent exact-digest review. That instruction is the
+historical v1 invalidation record; it has now been satisfied.
 
-The repaired source gate is `104 passed` focused and
-`1130 passed, 16 skipped in 414.82 s` complete. No fresh development rerun has
-occurred. Only after that rerun passes and is reviewed may the qualification
-runner create an exclusive durable ledger, record materialization, and evaluate
-selector, confirmation, and final in order; the first failure stops later
-access.
+The qualified source is
+`df0235a92a81d3c1d2ba4e69e64d639562e3dfe8`. Fresh v2 report/checkpoint
+SHA-256 are
+`4cf1657ee95645c8c647433a8be660520e9cdc1a5e6ac106d85bd24547b4e740` and
+`fd663e5fa52dded8156a3178070966e3458d93a7b5a49dd5dcb2cc0d6278514e`.
+Its scientific metrics match v1; perception/rollout latency is
+`0.233866867 s`/`0.003934262 s`, and maximum RSS is `545804288` bytes.
 
-Only after this standalone rung qualifies should it enter the public runtime.
+The exclusive ledger then recorded selector, confirmation, and final before
+each access. All passed exactly once. Qualification-report, canonical-summary,
+and ledger SHA-256 are
+`7e4cface087620f058ade4cc83ac5fd197685ba26c8f0afb5089d8f7e646fe0d`,
+`7e9954ae34ce55b6923765de0c084d5075f238bd012554eeb44049a0db161658`, and
+`9fc139291dfb34b10125321d06fdf06ab68ed65df32f62c273a95e5ca7aa7b8b`.
+Manifest SHA-256 values are development
+`b92f1e3f12475986ebd2971ad2de70187432c0941caa0335ea53e82abc3c1d01`,
+selector `56cb85d9a30129f6e7153075b7334fd4737986f1c9679650533d20e7e0763cf8`,
+confirmation `eb61687ec0a8508a563b6e7c3dfb67b4393a6eaa9d35b2788eaa373d79e5df16`,
+and final `42e0320bf6f62b78c881951ec78486714b4432a1592fe2a5047027e2bbd0339f`.
+
+Every split reports `82` finite metrics and all `103` gate comparisons pass,
+with zero failures, optimizer updates, or learned state. Development, selector,
+confirmation, and final current position/velocity RMSE in mm and mm/s are
+`2.799/2.071`, `3.073/1.991`, `3.078/1.644`, and `2.905/2.226`; their
+two-second position RMSE is `5.397/5.774/4.328/5.560 mm`. Final two-second
+error is `18.5%` of gate and `3%` above development. The remaining horizon,
+runtime, VJP, semigroup, baseline, and RGB-only-ablation gates all pass as
+bound in the qualification report.
+
+The current source gate remains `104 passed` focused and
+`1130 passed, 16 skipped in 414.82 s` complete; this documentation sync makes
+no newer test claim. OLS covariance remains diagnostic, not calibrated.
+Artifacts are SHA-bound and tamper-evident but owner-writable. Preserve them;
+do not rerun final.
+
+The standalone rung is qualified and may now enter the public runtime bridge.
 The first bridge must use one batched composite `rgbd` packet carrying
 `[B,3,H,W]` RGB and `[B,1,H,W]` depth plus calibration and explicit image
 size. A modality-qualified sensor key avoids current cache/history/scheduler

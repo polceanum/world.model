@@ -63,14 +63,18 @@
   roundtrip as the only source-integrity defect, and repair comparison with a
   canonical JSON SHA plus regression coverage. Keep protected data unopened
   and create no protected ledger.
-- [ ] Rerun development from the repaired clean source to fresh v2 report and
-  checkpoint paths. The pre-repair report/checkpoint pair must not qualify
-  protected access even though its finite metrics passed.
-- [ ] If the fresh v2 development rerun passes and its exact artifacts are
-  independently reviewed, qualify selector `42000000--42000023`, then
+- [x] Rerun development from qualified clean source
+  `df0235a92a81d3c1d2ba4e69e64d639562e3dfe8` to fresh v2 report/checkpoint
+  paths; pass all frozen gates and exact-digest audit while retaining the
+  pre-repair pair as non-qualifying history.
+- [x] Qualify selector `42000000--42000023`, then
   confirmation `43000000--43000023`, then one-shot final
-  `44000000--44000047` under the exclusive durable access ledger. All three
-  protected manifests remain unopened and the ledger is absent.
+  `44000000--44000047` exactly once under the exclusive durable access ledger;
+  pass all `103` comparisons with zero failures/optimizer/state. Final is
+  consumed and must not be rerun.
+- [x] Record the SHA-bound development, qualification-report, canonical-summary,
+  ledger, and four manifest digests; retain the nonblocking caveat that the
+  tamper-evident artifact files remain owner-writable.
 - [ ] Bridge the qualified observation and temporal estimator into the
   public one-slot `OnlineWorldModel` observation/belief/rollout workflow using
   one batched composite `rgbd` packet and modality-qualified sensor key.

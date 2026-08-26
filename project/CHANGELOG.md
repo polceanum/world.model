@@ -2,6 +2,47 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-26 standalone RGB-D temporal qualification
+
+- Qualified exact runtime source
+  `df0235a92a81d3c1d2ba4e69e64d639562e3dfe8` with unchanged config SHA-256
+  `5667cdb3603682b8d80a3e42793d25e36989269df1afacfa9b1028f2451101e9`
+  and protocol-payload SHA-256
+  `4e334e9d7942ea3f2416c0a9f5ca8e327d1d0a1e9131074f20c051ebd3163ad7`.
+- Fresh v2 development report/checkpoint SHA-256 are
+  `4cf1657ee95645c8c647433a8be660520e9cdc1a5e6ac106d85bd24547b4e740` and
+  `fd663e5fa52dded8156a3178070966e3458d93a7b5a49dd5dcb2cc0d6278514e`.
+  Scientific errors match v1; perception/rollout time is
+  `0.233866867 s`/`0.003934262 s`, with `545804288` bytes maximum RSS.
+- Ran protected selector -> confirmation -> final exactly once under the
+  durable ledger, recording every access before materialization. Qualification
+  report bytes, canonical summary, and ledger SHA-256 are
+  `7e4cface087620f058ade4cc83ac5fd197685ba26c8f0afb5089d8f7e646fe0d`,
+  `7e9954ae34ce55b6923765de0c084d5075f238bd012554eeb44049a0db161658`, and
+  `9fc139291dfb34b10125321d06fdf06ab68ed65df32f62c273a95e5ca7aa7b8b`.
+- Bound development, selector, confirmation, and final manifest SHA-256 values
+  `b92f1e3f12475986ebd2971ad2de70187432c0941caa0335ea53e82abc3c1d01`,
+  `56cb85d9a30129f6e7153075b7334fd4737986f1c9679650533d20e7e0763cf8`,
+  `eb61687ec0a8508a563b6e7c3dfb67b4393a6eaa9d35b2788eaa373d79e5df16`, and
+  `42e0320bf6f62b78c881951ec78486714b4432a1592fe2a5047027e2bbd0339f`.
+- Every split reports `82` finite metrics, and all `103` gate comparisons pass
+  with zero failures, optimizer updates, or learned state. Development,
+  selector, confirmation, and final current position/velocity are
+  `2.799/2.071`, `3.073/1.991`, `3.078/1.644`, and `2.905/2.226` mm and mm/s;
+  their two-second position errors are `5.397/5.774/4.328/5.560 mm`.
+- Final two-second error is `18.5%` of its `30 mm` gate and `3%` above
+  development. Five-horizon rollout is `3.80--3.95 ms`, perception is
+  `232--237 ms`, maximum RSS is `554 MB`, RGB/depth VJPs span
+  `0.1156--3.6564`, semigroup error is at most
+  `2.384e-7 m`/`3.725e-9 m/s`, and all trivial/RGB-only ablation gates pass.
+- Final is consumed and must not be rerun. OLS covariance remains diagnostic,
+  not calibrated. Evidence is SHA-bound and tamper-evident but owner-writable,
+  a nonblocking caveat.
+- The standalone rung is qualified; the next task is the composite RGB-D
+  public `OnlineWorldModel` bridge, with no capacity scaling yet. The existing
+  full source claim remains `1130 passed, 16 skipped in 414.82 s`; this
+  documentation-only change adds no newer full test claim.
+
 ### 2026-08-26 RGB-D development audit and canonical-comparator repair
 
 - Ran the first development manifest `41000000--41000023` on clean commit

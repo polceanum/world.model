@@ -65,7 +65,7 @@ diagnostic recovered most position gates, but future velocity remained
 test still failed. The physics/oracle path was correct. This family is closed,
 its protected manifests stay unopened, and its code is not an active workflow.
 
-### 2. Observable-depth/RGB-D temporal state — first development audited; protected unopened
+### 2. Observable-depth/RGB-D temporal state — standalone rung qualified
 
 Retain the same one-sphere, fixed-camera, contact-free analytic world, but
 measure metric depth as an observable input rather than asking a learned
@@ -89,8 +89,8 @@ self-reporting digest field,
 It reserves development `41000000--41000023`, selector
 `42000000--42000023`, confirmation `43000000--43000023`, and final
 `44000000--44000047`. Every namespace was unopened at the protocol-freeze
-boundary; the first development namespace has since been materialized once,
-while all protected namespaces remain unopened.
+boundary; that unopened state is historical. Fresh v2 development and the
+protected sequence have now completed exactly once.
 
 The estimator owns zero parameters, buffers, persistent tensor state, and
 optimizer updates. It measures all sixteen frames independently, fits anchor
@@ -119,14 +119,30 @@ Audit found a raw Python tuple/list equality check after JSON roundtrip. The
 current source replaces it with canonical JSON SHA comparison and regression
 coverage. That repair changes source, so the first run is a historical
 conditional pass and its old artifacts cannot qualify protected access. A
-fresh clean-source development rerun to fresh v2 paths is pending. The current
-repaired surface passes `104` focused tests and the complete gate at
-`1130 passed, 16 skipped in 414.82 s`; no protected ledger exists.
+fresh clean-source development rerun to fresh v2 paths was therefore required.
+That paragraph remains the historical v1 invalidation record.
 
-No fresh rerun, protected result, or temporal/long-horizon convergence claim
-exists. The former two monocular attempts do not reset; this is a new modality
-and structural capability, not a third tuning attempt. Capacity remains fixed
-until this rung qualifies.
+Qualified source `df0235a92a81d3c1d2ba4e69e64d639562e3dfe8` produced audited
+v2 report/checkpoint SHA-256
+`4cf1657ee95645c8c647433a8be660520e9cdc1a5e6ac106d85bd24547b4e740` and
+`fd663e5fa52dded8156a3178070966e3458d93a7b5a49dd5dcb2cc0d6278514e`.
+The one-shot qualification-report, canonical-summary, and ledger SHA-256 are
+`7e4cface087620f058ade4cc83ac5fd197685ba26c8f0afb5089d8f7e646fe0d`,
+`7e9954ae34ce55b6923765de0c084d5075f238bd012554eeb44049a0db161658`, and
+`9fc139291dfb34b10125321d06fdf06ab68ed65df32f62c273a95e5ca7aa7b8b`.
+
+Development, selector, confirmation, and final current position/velocity are
+`2.799/2.071`, `3.073/1.991`, `3.078/1.644`, and `2.905/2.226` mm and mm/s;
+their two-second position errors are `5.397/5.774/4.328/5.560 mm`. Every split
+has `82` finite metrics and all `103` comparisons pass with zero failures,
+optimizer updates, or learned state. Final is `18.5%` of its gate and `3%`
+above development, with no collapse. Runtime, VJP, semigroup, baseline, and
+RGB-only gates all pass. Final is consumed and must not be rerun.
+
+The rung is qualified only at its declared standalone scope. OLS uncertainty
+remains diagnostic; artifacts are SHA-bound but owner-writable. The former two
+monocular attempts do not reset, and capacity remains fixed until the public
+bridge reproduces this behavior.
 
 ### 3. Public one-slot online integration
 

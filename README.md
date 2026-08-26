@@ -59,8 +59,10 @@ generalization rung now has a passing parameter-free RGB-D metric measurement
 core plus a frozen, reviewed parameter-free temporal protocol. The first 41m
 development run passed its frozen metrics, but a representation-sensitive
 post-run comparator required a source repair and invalidated those artifacts
-for qualification. Protected 42m/43m/44m data remains unopened; this is not a
-third monocular-taper attempt or a convergence claim.
+for qualification. A fresh v2 development rerun and exactly one ledgered
+42m -> 43m -> 44m qualification now pass on source `df0235a9`; final is
+consumed and must not be rerun. This is not a third monocular-taper attempt or
+a claim beyond the standalone rung.
 
 ## Quick start
 
@@ -199,16 +201,48 @@ That is historical conditional development evidence only. Audit found a raw
 Python tuple/list equality check after JSON roundtrip; the repaired verifier
 uses a canonical JSON SHA comparison plus regression coverage. Because that
 repair changes source, the old report/checkpoint pair must not qualify
-protected access. A fresh clean-source development rerun to fresh v2 artifact
-paths is pending. Selector, confirmation, and final 42m/43m/44m manifests
-remain unopened, and no protected ledger exists.
+protected access. That text records the v1 invalidation boundary; it is not the
+current qualification evidence.
 
-The repaired source passes the combined focused gate at `104 passed` and the
-full gate at `1130 passed, 16 skipped in 414.82 s`. No fresh v2 rerun,
-protected result, temporal-convergence, or long-horizon-convergence claim
-exists. The next implementation rung after qualification is a composite
-batched `rgbd` packet and one-slot public online bridge; capacity and scene
-complexity remain frozen until then.
+#### Qualified v2 development and one-shot protected result
+
+The qualified runtime is commit
+`df0235a92a81d3c1d2ba4e69e64d639562e3dfe8` with the unchanged config/protocol
+hashes above. Fresh v2 development report SHA-256
+`4cf1657ee95645c8c647433a8be660520e9cdc1a5e6ac106d85bd24547b4e740` and
+checkpoint SHA-256
+`fd663e5fa52dded8156a3178070966e3458d93a7b5a49dd5dcb2cc0d6278514e`
+passed audit. Its scientific errors match v1; perception/rollout time is
+`0.233866867 s`/`0.003934262 s`, with `545804288` bytes maximum RSS.
+
+Protected selector, confirmation, and final then passed exactly once under the
+durable access ledger. Qualification-report bytes, canonical summary, and
+ledger SHA-256 are respectively
+`7e4cface087620f058ade4cc83ac5fd197685ba26c8f0afb5089d8f7e646fe0d`,
+`7e9954ae34ce55b6923765de0c084d5075f238bd012554eeb44049a0db161658`, and
+`9fc139291dfb34b10125321d06fdf06ab68ed65df32f62c273a95e5ca7aa7b8b`.
+The ledger records selector -> confirmation -> final before each access; final
+is consumed and must not be rerun.
+
+| split | current position / velocity | 0.1 / 0.25 / 0.5 / 1 / 2 s position RMSE |
+| --- | --- | --- |
+| development v2 | 2.799 mm / 2.071 mm/s | 2.860 / 2.975 / 3.221 / 3.856 / 5.397 mm |
+| selector | 3.073 mm / 1.991 mm/s | 3.159 / 3.306 / 3.589 / 4.254 / 5.774 mm |
+| confirmation | 3.078 mm / 1.644 mm/s | 3.078 / 3.094 / 3.162 / 3.431 / 4.328 mm |
+| final | 2.905 mm / 2.226 mm/s | 2.954 / 3.056 / 3.290 / 3.934 / 5.560 mm |
+
+Every split has `82` finite metrics; all `103` gate comparisons pass with zero
+failures, optimizer updates, or learned state. Final two-second error is
+`18.5%` of its gate and only `3%` above development. Rollout is
+`3.80--3.95 ms`, perception is `232--237 ms`, maximum RSS is `554 MB`, both
+modalities retain VJP norms `0.1156--3.6564`, semigroup error stays below
+`2.384e-7 m`/`3.725e-9 m/s`, and every trivial/RGB-only ablation gate passes.
+
+OLS covariance remains diagnostic, not calibrated uncertainty. Artifacts are
+SHA-bound and tamper-evident but owner-writable. The next rung is the composite
+batched `rgbd` public `OnlineWorldModel` bridge; no capacity scaling is allowed
+yet. The existing full source gate remains
+`1130 passed, 16 skipped in 414.82 s`; this docs update makes no new test claim.
 
 The former grounded, attention, change-point, and multi-day accuracy commands
 are historical evidence only and have been removed from the active workflow.

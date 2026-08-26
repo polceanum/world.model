@@ -126,7 +126,7 @@ namespace and no protected data. It establishes only single-frame RGB-D metric
 state: temporal execution, velocity and long-horizon qualification, and every
 convergence claim remain pending. The source protocol itself is frozen below.
 
-### Frozen RGB-D temporal protocol — first development audited; protected unopened
+### Qualified standalone RGB-D temporal protocol — final consumed once
 
 Specification 1.54 now freezes the standalone parameter-free temporal rung.
 The exact config SHA-256 is
@@ -137,8 +137,9 @@ digest field is
 The disjoint manifests are development `41000000--41000023`, selector
 `42000000--42000023`, confirmation `43000000--43000023`, and final
 `44000000--44000047`. All four were unopened at the specification-freeze
-boundary. The development manifest has since been materialized once; every
-protected manifest remains unopened.
+boundary. The v1 development and its invalidation are retained below; the
+fresh v2 development and all three protected splits have since been consumed
+under the qualified evidence contract.
 
 The estimator has zero learned parameters, tensor buffers, optimizer state,
 and optimizer updates. It independently measures all sixteen RGB-D frames,
@@ -168,19 +169,55 @@ canonical JSON SHA and includes a regression test. Although the numerical
 development result is a historical conditional pass, the repair changes
 source, so its report/checkpoint pair must not qualify protected access. A
 fresh clean-source development rerun must use fresh v2 report/checkpoint paths
-and be independently reviewed before qualification. No protected ledger has
-been created; selector, confirmation, and final remain unopened.
+and be independently reviewed before qualification. That paragraph records the
+historical post-repair boundary, not current status.
 
-The repaired source passes the combined focused gate at `104 passed` and the
-complete repository gate at `1130 passed, 16 skipped in 414.82 s`. No fresh
-development rerun, protected result, temporal convergence, or long-horizon
-convergence is claimed.
+The qualified runtime source is
+`df0235a92a81d3c1d2ba4e69e64d639562e3dfe8`. Fresh v2 development report and
+checkpoint SHA-256 are
+`4cf1657ee95645c8c647433a8be660520e9cdc1a5e6ac106d85bd24547b4e740` and
+`fd663e5fa52dded8156a3178070966e3458d93a7b5a49dd5dcb2cc0d6278514e`.
+The scientific metrics match v1; perception/rollout time is
+`0.233866867 s`/`0.003934262 s`, and maximum RSS is `545804288` bytes.
+
+Protected qualification passed exactly once in ledgered
+selector -> confirmation -> final order. Qualification-report bytes,
+canonical summary, and ledger SHA-256 are
+`7e4cface087620f058ade4cc83ac5fd197685ba26c8f0afb5089d8f7e646fe0d`,
+`7e9954ae34ce55b6923765de0c084d5075f238bd012554eeb44049a0db161658`, and
+`9fc139291dfb34b10125321d06fdf06ab68ed65df32f62c273a95e5ca7aa7b8b`.
+Development, selector, confirmation, and final manifest SHA-256 values are
+`b92f1e3f12475986ebd2971ad2de70187432c0941caa0335ea53e82abc3c1d01`,
+`56cb85d9a30129f6e7153075b7334fd4737986f1c9679650533d20e7e0763cf8`,
+`eb61687ec0a8508a563b6e7c3dfb67b4393a6eaa9d35b2788eaa373d79e5df16`, and
+`42e0320bf6f62b78c881951ec78486714b4432a1592fe2a5047027e2bbd0339f`.
+
+| split | current position / velocity | horizon position RMSE at 0.1/0.25/0.5/1/2 s |
+| --- | --- | --- |
+| development v2 | 2.799 mm / 2.071 mm/s | 2.860 / 2.975 / 3.221 / 3.856 / 5.397 mm |
+| selector | 3.073 mm / 1.991 mm/s | 3.159 / 3.306 / 3.589 / 4.254 / 5.774 mm |
+| confirmation | 3.078 mm / 1.644 mm/s | 3.078 / 3.094 / 3.162 / 3.431 / 4.328 mm |
+| final | 2.905 mm / 2.226 mm/s | 2.954 / 3.056 / 3.290 / 3.934 / 5.560 mm |
+
+All splits have `82` finite metrics, all `103` frozen gate comparisons pass,
+and failures, optimizer updates, and learned state are zero. Final two-second
+error is `18.5%` of its gate and only `3%` above development. Across splits,
+rollout is `3.80--3.95 ms`, perception is `232--237 ms`, maximum RSS is
+`554 MB`, RGB/depth VJPs span `0.1156--3.6564`, and semigroup errors are at most
+`2.384e-7 m`/`3.725e-9 m/s`. Baseline and RGB-only ablation gates all pass.
+Final is consumed and must not be rerun.
+
+OLS covariance remains diagnostic rather than calibrated uncertainty.
+Artifacts are SHA-bound and tamper-evident but owner-writable, a nonblocking
+operational caveat. The standalone rung is qualified; broader temporal/world-
+model convergence is not claimed.
 
 The later online rung must use one batched composite `rgbd` packet and a
 modality-qualified sensor key before it touches `MeasurementSet`, causal
 history, checkpoints, evaluator, or demo. The standalone protocol does not
 claim that public bridge, and no model capacity or scene complexity should be
-added before temporal qualification.
+added before the public bridge reproduces the qualified accuracy, latency, and
+fail-closed missing-depth behavior.
 
 ## Validation state
 
@@ -194,12 +231,12 @@ pre-failure source-integrity evidence, not evidence for the post-deletion/core
 tree. The complete post-deletion/core gate passes `1091` tests with `16`
 expected inactive-device skips in `418.49 s`.
 
-The repaired RGB-D temporal protocol surface has the proportional
-`104 passed` focused gate and a complete repository gate of
-`1130 passed, 16 skipped in 414.82 s`. The older `1091` result remains the
-historical single-frame-core boundary. The first development metrics above
-belong to pre-repair commit `8e68035` and are not qualifying evidence for the
-current source.
+The qualified RGB-D temporal runtime remains bound to the repaired-source
+`104 passed` focused gate and complete repository gate
+`1130 passed, 16 skipped in 414.82 s`. This documentation-only evidence update
+does not create a newer full-suite claim. The older `1091` result remains the
+historical single-frame-core boundary, and the v1 development metrics remain
+non-qualifying evidence.
 
-No accepted long-horizon temporal, multi-object, contact, multimodal, or planning
-convergence claim exists yet.
+No accepted broader multi-object, contact, additional-modality, or planning
+convergence claim exists beyond the standalone two-second RGB-D rung.
