@@ -144,22 +144,60 @@ remains diagnostic; artifacts are SHA-bound but owner-writable. The former two
 monocular attempts do not reset, and capacity remains fixed until the public
 bridge reproduces this behavior.
 
-### 3. Public one-slot online integration
+### 3. Public one-slot online integration — frozen pre-development
 
-Put the qualified observation and temporal fit behind the normal
-observation, `MeasurementSet`, `WorldBelief`, predict/observe/correct, project
-checkpoint, evaluator, and demo contracts. Reproduce the accepted temporal
-metrics while ingesting frames causally and prove bounded update cost and
-persistent-state memory. The standalone ladder remains a diagnostic oracle, not a second
-production architecture.
+The qualified observation and temporal estimator are now implemented behind
+the normal observation, `MeasurementSet`, `WorldBelief`, predict/observe/
+correct, project-checkpoint, evaluator, and demo contracts. The frozen bridge
+uses one composite batched `rgbd` packet containing `[B,3,H,W]` RGB,
+`[B,1,H,W]` depth, batched calibration, and explicit image size. A modality-
+qualified stream key prevents collisions between cache, temporal-history, and
+scheduler ownership. The standalone two-second rung remains the qualified
+diagnostic oracle; this public integration has not yet produced episode-
+accuracy evidence.
 
-The first bridge uses one composite batched `rgbd` packet containing
-`[B,3,H,W]` RGB, `[B,1,H,W]` depth, batched calibration, and explicit image
-size. It uses a modality-qualified sensor key because current cache, temporal-
-history, and scheduler maps otherwise collide on `sensor_id`; separate
-same-timestamp RGB/depth packets also make elapsed-time ownership order-
-dependent. The bridge must fit only raw associated metric positions, keep
-missing depth fail-closed, and synchronize checkpoint/evaluator/demo schemas.
+There is exactly one direct observable metric-position owner. The bridge
+aligns sixteen raw positions by persistent object ID, fits velocity only with
+uniform differentiable exact free-motion WLS, and uses parameter-free analytic
+dynamics for every horizon. It owns zero parameters, state-dict entries, and
+optimizer updates. Complete batch-four persistent runtime tensor state is
+`25,364` recursively enumerated unique-storage bytes against a `32,768`-byte
+gate. Fixed-output VJPs reach current velocity and every horizon through each
+of the sixteen RGB and depth frames.
+
+For an already-active persistent object, a well-formed frame with missing
+depth, nonfinite or otherwise invalid depth in the sampled measurement support,
+or no foreground appends an invalid causal row; the frozen sixteenth-frame
+full-window ablation reports `sample_count: 16` and `valid_count: 15`. It emits
+no valid/admissible temporal fit or direct velocity evidence, correction, or
+birth; a finite diagnostic fit with `fit_valid: false` is not admissible
+evidence. Before birth, the same frame advances runtime time but creates no
+object-history row and no birth. Malformed packets, nonfinite RGB/calibration,
+unsupported low precision, unknown/duplicate/stale streams, and invalid
+prepared propagation reject atomically without mutating temporal state or
+consuming one-use propagation.
+
+Evaluator and demo paths carry truthful RGB-D modality metadata. The evaluator
+labels its fifteen-frame warmup, while demo aggregate errors remain pooled
+across warmup and post-warmup frames. The legacy RGB path remains supported.
+Ordinary project checkpoints reproduce the parameter-free module and
+configuration, but exact live-stream resume from a partially populated
+temporal history is explicitly unsupported.
+
+The frozen config SHA-256 is
+`c40b3438c7fd60646d356db3fe54050039912ace288d9db89620b626106993a3`; the
+current seed-free canonical protocol SHA-256 is
+`e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`.
+Independent source/config/protocol audit passes, and the final current-byte
+targeted gate is `419 passed in 61.33 s`; the complete repository gate is
+`1207 passed, 16 skipped in 431.10 s`. Development `45000000--45000023`,
+selector `46000000--46000015`, confirmation `47000000--47000015`, and final
+`48000000--48000031` remain unopened.
+
+The next sequence is a clean commit/push, one development reproduction plus
+independent audit, then selector -> confirmation -> final exactly once. The
+bridge must reproduce the accepted temporal metrics while ingesting causally;
+no capacity, modality, task, or scene scaling begins unless it passes.
 
 ### 4. Observable nuisance variables and additional useful modalities
 

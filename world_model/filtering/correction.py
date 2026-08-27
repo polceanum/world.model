@@ -14,7 +14,7 @@ from world_model.belief import (
     pack_fast_state,
     unpack_fast_state,
 )
-from world_model.filtering.analytic_update import diagonal_kalman_update
+from world_model.filtering.analytic_update import DiagonalUpdateResult, diagonal_kalman_update
 from world_model.filtering.learned_update import LearnedFastCorrector
 from world_model.filtering.uncertainty import (
     FilterUncertainty,
@@ -38,6 +38,7 @@ class BeliefUpdaterConfig:
     appearance_ema: float = 0.15
     learned_residual_scale: float = 0.1
     enable_learned_corrector: bool = True
+    direct_metric_position_update: bool = False
     innovation_anchored_correction: bool = False
     velocity_from_position_coupling: float = 0.5
     velocity_from_position_variance_scale: float = 2.0
@@ -205,6 +206,8 @@ class BeliefUpdater(nn.Module):
         cause: SurpriseAssessment | None = None,
     ) -> WorldBelief:
         del predicted
+        if self.config.direct_metric_position_update and measured.modality != "rgbd":
+            raise ValueError("direct metric position updates accept only RGB-D measurements")
         elapsed_by_batch = self._normalise_dt(prior, dt)
         packed = pack_fast_state(prior.objects)
         log_variance = prior.objects.fast_log_variance
@@ -331,16 +334,49 @@ class BeliefUpdater(nn.Module):
         # innovation-anchored updates. A copied/source-bound coordinate is not
         # evidence for either a learned mean shift or variance contraction.
         correction_confidence[..., position_slice] = analytic_position_confidence
-        analytic_position = diagonal_kalman_update(
-            prior_position,
-            prior_position_lv,
-            causal_position_measurement,
-            causal_position_measurement_lv,
-            confidence=analytic_position_confidence,
-            robust_clip_norm=self.config.robust_clip_norm,
-            minimum_log_variance=self.config.minimum_log_variance,
-            maximum_log_variance=self.config.maximum_log_variance,
-        )
+        if self.config.direct_metric_position_update:
+            # A calibrated metric RGB-D centre is a direct observable state,
+            # not a noisy residual around an independently propagated latent
+            # position. Replacing supported axes avoids the structurally
+            # biased history average produced by a deterministic zero-velocity
+            # prior before temporal velocity becomes identifiable. This is an
+            # ordinary differentiable assignment; measurement_mask,
+            # association, and explicit axis provenance remain admissibility
+            # gates, while confidence stays a diagnostic.
+            direct_gain = position_causal_axis_support.to(prior_position.dtype)
+            direct_correction = torch.where(
+                position_causal_axis_support,
+                causal_position_measurement - prior_position,
+                torch.zeros_like(prior_position),
+            )
+            analytic_position = DiagonalUpdateResult(
+                mean=torch.where(
+                    position_causal_axis_support,
+                    causal_position_measurement,
+                    prior_position,
+                ),
+                log_variance=torch.where(
+                    position_causal_axis_support,
+                    causal_position_measurement_lv,
+                    prior_position_lv,
+                ).clamp(
+                    self.config.minimum_log_variance,
+                    self.config.maximum_log_variance,
+                ),
+                gain=direct_gain,
+                correction=direct_correction,
+            )
+        else:
+            analytic_position = diagonal_kalman_update(
+                prior_position,
+                prior_position_lv,
+                causal_position_measurement,
+                causal_position_measurement_lv,
+                confidence=analytic_position_confidence,
+                robust_clip_norm=self.config.robust_clip_norm,
+                minimum_log_variance=self.config.minimum_log_variance,
+                maximum_log_variance=self.config.maximum_log_variance,
+            )
         updated_packed[batch_index, belief_index, position_slice] = analytic_position.mean
         updated_log_variance[batch_index, belief_index, position_slice] = (
             analytic_position.log_variance

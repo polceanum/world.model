@@ -75,9 +75,44 @@
 - [x] Record the SHA-bound development, qualification-report, canonical-summary,
   ledger, and four manifest digests; retain the nonblocking caveat that the
   tamper-evident artifact files remain owner-writable.
-- [ ] Bridge the qualified observation and temporal estimator into the
-  public one-slot `OnlineWorldModel` observation/belief/rollout workflow using
-  one batched composite `rgbd` packet and modality-qualified sensor key.
+- [x] Bridge the qualified observation and temporal estimator into the public
+  one-slot `OnlineWorldModel` observation/belief/rollout workflow using one
+  batched composite `rgbd` packet and a modality-qualified stream key.
+- [x] Give direct raw RGB-D position one filter owner, derive only velocity
+  from the persistent-ID-aligned uniform sixteen-frame WLS history, and keep
+  future state parameter-free under analytic free-motion dynamics.
+- [x] Preserve per-frame RGB/depth VJPs; for an already-active persistent
+  object, append a well-formed frame with missing depth, nonfinite or otherwise
+  invalid depth in the sampled measurement support, or no foreground as an
+  invalid causal row. The frozen sixteenth-frame full-window ablation reports
+  `sample_count: 16` and `valid_count: 15`, with no valid/admissible temporal
+  fit, direct velocity evidence, correction, or birth from that measurement.
+- [x] Let a corresponding pre-birth invalid frame advance runtime time while
+  creating no object-history row or birth; keep any finite diagnostic fit with
+  `fit_valid: false` inadmissible as temporal evidence.
+- [x] Preserve atomic no-consumption rejection for malformed packets,
+  nonfinite RGB/calibration, low precision, stale or duplicate streams, unknown
+  modalities, and invalid prepared propagation.
+- [x] Make evaluator/demo modality metadata truthful for composite RGB-D;
+  label the fifteen-frame warmup in evaluator metrics, record the demo's
+  warmup-pooled aggregate-error limitation, and preserve legacy RGB behavior
+  and the explicit lack of exact mid-history checkpoint resume.
+- [x] Freeze bridge config SHA-256
+  `c40b3438c7fd60646d356db3fe54050039912ace288d9db89620b626106993a3`,
+  seed-free protocol SHA-256
+  `e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`,
+  and unopened 45m/46m/47m/48m manifests before episode access.
+- [x] Pass independent source review, the current-byte targeted gate at
+  `419 passed in 61.33 s`, and the complete repository gate at
+  `1207 passed, 16 skipped in 431.10 s`; retain zero parameters/state
+  dict/optimizer and full batch-four unique-storage runtime tensor state
+  `25,364 <= 32,768` bytes.
+- [ ] Commit and push the clean reviewed specification-1.55 bridge source.
+- [ ] Run the 24-seed development manifest once to fresh report/checkpoint
+  paths and independently audit exact source/config/protocol/report evidence.
+- [ ] On development pass only, reserve the durable ledger and run selector,
+  confirmation, then one-shot final exactly once; stop before the next split
+  on any failure.
 - [ ] Add one complexity per later rung: camera motion; drag identification;
   variable scale; multi-object sets; identity/occlusion; contact;
   material parameters; known actions/planning; richer modalities/geometry.

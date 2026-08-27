@@ -1395,6 +1395,101 @@ def test_innovation_anchored_correction_is_semantic_with_legacy_false() -> None:
         validate_checkpoint_config(payload, corrected)
 
 
+def test_rgbd_analytic_bridge_fields_are_semantic_with_legacy_disabled_defaults() -> None:
+    config = _small_config()
+    payload = {
+        "config": config.to_dict(),
+        "simulator_version": SIMULATOR_VERSION,
+    }
+    legacy_payload = deepcopy(payload)
+    legacy_payload["config"]["model"].pop("rgbd")
+    legacy_payload["config"]["model"]["dynamics"].pop("analytic_free_motion_only")
+    legacy_payload["config"]["model"]["filter"].pop("enable_learned_corrector")
+    legacy_payload["config"]["model"]["filter"].pop("direct_metric_position_update")
+
+    validate_checkpoint_config(legacy_payload, config)
+    validate_training_resume_config(legacy_payload, config)
+
+    rgbd_enabled = replace(
+        config,
+        model=replace(
+            config.model,
+            max_objects=1,
+            rgbd=replace(
+                config.model.rgbd,
+                enabled=True,
+                world_radius=config.simulator.radius_range[0],
+                linear_drag=config.simulator.drag_range[0],
+            ),
+        ),
+        simulator=replace(
+            config.simulator,
+            min_objects=1,
+            max_objects=1,
+            radius_range=(
+                config.simulator.radius_range[0],
+                config.simulator.radius_range[0],
+            ),
+            drag_range=(
+                config.simulator.drag_range[0],
+                config.simulator.drag_range[0],
+            ),
+        ),
+        runtime=replace(config.runtime, modality="rgbd"),
+        evaluation=replace(config.evaluation, rgb_only=False),
+    )
+    rgbd_enabled.validate()
+    analytic_enabled = replace(
+        config,
+        model=replace(
+            config.model,
+            dynamics=replace(config.model.dynamics, analytic_free_motion_only=True),
+        ),
+    )
+    analytic_enabled.validate()
+    learned_disabled = replace(
+        config,
+        model=replace(
+            config.model,
+            filter=replace(config.model.filter, enable_learned_corrector=False),
+        ),
+    )
+    learned_disabled.validate()
+    drag_changed = replace(
+        config,
+        model=replace(
+            config.model,
+            rgbd=replace(config.model.rgbd, linear_drag=0.07),
+        ),
+    )
+    drag_changed.validate()
+    direct_enabled = replace(
+        rgbd_enabled,
+        model=replace(
+            rgbd_enabled.model,
+            rgb=replace(rgbd_enabled.model.rgb, enabled=False),
+            filter=replace(
+                rgbd_enabled.model.filter,
+                enable_learned_corrector=False,
+                direct_metric_position_update=True,
+            ),
+        ),
+    )
+    direct_enabled.validate()
+
+    for changed in (
+        rgbd_enabled,
+        analytic_enabled,
+        learned_disabled,
+        drag_changed,
+        direct_enabled,
+    ):
+        with pytest.raises(ValueError, match="model"):
+            validate_checkpoint_config(legacy_payload, changed)
+        with pytest.raises(ValueError, match="model"):
+            validate_training_resume_config(legacy_payload, changed)
+
+
 def test_attention_relation_endpoint_binding_is_semantic_with_legacy_false() -> None:
     config = _small_config()
     historical = replace(

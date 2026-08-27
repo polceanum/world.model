@@ -1,5 +1,63 @@
 # Design decisions
 
+## ADR-163 — Freeze the parameter-free public RGB-D bridge before development
+
+- **Date:** 2026-08-27
+- **Status:** accepted pre-development contract; source/config/protocol audit
+  passed and all episode manifests unopened
+- **Context:** ADR-162 qualified the standalone sixteen-frame RGB-D temporal
+  estimator through two seconds, but it intentionally bypassed the public
+  `OnlineWorldModel`. Integrating it could reintroduce duplicated correction,
+  posterior-derived temporal evidence, modality-key collisions, non-atomic
+  prepared propagation, dishonest RGB-labelled evaluation, or hidden runtime
+  state that an ordinary checkpoint cannot reproduce. Capacity scaling before
+  reproducing the accepted behavior through the public loop would create a
+  second architecture instead of extending the qualified one.
+- **Decision:** Implement one composite batched `rgbd` packet with batched
+  calibration, explicit image size, and modality-qualified stream key. Give
+  raw metric position one direct filter owner and its declared measurement
+  variance; keep the learned corrector disabled. Align sixteen raw position
+  rows by persistent object ID, fit velocity only through uniform
+  differentiable exact free-motion WLS, and use parameter-free analytic
+  dynamics for every horizon. Preserve per-frame RGB/depth VJPs. For an
+  already-active persistent object, a well-formed frame with missing depth,
+  nonfinite or otherwise invalid depth in the sampled measurement support, or
+  no foreground appends an invalid causal row; the frozen sixteenth-frame
+  full-window ablation reports `sample_count: 16` and `valid_count: 15`. It
+  emits no valid/admissible temporal fit or direct velocity evidence,
+  correction, or birth; a finite diagnostic fit with `fit_valid: false` is not
+  admissible evidence. Before birth, the same frame advances runtime time but
+  creates no object-history row and no birth. Reject malformed packets,
+  nonfinite RGB/calibration, low-precision input, unknown/duplicate/stale
+  streams, and invalid prepared propagation atomically before any state or
+  one-use propagation is consumed. Make evaluator/demo modality metadata
+  explicit, label the fifteen-frame
+  warmup in the evaluator, and retain the demo's warmup-pooled aggregate-error
+  limitation while preserving legacy RGB. Ordinary checkpoints recreate the
+  zero-state module/configuration but do not claim exact live-stream resume
+  from a partially populated temporal history.
+- **Protocol:** Freeze config SHA-256
+  `c40b3438c7fd60646d356db3fe54050039912ace288d9db89620b626106993a3`
+  and seed-free canonical protocol SHA-256
+  `e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`.
+  Reserve development `45000000--45000023`, selector
+  `46000000--46000015`, confirmation `47000000--47000015`, and one-shot final
+  `48000000--48000031`; all remain unopened at source freeze.
+- **Alternatives considered:** separate same-timestamp RGB/depth packets;
+  posterior or filtered-position history; a second Kalman/learned correction
+  owner; confidence-weighted temporal fitting; a recurrent or learned
+  transition; serializing mutable live histories as model weights; beginning
+  multi-object or capacity work before bridge qualification.
+- **Consequences:** Independent source review and the current-byte targeted
+  gate pass (`419 passed in 61.33 s`), as does the complete repository gate
+  (`1207 passed, 16 skipped in 431.10 s`). Parameters, state-dict entries, and
+  optimizer updates remain zero. Complete batch-four persistent runtime tensor
+  state is `25,364` unique-storage bytes against a `32,768`-byte gate. These
+  are implementation and protocol facts, not accuracy evidence. Next is a
+  clean commit/push, one development reproduction plus independent audit, then
+  exactly-once selector -> confirmation -> final. Scaling remains blocked on
+  that result.
+
 ## ADR-153 — Run grounded recursive optimization on the measured faster CPU
 
 - **Date:** 2026-08-21
@@ -4505,7 +4563,10 @@
   protocol and implementation surface; it is not development evidence or a
   temporal/long-horizon convergence claim. A later online bridge must use one
   batched composite `rgbd` packet, a modality-qualified sensor key, raw metric
-  causal history, and fail-closed missing depth before any capacity scaling.
+  causal history, append a well-formed missing/no-foreground/invalid-sampled-
+  depth frame only for an already-active persistent object, and let the same
+  pre-birth frame advance runtime time without an object-history row or birth.
+  Neither path may fall back to RGB before any capacity scaling.
 
 ## ADR-161 — Invalidate the first development artifacts after comparator repair
 

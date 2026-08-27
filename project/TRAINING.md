@@ -159,9 +159,10 @@ error is `18.5%` of gate and `3%` above development. The remaining horizon,
 runtime, VJP, semigroup, baseline, and RGB-only-ablation gates all pass as
 bound in the qualification report.
 
-The current source gate remains `104 passed` focused and
-`1130 passed, 16 skipped in 414.82 s` complete; this documentation sync makes
-no newer test claim. OLS covariance remains diagnostic, not calibrated.
+The standalone source gate was `104 passed` focused and
+`1130 passed, 16 skipped in 414.82 s` complete. The later integrated bridge
+tree passes `1207 passed, 16 skipped in 431.10 s` complete. OLS covariance
+remains diagnostic, not calibrated.
 Artifacts are SHA-bound and tamper-evident but owner-writable. Preserve them;
 do not rerun final.
 
@@ -173,10 +174,69 @@ collisions. Separate same-timestamp RGB and depth packets are outside the
 qualified contract. Runtime may consume only RGB-D, calibration, timestamps,
 and declared priors—never simulator state.
 
+## Frozen public bridge qualification — development not yet opened
+
+Specification 1.55 implements and freezes that public one-slot bridge. The
+exact config SHA-256 is
+`c40b3438c7fd60646d356db3fe54050039912ace288d9db89620b626106993a3`; the
+seed-free canonical `bridge_protocol()` SHA-256, before its self-reporting
+field is added, is
+`e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`.
+Development `45000000--45000023`, selector `46000000--46000015`, confirmation
+`47000000--47000015`, and final `48000000--48000031` are all unopened at this
+boundary. Do not run any of them from an uncommitted or unaudited source.
+
+The runtime accepts one composite batched `rgbd` packet. Raw observable metric
+position has one direct correction owner. Sixteen raw positions, aligned by
+persistent object ID, enter a uniform differentiable exact free-motion WLS fit
+that emits velocity-only evidence. Parameter-free analytic dynamics answers
+all five future horizons. The bridge owns zero parameters and state-dict
+entries, and no optimizer may be constructed for its qualification.
+
+The qualification gate requires fixed-output VJPs to RGB and depth separately
+for current velocity and every horizon at every input frame. For an already-
+active persistent object, a well-formed frame with missing depth, nonfinite or
+otherwise invalid depth in the sampled measurement support, or no foreground
+appends an invalid causal row. In the frozen sixteenth-frame full-window
+ablation, diagnostics are `sample_count: 16` and `valid_count: 15`. The invalid
+measurement emits no valid/admissible temporal fit or direct velocity evidence,
+correction, or birth. A finite diagnostic fit may be computed with
+`fit_valid: false` but is not admissible evidence. Before birth, the same
+invalid frame advances runtime time but creates no object-history row and no
+birth. Malformed packets, nonfinite RGB or calibration, float16/bfloat16,
+stale or duplicate stream evidence, an unknown modality, or invalid prepared
+propagation reject atomically without changing or consuming runtime state.
+
+Full batch-four persistent runtime tensor storage is counted recursively by
+unique storage and must remain within `32,768` bytes; current frozen source
+measures `25,364` bytes. The current targeted source/config/protocol gate is
+`419 passed in 61.33 s`, the complete repository gate is
+`1207 passed, 16 skipped in 431.10 s`, and independent source review passes.
+
+Public RGB-D evaluator and demo reports carry truthful
+`observation_modality: rgbd` and `rgb_only: false` metadata. The evaluator
+labels its fifteen-frame warmup and must not be compared as if it were the
+standalone qualification. Demo aggregate errors remain pooled across warmup
+and post-warmup frames; they are not warmup-separated accuracy evidence.
+Legacy RGB execution remains unchanged. Model checkpoint round-trip covers the
+parameter-free module/configuration only: live temporal histories and caches
+are not serialized, so exact mid-history stream resume is unsupported and
+must be rebuilt by replaying observations.
+
+After a clean source commit is pushed, run the development split once to fresh
+artifacts and audit exact source, config, protocol, metrics, runtime-state
+memory, and report/checkpoint digests. Only an independently approved pass may
+create the exclusive protected ledger. That ledger records selector access
+before materialization, then confirmation, then final exactly once. Stop on
+the first failure. No optimizer tuning, threshold change, repeated final
+inspection, scene scaling, or capacity increase is allowed inside this rung.
+
 The complete `1075 passed, 16 skipped` repository gate belongs to the clean
 pre-failure source commit above. After deletion of the rejected experiment and
 addition of the RGB-D core, the new complete source gate passes `1091` tests
-with `16` expected inactive-device skips in `418.49 s`.
+with `16` expected inactive-device skips in `418.49 s`. The integrated bridge
+tree is the current complete repository result at
+`1207 passed, 16 skipped in 431.10 s`.
 
 The broad `train.py`, `evaluate.py`, and `demo.py` workflow remains available
 for `OnlineWorldModel` smoke/integration checks, but no older sustained profile

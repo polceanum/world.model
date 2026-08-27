@@ -23,6 +23,7 @@ from world_model.utils.config import (
     LifecycleConfig,
     OrpheusConfig,
     RGBConfig,
+    RGBDConfig,
     RuntimeConfig,
 )
 from world_model.utils.version import SIMULATOR_VERSION, SPECIFICATION_VERSION, __version__
@@ -151,6 +152,8 @@ _DYNAMICS_LEGACY_DEFAULTS = {
     "event_hazard_gap_temperature_m": 0.02,
     "event_hazard_velocity_temperature_mps": 0.10,
     "event_hazard_resolved_logit_floor": 2.0,
+    # Historical checkpoints always used the hybrid dynamics stack.
+    "analytic_free_motion_only": False,
 }
 _ASSOCIATION_MIGRATION_DEFAULT_FIELDS = ("minimum_measurement_confidence",)
 _LIFECYCLE_MIGRATION_DEFAULT_FIELDS = (
@@ -281,6 +284,14 @@ def _model_checkpoint_semantics(value: object) -> object:
     if not isinstance(value, Mapping):
         return value
     model = deepcopy(dict(value))
+    model.setdefault("rgbd", dict(vars(RGBDConfig())))
+    rgbd = model.get("rgbd")
+    if isinstance(rgbd, Mapping):
+        normalized_rgbd = dict(rgbd)
+        rgbd_defaults = RGBDConfig()
+        normalized_rgbd.setdefault("global_every_steps", rgbd_defaults.global_every_steps)
+        normalized_rgbd.setdefault("linear_drag", rgbd_defaults.linear_drag)
+        model["rgbd"] = normalized_rgbd
     rgb = model.get("rgb")
     if isinstance(rgb, Mapping):
         normalized_rgb = dict(rgb)
@@ -321,6 +332,11 @@ def _model_checkpoint_semantics(value: object) -> object:
         # residual path. Missing is therefore exactly legacy False, not the
         # semantics selected by a newer training profile.
         normalized_filter.setdefault("innovation_anchored_correction", False)
+        # Every historical checkpoint constructed the learned corrector.
+        normalized_filter.setdefault("enable_learned_corrector", True)
+        # Direct metric replacement is new RGB-D-only semantics. Historical
+        # checkpoints retain uncertainty-weighted position fusion.
+        normalized_filter.setdefault("direct_metric_position_update", False)
         model["filter"] = normalized_filter
     association = model.get("association")
     if isinstance(association, Mapping):

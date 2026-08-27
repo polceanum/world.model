@@ -64,6 +64,13 @@ for qualification. A fresh v2 development rerun and exactly one ledgered
 consumed and must not be rerun. This is not a third monocular-taper attempt or
 a claim beyond the standalone rung.
 
+The composite one-slot RGB-D `OnlineWorldModel` bridge is now implemented and
+independently source-audited under specification 1.55. It remains
+pre-development: the 45m development and 46m -> 47m -> 48m protected
+namespaces are unopened, so no bridge accuracy or public long-horizon result
+is claimed. The next action is a clean commit/push followed by one development
+reproduction and audit; no scene or model-capacity scaling is allowed first.
+
 ## Quick start
 
 Use the existing `orpheus` environment. PyTorch is an externally managed
@@ -241,14 +248,61 @@ modalities retain VJP norms `0.1156--3.6564`, semigroup error stays below
 OLS covariance remains diagnostic, not calibrated uncertainty. Artifacts are
 SHA-bound and tamper-evident but owner-writable. The next rung is the composite
 batched `rgbd` public `OnlineWorldModel` bridge; no capacity scaling is allowed
-yet. The existing full source gate remains
-`1130 passed, 16 skipped in 414.82 s`; this docs update makes no new test claim.
+yet. The standalone source gate was
+`1130 passed, 16 skipped in 414.82 s`; the integrated bridge tree now passes
+the complete repository gate at `1207 passed, 16 skipped in 431.10 s`.
 
 The former grounded, attention, change-point, and multi-day accuracy commands
 are historical evidence only and have been removed from the active workflow.
 Their records remain in Git history and the ignored, local pre-generalization
 archive. Broad training stays paused while the observable-depth/RGB-D rung is
-specified and qualified without weakening the accepted minimal gates.
+reproduced through public integration without weakening its accepted
+standalone gates.
+
+### Frozen public RGB-D online bridge
+
+The bridge uses one composite batched `rgbd` packet with RGB `[B,3,H,W]`,
+depth `[B,1,H,W]`, batched calibration, explicit image size, and a
+modality-qualified stream key. Raw metric positions have one direct filter
+owner; a persistent-ID-aligned uniform sixteen-frame WLS history emits
+velocity-only evidence; and the parameter-free analytic dynamics answers
+`0.1/0.25/0.5/1/2 s` queries. Missing depth never falls back to RGB.
+
+The frozen config SHA-256 is
+`c40b3438c7fd60646d356db3fe54050039912ace288d9db89620b626106993a3`, and
+the seed-free canonical protocol SHA-256 is
+`e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`.
+The source/config/protocol gate is `419 passed in 61.33 s`; the complete
+repository gate is `1207 passed, 16 skipped in 431.10 s`. The bridge owns zero
+parameters, state-dict entries, or optimizer state; complete batch-four
+persistent runtime tensor storage is `25,364` bytes against a `32,768`-byte
+gate.
+
+RGB-D evaluation and demos now use the real composite packet and truthful
+`observation_modality: rgbd`/`rgb_only: false` metadata. The evaluator labels
+its fifteen-frame warmup; demo aggregate errors remain pooled across warmup
+and post-warmup frames. The legacy RGB workflow is preserved when the bridge
+is disabled. Per-frame VJPs cover both RGB and depth for current velocity and
+every horizon.
+
+For an already-active persistent object, a well-formed frame with missing
+depth, nonfinite or otherwise invalid depth in the sampled measurement support,
+or no foreground appends an invalid causal row. In the frozen sixteenth-frame
+full-window ablation, diagnostics are `sample_count: 16` and `valid_count: 15`.
+The invalid measurement emits no valid/admissible temporal fit or direct
+velocity evidence, correction, or birth. A finite diagnostic fit may exist
+with `fit_valid: false` but is not admissible evidence. Before birth, the same
+invalid frame advances runtime time but creates no object-history row and no
+birth. Malformed packets, nonfinite RGB/calibration, unsupported low precision,
+stale/duplicate/unknown streams, and invalid prepared propagation reject
+atomically without consuming runtime or propagation state.
+Ordinary checkpoints do not serialize live temporal histories and caches, so
+exact mid-history stream resume is unsupported; replay the observations to
+rebuild that state.
+
+Development seeds are `45000000--45000023`; selector, confirmation, and
+one-shot final are `46000000--46000015`, `47000000--47000015`, and
+`48000000--48000031`. All remain unopened at this source-freeze boundary.
 
 The general evaluator still supports explicit disjoint manifests for a
 compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not

@@ -40,6 +40,47 @@ class LifecycleConfig:
     birth_confirmation_distance_m: float = 0.5
 
 
+@dataclass(frozen=True)
+class BirthAssignments:
+    """Explicit correspondence for permanent IDs allocated on one birth pass.
+
+    Every field is a flat ``torch.int64`` tensor with one entry per successful
+    allocation.  Keeping the discrete lifecycle correspondence explicit lets
+    an observation module move its current raw measurement history from a
+    proposal index to the new persistent belief slot without treating the
+    tentative-birth buffer as differentiable physical state.
+    """
+
+    batch_indices: Tensor
+    measurement_indices: Tensor
+    belief_indices: Tensor
+    object_ids: Tensor
+
+    def validate(self) -> BirthAssignments:
+        fields = (
+            ("batch_indices", self.batch_indices),
+            ("measurement_indices", self.measurement_indices),
+            ("belief_indices", self.belief_indices),
+            ("object_ids", self.object_ids),
+        )
+        expected_shape = self.batch_indices.shape
+        expected_device = self.batch_indices.device
+        for name, value in fields:
+            if value.ndim != 1 or value.shape != expected_shape:
+                raise ValueError("birth-assignment fields must share flat shape [K]")
+            if value.dtype is not torch.int64:
+                raise TypeError(f"{name} must use torch.int64")
+            if value.device != expected_device:
+                raise ValueError("birth-assignment fields must share one device")
+            if torch.any(value < 0):
+                raise ValueError(f"{name} must be nonnegative")
+        return self
+
+    @property
+    def count(self) -> int:
+        return self.batch_indices.numel()
+
+
 class ObjectLifecycle:
     """Apply cheap seen/missed/birth/death transitions without neural updates."""
 
@@ -308,6 +349,32 @@ class ObjectLifecycle:
         state.  Simulator state is never consulted.
         """
 
+        born, _ = self.birth_from_measurements_with_assignments(
+            belief,
+            measurements,
+            unmatched_measurements,
+            confidence_threshold=confidence_threshold,
+            initial_velocity_variance=initial_velocity_variance,
+        )
+        return born
+
+    def birth_from_measurements_with_assignments(
+        self,
+        belief: WorldBelief,
+        measurements: MeasurementSet,
+        unmatched_measurements: Tensor,
+        *,
+        confidence_threshold: float = 0.5,
+        initial_velocity_variance: float = 1.0,
+    ) -> tuple[WorldBelief, BirthAssignments]:
+        """Allocate births and return their measurement-to-ID correspondence.
+
+        This is an opt-in extension of :meth:`birth_from_measurements`; the
+        legacy method still returns only the updated belief.  Assignment
+        tensors are discrete metadata, while the born state continues to copy
+        differentiable measurement tensors exactly as before.
+        """
+
         objects = belief.objects
         batch, proposals = measurements.measurement_mask.shape
         if batch != belief.batch_size:
@@ -356,6 +423,10 @@ class ObjectLifecycle:
         updated = objects.clone()
         next_id = belief.next_object_id.clone()
         velocity_log_variance = math.log(initial_velocity_variance)
+        birth_batch_indices: list[int] = []
+        birth_measurement_indices: list[int] = []
+        birth_belief_indices: list[int] = []
+        birth_object_ids: list[Tensor] = []
         for batch_index in range(batch):
             slots = torch.nonzero(
                 ~updated.active[batch_index],
@@ -417,8 +488,13 @@ class ObjectLifecycle:
                 updated.parameter_memory[batch_index, slot].zero_()
 
                 updated.active[batch_index, slot] = True
-                updated.object_id[batch_index, slot] = next_id[batch_index]
+                assigned_object_id = next_id[batch_index].clone()
+                updated.object_id[batch_index, slot] = assigned_object_id
                 next_id[batch_index] += 1
+                birth_batch_indices.append(batch_index)
+                birth_measurement_indices.append(measurement_index)
+                birth_belief_indices.append(slot)
+                birth_object_ids.append(assigned_object_id)
                 updated.existence_logit[batch_index, slot] = measurements.existence_logits[
                     batch_index, measurement_index
                 ]
@@ -445,12 +521,36 @@ class ObjectLifecycle:
                 updated.fast_log_variance[batch_index, slot, 3:6] = velocity_log_variance
         metadata = belief.metadata.copy()
         metadata["initialised"] = bool(updated.active.any())
-        return replace(
+        born = replace(
             belief,
             objects=updated,
             next_object_id=next_id,
             metadata=metadata,
         )
+        assignment_device = objects.object_id.device
+        assignments = BirthAssignments(
+            batch_indices=torch.tensor(
+                birth_batch_indices,
+                device=assignment_device,
+                dtype=torch.int64,
+            ),
+            measurement_indices=torch.tensor(
+                birth_measurement_indices,
+                device=assignment_device,
+                dtype=torch.int64,
+            ),
+            belief_indices=torch.tensor(
+                birth_belief_indices,
+                device=assignment_device,
+                dtype=torch.int64,
+            ),
+            object_ids=(
+                torch.stack(birth_object_ids)
+                if birth_object_ids
+                else objects.object_id.new_empty((0,))
+            ),
+        ).validate()
+        return born, assignments
 
 
 def birth_from_measurements(

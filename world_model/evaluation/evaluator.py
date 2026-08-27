@@ -1,4 +1,4 @@
-"""Held-out RGB-only evaluation with transparent physical baselines."""
+"""Held-out no-oracle visual evaluation with transparent physical baselines."""
 
 from __future__ import annotations
 
@@ -43,6 +43,7 @@ from world_model.evaluation.velocity_metrics import (
     TemporalVelocityMeasurementAccumulator,
 )
 from world_model.identification import ParameterUpdateDiagnostics
+from world_model.observations import DirectVelocityEvidence, MeasurementSet, ObservationPacket
 from world_model.runtime import OnlineWorldModel
 from world_model.simulator.sphere_world import SphereWorldConfig
 from world_model.training.checkpointing import capture_git_metadata, load_checkpoint
@@ -55,6 +56,7 @@ from world_model.training.loop import (
     future_scene_predictable_mask,
     gather_target_slots,
     make_rgb_packet,
+    make_rgbd_packet,
     match_belief_to_targets,
     move_batch_to_device,
 )
@@ -70,6 +72,8 @@ _IDENTIFIER_PARAMETERS = ("mass", "restitution", "drag", "friction", "radius")
 _CURRENT_DETECTION_DISTANCE_THRESHOLD_M = 0.5
 _EVALUATION_PROTOCOL_SCHEMA_VERSION = "held_out_rgb_online_v2"
 _EVALUATION_METRIC_SCHEMA_VERSION = "held_out_rgb_metrics_v2"
+_RGBD_EVALUATION_PROTOCOL_SCHEMA_VERSION = "held_out_rgbd_online_v1"
+_RGBD_EVALUATION_METRIC_SCHEMA_VERSION = "held_out_rgbd_metrics_v1"
 _PER_SCENARIO_METRIC_SCHEMA = "clean_primary_additive_support_diagnostic_v2"
 _RUNTIME_HYPOTHESIS_CANDIDATES = (
     "learned",
@@ -77,6 +81,57 @@ _RUNTIME_HYPOTHESIS_CANDIDATES = (
     "damped_constant_velocity",
     "ballistic_contact",
 )
+
+
+def _evaluation_schema_versions(modality: str) -> tuple[str, str]:
+    if modality == "rgb":
+        return _EVALUATION_PROTOCOL_SCHEMA_VERSION, _EVALUATION_METRIC_SCHEMA_VERSION
+    if modality == "rgbd":
+        return (
+            _RGBD_EVALUATION_PROTOCOL_SCHEMA_VERSION,
+            _RGBD_EVALUATION_METRIC_SCHEMA_VERSION,
+        )
+    raise ValueError("held-out evaluation supports only rgb or rgbd runtime input")
+
+
+def _make_runtime_packet(
+    config: OrpheusConfig,
+    batch: Mapping[str, Any],
+    frame_index: int,
+) -> ObservationPacket:
+    """Build the configured public no-oracle observation packet."""
+
+    if config.runtime.modality == "rgbd":
+        return make_rgbd_packet(batch, frame_index)
+    if config.runtime.modality == "rgb":
+        return make_rgb_packet(batch, frame_index)
+    raise ValueError("held-out evaluation supports only rgb or rgbd runtime input")
+
+
+def _record_temporal_velocity_measurements(
+    accumulator: TemporalVelocityMeasurementAccumulator,
+    *,
+    modality: str,
+    measurements: MeasurementSet | None,
+    direct_evidence: DirectVelocityEvidence | None,
+) -> None:
+    """Record the sole temporal-velocity representation owned by a modality."""
+
+    if modality not in {"rgb", "rgbd"}:
+        raise ValueError("temporal velocity metrics support only rgb or rgbd")
+    accumulator.update(measurements)
+    if modality == "rgbd":
+        accumulator.update_direct(direct_evidence)
+
+
+def _temporal_velocity_measurement_metric_source(modality: str) -> str:
+    """Describe the modality-owned runtime evidence used by velocity metrics."""
+
+    if modality == "rgb":
+        return "fresh_runtime_last_measurements_explicit_auxiliary_fields_only"
+    if modality == "rgbd":
+        return "fresh_runtime_last_direct_velocity_evidence_after_association"
+    raise ValueError("temporal velocity metrics support only rgb or rgbd")
 
 
 def enable_runtime_hypothesis_pool(
@@ -854,9 +909,10 @@ def _resolved_evaluation_protocol(
 ) -> dict[str, Any]:
     """Canonical, JSON-safe contract for one resolved evaluation pass."""
 
-    return {
-        "schema_version": _EVALUATION_PROTOCOL_SCHEMA_VERSION,
-        "metric_schema_version": _EVALUATION_METRIC_SCHEMA_VERSION,
+    protocol_schema, metric_schema = _evaluation_schema_versions(config.runtime.modality)
+    protocol = {
+        "schema_version": protocol_schema,
+        "metric_schema_version": metric_schema,
         "per_scenario_metric_schema": _PER_SCENARIO_METRIC_SCHEMA,
         "checkpoint_sha256": checkpoint_sha256,
         "resolved_config_sha256": _canonical_sha256(config.to_dict()),
@@ -875,6 +931,15 @@ def _resolved_evaluation_protocol(
             "recovery_probe_velocity_std": config.evaluation.perturbation_velocity_std,
         },
     }
+    if config.runtime.modality == "rgbd":
+        protocol.update(
+            {
+                "observation_modality": "rgbd",
+                "rgb_only": False,
+                "temporal_warmup_frames": config.model.rgbd.temporal_history_size - 1,
+            }
+        )
+    return protocol
 
 
 def _future_queries(
@@ -1010,7 +1075,7 @@ def _run_recovery_probe(
             # Reconstruct the same causal RGB history in a fresh runtime. No
             # simulator state participates in these online updates.
             for frame_index in range(perturbation_frame):
-                packet = make_rgb_packet(batch, frame_index)
+                packet = _make_runtime_packet(config, batch, frame_index)
                 prepared = (
                     None if model.belief is None else model.prepare_propagation(packet.timestamp)
                 )
@@ -1022,7 +1087,7 @@ def _run_recovery_probe(
 
             if model.belief is None:
                 raise RuntimeError("recovery probe prefix did not initialize WorldBelief")
-            packet = make_rgb_packet(batch, perturbation_frame)
+            packet = _make_runtime_packet(config, batch, perturbation_frame)
             # Model construction and prefix replay may consume different RNG
             # streams as architectures evolve. Bind the synthetic recovery
             # intervention to the explicit batch manifest immediately before
@@ -1076,7 +1141,9 @@ def _run_recovery_probe(
                 context=f"recovery batch {batch_index} posterior",
             )
             if model.diagnostics.oracle_used:
-                raise RuntimeError("oracle diagnostics detected during RGB-only recovery probe")
+                raise RuntimeError(
+                    "oracle diagnostics detected during no-oracle visual recovery probe"
+                )
             target_position = batch["objects"]["position"][:, perturbation_frame]
             target_active = batch["objects"]["active"][:, perturbation_frame].bool()
             target_indices, matched = match_belief_to_targets(
@@ -1230,6 +1297,12 @@ def evaluate_checkpoint(
 ) -> dict[str, Any]:
     """Evaluate a trusted checkpoint with progress from initialization onward."""
 
+    if (
+        runtime_hypothesis_pool
+        and getattr(getattr(config, "runtime", None), "modality", "rgb") != "rgb"
+    ):
+        raise ValueError("runtime hypothesis-pool intervention supports only RGB evaluation")
+
     checkpoint, planned_output = _planned_evaluation_output(
         checkpoint_path,
         split=split,
@@ -1250,6 +1323,7 @@ def evaluate_checkpoint(
     # particular, a custom non-ignored output path must not contaminate the
     # source fingerprint that the resulting report claims to have evaluated.
     evaluation_source_provenance = capture_git_metadata(Path(__file__).resolve().parents[2])
+    initial_modality = getattr(getattr(config, "runtime", None), "modality", "rgb")
     initial_event: dict[str, Any] = {
         "stage": "initializing",
         "updated_utc": datetime.now(timezone.utc).isoformat(),
@@ -1260,7 +1334,8 @@ def evaluate_checkpoint(
         "evaluation_source_provenance": evaluation_source_provenance,
         "output_directory": str(planned_output),
         "runtime_hypothesis_pool": runtime_hypothesis_pool,
-        "rgb_only": True,
+        "rgb_only": initial_modality == "rgb",
+        "observation_modality": initial_modality,
     }
     try:
         # Capture bytes before notifying external callbacks. A callback or
@@ -1324,18 +1399,22 @@ def _evaluate_checkpoint_impl(
     runtime_hypothesis_pool: bool = False,
     progress_sink: _EvaluationProgressSink,
 ) -> dict[str, Any]:
-    """Evaluate a trusted local checkpoint on held-out RGB episodes.
+    """Evaluate a trusted local checkpoint on held-out visual episodes.
 
     Simulator state and parameters are used for metrics and the explicitly
     labelled oracle-parameter analytic baseline only.  Every model correction
-    consumes RGB plus known camera calibration.
+    consumes its configured no-oracle visual packet plus known calibration.
     """
 
     config.validate()
-    if not config.evaluation.rgb_only:
-        raise ValueError("Milestone 1 evaluation must set evaluation.rgb_only=true")
-    if config.runtime.modality != "rgb" or config.runtime.enable_debug_oracle:
-        raise ValueError("held-out RGB evaluation forbids debug_oracle runtime input")
+    if config.runtime.modality not in {"rgb", "rgbd"} or config.runtime.enable_debug_oracle:
+        raise ValueError("held-out visual evaluation forbids debug_oracle runtime input")
+    expected_rgb_only = config.runtime.modality == "rgb"
+    if config.evaluation.rgb_only is not expected_rgb_only:
+        raise ValueError(
+            "held-out visual evaluation requires evaluation.rgb_only to match "
+            "the configured RGB versus RGB-D modality"
+        )
     if config.runtime.hypothesis_pool_enabled:
         raise ValueError(
             "checkpoint evaluation config must keep runtime.hypothesis_pool_enabled=false; "
@@ -1434,7 +1513,8 @@ def _evaluate_checkpoint_impl(
             "checkpoint_step": checkpoint_step,
             "output_directory": str(output),
             "runtime_hypothesis_pool": runtime_hypothesis_pool,
-            "rgb_only": True,
+            "rgb_only": config.runtime.modality == "rgb",
+            "observation_modality": config.runtime.modality,
         }
     )
     report_progress(
@@ -1443,6 +1523,7 @@ def _evaluate_checkpoint_impl(
 
     current_error = _ErrorAccumulator()
     current_velocity_error = MaskedVelocityErrorAccumulator()
+    temporal_supported_velocity_error = MaskedVelocityErrorAccumulator()
     ordinary_velocity_correction = OrdinaryVelocityCorrectionAccumulator()
     temporal_velocity_measurements = TemporalVelocityMeasurementAccumulator()
     forecast_errors: dict[tuple[str, str], _ErrorAccumulator] = {}
@@ -1551,7 +1632,7 @@ def _evaluate_checkpoint_impl(
             diagnostic_offset = 0
 
             for frame_index in range(total_frames):
-                packet = make_rgb_packet(batch, frame_index)
+                packet = _make_runtime_packet(config, batch, frame_index)
                 ordinary_velocity_prior = None
                 prepared_propagation = None
                 propagation_elapsed_ms = 0.0
@@ -1607,7 +1688,12 @@ def _evaluate_checkpoint_impl(
                         last_measurements,
                         context=f"primary batch {batch_index} frame {frame_index}",
                     )
-                temporal_velocity_measurements.update(last_measurements)
+                _record_temporal_velocity_measurements(
+                    temporal_velocity_measurements,
+                    modality=config.runtime.modality,
+                    measurements=last_measurements,
+                    direct_evidence=model.last_direct_velocity_evidence,
+                )
                 if last_measurements is not None:
                     change_point_mask = last_measurements.auxiliary.get(
                         "trajectory_change_point_mask"
@@ -1678,7 +1764,7 @@ def _evaluate_checkpoint_impl(
                         )
                 if model.diagnostics.oracle_used:
                     raise RuntimeError(
-                        "oracle diagnostics detected during claimed RGB-only evaluation"
+                        "oracle diagnostics detected during claimed no-oracle visual evaluation"
                     )
                 target_position = batch["objects"]["position"][:, frame_index]
                 target_active = batch["objects"]["active"][:, frame_index].bool()
@@ -1710,6 +1796,13 @@ def _evaluate_checkpoint_impl(
                     aligned_velocity,
                     distance_gated_matched,
                 )
+                direct_velocity_evidence = model.last_direct_velocity_evidence
+                if direct_velocity_evidence is not None:
+                    temporal_supported_velocity_error.update(
+                        belief.objects.velocity,
+                        aligned_velocity,
+                        distance_gated_matched & direct_velocity_evidence.valid_mask,
+                    )
                 if ordinary_velocity_prior is not None and last_measurements is not None:
                     same_persistent_slot = (
                         ordinary_velocity_prior.objects.active
@@ -2426,6 +2519,8 @@ def _evaluate_checkpoint_impl(
     metrics: dict[str, Any] = {}
     metrics.update(current_error.metrics("posterior_current"))
     metrics.update(current_velocity_error.metrics("posterior_current"))
+    if config.runtime.modality == "rgbd":
+        metrics.update(temporal_supported_velocity_error.metrics("posterior_temporal_supported"))
     metrics.update(ordinary_velocity_correction.metrics())
     metrics.update(temporal_velocity_measurements.metrics())
     for (method, horizon), accumulator in sorted(forecast_errors.items()):
@@ -2624,8 +2719,9 @@ def _evaluate_checkpoint_impl(
         ),
         (
             "The analytic_oracle_parameter baseline reads simulator drag only "
-            "for comparison; the evaluated model runtime receives RGB and "
-            "known calibration only."
+            "for comparison; the evaluated model runtime receives only its "
+            "configured visual observation (RGB or RGB-D), known calibration, "
+            "and checkpoint-bound physical priors."
         ),
         (
             "Object alignment for metrics uses held-out simulator positions; "
@@ -2662,6 +2758,14 @@ def _evaluate_checkpoint_impl(
             "distance-independent measurement proposal was marked valid; reported "
             "measurement variance is null."
         )
+    if config.runtime.modality == "rgbd":
+        limitations.append(
+            "Generic posterior_current velocity and forecast aggregates include the "
+            "causal 15-frame RGB-D history warmup. Use posterior_temporal_supported "
+            "velocity metrics for supported current state; bridge qualification uses "
+            "a dedicated fixed-anchor, every-horizon protocol rather than comparing "
+            "these warmup-pooled metrics to the standalone rung."
+        )
     if collision_conditioned_forecasts.total_collision_object_horizons == 0:
         limitations.append(
             "No tracked object had a simulator-labelled collision in any future "
@@ -2685,7 +2789,7 @@ def _evaluate_checkpoint_impl(
     ]
     if zero_update_parameters:
         limitations.append(
-            "The RGB runtime produced zero identifier updates above the "
+            "The no-oracle visual runtime produced zero identifier updates above the "
             "1e-3 gate threshold for "
             + ", ".join(zero_update_parameters)
             + "; updated-parameter MAE is unavailable for those parameters."
@@ -2748,7 +2852,7 @@ def _evaluate_checkpoint_impl(
         "evaluation_specification_version": SPECIFICATION_VERSION,
         "checkpoint_source_provenance": checkpoint_source_provenance,
         "evaluation_source_provenance": dict(evaluation_source_provenance),
-        "evaluation_metric_schema_version": _EVALUATION_METRIC_SCHEMA_VERSION,
+        "evaluation_metric_schema_version": _evaluation_schema_versions(config.runtime.modality)[1],
         "resolved_evaluation_config_sha256": resolved_evaluation_protocol["resolved_config_sha256"],
         "resolved_evaluation_protocol": resolved_evaluation_protocol,
         "resolved_evaluation_protocol_sha256": resolved_evaluation_protocol_sha256,
@@ -2785,7 +2889,8 @@ def _evaluate_checkpoint_impl(
         "episodes": evaluated_episodes,
         "device": str(device),
         "precision": resolved_device.precision,
-        "rgb_only": True,
+        "rgb_only": config.runtime.modality == "rgb",
+        "observation_modality": config.runtime.modality,
         "primary_online_pass_evaluator_state_perturbation_free": True,
         # Deprecated compatibility alias.  Its explicit scope prevents this
         # from being read as a claim that simulator interventions were absent.
@@ -2856,7 +2961,7 @@ def _evaluate_checkpoint_impl(
             "same_persistent_slot_and_distance_gated_current_detection"
         ),
         "temporal_velocity_measurement_metric_source": (
-            "fresh_runtime_last_measurements_explicit_auxiliary_fields_only"
+            _temporal_velocity_measurement_metric_source(config.runtime.modality)
         ),
         "occlusion_visible_fraction_threshold": (occlusion_transitions.visible_fraction_threshold),
         "occlusion_fully_hidden_fraction_threshold": (
@@ -2887,7 +2992,8 @@ def _evaluate_checkpoint_impl(
         "seed_protocol": resolved_seed_protocol.name,
         "episode_seeds": list(resolved_seed_protocol.manifest.seeds),
         "device": str(device),
-        "rgb_only": True,
+        "rgb_only": config.runtime.modality == "rgb",
+        "observation_modality": config.runtime.modality,
         "oracle_runtime_input_used": False,
         "runtime_hypothesis_pool_enabled": runtime_hypothesis_pool,
         "metrics": metrics,

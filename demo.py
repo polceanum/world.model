@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render a held-out RGB-only Orpheus online-correction demonstration."""
+"""Render a held-out no-oracle RGB or RGB-D online-correction demonstration."""
 
 from __future__ import annotations
 

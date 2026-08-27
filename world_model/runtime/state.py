@@ -8,6 +8,20 @@ from world_model.belief import TentativeBirthState, WorldBelief
 from world_model.observations.base import ModalityCache, ModalityHistory
 
 
+def runtime_stream_key(modality: str, sensor_id: str) -> str:
+    """Return an isolated sensor stream key while preserving legacy keys.
+
+    RGB and debug-oracle callers historically index runtime state directly by
+    ``sensor_id``.  Keep those keys byte-for-byte compatible; newer modalities
+    qualify the key so a physical sensor name reused across modalities cannot
+    couple caches, temporal history, or scheduler cadence.
+    """
+
+    if modality in {"rgb", "debug_oracle"}:
+        return sensor_id
+    return f"{modality}:{sensor_id}"
+
+
 @dataclass
 class RuntimeState:
     belief: WorldBelief | None = None
