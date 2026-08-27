@@ -42,6 +42,9 @@ def test_rgbd_online_profile_binds_metric_temporal_and_analytic_semantics() -> N
     assert config.model.rgbd.linear_drag == pytest.approx(0.05)
     assert config.model.rgbd.temporal_history_size == 16
     assert config.model.rgbd.temporal_min_samples == 16
+    assert not config.model.rgbd.bounded_partial_visibility
+    assert config.model.rgbd.max_missing_rows == 0
+    assert config.model.rgbd.require_latest_valid is True
     assert config.model.dynamics.analytic_free_motion_only
     assert not config.model.filter.enable_learned_corrector
     assert config.model.filter.direct_metric_position_update
@@ -70,6 +73,22 @@ def test_rgbd_online_profile_binds_metric_temporal_and_analytic_semantics() -> N
             "model.rgbd.chromatic_centre_blend=1.1",
             "must be no greater than one",
         ),
+        (
+            "model.rgbd.minimum_observed_support_fraction=1.1",
+            "must be no greater than one",
+        ),
+        (
+            "model.rgbd.maximum_surface_residual_relative_rms=1.1",
+            "must be no greater than one",
+        ),
+        (
+            "model.rgbd.maximum_full_silhouette_overlap_fraction=1.0",
+            "must be smaller than one",
+        ),
+        ("model.rgbd.bounded_partial_visibility=1", "must be boolean"),
+        ("model.rgbd.max_missing_rows=true", "must be integer zero or one"),
+        ("model.rgbd.max_missing_rows=2", "must be integer zero or one"),
+        ("model.rgbd.require_latest_valid=false", "must be true"),
         ("model.rgbd.enabled=1", "must be boolean"),
         ("model.dynamics.analytic_free_motion_only=1", "must be boolean"),
         ("model.filter.enable_learned_corrector=1", "must be boolean"),
@@ -110,6 +129,53 @@ def test_two_object_rgbd_requires_exact_observable_appearance_capacity() -> None
         )
         with pytest.raises(ValueError, match="appearance_dim exactly three"):
             invalid.validate()
+
+
+def test_bounded_partial_rgbd_and_one_missing_row_are_two_object_semantics() -> None:
+    base = load_config(CONFIG_DIR / "rgbd_online_free_motion_cpu.yaml")
+    two_object = replace(
+        base,
+        model=replace(
+            base.model,
+            max_objects=2,
+            state=replace(base.model.state, appearance_dim=3),
+            rgbd=replace(
+                base.model.rgbd,
+                proposal_count=2,
+                bounded_partial_visibility=True,
+                max_missing_rows=1,
+            ),
+        ),
+        simulator=replace(base.simulator, min_objects=2, max_objects=2),
+    )
+    two_object.validate()
+
+    for rgbd in (
+        replace(base.model.rgbd, bounded_partial_visibility=True),
+        replace(base.model.rgbd, max_missing_rows=1),
+    ):
+        invalid = replace(base, model=replace(base.model, rgbd=rgbd))
+        with pytest.raises(ValueError, match="require proposal_count two"):
+            invalid.validate()
+
+
+def test_partial_visibility_recovery_profile_binds_the_frozen_runtime_contract() -> None:
+    config = load_config(CONFIG_DIR / "rgbd_partial_visibility_recovery_cpu.yaml")
+    rgbd = config.model.rgbd
+
+    assert config.project.seed == 53_000_000
+    assert config.simulator.sequence_frames == 58
+    assert config.training.tbptt_steps == 18
+    assert rgbd.proposal_count == 2
+    assert rgbd.bounded_partial_visibility is True
+    assert rgbd.minimum_observed_support_fraction == pytest.approx(0.35)
+    assert rgbd.maximum_surface_residual_relative_rms == pytest.approx(0.05)
+    assert rgbd.maximum_full_silhouette_overlap_fraction == pytest.approx(0.60)
+    assert rgbd.temporal_history_size == 16
+    assert rgbd.temporal_min_samples == 16
+    assert rgbd.max_missing_rows == 1
+    assert rgbd.require_latest_valid is True
+    assert config.model.filter.missed_variance_growth == pytest.approx(0.08)
 
 
 def test_sustained_v3_analytic_contacts_match_reference_solver_thresholds() -> None:

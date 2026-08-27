@@ -81,11 +81,17 @@ def _packet(
     timestamp: float,
     *,
     requires_grad: bool = False,
+    drop_depth_slot: int | None = None,
 ) -> tuple[ObservationPacket, torch.Tensor, torch.Tensor]:
     camera = _camera()
     rendered = render_spheres(_state(position, velocity), camera, IMAGE_SIZE)
     rgb = rendered.rgb.unsqueeze(0)
     depth = rendered.depth_buffer[None, None]
+    if drop_depth_slot is not None:
+        if drop_depth_slot not in {0, 1}:
+            raise ValueError("drop_depth_slot must be physical slot zero or one")
+        depth = depth.clone()
+        depth[0, 0, rendered.instance_slot_map == drop_depth_slot] = 0.0
     if requires_grad:
         rgb.requires_grad_()
         depth.requires_grad_()
@@ -129,6 +135,15 @@ def test_two_object_runtime_births_two_metric_tracks_with_sensor_gradients() -> 
     assert model.last_measurements.values.shape == (1, 2, 3)
     assert model.last_measurements.appearance is not None
     assert model.last_measurements.appearance.shape == (1, 2, 3)
+    for partial_only_diagnostic in (
+        "surface_fit_residual_relative_rms",
+        "observed_support_fraction",
+        "full_silhouette_radius_pixels",
+        "full_silhouette_gap_pixels",
+        "full_boundary_clearance_pixels",
+        "full_silhouette_overlap_fraction",
+    ):
+        assert partial_only_diagnostic not in model.last_measurements.auxiliary
     history = model.state.temporal_histories["rgbd:camera0:rgbd"]
     assert isinstance(history, RGBDTemporalPositionHistory)
     assert history.object_ids.tolist() == [[0, 1]]
@@ -304,8 +319,14 @@ def test_alternating_proposal_order_does_not_switch_persistent_ids(
             surface_fit_condition_number=result.surface_fit_condition_number.flip(1),
             surface_fit_radius=result.surface_fit_radius.flip(1),
             surface_fit_radius_relative_error=(result.surface_fit_radius_relative_error.flip(1)),
+            surface_fit_residual_relative_rms=(result.surface_fit_residual_relative_rms.flip(1)),
+            observed_support_fraction=result.observed_support_fraction.flip(1),
             silhouette_gap_pixels=result.silhouette_gap_pixels,
             boundary_clearance_pixels=result.boundary_clearance_pixels,
+            full_silhouette_radius_pixels=result.full_silhouette_radius_pixels.flip(1),
+            full_silhouette_gap_pixels=result.full_silhouette_gap_pixels,
+            full_boundary_clearance_pixels=result.full_boundary_clearance_pixels.flip(1),
+            full_silhouette_overlap_fraction=result.full_silhouette_overlap_fraction,
             chromatic_world_position=result.chromatic_world_position.flip(1),
             slot_logits=result.slot_logits.flip(1),
             provisional_centres=result.provisional_centres.flip(1),
@@ -356,3 +377,106 @@ def test_alternating_proposal_order_does_not_switch_persistent_ids(
     assert isinstance(history, RGBDTemporalPositionHistory)
     assert history.object_ids.tolist() == [[0, 1]]
     assert history.valid_mask.all()
+
+
+def test_partial_visibility_one_local_miss_recovers_without_resetting_history() -> None:
+    config = load_config(CONFIG_DIR / "rgbd_partial_visibility_recovery_cpu.yaml")
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    runtime_module = model.observation_modules["rgbd"]
+    assert isinstance(runtime_module, rgbd_module.RGBDObservationModule)
+    assert runtime_module.config.bounded_partial_visibility is True
+    assert runtime_module.config.minimum_observed_support_fraction == pytest.approx(0.35)
+    assert runtime_module.config.maximum_surface_residual_relative_rms == pytest.approx(0.05)
+    assert runtime_module.config.maximum_full_silhouette_overlap_fraction == pytest.approx(0.60)
+    assert runtime_module.config.max_missing_rows == 1
+    assert runtime_module.config.require_latest_valid is True
+    initial_position = torch.tensor(
+        [[-0.16, 0.0, 4.0], [0.16, 0.0, 5.0]],
+        dtype=torch.float32,
+    )
+    initial_velocity = torch.tensor(
+        [[0.02, 0.0, 0.0], [0.02, 0.0, 0.0]],
+        dtype=torch.float32,
+    )
+    gravity = torch.zeros((1, 3))
+    drag = torch.full((1, 2), DRAG)
+
+    for frame_index in range(16):
+        timestamp = frame_index * 0.05
+        position, velocity = free_motion_position_velocity(
+            initial_position.unsqueeze(0),
+            initial_velocity.unsqueeze(0),
+            timestamp,
+            gravity=gravity,
+            drag=drag,
+        )
+        packet, _, _ = _packet(position[0], velocity[0], timestamp)
+        posterior = model.ingest(packet)
+
+    assert model.last_measurements is not None
+    assert model.last_measurements.measurement_mask.all()
+    for partial_diagnostic in (
+        "surface_fit_residual_relative_rms",
+        "observed_support_fraction",
+        "full_silhouette_radius_pixels",
+        "full_silhouette_gap_pixels",
+        "full_boundary_clearance_pixels",
+        "full_silhouette_overlap_fraction",
+    ):
+        assert partial_diagnostic in model.last_measurements.auxiliary
+    object_ids = posterior.objects.object_id.clone()
+
+    miss_timestamp = 0.8
+    miss_position, miss_velocity = free_motion_position_velocity(
+        initial_position.unsqueeze(0),
+        initial_velocity.unsqueeze(0),
+        miss_timestamp,
+        gravity=gravity,
+        drag=drag,
+    )
+    miss_packet, _, _ = _packet(
+        miss_position[0],
+        miss_velocity[0],
+        miss_timestamp,
+        drop_depth_slot=1,
+    )
+    missed = model.ingest(miss_packet)
+
+    assert model.last_measurements is not None
+    assert model.last_measurements.measurement_mask.sum().item() == 1
+    assert model.last_direct_velocity_evidence is not None
+    assert sorted(model.last_direct_velocity_evidence.valid_mask[0].tolist()) == [False, True]
+    history = model.state.temporal_histories["rgbd:camera0:rgbd"]
+    assert isinstance(history, RGBDTemporalPositionHistory)
+    assert sorted(history.sample_mask.sum(dim=-1)[0].tolist()) == [16, 16]
+    assert sorted(history.valid_mask.sum(dim=-1)[0].tolist()) == [15, 16]
+    assert sorted(missed.objects.missed_steps[0].tolist()) == [0, 1]
+    assert torch.equal(missed.objects.object_id, object_ids)
+    assert missed.objects.active.all()
+
+    recovery_timestamp = 0.85
+    recovery_position, recovery_velocity = free_motion_position_velocity(
+        initial_position.unsqueeze(0),
+        initial_velocity.unsqueeze(0),
+        recovery_timestamp,
+        gravity=gravity,
+        drag=drag,
+    )
+    recovery_packet, _, _ = _packet(
+        recovery_position[0],
+        recovery_velocity[0],
+        recovery_timestamp,
+    )
+    recovered = model.ingest(recovery_packet)
+
+    assert model.last_measurements is not None
+    assert model.last_measurements.measurement_mask.all()
+    assert model.last_direct_velocity_evidence is not None
+    assert model.last_direct_velocity_evidence.valid_mask.all()
+    history = model.state.temporal_histories["rgbd:camera0:rgbd"]
+    assert isinstance(history, RGBDTemporalPositionHistory)
+    assert sorted(history.sample_mask.sum(dim=-1)[0].tolist()) == [16, 16]
+    assert sorted(history.valid_mask.sum(dim=-1)[0].tolist()) == [15, 16]
+    assert recovered.objects.missed_steps.eq(0).all()
+    assert torch.equal(recovered.objects.object_id, object_ids)
+    assert recovered.objects.active.all()

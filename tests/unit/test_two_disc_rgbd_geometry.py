@@ -1,8 +1,8 @@
-"""Seed-free tests for the fully visible two-sphere RGB-D primitive."""
+"""Seed-free tests for the separated and bounded-partial RGB-D primitive."""
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import fields, is_dataclass, replace
 
 import pytest
 import torch
@@ -15,6 +15,9 @@ from world_model.simulator import CameraFrame, SphereState, make_intrinsics, ren
 IMAGE_SIZE = (64, 80)
 RADIUS_M = 0.3
 PALETTE_SET_INVARIANCE_M = 5.0e-4
+PARTIAL_POSITIONS = ((-0.18, 0.0, 4.0), (0.18, 0.0, 4.2))
+PARTIAL_COLOURS = ((0.90, 0.20, 0.18), (0.18, 0.82, 0.90))
+PARTIAL_SET_ERROR_M = 5.0e-4
 
 
 def _camera(dtype: torch.dtype = torch.float32) -> CameraFrame:
@@ -100,6 +103,54 @@ def _measurement(
         camera.world_from_camera.unsqueeze(0),
         camera.intrinsics.unsqueeze(0),
     )
+
+
+def _partial_render(
+    *,
+    positions: tuple[tuple[float, float, float], tuple[float, float, float]] = PARTIAL_POSITIONS,
+    colours: tuple[
+        tuple[float, float, float],
+        tuple[float, float, float],
+    ] = PARTIAL_COLOURS,
+):
+    camera = _camera()
+    state = replace(
+        _state(colours),
+        position=torch.tensor(positions, dtype=torch.float32),
+    )
+    rendered = render_spheres(state, camera, IMAGE_SIZE)
+    return rendered, rendered.rgb.unsqueeze(0), rendered.depth_buffer[None, None], camera, state
+
+
+def _partial_measurement(
+    image: torch.Tensor,
+    depth: torch.Tensor,
+    camera: CameraFrame,
+    radius: torch.Tensor | float = RADIUS_M,
+    **kwargs: float,
+):
+    return two_disc_geometry_from_rgbd(
+        image,
+        depth,
+        radius,
+        camera.world_from_camera.unsqueeze(0),
+        camera.intrinsics.unsqueeze(0),
+        bounded_partial_visibility=True,
+        **kwargs,
+    )
+
+
+def _assert_dataclass_tensors_exact(first: object, second: object) -> None:
+    assert type(first) is type(second)
+    assert is_dataclass(first) and not isinstance(first, type)
+    for field in fields(first):
+        first_value = getattr(first, field.name)
+        second_value = getattr(second, field.name)
+        if is_dataclass(first_value) and not isinstance(first_value, type):
+            _assert_dataclass_tensors_exact(first_value, second_value)
+        else:
+            assert isinstance(first_value, torch.Tensor), field.name
+            assert torch.equal(first_value, second_value), field.name
 
 
 def _best_set_error(measured: torch.Tensor, expected: torch.Tensor) -> torch.Tensor:
@@ -386,3 +437,308 @@ def test_observably_overlapping_pair_fails_closed_before_state_publication() -> 
         resolved = torch.zeros_like(source) if gradient is None else gradient
         assert torch.isfinite(resolved).all()
         assert torch.equal(resolved, torch.zeros_like(resolved))
+
+
+def test_partial_visibility_is_opt_in_and_legacy_default_is_exact() -> None:
+    image, depth, camera, _ = _render()
+
+    implicit_legacy = _measurement(image, depth, camera)
+    explicit_legacy = two_disc_geometry_from_rgbd(
+        image,
+        depth,
+        RADIUS_M,
+        camera.world_from_camera.unsqueeze(0),
+        camera.intrinsics.unsqueeze(0),
+        bounded_partial_visibility=False,
+    )
+
+    _assert_dataclass_tensors_exact(implicit_legacy, explicit_legacy)
+
+
+def test_partial_mode_preserves_the_separated_lower_rung() -> None:
+    image, depth, camera, state = _render()
+
+    measured = _partial_measurement(image, depth, camera)
+    error = _best_set_error(measured.world_position[0], state.position)
+
+    assert measured.pair_valid_mask.tolist() == [True]
+    assert measured.valid_mask.tolist() == [[True, True]]
+    assert float(error.max()) < PARTIAL_SET_ERROR_M
+    assert float(measured.full_silhouette_gap_pixels[0]) > 0.0
+    assert float(measured.full_silhouette_overlap_fraction[0]) == 0.0
+
+
+def test_bounded_partial_overlap_recovers_the_set_and_is_palette_invariant() -> None:
+    rendered, image, depth, camera, state = _partial_render()
+
+    measured = _partial_measurement(image, depth, camera)
+    error = _best_set_error(measured.world_position[0], state.position)
+
+    assert bool((rendered.full_mask[0] & rendered.full_mask[1]).any())
+    assert 0.65 < float(rendered.visible_fraction.min()) < 1.0
+    assert measured.pair_valid_mask.tolist() == [True]
+    assert measured.valid_mask.tolist() == [[True, True]]
+    assert float(error.max()) < PARTIAL_SET_ERROR_M
+    assert float(measured.full_silhouette_gap_pixels[0]) < 0.0
+    assert 0.20 < float(measured.full_silhouette_overlap_fraction[0]) < 0.60
+    assert float(measured.observed_support_fraction.min()) > 0.35
+    assert float(measured.observed_support_fraction.max()) <= 1.0
+    assert float(measured.surface_fit_residual_relative_rms.max()) < 0.05
+
+    _, swapped_image, swapped_depth, _, _ = _partial_render(
+        colours=tuple(reversed(PARTIAL_COLOURS)),
+    )
+    swapped = _partial_measurement(swapped_image, swapped_depth, camera)
+    pairwise = torch.cdist(measured.world_position[0], swapped.world_position[0])
+
+    assert swapped.pair_valid_mask.tolist() == [True]
+    assert float(pairwise.amin(dim=-1).max()) < PALETTE_SET_INVARIANCE_M
+
+
+def test_partial_support_and_full_overlap_bounds_fail_closed() -> None:
+    _, image, depth, camera, state = _partial_render()
+
+    permissive = _partial_measurement(image, depth, camera)
+    support = permissive.observed_support_fraction[0].sort().values
+    assert float(support[0]) < 0.80 < float(support[1])
+    assert float(permissive.full_silhouette_overlap_fraction[0]) > 0.20
+
+    support_bounded = _partial_measurement(
+        image,
+        depth,
+        camera,
+        minimum_observed_support_fraction=0.80,
+    )
+    assert support_bounded.valid_mask.sum().item() == 1
+    assert support_bounded.pair_valid_mask.tolist() == [False]
+    valid_position = support_bounded.world_position[0, support_bounded.valid_mask[0]]
+    assert float(torch.cdist(valid_position, state.position).min()) < PARTIAL_SET_ERROR_M
+    assert torch.equal(
+        support_bounded.world_position[0, ~support_bounded.valid_mask[0]],
+        torch.zeros_like(support_bounded.world_position[0, ~support_bounded.valid_mask[0]]),
+    )
+
+    overlap_bounded = _partial_measurement(
+        image,
+        depth,
+        camera,
+        maximum_full_silhouette_overlap_fraction=0.20,
+    )
+    assert overlap_bounded.pair_valid_mask.tolist() == [False]
+    assert not overlap_bounded.valid_mask.any()
+    assert torch.equal(
+        overlap_bounded.world_position,
+        torch.zeros_like(overlap_bounded.world_position),
+    )
+
+
+def test_partial_object_local_depth_loss_preserves_only_the_observable_slot() -> None:
+    rendered, image, depth, camera, state = _partial_render()
+    dropped_depth = depth.clone()
+    dropped_depth[0, 0, rendered.instance_slot_map == 1] = 0.0
+    image = image.requires_grad_(True)
+    dropped_depth = dropped_depth.requires_grad_(True)
+
+    measured = _partial_measurement(image, dropped_depth, camera)
+
+    assert measured.pair_valid_mask.tolist() == [False]
+    assert measured.valid_mask.sum().item() == 1
+    valid_slot = int(measured.valid_mask[0].nonzero().item())
+    missing_slot = 1 - valid_slot
+    assert (
+        float(
+            torch.linalg.vector_norm(
+                measured.world_position[0, valid_slot].detach() - state.position[0],
+            )
+        )
+        < PARTIAL_SET_ERROR_M
+    )
+
+    missing_payload = (
+        measured.world_position[0, missing_slot].sum()
+        + measured.camera_position[0, missing_slot].sum()
+        + measured.centres[0, missing_slot].sum()
+        + measured.radius_pixels[0, missing_slot]
+        + measured.appearance[0, missing_slot].sum()
+        + measured.surface_depth[0, missing_slot]
+        + measured.centre_depth[0, missing_slot]
+        + measured.confidence[0, missing_slot]
+        + measured.surface_fit_condition_number[0, missing_slot]
+        + measured.surface_fit_radius[0, missing_slot]
+        + measured.surface_fit_radius_relative_error[0, missing_slot]
+        + measured.surface_fit_residual_relative_rms[0, missing_slot]
+        + measured.observed_support_fraction[0, missing_slot]
+        + measured.full_silhouette_radius_pixels[0, missing_slot]
+        + measured.full_boundary_clearance_pixels[0, missing_slot]
+        + measured.chromatic_world_position[0, missing_slot].sum()
+        + measured.slot_logits[0, missing_slot].sum()
+        + measured.provisional_centres[0, missing_slot].sum()
+        + measured.geometry.mass[0, missing_slot]
+        + measured.geometry.confidence[0, missing_slot]
+        + measured.geometry.effective_masks[0, missing_slot].sum()
+    )
+    missing_gradients = torch.autograd.grad(
+        missing_payload,
+        (image, dropped_depth),
+        retain_graph=True,
+        allow_unused=True,
+    )
+    for source, gradient in zip((image, dropped_depth), missing_gradients, strict=True):
+        resolved = torch.zeros_like(source) if gradient is None else gradient
+        assert torch.isfinite(resolved).all()
+        assert torch.equal(resolved, torch.zeros_like(resolved))
+
+    coefficient = image.new_tensor([0.37, -0.23, 0.51])
+    observable_objective = (measured.world_position[0, valid_slot] * coefficient).sum()
+    observable_gradients = torch.autograd.grad(observable_objective, (image, dropped_depth))
+    for gradient in observable_gradients:
+        assert torch.isfinite(gradient).all()
+        assert float(gradient.abs().sum()) > 0.0
+
+
+def test_partial_complete_occlusion_fails_closed_with_finite_zero_gradients() -> None:
+    rendered, image, depth, camera, _ = _partial_render(
+        positions=((0.0, 0.0, 4.0), (0.0, 0.0, 4.4)),
+    )
+    image = image.requires_grad_(True)
+    depth = depth.requires_grad_(True)
+
+    measured = _partial_measurement(image, depth, camera)
+    gradients = torch.autograd.grad(
+        measured.world_position.sum() + measured.appearance.sum() + measured.slot_logits.sum(),
+        (image, depth),
+        allow_unused=True,
+    )
+
+    assert rendered.visible_fraction.tolist() == [1.0, 0.0]
+    assert not measured.pair_valid_mask.any()
+    assert not measured.valid_mask.any()
+    assert torch.equal(measured.world_position, torch.zeros_like(measured.world_position))
+    assert torch.equal(measured.slot_logits, torch.zeros_like(measured.slot_logits))
+    for source, gradient in zip((image, depth), gradients, strict=True):
+        resolved = torch.zeros_like(source) if gradient is None else gradient
+        assert torch.isfinite(resolved).all()
+        assert torch.equal(resolved, torch.zeros_like(resolved))
+
+
+def test_partial_extreme_finite_depth_fails_closed_before_linear_algebra() -> None:
+    _, image, depth, camera, _ = _partial_render()
+    depth = torch.full_like(depth, torch.finfo(depth.dtype).max).requires_grad_(True)
+
+    measured = _partial_measurement(image, depth, camera)
+    (gradient,) = torch.autograd.grad(
+        measured.world_position.sum(),
+        (depth,),
+        allow_unused=True,
+    )
+
+    assert not measured.pair_valid_mask.any()
+    assert not measured.valid_mask.any()
+    assert torch.equal(measured.world_position, torch.zeros_like(measured.world_position))
+    resolved = torch.zeros_like(depth) if gradient is None else gradient
+    assert torch.isfinite(resolved).all()
+    assert torch.equal(resolved, torch.zeros_like(resolved))
+
+
+def test_partial_metric_state_retains_per_slot_rgb_depth_and_radius_vjps() -> None:
+    _, image, depth, camera, _ = _partial_render()
+    image = image.requires_grad_(True)
+    depth = depth.requires_grad_(True)
+    radius = torch.tensor(RADIUS_M, requires_grad=True)
+
+    measured = _partial_measurement(image, depth, camera, radius)
+    coefficient = image.new_tensor([0.37, -0.23, 0.51])
+
+    assert measured.pair_valid_mask.tolist() == [True]
+    for slot in range(2):
+        gradients = torch.autograd.grad(
+            (measured.world_position[0, slot] * coefficient).sum(),
+            (image, depth, radius),
+            retain_graph=slot == 0,
+        )
+        for gradient in gradients:
+            assert torch.isfinite(gradient).all()
+            assert float(gradient.abs().sum()) > 0.0
+
+
+def _partial_double_objective(
+    image: torch.Tensor,
+    depth: torch.Tensor,
+    radius: torch.Tensor,
+    camera: CameraFrame,
+) -> torch.Tensor:
+    measured = _partial_measurement(image, depth, camera, radius)
+    assert measured.pair_valid_mask.tolist() == [True]
+    return measured.world_position.square().sum()
+
+
+def test_partial_rgb_depth_and_radius_vjps_match_central_fd() -> None:
+    _, image, depth, _, _ = _partial_render()
+    camera = _camera(torch.float64)
+    image = image.to(torch.float64).requires_grad_(True)
+    depth = depth.to(torch.float64).requires_grad_(True)
+    radius = torch.tensor(RADIUS_M, dtype=torch.float64, requires_grad=True)
+    objective = _partial_double_objective(image, depth, radius, camera)
+    image_gradient, depth_gradient, radius_gradient = torch.autograd.grad(
+        objective,
+        (image, depth, radius),
+    )
+
+    rgb_step = 1.0e-4
+    rgb_admissible = (image.detach() > 10.0 * rgb_step) & (image.detach() < 1.0 - 10.0 * rgb_step)
+    rgb_scores = torch.where(
+        rgb_admissible,
+        image_gradient.abs(),
+        torch.full_like(image_gradient, -1.0),
+    )
+    rgb_index = tuple(torch.unravel_index(rgb_scores.argmax(), image.shape))
+    rgb_positive = image.detach().clone()
+    rgb_negative = image.detach().clone()
+    rgb_positive[rgb_index] += rgb_step
+    rgb_negative[rgb_index] -= rgb_step
+    rgb_fd = _central_difference(
+        _partial_double_objective(rgb_positive, depth.detach(), radius.detach(), camera),
+        _partial_double_objective(rgb_negative, depth.detach(), radius.detach(), camera),
+        rgb_step,
+    )
+    assert float(image_gradient[rgb_index].abs()) > 1.0e-8
+    assert _relative_derivative_error(image_gradient[rgb_index], rgb_fd) < 5.0e-3
+
+    depth_step = 1.0e-5
+    depth_admissible = depth.detach() > 10.0 * depth_step
+    depth_scores = torch.where(
+        depth_admissible,
+        depth_gradient.abs(),
+        torch.full_like(depth_gradient, -1.0),
+    )
+    depth_index = tuple(torch.unravel_index(depth_scores.argmax(), depth.shape))
+    depth_positive = depth.detach().clone()
+    depth_negative = depth.detach().clone()
+    depth_positive[depth_index] += depth_step
+    depth_negative[depth_index] -= depth_step
+    depth_fd = _central_difference(
+        _partial_double_objective(image.detach(), depth_positive, radius.detach(), camera),
+        _partial_double_objective(image.detach(), depth_negative, radius.detach(), camera),
+        depth_step,
+    )
+    assert float(depth_gradient[depth_index].abs()) > 1.0e-8
+    assert _relative_derivative_error(depth_gradient[depth_index], depth_fd) < 1.0e-4
+
+    radius_step = 1.0e-5
+    radius_fd = _central_difference(
+        _partial_double_objective(
+            image.detach(),
+            depth.detach(),
+            radius.detach() + radius_step,
+            camera,
+        ),
+        _partial_double_objective(
+            image.detach(),
+            depth.detach(),
+            radius.detach() - radius_step,
+            camera,
+        ),
+        radius_step,
+    )
+    assert float(radius_gradient.abs()) > 1.0e-8
+    assert _relative_derivative_error(radius_gradient, radius_fd) < 1.0e-4

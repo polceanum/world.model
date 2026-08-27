@@ -110,6 +110,71 @@ def _association(*, matched: bool = True) -> AssociationResult:
     )
 
 
+def _active_two_object_belief(*, timestamp: float = 0.0):
+    belief = BeliefFactory(
+        max_objects=2,
+        appearance_dim=3,
+        initial_radius=0.21,
+    ).create(
+        batch_size=1,
+        timestamp=timestamp,
+        gravity=(0.0, 0.0, 0.0),
+    )
+    return belief.replace(
+        objects=belief.objects.replace(
+            active=torch.tensor([[True, True]]),
+            object_id=torch.tensor([[7, 11]], dtype=torch.int64),
+        )
+    )
+
+
+def _slot_measurement(
+    position: torch.Tensor,
+    timestamp: float,
+    *,
+    valid: tuple[bool, bool],
+) -> MeasurementSet:
+    if position.shape != (1, 2, 3):
+        raise ValueError("two-slot test position must be [1,2,3]")
+    mask = torch.tensor([valid], dtype=torch.bool, device=position.device)
+    log_variance = position.new_full(position.shape, -9.0)
+    values = torch.where(mask.unsqueeze(-1), position, torch.zeros_like(position))
+    return MeasurementSet(
+        modality="rgbd",
+        sensor_id="camera0:rgbd",
+        timestamp=position.new_tensor([timestamp]),
+        values=values,
+        log_variance=log_variance,
+        existence_logits=torch.where(
+            mask,
+            position.new_full(mask.shape, 8.0),
+            position.new_full(mask.shape, -8.0),
+        ),
+        measurement_mask=mask,
+        appearance=None,
+        class_logits=None,
+        frame_id="camera:camera0",
+        supported_state_fields=("position",),
+        auxiliary={
+            "world_position": values,
+            "world_position_log_variance": log_variance,
+        },
+    )
+
+
+def _slot_association(*, valid: tuple[bool, bool]) -> AssociationResult:
+    pair_mask = torch.tensor([valid], dtype=torch.bool)
+    return AssociationResult(
+        belief_indices=torch.tensor([[0, 1]], dtype=torch.int64),
+        measurement_indices=torch.tensor([[0, 1]], dtype=torch.int64),
+        pair_mask=pair_mask,
+        pair_cost=torch.zeros((1, 2)),
+        unmatched_beliefs=~pair_mask,
+        unmatched_measurements=torch.zeros_like(pair_mask),
+        ambiguous=torch.zeros_like(pair_mask),
+    )
+
+
 @pytest.mark.parametrize(
     "field_name",
     ("temporal_history_size", "temporal_min_samples"),
@@ -117,6 +182,63 @@ def _association(*, matched: bool = True) -> AssociationResult:
 def test_rgbd_temporal_sample_counts_require_real_integers(field_name: str) -> None:
     with pytest.raises(ValueError, match=f"{field_name} must be an integer"):
         RGBDObservationConfig(**{field_name: 16.0})
+
+
+@pytest.mark.parametrize("value", (True, -1, 2, 1.0))
+def test_rgbd_max_missing_rows_is_strictly_zero_or_one(value: object) -> None:
+    with pytest.raises(ValueError, match="max_missing_rows"):
+        RGBDObservationConfig(max_missing_rows=value)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("value", (False, 0, 1, 1.0))
+def test_rgbd_temporal_recovery_requires_a_fresh_latest_row(value: object) -> None:
+    with pytest.raises(ValueError, match="require_latest_valid"):
+        RGBDObservationConfig(require_latest_valid=value)  # type: ignore[arg-type]
+
+
+def test_rgbd_temporal_recovery_defaults_preserve_complete_sixteen_row_fit() -> None:
+    config = RGBDObservationConfig()
+
+    assert config.temporal_history_size == 16
+    assert config.temporal_min_samples == 16
+    assert config.max_missing_rows == 0
+    assert config.require_latest_valid is True
+
+
+def test_partial_visibility_and_missing_row_opt_in_require_two_proposals() -> None:
+    for mutation in (
+        {"bounded_partial_visibility": True},
+        {"max_missing_rows": 1},
+    ):
+        with pytest.raises(ValueError, match="require proposal_count two"):
+            RGBDObservationConfig(**mutation)
+
+    config = RGBDObservationConfig(
+        proposal_count=2,
+        appearance_dim=3,
+        bounded_partial_visibility=True,
+        max_missing_rows=1,
+    )
+    assert config.bounded_partial_visibility
+    assert config.max_missing_rows == 1
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "match"),
+    (
+        ("bounded_partial_visibility", 1, "must be boolean"),
+        ("minimum_observed_support_fraction", 1.1, "no greater than one"),
+        ("maximum_surface_residual_relative_rms", 1.1, "no greater than one"),
+        ("maximum_full_silhouette_overlap_fraction", 1.0, "smaller than one"),
+    ),
+)
+def test_partial_visibility_controls_fail_closed(
+    field_name: str,
+    value: object,
+    match: str,
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        RGBDObservationConfig(**{field_name: value})  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(
@@ -253,6 +375,93 @@ def test_rgbd_projection_uses_world_position_in_one_persistent_slot() -> None:
     torch.testing.assert_close(projected.values, belief.objects.position)
     assert projected.valid_mask.all()
     assert projected.object_ids.item() == 7
+    assert set(projected.auxiliary) == {"world_position"}
+    torch.testing.assert_close(projected.auxiliary["world_position"], belief.objects.position)
+
+
+def test_rgbd_projection_reports_causal_depth_ordered_partial_visibility() -> None:
+    module = RGBDObservationModule(
+        RGBDObservationConfig(
+            proposal_count=2,
+            appearance_dim=3,
+            bounded_partial_visibility=True,
+        )
+    )
+    intrinsics = torch.tensor(
+        [[50.0, 0.0, 31.5], [0.0, 50.0, 31.5], [0.0, 0.0, 1.0]],
+        dtype=torch.float32,
+    ).unsqueeze(0)
+    world_from_camera = torch.eye(4, dtype=torch.float32).unsqueeze(0)
+    belief = BeliefFactory(
+        max_objects=2,
+        appearance_dim=3,
+        initial_radius=0.21,
+    ).create(
+        batch_size=1,
+        gravity=(0.0, 0.0, 0.0),
+        intrinsics=intrinsics,
+        world_from_camera=world_from_camera,
+    )
+    position = torch.tensor(
+        [[[0.0, 0.0, 2.0], [0.12, 0.0, 2.2]]],
+        dtype=torch.float32,
+        requires_grad=True,
+    )
+    belief = belief.replace(
+        objects=belief.objects.replace(
+            active=torch.tensor([[True, True]]),
+            object_id=torch.tensor([[7, 11]], dtype=torch.int64),
+            position=position,
+        )
+    )
+    projected = module.project(
+        belief,
+        SensorContext(
+            sensor_id="camera0:rgbd",
+            timestamp=0.0,
+            calibration={
+                "world_from_camera": world_from_camera,
+                "intrinsics": intrinsics,
+            },
+            frame_id="camera:camera0",
+            image_size=(64, 64),
+        ),
+    )
+
+    visible = projected.auxiliary["visible_fraction"]
+    torch.testing.assert_close(visible[0, 0], visible.new_tensor(1.0))
+    assert 0.05 < float(visible[0, 1].detach()) < 1.0
+    torch.testing.assert_close(
+        projected.auxiliary["occlusion_fraction"],
+        1.0 - visible,
+    )
+    assert projected.auxiliary["projectable_mask"].all()
+    assert not projected.auxiliary["fully_occluded_mask"].any()
+    assert not projected.auxiliary["unobservable_mask"].any()
+    assert projected.auxiliary["pairwise_occlusion_fraction"].shape == (1, 2, 2)
+    gradient = torch.autograd.grad(visible[0, 1], position)[0]
+    assert torch.isfinite(gradient).all()
+    assert gradient.abs().sum() > 0.0
+
+
+def test_separated_two_object_projection_retains_the_legacy_auxiliary_contract() -> None:
+    module = RGBDObservationModule(RGBDObservationConfig(proposal_count=2, appearance_dim=3))
+    belief = _active_two_object_belief()
+
+    projected = module.project(
+        belief,
+        SensorContext(
+            sensor_id="camera0:rgbd",
+            timestamp=0.0,
+            calibration={},
+            frame_id="camera:camera0",
+            image_size=None,
+        ),
+    )
+
+    assert set(projected.auxiliary) == {"world_position"}
+    torch.testing.assert_close(projected.values, belief.objects.position)
+    torch.testing.assert_close(projected.auxiliary["world_position"], belief.objects.position)
 
 
 def test_birth_assignment_seeds_frame_zero_and_uniform_fit_emits_velocity_only() -> None:
@@ -356,6 +565,178 @@ def test_one_invalid_associated_row_fails_complete_uniform_window_closed() -> No
     assert isinstance(history, RGBDTemporalPositionHistory)
     assert history.sample_mask.all()
     assert not history.valid_mask.all()
+
+
+def test_opt_in_single_missing_row_recovers_per_slot_and_masks_ols_gradients() -> None:
+    module = RGBDObservationModule(
+        RGBDObservationConfig(
+            proposal_count=2,
+            appearance_dim=3,
+            max_missing_rows=1,
+            require_latest_valid=True,
+            temporal_velocity_variance_floor=1.0e-12,
+            temporal_velocity_variance_ceiling=1.0,
+        )
+    )
+    belief = _active_two_object_belief()
+    initial_position = torch.tensor(
+        [[[0.1, -0.3, 2.0], [-0.4, 0.2, 2.4]]],
+        dtype=torch.float32,
+    )
+    initial_velocity = torch.tensor(
+        [[[0.2, 0.05, -0.1], [-0.08, 0.12, 0.04]]],
+        dtype=torch.float32,
+    )
+
+    def raw_position(frame_index: int) -> torch.Tensor:
+        timestamp = 0.05 * frame_index
+        ideal, _ = free_motion_position_velocity(
+            initial_position,
+            initial_velocity,
+            timestamp,
+            gravity=belief.gravity,
+            drag=belief.objects.drag,
+        )
+        phase = -1.0 if frame_index % 2 else 1.0
+        jitter = (
+            ideal.new_tensor(
+                [
+                    [[phase, -0.5 * phase, 0.25 * phase], [0.3 * phase, phase, -phase]],
+                ]
+            )
+            * 1.0e-3
+        )
+        return (ideal.detach() + jitter).requires_grad_(True)
+
+    history = None
+    evidence = None
+    for frame_index in range(16):
+        timestamp = 0.05 * frame_index
+        belief = belief.with_timestamp(timestamp)
+        evidence, history = module.update_temporal_history(
+            posterior=belief,
+            measured=_slot_measurement(
+                raw_position(frame_index),
+                timestamp,
+                valid=(True, True),
+            ),
+            association=_slot_association(valid=(True, True)),
+            history=history,
+        )
+        if frame_index < 15:
+            assert evidence is None
+
+    assert evidence is not None and evidence.valid_mask.all()
+    assert isinstance(history, RGBDTemporalPositionHistory)
+    assert history.sample_mask.sum(dim=-1).tolist() == [[16, 16]]
+    assert history.valid_mask.sum(dim=-1).tolist() == [[16, 16]]
+
+    miss_timestamp = 0.8
+    belief = belief.with_timestamp(miss_timestamp)
+    missing_position = raw_position(16)
+    evidence, history = module.update_temporal_history(
+        posterior=belief,
+        measured=_slot_measurement(
+            missing_position,
+            miss_timestamp,
+            valid=(False, True),
+        ),
+        association=_slot_association(valid=(False, True)),
+        history=history,
+    )
+    assert evidence is not None
+    assert evidence.valid_mask.tolist() == [[False, True]]
+    assert isinstance(history, RGBDTemporalPositionHistory)
+    assert history.sample_mask.sum(dim=-1).tolist() == [[16, 16]]
+    assert history.valid_mask.sum(dim=-1).tolist() == [[15, 16]]
+
+    recovery_timestamp = 0.85
+    belief = belief.with_timestamp(recovery_timestamp)
+    recovery_position = raw_position(17)
+    evidence, history = module.update_temporal_history(
+        posterior=belief,
+        measured=_slot_measurement(
+            recovery_position,
+            recovery_timestamp,
+            valid=(True, True),
+        ),
+        association=_slot_association(valid=(True, True)),
+        history=history,
+    )
+    assert evidence is not None and evidence.valid_mask.all()
+    assert isinstance(history, RGBDTemporalPositionHistory)
+    assert history.sample_mask.sum(dim=-1).tolist() == [[16, 16]]
+    assert history.valid_mask.sum(dim=-1).tolist() == [[15, 16]]
+
+    fit, fit_valid = history.fit(
+        gravity=belief.gravity,
+        drag=belief.objects.drag,
+        minimum_support=16,
+        minimum_dt=module.config.temporal_min_dt,
+        conditioning_limit=module.config.fit_conditioning_limit,
+        max_missing_rows=1,
+        require_latest_valid=True,
+    )
+    assert fit.support_count.tolist() == [[15, 16]]
+    assert fit_valid.all()
+    inverse_normal = torch.linalg.inv(fit.normal_matrix)
+    sample_count = fit.support_count.to(fit.normal_matrix.dtype)
+    expected_variance = (
+        fit.residual_covariance.diagonal(dim1=-2, dim2=-1)
+        * (sample_count / (sample_count - 2.0)).unsqueeze(-1)
+        * (inverse_normal[..., 1, 1] / sample_count).unsqueeze(-1)
+    ).clamp(
+        module.config.temporal_velocity_variance_floor,
+        module.config.temporal_velocity_variance_ceiling,
+    )
+    torch.testing.assert_close(evidence.log_variance.exp(), expected_variance)
+
+    missing_gradient, recovery_gradient = torch.autograd.grad(
+        evidence.velocity[0, 0].sum(),
+        (missing_position, recovery_position),
+        allow_unused=True,
+        materialize_grads=True,
+    )
+    torch.testing.assert_close(missing_gradient, torch.zeros_like(missing_gradient))
+    assert torch.isfinite(recovery_gradient).all()
+    assert recovery_gradient[0, 0].abs().sum() > 0.0
+    torch.testing.assert_close(
+        recovery_gradient[0, 1],
+        torch.zeros_like(recovery_gradient[0, 1]),
+    )
+
+    second_miss_timestamp = 0.9
+    belief = belief.with_timestamp(second_miss_timestamp)
+    evidence, history = module.update_temporal_history(
+        posterior=belief,
+        measured=_slot_measurement(
+            raw_position(18),
+            second_miss_timestamp,
+            valid=(False, True),
+        ),
+        association=_slot_association(valid=(False, True)),
+        history=history,
+    )
+    assert evidence is not None
+    assert evidence.valid_mask.tolist() == [[False, True]]
+
+    second_recovery_timestamp = 0.95
+    belief = belief.with_timestamp(second_recovery_timestamp)
+    evidence, history = module.update_temporal_history(
+        posterior=belief,
+        measured=_slot_measurement(
+            raw_position(19),
+            second_recovery_timestamp,
+            valid=(True, True),
+        ),
+        association=_slot_association(valid=(True, True)),
+        history=history,
+    )
+    assert evidence is not None
+    assert evidence.valid_mask.tolist() == [[False, True]]
+    assert isinstance(history, RGBDTemporalPositionHistory)
+    assert history.sample_mask.sum(dim=-1).tolist() == [[16, 16]]
+    assert history.valid_mask.sum(dim=-1).tolist() == [[14, 16]]
 
 
 def test_persistent_id_replacement_drops_previous_temporal_evidence() -> None:

@@ -34,6 +34,12 @@ from world_model.observations.measurements import (
 )
 from world_model.observations.packets import ObservationPacket
 from world_model.observations.registry import register_observation_module
+from world_model.observations.rgb.projector import (
+    RGBProjectorConfig,
+    calibration_tensors,
+    depth_ordered_circle_occlusion,
+    project_world_points,
+)
 from world_model.observations.rgbd.sphere_centres import (
     RGBDSphereCentreMeasurementModule,
 )
@@ -49,7 +55,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class RGBDObservationConfig:
-    """Checkpointed priors and numerical controls for the first RGB-D bridge."""
+    """Checkpointed priors and controls for the bounded analytic RGB-D bridges."""
 
     proposal_count: int = 1
     appearance_dim: int = 32
@@ -60,6 +66,10 @@ class RGBDObservationConfig:
     minimum_silhouette_gap_pixels: float = 2.0
     minimum_boundary_clearance_pixels: float = 2.0
     maximum_surface_radius_relative_error: float = 0.05
+    bounded_partial_visibility: bool = False
+    minimum_observed_support_fraction: float = 0.35
+    maximum_surface_residual_relative_rms: float = 0.05
+    maximum_full_silhouette_overlap_fraction: float = 0.60
     world_radius: float = 0.21
     foreground_threshold: float = 0.04
     foreground_temperature: float = 0.01
@@ -67,6 +77,8 @@ class RGBDObservationConfig:
     measurement_position_variance: float = 6.4e-5
     temporal_history_size: int = 16
     temporal_min_samples: int = 16
+    max_missing_rows: int = 0
+    require_latest_valid: bool = True
     temporal_min_dt: float = 1.0e-3
     temporal_velocity_variance_floor: float = 1.0e-6
     temporal_velocity_variance_ceiling: float | None = 1.0e-2
@@ -87,6 +99,8 @@ class RGBDObservationConfig:
             raise ValueError("RGB-D appearance_dim must be a positive integer")
         if self.proposal_count == 2 and self.appearance_dim != 3:
             raise ValueError("two-object RGB-D requires appearance_dim exactly three")
+        if not isinstance(self.bounded_partial_visibility, bool):
+            raise ValueError("RGB-D bounded_partial_visibility must be boolean")
         positive = {
             "world_radius": self.world_radius,
             "foreground_threshold": self.foreground_threshold,
@@ -99,6 +113,11 @@ class RGBDObservationConfig:
             "minimum_silhouette_gap_pixels": self.minimum_silhouette_gap_pixels,
             "minimum_boundary_clearance_pixels": self.minimum_boundary_clearance_pixels,
             "maximum_surface_radius_relative_error": (self.maximum_surface_radius_relative_error),
+            "minimum_observed_support_fraction": self.minimum_observed_support_fraction,
+            "maximum_surface_residual_relative_rms": (self.maximum_surface_residual_relative_rms),
+            "maximum_full_silhouette_overlap_fraction": (
+                self.maximum_full_silhouette_overlap_fraction
+            ),
             "measurement_position_variance": self.measurement_position_variance,
             "temporal_min_dt": self.temporal_min_dt,
             "temporal_velocity_variance_floor": self.temporal_velocity_variance_floor,
@@ -115,6 +134,16 @@ class RGBDObservationConfig:
             raise ValueError(
                 "RGB-D maximum_surface_radius_relative_error must be no greater than one"
             )
+        if self.minimum_observed_support_fraction > 1.0:
+            raise ValueError("RGB-D minimum_observed_support_fraction must be no greater than one")
+        if self.maximum_surface_residual_relative_rms > 1.0:
+            raise ValueError(
+                "RGB-D maximum_surface_residual_relative_rms must be no greater than one"
+            )
+        if self.maximum_full_silhouette_overlap_fraction >= 1.0:
+            raise ValueError(
+                "RGB-D maximum_full_silhouette_overlap_fraction must be smaller than one"
+            )
         if self.chromatic_centre_blend > 1.0:
             raise ValueError("RGB-D chromatic_centre_blend must be no greater than one")
         for name, value in (
@@ -124,9 +153,24 @@ class RGBDObservationConfig:
             if isinstance(value, bool) or not isinstance(value, int) or value < 2:
                 raise ValueError(f"RGB-D {name} must be an integer of at least two")
         if self.temporal_history_size != 16:
-            raise ValueError("the first RGB-D bridge requires exactly 16 history samples")
+            raise ValueError("the analytic RGB-D bridge requires exactly 16 history samples")
         if self.temporal_min_samples != self.temporal_history_size:
             raise ValueError("RGB-D temporal_min_samples must equal temporal_history_size")
+        if (
+            isinstance(self.max_missing_rows, bool)
+            or not isinstance(self.max_missing_rows, int)
+            or self.max_missing_rows not in {0, 1}
+        ):
+            raise ValueError("RGB-D max_missing_rows must be integer zero or one")
+        if self.require_latest_valid is not True:
+            raise ValueError("RGB-D require_latest_valid must be true")
+        if (
+            self.bounded_partial_visibility or self.max_missing_rows > 0
+        ) and self.proposal_count != 2:
+            raise ValueError(
+                "bounded RGB-D partial visibility and missing-row recovery require "
+                "proposal_count two"
+            )
         ceiling = self.temporal_velocity_variance_ceiling
         if ceiling is not None and (
             isinstance(ceiling, bool)
@@ -294,6 +338,14 @@ class RGBDObservationModule(ObservationModule):
                     self.config.maximum_surface_radius_relative_error
                 ),
                 surface_fit_conditioning_limit=self.config.fit_conditioning_limit,
+                bounded_partial_visibility=self.config.bounded_partial_visibility,
+                minimum_observed_support_fraction=(self.config.minimum_observed_support_fraction),
+                maximum_surface_residual_relative_rms=(
+                    self.config.maximum_surface_residual_relative_rms
+                ),
+                maximum_full_silhouette_overlap_fraction=(
+                    self.config.maximum_full_silhouette_overlap_fraction
+                ),
             )
             measured_appearance = rgb.new_zeros(
                 (*measured.appearance.shape[:2], self.config.appearance_dim)
@@ -312,6 +364,21 @@ class RGBDObservationModule(ObservationModule):
                 "boundary_clearance_pixels": measured.boundary_clearance_pixels,
                 "chromatic_world_position": measured.chromatic_world_position,
             }
+            if self.config.bounded_partial_visibility:
+                measurement_diagnostics.update(
+                    {
+                        "surface_fit_residual_relative_rms": (
+                            measured.surface_fit_residual_relative_rms
+                        ),
+                        "observed_support_fraction": measured.observed_support_fraction,
+                        "full_silhouette_radius_pixels": (measured.full_silhouette_radius_pixels),
+                        "full_silhouette_gap_pixels": measured.full_silhouette_gap_pixels,
+                        "full_boundary_clearance_pixels": (measured.full_boundary_clearance_pixels),
+                        "full_silhouette_overlap_fraction": (
+                            measured.full_silhouette_overlap_fraction
+                        ),
+                    }
+                )
         batch, proposals = measured.valid_mask.shape
         if proposals != self.config.proposal_count:
             raise RuntimeError("RGB-D measurement proposal count disagrees with configuration")
@@ -396,6 +463,73 @@ class RGBDObservationModule(ObservationModule):
             .unsqueeze(0)
             .expand(batch, -1)
         )
+        if not self.config.bounded_partial_visibility:
+            result = PredictedMeasurements(
+                modality=self.modality_name,
+                sensor_id=sensor_context.sensor_id,
+                timestamp=belief.timestamp,
+                values=objects.position,
+                log_variance=objects.fast_log_variance[..., position_slice],
+                object_ids=objects.object_id,
+                belief_indices=belief_indices,
+                valid_mask=objects.active,
+                visibility=objects.visibility_logit.sigmoid(),
+                rois=None,
+                appearance=(objects.appearance if self.config.proposal_count == 2 else None),
+                auxiliary={"world_position": objects.position},
+            )
+            result.validate()
+            return result
+        if sensor_context.image_size is None:
+            raise ValueError("RGB-D projection requires SensorContext.image_size")
+        world_from_camera, intrinsics = calibration_tensors(
+            sensor_context.calibration,
+            batch=batch,
+            device=belief.device,
+            dtype=belief.dtype,
+            fallback_world_from_camera=belief.camera.world_from_camera,
+            fallback_intrinsics=belief.camera.intrinsics,
+        )
+        centre, normalised_radius, inverse_depth, camera_position = project_world_points(
+            objects.position,
+            objects.radius,
+            world_from_camera,
+            intrinsics,
+            sensor_context.image_size,
+        )
+        in_front = camera_position[..., 2] > 1.0e-4
+        near_image = (centre.abs() <= 1.0 + normalised_radius.unsqueeze(-1)).all(dim=-1)
+        projectable = (
+            in_front
+            & near_image
+            & torch.isfinite(centre).all(dim=-1)
+            & torch.isfinite(inverse_depth)
+        )
+        height, width = sensor_context.image_size
+        pixel_centres = torch.stack(
+            (
+                0.5 * (centre[..., 0] + 1.0) * max(width - 1, 1),
+                0.5 * (centre[..., 1] + 1.0) * max(height - 1, 1),
+            ),
+            dim=-1,
+        )
+        pixel_radii = normalised_radius * (0.5 * min(height, width))
+        visible_fraction, pairwise_occlusion = depth_ordered_circle_occlusion(
+            pixel_centres,
+            pixel_radii,
+            camera_position[..., 2],
+            objects.active & projectable,
+        )
+        occlusion_fraction = torch.where(
+            objects.active & projectable,
+            (1.0 - visible_fraction).clamp(0.0, 1.0),
+            torch.zeros_like(visible_fraction),
+        )
+        full_occlusion_threshold = RGBProjectorConfig().full_occlusion_visible_fraction
+        fully_occluded = (
+            objects.active & projectable & (visible_fraction <= full_occlusion_threshold)
+        )
+        unobservable = objects.active & (~projectable | fully_occluded)
         result = PredictedMeasurements(
             modality=self.modality_name,
             sensor_id=sensor_context.sensor_id,
@@ -408,7 +542,25 @@ class RGBDObservationModule(ObservationModule):
             visibility=objects.visibility_logit.sigmoid(),
             rois=None,
             appearance=(objects.appearance if self.config.proposal_count == 2 else None),
-            auxiliary={"world_position": objects.position},
+            auxiliary={
+                "world_position": objects.position,
+                "camera_position": camera_position,
+                "world_radius": objects.radius,
+                "world_from_camera": world_from_camera[:, None].expand(
+                    -1,
+                    objects_count,
+                    -1,
+                    -1,
+                ),
+                "intrinsics": intrinsics[:, None].expand(-1, objects_count, -1, -1),
+                "projectable_mask": objects.active & projectable,
+                "visible_fraction": visible_fraction,
+                "occlusion_fraction": occlusion_fraction,
+                "occluded_mask": fully_occluded,
+                "fully_occluded_mask": fully_occluded,
+                "unobservable_mask": unobservable,
+                "pairwise_occlusion_fraction": pairwise_occlusion,
+            },
         )
         result.validate()
         return result
@@ -486,10 +638,18 @@ class RGBDObservationModule(ObservationModule):
             identity,
         )
         inverse_normal = torch.linalg.inv(safe_normal)
-        sample_count = self.config.temporal_history_size
-        degrees_of_freedom = sample_count - 2
-        residual_covariance = fit.residual_covariance * (sample_count / degrees_of_freedom)
-        coefficient_scale = inverse_normal[..., 1, 1] / sample_count
+        if self.config.max_missing_rows == 0:
+            sample_count = self.config.temporal_history_size
+            degrees_of_freedom = sample_count - 2
+            residual_covariance = fit.residual_covariance * (sample_count / degrees_of_freedom)
+            coefficient_scale = inverse_normal[..., 1, 1] / sample_count
+        else:
+            sample_count = fit.support_count.to(dtype=fit.normal_matrix.dtype).clamp_min(3.0)
+            degrees_of_freedom = sample_count - 2.0
+            residual_covariance = (
+                fit.residual_covariance * (sample_count / degrees_of_freedom)[..., None, None]
+            )
+            coefficient_scale = inverse_normal[..., 1, 1] / sample_count
         variance = residual_covariance.diagonal(dim1=-2, dim2=-1) * coefficient_scale.unsqueeze(-1)
         variance = variance.clamp_min(self.config.temporal_velocity_variance_floor)
         if self.config.temporal_velocity_variance_ceiling is not None:
@@ -523,8 +683,10 @@ class RGBDObservationModule(ObservationModule):
             minimum_support=self.config.temporal_min_samples,
             minimum_dt=self.config.temporal_min_dt,
             conditioning_limit=self.config.fit_conditioning_limit,
+            max_missing_rows=self.config.max_missing_rows,
+            require_latest_valid=self.config.require_latest_valid,
         )
-        fit_valid = fit_valid & posterior.objects.active
+        fit_valid = fit_valid & valid & posterior.objects.active
         if not bool(fit_valid.any()):
             return None, resolved
         variance = self._velocity_variance(fit, fit_valid)

@@ -2,6 +2,54 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-27 frozen bounded-partial-visibility/isolated-miss RGB-D rung
+
+- Advanced the authoritative contract to specification 1.57 while retaining
+  simulator `sphere_world_v7` and the accepted exactly-two-visible
+  qualification unchanged. Froze only bounded partial visibility plus exactly
+  one isolated target-local missing-depth observation in the one-miss strata;
+  full occlusion/reappearance, contact, variable count, history-capacity, and
+  learned-capacity generalization remain excluded.
+- Retained exactly two fixed-radius `0.21 m`, fixed-camera, non-contact spheres
+  with known zero gravity and `0.05` drag, composite public RGB-D input, zero
+  learned/optimizer state, and parameter-free analytic rollouts. The
+  sixteen-row WLS path permits at most one invalid target row at frame 15 or
+  16, requires newest frame 17 valid and exactly fifteen target supports, and
+  must recover the same identity on the immediately following frame.
+- Assigned exactly one filter-owned miss-variance increment of
+  `0.08 +/- 1e-6`; the co-object, measurement owner, lifecycle, identity, and
+  global all-`FREE`/no-spurious-miss trace must remain unchanged.
+- Bound config/harness/runner/test/protocol SHA-256
+  `7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`,
+  `99084d9fb421faa8dbe7ef20f7a88ee5e196cce498586c0fae2b92eebddc36d4`,
+  `c97f20638c876045cb25adfe23d39db6daed749e42ab5eed1dea6aacac8dd90f`,
+  `e712f9b6ee1cd8775f8f8a1d07ee0844fe1ac1e8ac73a2a2233c9a231cce892e`,
+  and
+  `e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`.
+- Froze unopened development/selector/confirmation/final ranges
+  `53000000--53000031`, `54000000--54000023`, `55000000--55000023`, and
+  `56000000--56000047`, with pure manifest SHA-256
+  `ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391`,
+  `1b1e6ef6938705bcc7e2a66ad5ee4622860c9ea9ec3e6c19c86e8a8534209b28`,
+  `72d7c922029d300e3d28409bcb55a843633caac10b482f680ae769a442739e9f`,
+  and `70b60f48769a26c5587febf778443fd38f5814a39e80ec7da1c98dea9c389ded`.
+  Cross-split pure scene-signature lists are also frozen and unique.
+- Froze 98 authoritative gate fields and exactly 2,167 finite scalar metrics
+  per eventual split, including pooled/stratum/miss/co-object accuracy,
+  target-region RGB/depth VJPs, exact zero scheduled-miss/cross-scene
+  gradients, global recovery tracing, resources, exact evidence ledgers, and
+  the canonical five-artifact inventory.
+- Passed the seed-free combined source gate at `436 passed in 60.26s`, with
+  Ruff/format/diff clean and two independent audits passing. The full exact
+  current-byte repository suite also passes:
+  `1398 passed, 16 skipped in 487.93s (0:08:07)`. All 53m--56m namespaces
+  remain unopened; no episode, materialized manifest, report, checkpoint,
+  ledger, result, or evidence artifact exists.
+- Fixed the next order as clean committed source -> bind the already-passing
+  complete repository gate to that exact tree -> sole development run ->
+  independent exact-digest audit -> exactly-once selector -> confirmation ->
+  final only if development passes.
+
 ### 2026-08-27 accepted exactly-two-visible RGB-D qualification
 
 - Accepted the frozen architecture-attempt-2 qualification on clean

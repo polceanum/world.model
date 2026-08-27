@@ -458,9 +458,21 @@ class OnlineWorldModel(nn.Module):
                     maximum_surface_radius_relative_error=(
                         rgbd_config.maximum_surface_radius_relative_error
                     ),
+                    bounded_partial_visibility=rgbd_config.bounded_partial_visibility,
+                    minimum_observed_support_fraction=(
+                        rgbd_config.minimum_observed_support_fraction
+                    ),
+                    maximum_surface_residual_relative_rms=(
+                        rgbd_config.maximum_surface_residual_relative_rms
+                    ),
+                    maximum_full_silhouette_overlap_fraction=(
+                        rgbd_config.maximum_full_silhouette_overlap_fraction
+                    ),
                     measurement_position_variance=(rgbd_config.measurement_position_variance),
                     temporal_history_size=rgbd_config.temporal_history_size,
                     temporal_min_samples=rgbd_config.temporal_min_samples,
+                    max_missing_rows=rgbd_config.max_missing_rows,
+                    require_latest_valid=rgbd_config.require_latest_valid,
                     temporal_min_dt=rgbd_config.temporal_min_dt,
                     temporal_velocity_variance_floor=(rgbd_config.temporal_velocity_variance_floor),
                     temporal_velocity_variance_ceiling=(

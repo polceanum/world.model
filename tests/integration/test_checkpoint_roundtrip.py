@@ -1406,9 +1406,21 @@ def test_rgbd_analytic_bridge_fields_are_semantic_with_legacy_disabled_defaults(
     legacy_payload["config"]["model"]["dynamics"].pop("analytic_free_motion_only")
     legacy_payload["config"]["model"]["filter"].pop("enable_learned_corrector")
     legacy_payload["config"]["model"]["filter"].pop("direct_metric_position_update")
+    existing_rgbd_legacy_payload = deepcopy(payload)
+    for field_name in (
+        "bounded_partial_visibility",
+        "minimum_observed_support_fraction",
+        "maximum_surface_residual_relative_rms",
+        "maximum_full_silhouette_overlap_fraction",
+        "max_missing_rows",
+        "require_latest_valid",
+    ):
+        existing_rgbd_legacy_payload["config"]["model"]["rgbd"].pop(field_name)
 
     validate_checkpoint_config(legacy_payload, config)
     validate_training_resume_config(legacy_payload, config)
+    validate_checkpoint_config(existing_rgbd_legacy_payload, config)
+    validate_training_resume_config(existing_rgbd_legacy_payload, config)
 
     rgbd_enabled = replace(
         config,
@@ -1476,6 +1488,58 @@ def test_rgbd_analytic_bridge_fields_are_semantic_with_legacy_disabled_defaults(
         ),
     )
     direct_enabled.validate()
+    partial_enabled = replace(
+        rgbd_enabled,
+        model=replace(
+            rgbd_enabled.model,
+            max_objects=2,
+            state=replace(rgbd_enabled.model.state, appearance_dim=3),
+            rgbd=replace(
+                rgbd_enabled.model.rgbd,
+                proposal_count=2,
+                bounded_partial_visibility=True,
+                max_missing_rows=1,
+            ),
+        ),
+        simulator=replace(
+            rgbd_enabled.simulator,
+            min_objects=2,
+            max_objects=2,
+            ensure_collision=False,
+        ),
+    )
+    partial_enabled.validate()
+    two_object_default = replace(
+        partial_enabled,
+        model=replace(
+            partial_enabled.model,
+            rgbd=replace(
+                partial_enabled.model.rgbd,
+                bounded_partial_visibility=False,
+                max_missing_rows=0,
+            ),
+        ),
+    )
+    two_object_default.validate()
+    two_object_rgbd_legacy_payload = {
+        "config": two_object_default.to_dict(),
+        "simulator_version": SIMULATOR_VERSION,
+    }
+    for field_name in (
+        "bounded_partial_visibility",
+        "minimum_observed_support_fraction",
+        "maximum_surface_residual_relative_rms",
+        "maximum_full_silhouette_overlap_fraction",
+        "max_missing_rows",
+        "require_latest_valid",
+    ):
+        two_object_rgbd_legacy_payload["config"]["model"]["rgbd"].pop(field_name)
+    validate_checkpoint_config(two_object_rgbd_legacy_payload, two_object_default)
+    validate_training_resume_config(two_object_rgbd_legacy_payload, two_object_default)
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(two_object_rgbd_legacy_payload, partial_enabled)
+    with pytest.raises(ValueError, match="model"):
+        validate_training_resume_config(two_object_rgbd_legacy_payload, partial_enabled)
 
     for changed in (
         rgbd_enabled,
@@ -1483,6 +1547,7 @@ def test_rgbd_analytic_bridge_fields_are_semantic_with_legacy_disabled_defaults(
         learned_disabled,
         drag_changed,
         direct_enabled,
+        partial_enabled,
     ):
         with pytest.raises(ValueError, match="model"):
             validate_checkpoint_config(legacy_payload, changed)

@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.56
+**Version:** 1.57
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, exactly-once two-visible-object acceptance, bounded-partial-visibility, isolated-target-depth-miss, immediate-recovery, and pre-development evidence-freeze amendments 27 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -8444,6 +8444,141 @@ After this accepted branch is merged, the next rung may add only bounded
 partial visibility and missed-observation recovery under a separately frozen
 protocol.  No threshold, architecture, or capacity may be tuned on the
 consumed final.
+
+# Part XLVIII — Bounded partial-visibility and isolated-miss source-freeze amendment
+
+## 255. Freeze the pre-development RGB-D recovery qualification
+
+Specification 1.57 preserves the accepted exactly-two-visible qualification
+from section 254 as its historical base and changes one bounded capability.
+The new architecture-attempt-1 family retains exactly two chromatically
+distinct, fixed-radius `0.21 m` spheres, one fixed calibrated camera, known
+gravity `[0.0, 0.0, 0.0]`, known linear drag `0.05`, non-contact free motion,
+one composite public RGB-D packet, and the parameter-free analytic rollout.
+It adds only bounded partial visibility that never becomes full occlusion and,
+in exactly two of four balanced strata, exactly one isolated target-local
+missing-depth observation.  The miss zeros depth only where the target's
+instance-slot region is visible; RGB, calibration, the other object's depth,
+and every non-target depth pixel remain unchanged.  Renderer truth and the
+miss schedule are preflight/scoring controls and never runtime inputs.
+
+The four strata are `separated_no_miss`, `partial_no_miss`,
+`separated_one_miss`, and `partial_one_miss`, assigned by
+`(seed - split_start) % 4`.  Frames `0--17` are ingested, the live temporal
+window is frames `2--17`, the current-state anchor is frame `17`, and the one
+scheduled miss is at frame `15` or `16`.  The sixteen-row differentiable
+free-motion WLS fit permits at most one invalid row, requires the newest row
+valid, uses all sixteen rows in no-miss strata, and requires exactly fifteen
+valid target rows plus sixteen valid co-object rows in one-miss strata.  The
+missed target emits no direct position or velocity evidence on the miss frame.
+The filter alone applies exactly one heuristic missed-state variance increment
+of `0.08` to that target, with tolerance `1e-6`; no duplicate lifecycle or
+co-object inflation is permitted.  The same persistent identity must recover
+on the immediately following frame, with missed-step trace `0 -> 1 -> 0`, no
+birth, death, switch, mismatch, ambiguity, or false miss, and all runtime and
+rollout modes remaining `FREE`.
+
+The frozen byte and canonical-payload bindings are:
+
+- config `configs/rgbd_partial_visibility_recovery_cpu.yaml`, SHA-256
+  `7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`;
+- qualification harness
+  `world_model/training/rgbd_partial_visibility_recovery_qualification.py`,
+  SHA-256
+  `99084d9fb421faa8dbe7ef20f7a88ee5e196cce498586c0fae2b92eebddc36d4`;
+- thin runner `scripts/run_rgbd_partial_visibility_recovery_qualification.py`,
+  SHA-256
+  `c97f20638c876045cb25adfe23d39db6daed749e42ab5eed1dea6aacac8dd90f`;
+- harness tests
+  `tests/unit/test_rgbd_partial_visibility_recovery_qualification.py`,
+  SHA-256
+  `e712f9b6ee1cd8775f8f8a1d07ee0844fe1ac1e8ac73a2a2233c9a231cce892e`;
+  and
+- canonical pre-self-hash `bridge_protocol()` payload SHA-256
+  `e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`.
+
+The simulator protocol remains `sphere_world_v7`.  Any change to the frozen
+bytes or canonical protocol is a new experiment and cannot reuse these
+namespaces.  Pure source arithmetic, without constructing simulator state,
+binds the exact manifests and disjoint scene-parameter signature lists:
+
+| split | exact seed range | manifest SHA-256 | scene-signature-list SHA-256 |
+| --- | --- | --- | --- |
+| development | `53000000--53000031` | `ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391` | `f22a2e26df99edda751d13c383733c447139afe4de840bae64b3e03758155baf` |
+| selector | `54000000--54000023` | `1b1e6ef6938705bcc7e2a66ad5ee4622860c9ea9ec3e6c19c86e8a8534209b28` | `85bf300a1af8547746663a9b10403fa8b3d726533d0f68955c2cad5ecf3a4d75` |
+| confirmation | `55000000--55000023` | `72d7c922029d300e3d28409bcb55a843633caac10b482f680ae769a442739e9f` | `e6319849bb4b4974ceeb6752eadf7235f8e82e47440f0e2b7d1be75191600931` |
+| one-shot final | `56000000--56000047` | `70b60f48769a26c5587febf778443fd38f5814a39e80ec7da1c98dea9c389ded` | `575e4af1694825e40c780c2a64c783232b013bf8432c8fbe76d095180f0c9d5f` |
+
+At this pre-development boundary all four namespaces are unopened.  No
+episode, materialized manifest, report, checkpoint, access ledger, result, or
+other evidence artifact exists for this rung.  The hashes above bind pure seed
+and scene-parameter records only; they are not accuracy evidence.
+
+The protocol exposes `98` authoritative gate fields and requires exactly
+`2,167` finite scalar metrics on every eventual split.  Pooled, stratum,
+partial/separated, miss/no-miss, missed-target, and co-object state gates retain
+current position/velocity RMSE limits `0.010 m`/`0.012 m/s`, position-horizon
+limits `0.011/0.013/0.016/0.022/0.035 m`, future-velocity limit `0.012 m/s`,
+per-object-axis limits `0.014 m`/`0.016 m/s`, maximum growth slope
+`0.015 m/s`, early stationary margin `0.003 m`, long stationary ratio `0.80`,
+and zero-velocity ratio `0.70`.  Geometry must retain at least `0.35` observed
+support, surface-residual relative RMS at most `0.05`, full-silhouette overlap
+at most `0.60`, fitted-radius relative error at most `0.05`, fit condition
+number at most `100`, and at least `2 px` fitted boundary clearance.  Recovery
+must occur in exactly one frame and the global trace must contain no spurious
+miss, lifecycle, identity, or non-`FREE` event.
+
+Fixed-output target-region VJPs are audited separately for RGB and depth,
+object, scene, and output.  Current position reaches anchor frame `17` only;
+all other history gradients are exactly zero.  Current velocity and every
+position/velocity query at `0.10/0.25/0.50/1.00/2.00 s` reach frames `2--17`
+in no-miss/co-object paths.  A missed target has exactly fifteen supported
+history frames and exact zero gradient at its scheduled missing-depth frame;
+frames `0--1` are always exact zero.  Every supported frame and target-visible
+region has VJP L1 at least `1e-8`, total VJP L1 is bounded by
+`1e-8--1e8`, and all cross-scene coupling is exactly zero.  Scene signatures
+must be unique within and across splits.
+
+The parameter-free path must retain zero learned parameters, buffers,
+state-dict entries, optimizer/scheduler/RNG state, optimizer, and updates.
+Perception is limited to `3 s`, the five state-only rollouts to `0.075 s`,
+persistent runtime tensor state to `65,536` bytes, maximum RSS to
+`2,500,000,000` bytes, and RSS delta to `1,000,000,000` bytes.  Semigroup,
+public-query, analytic-agreement, single-position-owner, history-call,
+fail-closed geometry, and exact miss-isolation gates remain authoritative.
+
+Seed-free validation of the frozen files passes `436 passed in 60.26s` in the
+combined gate.  Ruff lint, Ruff format-check, and diff integrity are clean,
+and two independent source/protocol audits pass.  These checks generated no
+episode and supply no accuracy evidence.  The full exact current-byte
+repository suite also passes
+`1398 passed, 16 skipped in 487.93s (0:08:07)`.  This is source-integrity
+evidence only and must be bound to the exact clean committed tree before
+development.
+
+The only permitted evidence inventory is the canonical five files under
+`runs/rgbd_partial_visibility_recovery_v1/`: `development_report.json`,
+`development_model.pt`, `development_attempt_1_access.json`,
+`qualification_report.json`, and `qualification_attempt_1_access.json`.
+Those names define future fresh-path controls; none exists at this freeze.
+The development ledger must record its single authorization before the sole
+development manifest is materialized.  Only an independently audited passing
+development report, empty-state checkpoint, and completed development ledger
+may authorize the protected ledger, which may consume selector -> confirmation
+-> final exactly once and must stop immediately on any failure.  Reports are
+written before terminal ledger digests, aliases and extra artifacts are
+rejected, and ordinary checkpoints still do not serialize live histories.
+
+The next action is exact: commit the clean frozen source/config/tests/runner/
+specification/documentation tree; bind the already-passing complete repository
+gate above to that exact tree; execute the sole development run; obtain an
+independent exact-digest audit; and only if development passes, consume
+selector, confirmation, and final once in that order.  Until then this is a
+source/protocol freeze only.  It makes no claim
+for full occlusion, reappearance after a longer absence, contact or events,
+variable object count, history-capacity generalization, moving cameras,
+variable physics, learned capacity, another modality, tasks/planning, or
+general world-model convergence.
 
 # Closing directive
 

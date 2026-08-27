@@ -7,12 +7,13 @@ The pre-generalization public base was commit
 foundation is GitHub `main` commit
 `08ae63adc5ade2e5061f54539fc7a25564c8c8d6`, and the accepted public RGB-D
 bridge is merged at `3eed0b71e6f18c7036bf376c075493a89d5fdc9f`. Broad heterogeneous training
-remains paused. The active contract is specification 1.56. The accepted base
+remains paused. The active contract is specification 1.57. The accepted base
 now comprises the specification-1.51 differentiable one-sphere unit, the
 qualified standalone two-second RGB-D rung, and its qualified public one-slot
 `OnlineWorldModel` bridge. The accepted branch additionally contains the
 exactly-two-visible RGB-D qualification recorded below—not any older campaign
-checkpoint.
+checkpoint. Specification 1.57 freezes the next bounded rung before
+development; it does not add an accepted accuracy result.
 
 The qualified unit achieved, on its single previously untouched final set:
 
@@ -470,6 +471,73 @@ freeze; no consumed-final tuning is allowed. That merge is now complete:
 GitHub `main` contains the reviewed net tree through
 `1e951520e5a2bf06c1932f64b8334e552247de82`.
 
+## Pre-development freeze: bounded partial visibility and one local depth miss
+
+Specification 1.57 preserves that accepted two-visible result and freezes
+architecture attempt 1 for the next rung. The scope remains exactly two
+fixed-radius `0.21 m`, fixed-camera, non-contact spheres with known zero
+gravity and `0.05` drag, public composite RGB-D input, zero learned or
+optimizer state, and the parameter-free analytic five-horizon rollout. The
+only new conditions are bounded partial visibility that never becomes full
+occlusion and exactly one isolated target-local missing-depth observation at
+frame 15 or 16 in the declared one-miss strata.
+
+Frames `0--17` are ingested and the sixteen-row history uses frames `2--17`
+with frame 17 required valid. No-miss/co-object histories retain 16 valid rows;
+the missed target has exactly 15. The miss changes no RGB, calibration,
+co-object depth, or non-target depth pixel. It emits no target measurement or
+velocity evidence, triggers exactly one filter-owned `0.08 +/- 1e-6`
+miss-variance increment, and must recover the same persistent identity on the
+next frame. The required trace is `0 -> 1 -> 0` missed steps, all-`FREE`, with
+no switch, mismatch, ambiguity, birth, death, false miss, contact, or event.
+
+Frozen config, harness, runner, test, and pre-self-hash protocol SHA-256 values
+are respectively
+`7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`,
+`99084d9fb421faa8dbe7ef20f7a88ee5e196cce498586c0fae2b92eebddc36d4`,
+`c97f20638c876045cb25adfe23d39db6daed749e42ab5eed1dea6aacac8dd90f`,
+`e712f9b6ee1cd8775f8f8a1d07ee0844fe1ac1e8ac73a2a2233c9a231cce892e`,
+and
+`e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`.
+Simulator protocol remains `sphere_world_v7`.
+
+| split | exact seed range | pure manifest SHA-256 |
+| --- | --- | --- |
+| development | `53000000--53000031` | `ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391` |
+| selector | `54000000--54000023` | `1b1e6ef6938705bcc7e2a66ad5ee4622860c9ea9ec3e6c19c86e8a8534209b28` |
+| confirmation | `55000000--55000023` | `72d7c922029d300e3d28409bcb55a843633caac10b482f680ae769a442739e9f` |
+| final | `56000000--56000047` | `70b60f48769a26c5587febf778443fd38f5814a39e80ec7da1c98dea9c389ded` |
+
+Pure scene-parameter signature-list SHA-256 values are development
+`f22a2e26df99edda751d13c383733c447139afe4de840bae64b3e03758155baf`,
+selector `85bf300a1af8547746663a9b10403fa8b3d726533d0f68955c2cad5ecf3a4d75`,
+confirmation
+`e6319849bb4b4974ceeb6752eadf7235f8e82e47440f0e2b7d1be75191600931`,
+and final
+`575e4af1694825e40c780c2a64c783232b013bf8432c8fbe76d095180f0c9d5f`;
+they are unique across splits without episode construction.
+
+The frozen protocol has 98 authoritative gate fields and requires exactly
+2,167 finite scalar metrics per eventual split. It includes pooled/stratum/
+miss/co-object accuracy, exact target-region RGB/depth VJPs with zero gradient
+at the scheduled miss and outside frames `2--17`, exact zero cross-scene
+coupling, pure scene signatures, global all-`FREE`/no-spurious-miss tracing,
+resources, zero-state ownership, exact ledgers, and a canonical five-artifact
+inventory. Seed-free combined validation is `436 passed in 60.26s`; Ruff
+lint, Ruff format-check, and diff integrity are clean, and two independent
+audits pass. The full exact current-byte repository suite also passes:
+`1398 passed, 16 skipped in 487.93s (0:08:07)`.
+
+All development/selector/confirmation/final namespaces remain unopened. No
+episode, materialized manifest, report, checkpoint, ledger, result, or other
+evidence artifact exists. The next action is to commit the exact clean source
+and documentation, bind the already-passing complete repository gate to that
+exact tree, execute the sole development run, and obtain independent digest
+review. Selector -> confirmation -> final may run exactly once only if
+development passes. This is not full-occlusion/reappearance, contact,
+variable-count, history-capacity, learned-capacity, extra-modality,
+task/planning, or general-convergence evidence.
+
 ## Validation state
 
 The pre-failure clean source at commit `8889818619121351d342490786331e854364532c`
@@ -495,6 +563,15 @@ The accepted two-visible-object source retains `43 passed` focused,
 `1275 passed, 16 skipped in 447.29 s` complete, with Ruff/format/diff clean.
 The exact independent qualification audit also passes.
 
+The specification-1.57 partial-visibility/isolated-miss freeze passes the
+seed-free combined source gate at `436 passed in 60.26s`, with Ruff/format/
+diff clean and two independent audits passing. Its full exact current-byte
+repository suite passes
+`1398 passed, 16 skipped in 487.93s (0:08:07)`, and it still has no episode or
+evidence result.
+
 No accepted claim exists beyond the exactly-two-visible non-contact RGB-D
-family; contact, partial visibility, variable count, additional modality,
-planning, and general convergence remain unqualified.
+family. The new bounded partial-visibility protocol is frozen but not yet
+developed or accepted; full occlusion, reappearance, contact, variable count,
+additional modality, planning, learned capacity, and general convergence
+remain unqualified.

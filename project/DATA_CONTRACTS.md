@@ -26,8 +26,14 @@ history length, and `H_img,W_img` image height/width.
   It is sensor-local causal evidence, not physical state.
 - `RGBDTemporalPositionHistory`: persistent IDs plus bounded `[B,N,R]`
   timestamps/sample/valid masks and `[B,N,R,3]` raw metric positions. Invalid
-  sampled-depth rows retain their causal sample position but fail the complete
-  uniform fit closed. The current qualified/frozen RGB-D paths use `R=16`.
+  sampled-depth rows retain their causal sample position. The accepted
+  specification-1.55/1.56 paths require all sixteen valid rows and fail their
+  complete uniform fit closed. The separately frozen specification-1.57
+  partial-visibility path still uses `R=16` but permits at most one scheduled
+  object-local invalid target row, requires the newest row valid, and requires
+  exactly fifteen valid target supports; the co-object remains independently
+  valid with sixteen. The invalid row emits no direct state/velocity evidence,
+  and the filter alone owns its single `0.08` missed-state variance increment.
   This live sensor-local state is not serialized by an ordinary checkpoint.
 - `AbstractionAssignment`: `[B,N]` abstraction kind, routing confidence,
   complexity cost, refinement reason, and active mask. It is derived from

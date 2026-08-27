@@ -1,9 +1,9 @@
-"""Differentiable unordered RGB-D geometry for two visible coloured spheres.
+"""Differentiable unordered RGB-D geometry for two coloured spheres.
 
 This primitive is intentionally narrower than an instance segmenter.  It owns
-the first multi-object rung's declared observable family: exactly two fully
-visible, image-separated spheres with distinct chromatic appearance.  A
-weighted colour-covariance eigenvector supplies symmetric ``+/-`` soft slot
+the first multi-object rung's separated family and an opt-in bounded-partial
+extension: exactly two fixed-radius spheres with distinct chromatic appearance.
+A weighted colour-covariance eigenvector supplies symmetric ``+/-`` soft slot
 logits, so its arbitrary sign can only permute the unordered output set.
 
 No instance map, object ID, simulator state, connected component, or detached
@@ -55,8 +55,14 @@ class TwoDiscRGBDGeometryOutput:
     surface_fit_condition_number: Tensor
     surface_fit_radius: Tensor
     surface_fit_radius_relative_error: Tensor
+    surface_fit_residual_relative_rms: Tensor
+    observed_support_fraction: Tensor
     silhouette_gap_pixels: Tensor
     boundary_clearance_pixels: Tensor
+    full_silhouette_radius_pixels: Tensor
+    full_silhouette_gap_pixels: Tensor
+    full_boundary_clearance_pixels: Tensor
+    full_silhouette_overlap_fraction: Tensor
     chromatic_world_position: Tensor
     slot_logits: Tensor
     provisional_centres: Tensor
@@ -72,14 +78,159 @@ def _positive_finite(name: str, value: float) -> float:
     return resolved
 
 
+def _fraction(name: str, value: float, *, upper_inclusive: bool) -> float:
+    resolved = _positive_finite(name, value)
+    if resolved > 1.0 or (resolved == 1.0 and not upper_inclusive):
+        interval = "(0,1]" if upper_inclusive else "(0,1)"
+        raise ValueError(f"{name} must lie in {interval}")
+    return resolved
+
+
+def _broadcast_world_radius(
+    world_radius: Tensor | float,
+    *,
+    batch: int,
+    slots: int,
+    reference: Tensor,
+) -> Tensor:
+    """Broadcast the declared fixed radius without importing hidden state."""
+
+    if isinstance(world_radius, Tensor):
+        if not world_radius.is_floating_point():
+            raise TypeError("world_radius must be floating point")
+        if world_radius.dtype != reference.dtype:
+            raise TypeError("world_radius and RGB-D evidence must share dtype")
+        if world_radius.device != reference.device:
+            raise ValueError("world_radius and RGB-D evidence must share device")
+    elif isinstance(world_radius, bool) or not isinstance(world_radius, (int, float)):
+        raise TypeError("world_radius must be a floating-point tensor or real scalar")
+    radius = torch.as_tensor(world_radius, dtype=reference.dtype, device=reference.device)
+    if radius.ndim > 0 and radius.shape[-1:] == (1,):
+        radius = radius.squeeze(-1)
+    if radius.ndim == 0:
+        return radius.expand(batch, slots)
+    if radius.shape == (batch,) and slots == 1:
+        return radius.unsqueeze(-1)
+    try:
+        return torch.broadcast_to(radius, (batch, slots))
+    except RuntimeError as error:
+        raise ValueError("world_radius must be broadcastable to [B,S]") from error
+
+
+def _project_full_silhouettes(
+    camera_position: Tensor,
+    radius: Tensor,
+    intrinsics: Tensor,
+    valid_mask: Tensor,
+    *,
+    height: int,
+    width: int,
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
+    """Project fitted fixed-radius spheres and measure conservative overlap.
+
+    The public renderer uses the same mean-focal ``f * radius / z`` apparent
+    radius. Circle-intersection area is normalized by the smaller full disc,
+    so containment is one and separated silhouettes are zero. These values
+    are observation-derived diagnostics and admissibility gates; renderer
+    masks or labels never enter this path.
+    """
+
+    if camera_position.shape[-2:] != (2, 3) or radius.shape != camera_position.shape[:2]:
+        raise ValueError("full-silhouette projection requires [B,2,3] centres and [B,2] radii")
+    dtype = camera_position.dtype
+    epsilon = max(float(torch.finfo(dtype).eps), 1.0e-8)
+    raw_fx = intrinsics[:, 0, 0]
+    raw_fy = intrinsics[:, 1, 1]
+    calibration_valid = (
+        torch.isfinite(intrinsics).all(dim=(-2, -1))
+        & (intrinsics.abs().amax(dim=(-2, -1)) <= MAXIMUM_CALIBRATION_MAGNITUDE)
+        & (raw_fx >= MINIMUM_FOCAL_LENGTH_PIXELS)
+        & (raw_fy >= MINIMUM_FOCAL_LENGTH_PIXELS)
+    )
+    radius_valid = torch.isfinite(radius) & (radius > 0.0) & (radius <= MAXIMUM_METRIC_DISTANCE_M)
+    depth = camera_position[..., 2]
+    projection_valid = (
+        valid_mask
+        & calibration_valid[:, None]
+        & radius_valid
+        & torch.isfinite(camera_position).all(dim=-1)
+        & (depth > radius + epsilon)
+    )
+    safe_depth = torch.where(projection_valid, depth, torch.ones_like(depth))
+    safe_radius = torch.where(projection_valid, radius, torch.ones_like(radius))
+    safe_fx = torch.where(calibration_valid, raw_fx, torch.ones_like(raw_fx))
+    safe_fy = torch.where(calibration_valid, raw_fy, torch.ones_like(raw_fy))
+    safe_cx = torch.where(calibration_valid, intrinsics[:, 0, 2], torch.zeros_like(raw_fx))
+    safe_cy = torch.where(calibration_valid, intrinsics[:, 1, 2], torch.zeros_like(raw_fy))
+    centre_x = safe_fx[:, None] * camera_position[..., 0] / safe_depth + safe_cx[:, None]
+    centre_y = safe_fy[:, None] * camera_position[..., 1] / safe_depth + safe_cy[:, None]
+    centres = torch.stack((centre_x, centre_y), dim=-1)
+    focal = 0.5 * (safe_fx + safe_fy)
+    radius_pixels = focal[:, None] * safe_radius / safe_depth
+    separation = torch.linalg.vector_norm(centres[:, 0] - centres[:, 1], dim=-1)
+    silhouette_gap = separation - radius_pixels.sum(dim=-1)
+    boundary_clearance = torch.stack(
+        (
+            centre_x - radius_pixels,
+            (width - 1) - centre_x - radius_pixels,
+            centre_y - radius_pixels,
+            (height - 1) - centre_y - radius_pixels,
+        ),
+        dim=-1,
+    ).amin(dim=-1)
+
+    radius_first = radius_pixels[:, 0]
+    radius_second = radius_pixels[:, 1]
+    minimum_radius = torch.minimum(radius_first, radius_second).clamp_min(epsilon)
+    safe_separation = separation.clamp_min(epsilon)
+    cosine_first = (safe_separation.square() + radius_first.square() - radius_second.square()) / (
+        2.0 * safe_separation * radius_first.clamp_min(epsilon)
+    )
+    cosine_second = (safe_separation.square() + radius_second.square() - radius_first.square()) / (
+        2.0 * safe_separation * radius_second.clamp_min(epsilon)
+    )
+    partial_area = (
+        radius_first.square() * torch.acos(cosine_first.clamp(-1.0, 1.0))
+        + radius_second.square() * torch.acos(cosine_second.clamp(-1.0, 1.0))
+        - 0.5
+        * (
+            (-safe_separation + radius_first + radius_second)
+            * (safe_separation + radius_first - radius_second)
+            * (safe_separation - radius_first + radius_second)
+            * (safe_separation + radius_first + radius_second)
+        )
+        .clamp_min(0.0)
+        .sqrt()
+    )
+    no_overlap = separation >= radius_first + radius_second
+    containment = separation <= (radius_first - radius_second).abs()
+    intersection_area = torch.where(
+        no_overlap,
+        torch.zeros_like(partial_area),
+        torch.where(containment, math.pi * minimum_radius.square(), partial_area),
+    )
+    overlap_fraction = (intersection_area / (math.pi * minimum_radius.square())).clamp(0.0, 1.0)
+    pair_projection_valid = projection_valid.all(dim=-1)
+    slot_gate = projection_valid.unsqueeze(-1)
+    return (
+        torch.where(slot_gate, centres, torch.zeros_like(centres)),
+        torch.where(projection_valid, radius_pixels, torch.zeros_like(radius_pixels)),
+        torch.where(pair_projection_valid, silhouette_gap, torch.zeros_like(silhouette_gap)),
+        torch.where(projection_valid, boundary_clearance, torch.zeros_like(boundary_clearance)),
+        torch.where(pair_projection_valid, overlap_fraction, torch.ones_like(overlap_fraction)),
+        projection_valid,
+    )
+
+
 def _masked_geometry(
     geometry: SoftDiscGeometryOutput,
-    pair_valid: Tensor,
+    slot_valid: Tensor,
 ) -> SoftDiscGeometryOutput:
-    slot_valid = pair_valid.unsqueeze(-1).expand_as(geometry.valid_mask)
+    if slot_valid.shape != geometry.valid_mask.shape or slot_valid.dtype is not torch.bool:
+        raise ValueError("geometry slot validity must be boolean [B,S]")
     slot_gate = slot_valid.unsqueeze(-1)
     image_gate = slot_valid.unsqueeze(-1).unsqueeze(-1)
-    foreground_gate = pair_valid[:, None, None, None]
+    foreground_gate = slot_valid.any(dim=-1)[:, None, None, None]
     return SoftDiscGeometryOutput(
         centres=torch.where(slot_gate, geometry.centres, torch.zeros_like(geometry.centres)),
         radius_pixels=torch.where(
@@ -115,7 +266,7 @@ def _fit_visible_sphere_surfaces(
     intrinsics: Tensor,
     *,
     conditioning_limit: float,
-) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
     """Fit sphere centres to observable surface points with weighted WLS."""
 
     batch, slots, height, width = masks.shape
@@ -190,11 +341,17 @@ def _fit_visible_sphere_surfaces(
     with torch.no_grad():
         eigenvalues = torch.linalg.eigvalsh(normal.detach())
         condition = eigenvalues[..., -1] / eigenvalues[..., 0].clamp_min(epsilon)
+        radius_admissible = (
+            torch.isfinite(expected_radius.detach())
+            & (expected_radius.detach() > 0.0)
+            & (expected_radius.detach() <= MAXIMUM_METRIC_DISTANCE_M)
+        )
         fit_admissible = (
             torch.isfinite(eigenvalues).all(dim=-1)
             & (eigenvalues[..., 0] > epsilon)
             & (condition <= conditioning_limit)
             & (support.detach() >= 4.0)
+            & radius_admissible
             & calibration_finite[:, None]
         )
     safe_normal = torch.where(
@@ -256,10 +413,13 @@ def _fit_visible_sphere_surfaces(
         camera_centre = camera_centre + step
         fit_admissible = iteration_admissible
     world_centre = camera_to_world(camera_centre, safe_transform)
-    residual_radius = torch.linalg.vector_norm(
-        points[:, None] - camera_centre[:, :, None, None],
-        dim=-1,
+    diagnostic_delta = points[:, None] - camera_centre[:, :, None, None]
+    diagnostic_delta = torch.where(
+        fit_admissible[:, :, None, None, None],
+        diagnostic_delta,
+        torch.ones_like(diagnostic_delta),
     )
+    residual_radius = torch.linalg.vector_norm(diagnostic_delta, dim=-1)
     fitted_radius = (
         torch.einsum(
             "bshw,bshw->bs",
@@ -268,6 +428,17 @@ def _fit_visible_sphere_surfaces(
         )
         / safe_support
     )
+    residual_mean_square = (
+        torch.einsum(
+            "bshw,bshw->bs",
+            weights,
+            (residual_radius - safe_radius[:, :, None, None]).square(),
+        )
+        / safe_support
+    ).clamp_min(0.0)
+    # The epsilon-squared floor has negligible diagnostic scale but prevents
+    # the undefined derivative of ``sqrt(0)`` on an invalid or exact-fit row.
+    residual_rms = (residual_mean_square + epsilon**2).sqrt()
     valid = fit_admissible & torch.isfinite(camera_centre.detach()).all(dim=-1)
     value_gate = valid.unsqueeze(-1)
     return (
@@ -279,6 +450,8 @@ def _fit_visible_sphere_surfaces(
             maximum_condition.to(dtype),
             torch.zeros_like(maximum_condition, dtype=dtype),
         ),
+        torch.where(valid, residual_rms, torch.zeros_like(residual_rms)),
+        torch.where(valid, support, torch.zeros_like(support)),
         valid,
     )
 
@@ -301,12 +474,18 @@ def two_disc_geometry_from_rgbd(
     minimum_boundary_clearance_pixels: float = 2.0,
     maximum_surface_radius_relative_error: float = 0.05,
     surface_fit_conditioning_limit: float = 100.0,
+    bounded_partial_visibility: bool = False,
+    minimum_observed_support_fraction: float = 0.35,
+    maximum_surface_residual_relative_rms: float = 0.05,
+    maximum_full_silhouette_overlap_fraction: float = 0.60,
 ) -> TwoDiscRGBDGeometryOutput:
-    """Recover two unordered sphere centres from separated RGB-D evidence.
+    """Recover two unordered sphere centres from bounded RGB-D evidence.
 
     The fixed ``world_radius`` is the same explicit checkpointed prior as the
     accepted one-object bridge.  Radius estimation is deliberately deferred to
-    a later scale-identification rung.
+    a later scale-identification rung. The opt-in partial-visibility branch
+    uses chromatic ownership of visible depth surfaces and a fitted full-disc
+    projection; the default separated branch is unchanged.
     """
 
     if image.ndim != 4 or image.shape[1] != 3:
@@ -317,6 +496,20 @@ def two_disc_geometry_from_rgbd(
         raise ValueError("two-disc depth must have shape [B,1,H,W]")
     if depth.dtype != image.dtype or depth.device != image.device:
         raise ValueError("two-disc RGB and depth must share dtype and device")
+    if not isinstance(bounded_partial_visibility, bool):
+        raise TypeError("bounded_partial_visibility must be boolean")
+    if bounded_partial_visibility:
+        batch = image.shape[0]
+        if world_from_camera.shape != (batch, 4, 4):
+            raise ValueError("world_from_camera must have shape [B,4,4]")
+        if intrinsics.shape != (batch, 3, 3):
+            raise ValueError("intrinsics must have shape [B,3,3]")
+        if not world_from_camera.is_floating_point() or not intrinsics.is_floating_point():
+            raise TypeError("camera calibration must be floating point")
+        if world_from_camera.dtype != image.dtype or intrinsics.dtype != image.dtype:
+            raise TypeError("RGB-D evidence and calibration must share dtype")
+        if world_from_camera.device != image.device or intrinsics.device != image.device:
+            raise ValueError("RGB-D evidence and calibration must share device")
 
     slot_temperature = _positive_finite("chromatic_temperature", chromatic_temperature)
     minimum_gap = _positive_finite(
@@ -353,6 +546,21 @@ def two_disc_geometry_from_rgbd(
     )
     if surface_conditioning_limit <= 1.0:
         raise ValueError("surface_fit_conditioning_limit must be greater than one")
+    minimum_support_fraction = _fraction(
+        "minimum_observed_support_fraction",
+        minimum_observed_support_fraction,
+        upper_inclusive=True,
+    )
+    maximum_residual_rms = _fraction(
+        "maximum_surface_residual_relative_rms",
+        maximum_surface_residual_relative_rms,
+        upper_inclusive=True,
+    )
+    maximum_overlap_fraction = _fraction(
+        "maximum_full_silhouette_overlap_fraction",
+        maximum_full_silhouette_overlap_fraction,
+        upper_inclusive=False,
+    )
     required_mass = _positive_finite("minimum_mass", minimum_mass)
 
     foreground = soft_disc_geometry_from_rgb(
@@ -409,34 +617,39 @@ def two_disc_geometry_from_rgbd(
         foreground_temperature=foreground_temperature,
         minimum_mass=minimum_mass,
     )
-    centre_x = 0.5 * (provisional_geometry.centres[..., 0] + 1.0) * (width - 1)
-    centre_y = 0.5 * (provisional_geometry.centres[..., 1] + 1.0) * (height - 1)
-    y_pixel, x_pixel = torch.meshgrid(
-        torch.arange(height, dtype=image.dtype, device=image.device),
-        torch.arange(width, dtype=image.dtype, device=image.device),
-        indexing="ij",
-    )
-    distance_squared = (x_pixel - centre_x[..., None, None]).square() + (
-        y_pixel - centre_y[..., None, None]
-    ).square()
-    spatial_score = (distance_squared[:, 1] - distance_squared[:, 0]) / image.new_tensor(
-        spatial_temperature**2
-    )
-    raw_slot_logits = torch.stack((spatial_score, -spatial_score), dim=1)
-    geometry = soft_disc_geometry_from_rgb(
-        image,
-        raw_slot_logits,
-        foreground_threshold=foreground_threshold,
-        foreground_temperature=foreground_temperature,
-        minimum_mass=minimum_mass,
-    )
-    metric = metric_sphere_centres_from_surface_depth(
-        geometry.centres,
-        depth,
-        world_radius,
-        world_from_camera,
-        intrinsics,
-    )
+    if bounded_partial_visibility:
+        geometry = provisional_geometry
+        selected_slot_logits = chromatic_slot_logits
+        # The sign of the symmetric chromatic score is the parameter-free
+        # ownership boundary. Retain ordinary ReLU derivatives on its owning
+        # side while removing the low-probability cross-colour tails that can
+        # mix the front sphere's depth surface into the rear sphere fit.
+        chromatic_owner_strength = F.relu(2.0 * chromatic_slot_logits.sigmoid() - 1.0)
+        surface_masks = probability[:, None] * chromatic_owner_strength
+    else:
+        centre_x = 0.5 * (provisional_geometry.centres[..., 0] + 1.0) * (width - 1)
+        centre_y = 0.5 * (provisional_geometry.centres[..., 1] + 1.0) * (height - 1)
+        y_pixel, x_pixel = torch.meshgrid(
+            torch.arange(height, dtype=image.dtype, device=image.device),
+            torch.arange(width, dtype=image.dtype, device=image.device),
+            indexing="ij",
+        )
+        distance_squared = (x_pixel - centre_x[..., None, None]).square() + (
+            y_pixel - centre_y[..., None, None]
+        ).square()
+        spatial_score = (distance_squared[:, 1] - distance_squared[:, 0]) / image.new_tensor(
+            spatial_temperature**2
+        )
+        raw_slot_logits = torch.stack((spatial_score, -spatial_score), dim=1)
+        geometry = soft_disc_geometry_from_rgb(
+            image,
+            raw_slot_logits,
+            foreground_threshold=foreground_threshold,
+            foreground_temperature=foreground_temperature,
+            minimum_mass=minimum_mass,
+        )
+        selected_slot_logits = raw_slot_logits
+        surface_masks = geometry.effective_masks
     # Preserve a small, explicit RGB-centre owner in the deployed metric
     # estimate.  The exact fixed-radius surface fit below is intentionally
     # nearly invariant to mask weights on noiseless spheres, so without this
@@ -470,14 +683,6 @@ def two_disc_geometry_from_rgbd(
     provisional_pixel_y = 0.5 * (provisional_geometry.centres[..., 1] + 1.0) * (height - 1)
     provisional_ray_x = (provisional_pixel_x - safe_cx[:, None]) / safe_fx[:, None]
     provisional_ray_y = (provisional_pixel_y - safe_cy[:, None]) / safe_fy[:, None]
-    chromatic_camera_position = torch.stack(
-        (
-            provisional_ray_x * metric.centre_depth,
-            provisional_ray_y * metric.centre_depth,
-            metric.centre_depth,
-        ),
-        dim=-1,
-    )
     transform_valid = torch.isfinite(world_from_camera).all(dim=(-2, -1)) & (
         world_from_camera.abs().amax(dim=(-2, -1)) <= MAXIMUM_CALIBRATION_MAGNITUDE
     )
@@ -486,29 +691,65 @@ def two_disc_geometry_from_rgbd(
         world_from_camera,
         torch.eye(4, dtype=image.dtype, device=image.device).expand(batch, -1, -1),
     )
-    chromatic_world_position = camera_to_world(chromatic_camera_position, safe_transform)
-    expected_radius = (metric.centre_depth - metric.surface_depth) * torch.sqrt(
-        1.0 + metric.ray_xy.square().sum(dim=-1)
-    )
+    if bounded_partial_visibility:
+        expected_radius = _broadcast_world_radius(
+            world_radius,
+            batch=batch,
+            slots=2,
+            reference=image,
+        )
+    else:
+        metric = metric_sphere_centres_from_surface_depth(
+            geometry.centres,
+            depth,
+            world_radius,
+            world_from_camera,
+            intrinsics,
+        )
+        chromatic_camera_position = torch.stack(
+            (
+                provisional_ray_x * metric.centre_depth,
+                provisional_ray_y * metric.centre_depth,
+                metric.centre_depth,
+            ),
+            dim=-1,
+        )
+        chromatic_world_position = camera_to_world(chromatic_camera_position, safe_transform)
+        expected_radius = (metric.centre_depth - metric.surface_depth) * torch.sqrt(
+            1.0 + metric.ray_xy.square().sum(dim=-1)
+        )
     (
         fitted_world_position,
         fitted_camera_position,
         fitted_radius,
         fit_condition,
+        surface_residual_rms,
+        surface_support,
         surface_fit_valid,
     ) = _fit_visible_sphere_surfaces(
         depth,
-        geometry.effective_masks,
+        surface_masks,
         expected_radius,
         world_from_camera,
         intrinsics,
         conditioning_limit=surface_conditioning_limit,
     )
+    if bounded_partial_visibility:
+        fitted_depth = fitted_camera_position[..., 2]
+        chromatic_camera_position = torch.stack(
+            (
+                provisional_ray_x * fitted_depth,
+                provisional_ray_y * fitted_depth,
+                fitted_depth,
+            ),
+            dim=-1,
+        )
+        chromatic_world_position = camera_to_world(chromatic_camera_position, safe_transform)
 
-    appearance_mass = geometry.effective_masks.sum(dim=(-2, -1)).clamp_min(epsilon)
+    appearance_mass = surface_masks.sum(dim=(-2, -1)).clamp_min(epsilon)
     appearance = torch.einsum(
         "bshw,bchw->bsc",
-        geometry.effective_masks,
+        surface_masks,
         chromaticity,
     ) / appearance_mass.unsqueeze(-1)
     appearance = F.normalize(appearance, dim=-1, eps=epsilon)
@@ -521,6 +762,36 @@ def two_disc_geometry_from_rgbd(
     radius_relative_error = (fitted_radius - expected_radius).abs() / expected_radius.clamp_min(
         epsilon
     )
+    residual_relative_rms = surface_residual_rms / expected_radius.clamp_min(epsilon)
+    (
+        full_centres_pixels,
+        full_radius_pixels,
+        full_silhouette_gap_pixels,
+        full_boundary_clearance_pixels,
+        full_silhouette_overlap_fraction,
+        full_projection_valid,
+    ) = _project_full_silhouettes(
+        fitted_camera_position,
+        expected_radius,
+        intrinsics,
+        surface_fit_valid,
+        height=height,
+        width=width,
+    )
+    del full_centres_pixels
+    full_disc_area = math.pi * full_radius_pixels.square()
+    observed_support_fraction = (surface_support / full_disc_area.clamp_min(epsilon)).clamp(
+        0.0, 1.0
+    )
+    fitted_depth = fitted_camera_position[..., 2]
+    safe_fitted_depth = fitted_depth.clamp_min(epsilon)
+    fitted_ray_xy = fitted_camera_position[..., :2] / safe_fitted_depth.unsqueeze(-1)
+    fitted_ray_norm = torch.sqrt(1.0 + fitted_ray_xy.square().sum(dim=-1))
+    fitted_surface_depth = fitted_depth - expected_radius / fitted_ray_norm
+    reported_surface_depth = (
+        fitted_surface_depth if bounded_partial_visibility else metric.surface_depth
+    )
+    reported_centre_depth = fitted_depth if bounded_partial_visibility else metric.centre_depth
     refined_centre_x = 0.5 * (geometry.centres[..., 0] + 1.0) * (width - 1)
     refined_centre_y = 0.5 * (geometry.centres[..., 1] + 1.0) * (height - 1)
     refined_centres_pixels = torch.stack((refined_centre_x, refined_centre_y), dim=-1)
@@ -544,17 +815,39 @@ def two_disc_geometry_from_rgbd(
         & (silhouette_gap_pixels.detach() >= minimum_silhouette_gap)
         & (boundary_clearance_pixels.detach() >= minimum_boundary_clearance)
     )
-    pair_valid = (
-        spectral_admissible
-        & observable_separation_admissible
-        & geometry.valid_mask.all(dim=-1)
-        & metric.valid_mask.all(dim=-1)
-        & surface_fit_valid.all(dim=-1)
-        & (radius_relative_error.detach() <= maximum_radius_error).all(dim=-1)
-        & torch.isfinite(appearance.detach()).all(dim=(-2, -1))
-        & (appearance_separation.detach() > 0.0)
-    )
-    slot_valid = pair_valid.unsqueeze(-1).expand(batch, 2)
+    if bounded_partial_visibility:
+        both_projected = full_projection_valid.all(dim=-1)
+        overlap_admissible = ~both_projected | (
+            torch.isfinite(full_silhouette_overlap_fraction.detach())
+            & (full_silhouette_overlap_fraction.detach() <= maximum_overlap_fraction)
+        )
+        slot_valid = (
+            spectral_admissible.unsqueeze(-1)
+            & geometry.valid_mask
+            & surface_fit_valid
+            & full_projection_valid
+            & (radius_relative_error.detach() <= maximum_radius_error)
+            & (residual_relative_rms.detach() <= maximum_residual_rms)
+            & (observed_support_fraction.detach() >= minimum_support_fraction)
+            & torch.isfinite(full_boundary_clearance_pixels.detach())
+            & (full_boundary_clearance_pixels.detach() >= minimum_boundary_clearance)
+            & torch.isfinite(appearance.detach()).all(dim=-1)
+            & (appearance_separation.detach() > 0.0).unsqueeze(-1)
+            & overlap_admissible.unsqueeze(-1)
+        )
+        pair_valid = slot_valid.all(dim=-1)
+    else:
+        pair_valid = (
+            spectral_admissible
+            & observable_separation_admissible
+            & geometry.valid_mask.all(dim=-1)
+            & metric.valid_mask.all(dim=-1)
+            & surface_fit_valid.all(dim=-1)
+            & (radius_relative_error.detach() <= maximum_radius_error).all(dim=-1)
+            & torch.isfinite(appearance.detach()).all(dim=(-2, -1))
+            & (appearance_separation.detach() > 0.0)
+        )
+        slot_valid = pair_valid.unsqueeze(-1).expand(batch, 2)
     value_gate = slot_valid.unsqueeze(-1)
     blended_world_position = (
         1.0 - resolved_chromatic_blend
@@ -562,16 +855,26 @@ def two_disc_geometry_from_rgbd(
     blended_camera_position = (
         1.0 - resolved_chromatic_blend
     ) * fitted_camera_position + resolved_chromatic_blend * chromatic_camera_position
-    masked_geometry = _masked_geometry(geometry, pair_valid)
+    masked_geometry = _masked_geometry(geometry, slot_valid)
     differentiable_gap = eigenvalues[:, -1] - eigenvalues[:, -2]
     gap_confidence = differentiable_gap / (differentiable_gap + image.new_tensor(minimum_gap))
-    confidence = (geometry.confidence * metric.depth_support * gap_confidence.unsqueeze(-1)).clamp(
-        0.0, 1.0
+    if bounded_partial_visibility:
+        confidence = (
+            geometry.confidence
+            * observed_support_fraction.clamp(0.0, 1.0)
+            * gap_confidence.unsqueeze(-1)
+        ).clamp(0.0, 1.0)
+    else:
+        confidence = (
+            geometry.confidence * metric.depth_support * gap_confidence.unsqueeze(-1)
+        ).clamp(0.0, 1.0)
+    logit_gate = (
+        slot_valid[:, :, None, None]
+        if bounded_partial_visibility
+        else pair_valid[:, None, None, None]
     )
     slot_logits = torch.where(
-        pair_valid[:, None, None, None],
-        raw_slot_logits,
-        torch.zeros_like(raw_slot_logits),
+        logit_gate, selected_slot_logits, torch.zeros_like(selected_slot_logits)
     )
 
     return TwoDiscRGBDGeometryOutput(
@@ -590,13 +893,13 @@ def two_disc_geometry_from_rgbd(
         appearance=torch.where(value_gate, appearance, torch.zeros_like(appearance)),
         surface_depth=torch.where(
             slot_valid,
-            metric.surface_depth,
-            torch.zeros_like(metric.surface_depth),
+            reported_surface_depth,
+            torch.zeros_like(reported_surface_depth),
         ),
         centre_depth=torch.where(
             slot_valid,
-            metric.centre_depth,
-            torch.zeros_like(metric.centre_depth),
+            reported_centre_depth,
+            torch.zeros_like(reported_centre_depth),
         ),
         confidence=torch.where(slot_valid, confidence, torch.zeros_like(confidence)),
         valid_mask=slot_valid,
@@ -621,6 +924,16 @@ def two_disc_geometry_from_rgbd(
             radius_relative_error,
             torch.zeros_like(radius_relative_error),
         ),
+        surface_fit_residual_relative_rms=torch.where(
+            slot_valid,
+            residual_relative_rms,
+            torch.zeros_like(residual_relative_rms),
+        ),
+        observed_support_fraction=torch.where(
+            slot_valid,
+            observed_support_fraction,
+            torch.zeros_like(observed_support_fraction),
+        ),
         silhouette_gap_pixels=torch.where(
             torch.isfinite(silhouette_gap_pixels),
             silhouette_gap_pixels,
@@ -631,6 +944,26 @@ def two_disc_geometry_from_rgbd(
             boundary_clearance_pixels,
             torch.zeros_like(boundary_clearance_pixels),
         ),
+        full_silhouette_radius_pixels=torch.where(
+            slot_valid,
+            full_radius_pixels,
+            torch.zeros_like(full_radius_pixels),
+        ),
+        full_silhouette_gap_pixels=torch.where(
+            pair_valid,
+            full_silhouette_gap_pixels,
+            torch.zeros_like(full_silhouette_gap_pixels),
+        ),
+        full_boundary_clearance_pixels=torch.where(
+            slot_valid,
+            full_boundary_clearance_pixels,
+            torch.zeros_like(full_boundary_clearance_pixels),
+        ),
+        full_silhouette_overlap_fraction=torch.where(
+            pair_valid,
+            full_silhouette_overlap_fraction,
+            torch.zeros_like(full_silhouette_overlap_fraction),
+        ),
         chromatic_world_position=torch.where(
             value_gate,
             chromatic_world_position,
@@ -638,7 +971,7 @@ def two_disc_geometry_from_rgbd(
         ),
         slot_logits=slot_logits,
         provisional_centres=torch.where(
-            pair_valid[:, None, None],
+            value_gate,
             provisional_geometry.centres,
             torch.zeros_like(provisional_geometry.centres),
         ),

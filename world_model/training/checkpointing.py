@@ -316,6 +316,15 @@ def _model_checkpoint_semantics(value: object) -> object:
             "maximum_surface_radius_relative_error",
             rgbd_defaults.maximum_surface_radius_relative_error,
         )
+        for field_name in (
+            "bounded_partial_visibility",
+            "minimum_observed_support_fraction",
+            "maximum_surface_residual_relative_rms",
+            "maximum_full_silhouette_overlap_fraction",
+            "max_missing_rows",
+            "require_latest_valid",
+        ):
+            normalized_rgbd.setdefault(field_name, getattr(rgbd_defaults, field_name))
         normalized_rgbd.setdefault("linear_drag", rgbd_defaults.linear_drag)
         model["rgbd"] = normalized_rgbd
     rgb = model.get("rgb")

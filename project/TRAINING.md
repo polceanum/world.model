@@ -465,8 +465,53 @@ not OS-enforced WORM storage.
 Final is consumed. Do not run development or qualification again, and do not
 tune any threshold, architecture, or capacity against it. The reviewed tree is
 merged to GitHub `main` through
-`1e951520e5a2bf06c1932f64b8334e552247de82`; only a newly frozen bounded
-partial-visibility and missed-observation-recovery rung
-may proceed. It must retain exactly two objects, fixed camera/physics,
-non-contact motion, the parameter-free analytic rollout, and every accepted
-lower-rung gate.
+`1e951520e5a2bf06c1932f64b8334e552247de82`; the separately frozen bounded
+partial-visibility and missed-observation-recovery rung follows below. It
+retains exactly two objects, fixed camera/physics, non-contact motion, the
+parameter-free analytic rollout, and every accepted lower-rung gate.
+
+## Frozen partial-visibility recovery workflow — development not run
+
+Specification 1.57 freezes architecture attempt 1 before any episode access.
+The public parameter-free RGB-D path keeps exactly two fixed-radius,
+fixed-camera, non-contact spheres with known gravity/drag. It adds bounded
+partial visibility and exactly one target-local missing-depth observation at
+frame 15 or 16 in the one-miss strata. Sixteen WLS rows permit at most that one
+invalid row, require frame 17 valid, and retain fifteen missed-target supports.
+Exactly one filter-owned `0.08 +/- 1e-6` miss-variance increment must be
+followed by immediate next-frame same-ID recovery and an otherwise unchanged
+all-`FREE` trace. Full occlusion/reappearance, contact, variable count, and
+capacity generalization are outside the workflow.
+
+Frozen config/harness/runner/test/protocol SHA-256 values are
+`7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`,
+`99084d9fb421faa8dbe7ef20f7a88ee5e196cce498586c0fae2b92eebddc36d4`,
+`c97f20638c876045cb25adfe23d39db6daed749e42ab5eed1dea6aacac8dd90f`,
+`e712f9b6ee1cd8775f8f8a1d07ee0844fe1ac1e8ac73a2a2233c9a231cce892e`,
+and
+`e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`.
+The simulator remains `sphere_world_v7`.
+
+| split | exact seeds | pure manifest SHA-256 |
+| --- | --- | --- |
+| development | `53000000--53000031` | `ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391` |
+| selector | `54000000--54000023` | `1b1e6ef6938705bcc7e2a66ad5ee4622860c9ea9ec3e6c19c86e8a8534209b28` |
+| confirmation | `55000000--55000023` | `72d7c922029d300e3d28409bcb55a843633caac10b482f680ae769a442739e9f` |
+| final | `56000000--56000047` | `70b60f48769a26c5587febf778443fd38f5814a39e80ec7da1c98dea9c389ded` |
+
+The protocol requires cross-split unique pure scene signatures, 98
+authoritative gate fields, exactly 2,167 finite scalar metrics per eventual
+split, target-region RGB/depth VJPs, exact zero scheduled-miss and cross-scene
+gradients, global all-`FREE`/no-spurious-miss tracing, exact ledgers, and the
+canonical five artifacts. Seed-free combined validation is
+`436 passed in 60.26s`; Ruff/format/diff and two independent audits pass. The
+full exact current-byte repository suite also passes:
+`1398 passed, 16 skipped in 487.93s (0:08:07)`.
+
+All four namespaces remain unopened, and none of the five canonical evidence
+files exists. The only permitted next order is: commit the exact clean source
+and documentation; bind the complete repository gate already passed above to
+that exact tree; execute the sole development phase; independently audit the
+exact report/checkpoint/development-ledger digests; then, only if that passes,
+execute selector -> confirmation -> final exactly once under the protected
+ledger. Do not run an episode command before that boundary.

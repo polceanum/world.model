@@ -168,6 +168,27 @@ only next capability after the completed GitHub `main` fast-forward through
 `1e951520e5a2bf06c1932f64b8334e552247de82`; variable count, contact, camera
 motion, and learned capacity remain closed.
 
+Specification 1.57 freezes the next extension without changing that accepted
+base. The same parameter-free public RGB-D path admits bounded partial
+silhouette overlap and one scheduled object-local missing-depth row while
+retaining exactly two objects, fixed camera/physics, and non-contact motion.
+Each slot's surface fit is independently valid from observed RGB-D support;
+pair validity remains the conjunction needed by the public two-slot update.
+The live frames `2--17` form a sixteen-row WLS history that permits at most one
+invalid target row, requires the newest row valid, and emits velocity from
+exactly fifteen target supports after a miss. The filter is the only miss-
+uncertainty owner and applies one `0.08` increment; the same identity must
+recover on the next frame without birth/death or a non-`FREE` mode.
+
+The frozen differentiability audit targets RGB and depth only in the relevant
+object region. Current position reaches frame 17 only; temporal outputs reach
+all live no-miss/co-object rows and all fifteen valid missed-target rows, with
+exact zero at the scheduled miss, frames 0--1, and every cross-scene input.
+Renderer visibility and instance truth remain constructor/preflight controls,
+not runtime inputs. This is a source/protocol freeze with unopened 53m--56m
+namespaces and no evidence artifact—not acceptance of partial visibility, full
+occlusion/reappearance, contact, variable count, or added capacity.
+
 Evaluation seed manifests are explicit. `fresh_validation` starts after the
 checkpoint's trainer-validation episodes by default; `--seed-offset` can select
 a later disjoint range for a one-time confirmation. Both are asserted disjoint

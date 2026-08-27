@@ -310,20 +310,57 @@ The exact final audit passes; it did not reopen raw protected episodes.
 Owner-writable evidence is tamper-evident rather than OS-enforced WORM storage.
 Final is consumed and cannot be rerun or tuned against.
 
-### 5. Partial visibility and missed-observation recovery — next after completed merge
+### 5. Bounded partial visibility and one local depth miss — frozen before development
 
 The reviewed two-visible tree was fast-forwarded to GitHub `main` through
 `1e951520e5a2bf06c1932f64b8334e552247de82`.
 
-Retain exactly two fixed-radius objects, fixed camera and physical parameters,
-non-contact free motion, RGB-D input, and the accepted parameter-free analytic
-rollout. Add only bounded partial visibility and isolated missed observations.
-Before access, freeze visible-fraction strata, miss length/placement,
-association coverage, identity switches/mismatches, reacquisition latency,
-post-recovery current/five-horizon state error, VJPs, memory, and throughput on
-new disjoint manifests. Do not add variable count, contact, learned capacity,
-camera motion, or another modality, and never tune on the consumed rung-4
-final.
+Specification 1.57 now freezes architecture attempt 1 while retaining exactly
+two fixed-radius `0.21 m` objects, fixed camera, known zero gravity and `0.05`
+drag, non-contact free motion, composite public RGB-D input, and the accepted
+parameter-free analytic rollout. The only new conditions are bounded partial
+visibility that never reaches full occlusion and exactly one isolated
+target-local missing-depth observation at frame 15 or 16 in the declared
+one-miss strata.
+
+The sixteen-row differentiable WLS history uses frames `2--17`, permits at
+most one invalid row, requires newest frame 17 valid, and must retain exactly
+fifteen missed-target supports while the co-object retains sixteen. The miss
+has no target measurement or velocity evidence and exactly one filter-owned
+`0.08 +/- 1e-6` variance increment. Recovery is the immediately following
+frame with the same persistent identity, missed-step trace `0 -> 1 -> 0`, and
+no switch, mismatch, ambiguity, birth, death, false miss, contact, event, or
+non-`FREE` mode.
+
+Config/harness/runner/test/protocol SHA-256 values are
+`7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`,
+`99084d9fb421faa8dbe7ef20f7a88ee5e196cce498586c0fae2b92eebddc36d4`,
+`c97f20638c876045cb25adfe23d39db6daed749e42ab5eed1dea6aacac8dd90f`,
+`e712f9b6ee1cd8775f8f8a1d07ee0844fe1ac1e8ac73a2a2233c9a231cce892e`,
+and
+`e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`.
+Development/selector/confirmation/final ranges are 53m/54m/55m/56m, with
+manifest SHA-256
+`ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391`,
+`1b1e6ef6938705bcc7e2a66ad5ee4622860c9ea9ec3e6c19c86e8a8534209b28`,
+`72d7c922029d300e3d28409bcb55a843633caac10b482f680ae769a442739e9f`,
+and `70b60f48769a26c5587febf778443fd38f5814a39e80ec7da1c98dea9c389ded`.
+
+The 98 authoritative gate fields require exactly 2,167 finite scalar metrics
+per eventual split, cross-split unique pure scene signatures, target-region
+RGB/depth VJPs with zero scheduled-miss/cross-scene gradients, exact recovery
+traces, resources, ledgers, and the canonical five-artifact inventory.
+Seed-free combined validation passes `436 passed in 60.26s`, Ruff/format/diff
+are clean, and two independent audits pass. The full exact current-byte
+repository suite also passes:
+`1398 passed, 16 skipped in 487.93s (0:08:07)`. Every namespace is unopened and
+no evidence artifact exists. Commit the exact clean tree, bind the
+already-passing complete gate to it, run development once, and obtain
+independent audit before exactly-once selector -> confirmation -> final.
+
+This freeze is not rung acceptance. Do not add full occlusion/reappearance,
+variable count, history-capacity or learned-capacity scaling, contact, camera
+motion, another modality, or tuning against the consumed rung-4 final.
 
 ### 6. Observable nuisance variables and additional useful modalities
 

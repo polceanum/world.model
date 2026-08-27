@@ -82,6 +82,15 @@ def test_filter_is_single_authority_for_missed_track_uncertainty() -> None:
         prior_variance[0, 1],
     )
 
+    lifecycle_posterior = ObjectLifecycle().update_visibility(
+        posterior,
+        observed_mask=torch.tensor([[False, False]]),
+    )
+    torch.testing.assert_close(
+        lifecycle_posterior.objects.fast_log_variance,
+        posterior.objects.fast_log_variance,
+    )
+
 
 def test_oracle_position_update_reduces_error_without_resetting_identity() -> None:
     factory = BeliefFactory(max_objects=2, appearance_dim=4)

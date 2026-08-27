@@ -199,10 +199,10 @@ class RGBConfig:
 class RGBDConfig:
     """Observable metric RGB-D sphere measurements for the public runtime.
 
-    The first RGB-D integration rung deliberately keeps its physical prior and
-    temporal estimator explicit.  Radius is a checkpointed configuration
-    prior, not a simulator label; temporal velocity is derived from a bounded
-    uniform least-squares fit over raw associated metric measurements.
+    The bounded RGB-D integration family keeps its physical prior and temporal
+    estimator explicit. Radius is a checkpointed configuration prior, not a
+    simulator label; temporal velocity is derived from a bounded uniform
+    least-squares fit over raw associated metric measurements.
     """
 
     enabled: bool = False
@@ -220,9 +220,15 @@ class RGBDConfig:
     minimum_silhouette_gap_pixels: float = 2.0
     minimum_boundary_clearance_pixels: float = 2.0
     maximum_surface_radius_relative_error: float = 0.05
+    bounded_partial_visibility: bool = False
+    minimum_observed_support_fraction: float = 0.35
+    maximum_surface_residual_relative_rms: float = 0.05
+    maximum_full_silhouette_overlap_fraction: float = 0.60
     measurement_position_variance: float = 6.4e-5
     temporal_history_size: int = 16
     temporal_min_samples: int = 16
+    max_missing_rows: int = 0
+    require_latest_valid: bool = True
     temporal_min_dt: float = 1.0e-3
     temporal_velocity_variance_floor: float = 1.0e-6
     temporal_velocity_variance_ceiling: float = 1.0e-2
@@ -719,6 +725,10 @@ class OrpheusConfig:
             or model.rgbd.proposal_count not in {1, 2}
         ):
             raise ValueError("model.rgbd.proposal_count must be integer one or two")
+        if not isinstance(model.rgbd.bounded_partial_visibility, bool):
+            raise ValueError("model.rgbd.bounded_partial_visibility must be boolean")
+        if model.rgbd.require_latest_valid is not True:
+            raise ValueError("model.rgbd.require_latest_valid must be true")
         for name, value in (
             ("world_radius", model.rgbd.world_radius),
             ("linear_drag", model.rgbd.linear_drag),
@@ -741,6 +751,18 @@ class OrpheusConfig:
                 "maximum_surface_radius_relative_error",
                 model.rgbd.maximum_surface_radius_relative_error,
             ),
+            (
+                "minimum_observed_support_fraction",
+                model.rgbd.minimum_observed_support_fraction,
+            ),
+            (
+                "maximum_surface_residual_relative_rms",
+                model.rgbd.maximum_surface_residual_relative_rms,
+            ),
+            (
+                "maximum_full_silhouette_overlap_fraction",
+                model.rgbd.maximum_full_silhouette_overlap_fraction,
+            ),
             ("measurement_position_variance", model.rgbd.measurement_position_variance),
             ("temporal_min_dt", model.rgbd.temporal_min_dt),
             (
@@ -761,6 +783,18 @@ class OrpheusConfig:
             raise ValueError(
                 "model.rgbd.maximum_surface_radius_relative_error must be no greater than one"
             )
+        if model.rgbd.minimum_observed_support_fraction > 1.0:
+            raise ValueError(
+                "model.rgbd.minimum_observed_support_fraction must be no greater than one"
+            )
+        if model.rgbd.maximum_surface_residual_relative_rms > 1.0:
+            raise ValueError(
+                "model.rgbd.maximum_surface_residual_relative_rms must be no greater than one"
+            )
+        if model.rgbd.maximum_full_silhouette_overlap_fraction >= 1.0:
+            raise ValueError(
+                "model.rgbd.maximum_full_silhouette_overlap_fraction must be smaller than one"
+            )
         if model.rgbd.chromatic_centre_blend > 1.0:
             raise ValueError("model.rgbd.chromatic_centre_blend must be no greater than one")
         for name, value in (
@@ -770,9 +804,22 @@ class OrpheusConfig:
             if isinstance(value, bool) or not isinstance(value, int) or value < 2:
                 raise ValueError(f"model.rgbd.{name} must be an integer of at least two")
         if model.rgbd.temporal_history_size != 16:
-            raise ValueError("the first model.rgbd bridge requires exactly 16 history samples")
+            raise ValueError("the analytic model.rgbd bridge requires exactly 16 history samples")
         if model.rgbd.temporal_min_samples != model.rgbd.temporal_history_size:
             raise ValueError("model.rgbd.temporal_min_samples must equal temporal_history_size")
+        if (
+            isinstance(model.rgbd.max_missing_rows, bool)
+            or not isinstance(model.rgbd.max_missing_rows, int)
+            or model.rgbd.max_missing_rows not in {0, 1}
+        ):
+            raise ValueError("model.rgbd.max_missing_rows must be integer zero or one")
+        if (
+            model.rgbd.bounded_partial_visibility or model.rgbd.max_missing_rows > 0
+        ) and model.rgbd.proposal_count != 2:
+            raise ValueError(
+                "bounded RGB-D partial visibility and missing-row recovery require "
+                "proposal_count two"
+            )
         if (
             model.rgbd.temporal_velocity_variance_ceiling
             < model.rgbd.temporal_velocity_variance_floor
@@ -795,12 +842,12 @@ class OrpheusConfig:
                 )
             if simulator.radius_range != (model.rgbd.world_radius, model.rgbd.world_radius):
                 raise ValueError(
-                    "the first model.rgbd bridge requires its checkpointed world_radius "
+                    "the analytic model.rgbd bridge requires its checkpointed world_radius "
                     "to equal the fixed simulator radius"
                 )
             if simulator.drag_range != (model.rgbd.linear_drag, model.rgbd.linear_drag):
                 raise ValueError(
-                    "the first model.rgbd bridge requires its checkpointed linear_drag "
+                    "the analytic model.rgbd bridge requires its checkpointed linear_drag "
                     "to equal the fixed simulator drag"
                 )
         if (

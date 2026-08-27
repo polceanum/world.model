@@ -82,6 +82,13 @@ parameter-free, differentiable, fixed-camera, non-contact result—not evidence
 for partial visibility, contact, variable count, learned capacity, or general
 world-model convergence.
 
+Specification 1.57 is a pre-development freeze for the next rung only. It
+keeps the accepted two-visible result intact and adds bounded partial
+visibility plus exactly one isolated target-local missing-depth observation in
+the one-miss strata. All 53m--56m namespaces remain unopened and no evidence
+artifact exists. Development must wait for the complete clean-tree gate and a
+committed source/docs tree.
+
 ## Quick start
 
 Use the existing `orpheus` environment. PyTorch is an externally managed
@@ -267,10 +274,11 @@ integrated-tree boundary was `1207 passed, 16 skipped in 431.10 s`.
 The former grounded, attention, change-point, and multi-day accuracy commands
 are historical evidence only and have been removed from the active workflow.
 Their records remain in Git history and the ignored, local pre-generalization
-archive. Broad training remains paused. The accepted bridge is merged, and
-specification 1.56 now freezes the next bounded rung without weakening the
-standalone or public-integration gates; its single development attempt still
-waits for the exact source/docs tree to be committed cleanly.
+archive. Broad training remains paused. The accepted bridge and
+exactly-two-visible qualification are merged, and specification 1.57 now
+freezes the bounded partial-visibility/isolated-miss rung without weakening
+any accepted gate; its sole development attempt still waits for the exact
+source/docs tree to be committed cleanly.
 
 ### Qualified public RGB-D online bridge — final consumed once
 
@@ -442,6 +450,47 @@ through `1e951520e5a2bf06c1932f64b8334e552247de82`; the next rung is bounded
 partial visibility and missed-observation recovery only. Occlusion, variable
 count, contact, camera motion, variable physics, uncertainty calibration,
 tasks, added modalities, and learned capacity remain unqualified.
+
+### Frozen bounded partial-visibility/isolated-miss rung — pre-development
+
+The specification-1.57 runtime remains parameter-free and public RGB-D. It
+retains exactly two `0.21 m` spheres, fixed camera, known zero gravity and
+`0.05` drag, non-contact motion, and analytic five-horizon rollouts. Four
+balanced strata cross separated/bounded-partial geometry with no miss/exactly
+one target-local depth miss at frame 15 or 16. The sixteen-row WLS history may
+contain at most that one invalid target row, requires frame 17 valid, and must
+recover with fifteen target rows on the immediately following frame. Exactly
+one filter-owned `0.08` miss-variance increment is allowed; identity and the
+global all-`FREE` trace must otherwise remain unchanged. This does not include
+full occlusion or reappearance.
+
+Frozen config/harness/runner/test/protocol SHA-256 values are
+`7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`,
+`99084d9fb421faa8dbe7ef20f7a88ee5e196cce498586c0fae2b92eebddc36d4`,
+`c97f20638c876045cb25adfe23d39db6daed749e42ab5eed1dea6aacac8dd90f`,
+`e712f9b6ee1cd8775f8f8a1d07ee0844fe1ac1e8ac73a2a2233c9a231cce892e`,
+and
+`e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`.
+Development, selector, confirmation, and final seed ranges are
+`53000000--53000031`, `54000000--54000023`, `55000000--55000023`, and
+`56000000--56000047`; their pure manifest hashes are
+`ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391`,
+`1b1e6ef6938705bcc7e2a66ad5ee4622860c9ea9ec3e6c19c86e8a8534209b28`,
+`72d7c922029d300e3d28409bcb55a843633caac10b482f680ae769a442739e9f`,
+and `70b60f48769a26c5587febf778443fd38f5814a39e80ec7da1c98dea9c389ded`.
+
+The protocol has 98 authoritative gate fields and requires exactly 2,167
+finite scalar metrics per eventual split, pure cross-split scene signatures,
+target-region RGB/depth VJPs, and exact recovery/evidence ledgers. The
+seed-free combined source gate is `436 passed in 60.26s`; Ruff, format, and
+diff checks are clean, and two independent audits pass. The full exact
+current-byte repository suite also passes:
+`1398 passed, 16 skipped in 487.93s (0:08:07)`. All four namespaces and the
+canonical five-artifact inventory remain unopened/nonexistent. The next
+permitted sequence is clean commit -> complete repository gate (passed at this
+freeze as the exact result above) -> sole development run -> independent audit
+-> selector -> confirmation -> final, with protected access only if
+development passes.
 
 The general evaluator still supports explicit disjoint manifests for a
 compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not

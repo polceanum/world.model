@@ -340,28 +340,70 @@ class RGBDTemporalPositionHistory(ModalityHistory):
         minimum_support: int,
         minimum_dt: float,
         conditioning_limit: float,
+        max_missing_rows: int = 0,
+        require_latest_valid: bool = True,
     ) -> tuple[FreeMotionFitResult, Tensor]:
-        """Fit every declared row uniformly and return a fail-closed mask."""
+        """Fit the complete timestamp window and return a fail-closed mask.
+
+        The accepted bridge keeps ``max_missing_rows=0`` and therefore takes
+        the historical all-row uniform-fit path exactly.  The bounded recovery
+        opt-in admits at most one invalid observation row, excludes that row
+        from the otherwise uniform fit, and never emits a fit unless the newest
+        row is a fresh valid observation.
+        """
 
         self._validate_storage()
         if not 2 <= minimum_support <= self.history_size:
             raise ValueError("minimum_support must lie within the RGB-D history")
         if not torch.isfinite(torch.as_tensor(minimum_dt)) or minimum_dt <= 0.0:
             raise ValueError("minimum_dt must be finite and positive")
-        fit = fit_free_motion(
-            self.positions.permute(0, 2, 1, 3),
-            self.timestamps.permute(0, 2, 1),
-            gravity=gravity,
-            drag=drag,
-            anchor_time=self.timestamps[..., -1],
-            minimum_support=self.history_size,
-            conditioning_limit=conditioning_limit,
-        )
+        if (
+            isinstance(max_missing_rows, bool)
+            or not isinstance(max_missing_rows, int)
+            or max_missing_rows not in {0, 1}
+        ):
+            raise ValueError("RGB-D max_missing_rows must be integer zero or one")
+        if require_latest_valid is not True:
+            raise ValueError("RGB-D temporal fits require the latest row to be valid")
+
+        fit_arguments = {
+            "gravity": gravity,
+            "drag": drag,
+            "anchor_time": self.timestamps[..., -1],
+            "conditioning_limit": conditioning_limit,
+        }
+        if max_missing_rows == 0:
+            # Preserve the accepted all-16 implementation, including its
+            # fail-closed diagnostics for malformed/invalid windows.
+            fit = fit_free_motion(
+                self.positions.permute(0, 2, 1, 3),
+                self.timestamps.permute(0, 2, 1),
+                minimum_support=self.history_size,
+                **fit_arguments,
+            )
+        else:
+            fit = fit_free_motion(
+                self.positions.permute(0, 2, 1, 3),
+                self.timestamps.permute(0, 2, 1),
+                support=self.valid_mask.permute(0, 2, 1),
+                minimum_support=minimum_support - max_missing_rows,
+                **fit_arguments,
+            )
         span = self.timestamps[..., -1] - self.timestamps[..., 0]
+        complete_timestamp_window = self.sample_mask.sum(dim=-1).ge(minimum_support)
+        complete_timestamp_window &= self.sample_mask.all(dim=-1)
+        if max_missing_rows == 0:
+            observation_rows_valid = self.valid_mask.all(dim=-1)
+        else:
+            missing_rows = (self.sample_mask & ~self.valid_mask).sum(dim=-1)
+            observation_rows_valid = (
+                self.valid_mask.sum(dim=-1).ge(minimum_support - max_missing_rows)
+                & (missing_rows <= max_missing_rows)
+                & self.valid_mask[..., -1]
+            )
         sequence_valid = (
-            self.sample_mask.sum(dim=-1).ge(minimum_support)
-            & self.sample_mask.all(dim=-1)
-            & self.valid_mask.all(dim=-1)
+            complete_timestamp_window
+            & observation_rows_valid
             & (span >= minimum_dt)
             & fit.valid
             & (self.object_ids >= 0)

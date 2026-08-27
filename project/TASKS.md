@@ -191,10 +191,42 @@
 - [x] Commit and push the exact qualification-evidence documentation, then
   fast-forward only the reviewed net tree to GitHub `main` through
   `1e951520e5a2bf06c1932f64b8334e552247de82`.
-- [ ] With that merge complete, freeze one bounded partial-visibility and
-  missed-observation-recovery rung. Keep object count two, contact absent,
-  fixed camera/physics, parameter-free analytic rollout, and every accepted
-  lower-rung gate unchanged; do not tune on the consumed final.
+- [x] Freeze specification 1.57 before development for bounded partial
+  visibility plus exactly one isolated target-local missing-depth observation.
+  Keep exactly two fixed-radius, fixed-camera, non-contact, known-gravity/drag
+  spheres, the parameter-free public RGB-D path, analytic five-horizon
+  rollout, and every accepted lower-rung gate unchanged.
+- [x] Freeze the sixteen-row WLS recovery contract: at most one invalid target
+  row at frame 15 or 16, newest row valid, exactly fifteen target supports,
+  exactly one filter-owned `0.08 +/- 1e-6` miss-variance increment, and
+  immediate next-frame same-ID recovery with a global all-`FREE`,
+  no-spurious-miss trace. Exclude full occlusion/reappearance, contact,
+  variable count, history-capacity, and learned-capacity generalization.
+- [x] Bind config/harness/runner/test/protocol SHA-256
+  `7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c` /
+  `99084d9fb421faa8dbe7ef20f7a88ee5e196cce498586c0fae2b92eebddc36d4` /
+  `c97f20638c876045cb25adfe23d39db6daed749e42ab5eed1dea6aacac8dd90f` /
+  `e712f9b6ee1cd8775f8f8a1d07ee0844fe1ac1e8ac73a2a2233c9a231cce892e` /
+  `e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`.
+- [x] Freeze unopened 53m/54m/55m/56m manifests with SHA-256
+  `ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391`,
+  `1b1e6ef6938705bcc7e2a66ad5ee4622860c9ea9ec3e6c19c86e8a8534209b28`,
+  `72d7c922029d300e3d28409bcb55a843633caac10b482f680ae769a442739e9f`,
+  and `70b60f48769a26c5587febf778443fd38f5814a39e80ec7da1c98dea9c389ded`;
+  retain cross-split unique pure scene signatures, 98 authoritative gate
+  fields, exactly 2,167 finite scalar metrics per eventual split,
+  target-region VJPs, exact ledgers, and the canonical five-artifact contract.
+- [x] Pass the seed-free combined gate at `436 passed in 60.26s`, Ruff/format/
+  diff clean, and two independent audits. Pass the full exact current-byte
+  repository suite at
+  `1398 passed, 16 skipped in 487.93s (0:08:07)`. No 53m--56m episode,
+  materialized manifest, report, checkpoint, ledger, result, or other evidence
+  artifact exists.
+- [ ] Commit the exact clean frozen source/config/tests/runner/docs, bind the
+  already-passing complete repository gate to that exact tree, execute the sole
+  development run, and obtain an independent exact-digest audit. Only a
+  passing development artifact may authorize selector -> confirmation ->
+  final exactly once; stop on failure.
 - [ ] Add one complexity per later rung: camera motion; drag identification;
   variable scale; multi-object sets; identity/occlusion; contact; material
   parameters; known actions/planning; richer modalities/geometry.

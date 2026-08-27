@@ -1,5 +1,83 @@
 # Design decisions
 
+## ADR-167 — Freeze bounded partial visibility and one isolated depth miss before development
+
+- **Date:** 2026-08-27
+- **Status:** accepted pre-development source/protocol freeze; the full exact
+  current-byte repository suite passes, all episode namespaces are unopened,
+  and no evidence artifact exists
+- **Context:** ADR-166 accepted the exactly-two-visible, fixed-camera,
+  non-contact RGB-D qualification and its final is consumed. The smallest next
+  failure mode is limited observation loss, but full occlusion/reappearance,
+  contact, variable count, and learned capacity would confound geometry,
+  association, temporal support, lifecycle, and rollout error. The accepted
+  two-visible result must remain the historical base rather than be silently
+  reinterpreted through a broader scene family.
+- **Decision:** Advance the specification to 1.57 while keeping simulator
+  `sphere_world_v7`. Freeze architecture attempt 1 at exactly two
+  chromatically distinct, fixed-radius `0.21 m` spheres, one fixed calibrated
+  camera, known zero gravity and `0.05` drag, non-contact free motion,
+  composite public RGB-D input, zero learned/optimizer state, and the
+  parameter-free analytic rollout. Add only bounded partial visibility that
+  never becomes full occlusion and, in the two one-miss strata, exactly one
+  isolated target-local missing-depth observation at frame 15 or 16. RGB,
+  calibration, co-object depth, and every non-target depth pixel remain
+  unchanged; renderer masks and the miss schedule are never runtime inputs.
+- **Temporal/recovery contract:** Ingest frames `0--17`; fit frames `2--17`
+  with a sixteen-row differentiable exact free-motion WLS history. Permit at
+  most one invalid row, require newest frame 17 valid, retain all sixteen rows
+  for no-miss/co-object histories, and require exactly fifteen valid missed-
+  target rows. The miss emits no target measurement/velocity evidence. The
+  filter alone applies exactly one `0.08` variance increment within `1e-6`,
+  followed by immediate next-frame same-ID recovery and missed-step trace
+  `0 -> 1 -> 0`. Switches, mismatches, ambiguities, births, deaths, false
+  misses, contacts, events, and non-`FREE` runtime/rollout modes are forbidden.
+- **Frozen bindings:** Config, harness, runner, harness-test, and canonical
+  pre-self-hash protocol SHA-256 values are
+  `7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`,
+  `99084d9fb421faa8dbe7ef20f7a88ee5e196cce498586c0fae2b92eebddc36d4`,
+  `c97f20638c876045cb25adfe23d39db6daed749e42ab5eed1dea6aacac8dd90f`,
+  `e712f9b6ee1cd8775f8f8a1d07ee0844fe1ac1e8ac73a2a2233c9a231cce892e`,
+  and
+  `e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`.
+- **Unopened namespaces:** Development `53000000--53000031`, selector
+  `54000000--54000023`, confirmation `55000000--55000023`, and final
+  `56000000--56000047` have pure manifest SHA-256
+  `ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391`,
+  `1b1e6ef6938705bcc7e2a66ad5ee4622860c9ea9ec3e6c19c86e8a8534209b28`,
+  `72d7c922029d300e3d28409bcb55a843633caac10b482f680ae769a442739e9f`,
+  and `70b60f48769a26c5587febf778443fd38f5814a39e80ec7da1c98dea9c389ded`.
+  Pure scene-signature-list SHA-256 values are
+  `f22a2e26df99edda751d13c383733c447139afe4de840bae64b3e03758155baf`,
+  `85bf300a1af8547746663a9b10403fa8b3d726533d0f68955c2cad5ecf3a4d75`,
+  `e6319849bb4b4974ceeb6752eadf7235f8e82e47440f0e2b7d1be75191600931`,
+  and `575e4af1694825e40c780c2a64c783232b013bf8432c8fbe76d095180f0c9d5f`.
+  They are cross-split unique without constructing simulator state.
+- **Gates and evidence:** The protocol has 98 authoritative gate fields and
+  requires exactly 2,167 finite scalar metrics per eventual split. It binds
+  pooled/stratum/miss/co-object accuracy, immediate recovery, exact global
+  all-`FREE`/no-spurious-miss traces, target-region RGB/depth VJPs, zero
+  scheduled-miss and cross-scene gradients, pure scene signatures, resources,
+  zero-state ownership, exact development/protected ledgers, and exactly five
+  canonical artifacts. Seed-free combined validation passes
+  `436 passed in 60.26s`; Ruff/format/diff are clean and two independent audits
+  pass. The full exact current-byte repository suite also passes:
+  `1398 passed, 16 skipped in 487.93s (0:08:07)`. No episode, materialized
+  manifest, report, checkpoint, ledger, result, or evidence artifact exists.
+- **Alternatives considered:** add full occlusion and reappearance together;
+  vary object count or history capacity; add learned association/capacity;
+  permit arbitrary missing rows; let perception and filter both inflate miss
+  uncertainty; reuse the consumed two-visible final; materialize development
+  before a clean commit and complete repository gate.
+- **Consequences:** The next action is clean commit -> bind the already-passing
+  complete repository gate to that exact tree -> sole development run ->
+  independent exact-digest audit. Only a passing development result may
+  authorize selector -> confirmation -> final exactly once; any failure stops
+  without retuning. The freeze is not accuracy evidence and makes no claim for
+  full occlusion/reappearance, contact, variable count, history-capacity or
+  learned-capacity generalization, moving cameras, variable physics, added
+  modalities, tasks/planning, or general world-model convergence.
+
 ## ADR-166 — Accept the exactly-once two-visible-object RGB-D qualification
 
 - **Date:** 2026-08-27
