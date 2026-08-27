@@ -1806,7 +1806,7 @@ def validate_development_evidence(
         raise ValueError("development evidence must prove zero optimizer updates")
     if report.get("stopped_after") != "development":
         raise ValueError("reviewed evidence must stop after development")
-    if report.get("protocol") != bridge_protocol():
+    if canonical_sha256(report.get("protocol")) != canonical_sha256(bridge_protocol()):
         raise ValueError("reviewed development protocol differs from frozen source")
     if report.get("config_sha256") != FROZEN_CONFIG_SHA256:
         raise ValueError("reviewed development config hash differs from frozen bytes")

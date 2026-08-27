@@ -33,6 +33,7 @@ from world_model.training.rgbd_online_bridge_qualification import (
     new_public_model,
     new_standalone_estimator,
     sha256_file,
+    validate_development_evidence,
     validate_distinct_paths,
 )
 from world_model.utils.config import load_config
@@ -138,6 +139,42 @@ def _passing_metrics() -> dict[str, float]:
     return metrics
 
 
+def _reviewed_development_report() -> tuple[dict[str, object], dict[str, object], str]:
+    metrics = _passing_metrics()
+    development: dict[str, object] = {
+        "split": "development",
+        "seeds": list(DEVELOPMENT_SEEDS),
+        "seed_manifest_sha256": canonical_sha256(list(DEVELOPMENT_SEEDS)),
+        "optimizer_updates": 0,
+        "runtime_api": {
+            "packet_factory": "make_rgbd_packet",
+            "ingest_frames": list(range(16)),
+            "rollout_method": "OnlineWorldModel.predict",
+            "horizons_seconds": list(HORIZONS_SECONDS),
+        },
+        "metrics": metrics,
+        "failures": [],
+        "passed": True,
+    }
+    source: dict[str, object] = {"commit": "reviewed-commit", "dirty": False}
+    checkpoint_sha256 = "a" * 64
+    report: dict[str, object] = {
+        "artifact_kind": "rgbd_online_bridge_development",
+        "protocol": json.loads(json.dumps(bridge_protocol())),
+        "source_provenance": source,
+        "config_sha256": FROZEN_CONFIG_SHA256,
+        "development": development,
+        "optimizer_updates": 0,
+        "protected_data_materialized": False,
+        "passed": True,
+        "review_ready": True,
+        "stopped_after": "development",
+        "checkpoint_sha256": checkpoint_sha256,
+        "checkpoint_model_state_sha256": EMPTY_MODEL_STATE_SHA256,
+    }
+    return report, source, checkpoint_sha256
+
+
 def _handcrafted_rgbd_batch(*, batch_size: int = 1) -> dict[str, object]:
     # Mirror a real development episode: the public runtime consumes the first
     # 16 history frames while labels extend through the two-second target.
@@ -198,6 +235,39 @@ def test_protocol_predeclares_disjoint_exact_manifests_and_self_hash() -> None:
     assert protocol["runtime"]["horizon_offsets_seconds"] == list(HORIZONS_SECONDS)
     assert protocol["optimizer"] is None
     assert protocol["optimizer_updates"] == 0
+
+
+def test_development_validator_accepts_protocol_json_roundtrip() -> None:
+    report, source, checkpoint_sha256 = _reviewed_development_report()
+    assert report["protocol"] != bridge_protocol()
+
+    development = validate_development_evidence(
+        report,
+        checkpoint_sha256=checkpoint_sha256,
+        source=source,
+    )
+
+    assert development is report["development"]
+
+
+def test_development_validator_rejects_tampered_json_protocol() -> None:
+    report, source, checkpoint_sha256 = _reviewed_development_report()
+    protocol = report["protocol"]
+    assert isinstance(protocol, dict)
+    gates = protocol["gates"]
+    assert isinstance(gates, dict)
+    horizon_gates = gates["horizon_position_rmse_m"]
+    assert isinstance(horizon_gates, list)
+    horizon_gates[0] = 1.0
+    unsigned_protocol = {key: value for key, value in protocol.items() if key != "protocol_sha256"}
+    protocol["protocol_sha256"] = canonical_sha256(unsigned_protocol)
+
+    with pytest.raises(ValueError, match="protocol differs from frozen source"):
+        validate_development_evidence(
+            report,
+            checkpoint_sha256=checkpoint_sha256,
+            source=source,
+        )
 
 
 def test_frozen_config_binds_radius_drag_single_position_owner_and_zero_state() -> None:
