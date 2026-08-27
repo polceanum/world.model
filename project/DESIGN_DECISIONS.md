@@ -77,10 +77,12 @@
   threshold against final; treat hard Hungarian as a differentiable learned
   owner; begin a multi-capability scaling campaign before merge.
 - **Consequences:** The exactly-two-visible non-contact RGB-D rung is accepted
-  and ready to merge without changing specification 1.56 or simulator v7.
+  and was fast-forwarded to GitHub `main` through commit
+  `1e951520e5a2bf06c1932f64b8334e552247de82` without changing specification
+  1.56 or simulator v7.
   This is not partial-visibility, missed-observation recovery, occlusion,
   contact, variable-count, learned-capacity, or general-convergence evidence.
-  After merge, only a separately frozen bounded partial-visibility and
+  With that merge complete, only a separately frozen bounded partial-visibility and
   missed-observation-recovery rung may begin; the consumed final cannot be
   reused or tuned against.
 

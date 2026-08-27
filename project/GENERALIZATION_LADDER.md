@@ -310,7 +310,10 @@ The exact final audit passes; it did not reopen raw protected episodes.
 Owner-writable evidence is tamper-evident rather than OS-enforced WORM storage.
 Final is consumed and cannot be rerun or tuned against.
 
-### 5. Partial visibility and missed-observation recovery — next after merge
+### 5. Partial visibility and missed-observation recovery — next after completed merge
+
+The reviewed two-visible tree was fast-forwarded to GitHub `main` through
+`1e951520e5a2bf06c1932f64b8334e552247de82`.
 
 Retain exactly two fixed-radius objects, fixed camera and physical parameters,
 non-contact free motion, RGB-D input, and the accepted parameter-free analytic

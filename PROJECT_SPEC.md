@@ -8369,6 +8369,9 @@ canonical pre-self-hash protocol SHA-256
 `42b9dca23fed303d5cee4641c8d8753977a872fc90d0b1086658d7f12b823ea0`,
 and empty model-state SHA-256
 `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+The reviewed net tree, including the accepted evidence record, was subsequently
+fast-forwarded to GitHub `main` through commit
+`1e951520e5a2bf06c1932f64b8334e552247de82`.
 
 The one fixed development attempt passed and was independently audited before
 protected access.  Its report, restricted empty-state checkpoint, and durable

@@ -466,7 +466,9 @@ fixed-radius, non-contact spheres under fixed-camera free motion. It does not
 cover partial visibility, missed-observation recovery, contact, variable count,
 learned capacity, or general convergence. After merge, the next rung may add
 only bounded partial visibility and missed-observation recovery under a new
-freeze; no consumed-final tuning is allowed.
+freeze; no consumed-final tuning is allowed. That merge is now complete:
+GitHub `main` contains the reviewed net tree through
+`1e951520e5a2bf06c1932f64b8334e552247de82`.
 
 ## Validation state
 

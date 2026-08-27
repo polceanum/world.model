@@ -61,9 +61,11 @@
 - Accepted scope remains exactly two fully visible, image-separated,
   fixed-radius, non-contact spheres under fixed-camera free motion. No
   occlusion, partial-visibility recovery, contact, variable count, learned
-  capacity, or general convergence is claimed. After merge, the only next rung
-  is separately frozen bounded partial visibility and missed-observation
-  recovery; the consumed final cannot be tuned.
+  capacity, or general convergence is claimed. Fast-forwarded the reviewed net
+  tree to GitHub `main` through
+  `1e951520e5a2bf06c1932f64b8334e552247de82`. The only next rung is separately
+  frozen bounded partial visibility and missed-observation recovery; the
+  consumed final cannot be tuned.
 
 ### 2026-08-27 frozen two-visible-object RGB-D architecture attempt 2
 

@@ -463,8 +463,10 @@ reopen raw protected episodes; owner-writable evidence remains tamper-evident,
 not OS-enforced WORM storage.
 
 Final is consumed. Do not run development or qualification again, and do not
-tune any threshold, architecture, or capacity against it. After merge, only a
-newly frozen bounded partial-visibility and missed-observation-recovery rung
+tune any threshold, architecture, or capacity against it. The reviewed tree is
+merged to GitHub `main` through
+`1e951520e5a2bf06c1932f64b8334e552247de82`; only a newly frozen bounded
+partial-visibility and missed-observation-recovery rung
 may proceed. It must retain exactly two objects, fixed camera/physics,
 non-contact motion, the parameter-free analytic rollout, and every accepted
 lower-rung gate.

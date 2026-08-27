@@ -437,10 +437,11 @@ The ledgers completed in development then selector -> confirmation -> final
 order. Final is consumed: do not rerun qualification or tune against it. Audit
 did not reopen raw protected episodes. Owner-writable evidence is SHA-bound and
 tamper-evident, not OS-enforced WORM storage. Live history remains outside
-ordinary checkpoints. After merge, the next rung is bounded partial visibility
-and missed-observation recovery only; occlusion, variable count, contact,
-camera motion, variable physics, uncertainty calibration, tasks, added
-modalities, and learned capacity remain unqualified.
+ordinary checkpoints. The reviewed tree was fast-forwarded to GitHub `main`
+through `1e951520e5a2bf06c1932f64b8334e552247de82`; the next rung is bounded
+partial visibility and missed-observation recovery only. Occlusion, variable
+count, contact, camera motion, variable physics, uncertainty calibration,
+tasks, added modalities, and learned capacity remain unqualified.
 
 The general evaluator still supports explicit disjoint manifests for a
 compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not

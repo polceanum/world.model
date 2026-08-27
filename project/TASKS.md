@@ -188,9 +188,10 @@
   five-file artifact, and independent final-audit checks. Preserve the audit
   limitation that raw protected episodes were not reopened and evidence is
   owner-writable/tamper-evident rather than OS WORM.
-- [ ] Commit and push the exact qualification-evidence documentation, then
-  merge only the reviewed net tree to GitHub `main`.
-- [ ] Only after merge, freeze one bounded partial-visibility and
+- [x] Commit and push the exact qualification-evidence documentation, then
+  fast-forward only the reviewed net tree to GitHub `main` through
+  `1e951520e5a2bf06c1932f64b8334e552247de82`.
+- [ ] With that merge complete, freeze one bounded partial-visibility and
   missed-observation-recovery rung. Keep object count two, contact absent,
   fixed camera/physics, parameter-free analytic rollout, and every accepted
   lower-rung gate unchanged; do not tune on the consumed final.
