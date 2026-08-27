@@ -350,3 +350,25 @@ class DirectVelocityEvidence:
         if self.axis_valid_mask is None:
             return object_valid.expand_as(self.velocity)
         return object_valid & self.axis_valid_mask
+
+    def detach(self) -> DirectVelocityEvidence:
+        """Return evaluator-safe evidence without retaining the runtime graph."""
+
+        return DirectVelocityEvidence(
+            velocity=self.velocity.detach(),
+            log_variance=self.log_variance.detach(),
+            valid_mask=self.valid_mask.detach(),
+            confidence=self.confidence.detach(),
+            position=(self.position.detach() if self.position is not None else None),
+            position_log_variance=(
+                self.position_log_variance.detach()
+                if self.position_log_variance is not None
+                else None
+            ),
+            position_valid_mask=(
+                self.position_valid_mask.detach() if self.position_valid_mask is not None else None
+            ),
+            axis_valid_mask=(
+                self.axis_valid_mask.detach() if self.axis_valid_mask is not None else None
+            ),
+        )

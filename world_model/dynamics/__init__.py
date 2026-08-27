@@ -1,6 +1,7 @@
 """Hybrid structured and learned belief dynamics."""
 
 from world_model.dynamics.analytic import AnalyticKinematics
+from world_model.dynamics.analytic_free_motion import AnalyticFreeMotionDynamics
 from world_model.dynamics.applicability import (
     PairApplicability,
     PairApplicabilityConfig,
@@ -51,6 +52,7 @@ from world_model.dynamics.uncertainty import (
 
 __all__ = [
     "AnalyticKinematics",
+    "AnalyticFreeMotionDynamics",
     "AttentionTokenLayout",
     "ContactPlane",
     "ContactResult",

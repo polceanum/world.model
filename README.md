@@ -64,6 +64,17 @@ for qualification. A fresh v2 development rerun and exactly one ledgered
 consumed and must not be rerun. This is not a third monocular-taper attempt or
 a claim beyond the standalone rung.
 
+The composite one-slot RGB-D `OnlineWorldModel` bridge is now qualified under
+specification 1.55 on canonical clean source `526b5123`. The first development
+artifact from `ebda5a8` passed its numerical gates but was rejected because its
+persisted JSON protocol was compared to tuple-valued in-memory data with raw
+Python equality; no protected split was opened. A fresh canonical development
+run and independent audit then authorized exactly one ledgered
+46m -> 47m -> 48m qualification. All protected splits passed and final is
+consumed. This accepts only the frozen one-slot free-motion bridge; it is ready
+to merge, not evidence for broader scene, modality, or learned-capacity
+convergence.
+
 ## Quick start
 
 Use the existing `orpheus` environment. PyTorch is an externally managed
@@ -239,16 +250,132 @@ modalities retain VJP norms `0.1156--3.6564`, semigroup error stays below
 `2.384e-7 m`/`3.725e-9 m/s`, and every trivial/RGB-only ablation gate passes.
 
 OLS covariance remains diagnostic, not calibrated uncertainty. Artifacts are
-SHA-bound and tamper-evident but owner-writable. The next rung is the composite
-batched `rgbd` public `OnlineWorldModel` bridge; no capacity scaling is allowed
-yet. The existing full source gate remains
-`1130 passed, 16 skipped in 414.82 s`; this docs update makes no new test claim.
+SHA-bound and tamper-evident but owner-writable. At that boundary the next rung
+was the composite batched `rgbd` public `OnlineWorldModel` bridge; its later
+qualification is recorded below. The standalone source gate was
+`1130 passed, 16 skipped in 414.82 s`; the integrated bridge tree now passes
+the newer complete repository gate recorded below. Its first integrated-tree
+boundary was `1207 passed, 16 skipped in 431.10 s`.
 
 The former grounded, attention, change-point, and multi-day accuracy commands
 are historical evidence only and have been removed from the active workflow.
 Their records remain in Git history and the ignored, local pre-generalization
-archive. Broad training stays paused while the observable-depth/RGB-D rung is
-specified and qualified without weakening the accepted minimal gates.
+archive. Broad training stays paused while the accepted bridge evidence is
+merged and the next bounded rung is predeclared without weakening the
+standalone or public-integration gates.
+
+### Qualified public RGB-D online bridge — final consumed once
+
+The bridge uses one composite batched `rgbd` packet with RGB `[B,3,H,W]`,
+depth `[B,1,H,W]`, batched calibration, explicit image size, and a
+modality-qualified stream key. Raw metric positions have one direct filter
+owner; a persistent-ID-aligned uniform sixteen-frame WLS history emits
+velocity-only evidence; and the parameter-free analytic dynamics answers
+`0.1/0.25/0.5/1/2 s` queries. Missing depth never falls back to RGB.
+
+The frozen config SHA-256 is
+`c40b3438c7fd60646d356db3fe54050039912ace288d9db89620b626106993a3`, and
+the seed-free canonical protocol SHA-256 is
+`e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`.
+At the source-freeze boundary, the development and protected namespaces were
+all unopened. The current focused source/config/protocol gate is
+`421 passed in 62.72 s`; the complete repository gate is
+`1209 passed, 16 skipped in 434.37 s`. The bridge owns zero
+parameters, state-dict entries, or optimizer state; complete batch-four
+persistent runtime tensor storage is `25,364` bytes against a `32,768`-byte
+gate.
+
+RGB-D evaluation and demos now use the real composite packet and truthful
+`observation_modality: rgbd`/`rgb_only: false` metadata. The evaluator labels
+its fifteen-frame warmup; demo aggregate errors remain pooled across warmup
+and post-warmup frames. The legacy RGB workflow is preserved when the bridge
+is disabled. Per-frame VJPs cover both RGB and depth for current velocity and
+every horizon.
+
+For an already-active persistent object, a well-formed frame with missing
+depth, nonfinite or otherwise invalid depth in the sampled measurement support,
+or no foreground appends an invalid causal row. In the frozen sixteenth-frame
+full-window ablation, diagnostics are `sample_count: 16` and `valid_count: 15`.
+The invalid measurement emits no valid/admissible temporal fit or direct
+velocity evidence, correction, or birth. A finite diagnostic fit may exist
+with `fit_valid: false` but is not admissible evidence. Before birth, the same
+invalid frame advances runtime time but creates no object-history row and no
+birth. Malformed packets, nonfinite RGB/calibration, unsupported low precision,
+stale/duplicate/unknown streams, and invalid prepared propagation reject
+atomically without consuming runtime or propagation state.
+Ordinary checkpoints do not serialize live temporal histories and caches, so
+exact mid-history stream resume is unsupported; replay the observations to
+rebuild that state.
+
+Development seeds are `45000000--45000023`; selector, confirmation, and
+one-shot final are `46000000--46000015`, `47000000--47000015`, and
+`48000000--48000031`.
+
+The first development execution on source
+`ebda5a8bfa7b1131b827202f575351d116c78d01` passed every numerical gate, but
+its persisted protocol validator rejected JSON lists against the tuple-valued
+in-memory protocol despite equal canonical content and protocol SHA. Its
+report/checkpoint SHA-256 values are
+`2104ee87bcabdbd5312b4026a33e44e1de7d197e50215ec7f0bf0e0bb56992e3` and
+`38f4b2ef5addb98bb966360213d3bb36b43da606367fc60cd75d2ec487f1b866`.
+Those artifacts are diagnostic only; selector, confirmation, and final were
+not opened from them.
+
+The accepted clean source is
+`526b5123e6385c575a5777936272330d28972b93`, with runtime-source and worktree
+fingerprints
+`1eeaa176ad9be8886976910fe53028fb6de498adda73a2d20170f206b6134b40` and
+`90d0624a119e118e76b58061f7e5582dffc906f47d85cc4dde997b2f765bb07a`.
+The empty model-state SHA-256 is
+`4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+Canonical development report/checkpoint/manifest SHA-256 values are
+`dce6f920da85fbf696b7ae8a7a91d9cbf7d9084176e51ad7c319f92a6efe4966`,
+`48249f1a5a0467b1da8c7bdb5ad9e909f8c502631ec2fbad832cb490a00c3099`, and
+`069eb3331543727c911a07cc9a1bb352f6185ac8ceac7fafca502c9d7fab6d80`.
+The report and checkpoint are `22,346` and `46,596` bytes.
+Independent audit passed before protected access.
+
+| split | current position / velocity RMSE | 2 s position / velocity RMSE | growth slope | perception / rollout |
+| --- | --- | --- | --- | --- |
+| development | 3.068470 mm / 2.191966 mm/s | 5.609913 mm / 1.983371 mm/s | 1.270721 mm/s | 0.415134 s / 3.575380 ms |
+| selector | 3.177543 mm / 2.313401 mm/s | 5.881384 mm / 2.093251 mm/s | 1.351921 mm/s | 0.422070 s / 3.569962 ms |
+| confirmation | 5.681172 mm / 1.658775 mm/s | 6.188252 mm / 1.500921 mm/s | 0.253540 mm/s | 0.414407 s / 3.537710 ms |
+| final | 2.996787 mm / 2.221047 mm/s | 5.433965 mm / 2.009688 mm/s | 1.218589 mm/s | 0.417436 s / 3.566628 ms |
+
+Protected selector, confirmation, and final passed exactly once in order. Their
+manifest/result SHA-256 pairs are respectively
+`2159b044e089774b3b7df95509ac2cded19528de6ff133ae1b158a354ed7fbb9` /
+`9ac6b7cc1b97da9961345fdcf5488ddec3ac6a0186215699a55a66acfbb983cb`,
+`2cad3224740b4d73871ff1d1e60795d45dc149ad03d197513eddf514cb9946bf` /
+`1a3996914d59f840b2645e4b886f1027b830fa6f81c5763eb1735f25149aa9bc`,
+and
+`3c5c904203ddd46ea790322e446466b2c58e603015456f239715aa07135011a3` /
+`40d39accec8c2c6efa97f06a2f2748c580a5666b54c7dac4df36e3d7dc718bd1`.
+Qualification-report and ledger SHA-256 values are
+`7fd1829f663606910ac81990e4b633c63b1460dbc31dd24c71eedbd91b422908`
+and `cf6a10dd672aafbdd91c92871ae349fef0c549d865cc6532e6c42f7d9be14e32`.
+They are `47,353` and `1,626` bytes. Final is consumed and must not be rerun.
+
+Every split has `175/175` finite scalars, zero failures, full `16/16`
+per-target/per-modality history VJP support, one position owner, no identity
+change, and zero learned or optimizer state. Final semigroup error is
+`2.384186e-7 m`/`1.862645e-9 m/s`; maximum RSS is `708,853,760` bytes and
+runtime tensor state remains `25,364` bytes. Audit recomputed gates from
+finite persisted evidence but did not regenerate protected episodes or rerun
+latency/RSS. The ledger is durable atomically replaced state, not an
+append-only timestamped transition log; access-before-materialization is
+supported by clean committed control flow plus the final ledger and result
+receipts. Artifacts are SHA-bound and fresh-path protected but remain
+owner-writable, so they are tamper-evident rather than OS write-once.
+
+This qualifies the declared one-slot, one-sphere, fixed-camera, fixed-parameter
+free-motion bridge only. It does not establish uncertainty calibration,
+multi-object/contact behavior, camera-motion handling, learned capacity, or a
+general world model. After merge, the next bounded predeclared rung is one
+changed capability at a time. Before new data it must freeze moving-camera,
+multi-object, association/occlusion, contact/event, task-success, capacity,
+gradient, accuracy, memory, and rollout-throughput gates; no accepted bridge
+threshold or consumed-final result may be retuned.
 
 The general evaluator still supports explicit disjoint manifests for a
 compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not

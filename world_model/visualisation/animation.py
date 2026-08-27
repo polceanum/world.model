@@ -1,4 +1,4 @@
-"""Held-out RGB-only prior/posterior demonstration."""
+"""Held-out no-oracle visual prior/posterior demonstration."""
 
 from __future__ import annotations
 
@@ -91,19 +91,44 @@ def _packet(
     episode: dict[str, Any],
     index: int,
     *,
+    modality: str,
     device: torch.device,
 ) -> ObservationPacket:
+    if modality not in {"rgb", "rgbd"}:
+        raise ValueError("demo packets support only rgb or rgbd")
+    if modality == "rgbd":
+        payload: object = {
+            "rgb": episode["rgb"][index].unsqueeze(0).to(device),
+            "depth": episode["depth"][index].unsqueeze(0).to(device),
+        }
+        sensor_id = "camera0:rgbd"
+        frame_id = "camera:camera0:rgbd"
+        intrinsics = episode["camera"]["intrinsics"][index].unsqueeze(0).to(device)
+        world_from_camera = episode["camera"]["world_from_camera"][index].unsqueeze(0).to(device)
+    else:
+        payload = episode["rgb"][index].to(device)
+        sensor_id = "camera0"
+        frame_id = "camera:camera0"
+        intrinsics = episode["camera"]["intrinsics"][index].to(device)
+        world_from_camera = episode["camera"]["world_from_camera"][index].to(device)
     return ObservationPacket(
-        modality="rgb",
-        sensor_id="camera0",
+        modality=modality,
+        sensor_id=sensor_id,
         timestamp=float(episode["timestamps"][index]),
-        payload=episode["rgb"][index].to(device),
+        payload=payload,
         calibration={
-            "intrinsics": episode["camera"]["intrinsics"][index].to(device),
-            "world_from_camera": episode["camera"]["world_from_camera"][index].to(device),
+            "intrinsics": intrinsics,
+            "world_from_camera": world_from_camera,
         },
-        frame_id="camera:camera0",
-        metadata={"image_size": tuple(episode["rgb"].shape[-2:])},
+        frame_id=frame_id,
+        metadata={
+            "image_size": tuple(episode["rgb"].shape[-2:]),
+            "depth_semantics": (
+                "observable_camera_z_surface_depth_zero_means_no_return"
+                if modality == "rgbd"
+                else "not_present"
+            ),
+        },
     )
 
 
@@ -338,7 +363,12 @@ def _configure_world_axis(
     axis.grid(alpha=0.2)
 
 
-def _add_image_legend(axis: Any) -> None:
+def _add_image_legend(axis: Any, *, modality: str = "rgb") -> None:
+    if modality not in {"rgb", "rgbd"}:
+        raise ValueError("image legend supports only rgb or rgbd")
+    measurement_label = (
+        "scheduled RGB-D measurement" if modality == "rgbd" else "scheduled RGB measurement"
+    )
     handles = [
         Line2D(
             [],
@@ -346,7 +376,7 @@ def _add_image_legend(axis: Any) -> None:
             color="yellow",
             marker="x",
             linestyle="None",
-            label="scheduled RGB measurement",
+            label=measurement_label,
         ),
         Line2D(
             [],
@@ -495,6 +525,37 @@ def _project_world(
     return pixels.detach().cpu().numpy(), valid.detach().cpu().numpy()
 
 
+def _measurement_image_pixels(
+    values: torch.Tensor,
+    measurement_mask: torch.Tensor,
+    *,
+    modality: str,
+    image_size: tuple[int, int],
+    world_from_camera: torch.Tensor,
+    intrinsics: torch.Tensor,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Map modality-owned measurement coordinates into image pixels."""
+
+    if values.ndim != 2 or measurement_mask.shape != values.shape[:1]:
+        raise ValueError("measurement values/mask must have shapes [M,D] and [M]")
+    if modality == "rgb":
+        if values.shape[-1] < 2:
+            raise ValueError("RGB measurements must provide normalized image coordinates")
+        pixels = normalized_to_pixels(values[:, :2].detach().cpu().numpy(), image_size)
+        valid = measurement_mask & torch.isfinite(values[:, :2]).all(dim=-1)
+        return pixels, valid.detach().cpu().numpy()
+    if modality == "rgbd":
+        if values.shape[-1] != 3:
+            raise ValueError("RGB-D measurements must provide metric world positions")
+        return _project_world(
+            values,
+            measurement_mask,
+            world_from_camera,
+            intrinsics,
+        )
+    raise ValueError("measurement projection supports only rgb or rgbd")
+
+
 def _project_world_uncertainty(
     position: torch.Tensor,
     position_log_variance: torch.Tensor,
@@ -560,8 +621,13 @@ def create_demo(
 ) -> dict[str, Any]:
     """Create PNG frames, GIF, parameter plot, and truthful summary JSON."""
 
-    if not config.evaluation.rgb_only or config.runtime.enable_debug_oracle:
-        raise ValueError("The primary demo requires RGB-only configuration")
+    expected_rgb_only = config.runtime.modality == "rgb"
+    if (
+        config.evaluation.rgb_only is not expected_rgb_only
+        or config.runtime.enable_debug_oracle
+        or config.runtime.modality not in {"rgb", "rgbd"}
+    ):
+        raise ValueError("The primary demo requires no-oracle RGB or RGB-D configuration")
     output = timestamped_artifact_path(output_dir or f"demo_outputs/seed_{config.demo.seed}")
     frame_dir = output / "frames"
     frame_dir.mkdir(parents=True, exist_ok=True)
@@ -600,7 +666,12 @@ def create_demo(
 
     with torch.no_grad():
         for index in range(count):
-            packet = _packet(episode, index, device=device_info.device)
+            packet = _packet(
+                episode,
+                index,
+                modality=config.runtime.modality,
+                device=device_info.device,
+            )
             future_index = min(
                 total_frames - 1,
                 index + round(horizon * config.simulator.frame_rate),
@@ -629,7 +700,7 @@ def create_demo(
             posterior = model.ingest(packet)
             measured = model.last_measurements
             if measured is None:
-                raise RuntimeError("runtime did not retain its scheduled RGB measurements")
+                raise RuntimeError("runtime did not retain its scheduled visual measurements")
             posterior_future = model.predict(rollout_queries)
             observation_mode = (
                 model.diagnostics.latest.observation_mode
@@ -754,24 +825,32 @@ def create_demo(
             figure, axes = plt.subplots(1, 2, figsize=(11, 4.5))
             image = episode["rgb"][index].permute(1, 2, 0).numpy()
             axes[0].imshow(image)
+            calibration_world = episode["camera"]["world_from_camera"][index]
+            calibration_intrinsics = episode["camera"]["intrinsics"][index]
             measurement_probability = measured.existence_logits[0].sigmoid()
-            measurement_pixels = normalized_to_pixels(
-                measured.values[0, :, :2].detach().cpu().numpy(),
-                tuple(image.shape[:2]),
+            measurement_pixels, measurement_projection_valid = _measurement_image_pixels(
+                measured.values[0],
+                measured.measurement_mask[0],
+                modality=config.runtime.modality,
+                image_size=tuple(image.shape[:2]),
+                world_from_camera=calibration_world,
+                intrinsics=calibration_intrinsics,
             )
             overlay_points(
                 axes[0],
                 measurement_pixels,
                 color="yellow",
                 marker="x",
-                label="scheduled RGB measurement",
-                valid=(measured.measurement_mask[0] & (measurement_probability > 0.35))
-                .detach()
-                .cpu()
-                .numpy(),
+                label=(
+                    "scheduled RGB-D measurement"
+                    if config.runtime.modality == "rgbd"
+                    else "scheduled RGB measurement"
+                ),
+                valid=(
+                    measurement_projection_valid
+                    & (measurement_probability > 0.35).detach().cpu().numpy()
+                ),
             )
-            calibration_world = episode["camera"]["world_from_camera"][index]
-            calibration_intrinsics = episode["camera"]["intrinsics"][index]
             if prior is not None:
                 prior_pixels, prior_valid = _project_world(
                     prior.objects.position[0],
@@ -835,11 +914,13 @@ def create_demo(
             else:
                 current_error_text = f"posterior error {current_posterior_error:.3f} m"
             axes[0].set_title(
-                f"RGB-only online step {index} · t={packet.timestamp:.2f}s · {observation_mode}\n"
+                f"{'RGB-D' if config.runtime.modality == 'rgbd' else 'RGB'} "
+                f"no-oracle online step {index} · "
+                f"t={packet.timestamp:.2f}s · {observation_mode}\n"
                 f"{current_error_text}"
             )
             axes[0].axis("off")
-            _add_image_legend(axes[0])
+            _add_image_legend(axes[0], modality=config.runtime.modality)
 
             # Simulator labels below are evaluation/overlay data only. They are
             # read after RGB ingest and are never passed into the runtime.
@@ -1016,7 +1097,8 @@ def create_demo(
         "checkpoint": str(Path(checkpoint_path).resolve()),
         "checkpoint_step": int(checkpoint["step"]),
         "seed": config.demo.seed,
-        "rgb_only": True,
+        "rgb_only": config.runtime.modality == "rgb",
+        "observation_modality": config.runtime.modality,
         "oracle_input": False,
         "device": str(device_info.device),
         "frames": count,

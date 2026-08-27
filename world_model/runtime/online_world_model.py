@@ -42,6 +42,7 @@ from world_model.identification import (
     RecurrentParameterUpdater,
 )
 from world_model.observations import (
+    DirectVelocityEvidence,
     MeasurementSet,
     ObservationContext,
     ObservationModule,
@@ -59,7 +60,7 @@ from world_model.runtime.prepared import (
     TensorVersionSignature,
     tensor_identity_version_signature,
 )
-from world_model.runtime.state import RuntimeState
+from world_model.runtime.state import RuntimeState, runtime_stream_key
 
 if TYPE_CHECKING:
     from world_model.utils.config import OrpheusConfig
@@ -71,6 +72,18 @@ class OutOfSequenceObservationError(ValueError):
 
 def _packet_batch_size(packet: ObservationPacket) -> int:
     payload = packet.payload
+    if packet.modality == "rgbd":
+        if not isinstance(payload, Mapping):
+            raise ValueError("rgbd packet payload must map batched 'rgb' and 'depth' tensors")
+        rgb = payload.get("rgb")
+        depth = payload.get("depth")
+        if not isinstance(rgb, Tensor) or not isinstance(depth, Tensor):
+            raise ValueError("rgbd packet payload requires tensor 'rgb' and 'depth' fields")
+        if rgb.ndim != 4 or depth.ndim != 4:
+            raise ValueError("rgbd payload tensors must be explicitly batched [B,C,H,W]")
+        if rgb.shape[0] != depth.shape[0]:
+            raise ValueError("rgbd payload tensors must share one batch size")
+        return int(rgb.shape[0])
     if isinstance(payload, Tensor):
         return int(payload.shape[0]) if payload.ndim >= 4 else 1
     if isinstance(payload, Mapping):
@@ -148,6 +161,7 @@ class OnlineWorldModel(nn.Module):
         self.state = RuntimeState()
         self.diagnostics = RuntimeDiagnostics()
         self._last_measurements: MeasurementSet | None = None
+        self._last_direct_velocity_evidence: DirectVelocityEvidence | None = None
         self._prepared_propagation_owner = object()
         self.abstraction_router = PredictiveAbstractionRouter()
         self.belief_tokenizer = WorldBeliefTokenizer(self.abstraction_router)
@@ -159,10 +173,11 @@ class OnlineWorldModel(nn.Module):
         *,
         device: torch.device | str | None = None,
     ) -> OnlineWorldModel:
-        """Build the complete RGB/oracle-debug vertical path from typed config."""
+        """Build the complete configured observation path from typed config."""
 
         from world_model.belief import NUM_MOTION_MODES
         from world_model.dynamics import (
+            AnalyticFreeMotionDynamics,
             BallisticContactDynamics,
             ConstantVelocityDynamics,
             DynamicsModel,
@@ -171,6 +186,10 @@ class OnlineWorldModel(nn.Module):
         from world_model.observations.rgb import (
             RGBObservationConfig,
             RGBObservationModule,
+        )
+        from world_model.observations.rgbd import (
+            RGBDObservationConfig,
+            RGBDObservationModule,
         )
         from world_model.observations.state import (
             StateObservationConfig,
@@ -192,7 +211,17 @@ class OnlineWorldModel(nn.Module):
             parameter_memory_dim=state_config.parameter_memory_dim,
             global_code_dim=state_config.global_dim,
         )
-        dynamics = DynamicsModel.from_config(config)
+        if config.model.rgbd.enabled:
+            factory = replace(
+                factory,
+                initial_radius=config.model.rgbd.world_radius,
+                initial_drag=config.model.rgbd.linear_drag,
+            )
+        dynamics = (
+            AnalyticFreeMotionDynamics()
+            if config.model.dynamics.analytic_free_motion_only
+            else DynamicsModel.from_config(config)
+        )
         modules: dict[str, ObservationModule] = {}
         rgb_config = config.model.rgb
         if rgb_config.enabled:
@@ -408,6 +437,25 @@ class OnlineWorldModel(nn.Module):
                     measurement_log_variance_max=(rgb_config.measurement_log_variance_max),
                 )
             )
+        rgbd_config = config.model.rgbd
+        if rgbd_config.enabled:
+            modules["rgbd"] = RGBDObservationModule(
+                RGBDObservationConfig(
+                    world_radius=rgbd_config.world_radius,
+                    foreground_threshold=rgbd_config.foreground_threshold,
+                    foreground_temperature=rgbd_config.foreground_temperature,
+                    minimum_mass=rgbd_config.minimum_mass,
+                    measurement_position_variance=(rgbd_config.measurement_position_variance),
+                    temporal_history_size=rgbd_config.temporal_history_size,
+                    temporal_min_samples=rgbd_config.temporal_min_samples,
+                    temporal_min_dt=rgbd_config.temporal_min_dt,
+                    temporal_velocity_variance_floor=(rgbd_config.temporal_velocity_variance_floor),
+                    temporal_velocity_variance_ceiling=(
+                        rgbd_config.temporal_velocity_variance_ceiling
+                    ),
+                    fit_conditioning_limit=rgbd_config.fit_conditioning_limit,
+                )
+            )
         debug_allowed = (
             config.runtime.enable_debug_oracle or config.runtime.modality == "debug_oracle"
         )
@@ -439,6 +487,8 @@ class OnlineWorldModel(nn.Module):
                 minimum_log_variance=filter_config.min_log_variance,
                 maximum_log_variance=filter_config.max_log_variance,
                 learned_residual_scale=filter_config.learned_residual_scale,
+                enable_learned_corrector=filter_config.enable_learned_corrector,
+                direct_metric_position_update=(filter_config.direct_metric_position_update),
                 innovation_anchored_correction=(filter_config.innovation_anchored_correction),
                 missed_fast_variance_increment=(filter_config.missed_variance_growth),
                 observed_confidence_threshold=(association_config.minimum_measurement_confidence),
@@ -477,8 +527,13 @@ class OnlineWorldModel(nn.Module):
             and state_config.parameter_memory_dim != identification_config.hidden_dim
         ):
             raise ValueError("state.parameter_memory_dim must equal identification.hidden_dim")
+        scheduler_global_every_steps = (
+            rgbd_config.global_every_steps
+            if config.runtime.modality == "rgbd"
+            else rgb_config.global_every_steps
+        )
         scheduler = ObservationScheduler(
-            global_every_steps=rgb_config.global_every_steps,
+            global_every_steps=scheduler_global_every_steps,
             uncertainty_threshold=rgb_config.global_uncertainty_threshold,
             surprise_threshold=rgb_config.surprise_threshold,
         )
@@ -540,6 +595,12 @@ class OnlineWorldModel(nn.Module):
 
         return self._last_measurements
 
+    @property
+    def last_direct_velocity_evidence(self) -> DirectVelocityEvidence | None:
+        """Detached temporal evidence emitted by the most recent observation."""
+
+        return self._last_direct_velocity_evidence
+
     def predictive_abstractions(self) -> AbstractionAssignment:
         """Return the current derived executable abstraction per entity.
 
@@ -566,6 +627,7 @@ class OnlineWorldModel(nn.Module):
         self.scheduler.reset()
         self.diagnostics.reset()
         self._last_measurements = None
+        self._last_direct_velocity_evidence = None
         if self.hypothesis_controller is not None:
             device, dtype = self._model_device_dtype()
             self.hypothesis_controller.reset(batch_size, device=device, dtype=dtype)
@@ -877,6 +939,10 @@ class OnlineWorldModel(nn.Module):
         payload = packet.payload
         if isinstance(payload, Tensor) and payload.ndim >= 3:
             return int(payload.shape[-2]), int(payload.shape[-1])
+        if packet.modality == "rgbd" and isinstance(payload, Mapping):
+            rgb = payload.get("rgb")
+            if isinstance(rgb, Tensor) and rgb.ndim == 4:
+                return int(rgb.shape[-2]), int(rgb.shape[-1])
         return None
 
     @staticmethod
@@ -941,6 +1007,7 @@ class OnlineWorldModel(nn.Module):
         prior_interval_collision_mask: Tensor | None = None,
     ) -> WorldBelief:
         started = time.perf_counter()
+        self._last_direct_velocity_evidence = None
         if self.identifier is not None:
             # Diagnostics describe this packet only.  A propagation-only
             # scheduler decision must not expose the preceding update again.
@@ -958,6 +1025,7 @@ class OnlineWorldModel(nn.Module):
                 f"unsupported modality {packet.modality!r}; enabled: {available}"
             ) from exc
         module.validate_packet(packet)
+        stream_key = runtime_stream_key(packet.modality, packet.sensor_id)
         posterior = self._update_known_sensor_state(posterior, packet)
         sensor_context = SensorContext(
             sensor_id=packet.sensor_id,
@@ -976,9 +1044,12 @@ class OnlineWorldModel(nn.Module):
             raise ValueError(
                 "predicted measurement timestamp must equal the propagated belief timestamp"
             )
-        scheduler_context = self.diagnostics.scheduler_context(packet.sensor_id)
+        scheduler_context = self.diagnostics.scheduler_context(stream_key)
+        scheduler_packet = (
+            packet if stream_key == packet.sensor_id else replace(packet, sensor_id=stream_key)
+        )
         mode = self.scheduler.choose(
-            packet=packet,
+            packet=scheduler_packet,
             belief=posterior,
             predicted=predicted,
             diagnostics=scheduler_context,
@@ -994,20 +1065,20 @@ class OnlineWorldModel(nn.Module):
             predicted_regions=predicted.rois,
             metadata=packet.metadata,
         )
-        cache = self.state.caches.get(packet.sensor_id)
+        cache = self.state.caches.get(stream_key)
         if cache is not None and not self._cache_matches_belief(cache, posterior):
-            self.state.caches.pop(packet.sensor_id, None)
+            self.state.caches.pop(stream_key, None)
             cache = None
         if mode in {ObservationMode.GLOBAL_DISCOVERY, ObservationMode.RECOVERY}:
             # A global pass invalidates object-indexed ROI features even when it
             # was cadence-triggered rather than surprise-triggered.
-            self.state.caches.pop(packet.sensor_id, None)
+            self.state.caches.pop(stream_key, None)
             measurements = module.initialise_measurements([packet], observation_context)
         elif mode == ObservationMode.FAST_ROI:
             measurements, new_cache = module.encode_measurements(
                 [packet], posterior, predicted, cache
             )
-            self.state.caches[packet.sensor_id] = new_cache
+            self.state.caches[stream_key] = new_cache
         else:
             return posterior
         measurements.validate()
@@ -1058,13 +1129,14 @@ class OnlineWorldModel(nn.Module):
             posterior=posterior,
             measured=measurements,
             association=association,
-            history=self.state.temporal_histories.get(packet.sensor_id),
+            history=self.state.temporal_histories.get(stream_key),
         )
         if temporal_history is None:
-            self.state.temporal_histories.pop(packet.sensor_id, None)
+            self.state.temporal_histories.pop(stream_key, None)
         else:
-            self.state.temporal_histories[packet.sensor_id] = temporal_history
+            self.state.temporal_histories[stream_key] = temporal_history
         if velocity_evidence is not None:
+            self._last_direct_velocity_evidence = velocity_evidence.detach()
             posterior = self.updater.correct_direct_velocity(
                 posterior,
                 velocity_evidence,
@@ -1101,13 +1173,35 @@ class OnlineWorldModel(nn.Module):
             else:
                 self.state.tentative_births.pop(tentative_key, None)
             active_before_birth = int(posterior.objects.active.sum().detach().cpu())
-            posterior = self.lifecycle.birth_from_measurements(
-                posterior,
-                measurements,
-                confirmed_measurements,
-                confidence_threshold=self.birth_confidence,
-                initial_velocity_variance=self.initial_velocity_variance,
-            )
+            if module.requires_post_birth_temporal_history:
+                posterior, birth_assignments = (
+                    self.lifecycle.birth_from_measurements_with_assignments(
+                        posterior,
+                        measurements,
+                        confirmed_measurements,
+                        confidence_threshold=self.birth_confidence,
+                        initial_velocity_variance=self.initial_velocity_variance,
+                    )
+                )
+                if birth_assignments.count:
+                    temporal_history = module.update_temporal_history_after_births(
+                        posterior=posterior,
+                        measured=measurements,
+                        birth_assignments=birth_assignments,
+                        history=self.state.temporal_histories.get(stream_key),
+                    )
+                    if temporal_history is None:
+                        self.state.temporal_histories.pop(stream_key, None)
+                    else:
+                        self.state.temporal_histories[stream_key] = temporal_history
+            else:
+                posterior = self.lifecycle.birth_from_measurements(
+                    posterior,
+                    measurements,
+                    confirmed_measurements,
+                    confidence_threshold=self.birth_confidence,
+                    initial_velocity_variance=self.initial_velocity_variance,
+                )
             confirmed_births = max(
                 0,
                 int(posterior.objects.active.sum().detach().cpu()) - active_before_birth,
@@ -1129,17 +1223,17 @@ class OnlineWorldModel(nn.Module):
                 predicted_belief=predicted_belief,
                 direct_velocity_evidence=velocity_evidence,
             )
-        cached_after_update = self.state.caches.get(packet.sensor_id)
+        cached_after_update = self.state.caches.get(stream_key)
         if cached_after_update is not None and not self._cache_matches_belief(
             cached_after_update,
             posterior,
         ):
-            self.state.caches.pop(packet.sensor_id, None)
+            self.state.caches.pop(stream_key, None)
         aggregate_surprise = float(surprise.aggregate_surprise.mean().detach().cpu())
         unmatched_count = int(association.unmatched_measurements.sum().detach().cpu())
         failures = int(active_before > 0 and int(association.pair_mask.sum().detach().cpu()) == 0)
         self.scheduler.record(
-            packet.sensor_id,
+            stream_key,
             mode,
             surprise=aggregate_surprise,
             association_failures=failures,
@@ -1154,7 +1248,7 @@ class OnlineWorldModel(nn.Module):
             RuntimeStepDiagnostics(
                 timestamp=packet.timestamp,
                 modality=packet.modality,
-                sensor_id=packet.sensor_id,
+                sensor_id=stream_key,
                 observation_mode=mode.value,
                 active_objects_before=active_before,
                 active_objects_after=int(posterior.objects.active.sum().detach().cpu()),
@@ -1183,18 +1277,44 @@ class OnlineWorldModel(nn.Module):
             raise PreparedPropagationError(
                 "prepared propagation requires one observation timestamp group"
             )
+        # Validate the raw composite before device/dtype normalization.  The
+        # RGB-D geometry contract deliberately rejects low precision; silently
+        # promoting float16 here would bypass that public fail-closed boundary.
+        for packet in packet_list:
+            try:
+                module = self.observation_modules[packet.modality]
+            except KeyError as exc:
+                available = ", ".join(self.observation_modules.keys())
+                raise KeyError(
+                    f"unsupported modality {packet.modality!r}; enabled: {available}"
+                ) from exc
+            if packet.modality == "rgbd":
+                module.validate_packet(packet)
         device, dtype = self._model_device_dtype()
         packet_list = [_move_packet(packet, device=device, dtype=dtype) for packet in packet_list]
         packet_list.sort(key=lambda packet: packet.timestamp)
         for timestamp, iterator in groupby(packet_list, key=lambda packet: packet.timestamp):
             group = list(iterator)
+            ordered_group = self._order_group(group)
+            stream_keys = [
+                runtime_stream_key(packet.modality, packet.sensor_id) for packet in ordered_group
+            ]
+            if len(stream_keys) != len(set(stream_keys)):
+                raise ValueError("one timestamp group cannot contain duplicate observation streams")
+            packet_batch_sizes = {_packet_batch_size(packet) for packet in ordered_group}
+            if len(packet_batch_sizes) != 1:
+                message = "observation modalities disagree on batch size"
+                if prepared is not None:
+                    raise PreparedPropagationError(message)
+                raise ValueError(message)
+            group_batch_size = packet_batch_sizes.pop()
             if self.state.belief is None:
                 if prepared is not None:
                     raise PreparedPropagationError(
                         "cannot consume prepared propagation before belief initialization"
                     )
-                self.state.batch_size = _packet_batch_size(group[0])
-                self.state.belief = self._initial_belief(group[0])
+                self.state.batch_size = group_batch_size
+                self.state.belief = self._initial_belief(ordered_group[0])
                 if self.hypothesis_controller is not None:
                     self.hypothesis_controller.reset(
                         self.state.batch_size,
@@ -1202,6 +1322,16 @@ class OnlineWorldModel(nn.Module):
                         dtype=self.state.belief.dtype,
                     )
             current = self.state.belief
+            if prepared is None and group_batch_size != current.batch_size:
+                raise ValueError("observation batch size changed without runtime reset")
+            for packet in ordered_group:
+                module = self.observation_modules[packet.modality]
+                stream_key = runtime_stream_key(packet.modality, packet.sensor_id)
+                module.validate_temporal_history_packet(
+                    posterior=current,
+                    packet=packet,
+                    history=self.state.temporal_histories.get(stream_key),
+                )
             requested = self._requested_timestamp(current, timestamp)
             source_tensor_signature = tensor_identity_version_signature(current)
             dynamics_tensor_signature = self._dynamics_tensor_signature()
@@ -1213,16 +1343,11 @@ class OnlineWorldModel(nn.Module):
                     tensor_signature=tensor_identity_version_signature,
                 )
             if prepared is not None:
-                packet_batch_sizes = {_packet_batch_size(packet) for packet in group}
-                if len(packet_batch_sizes) != 1:
-                    raise PreparedPropagationError(
-                        "prepared propagation observation modalities disagree on batch size"
-                    )
                 self._validate_prepared_propagation(
                     prepared,
                     current=current,
                     requested=requested,
-                    packet_batch_size=packet_batch_sizes.pop(),
+                    packet_batch_size=group_batch_size,
                 )
                 prepared._consume()
                 prior = prepared.prior
@@ -1258,7 +1383,7 @@ class OnlineWorldModel(nn.Module):
                 else:
                     prior = self.dynamics.predict(current, dt)
             posterior = prior
-            for packet_index, packet in enumerate(self._order_group(group)):
+            for packet_index, packet in enumerate(ordered_group):
                 # Elapsed-time evidence belongs to the first assimilation only.
                 # Later modalities at the same timestamp correct that posterior
                 # without applying temporal position→velocity coupling twice.

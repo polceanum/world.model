@@ -10,11 +10,14 @@ from world_model.belief import BeliefFactory, BeliefTrajectory
 from world_model.evaluation.evaluator import (
     _canonical_sha256,
     _capture_checkpoint_snapshot,
+    _record_temporal_velocity_measurements,
     _recovery_persistent_support,
     _require_finite_belief,
     _require_finite_metrics,
     _require_finite_trajectory,
     _resolved_evaluation_protocol,
+    _temporal_velocity_measurement_metric_source,
+    evaluate_checkpoint,
 )
 from world_model.evaluation.reports import write_evaluation_report
 from world_model.evaluation.seed_protocol import make_evaluation_seed_protocol
@@ -31,6 +34,45 @@ def _trajectory(*, event_value: float = 0.0) -> BeliefTrajectory:
         fast_log_variance=torch.zeros(1, 1, 1, 3),
         active_mask=torch.ones(1, 1, 1, dtype=torch.bool),
         event_logits=torch.full((1, 1, 1, 4), event_value),
+    )
+
+
+class _TemporalMeasurementRecorder:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, object]] = []
+
+    def update(self, value: object) -> None:
+        self.calls.append(("measurement", value))
+
+    def update_direct(self, value: object) -> None:
+        self.calls.append(("direct", value))
+
+
+def test_evaluator_records_one_modality_owned_temporal_velocity_representation() -> None:
+    measurements = object()
+    direct = object()
+    rgb = _TemporalMeasurementRecorder()
+    _record_temporal_velocity_measurements(
+        rgb,  # type: ignore[arg-type]
+        modality="rgb",
+        measurements=measurements,  # type: ignore[arg-type]
+        direct_evidence=direct,  # type: ignore[arg-type]
+    )
+    assert rgb.calls == [("measurement", measurements)]
+
+    rgbd = _TemporalMeasurementRecorder()
+    _record_temporal_velocity_measurements(
+        rgbd,  # type: ignore[arg-type]
+        modality="rgbd",
+        measurements=measurements,  # type: ignore[arg-type]
+        direct_evidence=direct,  # type: ignore[arg-type]
+    )
+    assert rgbd.calls == [("measurement", measurements), ("direct", direct)]
+    assert _temporal_velocity_measurement_metric_source("rgb") == (
+        "fresh_runtime_last_measurements_explicit_auxiliary_fields_only"
+    )
+    assert _temporal_velocity_measurement_metric_source("rgbd") == (
+        "fresh_runtime_last_direct_velocity_evidence_after_association"
     )
 
 
@@ -142,3 +184,44 @@ def test_resolved_protocol_hash_binds_manifest_batch_horizons_and_intervention()
     assert _canonical_sha256(protocol) == _canonical_sha256(repeated)
     assert _canonical_sha256(protocol) != _canonical_sha256(changed_batch)
     assert _canonical_sha256(protocol) != _canonical_sha256(changed_intervention)
+
+
+def test_rgbd_resolved_protocol_has_distinct_truthful_schema_and_warmup() -> None:
+    config = load_config("configs/rgbd_online_free_motion_cpu.yaml")
+    config = replace(
+        config,
+        evaluation=replace(config.evaluation, episodes=2),
+    )
+    seed_protocol = make_evaluation_seed_protocol(
+        name="standard",
+        split="test",
+        episode_count=2,
+        training_validation_episodes=config.training.validation_episodes,
+    )
+
+    protocol = _resolved_evaluation_protocol(
+        config,
+        checkpoint_sha256="b" * 64,
+        resolved_seed_protocol=seed_protocol,
+        batch_size=2,
+        runtime_hypothesis_pool=False,
+    )
+
+    assert protocol["schema_version"] == "held_out_rgbd_online_v1"
+    assert protocol["metric_schema_version"] == "held_out_rgbd_metrics_v1"
+    assert protocol["observation_modality"] == "rgbd"
+    assert protocol["rgb_only"] is False
+    assert protocol["temporal_warmup_frames"] == 15
+
+
+def test_rgbd_evaluator_rejects_rgb_only_hypothesis_pool_before_checkpoint_access(
+    tmp_path,
+) -> None:
+    config = load_config("configs/rgbd_online_free_motion_cpu.yaml")
+
+    with pytest.raises(ValueError, match="supports only RGB evaluation"):
+        evaluate_checkpoint(
+            config,
+            tmp_path / "missing.pt",
+            runtime_hypothesis_pool=True,
+        )

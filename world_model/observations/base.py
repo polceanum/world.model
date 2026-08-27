@@ -18,6 +18,7 @@ from world_model.observations.measurements import (
 from world_model.observations.packets import ObservationPacket
 
 if TYPE_CHECKING:
+    from world_model.belief.lifecycle import BirthAssignments
     from world_model.belief.world_belief import WorldBelief
     from world_model.fusion.association import AssociationResult
 
@@ -40,6 +41,7 @@ class ObservationModule(nn.Module, ABC):
     """Stable interface implemented by every observation modality."""
 
     modality_name: str
+    requires_post_birth_temporal_history: bool = False
 
     @abstractmethod
     def validate_packet(self, packet: ObservationPacket) -> None:
@@ -104,6 +106,37 @@ class ObservationModule(nn.Module, ABC):
 
         del posterior, measured, association
         return None, history
+
+    def validate_temporal_history_packet(
+        self,
+        *,
+        posterior: WorldBelief,
+        packet: ObservationPacket,
+        history: ModalityHistory | None,
+    ) -> None:
+        """Preflight a causal history append before runtime state can mutate."""
+
+        del posterior, packet, history
+
+    def update_temporal_history_after_births(
+        self,
+        *,
+        posterior: WorldBelief,
+        measured: MeasurementSet,
+        birth_assignments: BirthAssignments,
+        history: ModalityHistory | None,
+    ) -> ModalityHistory | None:
+        """Optionally seed raw history after permanent lifecycle allocation.
+
+        The ordinary association callback runs before births exist.  Modules
+        that opt into this second callback can use explicit discrete birth
+        assignments to retain the current raw measurement under its permanent
+        ID.  The hook deliberately cannot emit correction evidence: a single
+        birth frame must not immediately correct position or velocity twice.
+        """
+
+        del posterior, measured, birth_assignments
+        return history
 
     def observe(
         self,

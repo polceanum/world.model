@@ -1,5 +1,146 @@
 # Design decisions
 
+## ADR-164 — Accept the canonical public RGB-D bridge qualification
+
+- **Date:** 2026-08-27
+- **Status:** accepted; canonical development/audit and exactly-once protected
+  qualification passed, and final is consumed
+- **Context:** ADR-163 froze the one-slot public bridge before any episode
+  access. The first development execution on source
+  `ebda5a8bfa7b1131b827202f575351d116c78d01` passed every numerical gate,
+  but its validator compared JSON-roundtripped list-valued protocol vectors
+  with tuple-valued in-memory data through raw Python equality. Although their
+  canonical content and protocol SHA were equal, the persisted report could
+  not validate itself. Report/checkpoint SHA-256 values
+  `2104ee87bcabdbd5312b4026a33e44e1de7d197e50215ec7f0bf0e0bb56992e3`
+  and `38f4b2ef5addb98bb966360213d3bb36b43da606367fc60cd75d2ec487f1b866`
+  are therefore rejected development-only diagnostics archived under ignored
+  `runs/rgbd_online_bridge_v1/rejected_ebda5a8_json_protocol/`. No selector,
+  confirmation, or final access was authorized from them.
+- **Decision:** Accept only the fresh development and protected sequence bound
+  to canonical clean source
+  `526b5123e6385c575a5777936272330d28972b93`, runtime-source fingerprint
+  `1eeaa176ad9be8886976910fe53028fb6de498adda73a2d20170f206b6134b40`,
+  worktree fingerprint
+  `90d0624a119e118e76b58061f7e5582dffc906f47d85cc4dde997b2f765bb07a`,
+  config SHA-256
+  `c40b3438c7fd60646d356db3fe54050039912ace288d9db89620b626106993a3`,
+  protocol SHA-256
+  `e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`,
+  and empty model-state SHA-256
+  `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+  The canonical development report, checkpoint, and manifest SHA-256 values
+  are
+  `dce6f920da85fbf696b7ae8a7a91d9cbf7d9084176e51ad7c319f92a6efe4966`,
+  `48249f1a5a0467b1da8c7bdb5ad9e909f8c502631ec2fbad832cb490a00c3099`,
+  and `069eb3331543727c911a07cc9a1bb352f6185ac8ceac7fafca502c9d7fab6d80`.
+  Independent audit passed before protected access. Accept the subsequently
+  ledgered selector -> confirmation -> final pass exactly once; final is
+  consumed and may never be rerun.
+- **Evidence:** Selector, confirmation, and final manifest/result SHA-256 pairs
+  are
+  `2159b044e089774b3b7df95509ac2cded19528de6ff133ae1b158a354ed7fbb9` /
+  `9ac6b7cc1b97da9961345fdcf5488ddec3ac6a0186215699a55a66acfbb983cb`,
+  `2cad3224740b4d73871ff1d1e60795d45dc149ad03d197513eddf514cb9946bf` /
+  `1a3996914d59f840b2645e4b886f1027b830fa6f81c5763eb1735f25149aa9bc`,
+  and
+  `3c5c904203ddd46ea790322e446466b2c58e603015456f239715aa07135011a3` /
+  `40d39accec8c2c6efa97f06a2f2748c580a5666b54c7dac4df36e3d7dc718bd1`.
+  Qualification-report and ledger SHA-256 values are
+  `7fd1829f663606910ac81990e4b633c63b1460dbc31dd24c71eedbd91b422908`
+  and `cf6a10dd672aafbdd91c92871ae349fef0c549d865cc6532e6c42f7d9be14e32`.
+  Development/selector/confirmation/final current position RMSE is
+  `3.068470/3.177543/5.681172/2.996787 mm`, current velocity RMSE is
+  `2.191966/2.313401/1.658775/2.221047 mm/s`, and two-second position RMSE is
+  `5.609913/5.881384/6.188252/5.433965 mm`. Every split reports `175/175`
+  finite scalars, zero failures, one position owner, identity-change count
+  zero, active fraction one, normal history `16/16`, and full `16/16`
+  per-target/per-modality history VJP support. Learned parameters, buffers,
+  model state, optimizer and optimizer-scheduler state, and updates remain
+  zero. Final semigroup error
+  is `2.384186e-7 m`/`1.862645e-9 m/s`, persistent runtime state is `25,364`
+  bytes, maximum RSS is `708,853,760` bytes, and the current source gates are
+  `421 passed in 62.72 s` focused and
+  `1209 passed, 16 skipped in 434.37 s` complete.
+- **Alternatives considered:** promote the rejected `ebda5a8` numerical pass;
+  repair the comparison and reuse its artifacts; inspect protected data before
+  a fresh audit; rerun final for confirmation; begin multi-object, contact,
+  modality, or learned-capacity scaling immediately.
+- **Consequences:** The accepted claim is the frozen one-slot, one-sphere,
+  fixed-camera, fixed-parameter free-motion bridge through two seconds, ready
+  to merge. It is not an uncertainty-calibration, broader world-model,
+  multi-object, contact, new-modality, or learned-capacity result. Independent
+  audit recomputed gates from finite persisted evidence but did not regenerate
+  protected episodes or rerun latency/RSS. The durable ledger is atomically
+  replaced state rather than an append-only timestamped transition log, so
+  access-before-materialization rests on clean committed control flow plus the
+  final ledger and result receipts. SHA-bound fresh-path evidence remains
+  owner-writable and is tamper-evident, not OS write-once. After merge and
+  before new data, the next bounded rung must predeclare moving-camera,
+  multi-object, association/occlusion, contact/event, task-success, capacity,
+  gradient, accuracy, memory, and rollout-throughput gates while adding one
+  changed capability at a time.
+
+## ADR-163 — Freeze the parameter-free public RGB-D bridge before development
+
+- **Date:** 2026-08-27
+- **Status:** accepted source-freeze contract; qualification completed by
+  ADR-164
+- **Context:** ADR-162 qualified the standalone sixteen-frame RGB-D temporal
+  estimator through two seconds, but it intentionally bypassed the public
+  `OnlineWorldModel`. Integrating it could reintroduce duplicated correction,
+  posterior-derived temporal evidence, modality-key collisions, non-atomic
+  prepared propagation, dishonest RGB-labelled evaluation, or hidden runtime
+  state that an ordinary checkpoint cannot reproduce. Capacity scaling before
+  reproducing the accepted behavior through the public loop would create a
+  second architecture instead of extending the qualified one.
+- **Decision:** Implement one composite batched `rgbd` packet with batched
+  calibration, explicit image size, and modality-qualified stream key. Give
+  raw metric position one direct filter owner and its declared measurement
+  variance; keep the learned corrector disabled. Align sixteen raw position
+  rows by persistent object ID, fit velocity only through uniform
+  differentiable exact free-motion WLS, and use parameter-free analytic
+  dynamics for every horizon. Preserve per-frame RGB/depth VJPs. For an
+  already-active persistent object, a well-formed frame with missing depth,
+  nonfinite or otherwise invalid depth in the sampled measurement support, or
+  no foreground appends an invalid causal row; the frozen sixteenth-frame
+  full-window ablation reports `sample_count: 16` and `valid_count: 15`. It
+  emits no valid/admissible temporal fit or direct velocity evidence,
+  correction, or birth; a finite diagnostic fit with `fit_valid: false` is not
+  admissible evidence. Before birth, the same frame advances runtime time but
+  creates no object-history row and no birth. Reject malformed packets,
+  nonfinite RGB/calibration, low-precision input, unknown/duplicate/stale
+  streams, and invalid prepared propagation atomically before any state or
+  one-use propagation is consumed. Make evaluator/demo modality metadata
+  explicit, label the fifteen-frame
+  warmup in the evaluator, and retain the demo's warmup-pooled aggregate-error
+  limitation while preserving legacy RGB. Ordinary checkpoints recreate the
+  zero-state module/configuration but do not claim exact live-stream resume
+  from a partially populated temporal history.
+- **Protocol:** Freeze config SHA-256
+  `c40b3438c7fd60646d356db3fe54050039912ace288d9db89620b626106993a3`
+  and seed-free canonical protocol SHA-256
+  `e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`.
+  Reserve development `45000000--45000023`, selector
+  `46000000--46000015`, confirmation `47000000--47000015`, and one-shot final
+  `48000000--48000031`; all remain unopened at source freeze.
+- **Alternatives considered:** separate same-timestamp RGB/depth packets;
+  posterior or filtered-position history; a second Kalman/learned correction
+  owner; confidence-weighted temporal fitting; a recurrent or learned
+  transition; serializing mutable live histories as model weights; beginning
+  multi-object or capacity work before bridge qualification.
+- **Consequences:** At this source-freeze boundary, independent source review
+  and the current-byte targeted gate passed (`419 passed in 61.33 s`), as did
+  the complete repository gate
+  (`1207 passed, 16 skipped in 431.10 s`). Parameters, state-dict entries, and
+  optimizer updates remain zero. Complete batch-four persistent runtime tensor
+  state is `25,364` unique-storage bytes against a `32,768`-byte gate. These
+  were implementation and protocol facts, not accuracy evidence. The next
+  authorized sequence was a clean commit/push, one development reproduction
+  plus independent audit, then exactly-once selector -> confirmation -> final.
+  ADR-164 records completion of that sequence; scaling was blocked pending its
+  result.
+
 ## ADR-153 — Run grounded recursive optimization on the measured faster CPU
 
 - **Date:** 2026-08-21
@@ -4505,7 +4646,10 @@
   protocol and implementation surface; it is not development evidence or a
   temporal/long-horizon convergence claim. A later online bridge must use one
   batched composite `rgbd` packet, a modality-qualified sensor key, raw metric
-  causal history, and fail-closed missing depth before any capacity scaling.
+  causal history, append a well-formed missing/no-foreground/invalid-sampled-
+  depth frame only for an already-active persistent object, and let the same
+  pre-birth frame advance runtime time without an object-history row or birth.
+  Neither path may fall back to RGB before any capacity scaling.
 
 ## ADR-161 — Invalidate the first development artifacts after comparator repair
 

@@ -17,13 +17,61 @@ CONFIG_DIR = Path(__file__).parents[2] / "configs"
 def test_profiles_resolve_and_validate(path: Path) -> None:
     config = load_config(path)
     assert config.model.max_objects >= config.simulator.max_objects
-    assert config.runtime.modality == "rgb"
-    assert config.evaluation.rgb_only
+    assert config.runtime.modality in {"rgb", "rgbd"}
+    if config.runtime.modality == "rgbd":
+        assert config.model.rgbd.enabled
+        assert not config.model.rgb.enabled
+        assert config.model.dynamics.analytic_free_motion_only
+        assert not config.model.filter.enable_learned_corrector
+    assert config.evaluation.rgb_only is (config.runtime.modality == "rgb")
     test_lower, test_upper = SPLIT_SEED_RANGES["test"]
     assert test_lower <= config.demo.seed <= test_upper
     assert config.simulator.split_validation_start == SPLIT_SEED_RANGES["validation"][0]
     assert config.simulator.split_test_start == test_lower
     assert config.simulator.split_ood_start == SPLIT_SEED_RANGES["ood"][0]
+
+
+def test_rgbd_online_profile_binds_metric_temporal_and_analytic_semantics() -> None:
+    config = load_config(CONFIG_DIR / "rgbd_online_free_motion_cpu.yaml")
+
+    assert config.runtime.modality == "rgbd"
+    assert config.runtime.modality_order == ("debug_oracle", "rgbd")
+    assert config.model.rgbd.enabled
+    assert config.model.rgbd.world_radius == pytest.approx(0.21)
+    assert config.model.rgbd.linear_drag == pytest.approx(0.05)
+    assert config.model.rgbd.temporal_history_size == 16
+    assert config.model.rgbd.temporal_min_samples == 16
+    assert config.model.dynamics.analytic_free_motion_only
+    assert not config.model.filter.enable_learned_corrector
+    assert config.model.filter.direct_metric_position_update
+    assert not config.model.identification.enabled
+    assert not config.evaluation.rgb_only
+
+
+@pytest.mark.parametrize(
+    "override,match",
+    [
+        ("model.rgbd.enabled=false", "direct metric position updates require the RGB-D runtime"),
+        ("model.rgbd.temporal_min_samples=15", "must equal temporal_history_size"),
+        ("model.rgbd.temporal_history_size=16.0", "must be an integer"),
+        ("model.rgbd.temporal_min_samples=16.0", "must be an integer"),
+        ("model.rgbd.global_every_steps=0", "global_every_steps must be a positive integer"),
+        ("model.rgbd.world_radius=0", "world_radius must be finite and positive"),
+        ("model.rgbd.linear_drag=0", "linear_drag must be finite and positive"),
+        ("model.rgbd.enabled=1", "must be boolean"),
+        ("model.dynamics.analytic_free_motion_only=1", "must be boolean"),
+        ("model.filter.enable_learned_corrector=1", "must be boolean"),
+        ("model.filter.direct_metric_position_update=1", "must be boolean"),
+        (
+            "model.rgb.enabled=true",
+            "direct metric position updates require an exclusive RGB-D observation path",
+        ),
+        ("evaluation.rgb_only=true", "RGB-D runtime requires evaluation.rgb_only=false"),
+    ],
+)
+def test_rgbd_online_semantics_fail_closed(override: str, match: str) -> None:
+    with pytest.raises(ValueError, match=match):
+        load_config(CONFIG_DIR / "rgbd_online_free_motion_cpu.yaml", overrides=[override])
 
 
 def test_sustained_v3_analytic_contacts_match_reference_solver_thresholds() -> None:

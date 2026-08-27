@@ -75,12 +75,70 @@
 - [x] Record the SHA-bound development, qualification-report, canonical-summary,
   ledger, and four manifest digests; retain the nonblocking caveat that the
   tamper-evident artifact files remain owner-writable.
-- [ ] Bridge the qualified observation and temporal estimator into the
-  public one-slot `OnlineWorldModel` observation/belief/rollout workflow using
-  one batched composite `rgbd` packet and modality-qualified sensor key.
+- [x] Bridge the qualified observation and temporal estimator into the public
+  one-slot `OnlineWorldModel` observation/belief/rollout workflow using one
+  batched composite `rgbd` packet and a modality-qualified stream key.
+- [x] Give direct raw RGB-D position one filter owner, derive only velocity
+  from the persistent-ID-aligned uniform sixteen-frame WLS history, and keep
+  future state parameter-free under analytic free-motion dynamics.
+- [x] Preserve per-frame RGB/depth VJPs; for an already-active persistent
+  object, append a well-formed frame with missing depth, nonfinite or otherwise
+  invalid depth in the sampled measurement support, or no foreground as an
+  invalid causal row. The frozen sixteenth-frame full-window ablation reports
+  `sample_count: 16` and `valid_count: 15`, with no valid/admissible temporal
+  fit, direct velocity evidence, correction, or birth from that measurement.
+- [x] Let a corresponding pre-birth invalid frame advance runtime time while
+  creating no object-history row or birth; keep any finite diagnostic fit with
+  `fit_valid: false` inadmissible as temporal evidence.
+- [x] Preserve atomic no-consumption rejection for malformed packets,
+  nonfinite RGB/calibration, low precision, stale or duplicate streams, unknown
+  modalities, and invalid prepared propagation.
+- [x] Make evaluator/demo modality metadata truthful for composite RGB-D;
+  label the fifteen-frame warmup in evaluator metrics, record the demo's
+  warmup-pooled aggregate-error limitation, and preserve legacy RGB behavior
+  and the explicit lack of exact mid-history checkpoint resume.
+- [x] Freeze bridge config SHA-256
+  `c40b3438c7fd60646d356db3fe54050039912ace288d9db89620b626106993a3`,
+  seed-free protocol SHA-256
+  `e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`,
+  and unopened 45m/46m/47m/48m manifests before episode access.
+- [x] Pass independent source review, the canonical-comparator focused gate at
+  `421 passed in 62.72 s`, and the complete repository gate at
+  `1209 passed, 16 skipped in 434.37 s`; retain zero parameters/state
+  dict/optimizer and full batch-four unique-storage runtime tensor state
+  `25,364 <= 32,768` bytes.
+- [x] Commit and push the reviewed bridge, then reject the first clean
+  `ebda5a8` development artifacts after audit found raw tuple/list protocol
+  comparison despite all `175` reported scalar metrics being finite and all
+  frozen gate checks passing; archive the rejected pair and keep protected
+  data unopened.
+- [x] Repair canonical protocol comparison and tamper rejection in clean source
+  `526b5123e6385c575a5777936272330d28972b93`.
+- [x] Run and independently audit the fresh canonical 24-seed development
+  pass: `175/175` reported scalar metrics finite with no gate failures, report SHA-256
+  `dce6f920da85fbf696b7ae8a7a91d9cbf7d9084176e51ad7c319f92a6efe4966`,
+  checkpoint SHA-256
+  `48249f1a5a0467b1da8c7bdb5ad9e909f8c502631ec2fbad832cb490a00c3099`,
+  and manifest SHA-256
+  `069eb3331543727c911a07cc9a1bb352f6185ac8ceac7fafca502c9d7fab6d80`.
+- [x] Run selector, confirmation, and one-shot final exactly once under the
+  ledger; keep all `175/175` reported scalar metrics finite with no gate
+  failures per split, retain `16/16` VJP reach,
+  zero identity change/learned state, and report/ledger SHA-256
+  `7fd1829f663606910ac81990e4b633c63b1460dbc31dd24c71eedbd91b422908` /
+  `cf6a10dd672aafbdd91c92871ae349fef0c549d865cc6532e6c42f7d9be14e32`.
+- [x] Mark final consumed with no rerun or raw protected-episode reinspection;
+  disclose owner-writable atomic-replace ledger limitations and accept the
+  one-sphere contact-free public bridge.
+- [ ] Commit/push this exact qualification evidence and merge the accepted
+  bridge to GitHub `main` without failed experiment history.
+- [ ] Before generation, predeclare the next bounded rung's multi-object,
+  association/identity, occlusion, contact/event, task-success, capacity,
+  gradient, accuracy, memory, and rollout-throughput gates. Do not alter the
+  accepted bridge or tune thresholds/architecture/capacity on consumed final.
 - [ ] Add one complexity per later rung: camera motion; drag identification;
-  variable scale; multi-object sets; identity/occlusion; contact;
-  material parameters; known actions/planning; richer modalities/geometry.
+  variable scale; multi-object sets; identity/occlusion; contact; material
+  parameters; known actions/planning; richer modalities/geometry.
 - [ ] At every rung require state/velocity/horizon accuracy, uncertainty,
   support, gradient, memory, and throughput non-regression; stop failed
   architecture families instead of marginal retuning.

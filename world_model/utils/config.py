@@ -196,6 +196,32 @@ class RGBConfig:
 
 
 @dataclass(frozen=True)
+class RGBDConfig:
+    """Observable metric RGB-D sphere measurements for the public runtime.
+
+    The first RGB-D integration rung deliberately keeps its physical prior and
+    temporal estimator explicit.  Radius is a checkpointed configuration
+    prior, not a simulator label; temporal velocity is derived from a bounded
+    uniform least-squares fit over raw associated metric measurements.
+    """
+
+    enabled: bool = False
+    global_every_steps: int = 1
+    world_radius: float = 0.21
+    linear_drag: float = 0.05
+    foreground_threshold: float = 0.04
+    foreground_temperature: float = 0.01
+    minimum_mass: float = 4.0
+    measurement_position_variance: float = 6.4e-5
+    temporal_history_size: int = 16
+    temporal_min_samples: int = 16
+    temporal_min_dt: float = 1.0e-3
+    temporal_velocity_variance_floor: float = 1.0e-6
+    temporal_velocity_variance_ceiling: float = 1.0e-2
+    fit_conditioning_limit: float = 100.0
+
+
+@dataclass(frozen=True)
 class DynamicsConfig:
     max_substep: float = 1.0 / 120.0
     # Opt-in multi-rate execution. ``None`` retains one graph/attention
@@ -224,6 +250,10 @@ class DynamicsConfig:
     attention_layers: int = 4
     attention_feed_forward_width: int = 512
     attention_dropout: float = 0.0
+    # Opt-in exact free-motion runtime used to reproduce the qualified
+    # parameter-free RGB-D temporal rung through OnlineWorldModel.  The
+    # default remains the historical hybrid learned/contact dynamics.
+    analytic_free_motion_only: bool = False
     contact_margin: float = 0.0
     boundary_contact_tolerance: float = 1.0e-4
     penetration_slop: float = 1e-4
@@ -249,6 +279,10 @@ class FilterConfig:
     min_log_variance: float = -12.0
     max_log_variance: float = 8.0
     learned_residual_scale: float = 0.15
+    enable_learned_corrector: bool = True
+    # A calibrated RGB-D centre directly owns supported position axes. False
+    # preserves every historical uncertainty-weighted filter/checkpoint.
+    direct_metric_position_update: bool = False
     # False preserves checkpoints trained before specification 1.19. New
     # protocols should opt into evidence-anchored, component-masked updates.
     innovation_anchored_correction: bool = False
@@ -292,6 +326,7 @@ class ModelConfig:
     max_objects: int = 8
     state: StateConfig = field(default_factory=StateConfig)
     rgb: RGBConfig = field(default_factory=RGBConfig)
+    rgbd: RGBDConfig = field(default_factory=RGBDConfig)
     dynamics: DynamicsConfig = field(default_factory=DynamicsConfig)
     filter: FilterConfig = field(default_factory=FilterConfig)
     association: AssociationConfig = field(default_factory=AssociationConfig)
@@ -619,6 +654,27 @@ class OrpheusConfig:
                 raise ValueError(f"model.dynamics.{name} must be finite and nonnegative")
         if not isinstance(model.dynamics.smooth_event_hazard_enabled, bool):
             raise ValueError("model.dynamics.smooth_event_hazard_enabled must be boolean")
+        if not isinstance(model.dynamics.analytic_free_motion_only, bool):
+            raise ValueError("model.dynamics.analytic_free_motion_only must be boolean")
+        if not isinstance(model.filter.enable_learned_corrector, bool):
+            raise ValueError("model.filter.enable_learned_corrector must be boolean")
+        if not isinstance(model.filter.direct_metric_position_update, bool):
+            raise ValueError("model.filter.direct_metric_position_update must be boolean")
+        if model.filter.direct_metric_position_update:
+            if runtime.modality != "rgbd" or not model.rgbd.enabled:
+                raise ValueError("direct metric position updates require the RGB-D runtime")
+            if model.rgb.enabled or runtime.enable_debug_oracle:
+                raise ValueError(
+                    "direct metric position updates require an exclusive RGB-D observation path"
+                )
+            if model.filter.enable_learned_corrector:
+                raise ValueError(
+                    "direct metric position updates require the learned corrector disabled"
+                )
+        if model.dynamics.analytic_free_motion_only and runtime.hypothesis_pool_enabled:
+            raise ValueError(
+                "analytic free-motion runtime cannot enable learned hypothesis selection"
+            )
         for name, value in (
             (
                 "event_hazard_gap_temperature_m",
@@ -641,6 +697,66 @@ class OrpheusConfig:
             or model.rgb.global_every_steps <= 0
         ):
             raise ValueError("model.rgb.global_every_steps must be a positive integer")
+        if not isinstance(model.rgbd.enabled, bool):
+            raise ValueError("model.rgbd.enabled must be boolean")
+        if (
+            isinstance(model.rgbd.global_every_steps, bool)
+            or not isinstance(model.rgbd.global_every_steps, int)
+            or model.rgbd.global_every_steps <= 0
+        ):
+            raise ValueError("model.rgbd.global_every_steps must be a positive integer")
+        for name, value in (
+            ("world_radius", model.rgbd.world_radius),
+            ("linear_drag", model.rgbd.linear_drag),
+            ("foreground_threshold", model.rgbd.foreground_threshold),
+            ("foreground_temperature", model.rgbd.foreground_temperature),
+            ("minimum_mass", model.rgbd.minimum_mass),
+            ("measurement_position_variance", model.rgbd.measurement_position_variance),
+            ("temporal_min_dt", model.rgbd.temporal_min_dt),
+            (
+                "temporal_velocity_variance_floor",
+                model.rgbd.temporal_velocity_variance_floor,
+            ),
+            (
+                "temporal_velocity_variance_ceiling",
+                model.rgbd.temporal_velocity_variance_ceiling,
+            ),
+            ("fit_conditioning_limit", model.rgbd.fit_conditioning_limit),
+        ):
+            if isinstance(value, bool) or not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"model.rgbd.{name} must be finite and positive")
+        if model.rgbd.foreground_threshold >= 2.0:
+            raise ValueError("model.rgbd.foreground_threshold must be smaller than two")
+        for name, value in (
+            ("temporal_history_size", model.rgbd.temporal_history_size),
+            ("temporal_min_samples", model.rgbd.temporal_min_samples),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 2:
+                raise ValueError(f"model.rgbd.{name} must be an integer of at least two")
+        if model.rgbd.temporal_history_size != 16:
+            raise ValueError("the first model.rgbd bridge requires exactly 16 history samples")
+        if model.rgbd.temporal_min_samples != model.rgbd.temporal_history_size:
+            raise ValueError("model.rgbd.temporal_min_samples must equal temporal_history_size")
+        if (
+            model.rgbd.temporal_velocity_variance_ceiling
+            < model.rgbd.temporal_velocity_variance_floor
+        ):
+            raise ValueError("model.rgbd temporal velocity variance bounds must be ordered")
+        if model.rgbd.fit_conditioning_limit <= 1.0:
+            raise ValueError("model.rgbd.fit_conditioning_limit must be greater than one")
+        if model.rgbd.enabled:
+            if model.max_objects != 1 or simulator.min_objects != 1 or simulator.max_objects != 1:
+                raise ValueError("the first model.rgbd bridge requires exactly one object slot")
+            if simulator.radius_range != (model.rgbd.world_radius, model.rgbd.world_radius):
+                raise ValueError(
+                    "the first model.rgbd bridge requires its checkpointed world_radius "
+                    "to equal the fixed simulator radius"
+                )
+            if simulator.drag_range != (model.rgbd.linear_drag, model.rgbd.linear_drag):
+                raise ValueError(
+                    "the first model.rgbd bridge requires its checkpointed linear_drag "
+                    "to equal the fixed simulator drag"
+                )
         if (
             not math.isfinite(model.rgb.temporal_velocity_min_dt)
             or model.rgb.temporal_velocity_min_dt <= 0
@@ -1166,15 +1282,23 @@ class OrpheusConfig:
             raise ValueError(
                 f"Unsupported closed-loop device preference {self.device.closed_loop_preference!r}"
             )
-        if self.runtime.modality not in {"rgb", "debug_oracle"}:
+        if self.runtime.modality not in {"rgb", "rgbd", "debug_oracle"}:
             raise ValueError(f"Unsupported runtime modality {self.runtime.modality!r}")
+        if self.runtime.modality == "rgbd" and not model.rgbd.enabled:
+            raise ValueError("runtime.modality='rgbd' requires model.rgbd.enabled=true")
         if not self.runtime.strict_timestamps:
             raise ValueError(
                 "Milestone 1 requires runtime.strict_timestamps=true; "
                 "out-of-sequence buffering is not implemented"
             )
-        if self.runtime.modality == "rgb" and not simulator.known_camera_pose:
-            raise ValueError("Milestone 1 RGB requires known_camera_pose=true")
+        if self.runtime.modality in {"rgb", "rgbd"} and not simulator.known_camera_pose:
+            raise ValueError("RGB/RGB-D runtime requires known_camera_pose=true")
+        if not isinstance(self.evaluation.rgb_only, bool):
+            raise ValueError("evaluation.rgb_only must be boolean")
+        if self.runtime.modality == "rgb" and not self.evaluation.rgb_only:
+            raise ValueError("RGB runtime requires evaluation.rgb_only=true")
+        if self.runtime.modality == "rgbd" and self.evaluation.rgb_only:
+            raise ValueError("RGB-D runtime requires evaluation.rgb_only=false")
         if self.evaluation.rgb_only and (
             self.runtime.modality == "debug_oracle" or self.runtime.enable_debug_oracle
         ):

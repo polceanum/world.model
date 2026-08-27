@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.54
+**Version:** 1.55
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, and exactly-once bridge-acceptance evidence amendments 27 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -7883,8 +7883,12 @@ and depth packets are forbidden for that first bridge: current runtime batch
 inference is ambiguous for unbatched mapping tensors, cache/history/scheduler
 state is keyed only by `sensor_id`, and only the first packet in a timestamp
 group receives elapsed-time evidence. The bridge must use raw metric
-measurements for bounded causal history and `DirectVelocityEvidence`, keep
-missing depth fail-closed, preserve selected continuous gradients, and update
+measurements for bounded causal history and `DirectVelocityEvidence`. For an
+already-active persistent object, a well-formed frame with missing depth,
+nonfinite or otherwise invalid depth in the sampled measurement support, or no
+foreground appends an invalid causal row without RGB fallback. Before birth,
+the same frame advances runtime time but creates no object-history row and no
+birth. The bridge must preserve selected continuous gradients and update
 checkpoint/evaluator/demo schemas truthfully. None of those online-integration
 changes is part of the frozen standalone protocol.
 
@@ -7986,9 +7990,200 @@ declared horizons. It does not qualify the public `OnlineWorldModel` bridge,
 additional scene complexity, learned capacity, or broader world-model
 convergence. The next rung is the composite batched RGB-D online bridge already
 bounded in section 245; capacity scaling remains prohibited until that bridge
-reproduces the qualified behavior. The current full source gate remains
-`1130 passed, 16 skipped in 414.82 s`; this documentation amendment creates no
-new full-test claim.
+reproduces the qualified behavior. The standalone-source full gate at that
+boundary was `1130 passed, 16 skipped in 414.82 s`; the first integrated bridge
+boundary passed `1207 passed, 16 skipped in 431.10 s`, and canonical comparator
+source in section 250 passes `1209 passed, 16 skipped in 434.37 s`.
+
+# Part XLVI — Public RGB-D online-bridge amendment
+
+## 248. Freeze the causal one-slot bridge before development access
+
+The qualified standalone two-second RGB-D temporal rung in section 247 remains
+the accepted lower bound.  At the specification-1.55 source-freeze boundary,
+the first public integration existed behind the ordinary `OnlineWorldModel`
+contracts and its qualification data was unopened.  Section 250 records the
+subsequent completed qualification.  The bridge consumes exactly one
+composite, batched `rgbd` packet per
+timestamp and sensor, with RGB `[B,3,H,W]`, depth `[B,1,H,W]`, batched camera
+intrinsics/extrinsics, explicit `image_size`, and a modality-qualified stream
+key.  Separate RGB and depth packets are not an equivalent protocol.
+
+The frozen bridge configuration is
+`configs/rgbd_online_free_motion_cpu.yaml`, SHA-256
+`c40b3438c7fd60646d356db3fe54050039912ace288d9db89620b626106993a3`.
+The canonical seed-free `bridge_protocol()` payload, before insertion of its
+self-reporting `protocol_sha256`, has SHA-256
+`e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`,
+which is returned by that field.  Any configuration byte or canonical protocol
+change creates a new experiment and may not reuse the manifests below:
+
+- development `45000000--45000023`;
+- selector `46000000--46000015`;
+- confirmation `47000000--47000015`; and
+- one-shot final `48000000--48000031`.
+
+At the specification-1.55 source-freeze boundary all four namespaces were
+unopened.  No development, selector, confirmation, final, online-bridge
+accuracy, or public long-horizon-convergence result existed at that boundary.
+The bridge source, configuration, and qualification protocol had passed
+independent source review; that was pre-development contract evidence, not
+episode evidence.
+
+One module owns direct observable metric position.  On supported axes the
+filter writes the raw RGB-D measurement mean and its declared measurement
+variance directly; no second Kalman or learned position correction may dilute
+or duplicate it.  A modality-local history stores exactly sixteen raw metric
+positions in persistent-object-ID order.  It produces velocity-only
+`DirectVelocityEvidence` through the existing uniform differentiable exact
+free-motion WLS fit.  `AnalyticFreeMotionDynamics` alone owns future state at
+`0.10/0.25/0.50/1.00/2.00 s`.  The bridge has zero learned parameters, an
+empty module state dict, no optimizer, and no learning-rate or optimizer-
+scheduler state.  The runtime `ObservationScheduler` remains part of causal
+stream ownership and is not an optimizer scheduler.
+
+Qualification probes fixed-output VJPs from current velocity and every
+declared horizon to RGB and depth independently at every one of the sixteen
+input frames.  For an already-active persistent object, a well-formed frame
+with missing depth, nonfinite or otherwise invalid depth in the sampled
+measurement support, or no foreground appends an invalid causal row rather
+than rejecting the packet.  In the frozen sixteenth-frame full-window
+ablation, diagnostics report `sample_count: 16` and `valid_count: 15`.  The
+invalid measurement emits no valid/admissible temporal fit or
+`DirectVelocityEvidence`, correction, or birth.  A finite diagnostic fit may
+still be computed with `fit_valid: false`; it is not admissible evidence.
+Before birth, the same invalid frame advances runtime time but creates no
+object-history row and no birth.  Neither path invokes an RGB-only fallback.
+
+Malformed packets, nonfinite RGB or calibration, float16/bfloat16 input,
+stale temporal evidence, duplicate same-time stream ownership, unknown
+modality, and invalid prepared propagation reject atomically before runtime
+consumption.  On that rejection path belief, history, cache, the runtime
+observation scheduler, diagnostics, direct evidence, ingest count, and a
+supplied prepared propagation remain unconsumed and unchanged.
+
+The public evaluator and demo construct the same composite packet rather than
+an RGB surrogate.  Both paths identify `observation_modality: rgbd` and
+`rgb_only: false`.  The evaluator explicitly identifies the fifteen-frame
+temporal warmup and labels warmup-aware current/forecast metrics separately
+from the standalone qualification.  The demo's aggregate error summaries are
+still pooled across warmup and post-warmup frames; truthful modality metadata
+must not be misread as a warmup-separated demo accuracy report.  Legacy RGB
+schemas, packet construction, cadence, metrics, checkpoint migration defaults,
+and demo behavior remain unchanged when RGB-D is disabled.  Runtime tensor
+histories and caches are not serialized by an ordinary model checkpoint, so
+exact live-stream continuation from the middle of a sixteen-frame history is
+explicitly unsupported.  A checkpoint can recreate the parameter-free
+module/configuration, then must rebuild temporal runtime state causally from
+observations.
+
+## 249. Resource, test, and promotion boundary
+
+The final canonical-comparator targeted bridge gate is
+`421 passed in 62.72 s`; the complete repository gate is
+`1209 passed, 16 skipped in 434.37 s`.  The module has zero
+parameters, zero state-dict keys/bytes, and zero optimizer updates.  Full
+batch-four persistent runtime tensor storage, counted recursively by unique
+underlying storage across belief, history, caches, diagnostics, and direct
+evidence, is `25,364` bytes against a `32,768`-byte gate.  This is the complete
+qualified memory coordinate; overlapping tensor views may not be counted as
+independent allocations merely to strengthen the claim.
+
+The source-freeze allowed sequence was: commit and push the clean reviewed
+source; run development once to fresh artifacts; independently audit its
+source/config/protocol/report evidence; and, only on a pass, reserve and run
+selector, confirmation, then final exactly once under the durable access
+ledger.  Section 250 records that completed sequence.  Camera motion, variable
+parameters, additional objects, contact, learned capacity, and new modalities
+remained closed until this bridge reproduced the standalone accuracy,
+gradient, failure-atomicity, memory, and latency gates.
+
+## 250. Accept the exactly-once public bridge qualification
+
+The first clean development on source `ebda5a8` had all `175` reported scalar
+metrics finite and passed all frozen gate checks, but its post-run audit found
+a representation-sensitive comparison
+between raw Python tuple/list protocol values after JSON roundtrip.  The
+numerical result is therefore rejected promotion evidence even though no gate
+failed.  No protected namespace was accessed and no protected ledger was
+created.  The rejected bytes are preserved under ignored directory
+`runs/rgbd_online_bridge_v1/rejected_ebda5a8_json_protocol/`; report and
+checkpoint SHA-256 are
+`2104ee87bcabdbd5312b4026a33e44e1de7d197e50215ec7f0bf0e0bb56992e3`
+and
+`38f4b2ef5addb98bb966360213d3bb36b43da606367fc60cd75d2ec487f1b866`.
+
+Commit `526b5123e6385c575a5777936272330d28972b93` compares canonical
+protocol JSON and rejects protocol tampering.  Its focused current-byte gate
+is `421 passed in 62.72 s`; its complete repository gate is
+`1209 passed, 16 skipped in 434.37 s`.  The qualification audit binds runtime
+fingerprint
+`1eeaa176ad9be8886976910fe53028fb6de498adda73a2d20170f206b6134b40`
+and worktree fingerprint
+`90d0624a119e118e76b58061f7e5582dffc906f47d85cc4dde997b2f765bb07a`
+to the unchanged config and protocol SHA-256 values from section 248.
+
+The fresh canonical 24-seed development pass over
+`45000000--45000023` has report SHA-256
+`dce6f920da85fbf696b7ae8a7a91d9cbf7d9084176e51ad7c319f92a6efe4966`
+(`22,346` bytes), checkpoint SHA-256
+`48249f1a5a0467b1da8c7bdb5ad9e909f8c502631ec2fbad832cb490a00c3099`
+(`46,596` bytes), and manifest SHA-256
+`069eb3331543727c911a07cc9a1bb352f6185ac8ceac7fafca502c9d7fab6d80`.
+All `175` reported scalars are finite and all frozen comparisons pass.
+Current position/velocity RMSE is `3.068470 mm`/`2.191966 mm/s`;
+two-second position/velocity RMSE is `5.609913 mm`/`1.983371 mm/s`;
+position-error growth slope is `1.270721 mm/s`; perception is
+`0.415134 s`; five-query state rollout is `3.575380 ms`; and complete
+batch-four persistent runtime tensor state is `25,364` bytes.  Every required
+target/modality history VJP reaches `16/16` frames, with minimum per-frame L1
+`2.9239957802928984e-4`.  Learned parameters, module buffers/state-dict
+entries, optimizer and optimizer-scheduler state, and updates are all zero.
+
+Protected qualification then passed selector, confirmation, and final exactly
+once under the ledger.  Qualification-report SHA-256 is
+`7fd1829f663606910ac81990e4b633c63b1460dbc31dd24c71eedbd91b422908`
+(`47,353` bytes); ledger SHA-256 is
+`cf6a10dd672aafbdd91c92871ae349fef0c549d865cc6532e6c42f7d9be14e32`
+(`1,626` bytes).  Initial and final empty state share SHA-256
+`4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+The exact protected bindings are:
+
+| split | manifest SHA-256 | result SHA-256 |
+| --- | --- | --- |
+| selector | `2159b044e089774b3b7df95509ac2cded19528de6ff133ae1b158a354ed7fbb9` | `9ac6b7cc1b97da9961345fdcf5488ddec3ac6a0186215699a55a66acfbb983cb` |
+| confirmation | `2cad3224740b4d73871ff1d1e60795d45dc149ad03d197513eddf514cb9946bf` | `1a3996914d59f840b2645e4b886f1027b830fa6f81c5763eb1735f25149aa9bc` |
+| final | `3c5c904203ddd46ea790322e446466b2c58e603015456f239715aa07135011a3` | `40d39accec8c2c6efa97f06a2f2748c580a5666b54c7dac4df36e3d7dc718bd1` |
+
+| split | current position / velocity | two-second position / velocity | growth slope | perception / rollout |
+| --- | --- | --- | --- | --- |
+| development | `3.068470 mm` / `2.191966 mm/s` | `5.609913 mm` / `1.983371 mm/s` | `1.270721 mm/s` | `0.415134 s` / `3.575380 ms` |
+| selector | `3.177543 mm` / `2.313401 mm/s` | `5.881384 mm` / `2.093251 mm/s` | `1.351921 mm/s` | `0.422070 s` / `3.569962 ms` |
+| confirmation | `5.681172 mm` / `1.658775 mm/s` | `6.188252 mm` / `1.500921 mm/s` | `0.253540 mm/s` | `0.414407 s` / `3.537710 ms` |
+| final | `2.996787 mm` / `2.221047 mm/s` | `5.433965 mm` / `2.009688 mm/s` | `1.218589 mm/s` | `0.417436 s` / `3.566628 ms` |
+
+Every split has `175/175` reported scalar metrics finite with no frozen gate
+failures; every required history VJP
+reaches `16/16` frames, active fraction is one, and identity changes are zero.
+The RGB-only, missing-depth, no-foreground, semigroup, memory, checkpoint, and
+zero-state ablations/gates pass.  Final persistent runtime state is `25,364`
+bytes, maximum RSS is `708,853,760` bytes, and maximum semigroup disagreement
+is `2.384186e-7 m`/`1.862645e-9 m/s`.
+
+The ledger is complete and stopped after final.  Final is consumed and must
+never be rerun or tuned against.  Evidence is hash-bound and atomically
+replaced, but the ledger and reports remain owner-writable rather than
+append-only OS-enforced storage; this is a disclosed operational limitation.
+The audit did not reinspect or rematerialize raw protected episodes.
+
+The specification-1.55 one-sphere, fixed-camera, contact-free public RGB-D
+bridge is accepted and ready to merge to `main`.  This does not establish
+multi-object association, occlusion, contact, task/planning, added modality,
+learned-capacity, or broader world-model convergence.  After merge, the next
+bounded rung must predeclare those changed capabilities and their per-object,
+association, event/contact, task-success, gradient, accuracy, memory, and
+rollout-throughput gates before generation.  It may not alter the accepted
+bridge or tune any threshold, architecture, or capacity on the consumed final.
 
 # Closing directive
 

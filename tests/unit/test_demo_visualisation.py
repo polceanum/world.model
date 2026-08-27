@@ -15,10 +15,70 @@ from world_model.visualisation.animation import (
     _future_query_seconds,
     _history_alpha,
     _match_positions,
+    _measurement_image_pixels,
+    _packet,
     _plot_ground_truth_window,
     _plot_historical_forecasts,
     _project_world_uncertainty,
 )
+
+
+def test_demo_projects_modality_owned_measurements_into_image_pixels() -> None:
+    image_size = (48, 64)
+    world_from_camera = torch.eye(4)
+    intrinsics = torch.tensor(
+        [
+            [40.0, 0.0, 32.0],
+            [0.0, 40.0, 24.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+
+    rgb_pixels, rgb_valid = _measurement_image_pixels(
+        torch.tensor([[0.25, -0.5, 0.0]]),
+        torch.tensor([True]),
+        modality="rgb",
+        image_size=image_size,
+        world_from_camera=world_from_camera,
+        intrinsics=intrinsics,
+    )
+    np.testing.assert_allclose(rgb_pixels, [[39.375, 11.75]], atol=1.0e-6)
+    assert rgb_valid.tolist() == [True]
+
+    rgbd_pixels, rgbd_valid = _measurement_image_pixels(
+        torch.tensor([[0.5, -0.25, 2.0]]),
+        torch.tensor([True]),
+        modality="rgbd",
+        image_size=image_size,
+        world_from_camera=world_from_camera,
+        intrinsics=intrinsics,
+    )
+    np.testing.assert_allclose(rgbd_pixels, [[42.0, 19.0]], atol=1.0e-6)
+    assert rgbd_valid.tolist() == [True]
+
+
+def test_demo_builds_one_strict_batched_rgbd_packet() -> None:
+    frames, height, width = 2, 8, 10
+    episode = {
+        "rgb": torch.zeros(frames, 3, height, width),
+        "depth": torch.ones(frames, 1, height, width),
+        "timestamps": torch.tensor([0.0, 0.05]),
+        "camera": {
+            "world_from_camera": torch.eye(4).expand(frames, 4, 4).clone(),
+            "intrinsics": torch.eye(3).expand(frames, 3, 3).clone(),
+        },
+    }
+
+    packet = _packet(episode, 1, modality="rgbd", device=torch.device("cpu"))
+
+    assert packet.modality == "rgbd"
+    assert packet.sensor_id == "camera0:rgbd"
+    assert packet.metadata["image_size"] == (height, width)
+    assert isinstance(packet.payload, dict)
+    assert packet.payload["rgb"].shape == (1, 3, height, width)
+    assert packet.payload["depth"].shape == (1, 1, height, width)
+    assert packet.calibration["intrinsics"].shape == (1, 3, 3)
+    assert packet.calibration["world_from_camera"].shape == (1, 4, 4)
 
 
 def test_demo_endpoint_matching_respects_masks_and_original_slots() -> None:

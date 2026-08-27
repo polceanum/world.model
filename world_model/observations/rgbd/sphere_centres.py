@@ -1,11 +1,10 @@
 """Differentiable metric sphere-centre measurements from observable RGB-D.
 
-This module deliberately stops short of registering a complete online
-observation modality.  It is the structural measurement primitive for that
-later integration rung: RGB supplies a subpixel image centre, the depth image
-supplies metric surface camera-z, and declared sphere radius plus calibration
-recover the metric centre.  No simulator state, renderer label, instance map,
-or detached assignment enters the forward path.
+This is the structural measurement primitive used by the public composite
+RGB-D observation modality: RGB supplies a subpixel image centre, the depth
+image supplies metric surface camera-z, and declared sphere radius plus
+calibration recover the metric centre.  No simulator state, renderer label,
+instance map, or detached assignment enters the forward path.
 """
 
 from __future__ import annotations
@@ -374,11 +373,12 @@ class RGBDSphereCentreMeasurementModule(nn.Module):
             world_from_camera,
             intrinsics,
         )
-        # RGB fit booleans remain diagnostics, as in the accepted monocular
-        # inverse.  They do not substitute a hard RGB selection for the
-        # continuous centre graph.  Only physically unusable metric depth or
-        # calibration fails the deployed measurement closed.
-        valid_mask = metric.valid_mask
+        # A finite positive depth return is not sufficient evidence that the
+        # RGB foreground exists.  Keep the deployed centre fully continuous
+        # on admissible rows, but fail closed when the image-moment foreground
+        # mass does not reach the declared minimum.  Photometric convergence
+        # diagnostics remain non-owning, as in the accepted monocular inverse.
+        valid_mask = metric.valid_mask & geometry.valid_mask
         valid = valid_mask.unsqueeze(-1)
         confidence = (
             geometry.confidence * photometric_geometry.confidence * metric.depth_support

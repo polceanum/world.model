@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 import torch
 from torch import Tensor
 
-from world_model.observations import MeasurementSet
+from world_model.observations import DirectVelocityEvidence, MeasurementSet
 
 _TEMPORAL_VELOCITY_KEYS = (
     "world_velocity",
@@ -299,6 +299,36 @@ class TemporalVelocityMeasurementAccumulator:
         for axis in range(3):
             self.axis_valid_coordinate_count[axis] += int(
                 valid_axes[..., axis].sum().detach().cpu()
+            )
+
+    def update_direct(self, evidence: DirectVelocityEvidence | None) -> None:
+        """Inspect post-association evidence aligned to persistent belief slots."""
+
+        if evidence is None:
+            return
+        evidence.validate()
+        axis_valid = evidence.resolved_axis_valid_mask()
+        self.explicit_field_update_count += 1
+        self.candidate_object_count += int(evidence.valid_mask.numel())
+        valid_count = int(axis_valid.any(dim=-1).sum().detach().cpu())
+        self.valid_object_count += valid_count
+        if valid_count == 0:
+            return
+        selected_velocity = evidence.velocity.masked_select(axis_valid)
+        selected_log_variance = evidence.log_variance.masked_select(axis_valid)
+        if not torch.isfinite(selected_velocity).all():
+            raise ValueError("direct temporal velocity contains NaN or Inf where valid")
+        if not torch.isfinite(selected_log_variance).all():
+            raise ValueError(
+                "direct temporal velocity log variance contains NaN or Inf where valid"
+            )
+        variance = selected_log_variance.detach().float().cpu().clamp(-30.0, 30.0).exp()
+        self.valid_update_count += 1
+        self.reported_variance_sum += float(variance.sum())
+        self.reported_variance_coordinate_count += int(variance.numel())
+        for axis in range(3):
+            self.axis_valid_coordinate_count[axis] += int(
+                axis_valid[..., axis].sum().detach().cpu()
             )
 
     def metrics(self) -> dict[str, float | None]:

@@ -3,6 +3,7 @@
 from world_model.belief.camera_belief import CameraBelief
 from world_model.belief.hypotheses import HypothesisSet
 from world_model.belief.lifecycle import (
+    BirthAssignments,
     LifecycleConfig,
     ObjectLifecycle,
     birth_from_measurements,
@@ -41,6 +42,7 @@ from world_model.belief.world_belief import (
 __all__ = [
     "BeliefFactory",
     "BeliefTrajectory",
+    "BirthAssignments",
     "CameraBelief",
     "HypothesisSet",
     "LifecycleConfig",

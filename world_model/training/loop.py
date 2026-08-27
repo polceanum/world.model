@@ -624,6 +624,53 @@ def make_rgb_packet(
     )
 
 
+def make_rgbd_packet(
+    batch: Mapping[str, Any],
+    frame_index: int,
+) -> ObservationPacket:
+    """Create one batched composite RGB-D packet from canonical episode data.
+
+    RGB and metric surface depth intentionally share one packet and stream ID.
+    Splitting them into same-timestamp packets would make temporal ownership
+    order-dependent and permit sensor-local caches to collide.
+    """
+
+    rgb = batch["rgb"]
+    depth = batch["depth"]
+    if not isinstance(rgb, Tensor) or rgb.ndim != 5:
+        raise ValueError("batch.rgb must have shape [B,T,3,H,W]")
+    if not isinstance(depth, Tensor) or depth.ndim != 5:
+        raise ValueError("batch.depth must have shape [B,T,1,H,W]")
+    if depth.shape[:2] != rgb.shape[:2] or depth.shape[-2:] != rgb.shape[-2:]:
+        raise ValueError("batch RGB and depth sequence dimensions must match")
+    if depth.shape[2] != 1:
+        raise ValueError("batch.depth must have one metric surface-depth channel")
+    if not 0 <= frame_index < rgb.shape[1]:
+        raise IndexError(frame_index)
+    camera = batch["camera"]
+    timestamp = _shared_timestamp(batch["timestamps"], frame_index)
+    return ObservationPacket(
+        modality="rgbd",
+        sensor_id="camera0:rgbd",
+        timestamp=timestamp,
+        payload={
+            "rgb": rgb[:, frame_index],
+            "depth": depth[:, frame_index],
+        },
+        calibration={
+            "world_from_camera": camera["world_from_camera"][:, frame_index],
+            "intrinsics": camera["intrinsics"][:, frame_index],
+        },
+        frame_id="camera:camera0:rgbd",
+        confidence=1.0,
+        metadata={
+            "image_size": (int(rgb.shape[-2]), int(rgb.shape[-1])),
+            "training_frame_index": int(frame_index),
+            "depth_semantics": "observable_camera_z_surface_depth_zero_means_no_return",
+        },
+    )
+
+
 def _target_measurement_values(
     batch: Mapping[str, Any],
     frame_index: int,
@@ -4630,6 +4677,7 @@ __all__ = [
     "future_scene_predictable_mask",
     "gather_target_slots",
     "make_rgb_packet",
+    "make_rgbd_packet",
     "match_belief_to_targets",
     "measurement_localization_metrics",
     "move_batch_to_device",

@@ -10,7 +10,7 @@ from world_model.evaluation.velocity_metrics import (
     OrdinaryVelocityCorrectionAccumulator,
     TemporalVelocityMeasurementAccumulator,
 )
-from world_model.observations import MeasurementSet
+from world_model.observations import DirectVelocityEvidence, MeasurementSet
 
 
 def _measurements(
@@ -148,6 +148,31 @@ def test_temporal_velocity_measurement_counts_only_supported_axes() -> None:
     assert metrics["temporal_velocity_measurement_reported_variance_coordinate_count"] == 1.0
     assert metrics["temporal_velocity_measurement_x_valid_coordinate_count"] == 1.0
     assert metrics["temporal_velocity_measurement_y_valid_coordinate_count"] == 0.0
+    assert metrics["temporal_velocity_measurement_z_valid_coordinate_count"] == 0.0
+
+
+def test_temporal_velocity_measurement_accepts_detached_runtime_evidence() -> None:
+    evidence = DirectVelocityEvidence(
+        velocity=torch.tensor([[[0.1, 0.2, 0.3]]], requires_grad=True),
+        log_variance=torch.tensor([[[-6.0, -5.0, -4.0]]], requires_grad=True),
+        valid_mask=torch.tensor([[True]]),
+        confidence=torch.ones(1, 1),
+        axis_valid_mask=torch.tensor([[[True, True, False]]]),
+    )
+    detached = evidence.detach()
+    accumulator = TemporalVelocityMeasurementAccumulator()
+    accumulator.update(None)
+    accumulator.update_direct(detached)
+
+    assert not detached.velocity.requires_grad
+    assert not detached.log_variance.requires_grad
+    metrics = accumulator.metrics()
+    assert metrics["temporal_velocity_measurement_inspected_update_count"] == 1.0
+    assert metrics["temporal_velocity_measurement_explicit_field_update_count"] == 1.0
+    assert metrics["temporal_velocity_measurement_valid_update_count"] == 1.0
+    assert metrics["temporal_velocity_measurement_valid_object_count"] == 1.0
+    assert metrics["temporal_velocity_measurement_x_valid_coordinate_count"] == 1.0
+    assert metrics["temporal_velocity_measurement_y_valid_coordinate_count"] == 1.0
     assert metrics["temporal_velocity_measurement_z_valid_coordinate_count"] == 0.0
 
 

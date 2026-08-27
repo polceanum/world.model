@@ -2,6 +2,117 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-27 qualified public OnlineWorldModel RGB-D bridge
+
+- Rejected the first development-only evidence from source
+  `ebda5a8bfa7b1131b827202f575351d116c78d01`: all numerical gates passed,
+  but the persisted-protocol validator compared JSON lists with tuple-valued
+  in-memory data by raw Python equality. Report/checkpoint SHA-256 values are
+  `2104ee87bcabdbd5312b4026a33e44e1de7d197e50215ec7f0bf0e0bb56992e3`
+  and `38f4b2ef5addb98bb966360213d3bb36b43da606367fc60cd75d2ec487f1b866`.
+  They are archived under ignored
+  `runs/rgbd_online_bridge_v1/rejected_ebda5a8_json_protocol/`. No protected
+  split was opened from this non-qualifying evidence.
+- Reproduced development on canonical clean source
+  `526b5123e6385c575a5777936272330d28972b93`, runtime fingerprint
+  `1eeaa176ad9be8886976910fe53028fb6de498adda73a2d20170f206b6134b40`,
+  and worktree fingerprint
+  `90d0624a119e118e76b58061f7e5582dffc906f47d85cc4dde997b2f765bb07a`.
+  Config, protocol, and empty-model-state SHA-256 values are
+  `c40b3438c7fd60646d356db3fe54050039912ace288d9db89620b626106993a3`,
+  `e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`,
+  and `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+  Development report/checkpoint/manifest SHA-256 values are
+  `dce6f920da85fbf696b7ae8a7a91d9cbf7d9084176e51ad7c319f92a6efe4966`,
+  `48249f1a5a0467b1da8c7bdb5ad9e909f8c502631ec2fbad832cb490a00c3099`,
+  and `069eb3331543727c911a07cc9a1bb352f6185ac8ceac7fafca502c9d7fab6d80`;
+  independent audit passed before protected access.
+- Passed selector -> confirmation -> final exactly once under the durable
+  ledger. Selector, confirmation, and final manifest/result SHA-256 pairs are
+  `2159b044e089774b3b7df95509ac2cded19528de6ff133ae1b158a354ed7fbb9` /
+  `9ac6b7cc1b97da9961345fdcf5488ddec3ac6a0186215699a55a66acfbb983cb`,
+  `2cad3224740b4d73871ff1d1e60795d45dc149ad03d197513eddf514cb9946bf` /
+  `1a3996914d59f840b2645e4b886f1027b830fa6f81c5763eb1735f25149aa9bc`,
+  and
+  `3c5c904203ddd46ea790322e446466b2c58e603015456f239715aa07135011a3` /
+  `40d39accec8c2c6efa97f06a2f2748c580a5666b54c7dac4df36e3d7dc718bd1`.
+  Qualification-report and ledger SHA-256 values are
+  `7fd1829f663606910ac81990e4b633c63b1460dbc31dd24c71eedbd91b422908`
+  and `cf6a10dd672aafbdd91c92871ae349fef0c549d865cc6532e6c42f7d9be14e32`
+  (`47,353` and `1,626` bytes). Final is consumed and must not be rerun.
+- Development/selector/confirmation/final current position RMSE is
+  `3.068470/3.177543/5.681172/2.996787 mm`; current velocity RMSE is
+  `2.191966/2.313401/1.658775/2.221047 mm/s`; and two-second position RMSE is
+  `5.609913/5.881384/6.188252/5.433965 mm`. Every split has `175/175` finite
+  scalars, no failures, full `16/16` target/modality history VJP support, one
+  position owner, no identity change, and zero learned parameter/buffer/model-
+  state, optimizer, optimizer-scheduler state, or update ownership. Final
+  semigroup position/velocity
+  error is `2.384186e-7 m`/`1.862645e-9 m/s`; persistent runtime state remains
+  `25,364` bytes, maximum RSS is `708,853,760` bytes, and rollout latency is
+  `3.537710--3.575380 ms`.
+- Passed the current focused gate at `421 passed in 62.72 s` and the complete
+  repository gate at `1209 passed, 16 skipped in 434.37 s`.
+- Independent audit recomputed gates from finite persisted evidence but did
+  not regenerate protected episodes or rerun latency/RSS. The durable ledger
+  is atomically replaced state rather than an append-only timestamped log;
+  clean committed control flow plus final ledger/result receipts establishes
+  access-before-materialization. SHA-bound fresh-path artifacts remain owner-
+  writable, so evidence is tamper-evident rather than OS write-once.
+- The frozen one-slot fixed-camera free-motion bridge is accepted and ready to
+  merge. This is not a broader world-model, uncertainty-calibration, contact,
+  multi-object, modality, or learned-capacity claim. After merge and before new
+  data, the next bounded rung must predeclare moving-camera, multi-object,
+  association/occlusion, contact/event, task-success, capacity, gradient,
+  accuracy, memory, and rollout-throughput gates while adding only one changed
+  capability at a time.
+
+### 2026-08-27 frozen public OnlineWorldModel RGB-D bridge
+
+- Advanced the authoritative contract to specification 1.55 while retaining
+  simulator protocol `sphere_world_v7`. The previously qualified standalone
+  two-second RGB-D rung remains unchanged and qualified.
+- Implemented the public one-slot bridge, its frozen configuration, and its
+  seed-free qualification protocol; independent source/config/protocol review
+  passes. The config SHA-256 is
+  `c40b3438c7fd60646d356db3fe54050039912ace288d9db89620b626106993a3`, and
+  the canonical current-byte seed-free protocol SHA-256 is
+  `e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`.
+- The bridge ingests one composite batched `rgbd` observation with explicit
+  image size and calibration. One direct observable metric-position owner
+  feeds a raw sixteen-frame history; uniform differentiable WLS fits velocity
+  only, and parameter-free analytic dynamics answer every rollout horizon.
+  Per-frame VJPs cover current velocity and every horizon through each of the
+  sixteen RGB and depth inputs.
+- Parameters, state-dict entries, and optimizer updates remain zero. Complete
+  batch-four persistent runtime tensor state occupies `25,364` recursively
+  enumerated unique-storage bytes against a `32,768`-byte gate. The final
+  current-byte targeted gate passes `419` tests in `61.33 s`; the complete
+  repository gate passes `1207` tests with `16` skips in `431.10 s`.
+- For an already-active persistent object, a well-formed frame with missing
+  depth, nonfinite or otherwise invalid depth in the sampled measurement
+  support, or no foreground appends an invalid causal row; the frozen
+  sixteenth-frame full-window ablation reports `sample_count: 16` and
+  `valid_count: 15`. It emits no valid/admissible temporal fit or direct
+  velocity evidence, correction, or birth; a finite diagnostic fit with
+  `fit_valid: false` is not admissible evidence. Before birth, the same frame
+  advances runtime time but creates no
+  object-history row and no birth. Malformed packets, nonfinite RGB/
+  calibration, low precision, unknown/duplicate/stale streams, and invalid
+  prepared propagation reject atomically without consuming runtime or one-use
+  propagation state.
+- Evaluator/demo paths carry truthful RGB-D modality metadata. The evaluator
+  labels its fifteen-frame warmup; demo aggregate errors remain pooled across
+  warmup and post-warmup frames. The legacy RGB path is preserved, and exact
+  live-stream resume from a mid-history checkpoint is explicitly unsupported.
+- Reserved development `45000000--45000023`, selector
+  `46000000--46000015`, confirmation `47000000--47000015`, and exactly-once
+  final `48000000--48000031` manifests remain unopened. These source and gate
+  results are not episode-accuracy evidence. Next is a clean commit/push, one
+  development reproduction plus independent audit, then selector ->
+  confirmation -> final exactly once. No capacity or task scaling is permitted
+  before that bridge qualification passes.
+
 ### 2026-08-26 standalone RGB-D temporal qualification
 
 - Qualified exact runtime source
@@ -108,8 +219,9 @@
   and no episode manifest was generated by it.
 - Recorded the later public bridge boundary: one batched composite `rgbd`
   packet, explicit image size/calibration, modality-qualified sensor state,
-  raw metric causal history, and fail-closed missing depth before any capacity
-  scaling.
+  raw metric causal history, active-object invalid rows for well-formed
+  missing/no-foreground/invalid-sampled-depth frames, and pre-birth time
+  advance without an object row or birth. Neither path falls back to RGB.
 
 ### 2026-08-26 seed-free RGB-D metric core
 
