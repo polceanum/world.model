@@ -441,10 +441,23 @@ class OnlineWorldModel(nn.Module):
         if rgbd_config.enabled:
             modules["rgbd"] = RGBDObservationModule(
                 RGBDObservationConfig(
+                    proposal_count=rgbd_config.proposal_count,
+                    appearance_dim=state_config.appearance_dim,
                     world_radius=rgbd_config.world_radius,
                     foreground_threshold=rgbd_config.foreground_threshold,
                     foreground_temperature=rgbd_config.foreground_temperature,
                     minimum_mass=rgbd_config.minimum_mass,
+                    chromatic_temperature=rgbd_config.chromatic_temperature,
+                    minimum_chromatic_eigengap=(rgbd_config.minimum_chromatic_eigengap),
+                    spatial_temperature_pixels=rgbd_config.spatial_temperature_pixels,
+                    chromatic_centre_blend=rgbd_config.chromatic_centre_blend,
+                    minimum_silhouette_gap_pixels=(rgbd_config.minimum_silhouette_gap_pixels),
+                    minimum_boundary_clearance_pixels=(
+                        rgbd_config.minimum_boundary_clearance_pixels
+                    ),
+                    maximum_surface_radius_relative_error=(
+                        rgbd_config.maximum_surface_radius_relative_error
+                    ),
                     measurement_position_variance=(rgbd_config.measurement_position_variance),
                     temporal_history_size=rgbd_config.temporal_history_size,
                     temporal_min_samples=rgbd_config.temporal_min_samples,

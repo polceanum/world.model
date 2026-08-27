@@ -270,6 +270,75 @@ def test_direct_metric_position_update_has_one_differentiable_axis_owner() -> No
     )
 
 
+def test_ambiguous_direct_metric_position_update_fails_closed() -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    world_position = torch.tensor(
+        [[[0.1, -0.2, 0.3]]],
+        requires_grad=True,
+    )
+    measurement_log_variance = torch.full_like(world_position, -8.0)
+    measured = replace(
+        measured,
+        modality="rgbd",
+        values=world_position,
+        log_variance=measurement_log_variance,
+        supported_state_fields=("position",),
+        auxiliary={
+            "world_position": world_position,
+            "world_position_log_variance": measurement_log_variance,
+            "world_position_independent_axis_mask": torch.ones_like(
+                world_position,
+                dtype=torch.bool,
+            ),
+        },
+    )
+    predicted = replace(predicted, modality="rgbd")
+    association = replace(association, ambiguous=torch.tensor([[True]]))
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=2,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(
+            enable_learned_corrector=False,
+            direct_metric_position_update=True,
+        ),
+    )
+
+    posterior = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+        dt=1.0,
+    )
+
+    torch.testing.assert_close(posterior.objects.position, belief.objects.position)
+    missed = updater.uncertainty.missed(belief, belief.objects.active)
+    torch.testing.assert_close(
+        posterior.objects.fast_log_variance[..., :3],
+        missed.objects.fast_log_variance[..., :3],
+    )
+    assert updater.last_diagnostics is not None
+    assert not updater.last_diagnostics.observed_mask.any()
+    torch.testing.assert_close(
+        updater.last_diagnostics.analytic_gain,
+        torch.zeros_like(updater.last_diagnostics.analytic_gain),
+    )
+    torch.testing.assert_close(
+        updater.last_diagnostics.correction_norm,
+        torch.zeros_like(updater.last_diagnostics.correction_norm),
+    )
+    posterior.objects.position.sum().backward()
+    assert world_position.grad is not None
+    torch.testing.assert_close(world_position.grad, torch.zeros_like(world_position.grad))
+
+
 def test_source_bound_copied_position_axes_never_fuse_as_new_evidence() -> None:
     belief, measured, predicted, association = _rgb_position_update_case()
     updater = BeliefUpdater(

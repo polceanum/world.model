@@ -343,20 +343,24 @@ class BeliefUpdater(nn.Module):
             # ordinary differentiable assignment; measurement_mask,
             # association, and explicit axis provenance remain admissibility
             # gates, while confidence stays a diagnostic.
-            direct_gain = position_causal_axis_support.to(prior_position.dtype)
+            non_ambiguous = ~association.ambiguous[batch_index, pair_index]
+            direct_position_axis_support = position_causal_axis_support & non_ambiguous.unsqueeze(
+                -1
+            )
+            direct_gain = direct_position_axis_support.to(prior_position.dtype)
             direct_correction = torch.where(
-                position_causal_axis_support,
+                direct_position_axis_support,
                 causal_position_measurement - prior_position,
                 torch.zeros_like(prior_position),
             )
             analytic_position = DiagonalUpdateResult(
                 mean=torch.where(
-                    position_causal_axis_support,
+                    direct_position_axis_support,
                     causal_position_measurement,
                     prior_position,
                 ),
                 log_variance=torch.where(
-                    position_causal_axis_support,
+                    direct_position_axis_support,
                     causal_position_measurement_lv,
                     prior_position_lv,
                 ).clamp(

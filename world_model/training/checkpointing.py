@@ -290,6 +290,32 @@ def _model_checkpoint_semantics(value: object) -> object:
         normalized_rgbd = dict(rgbd)
         rgbd_defaults = RGBDConfig()
         normalized_rgbd.setdefault("global_every_steps", rgbd_defaults.global_every_steps)
+        normalized_rgbd.setdefault("proposal_count", rgbd_defaults.proposal_count)
+        normalized_rgbd.setdefault("chromatic_temperature", rgbd_defaults.chromatic_temperature)
+        normalized_rgbd.setdefault(
+            "minimum_chromatic_eigengap",
+            rgbd_defaults.minimum_chromatic_eigengap,
+        )
+        normalized_rgbd.setdefault(
+            "spatial_temperature_pixels",
+            rgbd_defaults.spatial_temperature_pixels,
+        )
+        normalized_rgbd.setdefault(
+            "chromatic_centre_blend",
+            rgbd_defaults.chromatic_centre_blend,
+        )
+        normalized_rgbd.setdefault(
+            "minimum_silhouette_gap_pixels",
+            rgbd_defaults.minimum_silhouette_gap_pixels,
+        )
+        normalized_rgbd.setdefault(
+            "minimum_boundary_clearance_pixels",
+            rgbd_defaults.minimum_boundary_clearance_pixels,
+        )
+        normalized_rgbd.setdefault(
+            "maximum_surface_radius_relative_error",
+            rgbd_defaults.maximum_surface_radius_relative_error,
+        )
         normalized_rgbd.setdefault("linear_drag", rgbd_defaults.linear_drag)
         model["rgbd"] = normalized_rgbd
     rgb = model.get("rgb")

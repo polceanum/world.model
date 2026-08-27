@@ -38,6 +38,9 @@ from world_model.observations.rgbd.sphere_centres import (
     RGBDSphereCentreMeasurementModule,
 )
 from world_model.observations.rgbd.temporal import RGBDTemporalPositionHistory
+from world_model.observations.rgbd.two_disc_geometry import (
+    two_disc_geometry_from_rgbd,
+)
 
 if TYPE_CHECKING:
     from world_model.belief import BirthAssignments, WorldBelief
@@ -48,6 +51,15 @@ if TYPE_CHECKING:
 class RGBDObservationConfig:
     """Checkpointed priors and numerical controls for the first RGB-D bridge."""
 
+    proposal_count: int = 1
+    appearance_dim: int = 32
+    chromatic_temperature: float = 0.05
+    minimum_chromatic_eigengap: float = 0.01
+    spatial_temperature_pixels: float = 1.0
+    chromatic_centre_blend: float = 0.0025
+    minimum_silhouette_gap_pixels: float = 2.0
+    minimum_boundary_clearance_pixels: float = 2.0
+    maximum_surface_radius_relative_error: float = 0.05
     world_radius: float = 0.21
     foreground_threshold: float = 0.04
     foreground_temperature: float = 0.01
@@ -61,11 +73,32 @@ class RGBDObservationConfig:
     fit_conditioning_limit: float = 100.0
 
     def __post_init__(self) -> None:
+        if (
+            isinstance(self.proposal_count, bool)
+            or not isinstance(self.proposal_count, int)
+            or self.proposal_count not in {1, 2}
+        ):
+            raise ValueError("RGB-D proposal_count must be integer one or two")
+        if (
+            isinstance(self.appearance_dim, bool)
+            or not isinstance(self.appearance_dim, int)
+            or self.appearance_dim <= 0
+        ):
+            raise ValueError("RGB-D appearance_dim must be a positive integer")
+        if self.proposal_count == 2 and self.appearance_dim != 3:
+            raise ValueError("two-object RGB-D requires appearance_dim exactly three")
         positive = {
             "world_radius": self.world_radius,
             "foreground_threshold": self.foreground_threshold,
             "foreground_temperature": self.foreground_temperature,
             "minimum_mass": self.minimum_mass,
+            "chromatic_temperature": self.chromatic_temperature,
+            "minimum_chromatic_eigengap": self.minimum_chromatic_eigengap,
+            "spatial_temperature_pixels": self.spatial_temperature_pixels,
+            "chromatic_centre_blend": self.chromatic_centre_blend,
+            "minimum_silhouette_gap_pixels": self.minimum_silhouette_gap_pixels,
+            "minimum_boundary_clearance_pixels": self.minimum_boundary_clearance_pixels,
+            "maximum_surface_radius_relative_error": (self.maximum_surface_radius_relative_error),
             "measurement_position_variance": self.measurement_position_variance,
             "temporal_min_dt": self.temporal_min_dt,
             "temporal_velocity_variance_floor": self.temporal_velocity_variance_floor,
@@ -78,6 +111,12 @@ class RGBDObservationConfig:
                 or float(value) <= 0.0
             ):
                 raise ValueError(f"RGB-D {name} must be finite and positive")
+        if self.maximum_surface_radius_relative_error > 1.0:
+            raise ValueError(
+                "RGB-D maximum_surface_radius_relative_error must be no greater than one"
+            )
+        if self.chromatic_centre_blend > 1.0:
+            raise ValueError("RGB-D chromatic_centre_blend must be no greater than one")
         for name, value in (
             ("temporal_history_size", self.temporal_history_size),
             ("temporal_min_samples", self.temporal_min_samples),
@@ -225,16 +264,57 @@ class RGBDObservationModule(ObservationModule):
             batch=rgb.shape[0],
             reference=rgb,
         )
-        measured = self.measurement(
-            rgb,
-            depth,
-            self.config.world_radius,
-            world_from_camera,
-            intrinsics,
-        )
+        if self.config.proposal_count == 1:
+            measured = self.measurement(
+                rgb,
+                depth,
+                self.config.world_radius,
+                world_from_camera,
+                intrinsics,
+            )
+            measured_appearance = None
+            measurement_diagnostics: dict[str, Tensor] = {}
+        else:
+            measured = two_disc_geometry_from_rgbd(
+                rgb,
+                depth,
+                self.config.world_radius,
+                world_from_camera,
+                intrinsics,
+                foreground_threshold=self.config.foreground_threshold,
+                foreground_temperature=self.config.foreground_temperature,
+                minimum_mass=self.config.minimum_mass,
+                chromatic_temperature=self.config.chromatic_temperature,
+                minimum_chromatic_eigengap=self.config.minimum_chromatic_eigengap,
+                spatial_temperature_pixels=self.config.spatial_temperature_pixels,
+                chromatic_centre_blend=self.config.chromatic_centre_blend,
+                minimum_silhouette_gap_pixels=self.config.minimum_silhouette_gap_pixels,
+                minimum_boundary_clearance_pixels=(self.config.minimum_boundary_clearance_pixels),
+                maximum_surface_radius_relative_error=(
+                    self.config.maximum_surface_radius_relative_error
+                ),
+                surface_fit_conditioning_limit=self.config.fit_conditioning_limit,
+            )
+            measured_appearance = rgb.new_zeros(
+                (*measured.appearance.shape[:2], self.config.appearance_dim)
+            )
+            measured_appearance[..., :3] = measured.appearance
+            measurement_diagnostics = {
+                "chromatic_eigengap": measured.chromatic_eigengap,
+                "pair_valid_mask": measured.pair_valid_mask,
+                "image_centres": measured.centres,
+                "provisional_image_centres": measured.provisional_centres,
+                "image_radius_pixels": measured.radius_pixels,
+                "surface_fit_condition_number": measured.surface_fit_condition_number,
+                "surface_fit_radius": measured.surface_fit_radius,
+                "surface_fit_radius_relative_error": (measured.surface_fit_radius_relative_error),
+                "silhouette_gap_pixels": measured.silhouette_gap_pixels,
+                "boundary_clearance_pixels": measured.boundary_clearance_pixels,
+                "chromatic_world_position": measured.chromatic_world_position,
+            }
         batch, proposals = measured.valid_mask.shape
-        if proposals != 1:
-            raise RuntimeError("the first RGB-D bridge must emit exactly one proposal")
+        if proposals != self.config.proposal_count:
+            raise RuntimeError("RGB-D measurement proposal count disagrees with configuration")
         log_variance = rgb.new_full(
             (batch, proposals, 3),
             math.log(self.config.measurement_position_variance),
@@ -256,7 +336,7 @@ class RGBDObservationModule(ObservationModule):
             log_variance=log_variance,
             existence_logits=existence_logits,
             measurement_mask=measured.valid_mask,
-            appearance=None,
+            appearance=measured_appearance,
             class_logits=None,
             frame_id=packet.frame_id,
             supported_state_fields=("position",),
@@ -273,6 +353,7 @@ class RGBDObservationModule(ObservationModule):
                 "visibility_logit": existence_logits,
                 "metric_confidence": measured.confidence,
                 "metric_surface_depth": measured.surface_depth,
+                **measurement_diagnostics,
             },
         )
         result.validate()
@@ -305,8 +386,8 @@ class RGBDObservationModule(ObservationModule):
         belief: WorldBelief,
         sensor_context: SensorContext,
     ) -> PredictedMeasurements:
-        if belief.objects.max_objects != 1:
-            raise ValueError("the first RGB-D bridge requires max_objects=1")
+        if belief.objects.max_objects != self.config.proposal_count:
+            raise ValueError("RGB-D belief object count must equal proposal_count")
         objects = belief.objects
         position_slice = fast_packing_map(objects)["position"]
         batch, objects_count = objects.active.shape
@@ -326,7 +407,7 @@ class RGBDObservationModule(ObservationModule):
             valid_mask=objects.active,
             visibility=objects.visibility_logit.sigmoid(),
             rois=None,
-            appearance=None,
+            appearance=(objects.appearance if self.config.proposal_count == 2 else None),
             auxiliary={"world_position": objects.position},
         )
         result.validate()

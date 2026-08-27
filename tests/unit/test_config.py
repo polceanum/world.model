@@ -37,6 +37,7 @@ def test_rgbd_online_profile_binds_metric_temporal_and_analytic_semantics() -> N
     assert config.runtime.modality == "rgbd"
     assert config.runtime.modality_order == ("debug_oracle", "rgbd")
     assert config.model.rgbd.enabled
+    assert config.model.rgbd.proposal_count == 1
     assert config.model.rgbd.world_radius == pytest.approx(0.21)
     assert config.model.rgbd.linear_drag == pytest.approx(0.05)
     assert config.model.rgbd.temporal_history_size == 16
@@ -56,8 +57,19 @@ def test_rgbd_online_profile_binds_metric_temporal_and_analytic_semantics() -> N
         ("model.rgbd.temporal_history_size=16.0", "must be an integer"),
         ("model.rgbd.temporal_min_samples=16.0", "must be an integer"),
         ("model.rgbd.global_every_steps=0", "global_every_steps must be a positive integer"),
+        ("model.rgbd.proposal_count=0", "proposal_count must be integer one or two"),
+        ("model.rgbd.proposal_count=1.0", "proposal_count must be integer one or two"),
+        ("model.rgbd.proposal_count=2", "object counts to equal proposal_count"),
         ("model.rgbd.world_radius=0", "world_radius must be finite and positive"),
         ("model.rgbd.linear_drag=0", "linear_drag must be finite and positive"),
+        (
+            "model.rgbd.maximum_surface_radius_relative_error=1.1",
+            "must be no greater than one",
+        ),
+        (
+            "model.rgbd.chromatic_centre_blend=1.1",
+            "must be no greater than one",
+        ),
         ("model.rgbd.enabled=1", "must be boolean"),
         ("model.dynamics.analytic_free_motion_only=1", "must be boolean"),
         ("model.filter.enable_learned_corrector=1", "must be boolean"),
@@ -72,6 +84,32 @@ def test_rgbd_online_profile_binds_metric_temporal_and_analytic_semantics() -> N
 def test_rgbd_online_semantics_fail_closed(override: str, match: str) -> None:
     with pytest.raises(ValueError, match=match):
         load_config(CONFIG_DIR / "rgbd_online_free_motion_cpu.yaml", overrides=[override])
+
+
+def test_two_object_rgbd_requires_exact_observable_appearance_capacity() -> None:
+    base = load_config(CONFIG_DIR / "rgbd_online_free_motion_cpu.yaml")
+    two_object = replace(
+        base,
+        model=replace(
+            base.model,
+            max_objects=2,
+            state=replace(base.model.state, appearance_dim=3),
+            rgbd=replace(base.model.rgbd, proposal_count=2),
+        ),
+        simulator=replace(base.simulator, min_objects=2, max_objects=2),
+    )
+    two_object.validate()
+
+    for appearance_dim in (2, 4):
+        invalid = replace(
+            two_object,
+            model=replace(
+                two_object.model,
+                state=replace(two_object.model.state, appearance_dim=appearance_dim),
+            ),
+        )
+        with pytest.raises(ValueError, match="appearance_dim exactly three"):
+            invalid.validate()
 
 
 def test_sustained_v3_analytic_contacts_match_reference_solver_thresholds() -> None:

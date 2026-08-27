@@ -207,11 +207,19 @@ class RGBDConfig:
 
     enabled: bool = False
     global_every_steps: int = 1
+    proposal_count: int = 1
     world_radius: float = 0.21
     linear_drag: float = 0.05
     foreground_threshold: float = 0.04
     foreground_temperature: float = 0.01
     minimum_mass: float = 4.0
+    chromatic_temperature: float = 0.05
+    minimum_chromatic_eigengap: float = 0.01
+    spatial_temperature_pixels: float = 1.0
+    chromatic_centre_blend: float = 0.0025
+    minimum_silhouette_gap_pixels: float = 2.0
+    minimum_boundary_clearance_pixels: float = 2.0
+    maximum_surface_radius_relative_error: float = 0.05
     measurement_position_variance: float = 6.4e-5
     temporal_history_size: int = 16
     temporal_min_samples: int = 16
@@ -705,12 +713,34 @@ class OrpheusConfig:
             or model.rgbd.global_every_steps <= 0
         ):
             raise ValueError("model.rgbd.global_every_steps must be a positive integer")
+        if (
+            isinstance(model.rgbd.proposal_count, bool)
+            or not isinstance(model.rgbd.proposal_count, int)
+            or model.rgbd.proposal_count not in {1, 2}
+        ):
+            raise ValueError("model.rgbd.proposal_count must be integer one or two")
         for name, value in (
             ("world_radius", model.rgbd.world_radius),
             ("linear_drag", model.rgbd.linear_drag),
             ("foreground_threshold", model.rgbd.foreground_threshold),
             ("foreground_temperature", model.rgbd.foreground_temperature),
             ("minimum_mass", model.rgbd.minimum_mass),
+            ("chromatic_temperature", model.rgbd.chromatic_temperature),
+            ("minimum_chromatic_eigengap", model.rgbd.minimum_chromatic_eigengap),
+            ("spatial_temperature_pixels", model.rgbd.spatial_temperature_pixels),
+            ("chromatic_centre_blend", model.rgbd.chromatic_centre_blend),
+            (
+                "minimum_silhouette_gap_pixels",
+                model.rgbd.minimum_silhouette_gap_pixels,
+            ),
+            (
+                "minimum_boundary_clearance_pixels",
+                model.rgbd.minimum_boundary_clearance_pixels,
+            ),
+            (
+                "maximum_surface_radius_relative_error",
+                model.rgbd.maximum_surface_radius_relative_error,
+            ),
             ("measurement_position_variance", model.rgbd.measurement_position_variance),
             ("temporal_min_dt", model.rgbd.temporal_min_dt),
             (
@@ -727,6 +757,12 @@ class OrpheusConfig:
                 raise ValueError(f"model.rgbd.{name} must be finite and positive")
         if model.rgbd.foreground_threshold >= 2.0:
             raise ValueError("model.rgbd.foreground_threshold must be smaller than two")
+        if model.rgbd.maximum_surface_radius_relative_error > 1.0:
+            raise ValueError(
+                "model.rgbd.maximum_surface_radius_relative_error must be no greater than one"
+            )
+        if model.rgbd.chromatic_centre_blend > 1.0:
+            raise ValueError("model.rgbd.chromatic_centre_blend must be no greater than one")
         for name, value in (
             ("temporal_history_size", model.rgbd.temporal_history_size),
             ("temporal_min_samples", model.rgbd.temporal_min_samples),
@@ -745,8 +781,18 @@ class OrpheusConfig:
         if model.rgbd.fit_conditioning_limit <= 1.0:
             raise ValueError("model.rgbd.fit_conditioning_limit must be greater than one")
         if model.rgbd.enabled:
-            if model.max_objects != 1 or simulator.min_objects != 1 or simulator.max_objects != 1:
-                raise ValueError("the first model.rgbd bridge requires exactly one object slot")
+            if (
+                model.max_objects != model.rgbd.proposal_count
+                or simulator.min_objects != model.rgbd.proposal_count
+                or simulator.max_objects != model.rgbd.proposal_count
+            ):
+                raise ValueError(
+                    "model.rgbd requires model and simulator object counts to equal proposal_count"
+                )
+            if model.rgbd.proposal_count == 2 and model.state.appearance_dim != 3:
+                raise ValueError(
+                    "two-object model.rgbd requires model.state.appearance_dim exactly three"
+                )
             if simulator.radius_range != (model.rgbd.world_radius, model.rgbd.world_radius):
                 raise ValueError(
                     "the first model.rgbd bridge requires its checkpointed world_radius "
