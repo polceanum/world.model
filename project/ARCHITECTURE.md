@@ -4,7 +4,7 @@
 timestamped ObservationPacket
           │
           ▼
-registered RGB / debug-oracle observation module
+registered RGB / RGB-D / debug-oracle observation module
           │  MeasurementSet + covariance
           ▼
 projection ─ association ─ innovation
@@ -139,6 +139,28 @@ The original continuous velocity-only policy remains bounded to young or
 post-event tracks in public profiles. The new depth-position policy is
 configuration-gated and must pass paired multistep, tracking, event, and
 calibration evaluation before promotion.
+
+The accepted one-object RGB-D path is deliberately smaller than the learned
+RGB stack. A composite packet carries batched RGB, metric surface depth,
+calibration, timestamp, and explicit image size. Parameter-free differentiable
+geometry owns the metric measurement, direct position has exactly one filter
+owner, and `RGBDTemporalPositionHistory` stores sixteen raw positions in
+persistent-ID order. Uniform differentiable exact free-motion WLS emits
+velocity only; analytic dynamics own the five future position/velocity
+queries. Live history is causal runtime state rather than canonical physical
+state and is not serialized in ordinary checkpoints.
+
+Specification 1.56 freezes the exactly-two-visible extension of that same
+path. A symmetric chromatic-plus-spatial two-slot RGB-D module produces
+unordered measurements for two fully visible, image-separated, non-contact
+spheres. Hard Hungarian is isolated to discrete stable identity; it is not a
+differentiable measurement or state owner. Current-position gradients reach
+anchor frame 15 only, while velocity and every analytic rollout reach all
+sixteen RGB/depth frames. Four-scene batch VJPs require exact zero cross-scene
+coupling. The extension owns zero parameters and optimizer updates and leaves
+the accepted one-object behavior intact. Its episode namespaces remain
+unopened pending a clean committed freeze, one fixed development run, and
+independent audit.
 
 Evaluation seed manifests are explicit. `fresh_validation` starts after the
 checkpoint's trainer-validation episodes by default; `--seed-offset` can select

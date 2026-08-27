@@ -284,15 +284,17 @@ The ledger is complete and stopped after final. Evidence is atomically replaced
 and hash-bound but owner-writable, not OS-enforced append-only storage. Audit
 did not reinspect or rematerialize raw protected episodes. Do not rerun final,
 tune on it, change this accepted rung, or enlarge capacity inside it. The bridge
-is ready to merge to `main`; the next rung must be separately predeclared
-before any new multi-object, association, contact, task, or capacity data.
+is merged to `main` at `3eed0b71e6f18c7036bf376c075493a89d5fdc9f`; the
+next rung must be separately predeclared before any new multi-object,
+association, contact, task, or capacity data.
 
 The complete `1075 passed, 16 skipped` repository gate belongs to the clean
 pre-failure source commit above. After deletion of the rejected experiment and
 addition of the RGB-D core, the new complete source gate passes `1091` tests
 with `16` expected inactive-device skips in `418.49 s`. The integrated bridge
-tree is the current complete repository result at
-`1209 passed, 16 skipped in 434.37 s`.
+tree's accepted one-object boundary later passed
+`1209 passed, 16 skipped in 434.37 s`; the current specification-1.56
+two-visible-object source result is recorded in the section below.
 
 The broad `train.py`, `evaluate.py`, and `demo.py` workflow remains available
 for `OnlineWorldModel` smoke/integration checks, but no older sustained profile
@@ -302,3 +304,97 @@ contracts.
 
 Historical campaign commands and evidence through specification 1.51 remain
 in Git commit `c16acc99` and the ignored local pre-generalization archive.
+
+## Frozen two-visible-object rung — development not authorized yet
+
+Specification 1.56 freezes architecture attempt 2 at exactly two fully
+visible, image-separated, non-contact fixed-radius spheres. It preserves the
+accepted one-object path. Parameter-free differentiable chromatic-plus-spatial
+two-slot RGB-D geometry produces unordered metric measurements; hard Hungarian
+is used only for discrete stable identity. Direct metric position has one
+owner. Sixteen persistent-ID-aligned raw positions enter uniform
+differentiable exact free-motion WLS for velocity, and analytic dynamics answer
+position and velocity at `0.1/0.25/0.5/1/2 s`. No optimizer is constructed and
+optimizer updates remain zero.
+
+Frozen config/protocol SHA-256 values are
+`84e6f44b818bb9323a774bdba9492ef056e2a2747b93517fa38497ba83218bba` and
+`42b9dca23fed303d5cee4641c8d8753977a872fc90d0b1086658d7f12b823ea0`.
+The exact harness, harness-test, and runner SHA-256 values are
+`198cac1c4d683e3c983f70c0106827aaf883636d4bd6454e94011c3975c1b64a`,
+`d5dd3c18515589b4589e0179a68e29112d45987a513308df022cece5bf75e896`, and
+`a8e6d9f51380eede3b6a94f085e9741f67883e2740c6203c16aec4a5dcfa1bc1`.
+The simulator remains `sphere_world_v7`.
+
+The fixed VJP contract distinguishes direct current measurement from temporal
+outputs. Current position is owned by anchor frame 15 only (`1/16` reach, with
+every non-anchor gradient exactly zero). Current velocity and all five rollout
+positions and velocities must reach all `16/16` RGB and depth frames. Each
+split's B4 audit comprises four distinct scenes and requires exact zero
+cross-scene coupling.
+
+Source-only validation passes `43` focused tests,
+`281 passed in 15.61 s` across the accepted one-object/configuration/two-object
+harnesses, and `1275 passed, 16 skipped in 447.29 s` repository-wide. Ruff
+lint, Ruff format-check, diff integrity, and two independent audits also pass.
+These commands did not generate an episode and are not accuracy evidence.
+
+Inspect the canonical protocol without episode access:
+
+```bash
+conda run -n orpheus python scripts/run_rgbd_two_visible_qualification.py \
+  --phase protocol \
+  --config configs/rgbd_two_visible_free_motion_cpu.yaml
+```
+
+The exact frozen tree must first be clean and committed. Only then may the one
+fixed development attempt use fresh paths:
+
+```bash
+conda run -n orpheus python scripts/run_rgbd_two_visible_qualification.py \
+  --phase development \
+  --config configs/rgbd_two_visible_free_motion_cpu.yaml \
+  --report runs/rgbd_two_visible_bridge_v1/development_report.json \
+  --checkpoint runs/rgbd_two_visible_bridge_v1/development_model.pt
+```
+
+Do not use the qualification phase unless that exact development report and
+checkpoint pass independent digest review. The authorized command is:
+
+```bash
+conda run -n orpheus python scripts/run_rgbd_two_visible_qualification.py \
+  --phase qualification \
+  --config configs/rgbd_two_visible_free_motion_cpu.yaml \
+  --development-report runs/rgbd_two_visible_bridge_v1/development_report.json \
+  --checkpoint runs/rgbd_two_visible_bridge_v1/development_model.pt \
+  --report runs/rgbd_two_visible_bridge_v1/qualification_report.json \
+  --reviewed-checkpoint-sha256 <reviewed-checkpoint-sha256> \
+  --reviewed-report-sha256 <reviewed-report-sha256>
+```
+
+The frozen namespace/hash bindings are:
+
+| split | exact seed range | manifest SHA-256 |
+| --- | --- | --- |
+| development | `49000000--49000031` | `5a47a1a4a1405ba4c2fc3bce0087131d98fabfceb899beb26c6b4ba824a130f8` |
+| selector | `50000000--50000023` | `415bc33407a46b79d0a3a746a8f5b192e31cfd4f6a68b9764e9b9943b7e6d7fe` |
+| confirmation | `51000000--51000023` | `14f7dc3b762e4f987acbedcece815abd1c262bc9da60322f7f054e2c4eb4b3b1` |
+| final | `52000000--52000047` | `b7e8913e938e2f7ae7f937979a60279916ff1a06f071427bcce9f08b0e354e75` |
+
+All are unopened and no episode, report, checkpoint, or ledger exists. The
+fixed development ledger path is
+`runs/rgbd_two_visible_bridge_v1/development_attempt_2_access.json`; it is
+created before development materialization and alone authorizes the
+constructor. After a reviewed pass, the protected ledger at
+`runs/rgbd_two_visible_bridge_v1/qualification_attempt_2_access.json` does the
+same for selector -> confirmation -> final exactly once. A failed development
+or protected split stops immediately, leaves later splits unopened, and
+permits no retuning, renamed retry, or final reuse. Checkpoint review uses an
+empty, optimizer-/RNG-free payload loaded with
+`weights_only=True`; terminal report bytes precede the ledger's terminal
+digest.
+
+This rung excludes occlusion/reappearance, variable object count, contact,
+camera motion, variable physical parameters, uncertainty calibration,
+tasks/planning, extra modalities, and learned capacity. Ordinary checkpoints
+do not serialize live histories, so exact mid-history resume is unsupported.

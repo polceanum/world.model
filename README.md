@@ -71,9 +71,16 @@ persisted JSON protocol was compared to tuple-valued in-memory data with raw
 Python equality; no protected split was opened. A fresh canonical development
 run and independent audit then authorized exactly one ledgered
 46m -> 47m -> 48m qualification. All protected splits passed and final is
-consumed. This accepts only the frozen one-slot free-motion bridge; it is ready
-to merge, not evidence for broader scene, modality, or learned-capacity
-convergence.
+consumed. This accepts only the frozen one-slot free-motion bridge; it is
+merged to `main` at `3eed0b7`, not evidence for broader scene, modality, or
+learned-capacity convergence.
+
+Specification 1.56 now freezes the next bounded rung at exactly two fully
+visible, image-separated, non-contact fixed-radius spheres. Its continuous
+RGB-D-to-state-to-five-horizon rollout path is parameter-free and
+differentiable; hard Hungarian is isolated to stable discrete identity. All
+49m/50m/51m/52m namespaces remain unopened, with no episode artifact or
+ledger. Development waits for the exact source/docs freeze to be committed.
 
 ## Quick start
 
@@ -253,16 +260,17 @@ OLS covariance remains diagnostic, not calibrated uncertainty. Artifacts are
 SHA-bound and tamper-evident but owner-writable. At that boundary the next rung
 was the composite batched `rgbd` public `OnlineWorldModel` bridge; its later
 qualification is recorded below. The standalone source gate was
-`1130 passed, 16 skipped in 414.82 s`; the integrated bridge tree now passes
-the newer complete repository gate recorded below. Its first integrated-tree
-boundary was `1207 passed, 16 skipped in 431.10 s`.
+`1130 passed, 16 skipped in 414.82 s`; the integrated bridge tree later passed
+the accepted one-object complete repository gate recorded below. Its first
+integrated-tree boundary was `1207 passed, 16 skipped in 431.10 s`.
 
 The former grounded, attention, change-point, and multi-day accuracy commands
 are historical evidence only and have been removed from the active workflow.
 Their records remain in Git history and the ignored, local pre-generalization
-archive. Broad training stays paused while the accepted bridge evidence is
-merged and the next bounded rung is predeclared without weakening the
-standalone or public-integration gates.
+archive. Broad training remains paused. The accepted bridge is merged, and
+specification 1.56 now freezes the next bounded rung without weakening the
+standalone or public-integration gates; its single development attempt still
+waits for the exact source/docs tree to be committed cleanly.
 
 ### Qualified public RGB-D online bridge — final consumed once
 
@@ -278,8 +286,9 @@ The frozen config SHA-256 is
 the seed-free canonical protocol SHA-256 is
 `e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`.
 At the source-freeze boundary, the development and protected namespaces were
-all unopened. The current focused source/config/protocol gate is
-`421 passed in 62.72 s`; the complete repository gate is
+all unopened. That accepted one-object bridge boundary passed the focused
+source/config/protocol gate at `421 passed in 62.72 s` and the complete
+repository gate at
 `1209 passed, 16 skipped in 434.37 s`. The bridge owns zero
 parameters, state-dict entries, or optimizer state; complete batch-four
 persistent runtime tensor storage is `25,364` bytes against a `32,768`-byte
@@ -371,11 +380,52 @@ owner-writable, so they are tamper-evident rather than OS write-once.
 This qualifies the declared one-slot, one-sphere, fixed-camera, fixed-parameter
 free-motion bridge only. It does not establish uncertainty calibration,
 multi-object/contact behavior, camera-motion handling, learned capacity, or a
-general world model. After merge, the next bounded predeclared rung is one
-changed capability at a time. Before new data it must freeze moving-camera,
+general world model. The merge is complete; the next bounded predeclared rung
+is one changed capability at a time. Before new data it must freeze moving-camera,
 multi-object, association/occlusion, contact/event, task-success, capacity,
 gradient, accuracy, memory, and rollout-throughput gates; no accepted bridge
 threshold or consumed-final result may be retuned.
+
+### Frozen two-visible-object RGB-D rung — no episode access yet
+
+Architecture attempt 2 preserves the accepted one-object behavior and adds
+exactly two chromatically distinct spheres that remain fully visible,
+image-separated, and non-contacting. Differentiable chromatic-plus-spatial
+two-slot RGB-D geometry owns unordered metric measurement; hard Hungarian is
+only the discrete stable-identity control. Direct metric position has one
+owner, a uniform differentiable WLS fit uses all sixteen frames for velocity,
+and analytic dynamics answer position and velocity at
+`0.1/0.25/0.5/1/2 s`. The rung owns zero learned parameters and optimizer
+updates.
+
+Frozen config/protocol SHA-256 values are
+`84e6f44b818bb9323a774bdba9492ef056e2a2747b93517fa38497ba83218bba` /
+`42b9dca23fed303d5cee4641c8d8753977a872fc90d0b1086658d7f12b823ea0`.
+Current position intentionally reaches only anchor frame 15 (`1/16`, exact
+zero non-anchor gradient); current velocity and every rollout position and
+velocity reach `16/16` RGB and depth frames. Four distinct audit scenes per
+split establish exact zero cross-scene coupling. Seed-free checks pass at
+`43 passed` focused, `281 passed in 15.61 s` combined, and
+`1275 passed, 16 skipped in 447.29 s` complete; Ruff/format/diff and two
+independent audits pass.
+
+Protocol inspection is seed-free:
+
+```bash
+conda run -n orpheus python scripts/run_rgbd_two_visible_qualification.py \
+  --phase protocol \
+  --config configs/rgbd_two_visible_free_motion_cpu.yaml
+```
+
+Do not run development until the exact freeze is clean and committed. Then
+there is one fixed development attempt followed by independent audit; only a
+pass may authorize exactly-once selector -> confirmation -> final. Any failure
+stops with no retuning. Fixed durable ledgers record access before scene
+construction, the checkpoint is restricted `weights_only=True` empty state,
+and the terminal report precedes the ledger's terminal digest. This rung does
+not cover occlusion, variable object count, contact, camera motion, variable
+physics, uncertainty calibration, tasks, added modalities, or learned
+capacity; live temporal history also remains outside ordinary checkpoints.
 
 The general evaluator still supports explicit disjoint manifests for a
 compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not

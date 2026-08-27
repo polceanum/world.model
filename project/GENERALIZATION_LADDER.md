@@ -243,14 +243,60 @@ is `708,853,760` bytes. The ledger is complete, final is consumed, and no raw
 protected episode was reinspected. Evidence remains owner-writable despite
 atomic replacement and hash binding.
 
-The one-sphere contact-free public bridge is accepted and ready to merge. No
-multi-object, association/occlusion, contact/event, task/planning, modality, or
-learned-capacity convergence is claimed. After merge, the next rung must
+The one-sphere contact-free public bridge is accepted and merged to `main` at
+`3eed0b71e6f18c7036bf376c075493a89d5fdc9f`. No multi-object,
+association/occlusion, contact/event, task/planning, modality, or learned-
+capacity convergence is claimed. The next rung must
 predeclare those changed capabilities and all accuracy, identity/association,
 event, task-success, gradient, memory, and rollout-throughput gates. It may not
 alter this accepted rung or tune on final.
 
-### 4. Observable nuisance variables and additional useful modalities
+### 4. Exactly two visible non-contact objects — source frozen
+
+Specification 1.56 changes one capability: object count becomes exactly two.
+Both fixed-radius spheres remain fully visible, image-separated, and
+non-contacting under a fixed camera and fixed known dynamics. The accepted
+one-object behavior is retained. Occlusion, reappearance, variable set size,
+contact, moving camera, variable parameters, extra modalities, tasks, and
+learned capacity remain closed.
+
+Architecture attempt 2 uses parameter-free differentiable chromatic-plus-
+spatial symmetric two-slot RGB-D geometry. Hard Hungarian assignment is a
+discrete stable-identity controller only, never a claimed differentiable state
+owner. Direct metric position has one owner; sixteen persistent-ID-aligned raw
+measurements feed uniform differentiable exact free-motion WLS velocity; and
+analytic dynamics answer position and velocity at
+`0.1/0.25/0.5/1/2 s`. This is the smallest equation-led multi-object baseline,
+not a learned-capacity result.
+
+Config/protocol SHA-256 values are
+`84e6f44b818bb9323a774bdba9492ef056e2a2747b93517fa38497ba83218bba` /
+`42b9dca23fed303d5cee4641c8d8753977a872fc90d0b1086658d7f12b823ea0`.
+Current position must reach anchor frame 15 only (`1/16`, exact zero
+non-anchor gradient); current velocity and every horizon position/velocity
+must reach all `16/16` RGB and depth frames. B4 uses four distinct scenes per
+split and requires exact zero cross-scene coupling.
+
+Seed-free source validation passes `43` focused tests,
+`281 passed in 15.61 s` combined, `1275 passed, 16 skipped in 447.29 s`
+complete, Ruff/format/diff, and two independent audits. No episode result
+exists. Development `49000000--49000031`, selector
+`50000000--50000023`, confirmation `51000000--51000023`, and final
+`52000000--52000047` are unopened. Their manifest SHA-256 values are
+`5a47a1a4a1405ba4c2fc3bce0087131d98fabfceb899beb26c6b4ba824a130f8`,
+`415bc33407a46b79d0a3a746a8f5b192e31cfd4f6a68b9764e9b9943b7e6d7fe`,
+`14f7dc3b762e4f987acbedcece815abd1c262bc9da60322f7f054e2c4eb4b3b1`, and
+`b7e8913e938e2f7ae7f937979a60279916ff1a06f071427bcce9f08b0e354e75`.
+
+No episode, artifact, or ledger has been created. First commit the exact
+source/config/harness/tests/runner/docs tree. Then run one fixed development
+attempt and audit it independently. Only a pass may authorize exactly-once
+selector -> confirmation -> final under the durable ledger; any failure stops
+without retuning or a renamed retry. The constructor requires ledger-issued
+single-use authorization, checkpoint review is restricted `weights_only=True`
+empty state, and terminal report bytes precede the ledger's terminal digest.
+
+### 5. Observable nuisance variables and additional useful modalities
 
 Add one variable at a time: known moving-camera pose, then identifiable drag,
 then variable metric scale. Camera pose or IMU is calibration input, not hidden
@@ -259,14 +305,15 @@ accepted RGB-D state, not the route used to establish metric observability.
 Audio is added only for an event or material task where it provides
 independently scored information.
 
-### 5. Multiple non-contact objects
+### 6. Variable-size and partially observed object sets
 
-Progress from two visible objects to variable set size, partial occlusion, and
-reappearance. Require per-object state/horizon gates, association coverage,
-identity-switch limits, permutation invariance, and recovery after missed
-observations before increasing scene count or backbone capacity.
+Progress from the qualified exactly-two-visible rung to variable set size,
+partial occlusion, and reappearance. Require per-object state/horizon gates,
+association coverage, identity-switch limits, permutation invariance, and
+recovery after missed observations before increasing scene count or backbone
+capacity.
 
-### 6. Hybrid contact and material identification
+### 7. Hybrid contact and material identification
 
 Introduce sparse two-sphere contact with an analytic hard forward resolver and
 a differentiable local surrogate for learnable pre-contact state/parameter
@@ -275,7 +322,7 @@ state, energy/momentum diagnostics, and observable restitution/friction
 identification. Do not use fabricated straight-through gradients or simulator
 event labels at runtime.
 
-### 7. Actions, counterfactuals, and planning tasks
+### 8. Actions, counterfactuals, and planning tasks
 
 Condition the shared dynamics on known forces/actions and score factual and
 counterfactual trajectories. Tasks include interception, collision avoidance,
@@ -283,7 +330,7 @@ goal-reaching, and information gathering under occlusion. Planning must reuse
 the same cheap state-only rollout, report task success alongside physical
 accuracy, and remain consistent with the online posterior after new evidence.
 
-### 8. Richer geometry and real observations
+### 9. Richer geometry and real observations
 
 Only after the synthetic structured ladder closes, expand object geometry,
 camera environments, RGB-D/video data, and useful asynchronous sensors. Keep a

@@ -1,5 +1,90 @@
 # Design decisions
 
+## ADR-165 — Freeze differentiable two-visible-object RGB-D architecture attempt 2
+
+- **Date:** 2026-08-27
+- **Status:** accepted source-freeze contract; all episode namespaces remain
+  unopened
+- **Context:** ADR-164 accepted and subsequently merged the one-object public
+  RGB-D bridge. The next smallest missing capability is more than one object,
+  but introducing occlusion, contact, variable set size, moving cameras, or
+  learned capacity at the same time would confound observation, identity, and
+  rollout error. Hard assignment is also not a valid training path: identity
+  bookkeeping must be isolated from the continuous state geometry rather than
+  treated as if Hungarian matching were differentiable.
+- **Decision:** Freeze architecture attempt 2 at exactly two fully visible,
+  image-separated, non-contact, fixed-radius spheres under fixed camera and
+  physical parameters. Use parameter-free differentiable chromatic-plus-
+  spatial symmetric two-slot RGB-D geometry for unordered metric
+  measurements. Permit hard Hungarian only as the discrete stable identity
+  branch. Give direct observable metric position exactly one owner, align raw
+  positions by persistent identity, fit velocity over all sixteen frames with
+  uniform differentiable exact free-motion WLS, and use analytic dynamics for
+  position and velocity at `0.10/0.25/0.50/1.00/2.00 s`. Preserve the accepted
+  one-object behavior. The rung has no learned parameters, optimizer state, or
+  optimizer updates; it is the cheap equation-led convergence baseline upon
+  which later learned residuals must improve.
+- **Differentiability contract:** For each object, target, modality, and audit
+  scene, current position is anchor-frame-15-owned and therefore must reach
+  exactly `1/16` history frames with zero non-anchor gradient. Current
+  velocity and every horizon position/velocity must reach all `16/16` RGB and
+  depth frames. B4 evaluates four distinct scenes per split, aggregates floors
+  as minima and ceilings as maxima across them, and requires exactly zero
+  cross-scene gradient coupling. No gradient-through-Hungarian claim is made.
+- **Frozen bindings:** Config SHA-256 is
+  `84e6f44b818bb9323a774bdba9492ef056e2a2747b93517fa38497ba83218bba`;
+  canonical pre-self-hash protocol SHA-256 is
+  `42b9dca23fed303d5cee4641c8d8753977a872fc90d0b1086658d7f12b823ea0`.
+  Harness, harness-test, and runner SHA-256 values are
+  `198cac1c4d683e3c983f70c0106827aaf883636d4bd6454e94011c3975c1b64a`,
+  `d5dd3c18515589b4589e0179a68e29112d45987a513308df022cece5bf75e896`,
+  and
+  `a8e6d9f51380eede3b6a94f085e9741f67883e2740c6203c16aec4a5dcfa1bc1`.
+  Simulator protocol remains `sphere_world_v7`. No clean execution commit,
+  runtime fingerprint, or worktree fingerprint is claimed until the full
+  freeze is committed; documentation may change the later worktree
+  fingerprint without changing the four file hashes.
+- **Evidence:** Seed-free source validation passes the focused harness
+  (`43 passed`), combined accepted one-object/config/two-object harness
+  (`281 passed in 15.61 s`), complete repository
+  (`1275 passed, 16 skipped in 447.29 s`), Ruff lint and format-check, and diff
+  integrity. Two independent audits pass. This is implementation and
+  differentiability evidence only; no episode accuracy result exists.
+- **Access boundary:** Development `49000000--49000031`, selector
+  `50000000--50000023`, confirmation `51000000--51000023`, and final
+  `52000000--52000047` remain unopened. Their canonical manifest SHA-256
+  values are
+  `5a47a1a4a1405ba4c2fc3bce0087131d98fabfceb899beb26c6b4ba824a130f8`,
+  `415bc33407a46b79d0a3a746a8f5b192e31cfd4f6a68b9764e9b9943b7e6d7fe`,
+  `14f7dc3b762e4f987acbedcece815abd1c262bc9da60322f7f054e2c4eb4b3b1`,
+  and `b7e8913e938e2f7ae7f937979a60279916ff1a06f071427bcce9f08b0e354e75`.
+  No episode, report, checkpoint, result artifact, development ledger, or
+  protected ledger has been created. Development must wait for the exact
+  frozen tree to be clean and committed, then run once. A separate audit must
+  pass before the exactly-once selector -> confirmation -> final command; any
+  failure stops with later namespaces unopened and no retuning or renamed
+  retry.
+- **Integrity controls:** Attempt-scoped durable ledgers record access before
+  materialization and alone create the single-use authorization accepted by
+  the scene constructor. The review checkpoint is empty-state,
+  optimizer-/RNG-free, and loaded through restricted `weights_only=True`.
+  Terminal report bytes are persisted before the ledger receives its terminal
+  report digest. Fresh-path and SHA binding make evidence tamper-evident, not
+  OS write-once; live temporal histories remain outside ordinary checkpoints,
+  so exact mid-history resume is unsupported.
+- **Alternatives considered:** learn object slots or identity before an
+  equation-led baseline; backpropagate through or approximate hard Hungarian;
+  add occlusion/contact/variable count concurrently; reopen the accepted
+  one-object rung; run development before a clean committed freeze; weaken
+  gates or retry after observing a failure.
+- **Consequences:** The only active new claim is a frozen, seed-free
+  two-visible-object source and protocol. It proves a continuous trainable path
+  around a discrete identity controller, not multi-object episode accuracy or
+  general world-model convergence. Occlusion, missed-observation recovery,
+  variable set size, contact/events, moving camera, variable parameters,
+  uncertainty calibration, tasks/planning, richer modalities, and learned
+  capacity remain later separately frozen rungs.
+
 ## ADR-164 — Accept the canonical public RGB-D bridge qualification
 
 - **Date:** 2026-08-27

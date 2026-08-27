@@ -2,6 +2,57 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-27 frozen two-visible-object RGB-D architecture attempt 2
+
+- Advanced the authoritative contract to specification 1.56 while retaining
+  simulator protocol `sphere_world_v7` and the accepted one-object bridge.
+- Froze exactly two fully visible, image-separated, non-contact fixed-radius
+  spheres under fixed camera/parameters. Parameter-free differentiable
+  chromatic-plus-spatial two-slot RGB-D geometry owns unordered metric
+  measurements; hard Hungarian is isolated to the discrete stable identity
+  branch. One direct metric-position owner, sixteen-frame uniform
+  differentiable exact free-motion WLS velocity, and analytic
+  `0.1/0.25/0.5/1/2 s` position/velocity rollouts complete the runtime path.
+- Bound exact config SHA-256
+  `84e6f44b818bb9323a774bdba9492ef056e2a2747b93517fa38497ba83218bba`
+  and canonical pre-self-hash protocol SHA-256
+  `42b9dca23fed303d5cee4641c8d8753977a872fc90d0b1086658d7f12b823ea0`.
+  Harness, harness-test, and thin-runner SHA-256 values are
+  `198cac1c4d683e3c983f70c0106827aaf883636d4bd6454e94011c3975c1b64a`,
+  `d5dd3c18515589b4589e0179a68e29112d45987a513308df022cece5bf75e896`,
+  and
+  `a8e6d9f51380eede3b6a94f085e9741f67883e2740c6203c16aec4a5dcfa1bc1`.
+- Made the VJP boundary explicit. Current position is owned only by frame 15
+  (`1/16` reach with exact zero non-anchor gradient); current velocity and all
+  rollout position/velocity outputs reach `16/16` RGB and depth frames. B4
+  uses four distinct scenes per split and requires exact zero cross-scene
+  gradient coupling.
+- Passed seed-free source gates: focused harness `43 passed`; combined accepted
+  one-object/config/two-object harness `281 passed in 15.61 s`; full repository
+  `1275 passed, 16 skipped in 447.29 s`; Ruff lint, Ruff format-check, and diff
+  integrity clean; two independent audits pass. These are not episode-accuracy
+  results.
+- Froze development `49000000--49000031`, selector
+  `50000000--50000023`, confirmation `51000000--51000023`, and one-shot final
+  `52000000--52000047`. Their canonical manifest SHA-256 values are
+  `5a47a1a4a1405ba4c2fc3bce0087131d98fabfceb899beb26c6b4ba824a130f8`,
+  `415bc33407a46b79d0a3a746a8f5b192e31cfd4f6a68b9764e9b9943b7e6d7fe`,
+  `14f7dc3b762e4f987acbedcece815abd1c262bc9da60322f7f054e2c4eb4b3b1`,
+  and `b7e8913e938e2f7ae7f937979a60279916ff1a06f071427bcce9f08b0e354e75`.
+  Every namespace remains unopened; no episode, report, checkpoint, artifact,
+  or ledger exists.
+- Added fixed durable development/protected ledger contracts,
+  constructor-level manifest authorization, restricted `weights_only=True`
+  empty-state checkpoint validation, and report-before-terminal-ledger
+  ordering. Development waits for clean committed source and runs exactly once;
+  only an independently audited pass may authorize exactly-once selector ->
+  confirmation -> final. Any failure stops without retuning and leaves later
+  splits unopened.
+- This freeze makes no occlusion, variable-count, contact/event, camera-motion,
+  variable-physics, uncertainty-calibration, task/planning, added-modality, or
+  learned-capacity claim. Exact mid-history resume remains unsupported because
+  ordinary checkpoints do not serialize live temporal histories.
+
 ### 2026-08-27 qualified public OnlineWorldModel RGB-D bridge
 
 - Rejected the first development-only evidence from source

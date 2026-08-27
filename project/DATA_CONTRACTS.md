@@ -1,9 +1,14 @@
 # Data contracts
 
 Public tensors are batch-major. `B` is batch, `T` time, `N` padded object slots,
-`M` unordered measurements, and `K` stable modes.
+`M` unordered measurements, `K` stable modes, `L` token length, `R` bounded
+history length, and `H_img,W_img` image height/width.
 
-- `ObservationPacket`: immutable raw timestamped sensor event.
+- `ObservationPacket`: immutable raw timestamped sensor event. The qualified
+  RGB-D form is one composite modality-qualified packet containing
+  `[B,3,H_img,W_img]` RGB, `[B,1,H_img,W_img]` metric depth, batched calibration,
+  explicit image size, and one timestamp; separate same-time RGB/depth packets
+  are not equivalent.
 - `MeasurementSet`: `[B,M,Dm]` values/log variance, existence, mask, optional
   appearance/class evidence, frame, supported state fields, auxiliary tensors.
 - `ObjectBeliefTensor`: `[B,N,...]` persistent object state/parameters/masks.
@@ -16,9 +21,14 @@ Public tensors are batch-major. `B` is batch, `T` time, `N` padded object slots,
   `[B,N,3]` position/log-variance and independent position-validity mask. It is
   already aligned to persistent belief slots.
 - `RGBTemporalPositionHistory`: persistent IDs plus two bounded
-  `[B,N,H,...]` rings: per-frame point timestamps/positions/variance/validity
+  `[B,N,R,...]` rings: per-frame point timestamps/positions/variance/validity
   and trustworthy scale-anchor timestamps/positions/variance/validity.
   It is sensor-local causal evidence, not physical state.
+- `RGBDTemporalPositionHistory`: persistent IDs plus bounded `[B,N,R]`
+  timestamps/sample/valid masks and `[B,N,R,3]` raw metric positions. Invalid
+  sampled-depth rows retain their causal sample position but fail the complete
+  uniform fit closed. The current qualified/frozen RGB-D paths use `R=16`.
+  This live sensor-local state is not serialized by an ordinary checkpoint.
 - `AbstractionAssignment`: `[B,N]` abstraction kind, routing confidence,
   complexity cost, refinement reason, and active mask. It is derived from
   `WorldBelief`, not stored as independent physical state.

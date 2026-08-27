@@ -1,0 +1,143 @@
+project:
+  name: orpheus-rgbd-two-visible-free-motion-v1-cpu
+  seed: 49000000
+  output_dir: runs
+  deterministic: true
+
+device:
+  preference: cpu
+  closed_loop_preference: cpu
+  cuda_amp: false
+  compile: false
+
+# Frozen second RGB-D rung: exactly two fixed-radius, chromatically distinct,
+# fully visible, image-separated spheres.  The qualification constructor owns
+# the deterministic non-contact scene family and preflights every rendered
+# frame; `ensure_collision: false` is necessary but is never treated as proof.
+simulator:
+  image_size: [64, 64]
+  frame_rate: 20
+  physics_rate: 120
+  sequence_frames: 56
+  min_objects: 2
+  max_objects: 2
+  gravity: [0.0, 0.0, 0.0]
+  radius_range: [0.21, 0.21]
+  mass_range: [1.0, 1.0]
+  restitution_range: [0.7, 0.7]
+  drag_range: [0.05, 0.05]
+  friction_range: [0.2, 0.2]
+  # The custom deterministic constructor owns the exact vectors; this range
+  # truthfully bounds both sphere speed norms across the frozen seed family.
+  initial_speed_range: [0.035, 0.065]
+  camera_motion: fixed
+  render_noise_std: 0.0
+  ensure_collision: false
+  external_impulse_probability: 0.0
+  scenario_mixture: [baseline]
+
+model:
+  max_objects: 2
+  lifecycle:
+    birth_confidence: 0.5
+    birth_confirmations: 1
+  state:
+    geometry_dim: 1
+    appearance_dim: 3
+    residual_dynamics_dim: 1
+    modal_count: 0
+    modal_dim: 1
+    parameter_memory_dim: 1
+    global_dim: 1
+  rgb:
+    enabled: false
+    backbone_channels: [8, 12, 16, 20]
+    feature_dim: 16
+    proposal_queries: 2
+    global_every_steps: 1
+    roi_size: 8
+    temporal_velocity_enabled: false
+  rgbd:
+    enabled: true
+    global_every_steps: 1
+    proposal_count: 2
+    world_radius: 0.21
+    linear_drag: 0.05
+    foreground_threshold: 0.04
+    foreground_temperature: 0.01
+    minimum_mass: 4.0
+    chromatic_temperature: 0.05
+    minimum_chromatic_eigengap: 0.01
+    spatial_temperature_pixels: 1.0
+    chromatic_centre_blend: 0.0025
+    minimum_silhouette_gap_pixels: 2.0
+    minimum_boundary_clearance_pixels: 2.0
+    maximum_surface_radius_relative_error: 0.05
+    measurement_position_variance: 0.000064
+    temporal_history_size: 16
+    temporal_min_samples: 16
+    temporal_min_dt: 0.001
+    temporal_velocity_variance_floor: 0.000001
+    temporal_velocity_variance_ceiling: 0.01
+    fit_conditioning_limit: 100.0
+  dynamics:
+    hidden_dim: 16
+    max_substep: 0.008333333333333333
+    attention_residual_enabled: false
+    analytic_free_motion_only: true
+  filter:
+    hidden_dim: 16
+    learned_residual_scale: 0.0
+    enable_learned_corrector: false
+    direct_metric_position_update: true
+    innovation_anchored_correction: true
+  association:
+    geometry_weight: 1.0
+    appearance_weight: 0.25
+    existence_weight: 0.0
+    mahalanobis_gate: 100.0
+    maximum_cost: 100.0
+    ambiguity_margin: 0.02
+    minimum_measurement_confidence: 0.5
+  identification:
+    enabled: false
+    hidden_dim: 1
+
+runtime:
+  modality: rgbd
+  modality_order: [debug_oracle, rgbd]
+  enable_debug_oracle: false
+  strict_timestamps: true
+  hypothesis_pool_enabled: false
+
+# The profile remains loadable by common tooling, but this qualification has
+# no optimizer construction or update.  Every such count is independently
+# gated to zero in the durable report/checkpoint evidence.
+training:
+  batch_size: 4
+  steps: 1
+  learning_rate: 0.000001
+  closed_loop_learning_rate_scale: 1.0
+  weight_decay: 0.0
+  grad_clip_norm: 1.0
+  rgb_pretrain_steps: 0
+  train_episodes: 32
+  validation_episodes: 32
+  fixed_dataset: true
+  tbptt_steps: 16
+  checkpoint_every: 1
+  eval_every: 1
+  log_every: 1
+  horizon_weights: [1.0, 1.0, 1.0, 1.0, 1.0]
+
+evaluation:
+  horizons_seconds: [0.1, 0.25, 0.5, 1.0, 2.0]
+  episodes: 32
+  rgb_only: false
+  confidence_level: 0.90
+
+demo:
+  seed: 200000
+  max_frames: 56
+  future_horizon_seconds: 2.0
+  fps: 10

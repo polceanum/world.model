@@ -130,12 +130,50 @@
 - [x] Mark final consumed with no rerun or raw protected-episode reinspection;
   disclose owner-writable atomic-replace ledger limitations and accept the
   one-sphere contact-free public bridge.
-- [ ] Commit/push this exact qualification evidence and merge the accepted
-  bridge to GitHub `main` without failed experiment history.
-- [ ] Before generation, predeclare the next bounded rung's multi-object,
+- [x] Commit/push the exact one-object qualification evidence and merge the
+  accepted bridge to GitHub `main` at
+  `3eed0b71e6f18c7036bf376c075493a89d5fdc9f` without failed experiment
+  history.
+- [x] Before generation, predeclare the next bounded rung's multi-object,
   association/identity, occlusion, contact/event, task-success, capacity,
   gradient, accuracy, memory, and rollout-throughput gates. Do not alter the
   accepted bridge or tune thresholds/architecture/capacity on consumed final.
+- [x] Freeze architecture attempt 2 for exactly two fully visible,
+  image-separated, non-contact fixed-radius spheres: differentiable
+  chromatic-plus-spatial two-slot RGB-D geometry, discrete stable-branch hard
+  Hungarian identity only, one direct metric-position owner, sixteen-frame
+  uniform differentiable WLS velocity, and analytic five-horizon rollout.
+- [x] Bind exact config/protocol SHA-256
+  `84e6f44b818bb9323a774bdba9492ef056e2a2747b93517fa38497ba83218bba` /
+  `42b9dca23fed303d5cee4641c8d8753977a872fc90d0b1086658d7f12b823ea0`
+  and harness/test/runner SHA-256
+  `198cac1c4d683e3c983f70c0106827aaf883636d4bd6454e94011c3975c1b64a` /
+  `d5dd3c18515589b4589e0179a68e29112d45987a513308df022cece5bf75e896` /
+  `a8e6d9f51380eede3b6a94f085e9741f67883e2740c6203c16aec4a5dcfa1bc1`.
+- [x] Preserve one-object behavior and prove the intended VJP topology:
+  anchor-only current position (`1/16`, non-anchor exactly zero), `16/16`
+  current-velocity and all-rollout position/velocity reach, four distinct B4
+  audit scenes per split, and exactly zero cross-scene coupling.
+- [x] Pass seed-free source validation: focused `43 passed`, combined accepted
+  one-object/config/harness `281 passed in 15.61 s`, complete repository
+  `1275 passed, 16 skipped in 447.29 s`, Ruff/format/diff clean, and two
+  independent audits passing.
+- [x] Freeze unopened development/selector/confirmation/final namespaces
+  `49m/50m/51m/52m` with manifest SHA-256
+  `5a47a1a4a1405ba4c2fc3bce0087131d98fabfceb899beb26c6b4ba824a130f8`,
+  `415bc33407a46b79d0a3a746a8f5b192e31cfd4f6a68b9764e9b9943b7e6d7fe`,
+  `14f7dc3b762e4f987acbedcece815abd1c262bc9da60322f7f054e2c4eb4b3b1`,
+  and `b7e8913e938e2f7ae7f937979a60279916ff1a06f071427bcce9f08b0e354e75`;
+  create no episode, report, checkpoint, artifact, or ledger before the clean
+  committed-source boundary.
+- [ ] Commit and push the exact frozen two-object source/config/harness/tests/
+  runner/docs as one clean tree before any development materialization.
+- [ ] Execute the single fixed development attempt, then independently audit
+  exact source/config/protocol/report/checkpoint/ledger digests. Stop without
+  retuning or a renamed retry on any failure.
+- [ ] Only after that audit passes, consume selector -> confirmation -> final
+  exactly once under the fixed durable protected ledger. Stop immediately on
+  a failed split and leave every later namespace unopened.
 - [ ] Add one complexity per later rung: camera motion; drag identification;
   variable scale; multi-object sets; identity/occlusion; contact; material
   parameters; known actions/planning; richer modalities/geometry.
