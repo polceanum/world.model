@@ -10,7 +10,9 @@ bridge is merged at `3eed0b71e6f18c7036bf376c075493a89d5fdc9f`. Broad heterogene
 remains paused. The active contract is specification 1.56. The accepted base
 now comprises the specification-1.51 differentiable one-sphere unit, the
 qualified standalone two-second RGB-D rung, and its qualified public one-slot
-`OnlineWorldModel` bridge—not any older campaign checkpoint.
+`OnlineWorldModel` bridge. The accepted branch additionally contains the
+exactly-two-visible RGB-D qualification recorded below—not any older campaign
+checkpoint.
 
 The qualified unit achieved, on its single previously untouched final set:
 
@@ -346,17 +348,18 @@ owner-writable rather than OS-enforced append-only storage. The audit did not
 reinspect or rematerialize raw protected episodes.
 
 This one-sphere, fixed-camera, contact-free public bridge is accepted and
-merged to `main`. No broader multi-object, association, occlusion, contact,
-planning/task, learned-capacity, or additional-modality convergence is claimed.
-The next bounded rung must predeclare its changed capability and
+merged to `main`. At that boundary no broader multi-object, association,
+occlusion, contact, planning/task, learned-capacity, or additional-modality
+convergence was claimed; the later exactly-two-visible acceptance is recorded
+below. Each bounded rung must predeclare its changed capability and
 per-object, association, event/contact, task-success, gradient, accuracy,
 memory, and rollout gates. It may not alter this accepted rung or tune on the
 consumed final.
 
-## Frozen next rung: exactly two visible non-contact objects
+## Historical freeze: exactly two visible non-contact objects
 
-Specification 1.56 freezes architecture attempt 2 before any episode access.
-It adds exactly two fully visible, image-separated, non-contact, fixed-radius
+At its pre-access boundary, specification 1.56 froze architecture attempt 2.
+It added exactly two fully visible, image-separated, non-contact, fixed-radius
 spheres while retaining the accepted one-object behavior. The fixed-camera,
 fixed-parameter RGB-D runtime uses parameter-free differentiable chromatic and
 spatial two-slot geometry, a hard Hungarian branch only for discrete stable
@@ -373,10 +376,10 @@ Harness/test/runner SHA-256 values are
 `198cac1c4d683e3c983f70c0106827aaf883636d4bd6454e94011c3975c1b64a`,
 `d5dd3c18515589b4589e0179a68e29112d45987a513308df022cece5bf75e896`, and
 `a8e6d9f51380eede3b6a94f085e9741f67883e2740c6203c16aec4a5dcfa1bc1`.
-The eventual clean commit/runtime/worktree fingerprints are intentionally not
-claimed yet. Documentation may change a later worktree fingerprint; it does
-not change those four frozen file hashes.
-Seed-free validation passes the focused harness (`43 passed`), combined
+The eventual clean commit/runtime/worktree fingerprints were intentionally not
+claimed at that boundary. Later documentation could change a worktree
+fingerprint without changing those four frozen file hashes.
+Seed-free validation passed the focused harness (`43 passed`), combined
 accepted one-object/config/harness gate (`281 passed in 15.61 s`), complete
 repository (`1275 passed, 16 skipped in 447.29 s`), Ruff lint and format, diff
 integrity, and two independent audits.
@@ -387,26 +390,83 @@ position and velocity reach `16/16` RGB and depth frames. B4 uses four distinct
 audit scenes per split and requires exactly zero cross-scene coupling.
 
 Development `49000000--49000031`, selector `50000000--50000023`, confirmation
-`51000000--51000023`, and one-shot final `52000000--52000047` are all unopened.
+`51000000--51000023`, and one-shot final `52000000--52000047` were all unopened.
 Their predeclared manifest SHA-256 values are respectively
 `5a47a1a4a1405ba4c2fc3bce0087131d98fabfceb899beb26c6b4ba824a130f8`,
 `415bc33407a46b79d0a3a746a8f5b192e31cfd4f6a68b9764e9b9943b7e6d7fe`,
 `14f7dc3b762e4f987acbedcece815abd1c262bc9da60322f7f054e2c4eb4b3b1`, and
 `b7e8913e938e2f7ae7f937979a60279916ff1a06f071427bcce9f08b0e354e75`.
-No episodes, reports, checkpoints, or ledgers exist. Development must wait for
-one clean committed source tree, then run exactly once and receive independent
-audit. Only a pass may authorize exactly-once selector -> confirmation ->
-final. Any failure stops without retuning or reopening a later split.
+No episode, report, checkpoint, or ledger existed at that boundary.
+Development had to wait for one clean committed source tree, run exactly once,
+and receive independent audit. Only a pass could authorize exactly-once
+selector -> confirmation -> final; any failure would stop without retuning or
+opening a later split.
 
-Evidence control is enforced through fixed durable development/protected
+Evidence control was predeclared through fixed durable development/protected
 ledgers, constructor-level single-use authorization, a restricted
 `weights_only=True` empty-state checkpoint, and report creation before the
-ledger is made terminal. The ledger/report files will be hash-bound and
-fresh-path protected but remain owner-writable rather than OS write-once.
+ledger was made terminal. The ledger/report files were to be hash-bound and
+fresh-path protected but owner-writable rather than OS write-once.
 Exact mid-history resume remains unsupported because live temporal histories
 are not serialized. No occlusion, reappearance, variable object count,
 contact, camera motion, variable physics, uncertainty calibration, task,
 additional-modality, or learned-capacity claim is made.
+
+## Accepted exactly-two-visible qualification — final consumed
+
+The frozen tree was committed and pushed at
+`3b781e653a0287b2aa926e7c0b969e9197d48e42`. Runtime/worktree fingerprints are
+`810b237082ae99735527985c544dc28834b806489c555b464191c3b3e62520e7` and
+`fdbbe6fe3a85b491578d4cda2dc880f1dc21726f3469d3717976662796f12f23`.
+Config/protocol/empty-state SHA-256 values are
+`84e6f44b818bb9323a774bdba9492ef056e2a2747b93517fa38497ba83218bba`,
+`42b9dca23fed303d5cee4641c8d8753977a872fc90d0b1086658d7f12b823ea0`, and
+`4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+
+Development report/checkpoint/ledger SHA-256 values are
+`dfed30c29b7dc07adcfd01a233e3de3a42f32d8b333a1b8d696dae144af98f4b`,
+`e59e0d4b0f8f747b38fb0699cbf9f1491f0ca81dbffdcde5bcb56b04002c6bed`, and
+`9a49f574f6b7bdc0211d01d1ad4e5591d9155e7191f0a04b5e48e864ca56e579`.
+Qualification-report/ledger SHA-256 values are
+`085f5206ac02f01fa5d7f5bc0cad055f75d401447cc090c800431fabf89ef1ef` and
+`3cc22f65f809ad4afb08bf26a1984157beb1076acb5fc910d8edc3f5df0035af`.
+
+| split | result SHA-256 | current position / velocity RMSE | 2 s position RMSE |
+| --- | --- | --- | --- |
+| development | `2eaefcf40b459414492e849d24bbf50fc4638294dedfe4b5350fc011b599cfa2` | `1.9029872e-5 m` / `3.1932373e-5 m/s` | `7.4638663e-5 m` |
+| selector | `ede4e91e708645a761065ff43993e1df05800422673d5be1b1f77b2bd3c001ce` | `1.6885011e-5 m` / `3.1409136e-5 m/s` | `7.0948345e-5 m` |
+| confirmation | `204e5f5a65c73b721e038cf50ef732068ba4a901a68c78c8cb8d7f79a60b4ad8` | `1.6776625e-5 m` / `3.2594633e-5 m/s` | `7.2466125e-5 m` |
+| final | `7b9ba4df3a2595c9a671322f6650ed170a0b3cfbd092d9bf46612abbe9db6dae` | `1.7838631e-5 m` / `3.1881889e-5 m/s` | `7.1961138e-5 m` |
+
+Every split has `396` finite gated metrics and no failures. Final two-second
+velocity RMSE is `2.8845629e-5 m/s`; worst final per-axis position/velocity
+RMSE is `1.020557e-4 m`/`4.503076e-5 m/s`. Identity coverage is one with zero
+switches, mismatches, or ambiguities; minimum Hungarian margin is about
+`199.96`. Visibility is one, event count is zero, and minimum silhouette/world
+gap is `9.534 px`/`0.75985 m`.
+
+Every split preserves anchor-only `1/16` current-position VJP reach with zero
+non-anchor gradient, `16/16` temporal-output reach, four distinct B4 scenes,
+and zero cross-scene coupling. Final minimum total/minimum temporal-frame/
+maximum VJP L1 is `2.0798e-5`/`5.7799e-8`/`4.2197`.
+Final perception/five-query rollout is `0.352510 s`/`0.00359524 s`; runtime
+state is `28,512` bytes and maximum RSS is `579,817,472` bytes. Learned,
+buffer/model-state, optimizer/scheduler/RNG, and update counts are zero.
+
+The development ledger is complete and passed; the protected ledger is
+complete in exact selector -> confirmation -> final order. Final is consumed
+and must not be rerun. The
+audited directory has exactly five single-link regular files with no temporary,
+alias, or second-attempt artifact. Independent final audit passes without
+reopening raw protected episodes. Evidence remains owner-writable and
+tamper-evident, not OS-enforced WORM storage.
+
+The accepted claim is exactly two fully visible, image-separated,
+fixed-radius, non-contact spheres under fixed-camera free motion. It does not
+cover partial visibility, missed-observation recovery, contact, variable count,
+learned capacity, or general convergence. After merge, the next rung may add
+only bounded partial visibility and missed-observation recovery under a new
+freeze; no consumed-final tuning is allowed.
 
 ## Validation state
 
@@ -428,11 +488,11 @@ repository gate `1209 passed, 16 skipped in 434.37 s`. The older `1091` result
 remains the historical single-frame-core boundary, and both raw-comparator v1
 development artifacts remain non-qualifying evidence.
 
-The frozen two-visible-object source adds only seed-free validation:
-`43 passed` focused, `281 passed in 15.61 s` combined, and
-`1275 passed, 16 skipped in 447.29 s` complete, with Ruff/format/diff clean and
-two independent audits passing. These results do not open or evaluate any
-49m/50m/51m/52m episode.
+The accepted two-visible-object source retains `43 passed` focused,
+`281 passed in 15.61 s` combined, and
+`1275 passed, 16 skipped in 447.29 s` complete, with Ruff/format/diff clean.
+The exact independent qualification audit also passes.
 
-No accepted broader multi-object, contact, additional-modality, or planning
-convergence claim exists beyond the accepted one-sphere public RGB-D bridge.
+No accepted claim exists beyond the exactly-two-visible non-contact RGB-D
+family; contact, partial visibility, variable count, additional modality,
+planning, and general convergence remain unqualified.

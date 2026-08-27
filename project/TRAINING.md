@@ -305,9 +305,12 @@ contracts.
 Historical campaign commands and evidence through specification 1.51 remain
 in Git commit `c16acc99` and the ignored local pre-generalization archive.
 
-## Frozen two-visible-object rung — development not authorized yet
+## Historical two-visible-object source-freeze workflow
 
-Specification 1.56 freezes architecture attempt 2 at exactly two fully
+This section preserves the pre-access contract and exact commands that governed
+the subsequently accepted qualification. Final is now consumed; do not rerun
+either episode command below. Specification 1.56 froze architecture attempt 2
+at exactly two fully
 visible, image-separated, non-contact fixed-radius spheres. It preserves the
 accepted one-object path. Parameter-free differentiable chromatic-plus-spatial
 two-slot RGB-D geometry produces unordered metric measurements; hard Hungarian
@@ -333,13 +336,13 @@ positions and velocities must reach all `16/16` RGB and depth frames. Each
 split's B4 audit comprises four distinct scenes and requires exact zero
 cross-scene coupling.
 
-Source-only validation passes `43` focused tests,
+Source-only validation passed `43` focused tests,
 `281 passed in 15.61 s` across the accepted one-object/configuration/two-object
 harnesses, and `1275 passed, 16 skipped in 447.29 s` repository-wide. Ruff
-lint, Ruff format-check, diff integrity, and two independent audits also pass.
+lint, Ruff format-check, diff integrity, and two independent audits also passed.
 These commands did not generate an episode and are not accuracy evidence.
 
-Inspect the canonical protocol without episode access:
+The canonical seed-free protocol-inspection command was:
 
 ```bash
 conda run -n orpheus python scripts/run_rgbd_two_visible_qualification.py \
@@ -347,8 +350,8 @@ conda run -n orpheus python scripts/run_rgbd_two_visible_qualification.py \
   --config configs/rgbd_two_visible_free_motion_cpu.yaml
 ```
 
-The exact frozen tree must first be clean and committed. Only then may the one
-fixed development attempt use fresh paths:
+The exact frozen tree then had to be clean and committed before the one fixed
+development attempt could use fresh paths:
 
 ```bash
 conda run -n orpheus python scripts/run_rgbd_two_visible_qualification.py \
@@ -358,8 +361,8 @@ conda run -n orpheus python scripts/run_rgbd_two_visible_qualification.py \
   --checkpoint runs/rgbd_two_visible_bridge_v1/development_model.pt
 ```
 
-Do not use the qualification phase unless that exact development report and
-checkpoint pass independent digest review. The authorized command is:
+The qualification phase was authorized only after that exact development
+report and checkpoint passed independent digest review:
 
 ```bash
 conda run -n orpheus python scripts/run_rgbd_two_visible_qualification.py \
@@ -381,20 +384,87 @@ The frozen namespace/hash bindings are:
 | confirmation | `51000000--51000023` | `14f7dc3b762e4f987acbedcece815abd1c262bc9da60322f7f054e2c4eb4b3b1` |
 | final | `52000000--52000047` | `b7e8913e938e2f7ae7f937979a60279916ff1a06f071427bcce9f08b0e354e75` |
 
-All are unopened and no episode, report, checkpoint, or ledger exists. The
-fixed development ledger path is
-`runs/rgbd_two_visible_bridge_v1/development_attempt_2_access.json`; it is
-created before development materialization and alone authorizes the
+At the freeze boundary all were unopened and no episode, report, checkpoint,
+or ledger existed. The fixed development ledger path was
+`runs/rgbd_two_visible_bridge_v1/development_attempt_2_access.json`; it was
+created before development materialization and alone authorized the
 constructor. After a reviewed pass, the protected ledger at
-`runs/rgbd_two_visible_bridge_v1/qualification_attempt_2_access.json` does the
-same for selector -> confirmation -> final exactly once. A failed development
-or protected split stops immediately, leaves later splits unopened, and
-permits no retuning, renamed retry, or final reuse. Checkpoint review uses an
-empty, optimizer-/RNG-free payload loaded with
-`weights_only=True`; terminal report bytes precede the ledger's terminal
+`runs/rgbd_two_visible_bridge_v1/qualification_attempt_2_access.json` did the
+same for selector -> confirmation -> final exactly once. A failure would have
+stopped immediately, left later splits unopened, and permitted no retuning,
+renamed retry, or final reuse. Checkpoint review used an empty,
+optimizer-/RNG-free payload loaded with
+`weights_only=True`; terminal report bytes preceded the ledger's terminal
 digest.
 
 This rung excludes occlusion/reappearance, variable object count, contact,
 camera motion, variable physical parameters, uncertainty calibration,
 tasks/planning, extra modalities, and learned capacity. Ordinary checkpoints
 do not serialize live histories, so exact mid-history resume is unsupported.
+
+## Accepted two-visible-object qualification — final consumed once
+
+The exact workflow above passed on commit/origin
+`3b781e653a0287b2aa926e7c0b969e9197d48e42`, runtime fingerprint
+`810b237082ae99735527985c544dc28834b806489c555b464191c3b3e62520e7`, and
+worktree fingerprint
+`fdbbe6fe3a85b491578d4cda2dc880f1dc21726f3469d3717976662796f12f23`.
+Config/protocol/empty-state SHA-256 values are
+`84e6f44b818bb9323a774bdba9492ef056e2a2747b93517fa38497ba83218bba`,
+`42b9dca23fed303d5cee4641c8d8753977a872fc90d0b1086658d7f12b823ea0`, and
+`4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+
+Development report/checkpoint/ledger SHA-256 values are
+`dfed30c29b7dc07adcfd01a233e3de3a42f32d8b333a1b8d696dae144af98f4b`,
+`e59e0d4b0f8f747b38fb0699cbf9f1491f0ca81dbffdcde5bcb56b04002c6bed`, and
+`9a49f574f6b7bdc0211d01d1ad4e5591d9155e7191f0a04b5e48e864ca56e579`.
+Qualification-report/ledger SHA-256 values are
+`085f5206ac02f01fa5d7f5bc0cad055f75d401447cc090c800431fabf89ef1ef` and
+`3cc22f65f809ad4afb08bf26a1984157beb1076acb5fc910d8edc3f5df0035af`.
+
+| split | manifest SHA-256 | result SHA-256 |
+| --- | --- | --- |
+| development | `5a47a1a4a1405ba4c2fc3bce0087131d98fabfceb899beb26c6b4ba824a130f8` | `2eaefcf40b459414492e849d24bbf50fc4638294dedfe4b5350fc011b599cfa2` |
+| selector | `415bc33407a46b79d0a3a746a8f5b192e31cfd4f6a68b9764e9b9943b7e6d7fe` | `ede4e91e708645a761065ff43993e1df05800422673d5be1b1f77b2bd3c001ce` |
+| confirmation | `14f7dc3b762e4f987acbedcece815abd1c262bc9da60322f7f054e2c4eb4b3b1` | `204e5f5a65c73b721e038cf50ef732068ba4a901a68c78c8cb8d7f79a60b4ad8` |
+| final | `b7e8913e938e2f7ae7f937979a60279916ff1a06f071427bcce9f08b0e354e75` | `7b9ba4df3a2595c9a671322f6650ed170a0b3cfbd092d9bf46612abbe9db6dae` |
+
+All four splits have `396` finite gated metrics and no failures. Their current
+position/current velocity/two-second position RMSE values are respectively:
+
+- development: `1.9029872e-5 m` / `3.1932373e-5 m/s` / `7.4638663e-5 m`;
+- selector: `1.6885011e-5 m` / `3.1409136e-5 m/s` / `7.0948345e-5 m`;
+- confirmation: `1.6776625e-5 m` / `3.2594633e-5 m/s` / `7.2466125e-5 m`;
+  and
+- final: `1.7838631e-5 m` / `3.1881889e-5 m/s` / `7.1961138e-5 m`.
+
+Final two-second velocity RMSE is `2.8845629e-5 m/s`; worst final per-axis
+position/velocity RMSE is `1.020557e-4 m`/`4.503076e-5 m/s`. Identity coverage
+is one with zero switches, mismatches, or ambiguities. Minimum Hungarian margin
+is approximately `199.96`, visibility is one, event count is zero, and minimum
+silhouette/world gap is `9.534 px`/`0.75985 m`.
+
+Every split has current-position reach on the one anchor frame with exact zero
+non-anchor gradient, `16/16` reach for current velocity and every rollout
+position/velocity, four distinct B4 scenes, and zero cross-scene coupling.
+Final minimum total/minimum temporal-frame/maximum VJP L1 is
+`2.0798e-5`/`5.7799e-8`/`4.2197`. Final perception/five-query rollout time is
+`0.352510 s`/`0.00359524 s`; persistent tensor state is `28,512` bytes and
+maximum RSS is `579,817,472` bytes. Learned parameters, module buffers/model
+state, optimizer/scheduler/RNG state, and updates remain zero.
+
+The exact source gates are `43 passed` focused,
+`281 passed in 15.61 s` combined, and
+`1275 passed, 16 skipped in 447.29 s` complete. Independent final audit passes.
+Both ledgers are complete/passed in development then selector -> confirmation
+-> final order. The audited directory has exactly five single-link regular
+files with no temporary, alias, or second-attempt artifact. Audit did not
+reopen raw protected episodes; owner-writable evidence remains tamper-evident,
+not OS-enforced WORM storage.
+
+Final is consumed. Do not run development or qualification again, and do not
+tune any threshold, architecture, or capacity against it. After merge, only a
+newly frozen bounded partial-visibility and missed-observation-recovery rung
+may proceed. It must retain exactly two objects, fixed camera/physics,
+non-contact motion, the parameter-free analytic rollout, and every accepted
+lower-rung gate.

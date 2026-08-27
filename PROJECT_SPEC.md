@@ -5,7 +5,7 @@
 **Status:** Living authoritative specification
 **Version:** 1.56
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, and two-visible-object differentiable source-freeze amendments 27 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -8348,9 +8348,99 @@ calibration, variable scale or drag, moving-camera handling, actions,
 planning, richer modalities, or general world-model convergence.  Ordinary
 project checkpoints bind the zero-state module/configuration but do not
 serialize live temporal histories, so exact mid-history resume remains
-unsupported.  No claim may advance beyond the frozen exactly-two-visible,
-image-separated, non-contact family until development and the ordered
-protected sequence pass exactly as declared.
+unsupported.  At the source-freeze boundary, no claim could advance beyond the
+frozen exactly-two-visible, image-separated, non-contact family until
+development and the ordered protected sequence passed exactly as declared.
+Section 254 records that subsequent accepted sequence without rewriting the
+historical pre-access contract above.
+
+## 254. Accept the exactly-once two-visible-object qualification
+
+The exact source/config/protocol freeze from sections 251--253 was committed
+and pushed at commit and origin
+`3b781e653a0287b2aa926e7c0b969e9197d48e42`.  Qualification binds runtime-source
+fingerprint
+`810b237082ae99735527985c544dc28834b806489c555b464191c3b3e62520e7`
+and worktree fingerprint
+`fdbbe6fe3a85b491578d4cda2dc880f1dc21726f3469d3717976662796f12f23`
+to config SHA-256
+`84e6f44b818bb9323a774bdba9492ef056e2a2747b93517fa38497ba83218bba`,
+canonical pre-self-hash protocol SHA-256
+`42b9dca23fed303d5cee4641c8d8753977a872fc90d0b1086658d7f12b823ea0`,
+and empty model-state SHA-256
+`4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+
+The one fixed development attempt passed and was independently audited before
+protected access.  Its report, restricted empty-state checkpoint, and durable
+development-ledger SHA-256 values are respectively
+`dfed30c29b7dc07adcfd01a233e3de3a42f32d8b333a1b8d696dae144af98f4b`,
+`e59e0d4b0f8f747b38fb0699cbf9f1491f0ca81dbffdcde5bcb56b04002c6bed`,
+and `9a49f574f6b7bdc0211d01d1ad4e5591d9155e7191f0a04b5e48e864ca56e579`.
+The subsequently completed qualification-report and protected-ledger
+SHA-256 values are
+`085f5206ac02f01fa5d7f5bc0cad055f75d401447cc090c800431fabf89ef1ef`
+and `3cc22f65f809ad4afb08bf26a1984157beb1076acb5fc910d8edc3f5df0035af`.
+The exact manifest/result bindings are:
+
+| split | manifest SHA-256 | result SHA-256 |
+| --- | --- | --- |
+| development | `5a47a1a4a1405ba4c2fc3bce0087131d98fabfceb899beb26c6b4ba824a130f8` | `2eaefcf40b459414492e849d24bbf50fc4638294dedfe4b5350fc011b599cfa2` |
+| selector | `415bc33407a46b79d0a3a746a8f5b192e31cfd4f6a68b9764e9b9943b7e6d7fe` | `ede4e91e708645a761065ff43993e1df05800422673d5be1b1f77b2bd3c001ce` |
+| confirmation | `14f7dc3b762e4f987acbedcece815abd1c262bc9da60322f7f054e2c4eb4b3b1` | `204e5f5a65c73b721e038cf50ef732068ba4a901a68c78c8cb8d7f79a60b4ad8` |
+| final | `b7e8913e938e2f7ae7f937979a60279916ff1a06f071427bcce9f08b0e354e75` | `7b9ba4df3a2595c9a671322f6650ed170a0b3cfbd092d9bf46612abbe9db6dae` |
+
+Every split reports all `396` gated scalar metrics finite and
+`gate_failures: []`.  The principal held-out errors are:
+
+| split | current position RMSE | current velocity RMSE | 2 s position RMSE |
+| --- | --- | --- | --- |
+| development | `1.9029872e-5 m` | `3.1932373e-5 m/s` | `7.4638663e-5 m` |
+| selector | `1.6885011e-5 m` | `3.1409136e-5 m/s` | `7.0948345e-5 m` |
+| confirmation | `1.6776625e-5 m` | `3.2594633e-5 m/s` | `7.2466125e-5 m` |
+| final | `1.7838631e-5 m` | `3.1881889e-5 m/s` | `7.1961138e-5 m` |
+
+Final two-second velocity RMSE is `2.8845629e-5 m/s`.  The worst final
+per-object-axis position and velocity RMSE values are
+`1.020557e-4 m` and `4.503076e-5 m/s`.  Identity coverage is one; identity
+switches, persistent-ID mismatches, and association ambiguities are zero.  The
+minimum Hungarian assignment margin is approximately `199.96`, all objects
+remain fully visible, preflight event count is zero, minimum silhouette gap is
+`9.534 px`, and minimum world-surface gap is `0.75985 m`.
+
+Every split preserves the declared VJP topology: current position reaches only
+one anchor frame with exact zero non-anchor gradient; current velocity and
+every rollout position/velocity reach all `16/16` RGB and depth frames; all
+four B4 audit scenes are distinct; and cross-scene coupling is exactly zero.
+On final, the minimum total VJP L1 is `2.0798e-5`, minimum temporal per-frame
+L1 is `5.7799e-8`, and maximum VJP L1 is `4.2197`.
+
+Final perception latency is `0.352510 s`; all five state-only rollout queries
+take `0.00359524 s`.  Persistent runtime tensor state is `28,512` bytes and
+maximum RSS is `579,817,472` bytes.  Learned parameters, module buffers,
+model-state entries, optimizer/scheduler state, RNG state, and optimizer
+updates remain zero.  The focused, combined accepted one-object/configuration/
+two-object, and complete source gates are respectively `43 passed`,
+`281 passed in 15.61 s`, and
+`1275 passed, 16 skipped in 447.29 s`; the exact independent final audit also
+passes.
+
+The development ledger is complete and passed.  The protected ledger is
+complete in exact selector -> confirmation -> final order, and final is
+consumed.  It must never be rerun, tuned against, or repurposed.  The audited
+run directory contains exactly five single-link regular files, with no
+temporary file, alias, or second-attempt artifact.  Audit recomputed persisted
+evidence without reopening raw protected episodes.  The files remain
+owner-writable, so SHA/fresh-path binding makes them tamper-evident rather than
+OS-enforced write-once storage.
+
+This accepts only the exactly-two, fully-visible, image-separated,
+fixed-radius, non-contact, fixed-camera free-motion RGB-D family.  It does not
+accept occlusion, partial visibility, missed-observation recovery, contact,
+variable object count, learned capacity, or general world-model convergence.
+After this accepted branch is merged, the next rung may add only bounded
+partial visibility and missed-observation recovery under a separately frozen
+protocol.  No threshold, architecture, or capacity may be tuned on the
+consumed final.
 
 # Closing directive
 

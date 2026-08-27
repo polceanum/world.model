@@ -166,14 +166,34 @@
   and `b7e8913e938e2f7ae7f937979a60279916ff1a06f071427bcce9f08b0e354e75`;
   create no episode, report, checkpoint, artifact, or ledger before the clean
   committed-source boundary.
-- [ ] Commit and push the exact frozen two-object source/config/harness/tests/
-  runner/docs as one clean tree before any development materialization.
-- [ ] Execute the single fixed development attempt, then independently audit
-  exact source/config/protocol/report/checkpoint/ledger digests. Stop without
-  retuning or a renamed retry on any failure.
-- [ ] Only after that audit passes, consume selector -> confirmation -> final
-  exactly once under the fixed durable protected ledger. Stop immediately on
-  a failed split and leave every later namespace unopened.
+- [x] Commit and push the exact frozen two-object source/config/harness/tests/
+  runner/docs as clean commit/origin
+  `3b781e653a0287b2aa926e7c0b969e9197d48e42` before development
+  materialization.
+- [x] Execute the single fixed development attempt and independently audit its
+  exact source/config/protocol/report/checkpoint/ledger evidence. All `396`
+  metrics are finite, no gate fails, and reviewed report/checkpoint/ledger
+  SHA-256 values are
+  `dfed30c29b7dc07adcfd01a233e3de3a42f32d8b333a1b8d696dae144af98f4b`,
+  `e59e0d4b0f8f747b38fb0699cbf9f1491f0ca81dbffdcde5bcb56b04002c6bed`,
+  and `9a49f574f6b7bdc0211d01d1ad4e5591d9155e7191f0a04b5e48e864ca56e579`.
+- [x] After that audit passed, consume selector -> confirmation -> final
+  exactly once under the fixed durable protected ledger. Every split has
+  `396` finite gated metrics and no failures; qualification-report/ledger
+  SHA-256 values are
+  `085f5206ac02f01fa5d7f5bc0cad055f75d401447cc090c800431fabf89ef1ef` /
+  `3cc22f65f809ad4afb08bf26a1984157beb1076acb5fc910d8edc3f5df0035af`.
+  Final is consumed and must never be rerun or tuned against.
+- [x] Pass exact identity, geometry, VJP, resource, zero-state, source-gate,
+  five-file artifact, and independent final-audit checks. Preserve the audit
+  limitation that raw protected episodes were not reopened and evidence is
+  owner-writable/tamper-evident rather than OS WORM.
+- [ ] Commit and push the exact qualification-evidence documentation, then
+  merge only the reviewed net tree to GitHub `main`.
+- [ ] Only after merge, freeze one bounded partial-visibility and
+  missed-observation-recovery rung. Keep object count two, contact absent,
+  fixed camera/physics, parameter-free analytic rollout, and every accepted
+  lower-rung gate unchanged; do not tune on the consumed final.
 - [ ] Add one complexity per later rung: camera motion; drag identification;
   variable scale; multi-object sets; identity/occlusion; contact; material
   parameters; known actions/planning; richer modalities/geometry.

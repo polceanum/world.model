@@ -2,6 +2,69 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-27 accepted exactly-two-visible RGB-D qualification
+
+- Accepted the frozen architecture-attempt-2 qualification on clean
+  commit/origin `3b781e653a0287b2aa926e7c0b969e9197d48e42`, runtime fingerprint
+  `810b237082ae99735527985c544dc28834b806489c555b464191c3b3e62520e7`,
+  and worktree fingerprint
+  `fdbbe6fe3a85b491578d4cda2dc880f1dc21726f3469d3717976662796f12f23`.
+  Config/protocol/empty-state SHA-256 values remain
+  `84e6f44b818bb9323a774bdba9492ef056e2a2747b93517fa38497ba83218bba`,
+  `42b9dca23fed303d5cee4641c8d8753977a872fc90d0b1086658d7f12b823ea0`,
+  and `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+- Bound development report/checkpoint/ledger SHA-256
+  `dfed30c29b7dc07adcfd01a233e3de3a42f32d8b333a1b8d696dae144af98f4b`,
+  `e59e0d4b0f8f747b38fb0699cbf9f1491f0ca81dbffdcde5bcb56b04002c6bed`,
+  and `9a49f574f6b7bdc0211d01d1ad4e5591d9155e7191f0a04b5e48e864ca56e579`;
+  qualification-report/ledger SHA-256 are
+  `085f5206ac02f01fa5d7f5bc0cad055f75d401447cc090c800431fabf89ef1ef`
+  and `3cc22f65f809ad4afb08bf26a1984157beb1076acb5fc910d8edc3f5df0035af`.
+- Development, selector, confirmation, and final manifest/result SHA-256 pairs
+  are
+  `5a47a1a4a1405ba4c2fc3bce0087131d98fabfceb899beb26c6b4ba824a130f8` /
+  `2eaefcf40b459414492e849d24bbf50fc4638294dedfe4b5350fc011b599cfa2`,
+  `415bc33407a46b79d0a3a746a8f5b192e31cfd4f6a68b9764e9b9943b7e6d7fe` /
+  `ede4e91e708645a761065ff43993e1df05800422673d5be1b1f77b2bd3c001ce`,
+  `14f7dc3b762e4f987acbedcece815abd1c262bc9da60322f7f054e2c4eb4b3b1` /
+  `204e5f5a65c73b721e038cf50ef732068ba4a901a68c78c8cb8d7f79a60b4ad8`,
+  and
+  `b7e8913e938e2f7ae7f937979a60279916ff1a06f071427bcce9f08b0e354e75` /
+  `7b9ba4df3a2595c9a671322f6650ed170a0b3cfbd092d9bf46612abbe9db6dae`.
+  Every split reports `396` finite gated metrics and no gate failures.
+- Development/selector/confirmation/final current-position RMSE is
+  `1.9029872e-5/1.6885011e-5/1.6776625e-5/1.7838631e-5 m`; current-velocity
+  RMSE is `3.1932373e-5/3.1409136e-5/3.2594633e-5/3.1881889e-5 m/s`; and
+  two-second position RMSE is
+  `7.4638663e-5/7.0948345e-5/7.2466125e-5/7.1961138e-5 m`. Final two-second
+  velocity RMSE is `2.8845629e-5 m/s`; worst final per-axis position/velocity
+  RMSE is `1.020557e-4 m`/`4.503076e-5 m/s`.
+- Preserved identity coverage one with zero switches, mismatches, or
+  ambiguities; approximate minimum Hungarian margin `199.96`; visibility one;
+  zero events; and minimum silhouette/world gap `9.534 px`/`0.75985 m`.
+  Every split preserves anchor-only current-position VJP reach, `16/16`
+  temporal reach, four distinct B4 scenes, and exact zero cross-scene
+  coupling. Final VJP L1 spans `5.7799e-8--4.2197` with minimum total
+  `2.0798e-5`.
+- Final perception/five-query rollout is `0.352510 s`/`0.00359524 s`, runtime
+  tensor state is `28,512` bytes, and maximum RSS is `579,817,472` bytes.
+  Learned parameters, buffers/model state, optimizer/scheduler/RNG state, and
+  updates remain zero. Exact source gates are `43 passed` focused,
+  `281 passed in 15.61 s` combined, and
+  `1275 passed, 16 skipped in 447.29 s` complete; independent final audit
+  passes.
+- Completed the ledgers in development-pass then selector -> confirmation ->
+  final order. Final is consumed and must not be rerun. The audited directory
+  contains exactly five single-link regular files with no temporary, alias, or
+  second-attempt artifact. Audit did not reopen raw protected episodes;
+  owner-writable evidence is tamper-evident, not OS-enforced WORM storage.
+- Accepted scope remains exactly two fully visible, image-separated,
+  fixed-radius, non-contact spheres under fixed-camera free motion. No
+  occlusion, partial-visibility recovery, contact, variable count, learned
+  capacity, or general convergence is claimed. After merge, the only next rung
+  is separately frozen bounded partial visibility and missed-observation
+  recovery; the consumed final cannot be tuned.
+
 ### 2026-08-27 frozen two-visible-object RGB-D architecture attempt 2
 
 - Advanced the authoritative contract to specification 1.56 while retaining
@@ -39,15 +102,15 @@
   `415bc33407a46b79d0a3a746a8f5b192e31cfd4f6a68b9764e9b9943b7e6d7fe`,
   `14f7dc3b762e4f987acbedcece815abd1c262bc9da60322f7f054e2c4eb4b3b1`,
   and `b7e8913e938e2f7ae7f937979a60279916ff1a06f071427bcce9f08b0e354e75`.
-  Every namespace remains unopened; no episode, report, checkpoint, artifact,
-  or ledger exists.
+  At that source-freeze boundary every namespace was unopened; no episode,
+  report, checkpoint, artifact, or ledger existed.
 - Added fixed durable development/protected ledger contracts,
   constructor-level manifest authorization, restricted `weights_only=True`
   empty-state checkpoint validation, and report-before-terminal-ledger
-  ordering. Development waits for clean committed source and runs exactly once;
-  only an independently audited pass may authorize exactly-once selector ->
-  confirmation -> final. Any failure stops without retuning and leaves later
-  splits unopened.
+  ordering. Development had to wait for clean committed source and run exactly
+  once; only an independently audited pass could authorize exactly-once
+  selector -> confirmation -> final. Any failure would have stopped without
+  retuning and left later splits unopened.
 - This freeze makes no occlusion, variable-count, contact/event, camera-motion,
   variable-physics, uncertainty-calibration, task/planning, added-modality, or
   learned-capacity claim. Exact mid-history resume remains unsupported because

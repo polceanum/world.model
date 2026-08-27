@@ -244,14 +244,15 @@ protected episode was reinspected. Evidence remains owner-writable despite
 atomic replacement and hash binding.
 
 The one-sphere contact-free public bridge is accepted and merged to `main` at
-`3eed0b71e6f18c7036bf376c075493a89d5fdc9f`. No multi-object,
+`3eed0b71e6f18c7036bf376c075493a89d5fdc9f`. At that boundary no multi-object,
 association/occlusion, contact/event, task/planning, modality, or learned-
-capacity convergence is claimed. The next rung must
+capacity convergence was claimed; rung 4 records the subsequent bounded
+exactly-two-visible acceptance. Each next rung must
 predeclare those changed capabilities and all accuracy, identity/association,
 event, task-success, gradient, memory, and rollout-throughput gates. It may not
 alter this accepted rung or tune on final.
 
-### 4. Exactly two visible non-contact objects — source frozen
+### 4. Exactly two visible non-contact objects — qualified; final consumed
 
 Specification 1.56 changes one capability: object count becomes exactly two.
 Both fixed-radius spheres remain fully visible, image-separated, and
@@ -277,26 +278,51 @@ non-anchor gradient); current velocity and every horizon position/velocity
 must reach all `16/16` RGB and depth frames. B4 uses four distinct scenes per
 split and requires exact zero cross-scene coupling.
 
-Seed-free source validation passes `43` focused tests,
+At the source-freeze boundary, seed-free validation passed `43` focused tests,
 `281 passed in 15.61 s` combined, `1275 passed, 16 skipped in 447.29 s`
-complete, Ruff/format/diff, and two independent audits. No episode result
-exists. Development `49000000--49000031`, selector
+complete, Ruff/format/diff, and two independent audits. At that time no episode
+result existed. Development `49000000--49000031`, selector
 `50000000--50000023`, confirmation `51000000--51000023`, and final
-`52000000--52000047` are unopened. Their manifest SHA-256 values are
+`52000000--52000047` were unopened. Their manifest SHA-256 values are
 `5a47a1a4a1405ba4c2fc3bce0087131d98fabfceb899beb26c6b4ba824a130f8`,
 `415bc33407a46b79d0a3a746a8f5b192e31cfd4f6a68b9764e9b9943b7e6d7fe`,
 `14f7dc3b762e4f987acbedcece815abd1c262bc9da60322f7f054e2c4eb4b3b1`, and
 `b7e8913e938e2f7ae7f937979a60279916ff1a06f071427bcce9f08b0e354e75`.
 
-No episode, artifact, or ledger has been created. First commit the exact
-source/config/harness/tests/runner/docs tree. Then run one fixed development
-attempt and audit it independently. Only a pass may authorize exactly-once
-selector -> confirmation -> final under the durable ledger; any failure stops
-without retuning or a renamed retry. The constructor requires ledger-issued
-single-use authorization, checkpoint review is restricted `weights_only=True`
-empty state, and terminal report bytes precede the ledger's terminal digest.
+That exact tree was committed at
+`3b781e653a0287b2aa926e7c0b969e9197d48e42`. The one fixed development run and
+independent audit passed, then the durable ledger admitted selector ->
+confirmation -> final exactly once. All four splits have `396` finite gated
+metrics and no failures. Development/selector/confirmation/final current
+position RMSE is
+`1.9029872e-5/1.6885011e-5/1.6776625e-5/1.7838631e-5 m`; current velocity RMSE
+is `3.1932373e-5/3.1409136e-5/3.2594633e-5/3.1881889e-5 m/s`; and two-second
+position RMSE is
+`7.4638663e-5/7.0948345e-5/7.2466125e-5/7.1961138e-5 m`.
 
-### 5. Observable nuisance variables and additional useful modalities
+Identity coverage is one with zero switches, mismatches, or ambiguities;
+visibility is one and event count is zero. Every split preserves anchor-only
+current-position reach, `16/16` temporal-output reach, four unique B4 scenes,
+and zero cross-scene coupling. Final perception/five-query rollout is
+`0.352510 s`/`0.00359524 s`, runtime state is `28,512` bytes, and maximum RSS
+is `579,817,472` bytes. Learned/module/optimizer/RNG state and updates are zero.
+The exact final audit passes; it did not reopen raw protected episodes.
+Owner-writable evidence is tamper-evident rather than OS-enforced WORM storage.
+Final is consumed and cannot be rerun or tuned against.
+
+### 5. Partial visibility and missed-observation recovery — next after merge
+
+Retain exactly two fixed-radius objects, fixed camera and physical parameters,
+non-contact free motion, RGB-D input, and the accepted parameter-free analytic
+rollout. Add only bounded partial visibility and isolated missed observations.
+Before access, freeze visible-fraction strata, miss length/placement,
+association coverage, identity switches/mismatches, reacquisition latency,
+post-recovery current/five-horizon state error, VJPs, memory, and throughput on
+new disjoint manifests. Do not add variable count, contact, learned capacity,
+camera motion, or another modality, and never tune on the consumed rung-4
+final.
+
+### 6. Observable nuisance variables and additional useful modalities
 
 Add one variable at a time: known moving-camera pose, then identifiable drag,
 then variable metric scale. Camera pose or IMU is calibration input, not hidden
@@ -305,15 +331,15 @@ accepted RGB-D state, not the route used to establish metric observability.
 Audio is added only for an event or material task where it provides
 independently scored information.
 
-### 6. Variable-size and partially observed object sets
+### 7. Variable-size object sets
 
-Progress from the qualified exactly-two-visible rung to variable set size,
-partial occlusion, and reappearance. Require per-object state/horizon gates,
-association coverage, identity-switch limits, permutation invariance, and
-recovery after missed observations before increasing scene count or backbone
-capacity.
+Only after rung 5 qualifies partial visibility/recovery at fixed count,
+progress to variable set size and longer occlusion/reappearance. Require
+per-object state/horizon gates, association coverage, identity-switch limits,
+permutation invariance, and recovery after missed observations before
+increasing scene count or backbone capacity.
 
-### 7. Hybrid contact and material identification
+### 8. Hybrid contact and material identification
 
 Introduce sparse two-sphere contact with an analytic hard forward resolver and
 a differentiable local surrogate for learnable pre-contact state/parameter
@@ -322,7 +348,7 @@ state, energy/momentum diagnostics, and observable restitution/friction
 identification. Do not use fabricated straight-through gradients or simulator
 event labels at runtime.
 
-### 8. Actions, counterfactuals, and planning tasks
+### 9. Actions, counterfactuals, and planning tasks
 
 Condition the shared dynamics on known forces/actions and score factual and
 counterfactual trajectories. Tasks include interception, collision avoidance,
@@ -330,7 +356,7 @@ goal-reaching, and information gathering under occlusion. Planning must reuse
 the same cheap state-only rollout, report task success alongside physical
 accuracy, and remain consistent with the online posterior after new evidence.
 
-### 9. Richer geometry and real observations
+### 10. Richer geometry and real observations
 
 Only after the synthetic structured ladder closes, expand object geometry,
 camera environments, RGB-D/video data, and useful asynchronous sensors. Keep a

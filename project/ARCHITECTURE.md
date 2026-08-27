@@ -150,17 +150,22 @@ velocity only; analytic dynamics own the five future position/velocity
 queries. Live history is causal runtime state rather than canonical physical
 state and is not serialized in ordinary checkpoints.
 
-Specification 1.56 freezes the exactly-two-visible extension of that same
-path. A symmetric chromatic-plus-spatial two-slot RGB-D module produces
+Specification 1.56 froze and subsequently qualified the exactly-two-visible
+extension of that same path. A symmetric chromatic-plus-spatial two-slot RGB-D
+module produces
 unordered measurements for two fully visible, image-separated, non-contact
 spheres. Hard Hungarian is isolated to discrete stable identity; it is not a
 differentiable measurement or state owner. Current-position gradients reach
 anchor frame 15 only, while velocity and every analytic rollout reach all
 sixteen RGB/depth frames. Four-scene batch VJPs require exact zero cross-scene
 coupling. The extension owns zero parameters and optimizer updates and leaves
-the accepted one-object behavior intact. Its episode namespaces remain
-unopened pending a clean committed freeze, one fixed development run, and
-independent audit.
+the accepted one-object behavior intact. Its one fixed development run and
+ordered selector -> confirmation -> final qualification passed on clean commit
+`3b781e653a0287b2aa926e7c0b969e9197d48e42`; final is consumed and must not be
+rerun. The accepted scope remains exactly two fully visible, image-separated,
+non-contact objects. Partial visibility and missed-observation recovery are the
+only next capability after merge; variable count, contact, camera motion, and
+learned capacity remain closed.
 
 Evaluation seed manifests are explicit. `fresh_validation` starts after the
 checkpoint's trainer-validation episodes by default; `--seed-offset` can select

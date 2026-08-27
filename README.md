@@ -75,12 +75,12 @@ consumed. This accepts only the frozen one-slot free-motion bridge; it is
 merged to `main` at `3eed0b7`, not evidence for broader scene, modality, or
 learned-capacity convergence.
 
-Specification 1.56 now freezes the next bounded rung at exactly two fully
-visible, image-separated, non-contact fixed-radius spheres. Its continuous
-RGB-D-to-state-to-five-horizon rollout path is parameter-free and
-differentiable; hard Hungarian is isolated to stable discrete identity. All
-49m/50m/51m/52m namespaces remain unopened, with no episode artifact or
-ledger. Development waits for the exact source/docs freeze to be committed.
+Specification 1.56 now also accepts the exactly-two-visible RGB-D rung on
+clean commit `3b781e6`. Development and exactly-once selector -> confirmation
+-> final all passed; final is consumed and must not be rerun. This remains a
+parameter-free, differentiable, fixed-camera, non-contact result—not evidence
+for partial visibility, contact, variable count, learned capacity, or general
+world-model convergence.
 
 ## Quick start
 
@@ -386,7 +386,7 @@ multi-object, association/occlusion, contact/event, task-success, capacity,
 gradient, accuracy, memory, and rollout-throughput gates; no accepted bridge
 threshold or consumed-final result may be retuned.
 
-### Frozen two-visible-object RGB-D rung — no episode access yet
+### Qualified two-visible-object RGB-D rung — final consumed once
 
 Architecture attempt 2 preserves the accepted one-object behavior and adds
 exactly two chromatically distinct spheres that remain fully visible,
@@ -401,31 +401,46 @@ updates.
 Frozen config/protocol SHA-256 values are
 `84e6f44b818bb9323a774bdba9492ef056e2a2747b93517fa38497ba83218bba` /
 `42b9dca23fed303d5cee4641c8d8753977a872fc90d0b1086658d7f12b823ea0`.
-Current position intentionally reaches only anchor frame 15 (`1/16`, exact
-zero non-anchor gradient); current velocity and every rollout position and
-velocity reach `16/16` RGB and depth frames. Four distinct audit scenes per
-split establish exact zero cross-scene coupling. Seed-free checks pass at
-`43 passed` focused, `281 passed in 15.61 s` combined, and
-`1275 passed, 16 skipped in 447.29 s` complete; Ruff/format/diff and two
-independent audits pass.
+The empty model-state SHA-256 is
+`4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+The accepted source is commit/origin
+`3b781e653a0287b2aa926e7c0b969e9197d48e42`, with runtime/worktree fingerprints
+`810b237082ae99735527985c544dc28834b806489c555b464191c3b3e62520e7` /
+`fdbbe6fe3a85b491578d4cda2dc880f1dc21726f3469d3717976662796f12f23`.
+Development report/checkpoint/ledger SHA-256 values are
+`dfed30c29b7dc07adcfd01a233e3de3a42f32d8b333a1b8d696dae144af98f4b`,
+`e59e0d4b0f8f747b38fb0699cbf9f1491f0ca81dbffdcde5bcb56b04002c6bed`, and
+`9a49f574f6b7bdc0211d01d1ad4e5591d9155e7191f0a04b5e48e864ca56e579`;
+qualification-report/ledger SHA-256 values are
+`085f5206ac02f01fa5d7f5bc0cad055f75d401447cc090c800431fabf89ef1ef` and
+`3cc22f65f809ad4afb08bf26a1984157beb1076acb5fc910d8edc3f5df0035af`.
 
-Protocol inspection is seed-free:
+Every split reports `396` finite gated metrics and no failures. Current
+position/current velocity/two-second position RMSE is
+`1.9029872e-5/3.1932373e-5/7.4638663e-5` on development and
+`1.7838631e-5/3.1881889e-5/7.1961138e-5` on final, in metres and metres per
+second as applicable. Final two-second velocity RMSE is `2.8845629e-5 m/s`.
+Identity coverage is one with zero switches, mismatches, or ambiguities.
+Visibility is one and event count is zero.
 
-```bash
-conda run -n orpheus python scripts/run_rgbd_two_visible_qualification.py \
-  --phase protocol \
-  --config configs/rgbd_two_visible_free_motion_cpu.yaml
-```
+Current position reaches anchor frame 15 only (`1/16`, exact zero non-anchor
+gradient); current velocity and every rollout position/velocity reach `16/16`
+RGB and depth frames. Four distinct B4 scenes per split have exact zero
+cross-scene coupling. Final perception/five-query rollout is
+`0.352510 s`/`0.00359524 s`, runtime state is `28,512` bytes, and maximum RSS
+is `579,817,472` bytes. Learned, buffer/model-state, optimizer/scheduler/RNG,
+and update counts remain zero. Exact source gates are `43 passed` focused,
+`281 passed in 15.61 s` combined, and
+`1275 passed, 16 skipped in 447.29 s` complete; independent final audit passes.
 
-Do not run development until the exact freeze is clean and committed. Then
-there is one fixed development attempt followed by independent audit; only a
-pass may authorize exactly-once selector -> confirmation -> final. Any failure
-stops with no retuning. Fixed durable ledgers record access before scene
-construction, the checkpoint is restricted `weights_only=True` empty state,
-and the terminal report precedes the ledger's terminal digest. This rung does
-not cover occlusion, variable object count, contact, camera motion, variable
-physics, uncertainty calibration, tasks, added modalities, or learned
-capacity; live temporal history also remains outside ordinary checkpoints.
+The ledgers completed in development then selector -> confirmation -> final
+order. Final is consumed: do not rerun qualification or tune against it. Audit
+did not reopen raw protected episodes. Owner-writable evidence is SHA-bound and
+tamper-evident, not OS-enforced WORM storage. Live history remains outside
+ordinary checkpoints. After merge, the next rung is bounded partial visibility
+and missed-observation recovery only; occlusion, variable count, contact,
+camera motion, variable physics, uncertainty calibration, tasks, added
+modalities, and learned capacity remain unqualified.
 
 The general evaluator still supports explicit disjoint manifests for a
 compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not
