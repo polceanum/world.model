@@ -144,7 +144,7 @@ remains diagnostic; artifacts are SHA-bound but owner-writable. The former two
 monocular attempts do not reset, and capacity remains fixed until the public
 bridge reproduces this behavior.
 
-### 3. Public one-slot online integration — frozen pre-development
+### 3. Public one-slot online integration — qualified; final consumed
 
 The qualified observation and temporal estimator are now implemented behind
 the normal observation, `MeasurementSet`, `WorldBelief`, predict/observe/
@@ -153,8 +153,8 @@ uses one composite batched `rgbd` packet containing `[B,3,H,W]` RGB,
 `[B,1,H,W]` depth, batched calibration, and explicit image size. A modality-
 qualified stream key prevents collisions between cache, temporal-history, and
 scheduler ownership. The standalone two-second rung remains the qualified
-diagnostic oracle; this public integration has not yet produced episode-
-accuracy evidence.
+diagnostic oracle; the public integration now has its own accepted evidence
+below.
 
 There is exactly one direct observable metric-position owner. The bridge
 aligns sixteen raw positions by persistent object ID, fits velocity only with
@@ -189,15 +189,66 @@ The frozen config SHA-256 is
 current seed-free canonical protocol SHA-256 is
 `e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`.
 Independent source/config/protocol audit passes, and the final current-byte
-targeted gate is `419 passed in 61.33 s`; the complete repository gate is
-`1207 passed, 16 skipped in 431.10 s`. Development `45000000--45000023`,
-selector `46000000--46000015`, confirmation `47000000--47000015`, and final
-`48000000--48000031` remain unopened.
+targeted gate is `421 passed in 62.72 s`; the complete repository gate is
+`1209 passed, 16 skipped in 434.37 s`.
 
-The next sequence is a clean commit/push, one development reproduction plus
-independent audit, then selector -> confirmation -> final exactly once. The
-bridge must reproduce the accepted temporal metrics while ingesting causally;
-no capacity, modality, task, or scene scaling begins unless it passes.
+The first clean `ebda5a8` development had all `175` reported scalar metrics
+finite and passed all frozen gate checks, but a
+raw tuple/list protocol comparison after JSON roundtrip invalidated promotion.
+No protected data was accessed. The rejected report/checkpoint remain under
+ignored `runs/rgbd_online_bridge_v1/rejected_ebda5a8_json_protocol/` with
+SHA-256
+`2104ee87bcabdbd5312b4026a33e44e1de7d197e50215ec7f0bf0e0bb56992e3`
+and
+`38f4b2ef5addb98bb966360213d3bb36b43da606367fc60cd75d2ec487f1b866`.
+Canonical JSON comparison/tamper rejection is source
+`526b5123e6385c575a5777936272330d28972b93`.
+
+Fresh canonical development report/checkpoint/manifest SHA-256 are
+`dce6f920da85fbf696b7ae8a7a91d9cbf7d9084176e51ad7c319f92a6efe4966`,
+`48249f1a5a0467b1da8c7bdb5ad9e909f8c502631ec2fbad832cb490a00c3099`, and
+`069eb3331543727c911a07cc9a1bb352f6185ac8ceac7fafca502c9d7fab6d80`.
+It has all `175` reported scalar metrics finite with no gate failures; current
+position/velocity is
+`3.068470 mm`/`2.191966 mm/s`, two-second position/velocity
+`5.609913 mm`/`1.983371 mm/s`, slope `1.270721 mm/s`, and
+perception/rollout `0.415134 s`/`3.575380 ms`.
+
+Selector, confirmation, and one-shot final then passed exactly once. The
+qualification-report/ledger SHA-256 values are
+`7fd1829f663606910ac81990e4b633c63b1460dbc31dd24c71eedbd91b422908` and
+`cf6a10dd672aafbdd91c92871ae349fef0c549d865cc6532e6c42f7d9be14e32`.
+Protected manifest/result SHA-256 pairs are selector
+`2159b044e089774b3b7df95509ac2cded19528de6ff133ae1b158a354ed7fbb9` /
+`9ac6b7cc1b97da9961345fdcf5488ddec3ac6a0186215699a55a66acfbb983cb`,
+confirmation
+`2cad3224740b4d73871ff1d1e60795d45dc149ad03d197513eddf514cb9946bf` /
+`1a3996914d59f840b2645e4b886f1027b830fa6f81c5763eb1735f25149aa9bc`,
+and final
+`3c5c904203ddd46ea790322e446466b2c58e603015456f239715aa07135011a3` /
+`40d39accec8c2c6efa97f06a2f2748c580a5666b54c7dac4df36e3d7dc718bd1`.
+
+| split | current position / velocity | two-second position / velocity | slope | perception / rollout |
+| --- | --- | --- | --- | --- |
+| development | `3.068470 mm` / `2.191966 mm/s` | `5.609913 mm` / `1.983371 mm/s` | `1.270721 mm/s` | `0.415134 s` / `3.575380 ms` |
+| selector | `3.177543 mm` / `2.313401 mm/s` | `5.881384 mm` / `2.093251 mm/s` | `1.351921 mm/s` | `0.422070 s` / `3.569962 ms` |
+| confirmation | `5.681172 mm` / `1.658775 mm/s` | `6.188252 mm` / `1.500921 mm/s` | `0.253540 mm/s` | `0.414407 s` / `3.537710 ms` |
+| final | `2.996787 mm` / `2.221047 mm/s` | `5.433965 mm` / `2.009688 mm/s` | `1.218589 mm/s` | `0.417436 s` / `3.566628 ms` |
+
+Every split has `175/175` reported scalar metrics finite with no gate failures
+and `16/16` required history VJPs,
+with zero identity change. Ablation, semigroup, memory, checkpoint, and
+zero-state gates pass; final persistent state is `25,364` bytes and maximum RSS
+is `708,853,760` bytes. The ledger is complete, final is consumed, and no raw
+protected episode was reinspected. Evidence remains owner-writable despite
+atomic replacement and hash binding.
+
+The one-sphere contact-free public bridge is accepted and ready to merge. No
+multi-object, association/occlusion, contact/event, task/planning, modality, or
+learned-capacity convergence is claimed. After merge, the next rung must
+predeclare those changed capabilities and all accuracy, identity/association,
+event, task-success, gradient, memory, and rollout-throughput gates. It may not
+alter this accepted rung or tune on final.
 
 ### 4. Observable nuisance variables and additional useful modalities
 

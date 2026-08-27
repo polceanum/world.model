@@ -161,8 +161,9 @@ bound in the qualification report.
 
 The standalone source gate was `104 passed` focused and
 `1130 passed, 16 skipped in 414.82 s` complete. The later integrated bridge
-tree passes `1207 passed, 16 skipped in 431.10 s` complete. OLS covariance
-remains diagnostic, not calibrated.
+first boundary passed `1207 passed, 16 skipped in 431.10 s`; canonical
+comparator source now passes `1209 passed, 16 skipped in 434.37 s` complete.
+OLS covariance remains diagnostic, not calibrated.
 Artifacts are SHA-bound and tamper-evident but owner-writable. Preserve them;
 do not rerun final.
 
@@ -174,7 +175,7 @@ collisions. Separate same-timestamp RGB and depth packets are outside the
 qualified contract. Runtime may consume only RGB-D, calibration, timestamps,
 and declared priors—never simulator state.
 
-## Frozen public bridge qualification — development not yet opened
+## Qualified public bridge — final consumed once
 
 Specification 1.55 implements and freezes that public one-slot bridge. The
 exact config SHA-256 is
@@ -183,8 +184,9 @@ seed-free canonical `bridge_protocol()` SHA-256, before its self-reporting
 field is added, is
 `e536b0d0b721042bff55501faf3445456219fcc987334b6ec1e892688ea560b2`.
 Development `45000000--45000023`, selector `46000000--46000015`, confirmation
-`47000000--47000015`, and final `48000000--48000031` are all unopened at this
-boundary. Do not run any of them from an uncommitted or unaudited source.
+`47000000--47000015`, and final `48000000--48000031` were all unopened at
+source freeze. The audited sequence below has now consumed them exactly as
+declared; final must never be rerun.
 
 The runtime accepts one composite batched `rgbd` packet. Raw observable metric
 position has one direct correction owner. Sixteen raw positions, aligned by
@@ -210,8 +212,8 @@ propagation reject atomically without changing or consuming runtime state.
 Full batch-four persistent runtime tensor storage is counted recursively by
 unique storage and must remain within `32,768` bytes; current frozen source
 measures `25,364` bytes. The current targeted source/config/protocol gate is
-`419 passed in 61.33 s`, the complete repository gate is
-`1207 passed, 16 skipped in 431.10 s`, and independent source review passes.
+`421 passed in 62.72 s`, the complete repository gate is
+`1209 passed, 16 skipped in 434.37 s`, and independent source review passes.
 
 Public RGB-D evaluator and demo reports carry truthful
 `observation_modality: rgbd` and `rgb_only: false` metadata. The evaluator
@@ -223,20 +225,74 @@ parameter-free module/configuration only: live temporal histories and caches
 are not serialized, so exact mid-history stream resume is unsupported and
 must be rebuilt by replaying observations.
 
-After a clean source commit is pushed, run the development split once to fresh
-artifacts and audit exact source, config, protocol, metrics, runtime-state
-memory, and report/checkpoint digests. Only an independently approved pass may
-create the exclusive protected ledger. That ledger records selector access
-before materialization, then confirmation, then final exactly once. Stop on
-the first failure. No optimizer tuning, threshold change, repeated final
-inspection, scene scaling, or capacity increase is allowed inside this rung.
+The first clean development on `ebda5a8` had all `175` reported scalar metrics
+finite and passed all frozen gate checks, but
+its audit rejected raw tuple/list protocol comparison after JSON roundtrip.
+No protected data was accessed. Its report/checkpoint are archived under
+ignored `runs/rgbd_online_bridge_v1/rejected_ebda5a8_json_protocol/` with
+SHA-256
+`2104ee87bcabdbd5312b4026a33e44e1de7d197e50215ec7f0bf0e0bb56992e3`
+and
+`38f4b2ef5addb98bb966360213d3bb36b43da606367fc60cd75d2ec487f1b866`.
+
+Commit `526b5123e6385c575a5777936272330d28972b93` compares canonical
+protocol JSON and rejects tampering. Audit runtime/worktree fingerprints are
+`1eeaa176ad9be8886976910fe53028fb6de498adda73a2d20170f206b6134b40`
+and
+`90d0624a119e118e76b58061f7e5582dffc906f47d85cc4dde997b2f765bb07a`.
+Fresh canonical development report/checkpoint SHA-256 are
+`dce6f920da85fbf696b7ae8a7a91d9cbf7d9084176e51ad7c319f92a6efe4966`
+(`22,346` bytes) and
+`48249f1a5a0467b1da8c7bdb5ad9e909f8c502631ec2fbad832cb490a00c3099`
+(`46,596` bytes); manifest SHA-256 is
+`069eb3331543727c911a07cc9a1bb352f6185ac8ceac7fafca502c9d7fab6d80`.
+All `175` scalars are finite and all gates pass. Current position/velocity is
+`3.068470 mm`/`2.191966 mm/s`; two-second position/velocity is
+`5.609913 mm`/`1.983371 mm/s`; slope is `1.270721 mm/s`; perception/rollout
+is `0.415134 s`/`3.575380 ms`; and persistent runtime state is `25,364` bytes.
+
+Only that independently approved pass created the exclusive protected ledger.
+Selector, confirmation, and final were recorded before materialization and
+passed exactly once. Qualification-report/ledger SHA-256 are
+`7fd1829f663606910ac81990e4b633c63b1460dbc31dd24c71eedbd91b422908`
+(`47,353` bytes) and
+`cf6a10dd672aafbdd91c92871ae349fef0c549d865cc6532e6c42f7d9be14e32`
+(`1,626` bytes). Initial/final empty state SHA-256 is
+`4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+
+| split | manifest SHA-256 | result SHA-256 |
+| --- | --- | --- |
+| selector | `2159b044e089774b3b7df95509ac2cded19528de6ff133ae1b158a354ed7fbb9` | `9ac6b7cc1b97da9961345fdcf5488ddec3ac6a0186215699a55a66acfbb983cb` |
+| confirmation | `2cad3224740b4d73871ff1d1e60795d45dc149ad03d197513eddf514cb9946bf` | `1a3996914d59f840b2645e4b886f1027b830fa6f81c5763eb1735f25149aa9bc` |
+| final | `3c5c904203ddd46ea790322e446466b2c58e603015456f239715aa07135011a3` | `40d39accec8c2c6efa97f06a2f2748c580a5666b54c7dac4df36e3d7dc718bd1` |
+
+| split | current position / velocity | two-second position / velocity | slope | perception / rollout |
+| --- | --- | --- | --- | --- |
+| development | `3.068470 mm` / `2.191966 mm/s` | `5.609913 mm` / `1.983371 mm/s` | `1.270721 mm/s` | `0.415134 s` / `3.575380 ms` |
+| selector | `3.177543 mm` / `2.313401 mm/s` | `5.881384 mm` / `2.093251 mm/s` | `1.351921 mm/s` | `0.422070 s` / `3.569962 ms` |
+| confirmation | `5.681172 mm` / `1.658775 mm/s` | `6.188252 mm` / `1.500921 mm/s` | `0.253540 mm/s` | `0.414407 s` / `3.537710 ms` |
+| final | `2.996787 mm` / `2.221047 mm/s` | `5.433965 mm` / `2.009688 mm/s` | `1.218589 mm/s` | `0.417436 s` / `3.566628 ms` |
+
+Every split has `175/175` reported scalar metrics finite with no gate failures;
+all required history VJPs reach
+`16/16` frames, identity change is zero, and RGB-only, missing-depth,
+no-foreground, semigroup, memory, checkpoint, and zero-state gates pass. Final
+state is `25,364` bytes; maximum RSS is `708,853,760` bytes; semigroup error is
+at most `2.384186e-7 m`/`1.862645e-9 m/s`.
+
+The ledger is complete and stopped after final. Evidence is atomically replaced
+and hash-bound but owner-writable, not OS-enforced append-only storage. Audit
+did not reinspect or rematerialize raw protected episodes. Do not rerun final,
+tune on it, change this accepted rung, or enlarge capacity inside it. The bridge
+is ready to merge to `main`; the next rung must be separately predeclared
+before any new multi-object, association, contact, task, or capacity data.
 
 The complete `1075 passed, 16 skipped` repository gate belongs to the clean
 pre-failure source commit above. After deletion of the rejected experiment and
 addition of the RGB-D core, the new complete source gate passes `1091` tests
 with `16` expected inactive-device skips in `418.49 s`. The integrated bridge
 tree is the current complete repository result at
-`1207 passed, 16 skipped in 431.10 s`.
+`1209 passed, 16 skipped in 434.37 s`.
 
 The broad `train.py`, `evaluate.py`, and `demo.py` workflow remains available
 for `OnlineWorldModel` smoke/integration checks, but no older sustained profile
