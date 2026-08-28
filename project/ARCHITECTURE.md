@@ -168,26 +168,57 @@ only next capability after the completed GitHub `main` fast-forward through
 `1e951520e5a2bf06c1932f64b8334e552247de82`; variable count, contact, camera
 motion, and learned capacity remain closed.
 
-Specification 1.57 freezes the next extension without changing that accepted
-base. The same parameter-free public RGB-D path admits bounded partial
-silhouette overlap and one scheduled object-local missing-depth row while
+Specification 1.57 historically froze the first recovery extension without
+changing that accepted base. The same parameter-free public RGB-D path
+admitted bounded partial silhouette overlap and one scheduled object-local
+missing-depth row while
 retaining exactly two objects, fixed camera/physics, and non-contact motion.
-Each slot's surface fit is independently valid from observed RGB-D support;
-pair validity remains the conjunction needed by the public two-slot update.
-The live frames `2--17` form a sixteen-row WLS history that permits at most one
-invalid target row, requires the newest row valid, and emits velocity from
-exactly fifteen target supports after a miss. The filter is the only miss-
-uncertainty owner and applies one `0.08` increment; the same identity must
-recover on the next frame without birth/death or a non-`FREE` mode.
+Each slot's surface fit was independently valid from observed RGB-D support;
+pair validity remained the conjunction needed by the public two-slot update.
+The live frames `2--17` formed a sixteen-row WLS history that permitted at most
+one invalid target row, required the newest row valid, and emitted velocity
+from exactly fifteen target supports after a miss. The filter was the only
+miss-uncertainty owner and applied one `0.08` increment; the same identity had
+to recover on the next frame without birth/death or a non-`FREE` mode.
 
-The frozen differentiability audit targets RGB and depth only in the relevant
-object region. Current position reaches frame 17 only; temporal outputs reach
+The frozen differentiability audit targeted RGB and depth only in the relevant
+object region. Current position reached frame 17 only; temporal outputs reached
 all live no-miss/co-object rows and all fifteen valid missed-target rows, with
 exact zero at the scheduled miss, frames 0--1, and every cross-scene input.
-Renderer visibility and instance truth remain constructor/preflight controls,
-not runtime inputs. This is a source/protocol freeze with unopened 53m--56m
-namespaces and no evidence artifact—not acceptance of partial visibility, full
-occlusion/reappearance, contact, variable count, or added capacity.
+Renderer visibility and instance truth remained constructor/preflight
+controls, not runtime inputs. At the source-freeze boundary 53m--56m were
+unopened and no evidence artifact existed. The single attempt-1 development
+authorization later failed exact renderer visibility preflight before model,
+collate, or runtime: seed `53000001`, frame `4`, mild rear support/visible
+`20/15`, and exact `0.75 < 0.80` despite continuous `0.826827`. No checkpoint
+or protected access followed; 54m--56m are permanently unused.
+
+Specification 1.58 freezes architecture attempt 2 of 2 around a finite
+exact-raster constructor rather than a stochastic geometry family. One
+source-owned table crosses `16` rational primitives with all `8` exact `D4`
+transforms, yielding `128` unique physical cells. The canonical world path is
+an exact float32 `342`-substep recurrence identical to the public solver; the
+renderer trace supplies actual support/visibility. It retains the public
+history, miss-isolation, recovery, and gradient semantics stated above. The
+table SHA-256 is
+`c3f17e805de234fecb1f1928b47e8fd2127d608447e7b1e87df9a2ec970ce3aa`,
+the world trace by
+`32b34e716ec639cabdd5d36f1c0d30fa17b187546bb5653e4fa7d0a9d6af65d4`,
+and the renderer trace by
+`4362f06929f8e8958c1f12e8d2077dded6f8dda3bfdb99eed425899bb289f412`.
+Certified margins include actual visibility `0.05`; one-pixel hypothetical
+clearance is exactly zero under an inclusive gate and is not positive slack.
+
+Raw construction and evaluation remain private architecture-internal
+operations. A direct guard protects the immutable two-file live-v1 failure,
+tracked fixtures reproduce those exact bytes, and only an exact canonical
+ledger-minted capability may enter construction. A manifest-shaped value is
+not authority. The v2 protocol has no oracle and permits only five canonical
+single-link evidence files; the restricted checkpoint is loaded
+with `weights_only=True`. Fresh 57m--60m namespaces are unopened and no v2
+artifact exists. This is an audited source freeze ready for commit/push, not a
+development or partial-visibility qualification; a failed development ends
+the rung with no architecture attempt 3.
 
 Evaluation seed manifests are explicit. `fresh_validation` starts after the
 checkpoint's trainer-validation episodes by default; `--seed-offset` can select

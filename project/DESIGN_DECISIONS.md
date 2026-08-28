@@ -1,11 +1,116 @@
 # Design decisions
 
+## ADR-168 — Consume partial-visibility attempt 1 and freeze the terminal exact-raster attempt
+
+- **Date:** 2026-08-28
+- **Status:** accepted source/protocol/security freeze for architecture attempt
+  2 of 2; ready for clean commit and push, with every v2 namespace unopened
+  and no v2 evidence artifact; not developed, qualified, or accepted
+- **Context:** ADR-167 preserved the accepted specification-1.56
+  exactly-two-visible rung and froze a first bounded-partial-visibility
+  attempt. That attempt reached real development construction and exposed the
+  distinction its continuous preflight missed: seed `53000001` had continuous
+  rear-object visibility `0.826827`, but exact renderer support at frame `4`
+  was only `15/20 = 0.75`, below the frozen `0.80` gate. Retuning the gate or
+  retrying the same statistical constructor would spend evidence on the
+  constructor rather than the public RGB-D recovery path. The maximum remains
+  two architecture attempts.
+- **Attempt-1 disposition:** Bind the immutable failure to clean commit
+  `7e67823667769e47bad3678207f2c01bd3edbfe4`, report SHA-256/size
+  `7c08c794690a10d46100b8d17ee448e3a83960d265ec7859bb91cd6d2ac9ca9d`
+  / `13,948` bytes, and development-ledger SHA-256/size
+  `e4993abefefe07e0b0fb57a65769fa270012524d62c8ebab4b7db0251979aab4`
+  / `1,110` bytes. The v1 config/protocol/development-manifest digests are
+  `7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`,
+  `e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`,
+  and
+  `ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391`;
+  runtime/worktree fingerprints are
+  `2345bcf6d785cd864301dbcdcb23cc8f7287f1815615fd1e30e6f635084f12c3`
+  / `0d44cabadce831238fe1c8c1cda450677b62f20af3fcf9a411fa4ef621b1842f`.
+  Seed `53000000` completed the constructor; seed `53000001` rendered `58`
+  frames and failed renderer visibility preflight at frame `4`, before model,
+  collate, or runtime. The inferred in-memory cursor is `2`, not a durable
+  cursor; seeds `>=53000002` were untouched. No checkpoint exists. Protected
+  54m--56m namespaces were never opened and are permanently unused. Exactly
+  two single-link live files—the report and ledger—remain. Attempt 1 is
+  consumed.
+- **Decision:** Advance the specification to 1.58 while retaining simulator
+  `sphere_world_v7`, the accepted 1.56 qualification, and the historical 1.57
+  freeze/failure. Architecture attempt 2 uses one finite source-owned table of
+  `16` rational primitives crossed with all `8` exact `D4` transformations,
+  yielding `128` unique physical cells. It binds exact float32 world evolution
+  to a `342`-substep public-solver recurrence and accepts geometry through the
+  exact renderer trace. The raw constructor/evaluator remain private; public
+  seed mapping, solver identity, and persisted evidence remain auditable.
+- **Finite construction proof:** World/renderer trace SHA-256 values are
+  `32b34e716ec639cabdd5d36f1c0d30fa17b187546bb5653e4fa7d0a9d6af65d4`
+  / `4362f06929f8e8958c1f12e8d2077dded6f8dda3bfdb99eed425899bb289f412`.
+  Table/absolute-table/ordered-state/state-set/unordered-geometry SHA-256 are
+  `c3f17e805de234fecb1f1928b47e8fd2127d608447e7b1e87df9a2ec970ce3aa`,
+  `f86f218317d656c16f4c85e5b4a75b2e52094724316a3132b0a6e44715bec86e`,
+  `bc3e6349fc0d5effecbb53920a9c4224203067f05306330723f8c75dd9f35c57`,
+  `96a53595bf7d21b84fed772baef4b754b6e777b7560a8083d303814fa5f611b5`,
+  and `27a8dabb2d9936e635cde5b2155fffa5eddb89679b477175119917627772cafa`.
+  Frozen margins are discriminant `5.20199537e-5 >= 5e-5`, overlap depth
+  `0.831737 m >= 0.8 m`, projected drift
+  `1.144409e-5 px <= 2e-5 px`, conjugacy
+  `2.861023e-6 m <= 4e-6 m`, speed
+  `0.0406846--0.0520633 m/s`, gap `0.616238 m`, world-boundary clearance
+  `0.211665 m`, image clearance `19.4474 px`, separated excess
+  `1.44462 px`, partial margin `0.421646 px`, actual visibility margin `0.05`,
+  and support counts `18/14/14`. One-pixel hypothetical clearance is exactly
+  `0.0`; the gate is inclusive and this is not positive slack.
+- **Frozen byte bindings:** Config/harness/runner/qualification-test/config-test
+  SHA-256 values are
+  `b18f787987394f77771dbf31dae1642bd042b81e64b02a3e93b8cd048dd3416b`,
+  `859dedf68031ee66cec1334d2fc094078bc2aacf0deac4388c53337033b63519`,
+  `a16c0712b611ebe64dd5052efde3f73e3c5aa18f1b1c5f825f571c2674e598c0`,
+  `f4d35320f484484429cdfadb9f3faed6ad5c1ad85492d6ffaa378a7076955714`,
+  and `8f4e14c7ccff5c6af4d820c555956ce12b66854b1aef7ee3fb5ddbaad7abd40a`.
+  The canonical pre-self-hash protocol SHA-256 is
+  `5f049f060f6e8a9682d9413e6bc2d8f9f228f6e2aee67cde16f98d234cac8a3b`.
+- **Fresh namespaces:** Development `57000000--57000031`, selector
+  `58000000--58000023`, confirmation `59000000--59000023`, and final
+  `60000000--60000047` have manifest SHA-256
+  `ded3d75a7d248e3f9746b03b0cf249f32739208713c4287c45deb5eefd11f8e2`,
+  `effa598aa07a44c100da115f71828e00754f181729063899353d22b551f7227a`,
+  `9240a1dd465574de8ac032e318f3cee618909ed6a5b3e91c5fd8c87bad146cec`,
+  and `17fdd50896729b981357960ea0db74ef19e059e21bc8d8e41a7048cf237200a6`.
+  Their scene-signature-list SHA-256 values are
+  `8426ea4d0a7e1d507c5d7fc825afa8864ee694a04df622cba955b92ffd4350c0`,
+  `d421862763a3e0bc0af042fd81704c836c2123ad0fa260130e791cb250c0b2c7`,
+  `261f975fcd46795ff9f56c94857de69942ea047455f65cc0341bdc515cc76af5`,
+  and `1837d40a35ddba88e3a91f74c5b2c398aa01675ad8e84efa2fe660bbf49e34a2`.
+  All are unopened and no v2 artifact exists.
+- **Authorization and evidence:** The attempt-2 run root is
+  `runs/rgbd_partial_visibility_recovery_v2/`. Direct live-v1 guarding and
+  exact tracked report/ledger fixtures preserve the failed live archive. Only an
+  exact canonical ledger-minted capability may enter the private constructor;
+  there is no oracle. Exactly five canonical single-link v2 files are allowed,
+  and the restricted checkpoint must load with `weights_only=True`.
+- **Verification:** The canonical gate passes `315` tests in `345.27 s`; the
+  public-solver proof passes `1` test in `244.52 s`; and the full suite passes
+  `1407` tests with `16` skips in `816.14 s`. Two independent final audits
+  report `PASS`.
+- **Alternatives considered:** weaken the exact-raster visibility gate; trust
+  continuous visibility; resume after the inferred cursor; reuse protected v1
+  seeds; create a stochastic third constructor; expose the raw constructor;
+  let a manifest-shaped object act as authority; claim the passing source
+  proofs as development evidence.
+- **Consequences:** Commit and push the exact freeze first, then require a
+  clean tree with `HEAD == upstream` before the sole v2 development
+  authorization. Only an independently audited passing development result may
+  open selector -> confirmation -> final exactly once. A failed development
+  ends this rung permanently with no attempt 3. This ADR freezes source; it
+  does not claim development, qualification, or partial-visibility acceptance.
+
 ## ADR-167 — Freeze bounded partial visibility and one isolated depth miss before development
 
 - **Date:** 2026-08-27
-- **Status:** accepted pre-development source/protocol freeze; the full exact
-  current-byte repository suite passes, all episode namespaces are unopened,
-  and no evidence artifact exists
+- **Status:** historical specification-1.57 pre-development source/protocol
+  freeze; architecture attempt 1 later failed immutably during development,
+  and ADR-168 records its disposition and the attempt-2 freeze
 - **Context:** ADR-166 accepted the exactly-two-visible, fixed-camera,
   non-contact RGB-D qualification and its final is consumed. The smallest next
   failure mode is limited observation loss, but full occlusion/reappearance,
@@ -69,11 +174,12 @@
   permit arbitrary missing rows; let perception and filter both inflate miss
   uncertainty; reuse the consumed two-visible final; materialize development
   before a clean commit and complete repository gate.
-- **Consequences:** The next action is clean commit -> bind the already-passing
-  complete repository gate to that exact tree -> sole development run ->
-  independent exact-digest audit. Only a passing development result may
-  authorize selector -> confirmation -> final exactly once; any failure stops
-  without retuning. The freeze is not accuracy evidence and makes no claim for
+- **Consequences:** At this historical boundary the next action was clean
+  commit -> bind the already-passing complete repository gate to that exact
+  tree -> sole development run -> independent exact-digest audit. Development
+  later failed before model/collate/runtime and consumed attempt 1 as recorded
+  by ADR-168; no protected v1 namespace opened. The freeze was not accuracy
+  evidence and made no claim for
   full occlusion/reappearance, contact, variable count, history-capacity or
   learned-capacity generalization, moving cameras, variable physics, added
   modalities, tasks/planning, or general world-model convergence.

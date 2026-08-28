@@ -20,7 +20,7 @@ from world_model.training.rgbd_partial_visibility_recovery_qualification import 
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_RUN = REPOSITORY_ROOT / "runs" / "rgbd_partial_visibility_recovery_v1"
+DEFAULT_RUN = REPOSITORY_ROOT / "runs" / "rgbd_partial_visibility_recovery_v2"
 
 
 def arguments() -> argparse.Namespace:

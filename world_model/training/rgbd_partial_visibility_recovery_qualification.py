@@ -1,7 +1,7 @@
 """Frozen bounded-partial-visibility and one-miss RGB-D qualification.
 
 Protocol inspection and configuration validation are seed-free.  Simulator
-state can be materialized only by :func:`evaluate_seed_manifest` after a
+state can be materialized only by the runner-private manifest evaluator after a
 durable, single-use ledger has issued the exact split authorization.  Runtime
 packets contain RGB, the deliberately corrupted depth image, calibration, and
 time only; renderer masks and the predeclared miss schedule are retained for
@@ -33,10 +33,16 @@ from world_model.observations import DirectVelocityEvidence
 from world_model.observations.rgbd import RGBDTemporalPositionHistory
 from world_model.runtime import OnlineWorldModel
 from world_model.runtime.state import runtime_stream_key
-from world_model.simulator.camera import CameraFrame
+from world_model.simulator.camera import (
+    CameraFrame,
+    invert_rigid_transform,
+    look_at_world_from_camera,
+    make_intrinsics,
+    world_to_camera,
+)
 from world_model.simulator.episode import validate_episode
 from world_model.simulator.labels import make_perception_labels, validate_perception_labels
-from world_model.simulator.physics import empty_physics_events
+from world_model.simulator.physics import _integrate_free_motion_exact, empty_physics_events
 from world_model.simulator.sphere_world import SphereWorld, SphereWorldConfig
 from world_model.training.checkpointing import capture_git_metadata, checkpoint_payload
 from world_model.training.loop import make_rgbd_packet
@@ -68,16 +74,13 @@ from world_model.training.rgbd_two_visible_free_motion_qualification import (
     _state_record,
     _storage_alias,
 )
-from world_model.training.rgbd_two_visible_free_motion_qualification import (
-    scene_specification as separated_scene_specification,
-)
 from world_model.utils.config import OrpheusConfig, load_config
 from world_model.utils.version import SIMULATOR_VERSION, SPECIFICATION_VERSION, __version__
 
-DEVELOPMENT_SEEDS = tuple(range(53_000_000, 53_000_032))
-SELECTOR_SEEDS = tuple(range(54_000_000, 54_000_024))
-CONFIRMATION_SEEDS = tuple(range(55_000_000, 55_000_024))
-FINAL_TEST_SEEDS = tuple(range(56_000_000, 56_000_048))
+DEVELOPMENT_SEEDS = tuple(range(57_000_000, 57_000_032))
+SELECTOR_SEEDS = tuple(range(58_000_000, 58_000_024))
+CONFIRMATION_SEEDS = tuple(range(59_000_000, 59_000_024))
+FINAL_TEST_SEEDS = tuple(range(60_000_000, 60_000_048))
 MANIFESTS: dict[str, tuple[int, ...]] = {
     "development": DEVELOPMENT_SEEDS,
     "selector": SELECTOR_SEEDS,
@@ -85,10 +88,10 @@ MANIFESTS: dict[str, tuple[int, ...]] = {
     "final_test": FINAL_TEST_SEEDS,
 }
 MANIFEST_SHA256 = {
-    "development": "ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391",
-    "selector": "1b1e6ef6938705bcc7e2a66ad5ee4622860c9ea9ec3e6c19c86e8a8534209b28",
-    "confirmation": "72d7c922029d300e3d28409bcb55a843633caac10b482f680ae769a442739e9f",
-    "final_test": "70b60f48769a26c5587febf778443fd38f5814a39e80ec7da1c98dea9c389ded",
+    "development": "ded3d75a7d248e3f9746b03b0cf249f32739208713c4287c45deb5eefd11f8e2",
+    "selector": "effa598aa07a44c100da115f71828e00754f181729063899353d22b551f7227a",
+    "confirmation": "9240a1dd465574de8ac032e318f3cee618909ed6a5b3e91c5fd8c87bad146cec",
+    "final_test": "17fdd50896729b981357960ea0db74ef19e059e21bc8d8e41a7048cf237200a6",
 }
 
 INGEST_FRAME_INDICES = tuple(range(18))
@@ -117,12 +120,102 @@ STRATUM_NAMES = (
 # The raw-byte binding is rechecked at every non-protocol entry point.  A
 # changed YAML requires a new source freeze and this constant must change in
 # the same reviewed commit before any manifest authorization can be issued.
-FROZEN_CONFIG_SHA256 = "7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c"
-ARCHITECTURE_VERSION = 1
-ARCHITECTURE_ATTEMPT = 1
+FROZEN_CONFIG_SHA256 = "b18f787987394f77771dbf31dae1642bd042b81e64b02a3e93b8cd048dd3416b"
+ARCHITECTURE_VERSION = 2
+ARCHITECTURE_ATTEMPT = 2
 MAX_ARCHITECTURE_ATTEMPTS = 2
 OPTIMIZER_UPDATES = 0
 EMPTY_MODEL_STATE_SHA256 = canonical_sha256([])
+
+ATTEMPT1_RUN_RELATIVE_PATH = Path("runs/rgbd_partial_visibility_recovery_v1")
+ATTEMPT1_DEVELOPMENT_LEDGER_BACKLINK = (
+    "/Users/mike/Work/world.model/runs/rgbd_partial_visibility_recovery_v1/"
+    "development_attempt_1_access.json"
+)
+ATTEMPT1_REPORT_SHA256 = "7c08c794690a10d46100b8d17ee448e3a83960d265ec7859bb91cd6d2ac9ca9d"
+ATTEMPT1_LEDGER_SHA256 = "e4993abefefe07e0b0fb57a65769fa270012524d62c8ebab4b7db0251979aab4"
+ATTEMPT1_CONFIG_SHA256 = "7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c"
+ATTEMPT1_PROTOCOL_SHA256 = "e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd"
+ATTEMPT1_DEVELOPMENT_MANIFEST_SHA256 = (
+    "ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391"
+)
+ATTEMPT1_SOURCE_PROVENANCE = {
+    "commit": "7e67823667769e47bad3678207f2c01bd3edbfe4",
+    "dirty": False,
+    "runtime_source_fingerprint": (
+        "2345bcf6d785cd864301dbcdcb23cc8f7287f1815615fd1e30e6f635084f12c3"
+    ),
+    "worktree_fingerprint": ("0d44cabadce831238fe1c8c1cda450677b62f20af3fcf9a411fa4ef621b1842f"),
+}
+
+PARTIAL_TEMPLATE_RADIAL_RATE = 0.0085
+TEMPLATE_COORDINATE_DENOMINATOR = 16
+TEMPLATE_SYMMETRY_COUNT = 8
+MINIMUM_RENDERER_DISCRIMINANT_MARGIN = 5.0e-5
+MINIMUM_OVERLAP_DEPTH_MARGIN_M = 0.80
+MAXIMUM_PROJECTED_CENTRE_DRIFT_PIXELS = 2.0e-5
+MAXIMUM_CAMERA_CONJUGACY_ERROR_M = 4.0e-6
+
+
+@dataclass(frozen=True)
+class CameraSpaceSceneTemplate:
+    """One rational camera-space primitive before an exact D4 transform."""
+
+    name: str
+    severity: str
+    midpoint_u_sixteenths: int
+    midpoint_v_sixteenths: int
+    separation_u_sixteenths: int
+    separation_v_sixteenths: int
+    front_depth_sixteenths: int
+    rear_depth_sixteenths: int
+    expected_front_support_pixels: int
+    expected_rear_support_pixels: int
+    expected_rear_visible_pixels: int
+
+
+# Every value is an exact multiple of 1/16 in camera/pixel coordinates.  The
+# eight partial-severity primitives retain inclusive band admissibility under
+# every possible one-pixel support/visibility transition.  Eight separated
+# primitives supply the other 64 physical records; D4 is applied only after
+# choosing a primitive.
+ATTEMPT2_TEMPLATE_TABLE = (
+    CameraSpaceSceneTemplate("separated_0", "separated", -70, -2, 144, 16, 78, 98, 29, 18, 18),
+    CameraSpaceSceneTemplate("separated_1", "separated", -70, -2, 144, 16, 80, 98, 28, 18, 18),
+    CameraSpaceSceneTemplate("separated_2", "separated", -70, -4, 144, 20, 76, 98, 32, 18, 18),
+    CameraSpaceSceneTemplate("separated_3", "separated", -70, -6, 144, 24, 76, 98, 32, 18, 18),
+    CameraSpaceSceneTemplate("separated_4", "separated", -70, -8, 144, 28, 78, 98, 29, 18, 18),
+    CameraSpaceSceneTemplate("separated_5", "separated", -70, -10, 144, 32, 78, 98, 29, 18, 18),
+    CameraSpaceSceneTemplate("separated_6", "separated", -70, -10, 144, 32, 80, 98, 28, 18, 18),
+    CameraSpaceSceneTemplate("separated_7", "separated", -70, -12, 144, 36, 76, 98, 32, 18, 18),
+    CameraSpaceSceneTemplate("mild_0", "mild", -16, -2, 60, 40, 78, 94, 29, 20, 17),
+    CameraSpaceSceneTemplate("mild_1", "mild", -16, -2, 60, 40, 78, 96, 29, 20, 17),
+    CameraSpaceSceneTemplate("mild_2", "mild", -20, 2, 68, 32, 78, 94, 29, 20, 17),
+    CameraSpaceSceneTemplate("mild_3", "mild", -20, 2, 68, 32, 78, 96, 29, 20, 17),
+    CameraSpaceSceneTemplate("moderate_0", "moderate", -8, -2, 44, 40, 78, 94, 29, 20, 14),
+    CameraSpaceSceneTemplate("moderate_1", "moderate", -8, -2, 44, 40, 78, 96, 29, 20, 14),
+    CameraSpaceSceneTemplate("moderate_2", "moderate", -12, 2, 52, 32, 78, 94, 29, 20, 14),
+    CameraSpaceSceneTemplate("moderate_3", "moderate", -12, 2, 52, 32, 78, 96, 29, 20, 14),
+)
+ATTEMPT2_TEMPLATE_TABLE_SHA256 = "c3f17e805de234fecb1f1928b47e8fd2127d608447e7b1e87df9a2ec970ce3aa"
+ATTEMPT2_ABSOLUTE_PRIMITIVE_TABLE_SHA256 = (
+    "f86f218317d656c16f4c85e5b4a75b2e52094724316a3132b0a6e44715bec86e"
+)
+ATTEMPT2_ORDERED_PHYSICAL_STATE_SHA256 = (
+    "bc3e6349fc0d5effecbb53920a9c4224203067f05306330723f8c75dd9f35c57"
+)
+ATTEMPT2_PHYSICAL_STATE_SET_SHA256 = (
+    "96a53595bf7d21b84fed772baef4b754b6e777b7560a8083d303814fa5f611b5"
+)
+# Filled by the same independent state reconstruction after sorting the two
+# per-object [position, velocity] byte records within every geometry record.
+ATTEMPT2_UNORDERED_GEOMETRY_SET_SHA256 = (
+    "27a8dabb2d9936e635cde5b2155fffa5eddb89679b477175119917627772cafa"
+)
+ATTEMPT2_WORLD_TRAJECTORY_SHA256 = (
+    "32b34e716ec639cabdd5d36f1c0d30fa17b187546bb5653e4fa7d0a9d6af65d4"
+)
+ATTEMPT2_RENDERER_TRACE_SHA256 = "4362f06929f8e8958c1f12e8d2077dded6f8dda3bfdb99eed425899bb289f412"
 
 _MODERATE_PARTIAL = (False, True, False, True, False, True, False, True)
 _MISS_AT_16 = (False, True, True, False, False, True, False, True)
@@ -272,6 +365,7 @@ def _assert_seed_namespaces() -> None:
         if canonical_sha256(list(values)) != MANIFEST_SHA256[split]:
             raise RuntimeError(f"{split} manifest hash differs from the frozen list")
     _assert_scene_parameter_uniqueness()
+    assert_attempt2_admissibility()
 
 
 def _exact_seed_tuple(seeds: Sequence[int], *, label: str) -> tuple[int, ...]:
@@ -321,74 +415,177 @@ def scene_schedule(seed: int) -> SceneSchedule:
     )
 
 
-def _seed_unit(seed: int, stream: int) -> float:
-    """Deterministic non-RNG scalar used only by pure scene arithmetic."""
+def _d4_coordinate(x: float, y: float, symmetry: int) -> tuple[float, float]:
+    """Apply one exact square-grid D4 transform around the principal point."""
 
-    multipliers = (
-        0x9E3779,
-        0x7F4A7D,
-        0x6A09E7,
-        0xBB67AF,
-        0x3C6EF3,
-        0xA54FF5,
-        0x510E53,
-        0x1F83D9,
-        0x5BE0CD,
-        0xC2B2AF,
-        0x27D4EB,
-        0x165667,
+    transforms = (
+        (x, y),
+        (-y, x),
+        (-x, -y),
+        (y, -x),
+        (-x, y),
+        (x, -y),
+        (y, x),
+        (-y, -x),
     )
-    if not 0 <= stream < len(multipliers):
-        raise ValueError("partial scene stream is out of range")
-    mask = (1 << 24) - 1
-    mixed = ((seed & mask) * multipliers[stream] + (stream + 1) * 0x45D9F3) & mask
-    return (mixed + 0.5) / float(1 << 24)
+    if isinstance(symmetry, bool) or not isinstance(symmetry, int):
+        raise TypeError("template symmetry must be an exact integer")
+    if not 0 <= symmetry < len(transforms):
+        raise ValueError("template symmetry is outside D4")
+    return transforms[symmetry]
+
+
+def _templates_for_severity(severity: str) -> tuple[CameraSpaceSceneTemplate, ...]:
+    templates = tuple(
+        template for template in ATTEMPT2_TEMPLATE_TABLE if template.severity == severity
+    )
+    expected = 8 if severity == "separated" else 4
+    if severity not in {"separated", "mild", "moderate"} or len(templates) != expected:
+        raise RuntimeError("attempt-two template table has the wrong severity cardinality")
+    return templates
+
+
+@cache
+def _seeds_for_severity(severity: str) -> tuple[int, ...]:
+    return tuple(
+        seed
+        for seeds in MANIFESTS.values()
+        for seed in seeds
+        if scene_schedule(seed).severity == severity
+    )
+
+
+def _template_assignment(seed: int) -> tuple[CameraSpaceSceneTemplate, int]:
+    schedule = scene_schedule(seed)
+    ordered = _seeds_for_severity(schedule.severity)
+    expected = 64 if schedule.severity == "separated" else 32
+    if len(ordered) != expected:
+        raise RuntimeError("attempt-two severity population differs from the frozen design")
+    rank = ordered.index(seed)
+    templates = _templates_for_severity(schedule.severity)
+    template_index, symmetry = divmod(rank, TEMPLATE_SYMMETRY_COUNT)
+    return templates[template_index], symmetry
+
+
+def _fixed_intrinsics() -> Tensor:
+    return make_intrinsics((64, 64), 48.0, dtype=torch.float32)
+
+
+def _attempt2_absolute_primitive_table() -> list[dict[str, Any]]:
+    """Reconstruct the independently searched absolute front/rear payload."""
+
+    intrinsics = _fixed_intrinsics()
+    centre_u = float(intrinsics[0, 2])
+    centre_v = float(intrinsics[1, 2])
+    denominator = float(TEMPLATE_COORDINATE_DENOMINATOR)
+    severity_indices: Counter[str] = Counter()
+    table: list[dict[str, Any]] = []
+    for template in ATTEMPT2_TEMPLATE_TABLE:
+        midpoint_u = template.midpoint_u_sixteenths / denominator
+        midpoint_v = template.midpoint_v_sixteenths / denominator
+        separation_u = template.separation_u_sixteenths / denominator
+        separation_v = template.separation_v_sixteenths / denominator
+        table.append(
+            {
+                "kind": template.severity,
+                "index": severity_indices[template.severity],
+                "front": [
+                    centre_u + midpoint_u - 0.5 * separation_u,
+                    centre_v + midpoint_v - 0.5 * separation_v,
+                    template.front_depth_sixteenths / denominator,
+                ],
+                "rear": [
+                    centre_u + midpoint_u + 0.5 * separation_u,
+                    centre_v + midpoint_v + 0.5 * separation_v,
+                    template.rear_depth_sixteenths / denominator,
+                ],
+            }
+        )
+        severity_indices[template.severity] += 1
+    return table
+
+
+def _template_camera_state(
+    template: CameraSpaceSceneTemplate,
+    symmetry: int,
+    *,
+    intrinsics: Tensor,
+) -> tuple[Tensor, Tensor]:
+    """Resolve rational template coordinates to float32 position/velocity."""
+
+    denominator = float(TEMPLATE_COORDINATE_DENOMINATOR)
+    midpoint = (
+        template.midpoint_u_sixteenths / denominator,
+        template.midpoint_v_sixteenths / denominator,
+    )
+    separation = (
+        template.separation_u_sixteenths / denominator,
+        template.separation_v_sixteenths / denominator,
+    )
+    canonical_offsets = (
+        (midpoint[0] - 0.5 * separation[0], midpoint[1] - 0.5 * separation[1]),
+        (midpoint[0] + 0.5 * separation[0], midpoint[1] + 0.5 * separation[1]),
+    )
+    offsets = tuple(_d4_coordinate(*offset, symmetry) for offset in canonical_offsets)
+    depths = (
+        template.front_depth_sixteenths / denominator,
+        template.rear_depth_sixteenths / denominator,
+    )
+    fx, fy = float(intrinsics[0, 0]), float(intrinsics[1, 1])
+    cx, cy = float(intrinsics[0, 2]), float(intrinsics[1, 2])
+    points_camera = torch.tensor(
+        [
+            [offset[0] * depth / fx, offset[1] * depth / fy, depth]
+            for offset, depth in zip(offsets, depths, strict=True)
+        ],
+        dtype=torch.float32,
+    )
+    velocities_camera = points_camera * PARTIAL_TEMPLATE_RADIAL_RATE
+    projected = torch.stack(
+        (
+            intrinsics[0, 0] * points_camera[:, 0] / points_camera[:, 2] + cx,
+            intrinsics[1, 1] * points_camera[:, 1] / points_camera[:, 2] + cy,
+        ),
+        dim=-1,
+    )
+    expected_pixels = torch.tensor(
+        [[cx + offset[0], cy + offset[1]] for offset in offsets], dtype=torch.float32
+    )
+    if not torch.equal(projected, expected_pixels):
+        raise RuntimeError("template float32 backprojection changed its exact pixel phase")
+    return points_camera, velocities_camera
 
 
 def scene_parameter_record(seed: int) -> dict[str, Any]:
     """Return only parameters consumed by the deterministic scene constructor."""
 
     schedule = scene_schedule(seed)
-    base = separated_scene_specification(seed)
-    canonical_albedo = base.albedo.flip(0) if base.palette_swapped else base.albedo
-    final_albedo = canonical_albedo.flip(0) if schedule.palette_swapped else canonical_albedo
-    common: dict[str, Any] = {
+    template, symmetry = _template_assignment(seed)
+    points_camera, velocities_camera = _template_camera_state(
+        template,
+        symmetry,
+        intrinsics=_fixed_intrinsics(),
+    )
+    if schedule.partial and schedule.rear_slot == 0:
+        points_camera = points_camera.flip(0)
+        velocities_camera = velocities_camera.flip(0)
+    canonical_albedo = torch.tensor([[0.92, 0.20, 0.14], [0.14, 0.84, 0.30]], dtype=torch.float32)
+    albedo = canonical_albedo.flip(0) if schedule.palette_swapped else canonical_albedo
+    return {
         "stratum": schedule.stratum,
         "severity": schedule.severity,
         "miss_frame": schedule.miss_frame,
         "rear_slot": schedule.rear_slot,
         "missed_slot": schedule.missed_slot,
         "palette_swapped": schedule.palette_swapped,
-        "albedo": final_albedo.tolist(),
+        "family": "partial" if schedule.partial else "separated",
+        "template": asdict(template),
+        "template_symmetry": symmetry,
+        "template_table_sha256": ATTEMPT2_TEMPLATE_TABLE_SHA256,
+        "camera_position": points_camera.tolist(),
+        "camera_velocity": velocities_camera.tolist(),
+        "albedo": albedo.tolist(),
     }
-    if not schedule.partial:
-        common.update(
-            {
-                "family": "separated",
-                "position": base.position.tolist(),
-                "velocity": base.velocity.tolist(),
-            }
-        )
-        return common
-
-    signed = [2.0 * _seed_unit(seed, stream) - 1.0 for stream in range(10)]
-    front_depth = 5.00 + 0.08 * signed[0]
-    common.update(
-        {
-            "family": "partial",
-            "front_depth_m": front_depth,
-            "rear_depth_m": front_depth + 1.02 + 0.04 * signed[1],
-            "midpoint_pixels": [31.5 + 0.75 * signed[2], 31.5 + 0.75 * signed[3]],
-            "angle_radians": 2.0 * math.pi * _seed_unit(seed, 4),
-            "separation_pixels": (
-                (3.375 if schedule.severity == "moderate" else 4.325) + 0.125 * signed[5]
-            ),
-            "pixel_u_rate": 0.60 + 0.04 * signed[6],
-            "pixel_v_rate": 0.08 * signed[7],
-            "depth_rates_mps": [0.003 * signed[8], 0.003 * signed[9]],
-        }
-    )
-    return common
 
 
 @cache
@@ -399,10 +596,10 @@ def scene_parameter_signature(seed: int) -> str:
 
 
 SCENE_PARAMETER_SIGNATURE_SHA256 = {
-    "development": "f22a2e26df99edda751d13c383733c447139afe4de840bae64b3e03758155baf",
-    "selector": "85bf300a1af8547746663a9b10403fa8b3d726533d0f68955c2cad5ecf3a4d75",
-    "confirmation": "e6319849bb4b4974ceeb6752eadf7235f8e82e47440f0e2b7d1be75191600931",
-    "final_test": "575e4af1694825e40c780c2a64c783232b013bf8432c8fbe76d095180f0c9d5f",
+    "development": "8426ea4d0a7e1d507c5d7fc825afa8864ee694a04df622cba955b92ffd4350c0",
+    "selector": "d421862763a3e0bc0af042fd81704c836c2123ad0fa260130e791cb250c0b2c7",
+    "confirmation": "261f975fcd46795ff9f56c94857de69942ea047455f65cc0341bdc515cc76af5",
+    "final_test": "1837d40a35ddba88e3a91f74c5b2c398aa01675ad8e84efa2fe660bbf49e34a2",
 }
 
 
@@ -419,91 +616,667 @@ def _assert_scene_parameter_uniqueness() -> None:
         raise RuntimeError("pure scene-parameter arithmetic aliases across qualification splits")
 
 
-def _partial_scene_specification(
-    seed: int,
-    schedule: SceneSchedule,
-    camera: CameraFrame,
-) -> TwoVisibleSceneSpecification:
-    """Construct a bounded projected-overlap scene directly in camera space."""
-
-    parameters = scene_parameter_record(seed)
-    front_depth = float(parameters["front_depth_m"])
-    rear_depth = float(parameters["rear_depth_m"])
-    midpoint = torch.tensor(parameters["midpoint_pixels"], dtype=torch.float32)
-    angle = float(parameters["angle_radians"])
-    direction = torch.tensor([math.cos(angle), math.sin(angle)], dtype=torch.float32)
-    separation = float(parameters["separation_pixels"])
-    front_pixels = midpoint - 0.5 * separation * direction
-    rear_pixels = midpoint + 0.5 * separation * direction
-    intrinsics = camera.intrinsics.to(torch.float32)
-    fx, fy = float(intrinsics[0, 0]), float(intrinsics[1, 1])
-    cx, cy = float(intrinsics[0, 2]), float(intrinsics[1, 2])
-
-    def camera_point(pixel: Tensor, depth: float) -> Tensor:
-        return torch.tensor(
-            [
-                (float(pixel[0]) - cx) * depth / fx,
-                (float(pixel[1]) - cy) * depth / fy,
-                depth,
-            ],
-            dtype=torch.float32,
-        )
-
-    points_camera = torch.stack(
-        (camera_point(front_pixels, front_depth), camera_point(rear_pixels, rear_depth))
-    )
-    pixel_u_rate = float(parameters["pixel_u_rate"])
-    pixel_v_rate = float(parameters["pixel_v_rate"])
-    depth_rates = torch.tensor(parameters["depth_rates_mps"], dtype=torch.float32)
-    velocities_camera = torch.empty_like(points_camera)
-    for slot, (pixel, depth) in enumerate(((front_pixels, front_depth), (rear_pixels, rear_depth))):
-        depth_rate = float(depth_rates[slot])
-        velocities_camera[slot] = torch.tensor(
-            [
-                depth * pixel_u_rate / fx + (float(pixel[0]) - cx) * depth_rate / fx,
-                depth * pixel_v_rate / fy + (float(pixel[1]) - cy) * depth_rate / fy,
-                depth_rate,
-            ],
-            dtype=torch.float32,
-        )
-    rotation = camera.world_from_camera[:3, :3].to(torch.float32)
-    translation = camera.world_from_camera[:3, 3].to(torch.float32)
-    points_world = points_camera @ rotation.transpose(0, 1) + translation
-    velocities_world = velocities_camera @ rotation.transpose(0, 1)
-    if schedule.rear_slot == 0:
-        points_world = points_world.flip(0)
-        velocities_world = velocities_world.flip(0)
-
-    return TwoVisibleSceneSpecification(
-        position=points_world,
-        velocity=velocities_world,
-        albedo=torch.tensor(parameters["albedo"], dtype=torch.float32),
-        palette_swapped=schedule.palette_swapped,
-    )
-
-
 def scene_specification(
     seed: int,
     camera: CameraFrame,
 ) -> tuple[SceneSchedule, TwoVisibleSceneSpecification]:
     schedule = scene_schedule(seed)
-    if schedule.partial:
-        return schedule, _partial_scene_specification(seed, schedule, camera)
     parameters = scene_parameter_record(seed)
+    if not torch.equal(camera.intrinsics.to(torch.float32), _fixed_intrinsics()):
+        raise RuntimeError("attempt-two templates require the frozen fixed-camera intrinsics")
+    points_camera = torch.tensor(parameters["camera_position"], dtype=torch.float32)
+    velocities_camera = torch.tensor(parameters["camera_velocity"], dtype=torch.float32)
+    rotation = camera.world_from_camera[:3, :3].to(torch.float32)
+    translation = camera.world_from_camera[:3, 3].to(torch.float32)
     return schedule, TwoVisibleSceneSpecification(
-        position=torch.tensor(parameters["position"], dtype=torch.float32),
-        velocity=torch.tensor(parameters["velocity"], dtype=torch.float32),
+        position=points_camera @ rotation.transpose(0, 1) + translation,
+        velocity=velocities_camera @ rotation.transpose(0, 1),
         albedo=torch.tensor(parameters["albedo"], dtype=torch.float32),
         palette_swapped=schedule.palette_swapped,
     )
+
+
+@dataclass(frozen=True)
+class Attempt2AdmissibilityCertificate:
+    """Seed-free renderer/physics proof summary for the frozen template table."""
+
+    template_cell_count: int
+    physical_record_count: int
+    physics_substep_count: int
+    template_table_sha256: str
+    absolute_primitive_table_sha256: str
+    ordered_physical_state_sha256: str
+    physical_state_set_sha256: str
+    unordered_geometry_set_sha256: str
+    world_trajectory_sha256: str
+    renderer_trace_sha256: str
+    minimum_discriminant_abs_margin: float
+    minimum_overlap_depth_margin_m: float
+    maximum_projected_centre_drift_pixels: float
+    maximum_camera_conjugacy_error_m: float
+    minimum_initial_speed_mps: float
+    maximum_initial_speed_mps: float
+    minimum_world_surface_gap_m: float
+    minimum_world_boundary_clearance_m: float
+    minimum_image_boundary_clearance_pixels: float
+    minimum_separated_silhouette_gap_margin_pixels: float
+    minimum_partial_silhouette_band_margin_pixels: float
+    minimum_current_visibility_band_margin_fraction: float
+    minimum_one_pixel_visibility_band_margin_fraction: float
+    minimum_full_support_pixels: int
+    minimum_visible_support_pixels: int
+    minimum_local_miss_pixels: int
+
+
+def _renderer_ray_geometry(points_camera: Tensor, intrinsics: Tensor) -> dict[str, Tensor]:
+    """Apply the committed float32 ray/discriminant/near-root equations exactly."""
+
+    height = width = 64
+    pixel_y, pixel_x = torch.meshgrid(
+        torch.arange(height, dtype=torch.float32),
+        torch.arange(width, dtype=torch.float32),
+        indexing="ij",
+    )
+    ray_x = (pixel_x - intrinsics[0, 2]) / intrinsics[0, 0]
+    ray_y = (pixel_y - intrinsics[1, 2]) / intrinsics[1, 1]
+    ray_norm_squared = 1.0 + ray_x.square() + ray_y.square()
+    ray_dot_center = (
+        ray_x.unsqueeze(0) * points_camera[:, 0, None, None]
+        + ray_y.unsqueeze(0) * points_camera[:, 1, None, None]
+        + points_camera[:, 2, None, None]
+    )
+    center_cross_ray = torch.stack(
+        (
+            points_camera[:, 1, None, None] - points_camera[:, 2, None, None] * ray_y.unsqueeze(0),
+            points_camera[:, 2, None, None] * ray_x.unsqueeze(0) - points_camera[:, 0, None, None],
+            points_camera[:, 0, None, None] * ray_y.unsqueeze(0)
+            - points_camera[:, 1, None, None] * ray_x.unsqueeze(0),
+        ),
+        dim=-1,
+    )
+    radius = points_camera.new_full((2,), 0.21)
+    discriminant = ray_norm_squared.unsqueeze(0) * radius[:, None, None].square() - (
+        center_cross_ray.square().sum(dim=-1)
+    )
+    square_root = discriminant.clamp_min(0.0).sqrt()
+    near_root_denominator = ray_dot_center + square_root
+    quadratic_constant = (
+        points_camera.square().sum(dim=-1)[:, None, None] - radius[:, None, None].square()
+    )
+    metric_surface_depth = quadratic_constant / near_root_denominator.clamp_min(1.0e-12)
+    full_mask = (
+        (discriminant >= 0.0)
+        & (near_root_denominator > 0.0)
+        & (metric_surface_depth > 0.0)
+        & torch.isfinite(metric_surface_depth)
+    )
+    ordered_surface_depth = torch.where(
+        full_mask,
+        metric_surface_depth,
+        torch.full_like(metric_surface_depth, torch.inf),
+    )
+    depth_buffer, winning_slot = ordered_surface_depth.min(dim=0)
+    has_object = torch.isfinite(depth_buffer)
+    instance_slot_map = torch.where(
+        has_object,
+        winning_slot.to(torch.int64),
+        torch.full_like(winning_slot, -1, dtype=torch.int64),
+    )
+    slot_indices = torch.arange(2)[:, None, None]
+    visible_mask = full_mask & winning_slot.unsqueeze(0).eq(slot_indices) & has_object.unsqueeze(0)
+    projected_centres = torch.stack(
+        (
+            intrinsics[0, 0] * points_camera[:, 0] / points_camera[:, 2] + intrinsics[0, 2],
+            intrinsics[1, 1] * points_camera[:, 1] / points_camera[:, 2] + intrinsics[1, 2],
+        ),
+        dim=-1,
+    )
+    apparent_radius = 0.5 * (intrinsics[0, 0] + intrinsics[1, 1]) * radius / points_camera[:, 2]
+    return {
+        "discriminant": discriminant,
+        "near_root_denominator": near_root_denominator,
+        "metric_surface_depth": metric_surface_depth,
+        "full_mask": full_mask,
+        "visible_mask": visible_mask,
+        "instance_slot_map": instance_slot_map,
+        "projected_centres": projected_centres,
+        "apparent_radius": apparent_radius,
+    }
+
+
+def _exact_float32_free_trajectory(
+    initial_position: Tensor,
+    initial_velocity: Tensor,
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    """Apply the exact float32 six-by-1/120 free recurrence in its input frame."""
+
+    observation_dt = 1.0 / 20.0
+    substeps = math.ceil(observation_dt / (1.0 / 120.0))
+    sub_dt = observation_dt / substeps
+    if substeps != 6 or sub_dt != 1.0 / 120.0:
+        raise RuntimeError("attempt-two proof requires exactly six physics substeps per frame")
+    position = initial_position.clone()
+    velocity = initial_velocity.clone()
+    positions = [position]
+    velocities = [velocity]
+    substep_positions = [position]
+    substep_velocities = [velocity]
+    drag = torch.full((2, 1), 0.05, dtype=torch.float32)
+    gravity = torch.zeros(3, dtype=torch.float32)
+    movable = torch.ones(2, dtype=torch.bool)
+    for _frame in range(57):
+        for _substep in range(substeps):
+            position, velocity = _integrate_free_motion_exact(
+                position,
+                velocity,
+                drag,
+                gravity,
+                sub_dt,
+                movable,
+            )
+            substep_positions.append(position)
+            substep_velocities.append(velocity)
+        positions.append(position)
+        velocities.append(velocity)
+    if len(substep_positions) != 343 or len(positions) != 58:
+        raise AssertionError("attempt-two trajectory retained the wrong recurrence cardinality")
+    return (
+        torch.stack(positions),
+        torch.stack(velocities),
+        torch.stack(substep_positions),
+        torch.stack(substep_velocities),
+    )
+
+
+def _exact_float32_world_trajectory(
+    initial_camera_position: Tensor,
+    initial_camera_velocity: Tensor,
+    *,
+    world_from_camera: Tensor,
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    """Evolve the exact constructor-consumed world tensors for 342 substeps."""
+
+    if initial_camera_position.shape != (2, 3) or initial_camera_velocity.shape != (2, 3):
+        raise ValueError("attempt-two initial camera state must have shape [2,3]")
+    if initial_camera_position.dtype != torch.float32 or initial_camera_velocity.dtype != (
+        torch.float32
+    ):
+        raise TypeError("attempt-two initial camera state must remain float32")
+    if world_from_camera.shape != (4, 4) or world_from_camera.dtype != torch.float32:
+        raise TypeError("attempt-two world_from_camera must be float32 [4,4]")
+    rotation = world_from_camera[:3, :3]
+    translation = world_from_camera[:3, 3]
+    initial_world_position = initial_camera_position @ rotation.transpose(0, 1) + translation
+    initial_world_velocity = initial_camera_velocity @ rotation.transpose(0, 1)
+    return _exact_float32_free_trajectory(initial_world_position, initial_world_velocity)
+
+
+def _fixed_world_from_camera() -> Tensor:
+    return look_at_world_from_camera(
+        torch.tensor([0.0, 2.15, 5.6], dtype=torch.float32),
+        torch.tensor([0.0, 0.95, 0.0], dtype=torch.float32),
+    )
+
+
+_INDEPENDENT_D4_MATRICES = (
+    ((-1.0, 0.0), (0.0, -1.0)),
+    ((-1.0, 0.0), (0.0, 1.0)),
+    ((1.0, 0.0), (0.0, -1.0)),
+    ((1.0, 0.0), (0.0, 1.0)),
+    ((0.0, -1.0), (-1.0, 0.0)),
+    ((0.0, -1.0), (1.0, 0.0)),
+    ((0.0, 1.0), (-1.0, 0.0)),
+    ((0.0, 1.0), (1.0, 0.0)),
+)
+
+
+def _native_float32_bytes(value: Tensor) -> bytes:
+    if value.dtype != torch.float32:
+        raise TypeError("attempt-two physical state records must remain float32")
+    return bytes(value.contiguous().view(torch.uint8).flatten().tolist())
+
+
+def _attempt2_independent_physical_state_records() -> tuple[tuple[bytes, ...], set[bytes]]:
+    """Rebuild all 128 states from the absolute payload and explicit D4 matrices."""
+
+    intrinsics = _fixed_intrinsics()
+    centre = intrinsics[0, 2]
+    focal = intrinsics[0, 0]
+    transform = _fixed_world_from_camera()
+    rotation = transform[:3, :3]
+    translation = transform[:3, 3]
+    radial_rate = torch.tensor(PARTIAL_TEMPLATE_RADIAL_RATE, dtype=torch.float32)
+    ordered_records: list[bytes] = []
+    unordered_geometry_records: set[bytes] = set()
+    for primitive in _attempt2_absolute_primitive_table():
+        for matrix_values in _INDEPENDENT_D4_MATRICES:
+            matrix = torch.tensor(matrix_values, dtype=torch.float32)
+            points: list[Tensor] = []
+            for role in ("front", "rear"):
+                triple = torch.tensor(primitive[role], dtype=torch.float32)
+                pixel = centre + matrix @ (triple[:2] - centre)
+                depth = triple[2]
+                points.append(
+                    torch.stack(
+                        (
+                            (pixel[0] - centre) * depth / focal,
+                            (pixel[1] - centre) * depth / focal,
+                            depth,
+                        )
+                    )
+                )
+            camera_position = torch.stack(points)
+            world_position = camera_position @ rotation.transpose(0, 1) + translation
+            world_velocity = (radial_rate * camera_position) @ rotation.transpose(0, 1)
+            ordered_records.append(
+                _native_float32_bytes(
+                    torch.cat((world_position.reshape(-1), world_velocity.reshape(-1)))
+                )
+            )
+            object_records = tuple(
+                _native_float32_bytes(torch.cat((world_position[slot], world_velocity[slot])))
+                for slot in OBJECT_INDICES
+            )
+            unordered_geometry_records.add(b"".join(sorted(object_records)))
+    return tuple(ordered_records), unordered_geometry_records
+
+
+def _attempt2_admissibility_certificate() -> tuple[
+    Attempt2AdmissibilityCertificate, dict[str, tuple[int, int, int]]
+]:
+    """Compute the finite proof without constructing a simulator or episode."""
+
+    template_digest = canonical_sha256([asdict(template) for template in ATTEMPT2_TEMPLATE_TABLE])
+    if not ATTEMPT2_TEMPLATE_TABLE_SHA256.startswith("TO_BE_") and (
+        template_digest != ATTEMPT2_TEMPLATE_TABLE_SHA256
+    ):
+        raise RuntimeError("attempt-two template table hash changed")
+    if len({template.name for template in ATTEMPT2_TEMPLATE_TABLE}) != 16:
+        raise RuntimeError("attempt-two template names must be unique")
+    absolute_primitive_digest = canonical_sha256(_attempt2_absolute_primitive_table())
+    if absolute_primitive_digest != ATTEMPT2_ABSOLUTE_PRIMITIVE_TABLE_SHA256:
+        raise RuntimeError("attempt-two absolute primitive table hash changed")
+    ordered_state_records, independent_unordered_geometry_records = (
+        _attempt2_independent_physical_state_records()
+    )
+    ordered_physical_state_digest = sha256_bytes(b"".join(ordered_state_records))
+    physical_state_set_digest = sha256_bytes(b"".join(sorted(ordered_state_records)))
+    unordered_geometry_set_digest = sha256_bytes(
+        b"".join(sorted(independent_unordered_geometry_records))
+    )
+    if ordered_physical_state_digest != ATTEMPT2_ORDERED_PHYSICAL_STATE_SHA256:
+        raise RuntimeError("attempt-two ordered physical-state hash changed")
+    if physical_state_set_digest != ATTEMPT2_PHYSICAL_STATE_SET_SHA256:
+        raise RuntimeError("attempt-two physical-state set hash changed")
+    if unordered_geometry_set_digest != ATTEMPT2_UNORDERED_GEOMETRY_SET_SHA256:
+        raise RuntimeError("attempt-two unordered geometry-set hash changed")
+    if (
+        len(ordered_state_records) != 128
+        or len(set(ordered_state_records)) != 128
+        or len(independent_unordered_geometry_records) != 128
+    ):
+        raise RuntimeError("attempt-two independent physical-state reconstruction aliases")
+
+    assignments: dict[tuple[str, int], tuple[int, SceneSchedule]] = {}
+    physical_records: set[bytes] = set()
+    for seeds in MANIFESTS.values():
+        for seed in seeds:
+            schedule = scene_schedule(seed)
+            template, symmetry = _template_assignment(seed)
+            key = (template.name, symmetry)
+            if key in assignments:
+                raise RuntimeError("attempt-two seed mapping reused a physical template cell")
+            assignments[key] = (seed, schedule)
+            points, velocities = _template_camera_state(
+                template,
+                symmetry,
+                intrinsics=_fixed_intrinsics(),
+            )
+            if schedule.partial and schedule.rear_slot == 0:
+                points = points.flip(0)
+                velocities = velocities.flip(0)
+            transform = _fixed_world_from_camera()
+            world_position = points @ transform[:3, :3].transpose(0, 1) + transform[:3, 3]
+            world_velocity = velocities @ transform[:3, :3].transpose(0, 1)
+            object_records = tuple(
+                bytes(
+                    torch.cat((world_position[slot], world_velocity[slot]))
+                    .contiguous()
+                    .view(torch.uint8)
+                    .tolist()
+                )
+                for slot in OBJECT_INDICES
+            )
+            encoded = b"".join(sorted(object_records))
+            if encoded in physical_records:
+                raise RuntimeError("attempt-two float32 position/velocity geometry aliases")
+            physical_records.add(encoded)
+    if len(assignments) != len(ATTEMPT2_TEMPLATE_TABLE) * TEMPLATE_SYMMETRY_COUNT:
+        raise RuntimeError("attempt-two manifests do not cover every template cell exactly once")
+    if physical_records != independent_unordered_geometry_records:
+        raise RuntimeError("attempt-two seed mapping differs from the absolute geometry table")
+
+    intrinsics = _fixed_intrinsics()
+    transform = _fixed_world_from_camera()
+    camera_from_world = invert_rigid_transform(transform)
+    bounds = torch.tensor([[-2.25, 2.25], [0.0, 3.25], [-1.5, 1.5]], dtype=torch.float32)
+    world_trajectory_digests: dict[str, str] = {}
+    trace_digests: dict[str, str] = {}
+    support_records: dict[str, tuple[int, int, int]] = {}
+    discriminant_margins: list[float] = []
+    overlap_depth_margins: list[float] = []
+    projected_drifts: list[float] = []
+    camera_conjugacy_errors: list[float] = []
+    speed_values: list[float] = []
+    surface_gaps: list[float] = []
+    boundary_clearances: list[float] = []
+    image_boundary_clearances: list[float] = []
+    separated_silhouette_margins: list[float] = []
+    partial_silhouette_margins: list[float] = []
+    current_visibility_margins: list[float] = []
+    one_pixel_visibility_margins: list[float] = []
+    full_supports: list[int] = []
+    visible_supports: list[int] = []
+    local_miss_pixels: list[int] = []
+    for template in ATTEMPT2_TEMPLATE_TABLE:
+        per_template_support: set[tuple[int, int, int]] = set()
+        for symmetry in range(TEMPLATE_SYMMETRY_COUNT):
+            _seed, schedule = assignments[(template.name, symmetry)]
+            points, velocities = _template_camera_state(
+                template,
+                symmetry,
+                intrinsics=intrinsics,
+            )
+            front_slot, rear_slot = 0, 1
+            if schedule.partial and schedule.rear_slot == 0:
+                points = points.flip(0)
+                velocities = velocities.flip(0)
+                front_slot, rear_slot = 1, 0
+            (
+                _conjugate_camera_positions,
+                _conjugate_camera_velocities,
+                conjugate_camera_substep_positions,
+                _conjugate_camera_substep_velocities,
+            ) = _exact_float32_free_trajectory(
+                points,
+                velocities,
+            )
+            (
+                world_positions,
+                world_velocities,
+                world_substep_positions,
+                world_substep_velocities,
+            ) = _exact_float32_world_trajectory(
+                points,
+                velocities,
+                world_from_camera=transform,
+            )
+            if not torch.equal(world_positions, world_substep_positions[::6]) or not torch.equal(
+                world_velocities, world_substep_velocities[::6]
+            ):
+                raise RuntimeError("attempt-two frame states differ from the 342-substep trace")
+            world_trajectory_digests[f"{template.name}/d4_{symmetry}"] = sha256_bytes(
+                _native_float32_bytes(world_substep_positions)
+                + _native_float32_bytes(world_substep_velocities)
+            )
+            camera_positions = world_to_camera(world_positions, camera_from_world)
+            camera_substep_positions = world_to_camera(
+                world_substep_positions,
+                camera_from_world,
+            )
+            conjugacy_error = float(
+                (camera_substep_positions - conjugate_camera_substep_positions).abs().max()
+            )
+            if conjugacy_error > MAXIMUM_CAMERA_CONJUGACY_ERROR_M:
+                raise RuntimeError("attempt-two world/camera float32 conjugacy error is too large")
+            camera_conjugacy_errors.append(conjugacy_error)
+            speed = torch.linalg.vector_norm(world_velocities[0], dim=-1)
+            if float(speed.min()) < 0.035 or float(speed.max()) > 0.065:
+                raise RuntimeError("attempt-two initial speed left the frozen simulator range")
+            speed_values.extend(float(value) for value in speed)
+            reference_full: Tensor | None = None
+            reference_winner: Tensor | None = None
+            reference_centres: Tensor | None = None
+            trace = bytearray()
+            support_tuple: tuple[int, int, int] | None = None
+            coordinate_steps = world_substep_positions[1:] - world_substep_positions[:-1]
+            expected_sign = torch.sign(world_substep_velocities[0]).unsqueeze(0)
+            if bool((coordinate_steps * expected_sign < -1.0e-7).any()):
+                raise RuntimeError("attempt-two world coordinates left their monotonic rays")
+            lower = world_substep_positions - 0.21 - bounds[:, 0]
+            upper = bounds[:, 1] - world_substep_positions - 0.21
+            world_boundary = torch.minimum(lower, upper)
+            if float(world_boundary.min()) < DEFAULT_GATES.minimum_world_boundary_clearance_m:
+                raise RuntimeError("attempt-two template left the frozen world bounds")
+            boundary_clearances.append(float(world_boundary.min()))
+            pair_distance = torch.linalg.vector_norm(
+                world_substep_positions[:, 0] - world_substep_positions[:, 1], dim=-1
+            )
+            surface_gap = pair_distance - 0.42
+            if float(surface_gap.min()) < DEFAULT_GATES.minimum_world_surface_gap_m:
+                raise RuntimeError("attempt-two template violates the noncontact margin")
+            if bool((surface_gap[1:] < surface_gap[:-1] - 1.0e-7).any()):
+                raise RuntimeError("attempt-two noncontact margin is not monotonic")
+            surface_gaps.append(float(surface_gap.min()))
+            for frame_index, frame_points in enumerate(camera_positions):
+                geometry = _renderer_ray_geometry(frame_points, intrinsics)
+                full_mask = geometry["full_mask"]
+                winner = geometry["instance_slot_map"]
+                if reference_full is None:
+                    reference_full = full_mask
+                    reference_winner = winner
+                    reference_centres = geometry["projected_centres"]
+                elif not torch.equal(full_mask, reference_full) or not torch.equal(
+                    winner, reference_winner
+                ):
+                    raise RuntimeError("attempt-two renderer mask/winner trace is not invariant")
+                projected_drift = float(
+                    (geometry["projected_centres"] - reference_centres).abs().max()
+                )
+                if projected_drift > MAXIMUM_PROJECTED_CENTRE_DRIFT_PIXELS:
+                    raise RuntimeError("attempt-two radial motion changed projected pixel phase")
+                projected_drifts.append(projected_drift)
+                discriminant_margin = float(geometry["discriminant"].abs().min())
+                if discriminant_margin < MINIMUM_RENDERER_DISCRIMINANT_MARGIN:
+                    raise RuntimeError(
+                        "attempt-two template lacks a renderer-cell margin: "
+                        f"{template.name}/d4_{symmetry}/frame_{frame_index}="
+                        f"{discriminant_margin:.9g}"
+                    )
+                discriminant_margins.append(discriminant_margin)
+                visible_mask = geometry["visible_mask"]
+                full_count = full_mask.sum(dim=(-2, -1))
+                visible_count = visible_mask.sum(dim=(-2, -1))
+                full_supports.extend(int(value) for value in full_count)
+                current_support = (
+                    int(full_count[front_slot]),
+                    int(full_count[rear_slot]),
+                    int(visible_count[rear_slot]),
+                )
+                if support_tuple is None:
+                    support_tuple = current_support
+                elif current_support != support_tuple:
+                    raise RuntimeError("attempt-two exact renderer support counts changed")
+                if int(visible_count[front_slot]) != int(full_count[front_slot]):
+                    raise RuntimeError("attempt-two front sphere is not exactly fully visible")
+                if int(visible_count.min()) < 4:
+                    raise RuntimeError("attempt-two local miss has inadequate visible support")
+                visible_supports.extend(int(value) for value in visible_count)
+                if schedule.miss_frame is not None:
+                    if schedule.missed_slot not in OBJECT_INDICES:
+                        raise RuntimeError("attempt-two miss schedule lacks an exact target slot")
+                    local_miss_pixels.append(int(visible_count[schedule.missed_slot]))
+                overlap = full_mask[front_slot] & full_mask[rear_slot]
+                centres = geometry["projected_centres"]
+                radii = geometry["apparent_radius"]
+                image_boundary = torch.stack(
+                    (
+                        centres[:, 0] - radii,
+                        63.0 - centres[:, 0] - radii,
+                        centres[:, 1] - radii,
+                        63.0 - centres[:, 1] - radii,
+                    ),
+                    dim=-1,
+                )
+                if float(image_boundary.min()) < DEFAULT_GATES.minimum_boundary_clearance_pixels:
+                    raise RuntimeError("attempt-two template lacks image-boundary clearance")
+                image_boundary_clearances.append(float(image_boundary.min()))
+                silhouette_gap = float(
+                    torch.linalg.vector_norm(centres[front_slot] - centres[rear_slot]) - radii.sum()
+                )
+                if template.severity == "separated":
+                    if bool(overlap.any()) or silhouette_gap < (
+                        DEFAULT_GATES.minimum_separated_silhouette_gap_pixels
+                    ):
+                        raise RuntimeError("attempt-two separated template overlaps")
+                    separated_silhouette_margins.append(
+                        silhouette_gap - DEFAULT_GATES.minimum_separated_silhouette_gap_pixels
+                    )
+                else:
+                    if not bool(overlap.any()):
+                        raise RuntimeError("attempt-two partial template lacks overlap")
+                    depth = geometry["metric_surface_depth"]
+                    overlap_margin = float((depth[rear_slot] - depth[front_slot])[overlap].min())
+                    if overlap_margin < MINIMUM_OVERLAP_DEPTH_MARGIN_M:
+                        raise RuntimeError("attempt-two overlap lacks a near-root depth margin")
+                    overlap_depth_margins.append(overlap_margin)
+                    bounds_for_severity = (
+                        (
+                            DEFAULT_GATES.mild_rear_visible_fraction_min,
+                            DEFAULT_GATES.mild_rear_visible_fraction_max,
+                            DEFAULT_GATES.mild_silhouette_gap_min_pixels,
+                            DEFAULT_GATES.mild_silhouette_gap_max_pixels,
+                        )
+                        if template.severity == "mild"
+                        else (
+                            DEFAULT_GATES.moderate_rear_visible_fraction_min,
+                            DEFAULT_GATES.moderate_rear_visible_fraction_max,
+                            DEFAULT_GATES.moderate_silhouette_gap_min_pixels,
+                            DEFAULT_GATES.moderate_silhouette_gap_max_pixels,
+                        )
+                    )
+                    visible_min, visible_max, gap_min, gap_max = bounds_for_severity
+                    rear_support = int(full_count[rear_slot])
+                    rear_visible = int(visible_count[rear_slot])
+                    current_ratio = rear_visible / rear_support
+                    current_visibility_margins.append(
+                        min(current_ratio - visible_min, visible_max - current_ratio)
+                    )
+                    one_pixel_ratios = (
+                        (rear_visible - 1) / rear_support,
+                        (rear_visible + 1) / rear_support,
+                        (rear_visible + 1) / (rear_support + 1),
+                        rear_visible / (rear_support + 1),
+                        (rear_visible - 1) / (rear_support - 1),
+                        rear_visible / (rear_support - 1),
+                    )
+                    one_pixel_visibility_margins.append(
+                        min(
+                            min(ratio - visible_min, visible_max - ratio)
+                            for ratio in one_pixel_ratios
+                        )
+                    )
+                    if not all(visible_min <= ratio <= visible_max for ratio in one_pixel_ratios):
+                        raise RuntimeError(
+                            "attempt-two visibility lacks inclusive one-pixel band admissibility: "
+                            f"{template.name}/d4_{symmetry}/frame_{frame_index}="
+                            f"{rear_visible}/{rear_support}"
+                        )
+                    if not gap_min <= silhouette_gap <= gap_max:
+                        raise RuntimeError("attempt-two silhouette gap left its frozen band")
+                    partial_silhouette_margins.append(
+                        min(silhouette_gap - gap_min, gap_max - silhouette_gap)
+                    )
+                trace.extend(bytes(full_mask.to(torch.uint8).contiguous().flatten().tolist()))
+                trace.extend(bytes((winner + 1).to(torch.uint8).contiguous().flatten().tolist()))
+            if support_tuple is None:
+                raise AssertionError("attempt-two template produced no renderer frames")
+            expected_support = (
+                template.expected_front_support_pixels,
+                template.expected_rear_support_pixels,
+                template.expected_rear_visible_pixels,
+            )
+            if expected_support != (0, 0, 0) and support_tuple != expected_support:
+                raise RuntimeError("attempt-two support differs from the frozen template table")
+            per_template_support.add(support_tuple)
+            trace_digests[f"{template.name}/d4_{symmetry}"] = sha256_bytes(bytes(trace))
+        if len(per_template_support) != 1:
+            raise RuntimeError("attempt-two D4 transforms changed exact support counts")
+        support_records[template.name] = next(iter(per_template_support))
+    world_trajectory_digest = canonical_sha256(world_trajectory_digests)
+    if not ATTEMPT2_WORLD_TRAJECTORY_SHA256.startswith("TO_BE_") and (
+        world_trajectory_digest != ATTEMPT2_WORLD_TRAJECTORY_SHA256
+    ):
+        raise RuntimeError("attempt-two exact world-trajectory hash changed")
+    trace_digest = canonical_sha256(trace_digests)
+    if not ATTEMPT2_RENDERER_TRACE_SHA256.startswith("TO_BE_") and (
+        trace_digest != ATTEMPT2_RENDERER_TRACE_SHA256
+    ):
+        raise RuntimeError("attempt-two renderer mask/winner trace hash changed")
+    certificate = Attempt2AdmissibilityCertificate(
+        template_cell_count=len(assignments),
+        physical_record_count=len(physical_records),
+        physics_substep_count=342,
+        template_table_sha256=template_digest,
+        absolute_primitive_table_sha256=absolute_primitive_digest,
+        ordered_physical_state_sha256=ordered_physical_state_digest,
+        physical_state_set_sha256=physical_state_set_digest,
+        unordered_geometry_set_sha256=unordered_geometry_set_digest,
+        world_trajectory_sha256=world_trajectory_digest,
+        renderer_trace_sha256=trace_digest,
+        minimum_discriminant_abs_margin=min(discriminant_margins),
+        minimum_overlap_depth_margin_m=min(overlap_depth_margins),
+        maximum_projected_centre_drift_pixels=max(projected_drifts),
+        maximum_camera_conjugacy_error_m=max(camera_conjugacy_errors),
+        minimum_initial_speed_mps=min(speed_values),
+        maximum_initial_speed_mps=max(speed_values),
+        minimum_world_surface_gap_m=min(surface_gaps),
+        minimum_world_boundary_clearance_m=min(boundary_clearances),
+        minimum_image_boundary_clearance_pixels=min(image_boundary_clearances),
+        minimum_separated_silhouette_gap_margin_pixels=min(separated_silhouette_margins),
+        minimum_partial_silhouette_band_margin_pixels=min(partial_silhouette_margins),
+        minimum_current_visibility_band_margin_fraction=min(current_visibility_margins),
+        minimum_one_pixel_visibility_band_margin_fraction=min(one_pixel_visibility_margins),
+        minimum_full_support_pixels=min(full_supports),
+        minimum_visible_support_pixels=min(visible_supports),
+        minimum_local_miss_pixels=min(local_miss_pixels),
+    )
+    return certificate, support_records
+
+
+@cache
+def attempt2_admissibility_certificate() -> Attempt2AdmissibilityCertificate:
+    certificate, _support = _attempt2_admissibility_certificate()
+    if certificate.template_table_sha256 != ATTEMPT2_TEMPLATE_TABLE_SHA256:
+        raise RuntimeError("attempt-two template table is not frozen")
+    if certificate.absolute_primitive_table_sha256 != ATTEMPT2_ABSOLUTE_PRIMITIVE_TABLE_SHA256:
+        raise RuntimeError("attempt-two absolute primitive table is not frozen")
+    if (
+        certificate.ordered_physical_state_sha256 != ATTEMPT2_ORDERED_PHYSICAL_STATE_SHA256
+        or certificate.physical_state_set_sha256 != ATTEMPT2_PHYSICAL_STATE_SET_SHA256
+        or certificate.unordered_geometry_set_sha256 != ATTEMPT2_UNORDERED_GEOMETRY_SET_SHA256
+    ):
+        raise RuntimeError("attempt-two physical-state digests are not frozen")
+    if certificate.world_trajectory_sha256 != ATTEMPT2_WORLD_TRAJECTORY_SHA256:
+        raise RuntimeError("attempt-two exact world trajectory is not frozen")
+    if certificate.renderer_trace_sha256 != ATTEMPT2_RENDERER_TRACE_SHA256:
+        raise RuntimeError("attempt-two renderer trace is not frozen")
+    return certificate
+
+
+def assert_attempt2_admissibility() -> None:
+    certificate = attempt2_admissibility_certificate()
+    if certificate.template_cell_count != 128 or certificate.physical_record_count != 128:
+        raise RuntimeError("attempt-two admissibility proof lost exact physical coverage")
 
 
 def bridge_protocol() -> dict[str, Any]:
     """Return the canonical self-hashed protocol without materializing data."""
 
     _assert_seed_namespaces()
+    admissibility = attempt2_admissibility_certificate()
     protocol: dict[str, Any] = {
-        "name": "rgbd_partial_visibility_recovery_v1",
+        "name": "rgbd_partial_visibility_recovery_v2",
         "architecture_version": ARCHITECTURE_VERSION,
         "architecture_attempt": ARCHITECTURE_ATTEMPT,
         "maximum_architecture_attempts": MAX_ARCHITECTURE_ATTEMPTS,
@@ -514,6 +1287,28 @@ def bridge_protocol() -> dict[str, Any]:
             "clean_committed_source_required": True,
             "runtime_and_worktree_fingerprints_required": True,
             "development_checkpoint_report_ledger_must_match": True,
+            "attempt1_rejection_archive_required_before_every_authorization": True,
+        },
+        "attempt1_rejection": {
+            "run_relative_path": str(ATTEMPT1_RUN_RELATIVE_PATH),
+            "development_ledger_backlink": ATTEMPT1_DEVELOPMENT_LEDGER_BACKLINK,
+            "source_provenance": dict(ATTEMPT1_SOURCE_PROVENANCE),
+            "config_sha256": ATTEMPT1_CONFIG_SHA256,
+            "protocol_sha256": ATTEMPT1_PROTOCOL_SHA256,
+            "development_manifest_sha256": ATTEMPT1_DEVELOPMENT_MANIFEST_SHA256,
+            "development_report_sha256": ATTEMPT1_REPORT_SHA256,
+            "development_ledger_sha256": ATTEMPT1_LEDGER_SHA256,
+            "failure": {
+                "type": "RuntimeError",
+                "message": "partial scene left its declared renderer visibility band",
+                "before_model_evaluation": True,
+                "protected_data_materialized": False,
+            },
+            "permanently_unused_protected_namespaces": {
+                "selector": "54000000--54000023",
+                "confirmation": "55000000--55000023",
+                "final_test": "56000000--56000047",
+            },
         },
         "manifests": {split: list(values) for split, values in MANIFESTS.items()},
         "manifest_sha256": dict(MANIFEST_SHA256),
@@ -527,6 +1322,42 @@ def bridge_protocol() -> dict[str, Any]:
             "rear_slot_table": list(_REAR_SLOT),
             "separated_target_table": list(_SEPARATED_TARGET),
             "palette_swap": "((seed-split_start)//4 + stratum_index)%2",
+            "template_table": [asdict(template) for template in ATTEMPT2_TEMPLATE_TABLE],
+            "template_table_sha256": ATTEMPT2_TEMPLATE_TABLE_SHA256,
+            "template_table_hash_representation": (
+                "canonical JSON of CameraSpaceSceneTemplate records including support metadata"
+            ),
+            "absolute_primitive_table": _attempt2_absolute_primitive_table(),
+            "absolute_primitive_table_sha256": ATTEMPT2_ABSOLUTE_PRIMITIVE_TABLE_SHA256,
+            "ordered_physical_state_sha256": ATTEMPT2_ORDERED_PHYSICAL_STATE_SHA256,
+            "physical_state_set_sha256": ATTEMPT2_PHYSICAL_STATE_SET_SHA256,
+            "unordered_geometry_set_sha256": ATTEMPT2_UNORDERED_GEOMETRY_SET_SHA256,
+            "world_trajectory_sha256": ATTEMPT2_WORLD_TRAJECTORY_SHA256,
+            "physical_state_hash_recipe": {
+                "d4_matrix_order": [
+                    [list(row) for row in matrix] for matrix in _INDEPENDENT_D4_MATRICES
+                ],
+                "ordered_record": (
+                    "native-little-endian-float32 world_position(front,rear) then "
+                    "world_velocity(front,rear)"
+                ),
+                "physical_state_set": "lexicographically sorted 48-byte ordered records",
+                "unordered_geometry_set": (
+                    "sort two 24-byte [position,velocity] object records within each "
+                    "geometry, then sort 128 geometry records"
+                ),
+            },
+            "renderer_trace_sha256": ATTEMPT2_RENDERER_TRACE_SHA256,
+            "template_assignment": ("global_manifest_order_within_severity_then_divmod(rank,8)"),
+            "template_coordinate_denominator": TEMPLATE_COORDINATE_DENOMINATOR,
+            "template_symmetry_group": "D4",
+            "template_symmetry_count": TEMPLATE_SYMMETRY_COUNT,
+            "radial_velocity_scale_per_second": PARTIAL_TEMPLATE_RADIAL_RATE,
+            "float32_free_motion_substeps": 342,
+            "float32_free_motion_coordinate_frame": "constructor_consumed_world_state",
+            "renderer_camera_state_transform": "world_to_camera_with_fixed_camera_from_world",
+            "maximum_camera_conjugacy_error_m": MAXIMUM_CAMERA_CONJUGACY_ERROR_M,
+            "admissibility_certificate": asdict(admissibility),
             "radius_m": 0.21,
             "drag": 0.05,
             "gravity": [0.0, 0.0, 0.0],
@@ -536,6 +1367,11 @@ def bridge_protocol() -> dict[str, Any]:
             "miss_operator": "zero_depth_where_instance_slot_map_equals_target",
             "runtime_receives_renderer_truth": False,
             "preflight_all_frames": True,
+            "seed_free_renderer_certificate_before_authorization": True,
+            "exact_full_mask_and_winner_invariance": True,
+            "one_pixel_visibility_band_slack": (
+                "inclusive_all_six_single_pixel_support_visibility_transitions"
+            ),
             "rejection_sampling": False,
         },
         "runtime": {
@@ -576,7 +1412,8 @@ def bridge_protocol() -> dict[str, Any]:
             "cross_scene_gradient_exact_zero": True,
         },
         "evidence": {
-            "development_attempts": 1,
+            "development_attempts_for_architecture_2": 1,
+            "architecture_attempts_consumed_after_development": 2,
             "protected_order": ["selector", "confirmation", "final_test"],
             "constructor_single_use_authorization": True,
             "durable_record_before_materialization": True,
@@ -624,7 +1461,13 @@ def assert_rgbd_partial_visibility_config(config: OrpheusConfig) -> None:
     for name, expected in expected_simulator.items():
         if getattr(config.simulator, name) != expected:
             raise ValueError(f"partial-visibility RGB-D requires simulator.{name}={expected!r}")
-    if config.project.seed != DEVELOPMENT_SEEDS[0] or not config.project.deterministic:
+    if SphereWorldConfig.from_config(config).camera_fov_degrees != 48.0:
+        raise ValueError("partial-visibility RGB-D requires a 48-degree vertical camera FOV")
+    if (
+        config.project.name != "orpheus-rgbd-partial-visibility-recovery-v2-cpu"
+        or config.project.seed != DEVELOPMENT_SEEDS[0]
+        or not config.project.deterministic
+    ):
         raise ValueError("partial-visibility project seed/determinism differs from protocol")
     if config.device.preference != "cpu" or config.device.cuda_amp or config.device.compile:
         raise ValueError("partial-visibility qualification requires CPU float32")
@@ -750,6 +1593,8 @@ class _ManifestAccessAuthorization:
         self,
         authority: object,
         *,
+        issuer: object,
+        mint: object,
         split: str,
         seeds: Sequence[int],
         ledger_path: Path,
@@ -758,9 +1603,42 @@ class _ManifestAccessAuthorization:
     ) -> None:
         if authority is not _MANIFEST_ACCESS_AUTHORITY:
             raise PermissionError("manifest authorization requires durable ledger authority")
+        resolved_seeds = _exact_seed_tuple(seeds, label="authorized manifest")
+        if split == "development":
+            expected_issuer_type = DevelopmentLedger
+            expected_path = development_ledger_path()
+            expected_kind = DevelopmentLedger.ARTIFACT_KIND
+            expected_seeds = DEVELOPMENT_SEEDS
+        elif split in ("selector", "confirmation", "final_test"):
+            expected_issuer_type = QualificationLedger
+            expected_path = qualification_ledger_path()
+            expected_kind = QualificationLedger.ARTIFACT_KIND
+            expected_seeds = MANIFESTS[split]
+        else:
+            raise PermissionError("manifest authorization split is not canonical")
+        if (
+            type(issuer) is not expected_issuer_type
+            or getattr(issuer, "_authorization_mint", None) is not mint
+        ):
+            raise PermissionError("manifest authorization was not minted by its canonical ledger")
+        try:
+            supplied_path = _absolute_lexical(Path(ledger_path))
+            issuer_path = _absolute_lexical(Path(issuer.path))
+        except (AttributeError, TypeError, ValueError) as error:
+            raise PermissionError("manifest authorization ledger path is not canonical") from error
+        if (
+            supplied_path != expected_path
+            or issuer_path != expected_path
+            or type(ledger_kind) is not str
+            or ledger_kind != expected_kind
+            or resolved_seeds != expected_seeds
+        ):
+            raise PermissionError("manifest authorization path/kind/split/seeds are not canonical")
+        self._issuer = issuer
+        self._mint = mint
         self._split = split
-        self._seeds = _exact_seed_tuple(seeds, label="authorized manifest")
-        self._ledger_path = ledger_path
+        self._seeds = resolved_seeds
+        self._ledger_path = expected_path
         self._ledger_kind = ledger_kind
         self._receipt_sha256 = validated_sha256(
             receipt_sha256, label=f"{split} started-ledger receipt SHA-256"
@@ -770,7 +1648,21 @@ class _ManifestAccessAuthorization:
         self._cursor = 0
         self._result_sha256: str | None = None
 
+    def _require_canonical_mint(self) -> None:
+        minted = (
+            type(self._issuer) is DevelopmentLedger
+            and self._split == "development"
+            and self._issuer._authorization is self
+        ) or (
+            type(self._issuer) is QualificationLedger
+            and self._split in QualificationLedger.ORDER
+            and self._issuer._authorizations.get(self._split) is self
+        )
+        if not minted or getattr(self._issuer, "_authorization_mint", None) is not self._mint:
+            raise PermissionError("authorization is not the canonical ledger-minted capability")
+
     def _validate_receipt(self) -> None:
+        _require_attempt1_rejection()
         contents = _single_link_read_bytes(self._ledger_path, label=f"{self._split} access ledger")
         if sha256_bytes(contents) != self._receipt_sha256:
             raise RuntimeError("manifest authorization started-ledger receipt bytes changed")
@@ -832,6 +1724,15 @@ class _ManifestAccessAuthorization:
         self.require_finished()
         if self._result_sha256 is None or self._result_sha256 != canonical_sha256(result):
             raise RuntimeError("ledger result was not sealed by the authorized evaluator")
+
+
+def _require_ledger_minted_authorization(
+    authorization: object,
+) -> _ManifestAccessAuthorization:
+    if type(authorization) is not _ManifestAccessAuthorization:
+        raise PermissionError("materialization requires an exact ledger-minted authorization")
+    authorization._require_canonical_mint()
+    return authorization
 
 
 def _numeric(value: Any) -> float | None:
@@ -896,7 +1797,7 @@ def _typed_canonical_equal(actual: Any, expected: Any) -> bool:
         return False
 
 
-def construct_partial_visibility_episode(
+def _construct_partial_visibility_episode(
     config: OrpheusConfig,
     seed: int,
     *,
@@ -904,6 +1805,8 @@ def construct_partial_visibility_episode(
 ) -> dict[str, Any]:
     """Construct, corrupt, and preflight one authorized deterministic episode."""
 
+    _require_attempt1_rejection()
+    authorization = _require_ledger_minted_authorization(authorization)
     authorization.authorize_seed(seed)
     assert_rgbd_partial_visibility_config(config)
     resolved = SphereWorldConfig.from_config(config)
@@ -2395,6 +3298,7 @@ def _chunks(values: Sequence[int], size: int) -> Iterable[tuple[int, ...]]:
 
 
 def _validate_manifest(split: str, seeds: Sequence[int]) -> tuple[int, ...]:
+    assert_attempt2_admissibility()
     requested = _exact_seed_tuple(seeds, label=f"{split} manifest")
     if split not in MANIFESTS or requested != MANIFESTS[split]:
         raise ValueError(f"{split!r} must use its exact frozen partial-visibility manifest")
@@ -2467,7 +3371,7 @@ def _scene_signature(episode: Mapping[str, Any]) -> str:
     )
 
 
-def evaluate_seed_manifest(
+def _evaluate_seed_manifest(
     config: OrpheusConfig,
     seeds: Sequence[int],
     *,
@@ -2476,11 +3380,11 @@ def evaluate_seed_manifest(
 ) -> dict[str, Any]:
     """Evaluate one exact authorized manifest with no optimizer or hidden oracle."""
 
+    _require_attempt1_rejection()
+    authorization = _require_ledger_minted_authorization(authorization)
     assert_rgbd_partial_visibility_config(config)
     _assert_execution_environment()
     requested = _validate_manifest(split, seeds)
-    if authorization is None:
-        raise PermissionError("manifest evaluation requires a durable access authorization")
     authorization.begin_manifest(split, requested)
     process_rss_start_bytes = _process_max_rss_bytes()
     accumulated: dict[str, list[Tensor]] = {
@@ -2555,7 +3459,7 @@ def evaluate_seed_manifest(
 
     for chunk_start, seed_chunk in enumerate(_chunks(requested, config.training.batch_size)):
         episodes = [
-            construct_partial_visibility_episode(config, seed, authorization=authorization)
+            _construct_partial_visibility_episode(config, seed, authorization=authorization)
             for seed in seed_chunk
         ]
         schedules = [scene_schedule(seed) for seed in seed_chunk]
@@ -3101,7 +4005,7 @@ def evaluate_seed_manifest(
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-RUN_RELATIVE_PATH = Path("runs/rgbd_partial_visibility_recovery_v1")
+RUN_RELATIVE_PATH = Path("runs/rgbd_partial_visibility_recovery_v2")
 DEVELOPMENT_REPORT_NAME = "development_report.json"
 DEVELOPMENT_CHECKPOINT_NAME = "development_model.pt"
 QUALIFICATION_REPORT_NAME = "qualification_report.json"
@@ -3174,6 +4078,149 @@ def _single_link_read_bytes(path: Path, *, label: str) -> bytes:
     return contents
 
 
+def _attempt1_run_directory() -> Path:
+    root = _absolute_lexical(REPOSITORY_ROOT)
+    if ATTEMPT1_RUN_RELATIVE_PATH.is_absolute() or ".." in ATTEMPT1_RUN_RELATIVE_PATH.parts:
+        raise RuntimeError("attempt-one archive path must remain repository-relative")
+    directory = _absolute_lexical(root / ATTEMPT1_RUN_RELATIVE_PATH)
+    directory.relative_to(root)
+    current = root
+    for component in ATTEMPT1_RUN_RELATIVE_PATH.parts:
+        current /= component
+        if _lexists(current) and current.is_symlink():
+            raise ValueError("attempt-one archive path must not contain symbolic links")
+    if directory.resolve() != directory:
+        raise ValueError("attempt-one archive resolves outside its lexical path")
+    return directory
+
+
+def _validate_attempt1_rejection_bytes(
+    report_contents: bytes,
+    ledger_contents: bytes,
+) -> None:
+    """Validate the exact attempt-one rejection from bytes alone."""
+
+    if sha256_bytes(report_contents) != ATTEMPT1_REPORT_SHA256:
+        raise RuntimeError("attempt-one failed report bytes changed")
+    if sha256_bytes(ledger_contents) != ATTEMPT1_LEDGER_SHA256:
+        raise RuntimeError("attempt-one failed ledger bytes changed")
+    try:
+        report = json.loads(report_contents)
+        ledger = json.loads(ledger_contents)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("attempt-one rejection evidence is not canonical JSON") from exc
+    if not isinstance(report, Mapping) or not isinstance(ledger, Mapping):
+        raise RuntimeError("attempt-one rejection evidence must contain JSON objects")
+    expected_error = {
+        "type": "RuntimeError",
+        "message": "partial scene left its declared renderer visibility band",
+    }
+    expected_report_fields = {
+        "artifact_kind": "rgbd_partial_visibility_development",
+        "config_sha256": ATTEMPT1_CONFIG_SHA256,
+        "optimizer_updates": 0,
+        "passed": False,
+        "protected_data_materialized": False,
+        "review_ready": False,
+        "stopped_after": "development",
+        "error": expected_error,
+        "source_provenance": ATTEMPT1_SOURCE_PROVENANCE,
+    }
+    for name, expected in expected_report_fields.items():
+        if not _typed_canonical_equal(report.get(name), expected):
+            raise RuntimeError(f"attempt-one failed report field changed: {name}")
+    if report.get("development_ledger") != ATTEMPT1_DEVELOPMENT_LEDGER_BACKLINK:
+        raise RuntimeError("attempt-one report-to-ledger backlink changed")
+    if set(report) != {
+        "artifact_kind",
+        "config_sha256",
+        "development_ledger",
+        "error",
+        "optimizer_updates",
+        "passed",
+        "protected_data_materialized",
+        "protocol",
+        "review_ready",
+        "source_provenance",
+        "stopped_after",
+    }:
+        raise RuntimeError("attempt-one failed report schema changed")
+    protocol = report.get("protocol")
+    if not isinstance(protocol, Mapping):
+        raise RuntimeError("attempt-one failed report lacks its protocol")
+    unsigned_protocol = {key: value for key, value in protocol.items() if key != "protocol_sha256"}
+    expected_manifests = {
+        "development": list(range(53_000_000, 53_000_032)),
+        "selector": list(range(54_000_000, 54_000_024)),
+        "confirmation": list(range(55_000_000, 55_000_024)),
+        "final_test": list(range(56_000_000, 56_000_048)),
+    }
+    expected_manifest_hashes = {
+        "development": ATTEMPT1_DEVELOPMENT_MANIFEST_SHA256,
+        "selector": "1b1e6ef6938705bcc7e2a66ad5ee4622860c9ea9ec3e6c19c86e8a8534209b28",
+        "confirmation": "72d7c922029d300e3d28409bcb55a843633caac10b482f680ae769a442739e9f",
+        "final_test": "70b60f48769a26c5587febf778443fd38f5814a39e80ec7da1c98dea9c389ded",
+    }
+    protocol_fields = {
+        "name": "rgbd_partial_visibility_recovery_v1",
+        "architecture_version": 1,
+        "architecture_attempt": 1,
+        "maximum_architecture_attempts": 2,
+        "resolved_config_sha256": ATTEMPT1_CONFIG_SHA256,
+        "protocol_sha256": ATTEMPT1_PROTOCOL_SHA256,
+        "manifests": expected_manifests,
+        "manifest_sha256": expected_manifest_hashes,
+    }
+    for name, expected in protocol_fields.items():
+        if not _typed_canonical_equal(protocol.get(name), expected):
+            raise RuntimeError(f"attempt-one protocol binding changed: {name}")
+    if canonical_sha256(unsigned_protocol) != ATTEMPT1_PROTOCOL_SHA256:
+        raise RuntimeError("attempt-one protocol self-hash changed")
+    expected_ledger_fields = {
+        "artifact_kind": "rgbd_partial_visibility_development_access_ledger",
+        "architecture_attempt": 1,
+        "maximum_architecture_attempts": 2,
+        "attempt_reserved": True,
+        "access_started": True,
+        "development_data_materialized": True,
+        "result_sha256": None,
+        "status": "error",
+        "error": expected_error,
+        "report_sha256": ATTEMPT1_REPORT_SHA256,
+        "bindings": {
+            "config_sha256": ATTEMPT1_CONFIG_SHA256,
+            "development_manifest_sha256": ATTEMPT1_DEVELOPMENT_MANIFEST_SHA256,
+            "protocol_sha256": ATTEMPT1_PROTOCOL_SHA256,
+            "source_provenance": ATTEMPT1_SOURCE_PROVENANCE,
+        },
+    }
+    if set(ledger) != set(expected_ledger_fields):
+        raise RuntimeError("attempt-one failed ledger schema changed")
+    for name, expected in expected_ledger_fields.items():
+        if not _typed_canonical_equal(ledger.get(name), expected):
+            raise RuntimeError(f"attempt-one failed ledger field changed: {name}")
+
+
+def _require_attempt1_rejection() -> None:
+    """Require the exact immutable failed attempt-one archive before access."""
+
+    directory = _attempt1_run_directory()
+    if not directory.is_dir() or directory.is_symlink():
+        raise FileNotFoundError("attempt-one rejection archive is absent or not a real directory")
+    report_path = directory / DEVELOPMENT_REPORT_NAME
+    ledger_path = directory / "development_attempt_1_access.json"
+    expected_inventory = {report_path, ledger_path}
+    if set(directory.iterdir()) != expected_inventory:
+        raise RuntimeError(
+            "attempt-one rejection archive must contain exactly its failed report and ledger"
+        )
+    report_contents = _single_link_read_bytes(report_path, label="attempt-one failed report")
+    ledger_contents = _single_link_read_bytes(ledger_path, label="attempt-one failed ledger")
+    _validate_attempt1_rejection_bytes(report_contents, ledger_contents)
+    if set(directory.iterdir()) != expected_inventory:
+        raise RuntimeError("attempt-one rejection archive changed while it was checked")
+
+
 def _validate_artifact_inventory(*, allowed_existing: Sequence[str]) -> None:
     paths = canonical_artifact_paths()
     directory = next(iter(paths.values())).parent
@@ -3222,13 +4269,14 @@ def _require_config_matches(config: OrpheusConfig, path: Path) -> None:
 
 
 class DevelopmentLedger:
-    """Fresh attempt-one development receipt and authorization owner."""
+    """Fresh sole-attempt-two development receipt and authorization owner."""
 
     ARTIFACT_KIND = "rgbd_partial_visibility_development_access_ledger"
 
     def __init__(self, bindings: Mapping[str, Any], *, authority: object) -> None:
         if authority is not _LEDGER_CONSTRUCTION_AUTHORITY:
             raise PermissionError("development ledger requires the frozen runner authority")
+        _require_attempt1_rejection()
         self.path = development_ledger_path()
         _require_canonical_path(self.path, artifact="development_ledger")
         self.record: dict[str, Any] = {
@@ -3243,6 +4291,7 @@ class DevelopmentLedger:
             "status": "development_materialization_started",
         }
         self._authorization: _ManifestAccessAuthorization | None = None
+        self._authorization_mint = object()
         self._issued = False
         _durable_create(self.path, self._serialized())
         self._started_receipt_sha256 = sha256_bytes(
@@ -3257,11 +4306,14 @@ class DevelopmentLedger:
         _durable_replace(self.path, self._serialized())
 
     def authorization(self) -> _ManifestAccessAuthorization:
+        _require_attempt1_rejection()
         if self._issued:
             raise RuntimeError("development authorization cannot be issued twice")
         self._issued = True
         self._authorization = _ManifestAccessAuthorization(
             _MANIFEST_ACCESS_AUTHORITY,
+            issuer=self,
+            mint=self._authorization_mint,
             split="development",
             seeds=DEVELOPMENT_SEEDS,
             ledger_path=self.path,
@@ -3318,6 +4370,7 @@ class QualificationLedger:
     def __init__(self, bindings: Mapping[str, Any], *, authority: object) -> None:
         if authority is not _LEDGER_CONSTRUCTION_AUTHORITY:
             raise PermissionError("qualification ledger requires the frozen runner authority")
+        _require_attempt1_rejection()
         self.path = qualification_ledger_path()
         _require_canonical_path(self.path, artifact="qualification_ledger")
         self.record: dict[str, Any] = {
@@ -3335,6 +4388,7 @@ class QualificationLedger:
             "status": "reserved_before_protected_access",
         }
         self._authorizations: dict[str, _ManifestAccessAuthorization] = {}
+        self._authorization_mint = object()
         _durable_create(self.path, self._serialized())
 
     def _serialized(self) -> bytes:
@@ -3345,6 +4399,7 @@ class QualificationLedger:
         _durable_replace(self.path, self._serialized())
 
     def begin_access(self, split: str) -> _ManifestAccessAuthorization:
+        _require_attempt1_rejection()
         if split not in self.ORDER:
             raise ValueError(f"unknown protected split {split!r}")
         index = self.ORDER.index(split)
@@ -3364,6 +4419,8 @@ class QualificationLedger:
         )
         authorization = _ManifestAccessAuthorization(
             _MANIFEST_ACCESS_AUTHORITY,
+            issuer=self,
+            mint=self._authorization_mint,
             split=split,
             seeds=MANIFESTS[split],
             ledger_path=self.path,
@@ -3694,8 +4751,9 @@ def run_development(
     checkpoint_path: Path,
     source_provenance: Mapping[str, Any],
 ) -> int:
-    """Consume the single attempt-one development manifest and stop."""
+    """Consume the single attempt-two development manifest and stop."""
 
+    _require_attempt1_rejection()
     assert_rgbd_partial_visibility_config(config)
     _assert_execution_environment()
     source = clean_source(source_provenance, label="partial-visibility development")
@@ -3748,7 +4806,7 @@ def run_development(
         "stopped_after": "development",
     }
     try:
-        development = evaluate_seed_manifest(
+        development = _evaluate_seed_manifest(
             config,
             DEVELOPMENT_SEEDS,
             split="development",
@@ -3843,6 +4901,7 @@ def run_qualification(
 ) -> int:
     """Consume selector, confirmation, and final once after exact review."""
 
+    _require_attempt1_rejection()
     assert_rgbd_partial_visibility_config(config)
     _assert_execution_environment()
     source = clean_source(source_provenance, label="partial-visibility qualification")
@@ -3975,7 +5034,7 @@ def run_qualification(
             authorization = ledger.begin_access(split)
             report["protected_data_materialized"] = True
             report["stopped_after"] = split
-            result = evaluate_seed_manifest(
+            result = _evaluate_seed_manifest(
                 config,
                 MANIFESTS[split],
                 split=split,
@@ -4062,9 +5121,7 @@ __all__ = [
     "STRATUM_NAMES",
     "TARGET_FRAME_INDICES",
     "bridge_protocol",
-    "construct_partial_visibility_episode",
     "development_ledger_path",
-    "evaluate_seed_manifest",
     "gate_failures",
     "new_public_model",
     "preflight_partial_visibility_episode",

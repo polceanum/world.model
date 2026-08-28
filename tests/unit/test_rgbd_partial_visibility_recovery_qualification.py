@@ -13,7 +13,13 @@ from typing import Any
 import pytest
 import torch
 
+import world_model.simulator.physics as simulator_physics
 import world_model.training.rgbd_partial_visibility_recovery_qualification as qualification
+from world_model.observations import ObservationPacket
+from world_model.observations.rgbd import RGBDTemporalPositionHistory
+from world_model.simulator.camera import CameraFrame, invert_rigid_transform, world_to_camera
+from world_model.simulator.physics import SphereState
+from world_model.simulator.renderer import render_spheres
 from world_model.training.loop import make_rgbd_packet
 from world_model.training.rgbd_partial_visibility_recovery_qualification import (
     AXIS_NAMES,
@@ -50,6 +56,70 @@ from world_model.utils.config import load_config
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
 CONFIG_PATH = REPOSITORY_ROOT / "configs" / "rgbd_partial_visibility_recovery_cpu.yaml"
+ATTEMPT1_ARCHIVE_FIXTURE = (
+    REPOSITORY_ROOT / "tests" / "fixtures" / "rgbd_partial_visibility_recovery" / "attempt-1"
+)
+_LIVE_ATTEMPT1_REJECTION_GUARD = qualification._require_attempt1_rejection
+_EXPECTED_ATTEMPT2_ABSOLUTE_PRIMITIVES = (
+    ("separated", 0, (22.625, 30.875, 4.875), (31.625, 31.875, 6.125)),
+    ("separated", 1, (22.625, 30.875, 5.0), (31.625, 31.875, 6.125)),
+    ("separated", 2, (22.625, 30.625, 4.75), (31.625, 31.875, 6.125)),
+    ("separated", 3, (22.625, 30.375, 4.75), (31.625, 31.875, 6.125)),
+    ("separated", 4, (22.625, 30.125, 4.875), (31.625, 31.875, 6.125)),
+    ("separated", 5, (22.625, 29.875, 4.875), (31.625, 31.875, 6.125)),
+    ("separated", 6, (22.625, 29.875, 5.0), (31.625, 31.875, 6.125)),
+    ("separated", 7, (22.625, 29.625, 4.75), (31.625, 31.875, 6.125)),
+    ("mild", 0, (28.625, 30.125, 4.875), (32.375, 32.625, 5.875)),
+    ("mild", 1, (28.625, 30.125, 4.875), (32.375, 32.625, 6.0)),
+    ("mild", 2, (28.125, 30.625, 4.875), (32.375, 32.625, 5.875)),
+    ("mild", 3, (28.125, 30.625, 4.875), (32.375, 32.625, 6.0)),
+    ("moderate", 0, (29.625, 30.125, 4.875), (32.375, 32.625, 5.875)),
+    ("moderate", 1, (29.625, 30.125, 4.875), (32.375, 32.625, 6.0)),
+    ("moderate", 2, (29.125, 30.625, 4.875), (32.375, 32.625, 5.875)),
+    ("moderate", 3, (29.125, 30.625, 4.875), (32.375, 32.625, 6.0)),
+)
+
+
+@pytest.fixture(autouse=True)
+def _use_tracked_attempt1_archive(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise the production guard against exact portable rejection bytes."""
+
+    monkeypatch.setattr(
+        qualification,
+        "_attempt1_run_directory",
+        lambda: ATTEMPT1_ARCHIVE_FIXTURE,
+    )
+
+
+def _attempt2_camera() -> CameraFrame:
+    world_from_camera = qualification._fixed_world_from_camera()
+    return CameraFrame(
+        timestamp=0.0,
+        world_from_camera=world_from_camera,
+        camera_from_world=invert_rigid_transform(world_from_camera),
+        intrinsics=qualification._fixed_intrinsics(),
+        position=world_from_camera[:3, 3],
+        target=torch.tensor([0.0, 0.95, 0.0], dtype=torch.float32),
+    )
+
+
+def _attempt2_state(position: torch.Tensor, velocity: torch.Tensor) -> SphereState:
+    return SphereState(
+        object_id=torch.arange(2, dtype=torch.int64),
+        active=torch.ones(2, dtype=torch.bool),
+        position=position,
+        velocity=velocity,
+        radius=torch.full((2, 1), 0.21, dtype=torch.float32),
+        mass=torch.ones((2, 1), dtype=torch.float32),
+        restitution=torch.full((2, 1), 0.7, dtype=torch.float32),
+        drag=torch.full((2, 1), 0.05, dtype=torch.float32),
+        friction=torch.full((2, 1), 0.2, dtype=torch.float32),
+        albedo=torch.tensor([[0.92, 0.20, 0.14], [0.14, 0.84, 0.30]], dtype=torch.float32),
+        orientation=torch.tensor([[0.0, 0.0, 0.0, 1.0]]).expand(2, -1).clone(),
+        angular_velocity=torch.zeros((2, 3), dtype=torch.float32),
+        sleeping=torch.zeros(2, dtype=torch.bool),
+        sleep_counter=torch.zeros(2, dtype=torch.int64),
+    )
 
 
 class _UnsafeCheckpointValue:
@@ -420,10 +490,10 @@ def _consume_authorization(
 def test_protocol_freezes_manifests_schedule_vjp_and_resource_contract() -> None:
     namespaces = (DEVELOPMENT_SEEDS, SELECTOR_SEEDS, CONFIRMATION_SEEDS, FINAL_TEST_SEEDS)
     assert tuple(map(len, namespaces)) == (32, 24, 24, 48)
-    assert tuple(range(53_000_000, 53_000_032)) == DEVELOPMENT_SEEDS
-    assert tuple(range(54_000_000, 54_000_024)) == SELECTOR_SEEDS
-    assert tuple(range(55_000_000, 55_000_024)) == CONFIRMATION_SEEDS
-    assert tuple(range(56_000_000, 56_000_048)) == FINAL_TEST_SEEDS
+    assert tuple(range(57_000_000, 57_000_032)) == DEVELOPMENT_SEEDS
+    assert tuple(range(58_000_000, 58_000_024)) == SELECTOR_SEEDS
+    assert tuple(range(59_000_000, 59_000_024)) == CONFIRMATION_SEEDS
+    assert tuple(range(60_000_000, 60_000_048)) == FINAL_TEST_SEEDS
     flattened = tuple(seed for namespace in namespaces for seed in namespace)
     assert len(flattened) == len(set(flattened))
     for split, seeds in qualification.MANIFESTS.items():
@@ -448,6 +518,9 @@ def test_protocol_freezes_manifests_schedule_vjp_and_resource_contract() -> None
     assert protocol["evidence"]["report_before_terminal_ledger_digest"] is True
     assert protocol["evidence"]["weights_only_empty_state_checkpoint"] is True
     assert protocol["optimizer_updates"] == 0
+    assert protocol["name"] == "rgbd_partial_visibility_recovery_v2"
+    assert protocol["architecture_version"] == 2
+    assert protocol["architecture_attempt"] == 2
     assert protocol["maximum_architecture_attempts"] == 2
 
 
@@ -479,7 +552,7 @@ def test_scene_schedule_is_balanced_and_bounded_for_every_split(
     assert all(item.miss_frame is None for item in schedules if "no_miss" in item.stratum)
 
 
-@pytest.mark.parametrize("bad_seed", (True, 53_000_000.0, 52_999_999, 56_000_048))
+@pytest.mark.parametrize("bad_seed", (True, 57_000_000.0, 56_999_999, 60_000_048))
 def test_scene_schedule_rejects_noncanonical_seed(bad_seed: object) -> None:
     with pytest.raises((TypeError, ValueError)):
         scene_schedule(bad_seed)  # type: ignore[arg-type]
@@ -493,6 +566,314 @@ def test_pure_scene_parameter_signatures_are_unique_and_manifest_bound() -> None
         assert canonical_sha256(signatures) == qualification.SCENE_PARAMETER_SIGNATURE_SHA256[split]
         all_signatures.extend(signatures)
     assert len(all_signatures) == len(set(all_signatures))
+
+
+def test_attempt2_admissibility_certificate_freezes_every_template_cell() -> None:
+    certificate = qualification.attempt2_admissibility_certificate()
+    assert certificate.template_cell_count == 128
+    assert certificate.physical_record_count == 128
+    assert certificate.physics_substep_count == 342
+    assert certificate.template_table_sha256 == qualification.ATTEMPT2_TEMPLATE_TABLE_SHA256
+    assert (
+        certificate.absolute_primitive_table_sha256
+        == qualification.ATTEMPT2_ABSOLUTE_PRIMITIVE_TABLE_SHA256
+    )
+    assert (
+        certificate.ordered_physical_state_sha256
+        == qualification.ATTEMPT2_ORDERED_PHYSICAL_STATE_SHA256
+    )
+    assert certificate.physical_state_set_sha256 == qualification.ATTEMPT2_PHYSICAL_STATE_SET_SHA256
+    assert (
+        certificate.unordered_geometry_set_sha256
+        == qualification.ATTEMPT2_UNORDERED_GEOMETRY_SET_SHA256
+    )
+    assert certificate.world_trajectory_sha256 == qualification.ATTEMPT2_WORLD_TRAJECTORY_SHA256
+    assert certificate.renderer_trace_sha256 == qualification.ATTEMPT2_RENDERER_TRACE_SHA256
+    assert certificate.minimum_discriminant_abs_margin >= 5.0e-5
+    assert certificate.minimum_overlap_depth_margin_m >= 0.80
+    assert certificate.maximum_projected_centre_drift_pixels <= 2.0e-5
+    assert (
+        0.0
+        < certificate.maximum_camera_conjugacy_error_m
+        <= (qualification.MAXIMUM_CAMERA_CONJUGACY_ERROR_M)
+    )
+    assert certificate.minimum_initial_speed_mps >= 0.035
+    assert certificate.maximum_initial_speed_mps <= 0.065
+    assert certificate.minimum_world_surface_gap_m >= 0.50
+    assert certificate.minimum_world_boundary_clearance_m >= 0.10
+    assert certificate.minimum_image_boundary_clearance_pixels >= 2.0
+    assert certificate.minimum_separated_silhouette_gap_margin_pixels >= 1.0
+    assert certificate.minimum_partial_silhouette_band_margin_pixels >= 0.40
+    assert certificate.minimum_current_visibility_band_margin_fraction >= 0.049
+    assert certificate.minimum_one_pixel_visibility_band_margin_fraction >= 0.0
+    assert certificate.minimum_full_support_pixels >= 18
+    assert certificate.minimum_visible_support_pixels >= 14
+    assert certificate.minimum_local_miss_pixels >= 14
+
+
+def test_attempt2_absolute_primitives_and_physical_state_digests_are_independent() -> None:
+    expected = [
+        {
+            "kind": kind,
+            "index": index,
+            "front": list(front),
+            "rear": list(rear),
+        }
+        for kind, index, front, rear in _EXPECTED_ATTEMPT2_ABSOLUTE_PRIMITIVES
+    ]
+    assert qualification._attempt2_absolute_primitive_table() == expected
+    assert canonical_sha256(expected) == qualification.ATTEMPT2_ABSOLUTE_PRIMITIVE_TABLE_SHA256
+    ordered_records, unordered_geometry_records = (
+        qualification._attempt2_independent_physical_state_records()
+    )
+    assert len(ordered_records) == len(set(ordered_records)) == 128
+    assert len(unordered_geometry_records) == 128
+    assert (
+        sha256_bytes(b"".join(ordered_records))
+        == qualification.ATTEMPT2_ORDERED_PHYSICAL_STATE_SHA256
+    )
+    assert (
+        sha256_bytes(b"".join(sorted(ordered_records)))
+        == qualification.ATTEMPT2_PHYSICAL_STATE_SET_SHA256
+    )
+    assert (
+        sha256_bytes(b"".join(sorted(unordered_geometry_records)))
+        == qualification.ATTEMPT2_UNORDERED_GEOMETRY_SET_SHA256
+    )
+
+
+def test_attempt2_ray_certificate_matches_public_renderer_for_all_cells_and_frames() -> None:
+    camera = _attempt2_camera()
+    rotation = camera.world_from_camera[:3, :3]
+    translation = camera.world_from_camera[:3, 3]
+    for template in qualification.ATTEMPT2_TEMPLATE_TABLE:
+        for symmetry in range(qualification.TEMPLATE_SYMMETRY_COUNT):
+            points, velocities = qualification._template_camera_state(
+                template,
+                symmetry,
+                intrinsics=camera.intrinsics,
+            )
+            world_positions, world_velocities, world_substep_positions, world_substep_velocities = (
+                qualification._exact_float32_world_trajectory(
+                    points,
+                    velocities,
+                    world_from_camera=camera.world_from_camera,
+                )
+            )
+            assert torch.equal(
+                world_positions[0],
+                points @ rotation.transpose(0, 1) + translation,
+            )
+            assert torch.equal(world_velocities[0], velocities @ rotation.transpose(0, 1))
+            assert torch.equal(world_positions, world_substep_positions[::6])
+            assert torch.equal(world_velocities, world_substep_velocities[::6])
+            camera_positions = world_to_camera(world_positions, camera.camera_from_world)
+            for frame_points, frame_world_position, frame_world_velocity in zip(
+                camera_positions,
+                world_positions,
+                world_velocities,
+                strict=True,
+            ):
+                state = _attempt2_state(frame_world_position, frame_world_velocity)
+                rendered = render_spheres(state, camera, (64, 64))
+                certified = qualification._renderer_ray_geometry(
+                    frame_points,
+                    camera.intrinsics,
+                )
+                assert torch.equal(rendered.full_mask, certified["full_mask"])
+                assert torch.equal(
+                    rendered.instance_slot_map,
+                    certified["instance_slot_map"],
+                )
+                assert torch.equal(rendered.visible_mask, certified["visible_mask"])
+
+
+def test_attempt2_certified_world_trace_is_exact_public_solver_trace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = load_config(CONFIG_PATH)
+    resolved = qualification.SphereWorldConfig.from_config(config)
+    camera = _attempt2_camera()
+    expected_traces: list[tuple[torch.Tensor, torch.Tensor]] = []
+    for template in qualification.ATTEMPT2_TEMPLATE_TABLE:
+        for symmetry in range(qualification.TEMPLATE_SYMMETRY_COUNT):
+            points, velocities = qualification._template_camera_state(
+                template,
+                symmetry,
+                intrinsics=camera.intrinsics,
+            )
+            _, _, positions, world_velocities = qualification._exact_float32_world_trajectory(
+                points,
+                velocities,
+                world_from_camera=camera.world_from_camera,
+            )
+            expected_traces.append((positions, world_velocities))
+
+    original_integrate = simulator_physics._integrate_free_motion_exact
+    original_boundary = simulator_physics.resolve_axis_aligned_boundaries
+    original_pair = simulator_physics.resolve_sphere_sphere_collisions
+    active_trace: dict[str, object] = {}
+
+    def tracking_integrate(
+        position: torch.Tensor,
+        velocity: torch.Tensor,
+        drag: torch.Tensor,
+        gravity: torch.Tensor,
+        dt: float,
+        movable: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        expected_positions = active_trace["positions"]
+        expected_velocities = active_trace["velocities"]
+        cursor = active_trace["cursor"]
+        assert isinstance(expected_positions, torch.Tensor)
+        assert isinstance(expected_velocities, torch.Tensor)
+        assert isinstance(cursor, int)
+        assert torch.equal(position, expected_positions[cursor])
+        assert torch.equal(velocity, expected_velocities[cursor])
+        result = original_integrate(position, velocity, drag, gravity, dt, movable)
+        cursor += 1
+        assert torch.equal(result[0], expected_positions[cursor])
+        assert torch.equal(result[1], expected_velocities[cursor])
+        active_trace["cursor"] = cursor
+        return result
+
+    def tracking_boundary(*args: object, **kwargs: object) -> object:
+        result = original_boundary(*args, **kwargs)
+        position, velocity = args[:2]
+        assert isinstance(position, torch.Tensor)
+        assert isinstance(velocity, torch.Tensor)
+        assert torch.equal(result.position, position)
+        assert torch.equal(result.velocity, velocity)
+        assert not bool(result.contact.any())
+        assert not bool(result.collision.any())
+        assert not bool(result.impulse_magnitude.ne(0).any())
+        assert not bool(result.penetration.ne(0).any())
+        return result
+
+    def tracking_pair(*args: object, **kwargs: object) -> object:
+        result = original_pair(*args, **kwargs)
+        position, velocity = args[:2]
+        assert isinstance(position, torch.Tensor)
+        assert isinstance(velocity, torch.Tensor)
+        assert torch.equal(result.position, position)
+        assert torch.equal(result.velocity, velocity)
+        assert not bool(result.contact.any())
+        assert not bool(result.collision.any())
+        assert not bool(result.impulse_magnitude.ne(0).any())
+        assert not bool(result.penetration.ne(0).any())
+        return result
+
+    monkeypatch.setattr(simulator_physics, "_integrate_free_motion_exact", tracking_integrate)
+    monkeypatch.setattr(simulator_physics, "resolve_axis_aligned_boundaries", tracking_boundary)
+    monkeypatch.setattr(simulator_physics, "resolve_sphere_sphere_collisions", tracking_pair)
+    physics_config = simulator_physics.PhysicsConfig(
+        gravity=resolved.gravity,
+        bounds=resolved.world_bounds,
+        max_substep=1.0 / resolved.physics_rate,
+        solver_iterations=resolved.solver_iterations,
+    )
+    for expected_positions, expected_velocities in expected_traces:
+        state = _attempt2_state(expected_positions[0], expected_velocities[0])
+        active_trace.update(
+            positions=expected_positions,
+            velocities=expected_velocities,
+            cursor=0,
+        )
+        for frame_index in range(57):
+            state, events = simulator_physics.advance_spheres(
+                state,
+                resolved.observation_dt,
+                physics_config,
+                external_impulse=torch.zeros_like(state.velocity),
+            )
+            assert events.substeps == 6
+            assert not bool(events.pair_contact.any())
+            assert not bool(events.pair_collision.any())
+            assert not bool(events.pair_impulse.ne(0).any())
+            assert not bool(events.pair_penetration.ne(0).any())
+            assert not bool(events.boundary_contact.any())
+            assert not bool(events.boundary_collision.any())
+            assert not bool(events.boundary_impulse.ne(0).any())
+            assert not bool(events.boundary_penetration.ne(0).any())
+            assert not bool(events.collision.any())
+            assert not bool(events.contact.any())
+            assert not bool(events.sleeping.any())
+            assert not bool(events.external_impulse.ne(0).any())
+            assert bool(events.first_event_offset.eq(-1.0).all())
+            substep_index = (frame_index + 1) * 6
+            assert torch.equal(state.position, expected_positions[substep_index])
+            assert torch.equal(state.velocity, expected_velocities[substep_index])
+        assert active_trace["cursor"] == 342
+
+
+def test_all_attempt2_primitives_are_feasible_through_public_rgbd_runtime() -> None:
+    config = load_config(CONFIG_PATH)
+    camera = _attempt2_camera()
+    for template in qualification.ATTEMPT2_TEMPLATE_TABLE:
+        model = qualification.new_public_model(config)
+        points, velocities = qualification._template_camera_state(
+            template,
+            0,
+            intrinsics=camera.intrinsics,
+        )
+        world_positions, world_velocities, _, _ = qualification._exact_float32_world_trajectory(
+            points,
+            velocities,
+            world_from_camera=camera.world_from_camera,
+        )
+        posterior = None
+        for frame_index in qualification.INGEST_FRAME_INDICES:
+            state = _attempt2_state(
+                world_positions[frame_index],
+                world_velocities[frame_index],
+            )
+            rendered = render_spheres(state, camera, (64, 64))
+            posterior = model.ingest(
+                ObservationPacket(
+                    modality="rgbd",
+                    sensor_id="camera0:rgbd",
+                    timestamp=frame_index / 20.0,
+                    payload={
+                        "rgb": rendered.rgb.unsqueeze(0),
+                        "depth": rendered.depth_buffer[None, None],
+                    },
+                    calibration={
+                        "world_from_camera": camera.world_from_camera.unsqueeze(0),
+                        "intrinsics": camera.intrinsics.unsqueeze(0),
+                    },
+                    frame_id="camera:camera0:rgbd",
+                    metadata={"image_size": (64, 64)},
+                )
+            )
+            assert model.last_measurements is not None
+            assert bool(model.last_measurements.measurement_mask.all())
+        assert posterior is not None
+        assert bool(posterior.objects.active.all())
+        assert bool(posterior.objects.missed_steps.eq(0).all())
+        history = model.state.temporal_histories[qualification.RUNTIME_STREAM_KEY]
+        assert isinstance(history, RGBDTemporalPositionHistory)
+        assert bool(history.sample_mask.all())
+        assert bool(history.valid_mask.all())
+
+
+def test_attempt1_rejection_archive_is_exact_and_tamper_evident(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report_contents = (ATTEMPT1_ARCHIVE_FIXTURE / "development_report.json").read_bytes()
+    ledger_contents = (ATTEMPT1_ARCHIVE_FIXTURE / "development_attempt_1_access.json").read_bytes()
+    qualification._validate_attempt1_rejection_bytes(report_contents, ledger_contents)
+
+    archive = tmp_path / "attempt1"
+    archive.mkdir()
+    (archive / "development_report.json").write_bytes(report_contents)
+    (archive / "development_attempt_1_access.json").write_bytes(ledger_contents)
+    monkeypatch.setattr(qualification, "_attempt1_run_directory", lambda: archive)
+    _LIVE_ATTEMPT1_REJECTION_GUARD()
+    ledger = archive / "development_attempt_1_access.json"
+    ledger.write_bytes(ledger.read_bytes() + b" ")
+    with pytest.raises(RuntimeError, match="ledger bytes changed"):
+        _LIVE_ATTEMPT1_REJECTION_GUARD()
 
 
 def test_expected_masks_isolate_exactly_one_target_miss() -> None:
@@ -656,7 +1037,7 @@ def test_gate_recomputation_fails_closed_across_every_surface(
 
 
 def test_evaluator_reads_the_published_surface_fit_radius_diagnostic() -> None:
-    evaluator_source = inspect.getsource(qualification.evaluate_seed_manifest)
+    evaluator_source = inspect.getsource(qualification._evaluate_seed_manifest)
     assert 'get("surface_fit_radius_relative_error")' in evaluator_source
     assert 'get("surface_radius_relative_error")' not in evaluator_source
 
@@ -750,17 +1131,141 @@ def test_typed_canonical_comparison_rejects_python_type_coercions() -> None:
 
 
 def test_constructor_authorization_and_evaluator_order_are_static_boundaries() -> None:
-    constructor_source = inspect.getsource(qualification.construct_partial_visibility_episode)
+    assert "construct_partial_visibility_episode" not in qualification.__all__
+    assert "evaluate_seed_manifest" not in qualification.__all__
+    constructor_source = inspect.getsource(qualification._construct_partial_visibility_episode)
+    assert constructor_source.index("_require_attempt1_rejection()") < constructor_source.index(
+        "_require_ledger_minted_authorization"
+    )
     assert constructor_source.index(
         "authorization.authorize_seed(seed)"
     ) < constructor_source.index("SphereWorldConfig.from_config")
-    evaluator_source = inspect.getsource(qualification.evaluate_seed_manifest)
+    evaluator_source = inspect.getsource(qualification._evaluate_seed_manifest)
+    assert evaluator_source.index("_require_attempt1_rejection()") < evaluator_source.index(
+        "_require_ledger_minted_authorization"
+    )
     assert evaluator_source.index("authorization.begin_manifest") < evaluator_source.index(
-        "construct_partial_visibility_episode"
+        "_construct_partial_visibility_episode"
     )
     assert evaluator_source.index("authorization.finish_manifest") > evaluator_source.index(
-        "construct_partial_visibility_episode"
+        "_construct_partial_visibility_episode"
     )
+
+
+def test_fake_duck_authorizations_fail_before_constructor_or_evaluator_work(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+
+    class DuckAuthorization:
+        def begin_manifest(self, *_args: object) -> None:
+            events.append("duck:begin")
+
+        def authorize_seed(self, *_args: object) -> None:
+            events.append("duck:seed")
+
+        def finish_manifest(self) -> None:
+            events.append("duck:finish")
+
+    def rejection_guard() -> None:
+        events.append("attempt1:checked")
+
+    def forbidden_work(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("authorization rejection must precede materialization work")
+
+    monkeypatch.setattr(qualification, "_require_attempt1_rejection", rejection_guard)
+    monkeypatch.setattr(
+        qualification,
+        "assert_rgbd_partial_visibility_config",
+        forbidden_work,
+    )
+    duck = DuckAuthorization()
+    with pytest.raises(PermissionError, match="exact ledger-minted authorization"):
+        qualification._construct_partial_visibility_episode(
+            object(),  # type: ignore[arg-type]
+            DEVELOPMENT_SEEDS[0],
+            authorization=duck,  # type: ignore[arg-type]
+        )
+    with pytest.raises(PermissionError, match="exact ledger-minted authorization"):
+        qualification._evaluate_seed_manifest(
+            object(),  # type: ignore[arg-type]
+            DEVELOPMENT_SEEDS,
+            split="development",
+            authorization=duck,  # type: ignore[arg-type]
+        )
+    assert events == ["attempt1:checked", "attempt1:checked"]
+
+
+def test_private_token_rejects_noncanonical_authorization_contracts(tmp_path: Path) -> None:
+    issuer = object.__new__(DevelopmentLedger)
+    issuer.path = qualification.development_ledger_path()
+    issuer._authorization_mint = object()
+    issuer._authorization = None
+    canonical = {
+        "issuer": issuer,
+        "mint": issuer._authorization_mint,
+        "split": "development",
+        "seeds": DEVELOPMENT_SEEDS,
+        "ledger_path": issuer.path,
+        "ledger_kind": DevelopmentLedger.ARTIFACT_KIND,
+        "receipt_sha256": "0" * 64,
+    }
+    invalid_contracts = (
+        {"ledger_path": tmp_path / "attacker-ledger.json"},
+        {"ledger_kind": QualificationLedger.ARTIFACT_KIND},
+        {"split": "selector", "seeds": SELECTOR_SEEDS},
+        {"seeds": SELECTOR_SEEDS},
+    )
+    for invalid in invalid_contracts:
+        with pytest.raises(PermissionError, match="canonical"):
+            qualification._ManifestAccessAuthorization(
+                qualification._MANIFEST_ACCESS_AUTHORITY,
+                **(canonical | invalid),
+            )
+
+
+def test_unregistered_exact_authorization_identity_fails_at_both_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    issuer = object.__new__(DevelopmentLedger)
+    issuer.path = qualification.development_ledger_path()
+    issuer._authorization_mint = object()
+    issuer._authorization = None
+    authorization = qualification._ManifestAccessAuthorization(
+        qualification._MANIFEST_ACCESS_AUTHORITY,
+        issuer=issuer,
+        mint=issuer._authorization_mint,
+        split="development",
+        seeds=DEVELOPMENT_SEEDS,
+        ledger_path=issuer.path,
+        ledger_kind=DevelopmentLedger.ARTIFACT_KIND,
+        receipt_sha256="0" * 64,
+    )
+    events: list[str] = []
+    monkeypatch.setattr(
+        qualification,
+        "_require_attempt1_rejection",
+        lambda: events.append("attempt1:checked"),
+    )
+    monkeypatch.setattr(
+        qualification,
+        "assert_rgbd_partial_visibility_config",
+        lambda *_args: events.append("forbidden:config"),
+    )
+    with pytest.raises(PermissionError, match="canonical ledger-minted capability"):
+        qualification._construct_partial_visibility_episode(
+            object(),  # type: ignore[arg-type]
+            DEVELOPMENT_SEEDS[0],
+            authorization=authorization,
+        )
+    with pytest.raises(PermissionError, match="canonical ledger-minted capability"):
+        qualification._evaluate_seed_manifest(
+            object(),  # type: ignore[arg-type]
+            DEVELOPMENT_SEEDS,
+            split="development",
+            authorization=authorization,
+        )
+    assert events == ["attempt1:checked", "attempt1:checked"]
 
 
 def test_exactly_once_ledgers_are_durable_ordered_and_single_use(
@@ -930,7 +1435,7 @@ def test_reviewed_development_ledger_binds_exact_report_result_and_checkpoint(
     report_sha256 = "5" * 64
     record = {
         "artifact_kind": DevelopmentLedger.ARTIFACT_KIND,
-        "architecture_attempt": 1,
+        "architecture_attempt": 2,
         "maximum_architecture_attempts": 2,
         "bindings": {
             "protocol_sha256": bridge_protocol()["protocol_sha256"],
@@ -1051,6 +1556,9 @@ def test_protected_runner_writes_report_before_terminal_ledger_digest(
             events.append("ledger:error")
 
     fake_development = _development_result()
+    # This test replaces every evidence read with synthetic bytes; the exact
+    # archive guard has its own production-path and tamper tests above.
+    monkeypatch.setattr(qualification, "_require_attempt1_rejection", lambda: None)
     monkeypatch.setattr(qualification, "assert_rgbd_partial_visibility_config", lambda _: None)
     monkeypatch.setattr(qualification, "_assert_execution_environment", lambda: None)
     monkeypatch.setattr(qualification, "_require_config_matches", lambda *_args: None)
@@ -1075,7 +1583,7 @@ def test_protected_runner_writes_report_before_terminal_ledger_digest(
     monkeypatch.setattr(qualification, "development_ledger_path", lambda: tmp_path / "d.json")
     monkeypatch.setattr(
         qualification,
-        "evaluate_seed_manifest",
+        "_evaluate_seed_manifest",
         lambda _config, seeds, *, split, authorization: {
             "split": split,
             "seeds": list(seeds),

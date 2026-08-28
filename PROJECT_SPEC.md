@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.57
+**Version:** 1.58
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, exactly-once two-visible-object acceptance, bounded-partial-visibility, isolated-target-depth-miss, immediate-recovery, and pre-development evidence-freeze amendments 27 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, exactly-once two-visible-object acceptance, bounded-partial-visibility, isolated-target-depth-miss, immediate-recovery, and pre-development evidence-freeze amendments 27 August 2026; immutable partial-visibility attempt-1 failure, exact-raster finite-table recovery, capability-bound evidence access, and terminal attempt-2 source-freeze amendments 28 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -8579,6 +8579,142 @@ for full occlusion, reappearance after a longer absence, contact or events,
 variable object count, history-capacity generalization, moving cameras,
 variable physics, learned capacity, another modality, tasks/planning, or
 general world-model convergence.
+
+# Part XLIX — Partial-visibility attempt closure and terminal source-freeze amendment
+
+## 256. Record the immutable attempt-1 failure and freeze architecture attempt 2
+
+Section 255 is the historical specification-1.57 pre-access contract.  It was
+not an acceptance claim.  Architecture attempt 1 was subsequently committed
+as the exact clean source tree
+`7e67823667769e47bad3678207f2c01bd3edbfe4` and consumed its one permitted
+development authorization.  Its immutable terminal development report is
+`13,948` bytes with SHA-256
+`7c08c794690a10d46100b8d17ee448e3a83960d265ec7859bb91cd6d2ac9ca9d`;
+its `1,110`-byte development ledger has SHA-256
+`e4993abefefe07e0b0fb57a65769fa270012524d62c8ebab4b7db0251979aab4`.
+Those bytes bind the attempt-1 config SHA-256
+`7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`,
+canonical protocol SHA-256
+`e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`,
+development-manifest SHA-256
+`ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391`,
+runtime-source fingerprint
+`2345bcf6d785cd864301dbcdcb23cc8f7287f1815615fd1e30e6f635084f12c3`,
+and worktree fingerprint
+`0d44cabadce831238fe1c8c1cda450677b62f20af3fcf9a411fa4ef621b1842f`.
+
+The failure occurred before model construction, collation, or runtime
+execution.  Development seed `53000000` completed the private scene
+constructor.  Seed `53000001` rendered `58` constructor frames and then failed
+renderer visibility preflight at frame `4`: the mild rear object had support
+`20` and only `15` actually visible pixels, so exact raster visibility was
+`15/20 = 0.75`, below the frozen inclusive `0.80` minimum, even though the
+continuous visibility diagnostic was `0.826827`.  An in-memory cursor value of
+`2` can be inferred from that execution but is not a durable ledger cursor.
+Seeds `53000002` and above were untouched.  No checkpoint was created.  The
+protected `54000000--56000047` namespaces were never opened and are
+permanently unused; they cannot be reassigned to a later attempt.  The live v1
+inventory contains exactly two single-link regular files—the report and the
+development ledger—and no alias, temporary file, or other canonical artifact.
+This terminal constructor/preflight failure consumes architecture attempt 1.
+
+Specification 1.58 retains the accepted specification-1.56 exactly-two-visible
+result and the historical specification-1.57 failure, keeps simulator
+`sphere_world_v7`, and freezes architecture attempt 2 of the maximum two.  The
+new attempt uses one finite, source-owned physical table: `16` rational scene
+primitives crossed with the `8` exact transformations of `D4`, producing
+exactly `128` unique physical cells.  Seed-to-cell selection is public and
+deterministic, but the raw constructor and evaluator remain private.  World
+evolution is the exact public-solver identity in float32 over the frozen
+`342`-substep recurrence; renderer acceptance is evaluated on exact raster
+support rather than inferred from continuous geometry alone.
+
+The canonical table and trace commitments are:
+
+- world-recurrence trace SHA-256
+  `32b34e716ec639cabdd5d36f1c0d30fa17b187546bb5653e4fa7d0a9d6af65d4`;
+- renderer trace SHA-256
+  `4362f06929f8e8958c1f12e8d2077dded6f8dda3bfdb99eed425899bb289f412`;
+- rational primitive/D4 table SHA-256
+  `c3f17e805de234fecb1f1928b47e8fd2127d608447e7b1e87df9a2ec970ce3aa`;
+- absolute table SHA-256
+  `f86f218317d656c16f4c85e5b4a75b2e52094724316a3132b0a6e44715bec86e`;
+- ordered-state SHA-256
+  `bc3e6349fc0d5effecbb53920a9c4224203067f05306330723f8c75dd9f35c57`;
+- state-set SHA-256
+  `96a53595bf7d21b84fed772baef4b754b6e777b7560a8083d303814fa5f611b5`;
+  and
+- unordered-geometry SHA-256
+  `27a8dabb2d9936e635cde5b2155fffa5eddb89679b477175119917627772cafa`.
+
+The finite-table proof is margin-bearing, not merely hash-bearing.  Its
+minimum discriminant is `5.20199537e-5` against `5e-5`; minimum overlap depth
+is `0.831737 m` against `0.8 m`; maximum projected-state drift is
+`1.144409e-5 px` against `2e-5 px`; and maximum D4 conjugacy error is
+`2.861023e-6 m` against `4e-6 m`.  Cell speeds span
+`0.0406846--0.0520633 m/s`; the minimum physical gap is `0.616238 m`, minimum
+world-boundary clearance `0.211665 m`, and minimum image clearance
+`19.4474 px`.  The separated-case excess is `1.44462 px`, the partial-case
+margin is `0.421646 px`, and minimum actual visibility margin is `0.05`.
+The one-pixel hypothetical clearance is exactly `0.0`; its gate is explicitly
+inclusive and this value must never be described as positive slack.  The
+frozen support counts are `18/14/14`.
+
+The current frozen source/configuration bindings are:
+
+- config SHA-256
+  `b18f787987394f77771dbf31dae1642bd042b81e64b02a3e93b8cd048dd3416b`;
+- qualification-harness SHA-256
+  `859dedf68031ee66cec1334d2fc094078bc2aacf0deac4388c53337033b63519`;
+- thin-runner SHA-256
+  `a16c0712b611ebe64dd5052efde3f73e3c5aa18f1b1c5f825f571c2674e598c0`;
+- qualification-test SHA-256
+  `f4d35320f484484429cdfadb9f3faed6ad5c1ad85492d6ffaa378a7076955714`;
+- configuration-test SHA-256
+  `8f4e14c7ccff5c6af4d820c555956ce12b66854b1aef7ee3fb5ddbaad7abd40a`;
+  and
+- canonical pre-self-hash protocol SHA-256
+  `5f049f060f6e8a9682d9413e6bc2d8f9f228f6e2aee67cde16f98d234cac8a3b`.
+
+The exact tracked v1 report and ledger fixtures match the two immutable live
+v1 archive files byte for byte and digest for digest.  The v2 authorization path also
+guards the live v1 path directly.  Only an exact canonical ledger-minted
+capability may invoke the private constructor; neither a manifest-shaped
+object nor direct constructor access is authority.  The qualification has no
+oracle input.  Its checkpoint is restricted and must be loaded with
+`weights_only=True`.  The only permitted v2 inventory is five canonical
+single-link regular files under
+`runs/rgbd_partial_visibility_recovery_v2/`: `development_report.json`,
+`development_model.pt`, `development_attempt_2_access.json`,
+`qualification_report.json`, and `qualification_attempt_2_access.json`.
+Aliases, temporary files, v1-to-v2 reuse, extra evidence, and direct live-v1
+mutation are forbidden.
+
+The fresh, pure attempt-2 manifest and scene-signature bindings are:
+
+| split | exact seed range | manifest SHA-256 | scene-signature-list SHA-256 |
+| --- | --- | --- | --- |
+| development | `57000000--57000031` | `ded3d75a7d248e3f9746b03b0cf249f32739208713c4287c45deb5eefd11f8e2` | `8426ea4d0a7e1d507c5d7fc825afa8864ee694a04df622cba955b92ffd4350c0` |
+| selector | `58000000--58000023` | `effa598aa07a44c100da115f71828e00754f181729063899353d22b551f7227a` | `d421862763a3e0bc0af042fd81704c836c2123ad0fa260130e791cb250c0b2c7` |
+| confirmation | `59000000--59000023` | `9240a1dd465574de8ac032e318f3cee618909ed6a5b3e91c5fd8c87bad146cec` | `261f975fcd46795ff9f56c94857de69942ea047455f65cc0341bdc515cc76af5` |
+| one-shot final | `60000000--60000047` | `17fdd50896729b981357960ea0db74ef19e059e21bc8d8e41a7048cf237200a6` | `1837d40a35ddba88e3a91f74c5b2c398aa01675ad8e84efa2fe660bbf49e34a2` |
+
+All four v2 namespaces are unopened, and none of the five v2 artifacts exists.
+The canonical source gate passes `315` tests in `345.27 s`; the independent
+public-solver proof passes `1` test in `244.52 s`; and the full repository gate
+passes `1407` tests with `16` expected skips in `816.14 s`.  Two independent
+final source/protocol/security audits report `PASS`.
+
+This is a source freeze ready for commit and push, not a development result,
+qualification, or partial-visibility acceptance.  The exact documentation and
+source tree must first be committed and pushed, then the working tree must be
+clean with `HEAD == upstream`.  Only after that boundary may the v2 development
+ledger mint the single development capability.  A passing, independently
+audited development report/checkpoint/ledger may authorize selector ->
+confirmation -> final exactly once.  If attempt-2 development fails, this rung
+stops permanently: there is no architecture attempt 3, no renamed retry, and
+no reuse of any attempt-1 or protected namespace.
 
 # Closing directive
 

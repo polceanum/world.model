@@ -1,6 +1,6 @@
 project:
-  name: orpheus-rgbd-partial-visibility-recovery-v1-cpu
-  seed: 53000000
+  name: orpheus-rgbd-partial-visibility-recovery-v2-cpu
+  seed: 57000000
   output_dir: runs
   deterministic: true
 
@@ -10,11 +10,11 @@ device:
   cuda_amp: false
   compile: false
 
-# Frozen fifth generalization rung: exactly two fixed-radius, chromatically
-# distinct, non-contact spheres under a fixed calibrated camera.  The custom
-# qualification constructor owns the four separated/partial and complete/
-# one-miss strata and preflights every frame; generic simulator placement is
-# never treated as evidence that the bounded family was respected.
+# Sole attempt-two source freeze for the fifth generalization rung: exactly
+# two fixed-radius, chromatically distinct, non-contact spheres under a fixed
+# calibrated camera.  A hash-bound finite camera-space template table owns the
+# four separated/partial and complete/one-miss strata; each cell has an exact
+# all-frame renderer/integration certificate before any manifest can open.
 simulator:
   image_size: [64, 64]
   frame_rate: 20

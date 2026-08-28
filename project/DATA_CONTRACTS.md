@@ -28,13 +28,31 @@ history length, and `H_img,W_img` image height/width.
   timestamps/sample/valid masks and `[B,N,R,3]` raw metric positions. Invalid
   sampled-depth rows retain their causal sample position. The accepted
   specification-1.55/1.56 paths require all sixteen valid rows and fail their
-  complete uniform fit closed. The separately frozen specification-1.57
-  partial-visibility path still uses `R=16` but permits at most one scheduled
-  object-local invalid target row, requires the newest row valid, and requires
-  exactly fifteen valid target supports; the co-object remains independently
-  valid with sixteen. The invalid row emits no direct state/velocity evidence,
-  and the filter alone owns its single `0.08` missed-state variance increment.
-  This live sensor-local state is not serialized by an ordinary checkpoint.
+  complete uniform fit closed. The historical specification-1.57
+  partial-visibility attempt also used `R=16`, permitted at most one scheduled
+  object-local invalid target row, required the newest row valid, and required
+  exactly fifteen valid target supports; the co-object remained independently
+  valid with sixteen. Its first development construction failed exact renderer
+  visibility preflight before any model, collate, runtime, or checkpoint state.
+  Specification 1.58 preserves the same public history semantics in the
+  terminal attempt-2 source freeze. The invalid row emits no direct
+  state/velocity evidence, and the filter alone owns its single `0.08`
+  missed-state variance increment. This live sensor-local state is not
+  serialized by an ordinary checkpoint.
+- Attempt-2 finite constructor contract: private, immutable constructor data
+  selected from one finite `16`-rational-primitive by `8`-element exact-`D4`
+  table.
+  The resulting `128` physical cells are unique. They are preflight/scoring
+  inputs, never a public `ObservationPacket`, `MeasurementSet`, or runtime
+  oracle. Exact float32 world evolution is the public-solver-identical
+  `342`-substep recurrence, while exact raster support owns visibility.
+- Attempt-2 authorization contract: exact canonical single-use capability
+  minted by the durable attempt-2 ledger. A manifest or seed record is
+  descriptive data, not authority. The raw constructor/evaluator reject
+  direct calls, protect the immutable two-file live-v1 failure, and admit only
+  this capability. The v2 evidence contract permits exactly five canonical
+  single-link files and loads the restricted checkpoint with
+  `weights_only=True`; it contains no oracle input.
 - `AbstractionAssignment`: `[B,N]` abstraction kind, routing confidence,
   complexity cost, refinement reason, and active mask. It is derived from
   `WorldBelief`, not stored as independent physical state.

@@ -310,57 +310,112 @@ The exact final audit passes; it did not reopen raw protected episodes.
 Owner-writable evidence is tamper-evident rather than OS-enforced WORM storage.
 Final is consumed and cannot be rerun or tuned against.
 
-### 5. Bounded partial visibility and one local depth miss — frozen before development
+### 5. Bounded partial visibility and one local depth miss — attempt 2 source-frozen
 
 The reviewed two-visible tree was fast-forwarded to GitHub `main` through
 `1e951520e5a2bf06c1932f64b8334e552247de82`.
 
-Specification 1.57 now freezes architecture attempt 1 while retaining exactly
-two fixed-radius `0.21 m` objects, fixed camera, known zero gravity and `0.05`
-drag, non-contact free motion, composite public RGB-D input, and the accepted
-parameter-free analytic rollout. The only new conditions are bounded partial
-visibility that never reaches full occlusion and exactly one isolated
-target-local missing-depth observation at frame 15 or 16 in the declared
-one-miss strata.
+#### Historical architecture-attempt-1 freeze
 
-The sixteen-row differentiable WLS history uses frames `2--17`, permits at
-most one invalid row, requires newest frame 17 valid, and must retain exactly
-fifteen missed-target supports while the co-object retains sixteen. The miss
-has no target measurement or velocity evidence and exactly one filter-owned
-`0.08 +/- 1e-6` variance increment. Recovery is the immediately following
+Specification 1.57 historically froze architecture attempt 1 while retaining
+exactly two fixed-radius `0.21 m` objects, fixed camera, known zero gravity and
+`0.05` drag, non-contact free motion, composite public RGB-D input, and the
+accepted parameter-free analytic rollout. The only new conditions were
+bounded partial visibility that never reached full occlusion and exactly one
+isolated target-local missing-depth observation at frame 15 or 16 in the
+declared one-miss strata.
+
+The sixteen-row differentiable WLS history used frames `2--17`, permitted at
+most one invalid row, required newest frame 17 valid, and had to retain exactly
+fifteen missed-target supports while the co-object retained sixteen. The miss
+had no target measurement or velocity evidence and exactly one filter-owned
+`0.08 +/- 1e-6` variance increment. Recovery was the immediately following
 frame with the same persistent identity, missed-step trace `0 -> 1 -> 0`, and
 no switch, mismatch, ambiguity, birth, death, false miss, contact, event, or
 non-`FREE` mode.
 
-Config/harness/runner/test/protocol SHA-256 values are
+Config/harness/runner/test/protocol SHA-256 values were
 `7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`,
 `99084d9fb421faa8dbe7ef20f7a88ee5e196cce498586c0fae2b92eebddc36d4`,
 `c97f20638c876045cb25adfe23d39db6daed749e42ab5eed1dea6aacac8dd90f`,
 `e712f9b6ee1cd8775f8f8a1d07ee0844fe1ac1e8ac73a2a2233c9a231cce892e`,
 and
 `e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`.
-Development/selector/confirmation/final ranges are 53m/54m/55m/56m, with
+Development/selector/confirmation/final ranges were 53m/54m/55m/56m, with
 manifest SHA-256
 `ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391`,
 `1b1e6ef6938705bcc7e2a66ad5ee4622860c9ea9ec3e6c19c86e8a8534209b28`,
 `72d7c922029d300e3d28409bcb55a843633caac10b482f680ae769a442739e9f`,
 and `70b60f48769a26c5587febf778443fd38f5814a39e80ec7da1c98dea9c389ded`.
 
-The 98 authoritative gate fields require exactly 2,167 finite scalar metrics
+The 98 authoritative gate fields required exactly 2,167 finite scalar metrics
 per eventual split, cross-split unique pure scene signatures, target-region
 RGB/depth VJPs with zero scheduled-miss/cross-scene gradients, exact recovery
 traces, resources, ledgers, and the canonical five-artifact inventory.
-Seed-free combined validation passes `436 passed in 60.26s`, Ruff/format/diff
-are clean, and two independent audits pass. The full exact current-byte
-repository suite also passes:
-`1398 passed, 16 skipped in 487.93s (0:08:07)`. Every namespace is unopened and
-no evidence artifact exists. Commit the exact clean tree, bind the
-already-passing complete gate to it, run development once, and obtain
-independent audit before exactly-once selector -> confirmation -> final.
+Seed-free combined validation passed `436 passed in 60.26s`, Ruff/format/diff
+were clean, and two independent audits passed. The full exact current-byte
+repository result was
+`1398 passed, 16 skipped in 487.93s (0:08:07)`. At that historical boundary
+every namespace was unopened and no evidence artifact existed. The required
+next sequence was exact clean commit, bound complete gate, one development
+run, independent audit, then exactly-once selector -> confirmation -> final.
 
-This freeze is not rung acceptance. Do not add full occlusion/reappearance,
-variable count, history-capacity or learned-capacity scaling, contact, camera
-motion, another modality, or tuning against the consumed rung-4 final.
+That freeze was not rung acceptance and did not authorize full
+occlusion/reappearance, variable count, history-capacity or learned-capacity
+scaling, contact, camera motion, another modality, or tuning against the
+consumed rung-4 final.
+
+Architecture attempt 1 then consumed its sole development authorization on
+clean commit `7e67823667769e47bad3678207f2c01bd3edbfe4`. Seed `53000000`
+completed construction; seed `53000001` rendered `58` frames and failed exact
+renderer visibility preflight at frame `4`, before model, collate, or runtime.
+Mild rear support/visible pixels were `20/15`, so raster visibility was
+`0.75 < 0.80` despite continuous visibility `0.826827`. Its immutable
+`13,948`-byte report and `1,110`-byte ledger have SHA-256
+`7c08c794690a10d46100b8d17ee448e3a83960d265ec7859bb91cd6d2ac9ca9d`
+and `e4993abefefe07e0b0fb57a65769fa270012524d62c8ebab4b7db0251979aab4`.
+The inferred in-memory cursor `2` is not durable; seeds `>=53000002` were
+untouched. No checkpoint exists, protected 54m--56m were never opened and are
+permanently unused, and exactly two single-link live files remain. Attempt 1
+is terminally consumed.
+
+Specification 1.58 freezes architecture attempt 2 of the maximum two and
+retains the public history, miss-isolation, and recovery semantics above. One
+finite source-owned table crosses `16` rational primitives with the `8` exact
+`D4` transforms, producing `128` unique physical cells. Exact float32 world
+evolution follows the public solver over `342` substeps; exact raster support
+owns visibility. World/renderer/table SHA-256 values are
+`32b34e716ec639cabdd5d36f1c0d30fa17b187546bb5653e4fa7d0a9d6af65d4`,
+`4362f06929f8e8958c1f12e8d2077dded6f8dda3bfdb99eed425899bb289f412`,
+and `c3f17e805de234fecb1f1928b47e8fd2127d608447e7b1e87df9a2ec970ce3aa`.
+Minimum actual visibility margin is `0.05`; one-pixel hypothetical clearance
+is exactly `0.0` under an inclusive gate, not positive slack.
+
+The attempt-2 config/harness/runner/protocol SHA-256 values are
+`b18f787987394f77771dbf31dae1642bd042b81e64b02a3e93b8cd048dd3416b`,
+`859dedf68031ee66cec1334d2fc094078bc2aacf0deac4388c53337033b63519`,
+`a16c0712b611ebe64dd5052efde3f73e3c5aa18f1b1c5f825f571c2674e598c0`,
+and `5f049f060f6e8a9682d9413e6bc2d8f9f228f6e2aee67cde16f98d234cac8a3b`.
+Fresh development/selector/confirmation/final manifests over 57m/58m/59m/60m
+have SHA-256
+`ded3d75a7d248e3f9746b03b0cf249f32739208713c4287c45deb5eefd11f8e2`,
+`effa598aa07a44c100da115f71828e00754f181729063899353d22b551f7227a`,
+`9240a1dd465574de8ac032e318f3cee618909ed6a5b3e91c5fd8c87bad146cec`,
+and `17fdd50896729b981357960ea0db74ef19e059e21bc8d8e41a7048cf237200a6`.
+All are unopened and no v2 artifact exists.
+
+Private raw construction/evaluation, a direct immutable-live-v1 guard, exact
+tracked v1 fixtures, and an exact canonical ledger-minted capability enforce
+access. There is no oracle; exactly five canonical v2 files are allowed; the
+restricted checkpoint loads with `weights_only=True`. The canonical gate
+passes `315 tests in 345.27 s`, the public-solver proof
+`1 test in 244.52 s`, the full suite `1407 tests, 16 skipped in 816.14 s`, and
+two independent final audits report `PASS`.
+
+This is a source freeze ready for commit/push, not rung acceptance. Development
+may begin only after a clean exact tree proves `HEAD == upstream`. Only an
+independently audited pass can authorize selector -> confirmation -> final
+once. Failure ends rung 5 permanently; there is no architecture attempt 3.
 
 ### 6. Observable nuisance variables and additional useful modalities
 

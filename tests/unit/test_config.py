@@ -163,7 +163,8 @@ def test_partial_visibility_recovery_profile_binds_the_frozen_runtime_contract()
     config = load_config(CONFIG_DIR / "rgbd_partial_visibility_recovery_cpu.yaml")
     rgbd = config.model.rgbd
 
-    assert config.project.seed == 53_000_000
+    assert config.project.name == "orpheus-rgbd-partial-visibility-recovery-v2-cpu"
+    assert config.project.seed == 57_000_000
     assert config.simulator.sequence_frames == 58
     assert config.training.tbptt_steps == 18
     assert rgbd.proposal_count == 2

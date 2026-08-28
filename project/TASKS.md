@@ -216,17 +216,64 @@
   retain cross-split unique pure scene signatures, 98 authoritative gate
   fields, exactly 2,167 finite scalar metrics per eventual split,
   target-region VJPs, exact ledgers, and the canonical five-artifact contract.
-- [x] Pass the seed-free combined gate at `436 passed in 60.26s`, Ruff/format/
-  diff clean, and two independent audits. Pass the full exact current-byte
-  repository suite at
-  `1398 passed, 16 skipped in 487.93s (0:08:07)`. No 53m--56m episode,
-  materialized manifest, report, checkpoint, ledger, result, or other evidence
-  artifact exists.
-- [ ] Commit the exact clean frozen source/config/tests/runner/docs, bind the
-  already-passing complete repository gate to that exact tree, execute the sole
-  development run, and obtain an independent exact-digest audit. Only a
-  passing development artifact may authorize selector -> confirmation ->
-  final exactly once; stop on failure.
+- [x] At the historical specification-1.57 freeze, pass the seed-free combined
+  gate at `436 passed in 60.26s`, Ruff/format/diff clean, and two independent
+  audits. Pass the full exact current-byte repository suite at
+  `1398 passed, 16 skipped in 487.93s (0:08:07)`. At that boundary no
+  53m--56m episode, materialized manifest, report, checkpoint, ledger, result,
+  or other evidence artifact existed.
+- [x] Commit architecture attempt 1 as clean source
+  `7e67823667769e47bad3678207f2c01bd3edbfe4`, consume its single development
+  authorization, and stop on immutable renderer preflight failure. Seed
+  `53000000` completed construction; seed `53000001` rendered `58` frames and
+  failed at frame `4`, where mild rear support/visible was `20/15` and
+  `0.75 < 0.80` despite continuous visibility `0.826827`. This preceded model,
+  collate, and runtime; inferred cursor `2` is not durable, seeds
+  `>=53000002` are untouched, and no checkpoint exists.
+- [x] Preserve the exact attempt-1 report/ledger as the only two single-link
+  live files. Their SHA-256/size bindings are
+  `7c08c794690a10d46100b8d17ee448e3a83960d265ec7859bb91cd6d2ac9ca9d`
+  / `13,948` bytes and
+  `e4993abefefe07e0b0fb57a65769fa270012524d62c8ebab4b7db0251979aab4`
+  / `1,110` bytes. Leave protected 54m--56m unopened and permanently unused.
+  Record that attempt 1 is consumed.
+- [x] Advance to specification 1.58 and freeze architecture attempt 2 of 2 at
+  `runs/rgbd_partial_visibility_recovery_v2/`. Use one finite table of `16`
+  rational primitives crossed with `8` exact `D4` transforms (`128` unique
+  cells), exact float32 `342`-substep public-solver recurrence, and exact
+  renderer support. Bind world/renderer/table SHA-256
+  `32b34e716ec639cabdd5d36f1c0d30fa17b187546bb5653e4fa7d0a9d6af65d4`
+  / `4362f06929f8e8958c1f12e8d2077dded6f8dda3bfdb99eed425899bb289f412`
+  / `c3f17e805de234fecb1f1928b47e8fd2127d608447e7b1e87df9a2ec970ce3aa`.
+- [x] Bind attempt-2 config/harness/runner/qualification-test/config-test/
+  protocol SHA-256
+  `b18f787987394f77771dbf31dae1642bd042b81e64b02a3e93b8cd048dd3416b`,
+  `859dedf68031ee66cec1334d2fc094078bc2aacf0deac4388c53337033b63519`,
+  `a16c0712b611ebe64dd5052efde3f73e3c5aa18f1b1c5f825f571c2674e598c0`,
+  `f4d35320f484484429cdfadb9f3faed6ad5c1ad85492d6ffaa378a7076955714`,
+  `8f4e14c7ccff5c6af4d820c555956ce12b66854b1aef7ee3fb5ddbaad7abd40a`,
+  and `5f049f060f6e8a9682d9413e6bc2d8f9f228f6e2aee67cde16f98d234cac8a3b`.
+- [x] Freeze fresh unopened 57m/58m/59m/60m manifests with SHA-256
+  `ded3d75a7d248e3f9746b03b0cf249f32739208713c4287c45deb5eefd11f8e2`,
+  `effa598aa07a44c100da115f71828e00754f181729063899353d22b551f7227a`,
+  `9240a1dd465574de8ac032e318f3cee618909ed6a5b3e91c5fd8c87bad146cec`,
+  and `17fdd50896729b981357960ea0db74ef19e059e21bc8d8e41a7048cf237200a6`.
+  Preserve private raw construction/evaluation, direct live-v1 guarding,
+  exact tracked v1 fixtures, exact canonical ledger-minted capability, no
+  oracle, five canonical v2 files, and restricted `weights_only=True`
+  checkpoint loading.
+- [x] Pass the attempt-2 canonical gate (`315 passed in 345.27 s`),
+  public-solver proof (`1 passed in 244.52 s`), full repository gate
+  (`1407 passed, 16 skipped in 816.14 s`), and two independent final audits
+  reporting `PASS`. Keep every v2 namespace unopened and create no v2 artifact.
+- [ ] Commit and push the exact specification-1.58 source/config/tests/runner/
+  docs freeze. Require a clean tree with `HEAD == upstream`, then execute the
+  sole attempt-2 development authorization and obtain an independent exact-
+  digest audit. This task is not complete merely because source gates pass.
+- [ ] Only a passing attempt-2 development artifact may authorize selector ->
+  confirmation -> final exactly once. If development fails, stop rung 5
+  permanently: no attempt 3, renamed retry, v1/protected-seed reuse, or gate
+  retuning.
 - [ ] Add one complexity per later rung: camera motion; drag identification;
   variable scale; multi-object sets; identity/occlusion; contact; material
   parameters; known actions/planning; richer modalities/geometry.

@@ -1,0 +1,26 @@
+{
+  "access_started": true,
+  "architecture_attempt": 1,
+  "artifact_kind": "rgbd_partial_visibility_development_access_ledger",
+  "attempt_reserved": true,
+  "bindings": {
+    "config_sha256": "7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c",
+    "development_manifest_sha256": "ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391",
+    "protocol_sha256": "e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd",
+    "source_provenance": {
+      "commit": "7e67823667769e47bad3678207f2c01bd3edbfe4",
+      "dirty": false,
+      "runtime_source_fingerprint": "2345bcf6d785cd864301dbcdcb23cc8f7287f1815615fd1e30e6f635084f12c3",
+      "worktree_fingerprint": "0d44cabadce831238fe1c8c1cda450677b62f20af3fcf9a411fa4ef621b1842f"
+    }
+  },
+  "development_data_materialized": true,
+  "error": {
+    "message": "partial scene left its declared renderer visibility band",
+    "type": "RuntimeError"
+  },
+  "maximum_architecture_attempts": 2,
+  "report_sha256": "7c08c794690a10d46100b8d17ee448e3a83960d265ec7859bb91cd6d2ac9ca9d",
+  "result_sha256": null,
+  "status": "error"
+}

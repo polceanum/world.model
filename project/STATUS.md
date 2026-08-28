@@ -1,19 +1,22 @@
 # Project status
 
-## Active generalization program — 2026-08-27
+## Active generalization program — 2026-08-28
 
 The pre-generalization public base was commit
 `c16acc99ef13757fc8f88528bfd0d66db4a2f4fd`; the cleaned generalization
 foundation is GitHub `main` commit
 `08ae63adc5ade2e5061f54539fc7a25564c8c8d6`, and the accepted public RGB-D
 bridge is merged at `3eed0b71e6f18c7036bf376c075493a89d5fdc9f`. Broad heterogeneous training
-remains paused. The active contract is specification 1.57. The accepted base
+remains paused. The active contract is specification 1.58. The accepted base
 now comprises the specification-1.51 differentiable one-sphere unit, the
 qualified standalone two-second RGB-D rung, and its qualified public one-slot
 `OnlineWorldModel` bridge. The accepted branch additionally contains the
 exactly-two-visible RGB-D qualification recorded below—not any older campaign
-checkpoint. Specification 1.57 freezes the next bounded rung before
-development; it does not add an accepted accuracy result.
+checkpoint. The specification-1.57 partial-visibility prefreeze is historical:
+architecture attempt 1 failed immutably during development before model,
+collate, or runtime. Specification 1.58 freezes the terminal architecture
+attempt 2. That tree is ready for commit/push only; no v2 namespace is opened,
+and no v2 development or accuracy result exists.
 
 The qualified unit achieved, on its single previously untouched final set:
 
@@ -465,41 +468,42 @@ tamper-evident, not OS-enforced WORM storage.
 The accepted claim is exactly two fully visible, image-separated,
 fixed-radius, non-contact spheres under fixed-camera free motion. It does not
 cover partial visibility, missed-observation recovery, contact, variable count,
-learned capacity, or general convergence. After merge, the next rung may add
+learned capacity, or general convergence. After merge, the next rung could add
 only bounded partial visibility and missed-observation recovery under a new
-freeze; no consumed-final tuning is allowed. That merge is now complete:
+freeze; no consumed-final tuning was allowed. That merge is complete:
 GitHub `main` contains the reviewed net tree through
 `1e951520e5a2bf06c1932f64b8334e552247de82`.
 
-## Pre-development freeze: bounded partial visibility and one local depth miss
+## Historical specification-1.57 pre-development freeze
 
-Specification 1.57 preserves that accepted two-visible result and freezes
-architecture attempt 1 for the next rung. The scope remains exactly two
-fixed-radius `0.21 m`, fixed-camera, non-contact spheres with known zero
+Specification 1.57 preserved that accepted two-visible result and froze
+architecture attempt 1 for the next rung. At that boundary the scope remained
+exactly two fixed-radius `0.21 m`, fixed-camera, non-contact spheres with known zero
 gravity and `0.05` drag, public composite RGB-D input, zero learned or
 optimizer state, and the parameter-free analytic five-horizon rollout. The
-only new conditions are bounded partial visibility that never becomes full
+only new conditions were bounded partial visibility that never became full
 occlusion and exactly one isolated target-local missing-depth observation at
 frame 15 or 16 in the declared one-miss strata.
 
-Frames `0--17` are ingested and the sixteen-row history uses frames `2--17`
-with frame 17 required valid. No-miss/co-object histories retain 16 valid rows;
-the missed target has exactly 15. The miss changes no RGB, calibration,
-co-object depth, or non-target depth pixel. It emits no target measurement or
-velocity evidence, triggers exactly one filter-owned `0.08 +/- 1e-6`
-miss-variance increment, and must recover the same persistent identity on the
-next frame. The required trace is `0 -> 1 -> 0` missed steps, all-`FREE`, with
-no switch, mismatch, ambiguity, birth, death, false miss, contact, or event.
+Frames `0--17` were ingested and the sixteen-row history used frames `2--17`,
+with frame 17 required valid. No-miss/co-object histories retained 16 valid
+rows; the missed target had exactly 15. The miss changed no RGB, calibration,
+co-object depth, or non-target depth pixel. It emitted no target measurement or
+velocity evidence, triggered exactly one filter-owned `0.08 +/- 1e-6`
+miss-variance increment, and had to recover the same persistent identity on
+the next frame. The required trace was `0 -> 1 -> 0` missed steps, all-`FREE`,
+with no switch, mismatch, ambiguity, birth, death, false miss, contact, or
+event.
 
 Frozen config, harness, runner, test, and pre-self-hash protocol SHA-256 values
-are respectively
+were respectively
 `7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`,
 `99084d9fb421faa8dbe7ef20f7a88ee5e196cce498586c0fae2b92eebddc36d4`,
 `c97f20638c876045cb25adfe23d39db6daed749e42ab5eed1dea6aacac8dd90f`,
 `e712f9b6ee1cd8775f8f8a1d07ee0844fe1ac1e8ac73a2a2233c9a231cce892e`,
 and
 `e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`.
-Simulator protocol remains `sphere_world_v7`.
+Simulator protocol was and remains `sphere_world_v7`.
 
 | split | exact seed range | pure manifest SHA-256 |
 | --- | --- | --- |
@@ -508,35 +512,130 @@ Simulator protocol remains `sphere_world_v7`.
 | confirmation | `55000000--55000023` | `72d7c922029d300e3d28409bcb55a843633caac10b482f680ae769a442739e9f` |
 | final | `56000000--56000047` | `70b60f48769a26c5587febf778443fd38f5814a39e80ec7da1c98dea9c389ded` |
 
-Pure scene-parameter signature-list SHA-256 values are development
+Pure scene-parameter signature-list SHA-256 values were development
 `f22a2e26df99edda751d13c383733c447139afe4de840bae64b3e03758155baf`,
 selector `85bf300a1af8547746663a9b10403fa8b3d726533d0f68955c2cad5ecf3a4d75`,
 confirmation
 `e6319849bb4b4974ceeb6752eadf7235f8e82e47440f0e2b7d1be75191600931`,
 and final
 `575e4af1694825e40c780c2a64c783232b013bf8432c8fbe76d095180f0c9d5f`;
-they are unique across splits without episode construction.
+they were unique across splits without episode construction.
 
-The frozen protocol has 98 authoritative gate fields and requires exactly
-2,167 finite scalar metrics per eventual split. It includes pooled/stratum/
-miss/co-object accuracy, exact target-region RGB/depth VJPs with zero gradient
-at the scheduled miss and outside frames `2--17`, exact zero cross-scene
+The historical frozen protocol had 98 authoritative gate fields and required
+exactly 2,167 finite scalar metrics per eventual split. It included pooled/
+stratum/miss/co-object accuracy, exact target-region RGB/depth VJPs with zero
+gradient at the scheduled miss and outside frames `2--17`, exact zero cross-scene
 coupling, pure scene signatures, global all-`FREE`/no-spurious-miss tracing,
 resources, zero-state ownership, exact ledgers, and a canonical five-artifact
-inventory. Seed-free combined validation is `436 passed in 60.26s`; Ruff
-lint, Ruff format-check, and diff integrity are clean, and two independent
-audits pass. The full exact current-byte repository suite also passes:
+inventory. Seed-free combined validation was `436 passed in 60.26s`; Ruff
+lint, Ruff format-check, and diff integrity were clean, and two independent
+audits passed. The full exact current-byte repository result was:
 `1398 passed, 16 skipped in 487.93s (0:08:07)`.
 
-All development/selector/confirmation/final namespaces remain unopened. No
-episode, materialized manifest, report, checkpoint, ledger, result, or other
-evidence artifact exists. The next action is to commit the exact clean source
-and documentation, bind the already-passing complete repository gate to that
-exact tree, execute the sole development run, and obtain independent digest
-review. Selector -> confirmation -> final may run exactly once only if
-development passes. This is not full-occlusion/reappearance, contact,
+At this historical freeze, every development/selector/confirmation/final
+namespace was unopened and no episode, materialized manifest, report,
+checkpoint, ledger, result, or other evidence artifact existed. The required
+next action was to commit the exact clean source and documentation, bind the
+complete repository gate, execute the sole development run, and obtain
+independent digest review. That attempt later failed as recorded below, so its
+selector -> confirmation -> final sequence never opened. This was not
+full-occlusion/reappearance, contact,
 variable-count, history-capacity, learned-capacity, extra-modality,
 task/planning, or general-convergence evidence.
+
+## Terminal architecture-attempt-1 development failure
+
+Architecture attempt 1 was committed as the clean source tree
+`7e67823667769e47bad3678207f2c01bd3edbfe4` and consumed its one development
+authorization. The immutable `13,948`-byte report SHA-256 is
+`7c08c794690a10d46100b8d17ee448e3a83960d265ec7859bb91cd6d2ac9ca9d`;
+the `1,110`-byte development-ledger SHA-256 is
+`e4993abefefe07e0b0fb57a65769fa270012524d62c8ebab4b7db0251979aab4`.
+The evidence binds v1 config/protocol/development-manifest SHA-256
+`7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`,
+`e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`,
+and
+`ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391`,
+plus runtime/worktree fingerprints
+`2345bcf6d785cd864301dbcdcb23cc8f7287f1815615fd1e30e6f635084f12c3`
+and `0d44cabadce831238fe1c8c1cda450677b62f20af3fcf9a411fa4ef621b1842f`.
+
+Seed `53000000` completed the private constructor. Seed `53000001` rendered
+`58` frames and then failed renderer visibility preflight at frame `4`: the
+mild rear sphere had support `20` and visible support `15`, so exact raster
+visibility was `0.75 < 0.80` despite continuous visibility `0.826827`. The
+failure preceded model, collate, and runtime. Cursor `2` is inferable only from
+the in-memory execution and was never durably persisted. Seeds `>=53000002`
+were untouched. No checkpoint exists. The protected 54m--56m namespaces never
+opened and are permanently unused. The live v1 inventory is exactly two
+single-link regular files, the report and ledger, with no alias or temporary
+artifact. Attempt 1 is terminally consumed.
+
+## Specification-1.58 terminal attempt-2 source freeze
+
+Architecture attempt 2 of the maximum two is frozen at
+`runs/rgbd_partial_visibility_recovery_v2/`. It retains the public history,
+miss-isolation, and recovery semantics above. The accepted 1.56 base and
+failed 1.57 attempt remain immutable. Simulator metadata remains
+`sphere_world_v7`.
+The replacement constructor uses one finite table of `16` rational primitives
+crossed with the `8` exact `D4` transforms, yielding `128` unique physical
+cells. The raw constructor/evaluator are private; seed mapping is public and
+deterministic. Float32 world evolution follows the exact public solver over a
+`342`-substep recurrence, and exact renderer support—not continuous visibility
+alone—governs preflight.
+
+World/renderer trace SHA-256 values are
+`32b34e716ec639cabdd5d36f1c0d30fa17b187546bb5653e4fa7d0a9d6af65d4`
+and `4362f06929f8e8958c1f12e8d2077dded6f8dda3bfdb99eed425899bb289f412`.
+Table/absolute-table/ordered-state/state-set/unordered-geometry SHA-256 values
+are
+`c3f17e805de234fecb1f1928b47e8fd2127d608447e7b1e87df9a2ec970ce3aa`,
+`f86f218317d656c16f4c85e5b4a75b2e52094724316a3132b0a6e44715bec86e`,
+`bc3e6349fc0d5effecbb53920a9c4224203067f05306330723f8c75dd9f35c57`,
+`96a53595bf7d21b84fed772baef4b754b6e777b7560a8083d303814fa5f611b5`,
+and `27a8dabb2d9936e635cde5b2155fffa5eddb89679b477175119917627772cafa`.
+
+The proof has explicit margins: discriminant
+`5.20199537e-5 >= 5e-5`, overlap depth `0.831737 m >= 0.8 m`, projected drift
+`1.144409e-5 px <= 2e-5 px`, D4 conjugacy
+`2.861023e-6 m <= 4e-6 m`, speed `0.0406846--0.0520633 m/s`, physical gap
+`0.616238 m`, world-boundary clearance `0.211665 m`, image clearance
+`19.4474 px`, separated excess `1.44462 px`, partial margin `0.421646 px`,
+actual visibility margin `0.05`, and support counts `18/14/14`. The
+one-pixel hypothetical clearance is exactly `0.0` under an inclusive gate and
+is not positive slack.
+
+Current config/harness/runner/qualification-test/config-test/protocol SHA-256
+values are
+`b18f787987394f77771dbf31dae1642bd042b81e64b02a3e93b8cd048dd3416b`,
+`859dedf68031ee66cec1334d2fc094078bc2aacf0deac4388c53337033b63519`,
+`a16c0712b611ebe64dd5052efde3f73e3c5aa18f1b1c5f825f571c2674e598c0`,
+`f4d35320f484484429cdfadb9f3faed6ad5c1ad85492d6ffaa378a7076955714`,
+`8f4e14c7ccff5c6af4d820c555956ce12b66854b1aef7ee3fb5ddbaad7abd40a`,
+and `5f049f060f6e8a9682d9413e6bc2d8f9f228f6e2aee67cde16f98d234cac8a3b`.
+The exact tracked v1 report/ledger fixtures match the two live files.
+
+| split | exact seeds | manifest SHA-256 | signature-list SHA-256 |
+| --- | --- | --- | --- |
+| development | `57000000--57000031` | `ded3d75a7d248e3f9746b03b0cf249f32739208713c4287c45deb5eefd11f8e2` | `8426ea4d0a7e1d507c5d7fc825afa8864ee694a04df622cba955b92ffd4350c0` |
+| selector | `58000000--58000023` | `effa598aa07a44c100da115f71828e00754f181729063899353d22b551f7227a` | `d421862763a3e0bc0af042fd81704c836c2123ad0fa260130e791cb250c0b2c7` |
+| confirmation | `59000000--59000023` | `9240a1dd465574de8ac032e318f3cee618909ed6a5b3e91c5fd8c87bad146cec` | `261f975fcd46795ff9f56c94857de69942ea047455f65cc0341bdc515cc76af5` |
+| final | `60000000--60000047` | `17fdd50896729b981357960ea0db74ef19e059e21bc8d8e41a7048cf237200a6` | `1837d40a35ddba88e3a91f74c5b2c398aa01675ad8e84efa2fe660bbf49e34a2` |
+
+All v2 namespaces are unopened and no v2 artifact exists. Direct live-v1
+guarding, exact tracked fixtures, a private raw constructor/evaluator, and an
+exact canonical ledger-minted capability prevent unauthorized construction or
+v1 reuse. The runtime has no oracle. Exactly five canonical v2 files are
+allowed, and checkpoint loading is restricted to `weights_only=True`.
+
+The canonical gate passes `315 passed in 345.27 s`; the public-solver proof
+passes `1 passed in 244.52 s`; the full repository suite passes
+`1407 passed, 16 skipped in 816.14 s`; and two independent final audits report
+`PASS`. This is source-integrity and security evidence only. The tree is ready
+for commit and push, not development or qualification. Development may begin
+only after a clean tree proves `HEAD == upstream`. If it fails, the rung ends
+with no attempt 3.
 
 ## Validation state
 
@@ -563,15 +662,24 @@ The accepted two-visible-object source retains `43 passed` focused,
 `1275 passed, 16 skipped in 447.29 s` complete, with Ruff/format/diff clean.
 The exact independent qualification audit also passes.
 
-The specification-1.57 partial-visibility/isolated-miss freeze passes the
-seed-free combined source gate at `436 passed in 60.26s`, with Ruff/format/
-diff clean and two independent audits passing. Its full exact current-byte
-repository suite passes
-`1398 passed, 16 skipped in 487.93s (0:08:07)`, and it still has no episode or
-evidence result.
+The historical specification-1.57 partial-visibility/isolated-miss freeze
+passed the seed-free combined source gate at `436 passed in 60.26s`, with
+Ruff/format/diff clean and two independent audits. Its full exact current-byte
+repository result was
+`1398 passed, 16 skipped in 487.93s (0:08:07)`. Architecture attempt 1 later
+failed during renderer preflight as recorded above; no model, collate,
+runtime, checkpoint, or protected access followed.
+
+The specification-1.58 attempt-2 frozen tree passes the canonical gate at
+`315 passed in 345.27 s`, the independent public-solver proof at
+`1 passed in 244.52 s`, and the full repository gate at
+`1407 passed, 16 skipped in 816.14 s`. Two independent final audits report
+`PASS`. This exact source freeze remains uncommitted/unpushed and has no v2
+episode or evidence result.
 
 No accepted claim exists beyond the exactly-two-visible non-contact RGB-D
-family. The new bounded partial-visibility protocol is frozen but not yet
-developed or accepted; full occlusion, reappearance, contact, variable count,
-additional modality, planning, learned capacity, and general convergence
-remain unqualified.
+family. Attempt 1 is a constructor/preflight failure, not recovery evidence.
+Attempt 2 is frozen but not committed, pushed, developed, qualified, or
+accepted; full occlusion, reappearance, contact, variable count, additional
+modality, planning, learned capacity, and general convergence remain
+unqualified.

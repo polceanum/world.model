@@ -470,27 +470,28 @@ partial-visibility and missed-observation-recovery rung follows below. It
 retains exactly two objects, fixed camera/physics, non-contact motion, the
 parameter-free analytic rollout, and every accepted lower-rung gate.
 
-## Frozen partial-visibility recovery workflow — development not run
+## Historical partial-visibility attempt-1 freeze and failure
 
-Specification 1.57 freezes architecture attempt 1 before any episode access.
-The public parameter-free RGB-D path keeps exactly two fixed-radius,
-fixed-camera, non-contact spheres with known gravity/drag. It adds bounded
+Specification 1.57 froze architecture attempt 1 before any episode access.
+At that boundary the public parameter-free RGB-D path kept exactly two
+fixed-radius, fixed-camera, non-contact spheres with known gravity/drag. It
+added bounded
 partial visibility and exactly one target-local missing-depth observation at
-frame 15 or 16 in the one-miss strata. Sixteen WLS rows permit at most that one
-invalid row, require frame 17 valid, and retain fifteen missed-target supports.
-Exactly one filter-owned `0.08 +/- 1e-6` miss-variance increment must be
-followed by immediate next-frame same-ID recovery and an otherwise unchanged
-all-`FREE` trace. Full occlusion/reappearance, contact, variable count, and
-capacity generalization are outside the workflow.
+frame 15 or 16 in the one-miss strata. Sixteen WLS rows permitted at most that
+one invalid row, required frame 17 valid, and retained fifteen missed-target
+supports. Exactly one filter-owned `0.08 +/- 1e-6` miss-variance increment had
+to be followed by immediate next-frame same-ID recovery and an otherwise
+unchanged all-`FREE` trace. Full occlusion/reappearance, contact, variable
+count, and capacity generalization were outside the workflow.
 
-Frozen config/harness/runner/test/protocol SHA-256 values are
+Frozen config/harness/runner/test/protocol SHA-256 values were
 `7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`,
 `99084d9fb421faa8dbe7ef20f7a88ee5e196cce498586c0fae2b92eebddc36d4`,
 `c97f20638c876045cb25adfe23d39db6daed749e42ab5eed1dea6aacac8dd90f`,
 `e712f9b6ee1cd8775f8f8a1d07ee0844fe1ac1e8ac73a2a2233c9a231cce892e`,
 and
 `e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`.
-The simulator remains `sphere_world_v7`.
+The simulator was and remains `sphere_world_v7`.
 
 | split | exact seeds | pure manifest SHA-256 |
 | --- | --- | --- |
@@ -499,19 +500,106 @@ The simulator remains `sphere_world_v7`.
 | confirmation | `55000000--55000023` | `72d7c922029d300e3d28409bcb55a843633caac10b482f680ae769a442739e9f` |
 | final | `56000000--56000047` | `70b60f48769a26c5587febf778443fd38f5814a39e80ec7da1c98dea9c389ded` |
 
-The protocol requires cross-split unique pure scene signatures, 98
+The protocol required cross-split unique pure scene signatures, 98
 authoritative gate fields, exactly 2,167 finite scalar metrics per eventual
 split, target-region RGB/depth VJPs, exact zero scheduled-miss and cross-scene
 gradients, global all-`FREE`/no-spurious-miss tracing, exact ledgers, and the
-canonical five artifacts. Seed-free combined validation is
-`436 passed in 60.26s`; Ruff/format/diff and two independent audits pass. The
-full exact current-byte repository suite also passes:
+canonical five artifacts. Seed-free combined validation was
+`436 passed in 60.26s`; Ruff/format/diff and two independent audits passed. The
+full exact current-byte repository result was:
 `1398 passed, 16 skipped in 487.93s (0:08:07)`.
 
-All four namespaces remain unopened, and none of the five canonical evidence
-files exists. The only permitted next order is: commit the exact clean source
-and documentation; bind the complete repository gate already passed above to
-that exact tree; execute the sole development phase; independently audit the
-exact report/checkpoint/development-ledger digests; then, only if that passes,
-execute selector -> confirmation -> final exactly once under the protected
-ledger. Do not run an episode command before that boundary.
+At the historical freeze all four namespaces were unopened and none of the
+five canonical evidence files existed. The required next order was exact clean
+commit, bound complete repository gate, sole development, independent digest
+audit, then protected selector -> confirmation -> final only after a pass.
+
+The exact clean source commit was
+`7e67823667769e47bad3678207f2c01bd3edbfe4`. Its sole development
+authorization terminated during private constructor/preflight: seed
+`53000000` completed construction; seed `53000001` rendered `58` frames and
+failed exact renderer visibility at frame `4`, where mild rear support/visible
+was `20/15`, so `0.75 < 0.80` despite continuous visibility `0.826827`.
+Failure occurred before model, collate, or runtime.
+
+The immutable development report is `13,948` bytes with SHA-256
+`7c08c794690a10d46100b8d17ee448e3a83960d265ec7859bb91cd6d2ac9ca9d`;
+the `1,110`-byte ledger has SHA-256
+`e4993abefefe07e0b0fb57a65769fa270012524d62c8ebab4b7db0251979aab4`.
+Runtime/worktree fingerprints are
+`2345bcf6d785cd864301dbcdcb23cc8f7287f1815615fd1e30e6f635084f12c3`
+and `0d44cabadce831238fe1c8c1cda450677b62f20af3fcf9a411fa4ef621b1842f`.
+In-memory cursor `2` is inferred rather than durable; seeds `>=53000002` were
+untouched. No checkpoint exists. Protected 54m--56m never opened and are
+permanently unused. Exactly two single-link live files—the report and
+ledger—remain. Attempt 1 is consumed and must not be resumed or renamed.
+
+## Frozen partial-visibility recovery workflow — attempt 2 not run
+
+Specification 1.58 retains simulator `sphere_world_v7`, the accepted
+specification-1.56 base, the failed specification-1.57 evidence, and the
+public history, miss-isolation, and recovery semantics above. The terminal
+architecture attempt uses one finite table of `16` rational
+primitives crossed with the `8` exact `D4` transforms, yielding `128` unique
+physical cells. Float32 world evolution is an exact `342`-substep recurrence
+identical to the public solver. Exact raster support owns renderer visibility.
+
+The world/renderer/table/absolute-table/ordered-state/state-set/unordered-
+geometry SHA-256 values are
+`32b34e716ec639cabdd5d36f1c0d30fa17b187546bb5653e4fa7d0a9d6af65d4`,
+`4362f06929f8e8958c1f12e8d2077dded6f8dda3bfdb99eed425899bb289f412`,
+`c3f17e805de234fecb1f1928b47e8fd2127d608447e7b1e87df9a2ec970ce3aa`,
+`f86f218317d656c16f4c85e5b4a75b2e52094724316a3132b0a6e44715bec86e`,
+`bc3e6349fc0d5effecbb53920a9c4224203067f05306330723f8c75dd9f35c57`,
+`96a53595bf7d21b84fed772baef4b754b6e777b7560a8083d303814fa5f611b5`,
+and `27a8dabb2d9936e635cde5b2155fffa5eddb89679b477175119917627772cafa`.
+Certified discriminant, overlap-depth, projected-drift, and D4-conjugacy
+margins are respectively `5.20199537e-5 >= 5e-5`,
+`0.831737 m >= 0.8 m`, `1.144409e-5 px <= 2e-5 px`, and
+`2.861023e-6 m <= 4e-6 m`. Minimum actual visibility margin is `0.05`.
+One-pixel hypothetical clearance is exactly `0.0` under an inclusive gate and
+must not be called positive slack.
+
+Frozen config/harness/runner/qualification-test/config-test/protocol SHA-256
+values are
+`b18f787987394f77771dbf31dae1642bd042b81e64b02a3e93b8cd048dd3416b`,
+`859dedf68031ee66cec1334d2fc094078bc2aacf0deac4388c53337033b63519`,
+`a16c0712b611ebe64dd5052efde3f73e3c5aa18f1b1c5f825f571c2674e598c0`,
+`f4d35320f484484429cdfadb9f3faed6ad5c1ad85492d6ffaa378a7076955714`,
+`8f4e14c7ccff5c6af4d820c555956ce12b66854b1aef7ee3fb5ddbaad7abd40a`,
+and `5f049f060f6e8a9682d9413e6bc2d8f9f228f6e2aee67cde16f98d234cac8a3b`.
+
+| split | exact seeds | pure manifest SHA-256 |
+| --- | --- | --- |
+| development | `57000000--57000031` | `ded3d75a7d248e3f9746b03b0cf249f32739208713c4287c45deb5eefd11f8e2` |
+| selector | `58000000--58000023` | `effa598aa07a44c100da115f71828e00754f181729063899353d22b551f7227a` |
+| confirmation | `59000000--59000023` | `9240a1dd465574de8ac032e318f3cee618909ed6a5b3e91c5fd8c87bad146cec` |
+| final | `60000000--60000047` | `17fdd50896729b981357960ea0db74ef19e059e21bc8d8e41a7048cf237200a6` |
+
+Their signature-list SHA-256 values are development
+`8426ea4d0a7e1d507c5d7fc825afa8864ee694a04df622cba955b92ffd4350c0`,
+selector `d421862763a3e0bc0af042fd81704c836c2123ad0fa260130e791cb250c0b2c7`,
+confirmation
+`261f975fcd46795ff9f56c94857de69942ea047455f65cc0341bdc515cc76af5`,
+and final
+`1837d40a35ddba88e3a91f74c5b2c398aa01675ad8e84efa2fe660bbf49e34a2`.
+All are unopened; no v2 artifact exists.
+
+The v2 run root is `runs/rgbd_partial_visibility_recovery_v2/`. Raw
+construction/evaluation are private. A direct guard protects the immutable
+live-v1 report/ledger, tracked fixtures match those exact bytes, and only an
+exact canonical ledger-minted capability may construct a scene. There is no
+oracle. Exactly five canonical v2 single-link files are permitted, and the
+restricted checkpoint must load with `weights_only=True`.
+
+The canonical gate passes `315 passed in 345.27 s`; the public-solver proof
+passes `1 passed in 244.52 s`; the full suite passes
+`1407 passed, 16 skipped in 816.14 s`; and two independent final audits report
+`PASS`. These are source/security proofs, not episode evidence.
+
+Do not execute development yet. First commit and push the exact source/docs
+freeze, then prove the tree clean with `HEAD == upstream`. The development
+ledger may then mint the sole attempt-2 capability. Independently audit a
+passing report/checkpoint/ledger before selector -> confirmation -> final is
+authorized exactly once. Any development failure stops the rung permanently;
+there is no architecture attempt 3.

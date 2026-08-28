@@ -2,6 +2,86 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-28 immutable attempt-1 failure and terminal partial-visibility source freeze
+
+- Advanced the authoritative contract to specification 1.58 while retaining
+  simulator `sphere_world_v7`, the accepted specification-1.56
+  exactly-two-visible qualification, and the specification-1.57 pre-access
+  freeze as historical evidence.
+- Recorded architecture attempt 1 as consumed on clean commit
+  `7e67823667769e47bad3678207f2c01bd3edbfe4`. Its immutable development
+  report is `13,948` bytes with SHA-256
+  `7c08c794690a10d46100b8d17ee448e3a83960d265ec7859bb91cd6d2ac9ca9d`;
+  its `1,110`-byte ledger has SHA-256
+  `e4993abefefe07e0b0fb57a65769fa270012524d62c8ebab4b7db0251979aab4`.
+  Config/protocol/development-manifest SHA-256 values are
+  `7d563382a8f4b6e301ac30510152f1b1409da32248aacf15dff460ea71d29e2c`,
+  `e178d572a238c17eaa4c23f1b0942e2c4e70103a73af3ab51736fffe36b0d8fd`,
+  and
+  `ca1fb17e87df5216c4429342f74dcccd2c31b11b8d48bb3c76eee27e139cf391`;
+  runtime/worktree fingerprints are
+  `2345bcf6d785cd864301dbcdcb23cc8f7287f1815615fd1e30e6f635084f12c3`
+  / `0d44cabadce831238fe1c8c1cda450677b62f20af3fcf9a411fa4ef621b1842f`.
+- Preserved the exact failure boundary: seed `53000000` completed the private
+  constructor; seed `53000001` rendered `58` frames and failed renderer
+  visibility preflight at frame `4`, where mild rear support/visible pixels
+  were `20/15`, so exact raster visibility was `0.75 < 0.80` despite
+  continuous visibility `0.826827`. Failure preceded model, collate, and
+  runtime. In-memory cursor `2` is inferred, not durable; seeds
+  `>=53000002` were untouched, no checkpoint exists, and protected
+  54m--56m namespaces were never opened and are permanently unused. The live
+  v1 inventory is exactly two single-link files: report and ledger.
+- Froze architecture attempt 2 of the maximum two at
+  `runs/rgbd_partial_visibility_recovery_v2/`. Its constructor is one finite
+  table of `16` rational primitives crossed with `8` exact `D4` transforms,
+  yielding `128` unique physical cells. Float32 world evolution uses the exact
+  `342`-substep public-solver recurrence. World/renderer trace SHA-256 values
+  are
+  `32b34e716ec639cabdd5d36f1c0d30fa17b187546bb5653e4fa7d0a9d6af65d4`
+  / `4362f06929f8e8958c1f12e8d2077dded6f8dda3bfdb99eed425899bb289f412`.
+- Bound table/absolute-table/ordered-state/state-set/unordered-geometry
+  SHA-256 values
+  `c3f17e805de234fecb1f1928b47e8fd2127d608447e7b1e87df9a2ec970ce3aa`,
+  `f86f218317d656c16f4c85e5b4a75b2e52094724316a3132b0a6e44715bec86e`,
+  `bc3e6349fc0d5effecbb53920a9c4224203067f05306330723f8c75dd9f35c57`,
+  `96a53595bf7d21b84fed772baef4b754b6e777b7560a8083d303814fa5f611b5`,
+  and `27a8dabb2d9936e635cde5b2155fffa5eddb89679b477175119917627772cafa`.
+  Certified margins include discriminant
+  `5.20199537e-5 >= 5e-5`, overlap depth `0.831737 m >= 0.8 m`, projected
+  drift `1.144409e-5 px <= 2e-5 px`, D4 conjugacy
+  `2.861023e-6 m <= 4e-6 m`, actual visibility margin `0.05`, and support
+  counts `18/14/14`. One-pixel hypothetical clearance is exactly `0.0` under
+  an inclusive gate, not positive slack.
+- Bound current config/harness/runner/qualification-test/config-test/protocol
+  SHA-256 values
+  `b18f787987394f77771dbf31dae1642bd042b81e64b02a3e93b8cd048dd3416b`,
+  `859dedf68031ee66cec1334d2fc094078bc2aacf0deac4388c53337033b63519`,
+  `a16c0712b611ebe64dd5052efde3f73e3c5aa18f1b1c5f825f571c2674e598c0`,
+  `f4d35320f484484429cdfadb9f3faed6ad5c1ad85492d6ffaa378a7076955714`,
+  `8f4e14c7ccff5c6af4d820c555956ce12b66854b1aef7ee3fb5ddbaad7abd40a`,
+  and `5f049f060f6e8a9682d9413e6bc2d8f9f228f6e2aee67cde16f98d234cac8a3b`.
+- Froze fresh development/selector/confirmation/final manifests
+  `ded3d75a7d248e3f9746b03b0cf249f32739208713c4287c45deb5eefd11f8e2`,
+  `effa598aa07a44c100da115f71828e00754f181729063899353d22b551f7227a`,
+  `9240a1dd465574de8ac032e318f3cee618909ed6a5b3e91c5fd8c87bad146cec`,
+  and `17fdd50896729b981357960ea0db74ef19e059e21bc8d8e41a7048cf237200a6`
+  over 57m/58m/59m/60m seeds. Their signature-list SHA-256 values are
+  `8426ea4d0a7e1d507c5d7fc825afa8864ee694a04df622cba955b92ffd4350c0`,
+  `d421862763a3e0bc0af042fd81704c836c2123ad0fa260130e791cb250c0b2c7`,
+  `261f975fcd46795ff9f56c94857de69942ea047455f65cc0341bdc515cc76af5`,
+  and `1837d40a35ddba88e3a91f74c5b2c398aa01675ad8e84efa2fe660bbf49e34a2`.
+- Hardened authorization with a private raw constructor/evaluator, direct
+  live-v1 guard, exact tracked report/ledger fixtures, and an exact canonical
+  ledger-minted capability. The protocol has no oracle, permits exactly five
+  canonical v2 files, and restricts checkpoint loading to `weights_only=True`.
+- Passed the canonical gate (`315 passed in 345.27 s`), public-solver proof
+  (`1 passed in 244.52 s`), and full repository gate
+  (`1407 passed, 16 skipped in 816.14 s`). Two independent final audits report
+  `PASS`. All v2 namespaces remain unopened and no v2 artifact exists.
+- Declared the tree source-freeze ready for commit/push only. Development may
+  begin only after clean `HEAD == upstream`; a failed attempt-2 development
+  ends the rung with no attempt 3.
+
 ### 2026-08-27 frozen bounded-partial-visibility/isolated-miss RGB-D rung
 
 - Advanced the authoritative contract to specification 1.57 while retaining
