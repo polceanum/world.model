@@ -2,7 +2,73 @@
 
 ## Unreleased — 2026-07-28
 
-### 2026-08-28 frozen known-calibrated orbital-camera RGB-D rung
+### 2026-08-28 accepted known-calibrated orbital-camera RGB-D qualification
+
+- Accepted the frozen specification-1.57 rung on committed source
+  `c15afd6d57963b24bb98c5171462ff927e7c72fd`, local upstream `0/0`, worktree
+  fingerprint
+  `0a5acfc54a5af482643b0c1037cf566a700e6122d2e6b51f7f4ad713ff652d2e`,
+  and runtime fingerprint
+  `bec3ca667fa464a3bbe82a83c14ffa924920ca367f14b6d9036ce52af041b83b`.
+  Specification remains 1.57 and simulator remains `sphere_world_v7`.
+- Bound development report/ledger/checkpoint SHA-256 and byte sizes
+  `56d7e32c461d9b5e3fbca5e2e11e015662cd08c3d60dfb4807e75cbcb7f8e37b`
+  / `88,743`,
+  `3f9d5c9cf88ae7e40517337799e270d02493e99ed58eaec24884e276dcec5ddf`
+  / `1,544`, and
+  `c473bb6d5f453c786c681509350d66364e1f1c61a2656a7c35354ab806da1a25`
+  / `78,573`; qualification report/ledger SHA-256 and bytes are
+  `6daf2dea453db7c3a32b7950c8f31201ccc3fc32b9da1b14d8cc97dbd46ee0ad`
+  / `202,540` and
+  `2aeb1c0194332004350c98628210d42724e31ece16614a210e2a84d6640b2719`
+  / `2,293`.
+- Bound development/selector/confirmation/final result SHA-256
+  `555871b24bfb764712d8dcae8473d5a9ad4c0ec6e9f02ffd42b2063af3cd7bc2`,
+  `fcfd1b39393a8e41d0b112244b7e5ca4fe3c0b2e4e63b4cd729659781198e9d6`,
+  `c3d644786d308a03d619eaf2a4d954bc216b1daf8655a9217f09e372ab27cd0b`,
+  and `b8ae823e961a981360717be273fe10d1ff5f9ce3bcbd6c396ba78fd5fdf0a4bf`.
+  Every split reports exactly `685/685` finite float metrics, all `686`
+  constraints pass, and `failures: []`.
+- Development/selector/confirmation/final current-position RMSE is
+  `1.5474954e-5/1.5932185e-5/1.6963295e-5/1.7444936e-5 m`; current-velocity
+  RMSE is
+  `1.9066727e-5/1.8599896e-5/1.9596576e-5/1.8386924e-5 m/s`. Corresponding
+  stale current-position/current-velocity/two-second-position controls are
+  `0.05323550/0.069687995/0.185869285`,
+  `0.053338622/0.069820234/0.186224087`,
+  `0.053142687/0.069565501/0.185543335`, and
+  `0.053232131/0.069683790/0.185857911`, with metres and metres per second as
+  applicable.
+- All eight camera strata pass. Minimum total VJP L1 across the splits is
+  `2.366e-5/2.259e-5/3.048e-5/2.502e-5`; minimum temporal-frame VJP L1 is
+  `6.546e-8/7.199e-8/3.345e-8/5.819e-8`. Cross-scene, non-anchor, and
+  homogeneous-row gradients are exactly zero. Identity/history,
+  camera/public-physics agreement, and the frozen certificate are exact.
+- Perception spans `0.3452--0.3944 s`, five-query rollout spans
+  `0.003469--0.003704 s`, persistent state is `28,512` bytes, and RSS remains
+  below `578 MB`. Parameter/model/optimizer state and updates remain zero;
+  initial and final state equal empty digest
+  `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+  The full source gate is `1302 passed, 16 skipped in 594.59 s (0:09:54)` and
+  two independent qualification audits pass.
+- Completed the exact five-file single-link inventory with no temporary or
+  extra file. Terminal evidence is complete/passed, stops after `final_test`,
+  and records every access started/passed. Final is consumed and cannot be
+  rerun or tuned against.
+- Preserved disclosed audit limits: the terminal snapshot is not an
+  append-only signed history; exactly-once relies on final state plus committed
+  control flow; ignored artifacts are unsigned/unlogged and deletable by a
+  filesystem writer; external hashes identify no reviewer; upstream equality
+  used an unfetched local tracking ref; and raw protected episodes were not
+  rederived or audited.
+- Accepted scope remains exactly two fully visible, separated, non-contact
+  spheres under one known calibrated orbit, complete RGB-D, gravity `0`, and
+  drag `0.05`. This is not general moving-camera, pose-learning, occlusion,
+  contact, variable-count, or learned-capacity evidence. The failed partial
+  family remains closed; any next rung must be genuinely new and frozen before
+  access.
+
+### 2026-08-28 historical source freeze: known-calibrated orbital-camera RGB-D
 
 - Advanced the authoritative contract to specification 1.57 while retaining
   simulator `sphere_world_v7` and every accepted specification-1.56 result.
@@ -36,20 +102,20 @@
   `c97fff97459ee9962b972cb7905887c2b2ed6eb5a1837d908f1512ce77e6d97f`,
   `b47f03633732fc2986939e71007a0a79b12db2b42f0b5261b4ebd2d0a304f544`,
   and `82927d192b53f2e4af11491f53039c145acfd8e0401a3e2b0b1e974591ee4174`.
-  No episode, manifest artifact, report, checkpoint, ledger, run directory, or
-  accuracy result exists.
-- Fixed all future artifacts under the fresh exact
-  `runs/rgbd_two_visible_orbital_camera_v1/` inventory. Development may run
-  once only after clean `HEAD` equals its published upstream. Protected access
-  requires external review of the exact checkpoint, development report, and
-  development ledger hashes before an exactly-once selector -> confirmation
-  -> final ledger can proceed.
+  At that boundary no episode, manifest artifact, report, checkpoint, ledger,
+  run directory, or accuracy result existed.
+- Fixed all then-future artifacts under the fresh exact
+  `runs/rgbd_two_visible_orbital_camera_v1/` inventory. Development was
+  permitted once only after clean `HEAD` equalled its published upstream.
+  Protected access required external review of the exact checkpoint,
+  development report, and development ledger hashes before an exactly-once
+  selector -> confirmation -> final ledger could proceed.
 - Recorded source checks only: moving-camera file
   `26 passed in 128.43 s`, accepted/configuration regressions
   `254 passed in 6.83 s`, and exact-current-tree complete repository
   `1302 passed, 16 skipped in 594.59 s (0:09:54)`, with two independent
-  science/security audits passing. These are not development or accuracy
-  evidence.
+  science/security audits passing. At that boundary these were not development
+  or accuracy evidence.
 
 ### 2026-08-27 accepted exactly-two-visible RGB-D qualification
 

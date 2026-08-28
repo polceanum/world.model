@@ -5,7 +5,7 @@
 **Status:** Living authoritative specification
 **Version:** 1.57
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze amendment 28 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -8567,13 +8567,13 @@ The disjoint namespaces and canonical manifest SHA-256 values are:
 | confirmation | `63000000--63000023` | `b47f03633732fc2986939e71007a0a79b12db2b42f0b5261b4ebd2d0a304f544` |
 | one-shot final | `64000000--64000047` | `82927d192b53f2e4af11491f53039c145acfd8e0401a3e2b0b1e974591ee4174` |
 
-At this source-freeze boundary all `61m--64m` namespaces remain unopened.  No
-scene from any namespace has been constructed or inspected, and
-`runs/rgbd_two_visible_orbital_camera_v1/` does not exist.  There is no
+At that source-freeze boundary all `61m--64m` namespaces were unopened.  No
+scene from any namespace had been constructed or inspected, and
+`runs/rgbd_two_visible_orbital_camera_v1/` did not exist.  There was no
 manifest artifact, report, checkpoint, ledger, result, or accuracy evidence
-for this rung.  The manifest hashes bind only the predeclared seed lists.
+for this rung.  The manifest hashes bound only the predeclared seed lists.
 
-All future artifacts have exact fixed paths:
+The frozen protocol assigned all eventual artifacts exact fixed paths:
 
 - `runs/rgbd_two_visible_orbital_camera_v1/development_report.json`;
 - `runs/rgbd_two_visible_orbital_camera_v1/development_model.pt`;
@@ -8581,23 +8581,23 @@ All future artifacts have exact fixed paths:
 - `runs/rgbd_two_visible_orbital_camera_v1/qualification_report.json`; and
 - `runs/rgbd_two_visible_orbital_camera_v1/qualification_attempt_1_access.json`.
 
-The directory and every output must be fresh.  Lexical path containment,
+The directory and every output had to be fresh.  Lexical path containment,
 regular-file type, single-link ownership, symlink rejection, exact inventory,
-atomic replacement, and stable-read checks apply before and after each phase.
-Only a private durable ledger may mint the single-use manifest capability,
-and it records access before construction.  Development may begin exactly
-once only after the complete specification-1.57 tree is committed cleanly,
-has a configured upstream, and clean `HEAD` equals the published upstream
-commit with zero commits ahead or behind.
+atomic replacement, and stable-read checks applied before and after each phase.
+Only a private durable ledger could mint the single-use manifest capability,
+and it had to record access before construction.  Development was permitted
+exactly once only after the complete specification-1.57 tree had been
+committed cleanly, had a configured upstream, and clean `HEAD` equalled the
+published upstream commit with zero commits ahead or behind.
 
-A passing development report alone cannot open protected data.  An external
-review must bind the exact SHA-256 of the development checkpoint, development
-report, and development access ledger.  The protected command accepts those
+A passing development report alone could not open protected data.  An external
+review had to bind the exact SHA-256 of the development checkpoint, development
+report, and development access ledger.  The protected command accepted those
 three independently reviewed hashes and no alternate paths.  Its durable
-ledger admits selector -> confirmation -> final exactly once and in that
-order; each predecessor must pass before the next manifest capability exists.
-Any failure stops permanently with later namespaces unopened.  Final cannot
-be rerun, renamed, or recycled into tuning.
+ledger admitted selector -> confirmation -> final exactly once and in that
+order; each predecessor had to pass before the next manifest capability could
+exist.  Any failure was required to stop permanently with later namespaces
+unopened.  Final could not be rerun, renamed, or recycled into tuning.
 
 ## 258. Source evidence and interpretation
 
@@ -8609,15 +8609,106 @@ complete repository source gate
 science/security audits pass.  These are implementation, integrity, and
 source-freeze results only; they are not episode or development evidence.
 
-Specification 1.57 therefore freezes a known-calibrated moving-camera source
-and one protected evidence protocol; it accepts no new scientific result.
-The already accepted fixed-camera exactly-two-visible rung remains the highest
-accepted claim.  Development, accuracy, selector, confirmation, and final
-evidence for the orbital-camera rung do not yet exist.  Partial visibility,
-occlusion, misses and recovery, contact, variable count, unknown cameras,
-learned pose, variable physics, tasks, additional modalities, and learned
-capacity remain explicitly unqualified and deferred to separately frozen
-later rungs.
+At that source-freeze boundary, specification 1.57 froze a known-calibrated
+moving-camera source and one protected evidence protocol; it accepted no new
+scientific result.  The fixed-camera exactly-two-visible rung remained the
+highest accepted claim, and development, selector, confirmation, final, and
+accuracy evidence for the orbital-camera rung did not yet exist.  Section 259
+records the later completed qualification without rewriting this historical
+pre-access boundary.
+
+## 259. Accept the exactly-once known-orbital-camera qualification
+
+The exact sections-255--258 source freeze was committed at
+`c15afd6d57963b24bb98c5171462ff927e7c72fd`.  At execution, clean `HEAD`
+equalled its configured upstream with zero commits ahead and behind.  The
+qualification binds worktree fingerprint
+`0a5acfc54a5af482643b0c1037cf566a700e6122d2e6b51f7f4ad713ff652d2e`
+and runtime-source fingerprint
+`bec3ca667fa464a3bbe82a83c14ffa924920ca367f14b6d9036ce52af041b83b`
+to the frozen config, harness, runner, tests, protocol, certificate, and
+manifests recorded above.  The upstream equality check used the local tracking
+reference; it was not a fresh network fetch.
+
+The fixed development phase passed and was independently reviewed before any
+protected authorization.  The exact five-file terminal inventory is:
+
+| artifact | SHA-256 | bytes |
+| --- | --- | ---: |
+| development report | `56d7e32c461d9b5e3fbca5e2e11e015662cd08c3d60dfb4807e75cbcb7f8e37b` | `88,743` |
+| development access ledger | `3f9d5c9cf88ae7e40517337799e270d02493e99ed58eaec24884e276dcec5ddf` | `1,544` |
+| restricted checkpoint | `c473bb6d5f453c786c681509350d66364e1f1c61a2656a7c35354ab806da1a25` | `78,573` |
+| qualification report | `6daf2dea453db7c3a32b7950c8f31201ccc3fc32b9da1b14d8cc97dbd46ee0ad` | `202,540` |
+| qualification access ledger | `2aeb1c0194332004350c98628210d42724e31ece16614a210e2a84d6640b2719` | `2,293` |
+
+Every entry is a single-link regular file.  The inventory contains no
+temporary, alternate, or extra file.  The development report, checkpoint, and
+development ledger were bound by the external three-hash review before the
+protected ledger admitted selector, confirmation, and final.  Their result
+SHA-256 values are:
+
+| split | result SHA-256 |
+| --- | --- |
+| development | `555871b24bfb764712d8dcae8473d5a9ad4c0ec6e9f02ffd42b2063af3cd7bc2` |
+| selector | `fcfd1b39393a8e41d0b112244b7e5ca4fe3c0b2e4e63b4cd729659781198e9d6` |
+| confirmation | `c3d644786d308a03d619eaf2a4d954bc216b1daf8655a9217f09e372ab27cd0b` |
+| final | `b8ae823e961a981360717be273fe10d1ff5f9ce3bcbd6c396ba78fd5fdf0a4bf` |
+
+Each split contains exactly `685/685` finite float metrics, passes all `686`
+frozen constraints, and records `failures: []`.  Principal calibrated and
+stale-calibration evidence is:
+
+| split | current position RMSE | current velocity RMSE | stale current position / velocity / 2 s position RMSE |
+| --- | ---: | ---: | --- |
+| development | `1.5474954e-5 m` | `1.9066727e-5 m/s` | `0.05323550 m` / `0.069687995 m/s` / `0.185869285 m` |
+| selector | `1.5932185e-5 m` | `1.8599896e-5 m/s` | `0.053338622 m` / `0.069820234 m/s` / `0.186224087 m` |
+| confirmation | `1.6963295e-5 m` | `1.9596576e-5 m/s` | `0.053142687 m` / `0.069565501 m/s` / `0.185543335 m` |
+| final | `1.7444936e-5 m` | `1.8386924e-5 m/s` | `0.053232131 m` / `0.069683790 m/s` / `0.185857911 m` |
+
+All eight camera strata pass independently.  Minimum total RGB/depth/
+`world_from_camera` VJP L1 across development, selector, confirmation, and
+final is respectively
+`2.366e-5`/`2.259e-5`/`3.048e-5`/`2.502e-5`; minimum temporal per-frame VJP L1
+is `6.546e-8`/`7.199e-8`/`3.345e-8`/`5.819e-8`.  Cross-scene coupling,
+non-anchor current-position reach, and homogeneous-transform-row gradients are
+exactly zero.  Identity, all sixteen history rows, camera calibration, public
+physics, and the frozen seed-free certificate remain exact on every split.
+
+Perception latency spans `0.3452--0.3944 s`; all five state-only rollout
+queries span `0.003469--0.003704 s`.  Persistent runtime tensor state is
+`28,512` bytes and process maximum RSS remains below `578 MB`.  Learned
+parameters, buffers/model state, optimizer/scheduler/RNG state, and optimizer
+updates remain zero.  The initial and final model-state SHA-256 are identical
+at the empty-state digest
+`4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+The exact source gate remains
+`1302 passed, 16 skipped in 594.59 s (0:09:54)`, and two independent
+qualification audits pass.
+
+The terminal evidence is complete and passed and stops after `final_test`.
+Across the development and protected ledger records, development, selector,
+confirmation, and final each have `access_started: true` and
+`status: passed`.  Final is consumed and must never be rerun, renamed, or used
+for tuning.
+
+This evidence has disclosed integrity limits.  The terminal ledger is an
+atomically replaced snapshot, not an append-only signed history; exactly-once
+access is inferred from its final state together with the committed control
+flow.  Ignored artifacts are neither cryptographically signed nor entered in
+a transparency log and remain deletable by a filesystem writer.  The external
+hashes carry no reviewer identity.  The upstream check used a local tracking
+reference rather than a fresh network fetch.  Audit did not rederive or
+audit the raw protected episodes.
+
+This accepts only the certified exactly-two, fully visible, image-separated,
+fixed-radius, non-contact, complete-RGB-D family under the declared known
+calibrated orbit, gravity `0`, and drag `0.05`.  It is not evidence for general
+moving-camera behavior, unknown-camera or learned-pose estimation, partial
+visibility, occlusion, missed-observation recovery, contact, variable count,
+variable physics, learned capacity, tasks, or general world-model convergence.
+The failed partial-visibility family remains closed and must not be revived or
+retried.  Any next rung must introduce a genuinely new capability under its
+own pre-access source, manifest, gate, and evidence contract.
 
 # Closing directive
 

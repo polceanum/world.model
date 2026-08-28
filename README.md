@@ -82,13 +82,13 @@ parameter-free, differentiable, fixed-camera, non-contact result—not evidence
 for partial visibility, contact, variable count, learned capacity, or general
 world-model convergence.
 
-Specification 1.57 freezes the next single-capability rung: the same exactly
-two fully visible, image-separated, non-contact spheres and complete RGB-D,
-now under a known calibrated orbital camera. Its `61m--64m` development,
-selector, confirmation, and final namespaces are all unopened, and no run
-artifact or accuracy result exists. Development remains blocked until the
-complete frozen tree is clean, committed, and identical to its published
-upstream.
+Specification 1.57 now also accepts that same exactly-two-visible family under
+one known calibrated orbital camera. Development and the exactly-once
+selector -> confirmation -> final ladder all passed on committed source
+`c15afd6`; final is consumed and must not be rerun. This remains a
+parameter-free result for one certified orbit—not general moving-camera,
+unknown-pose, learned-pose, occlusion, contact, variable-count, or learned-
+capacity evidence.
 
 ## Quick start
 
@@ -451,19 +451,21 @@ tamper-evident, not OS-enforced WORM storage. Live history remains outside
 ordinary checkpoints. The reviewed tree was fast-forwarded to GitHub `main`
 through `1e951520e5a2bf06c1932f64b8334e552247de82`. At that acceptance boundary,
 partial visibility and missed-observation recovery had been proposed as the
-next rung. The current specification instead inserts one smaller known-camera-
-motion rung first. Partial visibility, misses/recovery, occlusion, variable
-count, contact, unknown camera pose, variable physics, uncertainty calibration,
+next rung. Specification 1.57 instead inserted and has now accepted one smaller
+known-camera-motion rung first. The failed partial-visibility family remains
+closed and must not be retried. Misses/recovery, occlusion, variable count,
+contact, unknown camera pose, variable physics, uncertainty calibration,
 tasks, added modalities, and learned capacity all remain unqualified.
 
-### Frozen known-calibrated orbital-camera RGB-D rung — no episode access
+### Qualified known-calibrated orbital-camera RGB-D rung — final consumed once
 
-Specification 1.57 keeps exactly two fixed-radius spheres fully visible,
-image-separated, and non-contacting, with gravity `0`, drag `0.05`, complete
-RGB-D, and zero learned parameters, learned state, pose estimation, or optimizer
-updates. Sixteen physical primitives cross four orbital phases and two
-directions to form 128 joint scenes. The public runtime receives the exact
-time-aligned `world_from_camera` calibration; camera pose is not inferred.
+At the historical pre-access boundary, specification 1.57 froze exactly two
+fixed-radius spheres fully visible, image-separated, and non-contacting, with
+gravity `0`, drag `0.05`, complete RGB-D, and zero learned parameters, learned
+state, pose estimation, or optimizer updates. Sixteen physical primitives
+cross four orbital phases and two directions to form 128 joint scenes. The
+public runtime receives exact time-aligned `world_from_camera`; camera pose is
+not inferred.
 
 Frozen config, harness, runner, test, protocol, and certificate SHA-256 values
 are respectively
@@ -490,17 +492,57 @@ and calibration extrema cover all 128 joint scenes before seed access.
 | confirmation | `63000000--63000023` | `b47f03633732fc2986939e71007a0a79b12db2b42f0b5261b4ebd2d0a304f544` |
 | final | `64000000--64000047` | `82927d192b53f2e4af11491f53039c145acfd8e0401a3e2b0b1e974591ee4174` |
 
-All four namespaces remain unopened. The exact fresh artifact directory is
-`runs/rgbd_two_visible_orbital_camera_v1/`; it does not yet exist. After a
-single published-clean development pass, external review must bind the exact
-checkpoint, development-report, and development-ledger hashes before the
-durable ledger can admit selector -> confirmation -> final exactly once.
-The frozen implementation passed
-`26 passed in 128.43 s`, the accepted/configuration regression set passed
-`254 passed in 6.83 s`, and the exact current specification-1.57 tree passed
-`1302 passed, 16 skipped in 594.59 s (0:09:54)`; two independent
-science/security audits passed. Those are source-freeze checks, not
-development or accuracy evidence.
+At that historical boundary all four namespaces were unopened and no artifact
+existed. The exact freeze was then committed as
+`c15afd6d57963b24bb98c5171462ff927e7c72fd`, with local upstream `0/0`,
+worktree fingerprint
+`0a5acfc54a5af482643b0c1037cf566a700e6122d2e6b51f7f4ad713ff652d2e`,
+and runtime fingerprint
+`bec3ca667fa464a3bbe82a83c14ffa924920ca367f14b6d9036ce52af041b83b`.
+Development passed and external review bound the exact checkpoint, report, and
+development-ledger hashes before protected access.
+
+Development report/ledger/checkpoint SHA-256 values are
+`56d7e32c461d9b5e3fbca5e2e11e015662cd08c3d60dfb4807e75cbcb7f8e37b`,
+`3f9d5c9cf88ae7e40517337799e270d02493e99ed58eaec24884e276dcec5ddf`,
+and `c473bb6d5f453c786c681509350d66364e1f1c61a2656a7c35354ab806da1a25`;
+qualification report/ledger SHA-256 values are
+`6daf2dea453db7c3a32b7950c8f31201ccc3fc32b9da1b14d8cc97dbd46ee0ad`
+and `2aeb1c0194332004350c98628210d42724e31ece16614a210e2a84d6640b2719`.
+The five artifacts occupy `88,743`/`1,544`/`78,573`/`202,540`/`2,293` bytes
+in that order and form the exact single-link, no-extra terminal inventory.
+
+| split | result SHA-256 | current position / velocity RMSE |
+| --- | --- | --- |
+| development | `555871b24bfb764712d8dcae8473d5a9ad4c0ec6e9f02ffd42b2063af3cd7bc2` | `1.5474954e-5 m` / `1.9066727e-5 m/s` |
+| selector | `fcfd1b39393a8e41d0b112244b7e5ca4fe3c0b2e4e63b4cd729659781198e9d6` | `1.5932185e-5 m` / `1.8599896e-5 m/s` |
+| confirmation | `c3d644786d308a03d619eaf2a4d954bc216b1daf8655a9217f09e372ab27cd0b` | `1.6963295e-5 m` / `1.9596576e-5 m/s` |
+| final | `b8ae823e961a981360717be273fe10d1ff5f9ce3bcbd6c396ba78fd5fdf0a4bf` | `1.7444936e-5 m` / `1.8386924e-5 m/s` |
+
+Every split has `685/685` finite float metrics, all `686` constraints pass,
+and `failures: []`. Final stale-calibration current-position/current-velocity/
+two-second-position RMSE is
+`0.053232131 m`/`0.069683790 m/s`/`0.185857911 m`. All eight camera strata,
+identity/history, public physics, and the certificate pass. Final minimum total
+and temporal-frame VJP L1 are `2.502e-5` and `5.819e-8`; cross-scene,
+non-anchor, and homogeneous-row gradients are exactly zero.
+
+Perception/rollout spans `0.3452--0.3944 s`/`0.003469--0.003704 s`, persistent
+state is `28,512` bytes, RSS remains below `578 MB`, and initial/final state
+has the same empty SHA-256
+`4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+The full source gate is
+`1302 passed, 16 skipped in 594.59 s (0:09:54)` and two independent
+qualification audits pass. The ledger completed selector -> confirmation ->
+final and stopped after `final_test`; final is consumed.
+
+The terminal snapshot is not an append-only signed history, and exactly-once
+is inferred from final state plus committed control flow. Ignored artifacts
+are unsigned/unlogged and filesystem-deletable, external hashes carry no
+reviewer identity, upstream equality used a local tracking ref without a fresh
+network fetch, and raw protected episodes were not rederived or audited.
+Acceptance is therefore narrow and tamper-evident, not a general moving-camera
+or cryptographic-transparency claim.
 
 The general evaluator still supports explicit disjoint manifests for a
 compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not

@@ -310,18 +310,19 @@ The exact final audit passes; it did not reopen raw protected episodes.
 Owner-writable evidence is tamper-evident rather than OS-enforced WORM storage.
 Final is consumed and cannot be rerun or tuned against.
 
-### 5. Known calibrated orbital camera — source frozen; no data opened
+### 5. Known calibrated orbital camera — qualified; final consumed
 
 The reviewed two-visible tree was fast-forwarded to GitHub `main` through
 `1e951520e5a2bf06c1932f64b8334e552247de82`.
 
-Specification 1.57 inserts one smaller capability before the formerly proposed
-partial-visibility rung. Retain exactly two fixed-radius objects, full
-visibility, image separation, non-contact free motion, complete RGB-D, gravity
-`0`, drag `0.05`, and the accepted parameter-free analytic rollout. Add only a
-known calibrated orbital camera supplied as time-aligned `world_from_camera`;
-do not infer pose. Sixteen disjoint physical primitives cross four phases and
-two directions to produce 128 joint scenes. Simulator semantics remain
+Specification 1.57 inserted one smaller capability before the formerly
+proposed partial-visibility rung. The historical source freeze retained exactly
+two fixed-radius objects, full visibility, image separation, non-contact free
+motion, complete RGB-D, gravity `0`, drag `0.05`, and the accepted
+parameter-free analytic rollout. It added only a known calibrated orbital
+camera supplied as time-aligned `world_from_camera` and did not infer pose.
+Sixteen disjoint physical primitives cross four phases and two directions to
+produce 128 joint scenes. Simulator semantics remain
 `sphere_world_v7`.
 
 Config/harness/runner/tests SHA-256 values are
@@ -343,43 +344,83 @@ Development `61000000--61000031`, selector `62000000--62000023`, confirmation
 `c97fff97459ee9962b972cb7905887c2b2ed6eb5a1837d908f1512ce77e6d97f`,
 `b47f03633732fc2986939e71007a0a79b12db2b42f0b5261b4ebd2d0a304f544`,
 and `82927d192b53f2e4af11491f53039c145acfd8e0401a3e2b0b1e974591ee4174`.
-All remain unopened and the fixed
-`runs/rgbd_two_visible_orbital_camera_v1/` artifact root does not exist.
-Development may run once only after clean `HEAD` equals published upstream;
-external review must bind the checkpoint, development report, and development
-ledger before exactly-once selector -> confirmation -> final access.
+At that boundary all were unopened and the fixed artifact root did not exist.
+Development had to run once only after clean `HEAD` equalled published
+upstream; external review had to bind the checkpoint, development report, and
+development ledger before exactly-once selector -> confirmation -> final
+access.
 
 Source gates are `26 passed in 128.43 s`, `254 passed in 6.83 s`, and
 exact-current-tree `1302 passed, 16 skipped in 594.59 s (0:09:54)`; two
 independent science/security audits pass. They are source-freeze evidence only.
-No development, accuracy, protected-split, or acceptance result exists.
+No development, accuracy, protected-split, or acceptance result existed at
+that historical boundary.
 
-### 6. Partial visibility and missed-observation recovery — deferred
+The exact tree was then committed as
+`c15afd6d57963b24bb98c5171462ff927e7c72fd`, with local upstream `0/0`,
+worktree fingerprint
+`0a5acfc54a5af482643b0c1037cf566a700e6122d2e6b51f7f4ad713ff652d2e`,
+and runtime fingerprint
+`bec3ca667fa464a3bbe82a83c14ffa924920ca367f14b6d9036ce52af041b83b`.
+Development passed external three-hash review, then selector, confirmation,
+and final passed exactly once. Development report/ledger/checkpoint hashes are
+`56d7e32c461d9b5e3fbca5e2e11e015662cd08c3d60dfb4807e75cbcb7f8e37b`,
+`3f9d5c9cf88ae7e40517337799e270d02493e99ed58eaec24884e276dcec5ddf`,
+and `c473bb6d5f453c786c681509350d66364e1f1c61a2656a7c35354ab806da1a25`;
+qualification report/ledger hashes are
+`6daf2dea453db7c3a32b7950c8f31201ccc3fc32b9da1b14d8cc97dbd46ee0ad`
+and `2aeb1c0194332004350c98628210d42724e31ece16614a210e2a84d6640b2719`.
+Their respective byte sizes are
+`88,743/1,544/78,573/202,540/2,293`.
 
-Retain exactly two fixed-radius objects, known camera and physical parameters,
-non-contact free motion, RGB-D input, and every accepted lower-rung gate. Add
-only bounded partial visibility and isolated missed observations. Before
-access, freeze visible-fraction strata, miss length/placement, association
-coverage, identity switches/mismatches, reacquisition latency, post-recovery
-current/five-horizon state error, VJPs, memory, and throughput on new disjoint
-manifests. Do not add variable count, contact, learned capacity, unknown camera
-pose, or another modality, and never tune on a consumed lower-rung final. This
-is a future contract only, not accepted evidence.
+Development/selector/confirmation/final result hashes are
+`555871b24bfb764712d8dcae8473d5a9ad4c0ec6e9f02ffd42b2063af3cd7bc2`,
+`fcfd1b39393a8e41d0b112244b7e5ca4fe3c0b2e4e63b4cd729659781198e9d6`,
+`c3d644786d308a03d619eaf2a4d954bc216b1daf8655a9217f09e372ab27cd0b`,
+and `b8ae823e961a981360717be273fe10d1ff5f9ce3bcbd6c396ba78fd5fdf0a4bf`.
+Every split has `685/685` finite float metrics, all `686` constraints pass,
+and `failures: []`. Current-position RMSE spans
+`1.5474954e-5--1.7444936e-5 m`; current-velocity RMSE spans
+`1.8386924e-5--1.9596576e-5 m/s`. Stale-camera position/velocity/two-second
+position remains near `0.053/0.070/0.186`, separating known calibration from
+the frame-0 control.
 
-### 7. Observable nuisance variables and additional useful modalities
+All eight strata, identity/history, certificate/public physics, resources, and
+RGB/depth/calibration VJPs pass. Cross-scene, non-anchor, and homogeneous-row
+gradients are zero. Perception/rollout is
+`0.3452--0.3944 s`/`0.003469--0.003704 s`, state is `28,512` bytes, RSS is
+below `578 MB`, and learned/optimizer state is zero. The five-file terminal
+inventory is exact; the ledger stops after `final_test`; final is consumed;
+and two independent qualification audits pass.
 
-After the known calibrated moving-camera rung has its own accepted evidence,
-add one remaining variable at a time: identifiable drag, then variable metric
-scale, then unknown-pose estimation under a separate contract. Camera pose or
-IMU is calibration input when declared known, not hidden simulator state.
-RGB-only depth inference is a later ablation against the accepted RGB-D state,
-not the route used to establish metric observability. Audio is added only for
-an event or material task where it provides independently scored information.
+Evidence remains a terminal snapshot rather than signed append-only history;
+exactly-once is inferred from final state plus committed control flow. Ignored
+artifacts are unsigned/unlogged and filesystem-deletable, hashes carry no
+reviewer identity, upstream equality used an unfetched local tracking ref, and
+raw protected episodes were not rederived or audited. Acceptance therefore
+covers only the declared known orbit, not arbitrary camera motion or pose
+learning.
+
+### 6. Partial visibility and missed-observation recovery — failed family closed
+
+The separate partial-visibility and missed-observation-recovery family failed
+and is terminal. It is not an accepted rung, must not be revived or retried,
+and cannot be renamed as the next capability. Its historical material remains
+only as failure provenance.
+
+### 7. Next independent capability — not yet frozen
+
+No next active rung is selected or authorized by this document. It must add one
+genuinely new capability, freeze source/manifests/gates before access, preserve
+every accepted lower-rung gate, and remain distinct from the closed partial
+family. Candidates include identifiable drag, variable metric scale,
+variable-size sets, contact/material identification, actions/planning, or a
+new useful modality; listing them does not predeclare or authorize one.
 
 ### 8. Variable-size object sets
 
-Only after rung 6 qualifies partial visibility/recovery at fixed count,
-progress to variable set size and longer occlusion/reappearance. Require
+Variable-size sets require their own predeclared association/lifecycle and
+recovery contract rather than inheriting the failed rung 6 family. Require
 per-object state/horizon gates, association coverage, identity-switch limits,
 permutation invariance, and recovery after missed observations before
 increasing scene count or backbone capacity.

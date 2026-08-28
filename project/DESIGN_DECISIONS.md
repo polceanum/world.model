@@ -1,11 +1,98 @@
 # Design decisions
 
+## ADR-168 — Accept the exactly-once known-orbital-camera RGB-D qualification
+
+- **Date:** 2026-08-28
+- **Status:** accepted within the frozen narrow family; development and the
+  ordered protected ladder passed, and final is consumed
+- **Context:** ADR-167 froze one new capability only: a known calibrated orbit
+  around the already accepted exactly-two-visible, image-separated,
+  non-contact RGB-D scene. It predeclared 16 physical primitives crossed with
+  eight camera strata, the 685-float metric schema, stale-frame-0 calibration
+  control, RGB/depth/`world_from_camera` VJPs, resources, exact paths, external
+  three-hash review, and an exactly-once selector -> confirmation -> final
+  ledger. No episode evidence existed at that boundary.
+- **Decision:** Accept only the completed evidence bound to clean committed
+  source `c15afd6d57963b24bb98c5171462ff927e7c72fd`, local upstream equality
+  `0/0`, worktree fingerprint
+  `0a5acfc54a5af482643b0c1037cf566a700e6122d2e6b51f7f4ad713ff652d2e`,
+  and runtime fingerprint
+  `bec3ca667fa464a3bbe82a83c14ffa924920ca367f14b6d9036ce52af041b83b`.
+  Preserve specification 1.57 and simulator `sphere_world_v7`.
+- **Artifacts:** Development report/ledger/checkpoint SHA-256 and byte sizes
+  are
+  `56d7e32c461d9b5e3fbca5e2e11e015662cd08c3d60dfb4807e75cbcb7f8e37b`
+  / `88,743`,
+  `3f9d5c9cf88ae7e40517337799e270d02493e99ed58eaec24884e276dcec5ddf`
+  / `1,544`, and
+  `c473bb6d5f453c786c681509350d66364e1f1c61a2656a7c35354ab806da1a25`
+  / `78,573`. Qualification report/ledger SHA-256 and byte sizes are
+  `6daf2dea453db7c3a32b7950c8f31201ccc3fc32b9da1b14d8cc97dbd46ee0ad`
+  / `202,540` and
+  `2aeb1c0194332004350c98628210d42724e31ece16614a210e2a84d6640b2719`
+  / `2,293`. The terminal inventory is exactly these five single-link regular
+  files with no temporary or extra entry.
+- **Split bindings:** Development, selector, confirmation, and final result
+  SHA-256 values are
+  `555871b24bfb764712d8dcae8473d5a9ad4c0ec6e9f02ffd42b2063af3cd7bc2`,
+  `fcfd1b39393a8e41d0b112244b7e5ca4fe3c0b2e4e63b4cd729659781198e9d6`,
+  `c3d644786d308a03d619eaf2a4d954bc216b1daf8655a9217f09e372ab27cd0b`,
+  and `b8ae823e961a981360717be273fe10d1ff5f9ce3bcbd6c396ba78fd5fdf0a4bf`.
+  Every split has exactly `685/685` finite float metrics, all `686` constraints
+  pass, and `failures: []`.
+- **Accuracy and negative control:** Development/selector/confirmation/final
+  current-position RMSE is
+  `1.5474954e-5/1.5932185e-5/1.6963295e-5/1.7444936e-5 m`; current-velocity
+  RMSE is
+  `1.9066727e-5/1.8599896e-5/1.9596576e-5/1.8386924e-5 m/s`. The corresponding
+  stale-calibration current-position/current-velocity/two-second-position
+  triples are
+  `0.05323550/0.069687995/0.185869285`,
+  `0.053338622/0.069820234/0.186224087`,
+  `0.053142687/0.069565501/0.185543335`, and
+  `0.053232131/0.069683790/0.185857911` in metres and metres per second as
+  applicable.
+- **Strata, gradients, identity, and physics:** All eight camera strata pass.
+  Minimum total VJP L1 is
+  `2.366e-5/2.259e-5/3.048e-5/2.502e-5`, and minimum temporal-frame VJP L1 is
+  `6.546e-8/7.199e-8/3.345e-8/5.819e-8` across the four splits. Cross-scene,
+  non-anchor, and homogeneous-row gradients are exactly zero. Identity and
+  all history rows are exact; camera/public-physics agreement reproduces the
+  frozen certificate.
+- **Resources and zero state:** Perception spans `0.3452--0.3944 s`, five-query
+  rollout spans `0.003469--0.003704 s`, persistent state is `28,512` bytes,
+  and maximum RSS stays below `578 MB`. Parameter, model/buffer,
+  optimizer/scheduler/RNG state, and updates are zero. Initial and final state
+  both hash to
+  `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+  The full source gate is `1302 passed, 16 skipped in 594.59 s (0:09:54)`;
+  two independent qualification audits pass.
+- **Ledger and final:** The terminal evidence is complete and passed, stops
+  after `final_test`, and records every access as started and passed. Final is
+  consumed and may not be rerun, renamed, or used for tuning.
+- **Audit limitations:** The terminal snapshot is not an append-only signed
+  history, so exactly-once is inferred from final state plus committed control
+  flow. Ignored artifacts lack signatures and transparency logging and remain
+  deletable by a filesystem writer. External hashes identify no reviewer. The
+  upstream equality check used a local tracking ref without a fresh network
+  fetch. Raw protected episodes were not rederived or audited.
+- **Alternatives considered:** broaden acceptance to arbitrary camera motion;
+  claim pose learning; omit stale-camera evidence; rerun final; infer stronger
+  write-once provenance than the files provide; revive the failed
+  partial-visibility family.
+- **Consequences:** Accept only the declared known orbit with exactly two fully
+  visible separated non-contact spheres, complete RGB-D, gravity `0`, and drag
+  `0.05`. This is not general moving-camera, unknown-pose, learned-pose,
+  occlusion, partial-visibility, recovery, contact, variable-count,
+  learned-capacity, or general-convergence evidence. The failed partial family
+  remains closed. A next rung must be a genuinely new capability frozen before
+  access.
+
 ## ADR-167 — Freeze the known-calibrated orbital-camera RGB-D rung before access
 
 - **Date:** 2026-08-28
-- **Status:** frozen source contract; the scientific rung remains unaccepted,
-  all development and protected namespaces remain unopened, and no
-  development or accuracy result exists
+- **Status:** historical source-freeze contract; all namespaces were unopened
+  at that boundary, and ADR-168 records the later accepted qualification
 - **Context:** ADR-166 accepted the exactly-two-visible, fixed-camera,
   non-contact RGB-D family. The smallest independent next capability is known
   camera motion. Adding partial visibility, misses/recovery, contact, variable
@@ -37,24 +124,26 @@
 - **Certificate and gate schema:** The seed-free certificate covers all 16
   physical trajectories and 128 joint appearances, full visibility,
   image/world separation, zero events, non-degenerate camera motion, and
-  calibrated public-renderer geometry. Each split must publish exactly 685
-  finite gate floats. Gates cover state and every horizon, identity,
-  association, public-versus-analytic physics, semigroup agreement, one state
-  owner, stationary baselines, finite values, calibration, resources, and zero
-  learned/optimizer state.
-- **Negative control and gradients:** Preserve real RGB-D while replacing
-  frames `1--15` with stale frame-0 `world_from_camera`. Require calibrated
-  current position/current velocity/two-second position to beat the stale
-  control with fixed floors and ratios, including certificate-derived ideal
-  WLS lower bounds. Audit fixed-output VJPs separately to RGB, depth, and
-  `world_from_camera`; current position remains anchor-only, every temporal
-  output reaches all sixteen frames, homogeneous rigid-transform rows have
-  zero gradient, and cross-scene coupling is exactly zero.
-- **Resource contract:** Enforce one CPU thread, at most `3.0 s` perception,
-  `0.075 s` for all five state-only queries, `65,536` persistent tensor bytes,
+  calibrated public-renderer geometry. Each split was required to publish
+  exactly 685 finite gate floats. Gates covered state and every horizon,
+  identity, association, public-versus-analytic physics, semigroup agreement,
+  one state owner, stationary baselines, finite values, calibration,
+  resources, and zero learned/optimizer state.
+- **Negative control and gradients:** The protocol preserved real RGB-D while
+  replacing frames `1--15` with stale frame-0 `world_from_camera`. It required
+  calibrated current position/current velocity/two-second position to beat the
+  stale control with fixed floors and ratios, including certificate-derived
+  ideal WLS lower bounds. It audited fixed-output VJPs separately to RGB,
+  depth, and `world_from_camera`; current position remained anchor-only,
+  every temporal output reached all sixteen frames, homogeneous
+  rigid-transform rows had zero gradient, and cross-scene coupling was
+  exactly zero.
+- **Resource contract:** The protocol enforced one CPU thread, at most `3.0 s`
+  perception, `0.075 s` for all five state-only queries, `65,536` persistent
+  tensor bytes,
   `2,500,000,000` process-RSS bytes, and `1,000,000,000` RSS-growth bytes.
   Parameters, buffers/model state, optimizer/scheduler/RNG state, and updates
-  remain zero.
+  were required to remain zero.
 - **Access boundary:** Development `61000000--61000031`, selector
   `62000000--62000023`, confirmation `63000000--63000023`, and final
   `64000000--64000047` have manifest SHA-256 values
@@ -62,16 +151,17 @@
   `c97fff97459ee9962b972cb7905887c2b2ed6eb5a1837d908f1512ce77e6d97f`,
   `b47f03633732fc2986939e71007a0a79b12db2b42f0b5261b4ebd2d0a304f544`,
   and `82927d192b53f2e4af11491f53039c145acfd8e0401a3e2b0b1e974591ee4174`.
-  All remain unopened. No episode or run artifact exists.
-- **Evidence integrity:** The only allowed artifact root is the fresh exact
+  All were unopened at that boundary. No episode or run artifact existed.
+- **Evidence integrity:** The only allowed artifact root was the fresh exact
   `runs/rgbd_two_visible_orbital_camera_v1/` path, with fixed report,
   checkpoint, development-ledger, qualification-report, and protected-ledger
-  names. Development may run once only after clean `HEAD` equals the configured
-  published upstream. Protected access additionally requires external review
-  of the exact development checkpoint, report, and ledger hashes; the durable
-  ledger then admits selector -> confirmation -> final exactly once. Fresh
+  names. Development was permitted to run once only after clean `HEAD`
+  equalled the configured published upstream. Protected access additionally
+  required external review of the exact development checkpoint, report, and
+  ledger hashes; the durable ledger then admitted selector -> confirmation ->
+  final exactly once. Fresh
   paths, lexical containment, regular single-link files, exact inventory,
-  symlink rejection, atomic writes, and stable reads fail closed.
+  symlink rejection, atomic writes, and stable reads were fail-closed.
 - **Source evidence:** The moving-camera file passes
   `26 passed in 128.43 s`, accepted/configuration regressions pass
   `254 passed in 6.83 s`, and the exact current specification-1.57 tree passes
@@ -83,11 +173,10 @@
   generate development before clean publication; omit the stale-calibration
   control; review only the checkpoint/report pair; permit alternate artifact
   paths or protected retries.
-- **Consequences:** The highest accepted scientific claim remains ADR-166's
-  fixed-camera family. Specification 1.57 authorizes no data access by itself.
-  Partial visibility, occlusion, misses/recovery, contact, variable count,
-  unknown cameras, learned pose, variable physics, tasks, added modalities,
-  and learned capacity remain deferred to independently frozen later rungs.
+- **Consequences:** At that boundary the highest accepted scientific claim was
+  ADR-166's fixed-camera family, and specification 1.57 authorized no data
+  access by itself. ADR-168 records the later execution and narrow acceptance
+  without changing this pre-access contract.
 
 ## ADR-166 — Accept the exactly-once two-visible-object RGB-D qualification
 

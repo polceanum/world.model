@@ -219,33 +219,54 @@
   `c97fff97459ee9962b972cb7905887c2b2ed6eb5a1837d908f1512ce77e6d97f`,
   `b47f03633732fc2986939e71007a0a79b12db2b42f0b5261b4ebd2d0a304f544`,
   and `82927d192b53f2e4af11491f53039c145acfd8e0401a3e2b0b1e974591ee4174`.
-  No scene or run artifact exists.
+  At the historical source-freeze boundary no scene or run artifact existed.
 - [x] Record source gates only: moving-camera file
   `26 passed in 128.43 s`, accepted/configuration regressions
   `254 passed in 6.83 s`, and exact-current-tree full repository
-  `1302 passed, 16 skipped in 594.59 s (0:09:54)`, with two independent
-  science/security audits passing. Do not treat these as development or
-  accuracy evidence.
-- [ ] Commit and publish the exact specification-1.57 source/docs tree with a
-  clean worktree, configured upstream, `HEAD == upstream`, and zero
-  ahead/behind count. Until then, do not construct an episode or create
-  `runs/rgbd_two_visible_orbital_camera_v1/`.
-- [ ] From that exact published tree, run development exactly once at the
-  canonical fresh paths. Independently review the checkpoint, development
-  report, and development ledger hashes; only those three reviewed digests may
-  authorize the protected ladder.
-- [ ] If development and external review pass, consume selector ->
-  confirmation -> final exactly once under the protected ledger. Stop on any
-  failure with later namespaces unopened; never retry, rename, or tune on
-  final.
-- [ ] Keep bounded partial visibility and missed-observation recovery deferred
-  as a later, separately frozen rung. Do not add it, occlusion, contact,
-  variable count, unknown camera pose, learned pose, variable physics, or
-  learned capacity to the orbital-camera evidence.
-- [ ] Add one complexity per still-later rung: partial visibility/recovery;
-  drag identification; variable scale; multi-object sets; identity/occlusion;
-  contact; material parameters; known actions/planning; richer modalities/
-  geometry.
+  `1302 passed, 16 skipped in 594.59 s (0:09:54)`. These were source checks,
+  not development or accuracy evidence.
+- [x] Commit and publish the exact specification-1.57 tree as clean source
+  `c15afd6d57963b24bb98c5171462ff927e7c72fd`, with configured local upstream
+  equality `0/0`, worktree fingerprint
+  `0a5acfc54a5af482643b0c1037cf566a700e6122d2e6b51f7f4ad713ff652d2e`,
+  and runtime fingerprint
+  `bec3ca667fa464a3bbe82a83c14ffa924920ca367f14b6d9036ce52af041b83b`.
+- [x] Execute development once at the canonical paths and complete external
+  three-hash review. Report/ledger/checkpoint SHA-256 values are
+  `56d7e32c461d9b5e3fbca5e2e11e015662cd08c3d60dfb4807e75cbcb7f8e37b`,
+  `3f9d5c9cf88ae7e40517337799e270d02493e99ed58eaec24884e276dcec5ddf`,
+  and `c473bb6d5f453c786c681509350d66364e1f1c61a2656a7c35354ab806da1a25`,
+  at `88,743`/`1,544`/`78,573` bytes.
+- [x] Consume selector -> confirmation -> final exactly once. Qualification
+  report/ledger SHA-256 values are
+  `6daf2dea453db7c3a32b7950c8f31201ccc3fc32b9da1b14d8cc97dbd46ee0ad`
+  and `2aeb1c0194332004350c98628210d42724e31ece16614a210e2a84d6640b2719`,
+  at `202,540`/`2,293` bytes;
+  result SHA-256 values are development
+  `555871b24bfb764712d8dcae8473d5a9ad4c0ec6e9f02ffd42b2063af3cd7bc2`,
+  selector
+  `fcfd1b39393a8e41d0b112244b7e5ca4fe3c0b2e4e63b4cd729659781198e9d6`,
+  confirmation
+  `c3d644786d308a03d619eaf2a4d954bc216b1daf8655a9217f09e372ab27cd0b`,
+  and final
+  `b8ae823e961a981360717be273fe10d1ff5f9ce3bcbd6c396ba78fd5fdf0a4bf`.
+  Final is consumed.
+- [x] Pass exactly `685/685` finite float metrics and all `686` constraints on
+  every split, all eight camera strata, calibrated-versus-stale controls,
+  RGB/depth/calibration VJPs, identity/history, certificate/public physics,
+  resources, zero-state, exact five-file inventory, and two independent
+  qualification audits.
+- [x] Record the evidence limitations: terminal snapshot rather than signed
+  append-only history; exactly-once inferred from snapshot plus committed
+  control flow; unsigned/unlogged filesystem-deletable ignored artifacts;
+  hashes without reviewer identity; local tracking ref without fresh network
+  fetch; and no raw protected-episode rederivation or audit.
+- [x] Keep the failed partial-visibility/recovery family closed. Do not revive,
+  retry, rename, or use it as the next rung.
+- [ ] Select and freeze one genuinely new capability before any new data
+  access. Candidate later capabilities include identifiable drag, variable
+  scale, variable-size object sets, contact/materials, known actions/planning,
+  and richer modalities/geometry; this list does not itself authorize a rung.
 - [ ] At every rung require state/velocity/horizon accuracy, uncertainty,
   support, gradient, memory, and throughput non-regression; stop failed
   architecture families instead of marginal retuning.
