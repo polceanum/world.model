@@ -310,39 +310,81 @@ The exact final audit passes; it did not reopen raw protected episodes.
 Owner-writable evidence is tamper-evident rather than OS-enforced WORM storage.
 Final is consumed and cannot be rerun or tuned against.
 
-### 5. Partial visibility and missed-observation recovery — next after completed merge
+### 5. Known calibrated orbital camera — source frozen; no data opened
 
 The reviewed two-visible tree was fast-forwarded to GitHub `main` through
 `1e951520e5a2bf06c1932f64b8334e552247de82`.
 
-Retain exactly two fixed-radius objects, fixed camera and physical parameters,
-non-contact free motion, RGB-D input, and the accepted parameter-free analytic
-rollout. Add only bounded partial visibility and isolated missed observations.
-Before access, freeze visible-fraction strata, miss length/placement,
-association coverage, identity switches/mismatches, reacquisition latency,
-post-recovery current/five-horizon state error, VJPs, memory, and throughput on
-new disjoint manifests. Do not add variable count, contact, learned capacity,
-camera motion, or another modality, and never tune on the consumed rung-4
-final.
+Specification 1.57 inserts one smaller capability before the formerly proposed
+partial-visibility rung. Retain exactly two fixed-radius objects, full
+visibility, image separation, non-contact free motion, complete RGB-D, gravity
+`0`, drag `0.05`, and the accepted parameter-free analytic rollout. Add only a
+known calibrated orbital camera supplied as time-aligned `world_from_camera`;
+do not infer pose. Sixteen disjoint physical primitives cross four phases and
+two directions to produce 128 joint scenes. Simulator semantics remain
+`sphere_world_v7`.
 
-### 6. Observable nuisance variables and additional useful modalities
+Config/harness/runner/tests SHA-256 values are
+`a9c348ea54b168ec78780d59d3b3eb066344d3a7551464b9aad1e5b9ac6d6cbd`,
+`02e75b325bdf7bad310f8973a786a396b8762104261702b299a9f8103748e569`,
+`11bee2e4d05f83caaf9dbed6ca2a54d4c11b7c70e4bf8e1747b261b8518ef192`,
+and `d08c7bb4a1ba998a51dc2f0ddb1946596a5a299ed236cdf6a91b5711e2d0a1af`.
+Canonical protocol/certificate SHA-256 values are
+`7146befc869ea5f975177dd1c2da4691026439e1d36d84415aa23f696e61ef65`
+and `7832ddb49081292d0f50a5eb63edb38fefb49d136d7e1757c73d9c658e42a36f`.
+The exact 685-float schema includes public physics and resources, an explicit
+stale frame-0-calibration negative control, and fixed-output VJPs to RGB,
+depth, and `world_from_camera`. Learned parameters/state, pose estimation, and
+optimizer updates remain zero.
 
-Add one variable at a time: known moving-camera pose, then identifiable drag,
-then variable metric scale. Camera pose or IMU is calibration input, not hidden
-simulator state. RGB-only depth inference is a later ablation against the
-accepted RGB-D state, not the route used to establish metric observability.
-Audio is added only for an event or material task where it provides
-independently scored information.
+Development `61000000--61000031`, selector `62000000--62000023`, confirmation
+`63000000--63000023`, and final `64000000--64000047` have manifest SHA-256
+`eb558805c2974302c33abef4531e142bb60e8f20045d8530330838223a6899a0`,
+`c97fff97459ee9962b972cb7905887c2b2ed6eb5a1837d908f1512ce77e6d97f`,
+`b47f03633732fc2986939e71007a0a79b12db2b42f0b5261b4ebd2d0a304f544`,
+and `82927d192b53f2e4af11491f53039c145acfd8e0401a3e2b0b1e974591ee4174`.
+All remain unopened and the fixed
+`runs/rgbd_two_visible_orbital_camera_v1/` artifact root does not exist.
+Development may run once only after clean `HEAD` equals published upstream;
+external review must bind the checkpoint, development report, and development
+ledger before exactly-once selector -> confirmation -> final access.
 
-### 7. Variable-size object sets
+Source gates are `26 passed in 128.43 s`, `254 passed in 6.83 s`, and
+exact-current-tree `1302 passed, 16 skipped in 594.59 s (0:09:54)`; two
+independent science/security audits pass. They are source-freeze evidence only.
+No development, accuracy, protected-split, or acceptance result exists.
 
-Only after rung 5 qualifies partial visibility/recovery at fixed count,
+### 6. Partial visibility and missed-observation recovery — deferred
+
+Retain exactly two fixed-radius objects, known camera and physical parameters,
+non-contact free motion, RGB-D input, and every accepted lower-rung gate. Add
+only bounded partial visibility and isolated missed observations. Before
+access, freeze visible-fraction strata, miss length/placement, association
+coverage, identity switches/mismatches, reacquisition latency, post-recovery
+current/five-horizon state error, VJPs, memory, and throughput on new disjoint
+manifests. Do not add variable count, contact, learned capacity, unknown camera
+pose, or another modality, and never tune on a consumed lower-rung final. This
+is a future contract only, not accepted evidence.
+
+### 7. Observable nuisance variables and additional useful modalities
+
+After the known calibrated moving-camera rung has its own accepted evidence,
+add one remaining variable at a time: identifiable drag, then variable metric
+scale, then unknown-pose estimation under a separate contract. Camera pose or
+IMU is calibration input when declared known, not hidden simulator state.
+RGB-only depth inference is a later ablation against the accepted RGB-D state,
+not the route used to establish metric observability. Audio is added only for
+an event or material task where it provides independently scored information.
+
+### 8. Variable-size object sets
+
+Only after rung 6 qualifies partial visibility/recovery at fixed count,
 progress to variable set size and longer occlusion/reappearance. Require
 per-object state/horizon gates, association coverage, identity-switch limits,
 permutation invariance, and recovery after missed observations before
 increasing scene count or backbone capacity.
 
-### 8. Hybrid contact and material identification
+### 9. Hybrid contact and material identification
 
 Introduce sparse two-sphere contact with an analytic hard forward resolver and
 a differentiable local surrogate for learnable pre-contact state/parameter
@@ -351,7 +393,7 @@ state, energy/momentum diagnostics, and observable restitution/friction
 identification. Do not use fabricated straight-through gradients or simulator
 event labels at runtime.
 
-### 9. Actions, counterfactuals, and planning tasks
+### 10. Actions, counterfactuals, and planning tasks
 
 Condition the shared dynamics on known forces/actions and score factual and
 counterfactual trajectories. Tasks include interception, collision avoidance,
@@ -359,7 +401,7 @@ goal-reaching, and information gathering under occlusion. Planning must reuse
 the same cheap state-only rollout, report task success alongside physical
 accuracy, and remain consistent with the online posterior after new evidence.
 
-### 10. Richer geometry and real observations
+### 11. Richer geometry and real observations
 
 Only after the synthetic structured ladder closes, expand object geometry,
 camera environments, RGB-D/video data, and useful asynchronous sensors. Keep a

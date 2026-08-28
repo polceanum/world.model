@@ -1,18 +1,24 @@
 # Project status
 
-## Active generalization program — 2026-08-27
+## Active generalization program — 2026-08-28
 
 The pre-generalization public base was commit
 `c16acc99ef13757fc8f88528bfd0d66db4a2f4fd`; the cleaned generalization
 foundation is GitHub `main` commit
 `08ae63adc5ade2e5061f54539fc7a25564c8c8d6`, and the accepted public RGB-D
 bridge is merged at `3eed0b71e6f18c7036bf376c075493a89d5fdc9f`. Broad heterogeneous training
-remains paused. The active contract is specification 1.56. The accepted base
+remains paused. The active contract is specification 1.57. The accepted base
 now comprises the specification-1.51 differentiable one-sphere unit, the
 qualified standalone two-second RGB-D rung, and its qualified public one-slot
 `OnlineWorldModel` bridge. The accepted branch additionally contains the
 exactly-two-visible RGB-D qualification recorded below—not any older campaign
 checkpoint.
+
+The current unaccepted source freeze adds only a known calibrated orbital
+camera to that exactly-two-visible family. All `61m--64m` namespaces remain
+unopened, no run artifact exists, and no development or accuracy claim has
+been made. Development may begin only from a clean commit that exactly equals
+its published upstream.
 
 The qualified unit achieved, on its single previously untouched final set:
 
@@ -102,9 +108,9 @@ attempt. Its single-frame metric measurement core now passes as recorded
 below. At that historical boundary, the planned order placed public
 `OnlineWorldModel` integration before moving camera, identifiable drag,
 variable metric scale, and then multiple objects. Specification 1.56
-supersedes that ordering after accepting the public bridge: exactly two fully
-visible non-contact objects are now the frozen rung before moving camera,
-identifiable drag, and variable metric scale; variable set size,
+superseded that ordering by accepting exactly two fully visible non-contact
+objects; specification 1.57 now freezes their known calibrated camera-motion
+extension before identifiable drag and variable metric scale. Variable set size,
 identity/occlusion, analytic contact, observable material parameters, known
 actions and counterfactual planning, and richer modalities/geometry remain
 later. Model capacity grows only after a smaller structured rung demonstrably
@@ -463,12 +469,73 @@ tamper-evident, not OS-enforced WORM storage.
 
 The accepted claim is exactly two fully visible, image-separated,
 fixed-radius, non-contact spheres under fixed-camera free motion. It does not
-cover partial visibility, missed-observation recovery, contact, variable count,
-learned capacity, or general convergence. After merge, the next rung may add
-only bounded partial visibility and missed-observation recovery under a new
-freeze; no consumed-final tuning is allowed. That merge is now complete:
-GitHub `main` contains the reviewed net tree through
-`1e951520e5a2bf06c1932f64b8334e552247de82`.
+cover camera motion, partial visibility, missed-observation recovery, contact,
+variable count, learned capacity, or general convergence. That merge is
+complete: GitHub `main` contains the reviewed net tree through
+`1e951520e5a2bf06c1932f64b8334e552247de82`. The current source-only rung adds
+known calibrated camera motion first; the former partial-visibility proposal
+is deferred and remains unaccepted.
+
+## Frozen two-visible orbital-camera rung — source only, all data unopened
+
+Specification 1.57 keeps exactly two fully visible, image-separated,
+non-contact fixed-radius spheres, complete RGB-D, gravity `0`, and drag `0.05`.
+The only new capability is a known calibrated orbital camera; the runtime
+consumes time-aligned `world_from_camera` and performs no pose estimation.
+Sixteen physical primitives cross eight camera strata—four phases by two
+directions—for 128 joint scenes. Learned parameters, learned/model state,
+optimizer state, and updates remain zero. Partial visibility, occlusion,
+misses/recovery, contact, variable count, unknown cameras, learned pose, and
+variable physics remain excluded.
+
+The frozen byte/payload bindings are:
+
+- config `a9c348ea54b168ec78780d59d3b3eb066344d3a7551464b9aad1e5b9ac6d6cbd`;
+- harness `02e75b325bdf7bad310f8973a786a396b8762104261702b299a9f8103748e569`;
+- runner `11bee2e4d05f83caaf9dbed6ca2a54d4c11b7c70e4bf8e1747b261b8518ef192`;
+- harness tests `d08c7bb4a1ba998a51dc2f0ddb1946596a5a299ed236cdf6a91b5711e2d0a1af`;
+- canonical protocol `7146befc869ea5f975177dd1c2da4691026439e1d36d84415aa23f696e61ef65`;
+  and
+- seed-free certificate `7832ddb49081292d0f50a5eb63edb38fefb49d136d7e1757c73d9c658e42a36f`.
+
+The exact per-split schema contains 685 finite floats. The certificate binds
+all 16 physical trajectories and 128 camera appearances, full visibility,
+silhouette/boundary separation, non-contact public physics, non-degenerate
+orbital motion, and exact calibration. An explicit negative control replaces
+history-frame `world_from_camera` values `1--15` with the stale frame-0
+transform. Correct calibration must beat it for current position, current
+velocity, and two-second position. Fixed-output VJPs cover RGB, depth, and
+`world_from_camera`; current position remains anchor-only, every temporal
+output reaches all sixteen frames, and cross-scene coupling is zero. Resource
+gates include one CPU thread, `3.0 s` perception, `0.075 s` five-query rollout,
+`65,536` persistent bytes, `2.5 GB` maximum RSS, and `1.0 GB` RSS growth.
+
+| split | exact seeds | manifest SHA-256 |
+| --- | --- | --- |
+| development | `61000000--61000031` | `eb558805c2974302c33abef4531e142bb60e8f20045d8530330838223a6899a0` |
+| selector | `62000000--62000023` | `c97fff97459ee9962b972cb7905887c2b2ed6eb5a1837d908f1512ce77e6d97f` |
+| confirmation | `63000000--63000023` | `b47f03633732fc2986939e71007a0a79b12db2b42f0b5261b4ebd2d0a304f544` |
+| final | `64000000--64000047` | `82927d192b53f2e4af11491f53039c145acfd8e0401a3e2b0b1e974591ee4174` |
+
+All four namespaces remain unopened. The fixed
+`runs/rgbd_two_visible_orbital_camera_v1/` directory is absent; no manifest
+artifact, report, checkpoint, ledger, result, development evidence, or
+accuracy evidence exists. Its eventual exact files are
+`development_report.json`, `development_model.pt`,
+`development_attempt_1_access.json`, `qualification_report.json`, and
+`qualification_attempt_1_access.json`. Fresh-path, symlink/link-count,
+inventory, atomic-write, and stable-read checks apply. Development may execute
+once only after clean `HEAD` equals its configured published upstream with
+zero ahead/behind count. Protected access then requires external review of the
+exact checkpoint, development-report, and development-ledger hashes before an
+exactly-once selector -> confirmation -> final ledger can proceed.
+
+The source passes the moving-camera file (`26 passed in 128.43 s`) and
+accepted/configuration regressions (`254 passed in 6.83 s`). The exact current
+specification-1.57 tree passes the full repository gate
+(`1302 passed, 16 skipped in 594.59 s (0:09:54)`). Two independent
+science/security audits pass. These are source/integrity checks only; no
+episode accuracy may be inferred from them.
 
 ## Validation state
 
@@ -495,6 +562,15 @@ The accepted two-visible-object source retains `43 passed` focused,
 `1275 passed, 16 skipped in 447.29 s` complete, with Ruff/format/diff clean.
 The exact independent qualification audit also passes.
 
-No accepted claim exists beyond the exactly-two-visible non-contact RGB-D
-family; contact, partial visibility, variable count, additional modality,
-planning, and general convergence remain unqualified.
+The specification-1.57 orbital-camera implementation's source gates are
+`26 passed in 128.43 s`, `254 passed in 6.83 s`, and exact-current-tree
+`1302 passed, 16 skipped in 594.59 s (0:09:54)`; two independent
+science/security audits pass. All `61m--64m` namespaces and all run artifacts
+remain unopened/absent, so these results establish no development or accuracy
+claim.
+
+No accepted claim exists beyond the exactly-two-visible fixed-camera,
+non-contact RGB-D family. The known orbital-camera rung is frozen source only;
+contact, partial visibility, misses/recovery, unknown camera pose, variable
+count, additional modality, planning, and general convergence remain
+unqualified.

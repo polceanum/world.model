@@ -191,13 +191,61 @@
 - [x] Commit and push the exact qualification-evidence documentation, then
   fast-forward only the reviewed net tree to GitHub `main` through
   `1e951520e5a2bf06c1932f64b8334e552247de82`.
-- [ ] With that merge complete, freeze one bounded partial-visibility and
-  missed-observation-recovery rung. Keep object count two, contact absent,
-  fixed camera/physics, parameter-free analytic rollout, and every accepted
-  lower-rung gate unchanged; do not tune on the consumed final.
-- [ ] Add one complexity per later rung: camera motion; drag identification;
-  variable scale; multi-object sets; identity/occlusion; contact; material
-  parameters; known actions/planning; richer modalities/geometry.
+- [x] Supersede the proposed next-rung ordering without claiming its result:
+  insert one known-calibrated orbital-camera rung before partial visibility.
+  Keep exactly two fully visible, image-separated, non-contact fixed-radius
+  spheres, complete RGB-D, gravity `0`, drag `0.05`, analytic rollouts, and
+  zero learned parameters/state or pose estimation.
+- [x] Freeze specification 1.57 with 16 disjoint physical primitives crossed
+  with four orbital phases and two directions: 128 joint scenes, 56 frames at
+  20 Hz, exact known `world_from_camera`, and unchanged simulator
+  `sphere_world_v7`.
+- [x] Bind config/harness/runner/tests SHA-256
+  `a9c348ea54b168ec78780d59d3b3eb066344d3a7551464b9aad1e5b9ac6d6cbd` /
+  `02e75b325bdf7bad310f8973a786a396b8762104261702b299a9f8103748e569` /
+  `11bee2e4d05f83caaf9dbed6ca2a54d4c11b7c70e4bf8e1747b261b8518ef192` /
+  `d08c7bb4a1ba998a51dc2f0ddb1946596a5a299ed236cdf6a91b5711e2d0a1af`,
+  canonical protocol
+  `7146befc869ea5f975177dd1c2da4691026439e1d36d84415aa23f696e61ef65`,
+  and scene certificate
+  `7832ddb49081292d0f50a5eb63edb38fefb49d136d7e1757c73d9c658e42a36f`.
+- [x] Freeze the exact 685-float gate schema, including public-physics and
+  resource gates, the frame-0 stale-`world_from_camera` negative control,
+  RGB/depth/calibration VJPs, calibration integrity, certificate-backed
+  visibility/separation/non-contact, and zero learned/optimizer state.
+- [x] Freeze unopened development/selector/confirmation/final namespaces
+  `61m/62m/63m/64m` with manifest SHA-256
+  `eb558805c2974302c33abef4531e142bb60e8f20045d8530330838223a6899a0`,
+  `c97fff97459ee9962b972cb7905887c2b2ed6eb5a1837d908f1512ce77e6d97f`,
+  `b47f03633732fc2986939e71007a0a79b12db2b42f0b5261b4ebd2d0a304f544`,
+  and `82927d192b53f2e4af11491f53039c145acfd8e0401a3e2b0b1e974591ee4174`.
+  No scene or run artifact exists.
+- [x] Record source gates only: moving-camera file
+  `26 passed in 128.43 s`, accepted/configuration regressions
+  `254 passed in 6.83 s`, and exact-current-tree full repository
+  `1302 passed, 16 skipped in 594.59 s (0:09:54)`, with two independent
+  science/security audits passing. Do not treat these as development or
+  accuracy evidence.
+- [ ] Commit and publish the exact specification-1.57 source/docs tree with a
+  clean worktree, configured upstream, `HEAD == upstream`, and zero
+  ahead/behind count. Until then, do not construct an episode or create
+  `runs/rgbd_two_visible_orbital_camera_v1/`.
+- [ ] From that exact published tree, run development exactly once at the
+  canonical fresh paths. Independently review the checkpoint, development
+  report, and development ledger hashes; only those three reviewed digests may
+  authorize the protected ladder.
+- [ ] If development and external review pass, consume selector ->
+  confirmation -> final exactly once under the protected ledger. Stop on any
+  failure with later namespaces unopened; never retry, rename, or tune on
+  final.
+- [ ] Keep bounded partial visibility and missed-observation recovery deferred
+  as a later, separately frozen rung. Do not add it, occlusion, contact,
+  variable count, unknown camera pose, learned pose, variable physics, or
+  learned capacity to the orbital-camera evidence.
+- [ ] Add one complexity per still-later rung: partial visibility/recovery;
+  drag identification; variable scale; multi-object sets; identity/occlusion;
+  contact; material parameters; known actions/planning; richer modalities/
+  geometry.
 - [ ] At every rung require state/velocity/horizon accuracy, uncertainty,
   support, gradient, memory, and throughput non-regression; stop failed
   architecture families instead of marginal retuning.

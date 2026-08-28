@@ -1,5 +1,94 @@
 # Design decisions
 
+## ADR-167 — Freeze the known-calibrated orbital-camera RGB-D rung before access
+
+- **Date:** 2026-08-28
+- **Status:** frozen source contract; the scientific rung remains unaccepted,
+  all development and protected namespaces remain unopened, and no
+  development or accuracy result exists
+- **Context:** ADR-166 accepted the exactly-two-visible, fixed-camera,
+  non-contact RGB-D family. The smallest independent next capability is known
+  camera motion. Adding partial visibility, misses/recovery, contact, variable
+  count, unknown pose, or learned pose at the same time would confound camera
+  calibration with association, lifecycle, or learned-state error. The prior
+  proposal to move directly to partial visibility is therefore historical and
+  deferred, not accepted evidence.
+- **Decision:** Advance the contract to specification 1.57 while retaining
+  simulator `sphere_world_v7`. Keep exactly two chromatically distinct,
+  fixed-radius `0.21 m` spheres fully visible, image-separated, and
+  non-contacting with gravity `0`, drag `0.05`, complete RGB-D, and
+  parameter-free analytic dynamics. Add only a known calibrated orbit supplied
+  as time-aligned `world_from_camera`; do not estimate pose. Cross sixteen
+  disjoint rational physical primitives with four orbital phases and both
+  directions for 128 joint scenes. The orbit uses radius `4.6 m`, height
+  `2.15 m`, target `(0, 0.95, 0)`, angular speed `0.24 rad/s`, and vertical
+  field of view `48 degrees` over 56 frames at 20 Hz.
+- **Frozen bindings:** Config, harness, runner, and harness-test SHA-256 values
+  are
+  `a9c348ea54b168ec78780d59d3b3eb066344d3a7551464b9aad1e5b9ac6d6cbd`,
+  `02e75b325bdf7bad310f8973a786a396b8762104261702b299a9f8103748e569`,
+  `11bee2e4d05f83caaf9dbed6ca2a54d4c11b7c70e4bf8e1747b261b8518ef192`,
+  and `d08c7bb4a1ba998a51dc2f0ddb1946596a5a299ed236cdf6a91b5711e2d0a1af`.
+  Canonical protocol and seed-free certificate SHA-256 values are
+  `7146befc869ea5f975177dd1c2da4691026439e1d36d84415aa23f696e61ef65`
+  and `7832ddb49081292d0f50a5eb63edb38fefb49d136d7e1757c73d9c658e42a36f`.
+  The version advance does not alter the protocol payload; eventual checkpoint
+  metadata still binds specification 1.57.
+- **Certificate and gate schema:** The seed-free certificate covers all 16
+  physical trajectories and 128 joint appearances, full visibility,
+  image/world separation, zero events, non-degenerate camera motion, and
+  calibrated public-renderer geometry. Each split must publish exactly 685
+  finite gate floats. Gates cover state and every horizon, identity,
+  association, public-versus-analytic physics, semigroup agreement, one state
+  owner, stationary baselines, finite values, calibration, resources, and zero
+  learned/optimizer state.
+- **Negative control and gradients:** Preserve real RGB-D while replacing
+  frames `1--15` with stale frame-0 `world_from_camera`. Require calibrated
+  current position/current velocity/two-second position to beat the stale
+  control with fixed floors and ratios, including certificate-derived ideal
+  WLS lower bounds. Audit fixed-output VJPs separately to RGB, depth, and
+  `world_from_camera`; current position remains anchor-only, every temporal
+  output reaches all sixteen frames, homogeneous rigid-transform rows have
+  zero gradient, and cross-scene coupling is exactly zero.
+- **Resource contract:** Enforce one CPU thread, at most `3.0 s` perception,
+  `0.075 s` for all five state-only queries, `65,536` persistent tensor bytes,
+  `2,500,000,000` process-RSS bytes, and `1,000,000,000` RSS-growth bytes.
+  Parameters, buffers/model state, optimizer/scheduler/RNG state, and updates
+  remain zero.
+- **Access boundary:** Development `61000000--61000031`, selector
+  `62000000--62000023`, confirmation `63000000--63000023`, and final
+  `64000000--64000047` have manifest SHA-256 values
+  `eb558805c2974302c33abef4531e142bb60e8f20045d8530330838223a6899a0`,
+  `c97fff97459ee9962b972cb7905887c2b2ed6eb5a1837d908f1512ce77e6d97f`,
+  `b47f03633732fc2986939e71007a0a79b12db2b42f0b5261b4ebd2d0a304f544`,
+  and `82927d192b53f2e4af11491f53039c145acfd8e0401a3e2b0b1e974591ee4174`.
+  All remain unopened. No episode or run artifact exists.
+- **Evidence integrity:** The only allowed artifact root is the fresh exact
+  `runs/rgbd_two_visible_orbital_camera_v1/` path, with fixed report,
+  checkpoint, development-ledger, qualification-report, and protected-ledger
+  names. Development may run once only after clean `HEAD` equals the configured
+  published upstream. Protected access additionally requires external review
+  of the exact development checkpoint, report, and ledger hashes; the durable
+  ledger then admits selector -> confirmation -> final exactly once. Fresh
+  paths, lexical containment, regular single-link files, exact inventory,
+  symlink rejection, atomic writes, and stable reads fail closed.
+- **Source evidence:** The moving-camera file passes
+  `26 passed in 128.43 s`, accepted/configuration regressions pass
+  `254 passed in 6.83 s`, and the exact current specification-1.57 tree passes
+  `1302 passed, 16 skipped in 594.59 s (0:09:54)`. Two independent
+  science/security audits pass. These results establish source and integrity
+  only; no episode accuracy is claimed.
+- **Alternatives considered:** combine camera motion with partial visibility;
+  infer or learn pose; count camera strata as independent physical dynamics;
+  generate development before clean publication; omit the stale-calibration
+  control; review only the checkpoint/report pair; permit alternate artifact
+  paths or protected retries.
+- **Consequences:** The highest accepted scientific claim remains ADR-166's
+  fixed-camera family. Specification 1.57 authorizes no data access by itself.
+  Partial visibility, occlusion, misses/recovery, contact, variable count,
+  unknown cameras, learned pose, variable physics, tasks, added modalities,
+  and learned capacity remain deferred to independently frozen later rungs.
+
 ## ADR-166 — Accept the exactly-once two-visible-object RGB-D qualification
 
 - **Date:** 2026-08-27
@@ -82,9 +171,10 @@
   1.56 or simulator v7.
   This is not partial-visibility, missed-observation recovery, occlusion,
   contact, variable-count, learned-capacity, or general-convergence evidence.
-  With that merge complete, only a separately frozen bounded partial-visibility and
-  missed-observation-recovery rung may begin; the consumed final cannot be
-  reused or tuned against.
+  At that boundary, bounded partial-visibility and missed-observation recovery
+  was the proposed next rung. ADR-167 subsequently inserts a known calibrated
+  camera-motion freeze first; the consumed final cannot be reused or tuned
+  against either later rung.
 
 ## ADR-165 — Freeze differentiable two-visible-object RGB-D architecture attempt 2
 

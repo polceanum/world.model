@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.56
+**Version:** 1.57
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze amendment 28 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -8440,10 +8440,184 @@ This accepts only the exactly-two, fully-visible, image-separated,
 fixed-radius, non-contact, fixed-camera free-motion RGB-D family.  It does not
 accept occlusion, partial visibility, missed-observation recovery, contact,
 variable object count, learned capacity, or general world-model convergence.
-After this accepted branch is merged, the next rung may add only bounded
-partial visibility and missed-observation recovery under a separately frozen
-protocol.  No threshold, architecture, or capacity may be tuned on the
-consumed final.
+At that acceptance boundary, bounded partial visibility and missed-observation
+recovery was the proposed next rung.  Part XLVIII subsequently inserts a
+known-calibrated camera-motion source freeze first; neither later rung may tune
+any threshold, architecture, or capacity on the consumed final.
+
+# Part XLVIII — Known-calibrated orbital-camera RGB-D source-freeze amendment
+
+## 255. Freeze exactly two visible objects under one known orbital camera
+
+Specification 1.57 preserves every accepted specification-1.56 result and
+changes one capability only: the calibrated camera now follows a known orbit.
+The admitted scene still contains exactly two chromatically distinct,
+fixed-radius `0.21 m` spheres.  Both spheres must be fully visible,
+image-separated, and non-contacting in every rendered frame.  Gravity remains
+exactly zero, linear drag remains exactly `0.05`, RGB-D is complete, and the
+physical state is still propagated by the public parameter-free analytic
+path.  Partial visibility, occlusion, missed observations and recovery,
+contact, variable object count, unknown or estimated camera pose, variable
+physics, learned pose, learned parameters, and learned persistent state are
+outside this rung.
+
+Each episode contains 56 frames at 20 Hz.  Frames `0--15` provide the temporal
+history and frame 15 is the current-state anchor; the five declared rollout
+queries remain `0.10/0.25/0.50/1.00/2.00 s`.  The public input contains the
+time-aligned calibrated `world_from_camera` transform.  Camera pose is neither
+inferred nor read from simulator truth at runtime.  Four initial orbital
+phases are crossed with both directions to make eight camera strata.  The
+camera follows
+`theta(t) = theta0 + direction * 0.24 * t` at radius `4.6 m`, height
+`2.15 m`, target `(0, 0.95, 0)`, and vertical field of view `48 degrees`.
+Sixteen disjoint rational physical primitives crossed with those eight strata
+produce exactly 128 joint physical-camera scenes; the camera strata do not
+inflate the count of distinct physical trajectories.
+
+The exact frozen bindings are:
+
+- config `configs/rgbd_two_visible_orbital_camera_cpu.yaml`, SHA-256
+  `a9c348ea54b168ec78780d59d3b3eb066344d3a7551464b9aad1e5b9ac6d6cbd`;
+- qualification harness
+  `world_model/training/rgbd_two_visible_orbital_camera_qualification.py`,
+  SHA-256
+  `02e75b325bdf7bad310f8973a786a396b8762104261702b299a9f8103748e569`;
+- thin runner
+  `scripts/run_rgbd_two_visible_orbital_camera_qualification.py`, SHA-256
+  `11bee2e4d05f83caaf9dbed6ca2a54d4c11b7c70e4bf8e1747b261b8518ef192`;
+- harness tests
+  `tests/unit/test_rgbd_two_visible_orbital_camera_qualification.py`,
+  SHA-256
+  `d08c7bb4a1ba998a51dc2f0ddb1946596a5a299ed236cdf6a91b5711e2d0a1af`;
+- canonical pre-self-hash `bridge_protocol()` SHA-256
+  `7146befc869ea5f975177dd1c2da4691026439e1d36d84415aa23f696e61ef65`;
+  and
+- seed-free scene-family certificate SHA-256
+  `7832ddb49081292d0f50a5eb63edb38fefb49d136d7e1757c73d9c658e42a36f`.
+
+The simulator protocol remains `sphere_world_v7`.  Advancing the
+specification identifier does not change the canonical protocol payload;
+eventual checkpoint metadata must nevertheless bind specification 1.57.  Any
+change to a frozen file, protocol payload, certificate, manifest, gate, path,
+or scientific family creates a new experiment and may not reuse these
+namespaces.
+
+## 256. Certificate, stale-calibration control, gradients, and public physics
+
+Before any episode namespace is opened, a seed-free certificate enumerates
+all 16 physical primitives and all 128 physical-camera combinations through
+the public renderer.  Across every frame it certifies minimum full support of
+`22` pixels, visible fraction `1`, overlap count `0`, minimum silhouette gap
+`9.6222305 px`, minimum image-boundary clearance `15.5847006 px`, minimum
+world-surface gap `1.1445721 m`, minimum world-boundary clearance `0.184 m`,
+speed range `0.0367688--0.0484497 m/s`, and zero physical events.  Camera
+motion is non-degenerate: adjacent angle is
+`0.0119953--0.0120102 rad`, adjacent chord is
+`0.05519944--0.05519983 m`, maximum projected-centre step is
+`0.1224019 px`, and maximum calibration reconstruction error is
+`8.22e-7`.  These certificate facts predeclare the family and public physics;
+they are not development or accuracy evidence.
+
+The exact 685-float gate schema is recomputed independently for every split.
+It covers current and per-object/per-axis state, every horizon, identity and
+association, scene coverage, visibility and separation, stationary and
+zero-velocity baselines, public-versus-analytic physics, semigroup agreement,
+calibration preservation, fixed-output gradients, state ownership, finite
+values, latency, persistent tensor storage, process RSS, and zero learned or
+optimizer state.  Public `OnlineWorldModel.predict` outputs must agree with
+the direct analytic equations, expose no output alias, preserve query time,
+and remain consistent under composed rollouts.
+
+An explicit negative control retains the real RGB-D observations but replaces
+the `world_from_camera` calibration on history frames `1--15` with the stale
+frame-0 transform.  The correctly calibrated path must remain materially
+better for current position, current velocity, and two-second position, while
+the stale path must retain all sixteen valid history rows and stable identity.
+Frozen stale-path floors are `0.045 m`, `0.050 m/s`, and `0.080 m`, with
+correct-to-stale ceilings `0.25`, `0.25`, and `0.45`.  The independent ideal
+WLS certificate supplies stricter joint lower bounds
+`0.05203636 m`/`0.06767760 m/s`/`0.18084665 m`.  This prevents a
+frame-0-calibration implementation from passing merely because the camera
+trajectory is mild.
+
+Fixed-output VJPs audit RGB, depth, and `world_from_camera` separately for
+current position, current velocity, and every rollout position and velocity.
+Current position remains frame-15-owned with exact zero non-anchor gradient;
+all temporal outputs must reach all sixteen RGB, depth, and calibration
+frames.  Four distinct batched scenes must have exactly zero cross-scene
+coupling, and the homogeneous last row of each rigid transform has exactly
+zero gradient.  Hard identity assignment remains discrete bookkeeping and is
+not presented as a learned or differentiable pose owner.
+
+Resource gates require one CPU thread, perception latency no greater than
+`3.0 s`, five-query state-only rollout latency no greater than `0.075 s`,
+persistent runtime tensor storage no greater than `65,536` bytes, process RSS
+no greater than `2,500,000,000` bytes, and RSS growth no greater than
+`1,000,000,000` bytes.  Learned parameters, module/model state, optimizer,
+scheduler, RNG state, and optimizer updates must all remain zero.
+
+## 257. Frozen manifests, exact paths, and unopened evidence boundary
+
+The disjoint namespaces and canonical manifest SHA-256 values are:
+
+| split | exact seed range | manifest SHA-256 |
+| --- | --- | --- |
+| development | `61000000--61000031` | `eb558805c2974302c33abef4531e142bb60e8f20045d8530330838223a6899a0` |
+| selector | `62000000--62000023` | `c97fff97459ee9962b972cb7905887c2b2ed6eb5a1837d908f1512ce77e6d97f` |
+| confirmation | `63000000--63000023` | `b47f03633732fc2986939e71007a0a79b12db2b42f0b5261b4ebd2d0a304f544` |
+| one-shot final | `64000000--64000047` | `82927d192b53f2e4af11491f53039c145acfd8e0401a3e2b0b1e974591ee4174` |
+
+At this source-freeze boundary all `61m--64m` namespaces remain unopened.  No
+scene from any namespace has been constructed or inspected, and
+`runs/rgbd_two_visible_orbital_camera_v1/` does not exist.  There is no
+manifest artifact, report, checkpoint, ledger, result, or accuracy evidence
+for this rung.  The manifest hashes bind only the predeclared seed lists.
+
+All future artifacts have exact fixed paths:
+
+- `runs/rgbd_two_visible_orbital_camera_v1/development_report.json`;
+- `runs/rgbd_two_visible_orbital_camera_v1/development_model.pt`;
+- `runs/rgbd_two_visible_orbital_camera_v1/development_attempt_1_access.json`;
+- `runs/rgbd_two_visible_orbital_camera_v1/qualification_report.json`; and
+- `runs/rgbd_two_visible_orbital_camera_v1/qualification_attempt_1_access.json`.
+
+The directory and every output must be fresh.  Lexical path containment,
+regular-file type, single-link ownership, symlink rejection, exact inventory,
+atomic replacement, and stable-read checks apply before and after each phase.
+Only a private durable ledger may mint the single-use manifest capability,
+and it records access before construction.  Development may begin exactly
+once only after the complete specification-1.57 tree is committed cleanly,
+has a configured upstream, and clean `HEAD` equals the published upstream
+commit with zero commits ahead or behind.
+
+A passing development report alone cannot open protected data.  An external
+review must bind the exact SHA-256 of the development checkpoint, development
+report, and development access ledger.  The protected command accepts those
+three independently reviewed hashes and no alternate paths.  Its durable
+ledger admits selector -> confirmation -> final exactly once and in that
+order; each predecessor must pass before the next manifest capability exists.
+Any failure stops permanently with later namespaces unopened.  Final cannot
+be rerun, renamed, or recycled into tuning.
+
+## 258. Source evidence and interpretation
+
+The frozen implementation passes the moving-camera harness
+(`26 passed in 128.43 s`) and the accepted lower-rung/configuration regressions
+(`254 passed in 6.83 s`).  The exact current specification-1.57 tree passes the
+complete repository source gate
+(`1302 passed, 16 skipped in 594.59 s (0:09:54)`).  Two independent
+science/security audits pass.  These are implementation, integrity, and
+source-freeze results only; they are not episode or development evidence.
+
+Specification 1.57 therefore freezes a known-calibrated moving-camera source
+and one protected evidence protocol; it accepts no new scientific result.
+The already accepted fixed-camera exactly-two-visible rung remains the highest
+accepted claim.  Development, accuracy, selector, confirmation, and final
+evidence for the orbital-camera rung do not yet exist.  Partial visibility,
+occlusion, misses and recovery, contact, variable count, unknown cameras,
+learned pose, variable physics, tasks, additional modalities, and learned
+capacity remain explicitly unqualified and deferred to separately frozen
+later rungs.
 
 # Closing directive
 

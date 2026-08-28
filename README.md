@@ -82,6 +82,14 @@ parameter-free, differentiable, fixed-camera, non-contact result—not evidence
 for partial visibility, contact, variable count, learned capacity, or general
 world-model convergence.
 
+Specification 1.57 freezes the next single-capability rung: the same exactly
+two fully visible, image-separated, non-contact spheres and complete RGB-D,
+now under a known calibrated orbital camera. Its `61m--64m` development,
+selector, confirmation, and final namespaces are all unopened, and no run
+artifact or accuracy result exists. Development remains blocked until the
+complete frozen tree is clean, committed, and identical to its published
+upstream.
+
 ## Quick start
 
 Use the existing `orpheus` environment. PyTorch is an externally managed
@@ -267,10 +275,11 @@ integrated-tree boundary was `1207 passed, 16 skipped in 431.10 s`.
 The former grounded, attention, change-point, and multi-day accuracy commands
 are historical evidence only and have been removed from the active workflow.
 Their records remain in Git history and the ignored, local pre-generalization
-archive. Broad training remains paused. The accepted bridge is merged, and
-specification 1.56 now freezes the next bounded rung without weakening the
-standalone or public-integration gates; its single development attempt still
-waits for the exact source/docs tree to be committed cleanly.
+archive. Broad training remains paused. The accepted one-object and fixed-
+camera two-object bridges are merged. Specification 1.57 now freezes the next
+bounded known-camera-motion rung without weakening those accepted gates; its
+single development attempt still waits for the exact source/docs tree to be
+committed cleanly and published upstream.
 
 ### Qualified public RGB-D online bridge — final consumed once
 
@@ -380,11 +389,13 @@ owner-writable, so they are tamper-evident rather than OS write-once.
 This qualifies the declared one-slot, one-sphere, fixed-camera, fixed-parameter
 free-motion bridge only. It does not establish uncertainty calibration,
 multi-object/contact behavior, camera-motion handling, learned capacity, or a
-general world model. The merge is complete; the next bounded predeclared rung
-is one changed capability at a time. Before new data it must freeze moving-camera,
-multi-object, association/occlusion, contact/event, task-success, capacity,
-gradient, accuracy, memory, and rollout-throughput gates; no accepted bridge
-threshold or consumed-final result may be retuned.
+general world model. At that historical one-slot boundary, no multi-object,
+association/occlusion, contact/event, task-success, camera-motion, or learned-
+capacity result was claimed; the subsequently qualified exactly-two-visible
+fixed-camera rung is recorded below. Each later rung must predeclare its one
+changed capability and all applicable gradient, accuracy, identity/event,
+memory, and rollout-throughput gates. No accepted bridge threshold or
+consumed-final result may be retuned.
 
 ### Qualified two-visible-object RGB-D rung — final consumed once
 
@@ -438,10 +449,58 @@ order. Final is consumed: do not rerun qualification or tune against it. Audit
 did not reopen raw protected episodes. Owner-writable evidence is SHA-bound and
 tamper-evident, not OS-enforced WORM storage. Live history remains outside
 ordinary checkpoints. The reviewed tree was fast-forwarded to GitHub `main`
-through `1e951520e5a2bf06c1932f64b8334e552247de82`; the next rung is bounded
-partial visibility and missed-observation recovery only. Occlusion, variable
-count, contact, camera motion, variable physics, uncertainty calibration,
-tasks, added modalities, and learned capacity remain unqualified.
+through `1e951520e5a2bf06c1932f64b8334e552247de82`. At that acceptance boundary,
+partial visibility and missed-observation recovery had been proposed as the
+next rung. The current specification instead inserts one smaller known-camera-
+motion rung first. Partial visibility, misses/recovery, occlusion, variable
+count, contact, unknown camera pose, variable physics, uncertainty calibration,
+tasks, added modalities, and learned capacity all remain unqualified.
+
+### Frozen known-calibrated orbital-camera RGB-D rung — no episode access
+
+Specification 1.57 keeps exactly two fixed-radius spheres fully visible,
+image-separated, and non-contacting, with gravity `0`, drag `0.05`, complete
+RGB-D, and zero learned parameters, learned state, pose estimation, or optimizer
+updates. Sixteen physical primitives cross four orbital phases and two
+directions to form 128 joint scenes. The public runtime receives the exact
+time-aligned `world_from_camera` calibration; camera pose is not inferred.
+
+Frozen config, harness, runner, test, protocol, and certificate SHA-256 values
+are respectively
+`a9c348ea54b168ec78780d59d3b3eb066344d3a7551464b9aad1e5b9ac6d6cbd`,
+`02e75b325bdf7bad310f8973a786a396b8762104261702b299a9f8103748e569`,
+`11bee2e4d05f83caaf9dbed6ca2a54d4c11b7c70e4bf8e1747b261b8518ef192`,
+`d08c7bb4a1ba998a51dc2f0ddb1946596a5a299ed236cdf6a91b5711e2d0a1af`,
+`7146befc869ea5f975177dd1c2da4691026439e1d36d84415aa23f696e61ef65`,
+and `7832ddb49081292d0f50a5eb63edb38fefb49d136d7e1757c73d9c658e42a36f`.
+Simulator semantics remain `sphere_world_v7`.
+
+The exact per-split gate schema has 685 finite floats. It includes public
+physics and resource gates, fixed-output VJPs to RGB, depth, and
+`world_from_camera`, and a negative control that reuses the stale frame-0
+camera transform on history frames `1--15`. The correct calibrated path must
+beat that control for current position, current velocity, and two-second
+position. Certificate-bound visibility, separation, non-contact, camera-motion,
+and calibration extrema cover all 128 joint scenes before seed access.
+
+| split | seeds | manifest SHA-256 |
+| --- | --- | --- |
+| development | `61000000--61000031` | `eb558805c2974302c33abef4531e142bb60e8f20045d8530330838223a6899a0` |
+| selector | `62000000--62000023` | `c97fff97459ee9962b972cb7905887c2b2ed6eb5a1837d908f1512ce77e6d97f` |
+| confirmation | `63000000--63000023` | `b47f03633732fc2986939e71007a0a79b12db2b42f0b5261b4ebd2d0a304f544` |
+| final | `64000000--64000047` | `82927d192b53f2e4af11491f53039c145acfd8e0401a3e2b0b1e974591ee4174` |
+
+All four namespaces remain unopened. The exact fresh artifact directory is
+`runs/rgbd_two_visible_orbital_camera_v1/`; it does not yet exist. After a
+single published-clean development pass, external review must bind the exact
+checkpoint, development-report, and development-ledger hashes before the
+durable ledger can admit selector -> confirmation -> final exactly once.
+The frozen implementation passed
+`26 passed in 128.43 s`, the accepted/configuration regression set passed
+`254 passed in 6.83 s`, and the exact current specification-1.57 tree passed
+`1302 passed, 16 skipped in 594.59 s (0:09:54)`; two independent
+science/security audits passed. Those are source-freeze checks, not
+development or accuracy evidence.
 
 The general evaluator still supports explicit disjoint manifests for a
 compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not

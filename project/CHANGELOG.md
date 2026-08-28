@@ -2,6 +2,55 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-28 frozen known-calibrated orbital-camera RGB-D rung
+
+- Advanced the authoritative contract to specification 1.57 while retaining
+  simulator `sphere_world_v7` and every accepted specification-1.56 result.
+  Froze exactly two fully visible, image-separated, non-contact fixed-radius
+  spheres under complete RGB-D, gravity `0`, drag `0.05`, and a known
+  calibrated orbital camera. Pose is supplied as time-aligned
+  `world_from_camera`, never estimated; learned parameters/state and optimizer
+  updates remain zero.
+- Crossed 16 disjoint rational physical primitives with four orbital phases
+  and two directions for exactly 128 joint scenes over 56 frames at 20 Hz.
+  Partial visibility, occlusion, misses/recovery, contact, variable count,
+  unknown cameras, learned pose, variable physics, added modalities, and
+  learned capacity remain excluded.
+- Bound config/harness/runner/tests SHA-256
+  `a9c348ea54b168ec78780d59d3b3eb066344d3a7551464b9aad1e5b9ac6d6cbd`,
+  `02e75b325bdf7bad310f8973a786a396b8762104261702b299a9f8103748e569`,
+  `11bee2e4d05f83caaf9dbed6ca2a54d4c11b7c70e4bf8e1747b261b8518ef192`,
+  and `d08c7bb4a1ba998a51dc2f0ddb1946596a5a299ed236cdf6a91b5711e2d0a1af`;
+  canonical protocol and certificate SHA-256 are
+  `7146befc869ea5f975177dd1c2da4691026439e1d36d84415aa23f696e61ef65`
+  and `7832ddb49081292d0f50a5eb63edb38fefb49d136d7e1757c73d9c658e42a36f`.
+- Froze the exact 685-float per-split schema. It includes public-physics and
+  resource gates, the stale frame-0-`world_from_camera` negative control,
+  RGB/depth/calibration VJPs, certificate-bound visibility/separation/non-
+  contact/camera-motion facts, one-thread execution, and zero learned/optimizer
+  state.
+- Reserved unopened development `61000000--61000031`, selector
+  `62000000--62000023`, confirmation `63000000--63000023`, and final
+  `64000000--64000047`, with manifest SHA-256
+  `eb558805c2974302c33abef4531e142bb60e8f20045d8530330838223a6899a0`,
+  `c97fff97459ee9962b972cb7905887c2b2ed6eb5a1837d908f1512ce77e6d97f`,
+  `b47f03633732fc2986939e71007a0a79b12db2b42f0b5261b4ebd2d0a304f544`,
+  and `82927d192b53f2e4af11491f53039c145acfd8e0401a3e2b0b1e974591ee4174`.
+  No episode, manifest artifact, report, checkpoint, ledger, run directory, or
+  accuracy result exists.
+- Fixed all future artifacts under the fresh exact
+  `runs/rgbd_two_visible_orbital_camera_v1/` inventory. Development may run
+  once only after clean `HEAD` equals its published upstream. Protected access
+  requires external review of the exact checkpoint, development report, and
+  development ledger hashes before an exactly-once selector -> confirmation
+  -> final ledger can proceed.
+- Recorded source checks only: moving-camera file
+  `26 passed in 128.43 s`, accepted/configuration regressions
+  `254 passed in 6.83 s`, and exact-current-tree complete repository
+  `1302 passed, 16 skipped in 594.59 s (0:09:54)`, with two independent
+  science/security audits passing. These are not development or accuracy
+  evidence.
+
 ### 2026-08-27 accepted exactly-two-visible RGB-D qualification
 
 - Accepted the frozen architecture-attempt-2 qualification on clean
