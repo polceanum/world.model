@@ -163,10 +163,20 @@ the accepted one-object behavior intact. Its one fixed development run and
 ordered selector -> confirmation -> final qualification passed on clean commit
 `3b781e653a0287b2aa926e7c0b969e9197d48e42`; final is consumed and must not be
 rerun. The accepted scope remains exactly two fully visible, image-separated,
-non-contact objects. Partial visibility and missed-observation recovery are the
-only next capability after the completed GitHub `main` fast-forward through
-`1e951520e5a2bf06c1932f64b8334e552247de82`; variable count, contact, camera
-motion, and learned capacity remain closed.
+non-contact objects. Specification 1.57 subsequently qualified one known,
+time-aligned calibrated orbital-camera family without adding pose estimation,
+learned state, or optimizer updates. That reviewed result is published through
+acceptance commit `00a712d640cdb828f24a194817443daa57e6df65`; it establishes
+neither general camera motion nor unknown- or learned-pose inference.
+
+The attempted partial-visibility and missed-observation-recovery family failed
+its bounded development protocols and is closed. It must not be revived,
+renamed, or treated as the next rung. No next capability is currently selected:
+any successor must add a genuinely new capability under its own frozen
+pre-access manifests and gates while preserving every accepted lower-rung
+contract. Variable count, contact/material identification, variable physics,
+actions/planning, richer modalities, and learned capacity therefore remain
+unqualified candidates rather than an active launch plan.
 
 Evaluation seed manifests are explicit. `fresh_validation` starts after the
 checkpoint's trainer-validation episodes by default; `--seed-offset` can select

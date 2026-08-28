@@ -14,31 +14,41 @@ fixed-lag smoothing, richer geometry, and the window-spectral ablation.
 
 The first Milestone 2 increment is now implemented: an explicit abstraction
 registry, point-versus-rigid-sphere routing, and reversible LLM-style belief
-tokens. Next, train residual-token processing and evidence-driven abstraction
-selection while retaining per-abstraction accuracy and complexity gates.
+tokens. The later pre-generalization programme explored residual-token
+processing and evidence-driven abstraction selection, including a dense
+typed-attention campaign. Those campaigns and their checkpoints are historical
+diagnostics, not the active roadmap or launch recommendation.
 
-The active capacity ladder is evidence-gated: first qualify the repaired
-3.00M-parameter dense typed-attention rung on repeated fixed selectors; then
-compare data-only, depth, width, and bounded timestamped-history changes one at
-a time. A Mac result advances to a tens-of-millions single-CUDA-GPU rung only
-after disjoint RGB-only validation/test/OOD evidence shows a stable capacity
-ceiling and predicts a useful gain. The runtime belief/filter contracts do not
-change between rungs.
+The current evidence-led programme first qualified the minimal differentiable
+RGB core, then observable RGB-D temporal state, its public one-object bridge,
+exactly two fully visible objects, and one known calibrated orbital-camera
+family. The separate partial-visibility/recovery family failed and is closed.
+No next rung has been selected or authorized. A future rung must introduce one
+genuinely new capability, freeze disjoint development/selector/confirmation/
+final manifests and hard gates before access, and preserve all accepted
+accuracy, calibration, identity/event, rollout, gradient, memory, and
+throughput contracts. A failed family stops rather than receiving marginal
+retuning.
 
-Depth-only growth now has an exact inherited-function path: contiguous new
-pre-norm residual blocks start with zero MHA/SwiGLU output projections, while
-all smaller-model tensors load strictly. This removes relearning as a depth
-comparison confound. It does not weaken the selector/plateau gate, and width
-growth remains graph-initialized until it has its own proved handoff.
+Historical attention work established an exact inherited-function path for
+depth-only growth: contiguous new pre-norm residual blocks start with zero
+MHA/SwiGLU output projections while all smaller-model tensors load strictly.
+That reusable transform does not authorize a capacity rung. Learned residuals,
+depth, width, history, or accelerator scale may grow only after a smaller
+structured model has a localized, fixed-manifest plateau and the new capacity
+has its own predeclared handoff and non-regression evidence.
 
-Every rung now uses the same count-pooled consecutive training-trend report for
-early collapse diagnosis. Scale decisions still require fixed disjoint RGB-only
-selectors/test/OOD; noisy or incomplete training windows cannot authorize a
-larger model.
+Every learned rung uses count-pooled consecutive training-trend reporting for
+early collapse diagnosis. Scale decisions require fixed disjoint
+observable-input validation/test/OOD evidence appropriate to the declared
+modality; noisy or incomplete training windows cannot authorize a larger model.
 
 ## Milestone 3
 
-Add exactly one useful second modality behind the existing observation contract.
+The first useful second modality, observable metric depth paired with RGB, is
+qualified behind the existing observation contract for the narrow accepted
+families. Additional modalities require their own independently measurable rung
+and may not weaken the RGB/RGB-D lower-rung controls.
 
 ## Milestone 4
 

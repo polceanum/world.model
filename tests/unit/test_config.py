@@ -803,7 +803,7 @@ def test_horizon_sampling_controls_are_boolean(field: str) -> None:
         )
 
 
-def test_active_sustained_campaign_pins_legacy_horizon_semantics() -> None:
+def test_historical_sustained_profile_pins_legacy_horizon_semantics() -> None:
     config = load_config("configs/sustained_accuracy_mps.yaml")
 
     assert not config.training.normalize_rollout_axes_over_configured_horizons

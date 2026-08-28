@@ -2,6 +2,21 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-28 tracked repository-hygiene documentation repair
+
+- Reconciled the active architecture and roadmap with the accepted
+  known-calibrated orbital-camera rung, the closed partial-visibility family,
+  and the fact that no genuinely new successor rung is selected or authorized.
+- Marked the superseded dense-attention campaign and the already-removed
+  `runs/accuracy-*` workflow as historical provenance rather than current
+  launch guidance. The generic evaluator help and fresh-run validation
+  workflow remain supported; neither authorizes access to consumed
+  qualification manifests.
+- Renamed one stale test function to identify its sustained profile as a
+  historical compatibility fixture without changing assertions or behavior.
+  No production source, configuration, run, archive, checkpoint, evidence
+  artifact, or tested behavior was changed by this cleanup.
+
 ### 2026-08-28 accepted known-calibrated orbital-camera RGB-D qualification
 
 - Accepted the frozen specification-1.57 rung on committed source
