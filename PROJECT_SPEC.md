@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.58
+**Version:** 1.59
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, exactly-once two-visible-object acceptance, bounded-partial-visibility, isolated-target-depth-miss, immediate-recovery, and pre-development evidence-freeze amendments 27 August 2026; immutable partial-visibility attempt-1 failure, exact-raster finite-table recovery, capability-bound evidence access, and terminal attempt-2 source-freeze amendments 28 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, exactly-once two-visible-object acceptance, bounded-partial-visibility, isolated-target-depth-miss, immediate-recovery, and pre-development evidence-freeze amendments 27 August 2026; immutable partial-visibility attempt-1 failure, exact-raster finite-table recovery, capability-bound evidence access, terminal attempt-2 source-freeze, terminal heterogeneous-batch-schema failure, and rung-5 closure amendments 28 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -8715,6 +8715,89 @@ audited development report/checkpoint/ledger may authorize selector ->
 confirmation -> final exactly once.  If attempt-2 development fails, this rung
 stops permanently: there is no architecture attempt 3, no renamed retry, and
 no reuse of any attempt-1 or protected namespace.
+
+# Part L — Terminal partial-visibility rung closure amendment
+
+## 257. Record the attempt-2 batch-schema failure and close rung 5 permanently
+
+Section 256 remains the historical specification-1.58 source/protocol/security
+freeze.  That exact tree was subsequently committed and pushed as
+`cc54db3a0595e4b466f93fa987db648f383e47d3`, with Git tree
+`6a6d3b7405ceef41e10b5430584a4d3ac1fd1b94`; immediately before the sole
+development authorization the working tree was clean and `HEAD == upstream`.
+The run binds runtime-source fingerprint
+`8383157147b63f4fb557eac0ccaa32d12be987a45ed49c9dc90211d5b6f30b79`,
+worktree fingerprint
+`df56e3598cba8931d3dd5ad0a7fd756345658df46490fa5200fe6872b371fc34`,
+config SHA-256
+`b18f787987394f77771dbf31dae1642bd042b81e64b02a3e93b8cd048dd3416b`,
+and canonical protocol SHA-256
+`5f049f060f6e8a9682d9413e6bc2d8f9f228f6e2aee67cde16f98d234cac8a3b`.
+The frozen development/selector/confirmation/final manifest SHA-256 values
+remain, respectively,
+`ded3d75a7d248e3f9746b03b0cf249f32739208713c4287c45deb5eefd11f8e2`,
+`effa598aa07a44c100da115f71828e00754f181729063899353d22b551f7227a`,
+`9240a1dd465574de8ac032e318f3cee618909ed6a5b3e91c5fd8c87bad146cec`,
+and `17fdd50896729b981357960ea0db74ef19e059e21bc8d8e41a7048cf237200a6`.
+Simulator metadata remains `sphere_world_v7`.
+
+Architecture attempt 2 consumed its single permitted development
+authorization and terminated on the first heterogeneous batch collation.  The
+exact exception was
+`ValueError: mixed None/non-None values at metadata.qualification.miss_frame`.
+Batch size was four.  Seeds `57000000--57000003` were fully constructed and
+preflighted, with `miss_frame` schedule `[None, None, 15, 15]`; seeds
+`57000004--57000031` were untouched.  A cursor value of `4` is inferable from
+the execution but was not durably persisted.  Failure occurred after the four
+episode values were listed and at their first collate, before
+`_run_public_batch`.  The optional `rear_slot` and `missed_slot` fields would
+also have mixed `None`/non-`None` values, but `miss_frame` was the first field
+to fail.  Seed-free tests covered homogeneous metadata and did not exercise a
+real batch spanning no-miss and one-miss strata.
+
+One top-level empty `OnlineWorldModel` was instantiated and its state was
+hashed before ledger authorization.  No public batch model evaluation or
+runtime ingestion occurred: there was no `ingest`, `predict`, metric,
+optimizer, update, or checkpoint operation.  This distinction replaces the
+incorrect stronger statement that no model object existed while preserving
+the actual no-runtime boundary.
+
+The terminal evidence inventory contains exactly two single-link regular
+files, both mode `0600`:
+
+- `development_report.json`, `32,350` bytes, SHA-256
+  `aabda0bd672d2f12582ae2369ed9cad8268e6db921ab869d1d4ffe8600ecf682`;
+  and
+- `development_attempt_2_access.json`, `1,115` bytes, SHA-256
+  `fe00789c6c5c756eae6b8ef83ebc9a1f2fd86c52259c171bf3cdb96c9ca5efe7`.
+
+The ledger's report digest and the report's ledger backlink are exact.  The
+terminal status is `error` and result is `null`.  No checkpoint, temporary
+file, qualification report, qualification ledger, or other v2 artifact
+exists.
+
+The protected selector `58000000--58000023`, confirmation
+`59000000--59000023`, and final `60000000--60000047` namespaces were never
+authorized or materialized and are permanently unused.  The historical v1
+protected 54m--56m namespaces remain permanently unused as well.  Architecture
+attempt 2 was the declared second of at most two, so rung 5 is now closed
+permanently: there is no patch or rerun, renamed retry, architecture attempt 3,
+gate retune, seed reuse, or protected access.
+
+The pre-run source gates remain valid source-integrity evidence: the canonical
+gate passed `315` tests in `345.27 s`, the independent solver proof passed `1`
+test in `244.52 s`, the full suite passed `1407` tests with `16` expected skips
+in `816.14 s`, and the independent audits reported `PASS`.  They do not
+override the development failure.  Conversely, this failure is evidence of a
+heterogeneous batch metadata-schema defect, not renderer, perception,
+recovery, state/velocity accuracy, or architectural-capacity evidence.  No
+partial-visibility acceptance exists.
+
+Any future work must start from an accepted lower-rung base under a genuinely
+new rung and protocol with fresh namespaces.  Before any such data access, its
+seed-free gates must collate real heterogeneous batches whose optional
+episode metadata differs across strata.  This section does not authorize or
+predeclare that future rung.
 
 # Closing directive
 

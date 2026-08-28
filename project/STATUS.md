@@ -7,16 +7,21 @@ The pre-generalization public base was commit
 foundation is GitHub `main` commit
 `08ae63adc5ade2e5061f54539fc7a25564c8c8d6`, and the accepted public RGB-D
 bridge is merged at `3eed0b71e6f18c7036bf376c075493a89d5fdc9f`. Broad heterogeneous training
-remains paused. The active contract is specification 1.58. The accepted base
+remains paused. The active contract is specification 1.59. The accepted base
 now comprises the specification-1.51 differentiable one-sphere unit, the
 qualified standalone two-second RGB-D rung, and its qualified public one-slot
 `OnlineWorldModel` bridge. The accepted branch additionally contains the
 exactly-two-visible RGB-D qualification recorded below—not any older campaign
 checkpoint. The specification-1.57 partial-visibility prefreeze is historical:
 architecture attempt 1 failed immutably during development before model,
-collate, or runtime. Specification 1.58 freezes the terminal architecture
-attempt 2. That tree is ready for commit/push only; no v2 namespace is opened,
-and no v2 development or accuracy result exists.
+collate, or runtime. Specification 1.58 historically froze the terminal
+architecture attempt 2. That exact tree was committed and pushed, then its
+sole development authorization failed at first-batch heterogeneous metadata
+collation before public batch evaluation or runtime ingestion. Protected
+58m--60m never opened;
+attempt 2 of 2 is consumed and the rung is permanently closed. This is not a
+partial-visibility acceptance or accuracy result. The branch is terminal
+archival evidence, not ready to merge as an accepted capability.
 
 The qualified unit achieved, on its single previously untouched final set:
 
@@ -571,7 +576,7 @@ opened and are permanently unused. The live v1 inventory is exactly two
 single-link regular files, the report and ledger, with no alias or temporary
 artifact. Attempt 1 is terminally consumed.
 
-## Specification-1.58 terminal attempt-2 source freeze
+## Historical specification-1.58 terminal attempt-2 source freeze
 
 Architecture attempt 2 of the maximum two is frozen at
 `runs/rgbd_partial_visibility_recovery_v2/`. It retains the public history,
@@ -623,19 +628,69 @@ The exact tracked v1 report/ledger fixtures match the two live files.
 | confirmation | `59000000--59000023` | `9240a1dd465574de8ac032e318f3cee618909ed6a5b3e91c5fd8c87bad146cec` | `261f975fcd46795ff9f56c94857de69942ea047455f65cc0341bdc515cc76af5` |
 | final | `60000000--60000047` | `17fdd50896729b981357960ea0db74ef19e059e21bc8d8e41a7048cf237200a6` | `1837d40a35ddba88e3a91f74c5b2c398aa01675ad8e84efa2fe660bbf49e34a2` |
 
-All v2 namespaces are unopened and no v2 artifact exists. Direct live-v1
+At that source-freeze boundary all v2 namespaces were unopened and no v2
+artifact existed. Direct live-v1
 guarding, exact tracked fixtures, a private raw constructor/evaluator, and an
 exact canonical ledger-minted capability prevent unauthorized construction or
 v1 reuse. The runtime has no oracle. Exactly five canonical v2 files are
 allowed, and checkpoint loading is restricted to `weights_only=True`.
 
-The canonical gate passes `315 passed in 345.27 s`; the public-solver proof
+The canonical gate passed `315 passed in 345.27 s`; the public-solver proof
 passes `1 passed in 244.52 s`; the full repository suite passes
 `1407 passed, 16 skipped in 816.14 s`; and two independent final audits report
-`PASS`. This is source-integrity and security evidence only. The tree is ready
-for commit and push, not development or qualification. Development may begin
-only after a clean tree proves `HEAD == upstream`. If it fails, the rung ends
-with no attempt 3.
+`PASS`. This is source-integrity and security evidence only. The tree then
+required clean commit/push and `HEAD == upstream` before the one development
+authorization. That historical boundary was satisfied; the terminal result is
+recorded below.
+
+## Specification-1.59 terminal attempt-2 development failure
+
+The exact specification-1.58 freeze was committed and pushed as
+`cc54db3a0595e4b466f93fa987db648f383e47d3`, tree
+`6a6d3b7405ceef41e10b5430584a4d3ac1fd1b94`, with a clean worktree and
+`HEAD == upstream`. Runtime/worktree fingerprints are
+`8383157147b63f4fb557eac0ccaa32d12be987a45ed49c9dc90211d5b6f30b79`
+and `df56e3598cba8931d3dd5ad0a7fd756345658df46490fa5200fe6872b371fc34`.
+The config/protocol SHA-256 values remain
+`b18f787987394f77771dbf31dae1642bd042b81e64b02a3e93b8cd048dd3416b`
+and `5f049f060f6e8a9682d9413e6bc2d8f9f228f6e2aee67cde16f98d234cac8a3b`.
+
+The one permitted development authorization ended with
+`ValueError: mixed None/non-None values at metadata.qualification.miss_frame`.
+Batch size was four. Seeds `57000000--57000003` completed construction and
+preflight with schedules `[None, None, 15, 15]`; seeds
+`57000004--57000031` were untouched. Cursor `4` is inferable but was not
+persisted. The first batch failed during collation after its episode list was
+constructed and before `_run_public_batch`. Optional `rear_slot` and
+`missed_slot` metadata would also have been heterogeneous; `miss_frame` failed
+first. Seed-free tests did not cover a real heterogeneous episode batch.
+
+One empty top-level `OnlineWorldModel` was instantiated and state-hashed before
+the ledger authorization. No public batch evaluation or runtime ingestion
+occurred: no `ingest`, `predict`, metric, optimizer, update, or checkpoint ran.
+The exact terminal inventory is two mode-`0600`, single-link regular files:
+
+- report: `32,350` bytes, SHA-256
+  `aabda0bd672d2f12582ae2369ed9cad8268e6db921ab869d1d4ffe8600ecf682`;
+  and
+- ledger: `1,115` bytes, SHA-256
+  `fe00789c6c5c756eae6b8ef83ebc9a1f2fd86c52259c171bf3cdb96c9ca5efe7`.
+
+The ledger report digest and report backlink match exactly. Status is `error`,
+result is `null`, and no checkpoint, temporary, qualification-report, or
+qualification-ledger artifact exists. Selector 58m, confirmation 59m, and
+final 60m were never authorized or materialized and are permanently unused.
+Attempt 2 was the final permitted architecture attempt. Rung 5 is closed with
+no patch/rerun, renamed retry, attempt 3, gate retune, seed reuse, or protected
+access.
+
+This is a batch metadata-schema failure, not renderer, perception, recovery,
+state/velocity accuracy, capacity, or acceptance evidence. The accepted claim
+remains the exactly-two-visible non-contact RGB-D rung. Any future work must
+start from that accepted base under a genuinely new protocol with fresh
+namespaces and seed-free heterogeneous batch-collation tests; no successor rung
+is authorized here. The current branch should be archived as failed evidence,
+not merged as an accepted rung.
 
 ## Validation state
 
@@ -670,16 +725,18 @@ repository result was
 failed during renderer preflight as recorded above; no model, collate,
 runtime, checkpoint, or protected access followed.
 
-The specification-1.58 attempt-2 frozen tree passes the canonical gate at
+The specification-1.58 attempt-2 frozen tree passed the canonical gate at
 `315 passed in 345.27 s`, the independent public-solver proof at
 `1 passed in 244.52 s`, and the full repository gate at
 `1407 passed, 16 skipped in 816.14 s`. Two independent final audits report
-`PASS`. This exact source freeze remains uncommitted/unpushed and has no v2
-episode or evidence result.
+`PASS`. It was then committed/pushed exactly as recorded above. Those source
+proofs remain valid but are superseded operationally by the terminal
+development error.
 
 No accepted claim exists beyond the exactly-two-visible non-contact RGB-D
 family. Attempt 1 is a constructor/preflight failure, not recovery evidence.
-Attempt 2 is frozen but not committed, pushed, developed, qualified, or
-accepted; full occlusion, reappearance, contact, variable count, additional
+Attempt 2 is a first-batch metadata-collation failure, not recovery evidence;
+it is neither qualified nor accepted. Both attempts and rung 5 are closed.
+Full occlusion, reappearance, contact, variable count, additional
 modality, planning, learned capacity, and general convergence remain
 unqualified.

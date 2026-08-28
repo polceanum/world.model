@@ -193,7 +193,7 @@ collate, or runtime: seed `53000001`, frame `4`, mild rear support/visible
 `20/15`, and exact `0.75 < 0.80` despite continuous `0.826827`. No checkpoint
 or protected access followed; 54m--56m are permanently unused.
 
-Specification 1.58 freezes architecture attempt 2 of 2 around a finite
+Specification 1.58 historically froze architecture attempt 2 of 2 around a finite
 exact-raster constructor rather than a stochastic geometry family. One
 source-owned table crosses `16` rational primitives with all `8` exact `D4`
 transforms, yielding `128` unique physical cells. The canonical world path is
@@ -215,10 +215,24 @@ tracked fixtures reproduce those exact bytes, and only an exact canonical
 ledger-minted capability may enter construction. A manifest-shaped value is
 not authority. The v2 protocol has no oracle and permits only five canonical
 single-link evidence files; the restricted checkpoint is loaded
-with `weights_only=True`. Fresh 57m--60m namespaces are unopened and no v2
-artifact exists. This is an audited source freeze ready for commit/push, not a
-development or partial-visibility qualification; a failed development ends
-the rung with no architecture attempt 3.
+with `weights_only=True`. At that source-freeze boundary, fresh 57m--60m
+namespaces were unopened and no v2 artifact existed. It was not development or
+partial-visibility qualification.
+
+Specification 1.59 records the terminal execution of that frozen architecture.
+The exact clean pushed source constructed and preflighted the first four
+development episodes, whose optional qualification metadata crossed two
+no-miss and two one-miss strata. Generic collation rejected the resulting
+`miss_frame` values `[None, None, 15, 15]` with
+`ValueError: mixed None/non-None values at metadata.qualification.miss_frame`
+before `_run_public_batch`. An empty top-level `OnlineWorldModel` object had
+already been instantiated and state-hashed, but no public batch evaluation,
+runtime ingestion, prediction, metric, optimizer, update, or checkpoint
+occurred. This exposes a batch metadata-schema seam rather than a renderer,
+perception, recovery, or dynamics result. Protected 58m--60m were never
+authorized or materialized, both architecture attempts are consumed, and the
+rung is permanently closed. Any future protocol must seed-free collate real
+heterogeneous optional episode metadata before accessing fresh namespaces.
 
 Evaluation seed manifests are explicit. `fresh_validation` starts after the
 checkpoint's trainer-validation episodes by default; `--seed-offset` can select

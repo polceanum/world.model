@@ -534,7 +534,7 @@ untouched. No checkpoint exists. Protected 54m--56m never opened and are
 permanently unused. Exactly two single-link live files—the report and
 ledger—remain. Attempt 1 is consumed and must not be resumed or renamed.
 
-## Frozen partial-visibility recovery workflow — attempt 2 not run
+## Historical partial-visibility attempt-2 freeze and terminal failure
 
 Specification 1.58 retains simulator `sphere_world_v7`, the accepted
 specification-1.56 base, the failed specification-1.57 evidence, and the
@@ -583,7 +583,8 @@ confirmation
 `261f975fcd46795ff9f56c94857de69942ea047455f65cc0341bdc515cc76af5`,
 and final
 `1837d40a35ddba88e3a91f74c5b2c398aa01675ad8e84efa2fe660bbf49e34a2`.
-All are unopened; no v2 artifact exists.
+At the specification-1.58 source-freeze boundary all were unopened and no v2
+artifact existed.
 
 The v2 run root is `runs/rgbd_partial_visibility_recovery_v2/`. Raw
 construction/evaluation are private. A direct guard protects the immutable
@@ -597,9 +598,41 @@ passes `1 passed in 244.52 s`; the full suite passes
 `1407 passed, 16 skipped in 816.14 s`; and two independent final audits report
 `PASS`. These are source/security proofs, not episode evidence.
 
-Do not execute development yet. First commit and push the exact source/docs
-freeze, then prove the tree clean with `HEAD == upstream`. The development
-ledger may then mint the sole attempt-2 capability. Independently audit a
-passing report/checkpoint/ledger before selector -> confirmation -> final is
-authorized exactly once. Any development failure stops the rung permanently;
-there is no architecture attempt 3.
+That exact source/docs freeze was committed and pushed as
+`cc54db3a0595e4b466f93fa987db648f383e47d3`, tree
+`6a6d3b7405ceef41e10b5430584a4d3ac1fd1b94`, with a clean worktree and
+`HEAD == upstream`. Runtime/worktree fingerprints were
+`8383157147b63f4fb557eac0ccaa32d12be987a45ed49c9dc90211d5b6f30b79`
+and `df56e3598cba8931d3dd5ad0a7fd756345658df46490fa5200fe6872b371fc34`.
+
+The sole attempt-2 development capability has now been consumed. Do not run
+development or qualification again. Its first batch failed with
+`ValueError: mixed None/non-None values at metadata.qualification.miss_frame`.
+Batch size was four: seeds `57000000--57000003` completed construction and
+preflight with schedules `[None, None, 15, 15]`; seeds
+`57000004--57000031` were untouched. Cursor `4` is inferable but not durable.
+The exception arose during first-batch collation after the episode list was
+built and before `_run_public_batch`. `rear_slot` and `missed_slot` would also
+have been heterogeneous optional fields, but `miss_frame` failed first.
+
+One empty top-level `OnlineWorldModel` was instantiated and state-hashed before
+ledger authorization. No public batch model evaluation, runtime ingestion,
+`ingest`, `predict`, metric, optimizer, update, or checkpoint occurred. The
+terminal report is `32,350` bytes with SHA-256
+`aabda0bd672d2f12582ae2369ed9cad8268e6db921ab869d1d4ffe8600ecf682`;
+the terminal ledger is `1,115` bytes with SHA-256
+`fe00789c6c5c756eae6b8ef83ebc9a1f2fd86c52259c171bf3cdb96c9ca5efe7`.
+They are the exact two-file inventory, both mode-`0600`, single-link regular
+files with matching report digest/backlink, status `error`, and result `null`.
+There is no checkpoint, temporary file, qualification report, or
+qualification ledger.
+
+Selector 58m, confirmation 59m, and final 60m were never authorized or
+materialized and are permanently unused. This was architecture attempt 2 of
+the maximum two, so rung 5 is permanently closed. Do not patch/rerun, rename,
+create attempt 3, retune a gate, reuse a seed, or access protected data. The
+failure is a heterogeneous batch metadata-schema defect, not renderer,
+perception, recovery, state/velocity accuracy, or partial-visibility evidence.
+Any future work requires a genuinely new protocol and fresh namespaces from an
+accepted lower-rung base, with a seed-free test that collates real
+heterogeneous episode metadata before access.

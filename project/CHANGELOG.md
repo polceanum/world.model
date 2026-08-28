@@ -2,6 +2,53 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-28 terminal attempt-2 batch-schema failure and rung-5 closure
+
+- Advanced the authoritative contract to specification 1.59 while preserving
+  specification 1.58 and ADR-168 as the historical attempt-2 source freeze.
+  Simulator metadata remains `sphere_world_v7`.
+- Bound the sole development execution to clean pushed commit
+  `cc54db3a0595e4b466f93fa987db648f383e47d3`, tree
+  `6a6d3b7405ceef41e10b5430584a4d3ac1fd1b94`, clean
+  `HEAD == upstream`, runtime fingerprint
+  `8383157147b63f4fb557eac0ccaa32d12be987a45ed49c9dc90211d5b6f30b79`,
+  and worktree fingerprint
+  `df56e3598cba8931d3dd5ad0a7fd756345658df46490fa5200fe6872b371fc34`.
+  Config/protocol SHA-256 remained
+  `b18f787987394f77771dbf31dae1642bd042b81e64b02a3e93b8cd048dd3416b`
+  / `5f049f060f6e8a9682d9413e6bc2d8f9f228f6e2aee67cde16f98d234cac8a3b`.
+- Recorded the exact terminal exception:
+  `ValueError: mixed None/non-None values at metadata.qualification.miss_frame`.
+  Batch size was four. Seeds `57000000--57000003` completed construction and
+  preflight with schedules `[None, None, 15, 15]`; seeds
+  `57000004--57000031` were untouched. The failure occurred at first-batch
+  collation after episode-list construction and before `_run_public_batch`.
+  Optional `rear_slot` and `missed_slot` metadata would also have been
+  heterogeneous, but `miss_frame` failed first. Existing tests missed a real
+  heterogeneous episode-batch collation seam.
+- Clarified model/runtime scope: one empty top-level `OnlineWorldModel` was
+  instantiated and state-hashed before ledger authorization. No public batch
+  model evaluation, runtime ingestion, `ingest`, `predict`, metric, optimizer,
+  update, or checkpoint operation occurred.
+- Bound the exact terminal two-file inventory: `development_report.json` is
+  `32,350` bytes with SHA-256
+  `aabda0bd672d2f12582ae2369ed9cad8268e6db921ab869d1d4ffe8600ecf682`;
+  `development_attempt_2_access.json` is `1,115` bytes with SHA-256
+  `fe00789c6c5c756eae6b8ef83ebc9a1f2fd86c52259c171bf3cdb96c9ca5efe7`.
+  Both are mode-`0600`, single-link regular files with exact reciprocal digest
+  linkage; status is `error`, result is `null`, and no checkpoint, temporary,
+  qualification-report, or qualification-ledger artifact exists.
+- Left selector 58m, confirmation 59m, and final 60m unauthorized,
+  unmaterialized, and permanently unused. Architecture attempt 2 of 2 is
+  consumed, so rung 5 is permanently closed with no patch/rerun, renamed
+  retry, attempt 3, threshold retune, seed reuse, or protected access.
+- Kept the preceding `315`-test canonical, one-test solver, `1407 + 16` full-
+  suite, and independent audit passes as source-integrity evidence only. The
+  terminal result is a heterogeneous metadata-schema failure—not renderer,
+  perception, recovery, state/velocity accuracy, or partial-visibility
+  acceptance evidence. Future work requires a genuinely new protocol, fresh
+  namespaces, and a seed-free heterogeneous-batch collation gate.
+
 ### 2026-08-28 immutable attempt-1 failure and terminal partial-visibility source freeze
 
 - Advanced the authoritative contract to specification 1.58 while retaining

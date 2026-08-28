@@ -89,14 +89,16 @@ preflight before model, collation, or runtime: seed `53000001` had only
 though continuous visibility was `0.826827`. No checkpoint or protected
 access followed, and 54m--56m are permanently unused.
 
-Specification 1.58 freezes the terminal architecture attempt 2 around one
-finite exact-raster table of `16` rational primitives and `8` exact `D4`
-transforms (`128` unique physical cells). Fresh 57m--60m namespaces are all
-unopened and no v2 artifact exists. Canonical, solver-proof, and full-suite
-gates pass, with two independent audits reporting `PASS`. This is ready for
-clean commit/push only—not a development, qualification, or partial-visibility
-result. Development may begin only after clean `HEAD == upstream`; if it
-fails, there is no attempt 3.
+Specification 1.59 records the terminal architecture-attempt-2 development
+failure and closes the bounded-partial-visibility rung permanently. The exact
+1.58 source freeze was committed and pushed cleanly, but its first batch mixed
+`None` and integer `metadata.qualification.miss_frame` values and failed
+collation before any public batch evaluation or runtime ingestion. Exactly
+four development episodes were constructed; 58m--60m were never authorized
+and are permanently unused. Both permitted architecture attempts are consumed,
+so there is no patch, rerun, renamed retry, third attempt, or protected access.
+This branch is terminal archival evidence, not an accepted or merge-ready
+capability result.
 
 ## Quick start
 
@@ -286,9 +288,9 @@ Their records remain in Git history and the ignored, local pre-generalization
 archive. Broad training remains paused. The accepted bridge and
 exactly-two-visible qualification are merged. The specification-1.57
 partial-visibility attempt failed immutably in constructor preflight, and
-specification 1.58 now freezes the final exact-raster attempt without
-weakening any accepted gate. Its fresh source/docs tree still requires clean
-commit and push before development.
+specification 1.58 then froze the final exact-raster attempt without weakening
+any accepted gate. Specification 1.59 records that attempt's first-batch
+metadata-schema failure and closes the rung without opening protected data.
 
 ### Qualified public RGB-D online bridge — final consumed once
 
@@ -523,7 +525,7 @@ untouched. No checkpoint exists. Protected 54m--56m were never opened and are
 permanently unused. The live v1 directory has exactly two single-link files,
 the report and ledger. This consumes architecture attempt 1.
 
-#### Specification-1.58 attempt-2 source freeze
+#### Historical specification-1.58 attempt-2 source freeze
 
 Attempt 2 retains the public history, miss-isolation, and recovery semantics
 above. It uses a finite source-owned table: `16` rational primitives crossed
@@ -558,10 +560,49 @@ checkpoint with `weights_only=True`. Canonical validation passes
 full suite passes `1407 tests, 16 skipped in 816.14 s`; and two independent
 audits report `PASS`.
 
-Every v2 namespace is unopened and no v2 artifact exists. This source freeze
-is ready for commit/push, not development or qualification. Development may
-begin only after the exact tree is clean with `HEAD == upstream`. If it fails,
-the rung stops permanently with no attempt 3.
+At that boundary every v2 namespace was unopened and no v2 artifact existed.
+The source freeze required exact clean commit/push and `HEAD == upstream`
+before development. That boundary is preserved as history; the resulting
+terminal development failure is recorded below.
+
+#### Specification-1.59 terminal attempt-2 failure
+
+The frozen tree was committed and pushed as
+`cc54db3a0595e4b466f93fa987db648f383e47d3` (tree
+`6a6d3b7405ceef41e10b5430584a4d3ac1fd1b94`) with clean
+`HEAD == upstream`. Runtime/worktree fingerprints were
+`8383157147b63f4fb557eac0ccaa32d12be987a45ed49c9dc90211d5b6f30b79` /
+`df56e3598cba8931d3dd5ad0a7fd756345658df46490fa5200fe6872b371fc34`.
+
+The sole development authorization failed with
+`ValueError: mixed None/non-None values at metadata.qualification.miss_frame`.
+The first batch of four fully constructed and preflighted episodes used seeds
+`57000000--57000003` and schedules `[None, None, 15, 15]`; seeds
+`57000004--57000031` were untouched. Failure occurred in first-batch collation
+after list construction and before `_run_public_batch`. An empty top-level
+`OnlineWorldModel` had been instantiated and state-hashed before ledger
+authorization, but no public batch evaluation, `ingest`, `predict`, metric,
+optimizer, update, or checkpoint operation occurred. The tests had not
+covered real heterogeneous optional metadata across strata.
+
+The exact two-file v2 inventory is:
+
+- `development_report.json`, `32,350` bytes, SHA-256
+  `aabda0bd672d2f12582ae2369ed9cad8268e6db921ab869d1d4ffe8600ecf682`;
+  and
+- `development_attempt_2_access.json`, `1,115` bytes, SHA-256
+  `fe00789c6c5c756eae6b8ef83ebc9a1f2fd86c52259c171bf3cdb96c9ca5efe7`.
+
+Both are single-link regular files with mode `0600`; report/ledger backlinks
+match exactly, status is `error`, and result is `null`. No checkpoint,
+temporary, qualification-report, or qualification-ledger artifact exists.
+Selector 58m, confirmation 59m, and final 60m were never authorized or
+materialized and are permanently unused. Attempt 2 of 2 is consumed and rung
+5 is closed. This is a batch metadata-schema failure, not renderer,
+perception, recovery, accuracy, or partial-visibility acceptance evidence.
+Future work, if any, requires a genuinely new protocol and fresh namespaces
+from the accepted base, including a seed-free heterogeneous-batch collation
+gate.
 
 The general evaluator still supports explicit disjoint manifests for a
 compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not

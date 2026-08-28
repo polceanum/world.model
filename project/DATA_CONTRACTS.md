@@ -34,7 +34,7 @@ history length, and `H_img,W_img` image height/width.
   exactly fifteen valid target supports; the co-object remained independently
   valid with sixteen. Its first development construction failed exact renderer
   visibility preflight before any model, collate, runtime, or checkpoint state.
-  Specification 1.58 preserves the same public history semantics in the
+  Specification 1.58 preserved the same public history semantics in the
   terminal attempt-2 source freeze. The invalid row emits no direct
   state/velocity evidence, and the filter alone owns its single `0.08`
   missed-state variance increment. This live sensor-local state is not
@@ -53,6 +53,15 @@ history length, and `H_img,W_img` image height/width.
   this capability. The v2 evidence contract permits exactly five canonical
   single-link files and loads the restricted checkpoint with
   `weights_only=True`; it contains no oracle input.
+- Terminal attempt-2 batch-schema evidence: the first real batch crossed
+  no-miss and one-miss strata, so optional qualification metadata contained
+  `miss_frame == [None, None, 15, 15]`. Generic collation rejected the mixed
+  optional values before `_run_public_batch`; `rear_slot` and `missed_slot`
+  would have the same heterogeneity, but `miss_frame` failed first. This is not
+  a new public observation or belief contract and no runtime batch was
+  ingested. Any genuinely new rung must define an explicit typed optional-
+  metadata representation and a seed-free test that collates real
+  heterogeneous optional episode metadata before data access.
 - `AbstractionAssignment`: `[B,N]` abstraction kind, routing confidence,
   complexity cost, refinement reason, and active mask. It is derived from
   `WorldBelief`, not stored as independent physical state.

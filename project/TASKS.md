@@ -266,21 +266,36 @@
   public-solver proof (`1 passed in 244.52 s`), full repository gate
   (`1407 passed, 16 skipped in 816.14 s`), and two independent final audits
   reporting `PASS`. Keep every v2 namespace unopened and create no v2 artifact.
-- [ ] Commit and push the exact specification-1.58 source/config/tests/runner/
-  docs freeze. Require a clean tree with `HEAD == upstream`, then execute the
-  sole attempt-2 development authorization and obtain an independent exact-
-  digest audit. This task is not complete merely because source gates pass.
-- [ ] Only a passing attempt-2 development artifact may authorize selector ->
-  confirmation -> final exactly once. If development fails, stop rung 5
-  permanently: no attempt 3, renamed retry, v1/protected-seed reuse, or gate
+- [x] Commit and push the exact specification-1.58 source/config/tests/runner/
+  docs freeze as `cc54db3a0595e4b466f93fa987db648f383e47d3`, tree
+  `6a6d3b7405ceef41e10b5430584a4d3ac1fd1b94`, with clean
+  `HEAD == upstream`; execute the sole attempt-2 development authorization.
+  It failed first-batch collation with
+  `ValueError: mixed None/non-None values at metadata.qualification.miss_frame`
+  after seeds `57000000--57000003` completed construction/preflight and before
+  `_run_public_batch`. Seeds `57000004--57000031` were untouched.
+- [x] Preserve the exact terminal v2 report/ledger evidence: report
+  SHA-256/size
+  `aabda0bd672d2f12582ae2369ed9cad8268e6db921ab869d1d4ffe8600ecf682`
+  / `32,350` bytes and ledger SHA-256/size
+  `fe00789c6c5c756eae6b8ef83ebc9a1f2fd86c52259c171bf3cdb96c9ca5efe7`
+  / `1,115` bytes. Both are mode-`0600`, single-link regular files with exact
+  backlinks; status is `error`, result `null`, and there is no checkpoint,
+  temporary, or qualification artifact.
+- [x] Stop rung 5 permanently after architecture attempt 2 of 2. Leave
+  selector 58m, confirmation 59m, and final 60m unauthorized, unmaterialized,
+  and permanently unused. Do not patch/rerun, rename, add attempt 3, retune,
+  reuse seeds, or access protected data. Treat the branch as terminal archival
+  evidence, not an accepted-result merge candidate.
+- [ ] If future capability work is authorized, first define a genuinely new
+  rung/protocol from the accepted lower-rung base with fresh namespaces and a
+  seed-free test that collates real heterogeneous optional episode metadata.
+  Do not treat this task list as authorization or a predeclared successor rung.
+- [ ] At every future independently authorized rung require state, velocity,
+  horizon accuracy, uncertainty, support, gradient, memory, and throughput
+  non-regression; stop failed architecture families instead of marginal
   retuning.
-- [ ] Add one complexity per later rung: camera motion; drag identification;
-  variable scale; multi-object sets; identity/occlusion; contact; material
-  parameters; known actions/planning; richer modalities/geometry.
-- [ ] At every rung require state/velocity/horizon accuracy, uncertainty,
-  support, gradient, memory, and throughput non-regression; stop failed
-  architecture families instead of marginal retuning.
-- [ ] After the rung passes, update its exact evidence, rerun proportional
+- [ ] After any such rung passes, update its exact evidence, rerun proportional
   gates, commit and push the reviewed branch, and promote only the exact
   reviewed net tree to GitHub `main` without failed experiment history.
 Historical completed and rejected work through specification 1.51 is retained

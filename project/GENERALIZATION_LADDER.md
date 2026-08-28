@@ -310,7 +310,7 @@ The exact final audit passes; it did not reopen raw protected episodes.
 Owner-writable evidence is tamper-evident rather than OS-enforced WORM storage.
 Final is consumed and cannot be rerun or tuned against.
 
-### 5. Bounded partial visibility and one local depth miss — attempt 2 source-frozen
+### 5. Bounded partial visibility and one local depth miss — closed after attempt-2 development failure
 
 The reviewed two-visible tree was fast-forwarded to GitHub `main` through
 `1e951520e5a2bf06c1932f64b8334e552247de82`.
@@ -402,7 +402,8 @@ have SHA-256
 `effa598aa07a44c100da115f71828e00754f181729063899353d22b551f7227a`,
 `9240a1dd465574de8ac032e318f3cee618909ed6a5b3e91c5fd8c87bad146cec`,
 and `17fdd50896729b981357960ea0db74ef19e059e21bc8d8e41a7048cf237200a6`.
-All are unopened and no v2 artifact exists.
+At the specification-1.58 source-freeze boundary all were unopened and no v2
+artifact existed.
 
 Private raw construction/evaluation, a direct immutable-live-v1 guard, exact
 tracked v1 fixtures, and an exact canonical ledger-minted capability enforce
@@ -412,10 +413,42 @@ passes `315 tests in 345.27 s`, the public-solver proof
 `1 test in 244.52 s`, the full suite `1407 tests, 16 skipped in 816.14 s`, and
 two independent final audits report `PASS`.
 
-This is a source freeze ready for commit/push, not rung acceptance. Development
-may begin only after a clean exact tree proves `HEAD == upstream`. Only an
-independently audited pass can authorize selector -> confirmation -> final
-once. Failure ends rung 5 permanently; there is no architecture attempt 3.
+That source freeze was not rung acceptance. It required a clean exact commit,
+push, and `HEAD == upstream` before development; only a passing audited result
+could have authorized selector -> confirmation -> final. The exact tree was
+committed and pushed as
+`cc54db3a0595e4b466f93fa987db648f383e47d3`, tree
+`6a6d3b7405ceef41e10b5430584a4d3ac1fd1b94`, with runtime/worktree
+fingerprints
+`8383157147b63f4fb557eac0ccaa32d12be987a45ed49c9dc90211d5b6f30b79`
+and `df56e3598cba8931d3dd5ad0a7fd756345658df46490fa5200fe6872b371fc34`.
+
+The sole attempt-2 development authorization failed at its first batch with
+`ValueError: mixed None/non-None values at metadata.qualification.miss_frame`.
+Batch size four constructed and preflighted seeds `57000000--57000003`, whose
+schedules were `[None, None, 15, 15]`; seeds `57000004--57000031` remained
+untouched. Failure occurred in collation after episode-list construction and
+before `_run_public_batch`. One empty top-level `OnlineWorldModel` had been
+instantiated and state-hashed before ledger authorization, but no public batch
+evaluation, runtime ingestion, metric, optimizer, update, or checkpoint ran.
+
+The exact report is `32,350` bytes with SHA-256
+`aabda0bd672d2f12582ae2369ed9cad8268e6db921ab869d1d4ffe8600ecf682`;
+the exact ledger is `1,115` bytes with SHA-256
+`fe00789c6c5c756eae6b8ef83ebc9a1f2fd86c52259c171bf3cdb96c9ca5efe7`.
+They are the only v2 files, both mode-`0600`, single-link regular files with
+matching digest/backlink evidence, status `error`, and result `null`. No
+checkpoint, temporary, or qualification artifact exists. Selector 58m,
+confirmation 59m, and final 60m were never authorized or materialized and are
+permanently unused.
+
+Both permitted architecture attempts are now consumed and rung 5 is closed
+permanently. There is no patch/rerun, renamed retry, third attempt, retuning,
+seed reuse, or protected access. This is a heterogeneous metadata-schema
+failure, not renderer, perception, recovery, accuracy, or acceptance evidence.
+The remaining numbered sections are a non-authorizing long-term capability map,
+not a successor protocol. Any future work must first freeze a genuinely new
+rung with fresh namespaces and seed-free heterogeneous-batch collation tests.
 
 ### 6. Observable nuisance variables and additional useful modalities
 
@@ -428,8 +461,9 @@ independently scored information.
 
 ### 7. Variable-size object sets
 
-Only after rung 5 qualifies partial visibility/recovery at fixed count,
-progress to variable set size and longer occlusion/reappearance. Require
+Variable set size and longer occlusion/reappearance remain future capability
+ideas, not an authorized successor to the closed rung 5. Any new protocol must
+require
 per-object state/horizon gates, association coverage, identity-switch limits,
 permutation invariance, and recovery after missed observations before
 increasing scene count or backbone capacity.

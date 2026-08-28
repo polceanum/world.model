@@ -1,5 +1,70 @@
 # Design decisions
 
+## ADR-169 — Close the partial-visibility rung after terminal heterogeneous-batch failure
+
+- **Date:** 2026-08-28
+- **Status:** terminal rejected development; architecture attempts 1 and 2 are
+  consumed, rung 5 is permanently closed, and no protected v2 split opened
+- **Context:** ADR-168 froze the second and final architecture attempt around a
+  finite exact-raster table after attempt 1 failed renderer preflight. The
+  specification-1.58 source passed its seed-free canonical, solver, full-suite,
+  and independent security/protocol audits, then was committed and pushed as
+  `cc54db3a0595e4b466f93fa987db648f383e47d3` (tree
+  `6a6d3b7405ceef41e10b5430584a4d3ac1fd1b94`) with a clean worktree and
+  `HEAD == upstream`. Those source gates did not exercise a real batch whose
+  optional episode metadata differed across no-miss and one-miss strata.
+- **Provenance:** Runtime/worktree fingerprints are
+  `8383157147b63f4fb557eac0ccaa32d12be987a45ed49c9dc90211d5b6f30b79`
+  / `df56e3598cba8931d3dd5ad0a7fd756345658df46490fa5200fe6872b371fc34`.
+  Config/protocol SHA-256 values are
+  `b18f787987394f77771dbf31dae1642bd042b81e64b02a3e93b8cd048dd3416b`
+  / `5f049f060f6e8a9682d9413e6bc2d8f9f228f6e2aee67cde16f98d234cac8a3b`.
+  Frozen 57m/58m/59m/60m manifest SHA-256 values remain
+  `ded3d75a7d248e3f9746b03b0cf249f32739208713c4287c45deb5eefd11f8e2`,
+  `effa598aa07a44c100da115f71828e00754f181729063899353d22b551f7227a`,
+  `9240a1dd465574de8ac032e318f3cee618909ed6a5b3e91c5fd8c87bad146cec`,
+  and `17fdd50896729b981357960ea0db74ef19e059e21bc8d8e41a7048cf237200a6`.
+- **Failure:** The single permitted development authorization failed on the
+  first batch with
+  `ValueError: mixed None/non-None values at metadata.qualification.miss_frame`.
+  Batch size was four; seeds `57000000--57000003` completed construction and
+  preflight with schedules `[None, None, 15, 15]`, while seeds
+  `57000004--57000031` were untouched. Cursor `4` is inferable but not
+  persisted. Failure occurred after the four episode values were listed, in
+  first-batch collation, before `_run_public_batch`. `rear_slot` and
+  `missed_slot` were also structurally heterogeneous, but `miss_frame` failed
+  first.
+- **Runtime boundary:** One empty top-level `OnlineWorldModel` was instantiated
+  and state-hashed before ledger authorization. No public batch evaluation,
+  runtime ingestion, `ingest`, `predict`, metric, optimizer, update, or
+  checkpoint operation occurred. This is not a renderer, perception,
+  recovery, state/velocity accuracy, or learned-capacity result.
+- **Evidence:** The exact inventory is two mode-`0600`, single-link regular
+  files: report SHA-256/size
+  `aabda0bd672d2f12582ae2369ed9cad8268e6db921ab869d1d4ffe8600ecf682`
+  / `32,350` bytes and ledger SHA-256/size
+  `fe00789c6c5c756eae6b8ef83ebc9a1f2fd86c52259c171bf3cdb96c9ca5efe7`
+  / `1,115` bytes. Their report-digest/backlink fields match; terminal status
+  is `error`, result is `null`, and no checkpoint, temporary, qualification
+  report, or qualification ledger exists.
+- **Decision:** Consume architecture attempt 2 and close rung 5 permanently.
+  Selector `58000000--58000023`, confirmation `59000000--59000023`, and final
+  `60000000--60000047` were never authorized or materialized and are
+  permanently unused, as are the historical protected v1 namespaces. There
+  is no source patch, rerun, renamed retry, architecture attempt 3, threshold
+  retune, seed reuse, or protected access.
+- **Alternatives considered:** patch the optional metadata into sentinels and
+  rerun; rename the run; call collation a non-architectural retry; preserve
+  the remaining development seeds for a continuation; authorize protected
+  data because source audits passed; interpret constructed episodes as
+  recovery evidence.
+- **Consequences:** Specification 1.59 is terminal branch-closure memory, not
+  acceptance. The accepted lower-rung base remains exactly two fully visible,
+  separated, non-contact RGB-D objects. Any future work must be a genuinely
+  new rung/protocol from that accepted base with fresh namespaces and a
+  pre-access seed-free gate that collates real heterogeneous optional metadata.
+  This ADR does not authorize or predeclare that future rung.
+
 ## ADR-168 — Consume partial-visibility attempt 1 and freeze the terminal exact-raster attempt
 
 - **Date:** 2026-08-28
