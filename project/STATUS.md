@@ -19,6 +19,9 @@ known-calibrated orbital-camera qualification recorded below. All four splits
 passed in order and final is consumed. This is a narrow parameter-free result
 for one certified orbit, not a claim for general camera motion, camera-pose
 learning, occlusion, contact, variable count, or learned capacity.
+The reviewed net tree is merged and published to GitHub `main` through
+acceptance commit `00a712d640cdb828f24a194817443daa57e6df65`. Final remains
+consumed; any next rung still requires a genuinely new pre-access protocol.
 
 The qualified unit achieved, on its single previously untouched final set:
 

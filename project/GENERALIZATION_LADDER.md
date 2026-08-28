@@ -401,6 +401,10 @@ raw protected episodes were not rederived or audited. Acceptance therefore
 covers only the declared known orbit, not arbitrary camera motion or pose
 learning.
 
+The reviewed net tree is merged and published to GitHub `main` through
+acceptance commit `00a712d640cdb828f24a194817443daa57e6df65`. Final remains
+consumed; any next rung still requires a genuinely new pre-access protocol.
+
 ### 6. Partial visibility and missed-observation recovery — failed family closed
 
 The separate partial-visibility and missed-observation-recovery family failed

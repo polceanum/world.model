@@ -263,10 +263,14 @@
   fetch; and no raw protected-episode rederivation or audit.
 - [x] Keep the failed partial-visibility/recovery family closed. Do not revive,
   retry, rename, or use it as the next rung.
-- [ ] Select and freeze one genuinely new capability before any new data
-  access. Candidate later capabilities include identifiable drag, variable
-  scale, variable-size object sets, contact/materials, known actions/planning,
-  and richer modalities/geometry; this list does not itself authorize a rung.
+- [x] Merge and publish the reviewed net tree to GitHub `main` through
+  acceptance commit `00a712d640cdb828f24a194817443daa57e6df65`. Final remains
+  consumed; this closure authorizes no new data access.
+- [ ] Select and freeze one genuinely new capability under its own pre-access
+  protocol before any new data access. Candidate later capabilities include
+  identifiable drag, variable scale, variable-size object sets,
+  contact/materials, known actions/planning, and richer modalities/geometry;
+  this list does not itself authorize a rung.
 - [ ] At every rung require state/velocity/horizon accuracy, uncertainty,
   support, gradient, memory, and throughput non-regression; stop failed
   architecture families instead of marginal retuning.

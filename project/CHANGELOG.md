@@ -67,6 +67,9 @@
   contact, variable-count, or learned-capacity evidence. The failed partial
   family remains closed; any next rung must be genuinely new and frozen before
   access.
+- Merged and published the reviewed net tree to GitHub `main` through
+  acceptance commit `00a712d640cdb828f24a194817443daa57e6df65`. Final remains
+  consumed; any next rung still requires a genuinely new pre-access protocol.
 
 ### 2026-08-28 historical source freeze: known-calibrated orbital-camera RGB-D
 

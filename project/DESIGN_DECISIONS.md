@@ -85,8 +85,11 @@
   `0.05`. This is not general moving-camera, unknown-pose, learned-pose,
   occlusion, partial-visibility, recovery, contact, variable-count,
   learned-capacity, or general-convergence evidence. The failed partial family
-  remains closed. A next rung must be a genuinely new capability frozen before
-  access.
+  remains closed. The reviewed net tree is merged and published to GitHub
+  `main` through acceptance commit
+  `00a712d640cdb828f24a194817443daa57e6df65`; final remains consumed. A next
+  rung must be a genuinely new capability frozen under its own pre-access
+  protocol.
 
 ## ADR-167 — Freeze the known-calibrated orbital-camera RGB-D rung before access
 

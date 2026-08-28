@@ -8706,6 +8706,9 @@ calibrated orbit, gravity `0`, and drag `0.05`.  It is not evidence for general
 moving-camera behavior, unknown-camera or learned-pose estimation, partial
 visibility, occlusion, missed-observation recovery, contact, variable count,
 variable physics, learned capacity, tasks, or general world-model convergence.
+The reviewed net tree was merged and published to GitHub `main` through
+acceptance commit `00a712d640cdb828f24a194817443daa57e6df65`.  Final remains
+consumed.
 The failed partial-visibility family remains closed and must not be revived or
 retried.  Any next rung must introduce a genuinely new capability under its
 own pre-access source, manifest, gate, and evidence contract.

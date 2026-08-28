@@ -276,10 +276,12 @@ The former grounded, attention, change-point, and multi-day accuracy commands
 are historical evidence only and have been removed from the active workflow.
 Their records remain in Git history and the ignored, local pre-generalization
 archive. Broad training remains paused. The accepted one-object and fixed-
-camera two-object bridges are merged. Specification 1.57 now freezes the next
-bounded known-camera-motion rung without weakening those accepted gates; its
-single development attempt still waits for the exact source/docs tree to be
-committed cleanly and published upstream.
+camera two-object bridges are merged. The reviewed specification-1.57 known-
+calibrated orbital-camera net tree is also merged and published to GitHub
+`main` through acceptance commit
+`00a712d640cdb828f24a194817443daa57e6df65`; final remains consumed. Any next
+rung still requires a genuinely new capability frozen under its own pre-access
+protocol.
 
 ### Qualified public RGB-D online bridge — final consumed once
 
