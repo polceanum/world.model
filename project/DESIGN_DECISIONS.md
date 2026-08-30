@@ -1,10 +1,56 @@
 # Design decisions
 
+## ADR-170 — Close identifiable drag after first-batch development failure
+
+- **Date:** 2026-08-30
+- **Status:** terminal rejected family; protected splits unopened
+- **Context:** ADR-169 froze attempt 1 of 1 for a seedless 64-ordinal-per-split
+  identifiable-drag family. The exact tree passed source/certificate/security
+  gates, was committed/published as
+  `0e283d841281fbf98842c9969f02a026a5489dce`, and had clean configured-upstream
+  equality `0/0` before development.
+- **Failure:** The private constructor materialized development ordinals
+  `0,1,2,3`, including 56 public RGB-D render/preflight frames each. Generic
+  `collate_episodes` then raised
+  `ValueError: metadata tuple differs across batch at metadata.albedo`.
+  Palette/albedo varies deliberately across camera strata, but tuple metadata
+  in the canonical collator must be identical across a batch.
+- **Boundary:** Collation precedes reviewed-model construction/reset. Therefore
+  no `OnlineWorldModel` ingest/predict, drag fit, calibration, VJP, metrics,
+  model state, or checkpoint occurred. The ledger records four materialized,
+  zero completed ordinals, zero completed batches/evidence hashes, active
+  batch `[0,1,2,3]`, and
+  `status_before_error: development_batch_ordinal_constructed`.
+- **Evidence:** Development error report/ledger SHA-256 and sizes are
+  `b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307`
+  / `50,872` and
+  `95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694`
+  / `2,804`. They are the exact two-file, regular, single-link inventory.
+  Strict duplicate-free report/ledger schema and cross-binding validation
+  passes. The report is failed/not-review-ready with no protected
+  materialization; the ledger is `status: error`, `outcome: failed`.
+- **Decision:** Do not repair tuple collation, move palette metadata, alter
+  batch composition, change the attempt count, or retry through another path
+  under this family. Do not create a checkpoint, external review, protected
+  ledger, or qualification report. Selector, confirmation, and final stay
+  unopened permanently.
+- **Consequences:** Advance the record to specification 1.59 without rewriting
+  ADR-169's historical source-freeze facts. Keep the estimator, atomic
+  evidence, uncertainty, checkpoint, certificate, and security code as tested
+  reusable source, not acceptance evidence. Specification 1.57 remains the
+  highest accepted result. Any successor must add a genuinely new capability
+  and cannot relabel either this family or the closed partial-visibility
+  family.
+- **Alternatives considered:** patch and rerun; treat collation as pre-access;
+  ignore the four materialized scenes; decrease the batch size; exempt albedo
+  from canonical collation; call source/certificate success a scientific pass;
+  authorize protected access without a checkpoint.
+
 ## ADR-169 — Freeze distinct per-object drag identification before access
 
 - **Date:** 2026-08-30
-- **Status:** accepted as a source/protocol freeze only; all governed splits
-  are unopened and no scientific result is accepted
+- **Status:** historical source/protocol freeze; all governed splits were
+  unopened at this recorded boundary and no scientific result was accepted
 - **Context:** ADR-168 accepted one known calibrated orbit while retaining
   exactly two visible, separated, non-contact spheres and fixed drag `0.05`.
   The next rung must change a genuinely new capability without reviving the

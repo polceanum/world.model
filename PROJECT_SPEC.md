@@ -3,12 +3,15 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.58
+**Version:** 1.59
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026
 **Latest amendment:** per-object identifiable linear drag, fit-owned calibrated
 anchor uncertainty, direct-anchor uncertainty propagation, seedless ordinal
 scene certification, and exactly-once source-freeze protocol amendments
+30 August 2026
+**Terminal amendment:** fail-closed first-batch development collation evidence
+and permanent closure of the identifiable-drag governed family
 30 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
@@ -8953,6 +8956,69 @@ universal parameter identifiability, iid or distribution-free calibration,
 full-covariance filtering, arbitrary repeated re-anchoring, contacts,
 occlusion, variable count, pose inference, learned capacity, planning, or
 general world-model convergence.
+
+## 265. Record the terminal development collation failure
+
+The exact specification-1.58 source freeze was committed and published as
+`0e283d841281fbf98842c9969f02a026a5489dce` on configured upstream
+`origin/agent/rgbd-identifiable-drag-rung-1`.  Immediately before development,
+the worktree was clean, local `HEAD` and upstream were identical, and the
+ahead/behind counts were `0/0`.  The harness bound worktree fingerprint
+`d95a752f3a066073850e89baf04c8929f548db5f3531627788046218a67fca64`
+and runtime-source fingerprint
+`36adbd494e9da1aecb156dc78d8c0d6c71ebf45505ae36e3d0369899d94f8d10`.
+
+The sole development attempt durably reserved attempt 1 of 1 and issued the
+first aligned batch capability for ordinals `0,1,2,3`.  All four development
+episodes were constructed, including their 56 public RGB-D render frames and
+perception-label preflight, before batch collation.  The canonical collator
+then raised
+`ValueError: metadata tuple differs across batch at metadata.albedo`.
+The governed palette intentionally varies across camera strata, whereas the
+generic collator permits tuple metadata only when every batch row is exactly
+equal.  This is a real frozen harness/data-contract incompatibility, not an
+accuracy, calibration, optimizer, or physics result.
+
+The exception occurred in `collate_episodes(episodes)` before
+`_new_strict_reviewed_model`, model construction/reset, `OnlineWorldModel`
+ingestion, analytic-drag fitting, uncertainty calibration, VJP evaluation, or
+public prediction.  The ledger records `materialized_ordinal_count: 4`,
+`completed_ordinal_count: 0`, `completed_batch_count: 0`, active batch
+`[0,1,2,3]`, no ordinal or batch evidence hashes, and
+`status_before_error: development_batch_ordinal_constructed`.  No calibration
+scale was derived or installed, no result existed, and no checkpoint was
+written.
+
+The exact terminal directory contains only two single-link regular files:
+
+| artifact | SHA-256 | bytes |
+| --- | --- | ---: |
+| development error report | `b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307` | `50,872` |
+| development access ledger | `95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694` | `2,804` |
+
+The report records `passed: false`, `review_ready: false`,
+`protected_data_materialized: false`, `stopped_after: development`, no
+development result/calibration/checkpoint, and the exact error type/message.
+The ledger records `status: error`, `outcome: failed`, and binds the exact
+report digest, config, protocol, certificate, critical sources, manifest,
+source fingerprint, and publication state.  Duplicate-key-free strict report
+and error-ledger schema/cross-binding validation passes.  There is no
+checkpoint, qualification report, or qualification ledger.
+
+Selector, confirmation, and final were never authorized, materialized, or
+accessed.  The failure exhausted the frozen maximum of one architecture
+attempt.  The source, palette metadata, collator, thresholds, scene family,
+or attempt count must not be repaired and rerun under a renamed or alternate
+path.  The retained analytic drag, atomic evidence, uncertainty, certificate,
+and security implementations remain reusable source components, but this
+governed family is terminal and supplies no accepted scientific result.
+
+Specification 1.59 records this failure without rewriting sections 260--264's
+historical source-freeze facts.  Specification 1.57's accepted known-orbit,
+fixed-drag result remains the highest accepted claim.  Any successor must add
+a genuinely new bounded capability and freeze a new family/protocol before
+access; it cannot be a repair, retry, relabeling, or threshold change for this
+identifiable-drag family.
 
 # Closing directive
 

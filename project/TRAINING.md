@@ -469,91 +469,58 @@ merged to GitHub `main` through
 and identifiable-drag source freeze supersede that historical proposed order;
 the failed partial-visibility family remains closed.
 
-## Frozen identifiable-drag workflow — do not run before publication
+## Terminal identifiable-drag workflow — do not run
 
-Specification 1.58 freezes distinct per-object linear drag under the already
-accepted exactly-two-visible, non-contact, known-orbit RGB-D family. It adds no
-learned parameter or optimizer update. A differentiable adaptive analytic fit
-uses all sixteen persistent-ID-aligned positions and emits one atomic
-fit-owned anchor tuple: position, velocity, log drag, and diagonal variances.
-The public runtime then uses that per-object drag in the existing analytic
-dynamics and propagates diagonal uncertainty directly from the same anchor.
+Specification 1.58 historically froze distinct per-object linear drag under
+the accepted exactly-two-visible, non-contact, known-orbit RGB-D family. The
+source owns no learned parameter or optimizer update. Its differentiable
+adaptive fit, atomic position/velocity/log-drag anchor evidence, three scalar
+uncertainty buffers, and direct-anchor rollout remain tested reusable code.
+They are not an accepted qualification result.
 
-The family is seedless. Development, selector, confirmation, and final each
-own conceptual ordinals `0--63`; no numeric episode seed or manifest may be
-substituted. Each split is four rational physical primitives x two exact
-drag-slot counterfactuals x eight camera strata. The fixed profile and protocol
-SHA-256 are
-`a22f364601b8f87cdec3fd6bff7d757f134867bf66d9fa176c1f2d881a700c45`
+The exact tree was committed and published as
+`0e283d841281fbf98842c9969f02a026a5489dce`, with a clean worktree, configured
+upstream equality, and ahead/behind `0/0`. Profile/protocol/certificate
+SHA-256 values are
+`a22f364601b8f87cdec3fd6bff7d757f134867bf66d9fa176c1f2d881a700c45`,
+`d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`,
 and
-`d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`;
-the formal scene certificate SHA-256 is
 `588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
+The pre-documentation repository source gate was
+`1490 passed, 16 skipped in 781.56 s (0:13:01)`.
 
-The protocol-inspection command is seed-free and must not materialize a scene:
+The single authorized development attempt durably opened ordinals `0--3` as
+one aligned batch and constructed their 56-frame public RGB-D episodes.
+`collate_episodes` then raised
+`ValueError: metadata tuple differs across batch at metadata.albedo`.
+Palette/albedo intentionally varies across camera strata, while the generic
+collator requires tuple metadata to be identical across every row in a batch.
 
-```bash
-conda run -n orpheus python \
-  scripts/run_rgbd_identifiable_drag_qualification.py --phase protocol
-```
+The exception occurred before reviewed-model construction/reset, public
+runtime ingest/predict, analytic-drag fitting, uncertainty calibration, VJP,
+metric aggregation, or checkpoint writing. The ledger records four
+materialized and zero completed ordinals, zero completed batches, no ordinal
+or batch evidence hashes, no result, and
+`status_before_error: development_batch_ordinal_constructed`.
 
-Do not run either command below until the exact specification-1.58 tree has
-passed its final gates, been committed and pushed, has a configured upstream,
-and clean `HEAD` equals that upstream with zero commits ahead or behind. The
-canonical run directory must still be absent. Development then has exactly one
-permitted invocation:
+The canonical directory now contains exactly two single-link regular files:
 
-```bash
-conda run -n orpheus python \
-  scripts/run_rgbd_identifiable_drag_qualification.py --phase development
-```
+- development error report SHA-256
+  `b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307`
+  (`50,872` bytes); and
+- development access ledger SHA-256
+  `95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694`
+  (`2,804` bytes).
 
-Development begins with all three uncertainty scales at one and evaluates each
-ordinal once. It retains only ordered scale-independent sufficient evidence,
-computes position/velocity/drag scene-max standardized errors, selects
-one-indexed rank 59 of 64, converts the float64 targets to the minimal deployed
-float32 values that pass cached arithmetic, and calls the atomic three-scale
-setter once. It may not reconstruct, render, perceive, ingest, or reread an
-episode during calibration. Position/velocity scale deflation is permitted;
-the drag scale remains at least one.
+The report records `passed: false`, `review_ready: false`, no development
+result/calibration/checkpoint, and `protected_data_materialized: false`. The
+ledger records `status: error` and `outcome: failed`. Strict duplicate-key-free
+report/ledger schema and cross-binding audit passes. There is no qualification
+report or ledger.
 
-A passing development result does not open protected data. Independent review
-must supply the exact checkpoint, development-report, and development-ledger
-SHA-256 values to the one protected command:
-
-```bash
-conda run -n orpheus python \
-  scripts/run_rgbd_identifiable_drag_qualification.py \
-  --phase qualification \
-  --reviewed-checkpoint-sha256 <checkpoint-sha256> \
-  --reviewed-report-sha256 <development-report-sha256> \
-  --reviewed-development-ledger-sha256 <development-ledger-sha256>
-```
-
-That command alone may consume selector -> confirmation -> final, exactly once
-and in order. Any failure permanently stops before later access. Final may not
-be regenerated, renamed, or used for tuning. The canonical directory owns
-exactly five single-link regular files: development report, development access
-ledger, restricted checkpoint, qualification report, and qualification access
-ledger. Alternate paths, extra files, symlinks, hardlinks, repeated access,
-late threads, changed source/config/publication, or changed reviewed evidence
-fail closed.
-
-The exact 263-float gate schema covers current/horizon position and velocity,
-linear/log drag, fixed `0.05` and `0.185 /s` controls from the same public
-fitted anchor, coverage, Gaussian NLL, sharpness, RMS-z, identity,
-counterfactual ownership, excitation/information/boundary mass, analytic and
-semigroup agreement, exact frame/history/grid/predict counts, zero clamp
-saturation, the exact three-buffer/12-byte state, resources, and RGB/depth/
-`world_from_camera` VJPs. Development VJPs belong to the scale-one single pass;
-protected VJPs use the reviewed deployed buffers.
-
-At this source-freeze boundary the fixed run directory is absent, every
-ledgered split is unopened, and no governed runtime capability has been issued
-or consumed. Independent formal certificate enumeration is source proof, not
-episode access. The pre-documentation repository result is
-`1490 passed, 16 skipped in 781.56 s (0:13:01)`. It is not development,
-calibration, accuracy, protected-split, or acceptance evidence. The designed
-family is not iid; rank-59 calibration is not a distribution-free conformal
-guarantee; and the diagonal rollout claim excludes arbitrary sequential
-external re-anchoring.
+Do not invoke the development or qualification phases again. Attempt 1 of 1 is
+exhausted; selector, confirmation, and final remain unopened. Do not change
+the collator, metadata schema, family, gates, paths, or attempt count and then
+present the result as this protocol. A successor must be a genuinely new
+bounded capability under a new frozen pre-access contract. Specification 1.57
+remains the highest accepted result.

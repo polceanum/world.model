@@ -7,7 +7,7 @@ The pre-generalization public base was commit
 foundation is GitHub `main` commit
 `08ae63adc5ade2e5061f54539fc7a25564c8c8d6`, and the accepted public RGB-D
 bridge is merged at `3eed0b71e6f18c7036bf376c075493a89d5fdc9f`. Broad heterogeneous training
-remains paused. The active contract is specification 1.58. The accepted base
+remains paused. The active contract is specification 1.59. The accepted base
 now comprises the specification-1.51 differentiable one-sphere unit, the
 qualified standalone two-second RGB-D rung, and its qualified public one-slot
 `OnlineWorldModel` bridge. The accepted branch additionally contains the
@@ -23,15 +23,16 @@ The reviewed net tree is merged and published to GitHub `main` through
 acceptance commit `00a712d640cdb828f24a194817443daa57e6df65`. Final remains
 consumed; any next rung still requires a genuinely new pre-access protocol.
 
-Specification 1.58 now freezes that genuinely new rung: distinct per-object
+Specification 1.58 froze that genuinely new rung: distinct per-object
 linear drag inferred from the existing sixteen-frame, exactly-two-visible,
 known-orbit public RGB-D history. The implementation is still parameter-free;
 it adds an adaptive analytic drag fit, fit-owned atomic position/velocity/drag
 anchor evidence, three development-calibrated uncertainty-scale buffers, and
 direct-from-anchor uncertainty propagation. This is a source freeze only.
-The seedless 64-ordinal development, selector, confirmation, and final splits
-are all unopened, and the fixed run directory is absent. No drag accuracy,
-calibration, protected-split, or acceptance claim exists yet.
+At that historical source boundary all four seedless 64-ordinal splits were
+unopened and the fixed run directory was absent. The sole development attempt
+has since failed at first-batch metadata collation, as recorded below. No drag
+accuracy, calibration, protected-split, or acceptance claim exists.
 
 The qualified unit achieved, on its single previously untouched final set:
 
@@ -123,8 +124,9 @@ below. At that historical boundary, the planned order placed public
 variable metric scale, and then multiple objects. Specification 1.56
 superseded that ordering by accepting exactly two fully visible non-contact
 objects; specification 1.57 subsequently froze their known calibrated
-camera-motion extension. Specification 1.58 now freezes identifiable drag
-before variable metric scale. Variable set size,
+camera-motion extension. Specification 1.58 later froze identifiable drag,
+whose sole development attempt is now terminal. Variable metric scale,
+variable set size,
 identity/occlusion, analytic contact, observable material parameters, known
 actions and counterfactual planning, and richer modalities/geometry remain
 later. Model capacity grows only after a smaller structured rung demonstrably
@@ -611,9 +613,10 @@ Acceptance is limited to this certified known orbit with exactly two fully
 visible separated non-contact spheres, complete RGB-D, gravity `0`, and drag
 `0.05`. It is not general moving-camera, pose-learning, occlusion, recovery,
 contact, variable-count, learned-capacity, or general-convergence evidence.
-The failed partial family stays closed. Specification 1.58 supplies the next
-active genuinely new capability through identifiable per-object drag; it does
-not broaden this historical acceptance claim.
+The failed partial family stays closed. Specification 1.58 historically
+supplied the next genuinely new capability through identifiable per-object
+drag, but its sole development attempt failed and it does not broaden this
+historical acceptance claim. No next active rung is currently frozen.
 
 ## Validation state
 
@@ -661,12 +664,26 @@ protocol/certificate SHA-256 values are
 `d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`
 and
 `588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
-These are implementation and source-freeze results only. Development remains
-forbidden until this exact tree is committed, published, clean, and equal to
-its configured upstream.
+These are historical implementation and source-freeze results only. The exact
+tree was committed/published at `0e283d841281fbf98842c9969f02a026a5489dce`;
+its one permitted development attempt then failed closed.
+
+The canonical development report/ledger SHA-256 values are
+`b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307`
+and
+`95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694`,
+at `50,872` and `2,804` bytes. The ledger reserved attempt 1 of 1, materialized
+ordinals `0--3`, and recorded zero completed ordinals/batches before
+`collate_episodes` rejected heterogeneous `metadata.albedo` tuples. The error
+occurred before model construction, runtime ingest/predict, fitting,
+calibration, VJP, result creation, or checkpoint writing. Report/ledger strict
+schema and cross-binding audit passes. No other file exists in the canonical
+run directory; protected data remains unopened.
 
 The highest accepted claim remains the certified exactly-two-visible,
 non-contact, known-orbital-camera RGB-D family. General moving-camera behavior,
 unknown or learned pose, contact, partial visibility, misses/recovery, variable
 count, additional modality, planning, and general convergence remain
 unqualified. The failed partial family must not be retried.
+The identifiable-drag governed family is also terminal after its sole allowed
+attempt and must not be repaired, renamed, or rerun.

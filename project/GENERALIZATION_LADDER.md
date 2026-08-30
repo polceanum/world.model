@@ -412,9 +412,9 @@ and is terminal. It is not an accepted rung, must not be revived or retried,
 and cannot be renamed as the next capability. Its historical material remains
 only as failure provenance.
 
-### 7. Distinct per-object identifiable drag — source frozen; unopened
+### 7. Distinct per-object identifiable drag — terminal development failure
 
-Specification 1.58 selects one genuinely new capability while leaving the
+Specification 1.58 selected one genuinely new capability while leaving the
 accepted known-orbit scene otherwise unchanged: infer a different constant
 linear drag for each persistent object from the same sixteen public RGB-D
 frames. Exactly two fixed-radius objects remain fully visible, separated, and
@@ -422,15 +422,16 @@ non-contacting under zero gravity and known calibrated camera extrinsics. No
 learned capacity, pose inference, intervention, new modality, or object-count
 change enters this rung.
 
-The estimator is a differentiable bounded analytic variable-profile fit with a
+The estimator was a differentiable bounded analytic variable-profile fit with a
 257-node log-drag grid and same-sized local refinement. A complete valid fit
 atomically owns the anchor position, velocity, log drag, and their diagonal
-variances. Raw covariance remains diagnostic. Development may derive exactly
+variances. Raw covariance remains diagnostic. Development was permitted to
+derive exactly
 three float32 uncertainty scales from cached scale-one sufficient evidence:
 scene-max errors, one-indexed rank 59 of 64, float64 target, upward float32
 ceiling, and the minimum `nextafter(+infinity)` result that passes deployed
-cached arithmetic. It may install the three values once and may not replay or
-reread an episode during calibration.
+cached arithmetic. It could have installed the three values once and could not
+replay or reread an episode during calibration.
 
 The seedless family has 64 exact ordinals per split: four rational physical
 primitives x two drag-slot-swapped counterfactuals x eight camera strata. The
@@ -451,19 +452,35 @@ Protocol SHA-256 is
 Its exact 263-float surface gates point accuracy, both fixed-drag controls,
 coverage/proper score/sharpness, identity/counterfactual ownership, all clamp
 counts, gradients, resources, checkpoint state, analytic agreement, and the
-single-source multi-horizon uncertainty partition. The fixed artifact root is
-absent, every split is unopened, and no accuracy or calibration result exists.
-Development is authorized only after this exact tree is clean, committed,
-published, and equal to upstream; protected selector -> confirmation -> final
-requires external review of checkpoint, development report, and development
-ledger hashes.
+single-source multi-horizon uncertainty partition. At source freeze the fixed
+artifact root was absent and every split was unopened. Development required
+clean published upstream equality; protected selector -> confirmation -> final
+would additionally have required external review of checkpoint, development
+report, and development-ledger hashes.
 
 The pre-documentation full source gate is
-`1490 passed, 16 skipped in 781.56 s (0:13:01)`. This is source/certificate
-evidence only. Specification 1.57 remains the highest accepted rung until the
-unchanged governed protocol completes. Sequential external re-anchoring,
+`1490 passed, 16 skipped in 781.56 s (0:13:01)`. This was source/certificate
+evidence only. The unchanged governed protocol failed, so specification 1.57
+remains the highest accepted rung.
+
+The exact tree was published at
+`0e283d841281fbf98842c9969f02a026a5489dce` with upstream equality `0/0`.
+The sole development attempt constructed ordinals `0--3`, then failed before
+model construction because generic collation requires tuple metadata to be
+equal across a batch while `metadata.albedo` deliberately varies across camera
+strata. The ledger records four materialized and zero completed ordinals, zero
+completed batches/evidence hashes, no result/calibration/checkpoint, and no
+protected materialization.
+
+Development report/ledger SHA-256 values are
+`b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307`
+and
+`95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694`.
+Strict error-evidence audit passes. Attempt 1 of 1 is exhausted; this family
+is closed and cannot be repaired, relabelled, or rerun. Selector,
+confirmation, and final remain unopened. Sequential external re-anchoring,
 full-covariance filtering, universal calibration, and all later capabilities
-remain explicitly unqualified.
+remain explicitly unqualified. No next active rung is yet frozen.
 
 ### 8. Variable-size object sets
 

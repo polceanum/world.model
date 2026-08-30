@@ -301,16 +301,26 @@
 - [x] Advance the contract and checkpoint metadata to specification 1.58 while
   keeping simulator semantics at `sphere_world_v7`. Record that the canonical
   run directory is absent and all development/protected ordinals are unopened.
-- [ ] Commit and publish the exact specification-1.58 source-freeze tree, then
+- [x] Commit and publish the exact specification-1.58 source-freeze tree as
+  `0e283d841281fbf98842c9969f02a026a5489dce`, then
   prove a clean worktree, configured upstream, exact `HEAD` equality, and zero
   commits ahead or behind before any governed development access.
-- [ ] Run the sole 64-ordinal development pass with scale-one evidence, derive
-  rank-59 position/velocity/drag scales from cached evidence with no replay,
-  install the exact float32 triple once, and independently review the report,
-  checkpoint, and development-ledger hashes.
-- [ ] Only after that review, consume selector -> confirmation -> final exactly
-  once under the frozen protected ledger. Stop permanently at the first
-  failure and leave later splits unopened; never reuse final.
+- [x] Invoke the sole development attempt and stop at its first failure. The
+  first batch materialized ordinals `0--3`, then generic collation rejected
+  heterogeneous `metadata.albedo` tuples before model/runtime/fit/calibration.
+  Preserve report/ledger SHA-256
+  `b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307`
+  / `95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694`.
+- [x] Audit the exact two-file failure inventory and strict report/ledger
+  schemas. Record four materialized/zero completed ordinals, zero completed
+  batches/evidence hashes, no result/calibration/checkpoint, and
+  `protected_data_materialized: false`.
+- [x] Withhold protected authorization. Selector, confirmation, and final stay
+  unopened; no qualification ledger/report exists. Close attempt 1 of 1 and
+  prohibit a repair, renamed retry, alternate path, or threshold change.
+- [ ] Select and freeze a genuinely new bounded successor capability. It must
+  not be a retry or relabeling of identifiable drag or the earlier closed
+  partial-visibility family.
 - [ ] At every rung require state/velocity/horizon accuracy, uncertainty,
   support, gradient, memory, and throughput non-regression; stop failed
   architecture families instead of marginal retuning.

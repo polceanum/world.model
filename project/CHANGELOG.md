@@ -2,6 +2,40 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-30 terminal identifiable-drag development failure
+
+- Published the exact specification-1.58 source freeze as
+  `0e283d841281fbf98842c9969f02a026a5489dce`, verified clean
+  configured-upstream equality `0/0`, and invoked its sole development attempt
+  only after the canonical directory was confirmed absent.
+- Durably reserved attempt 1 of 1 and materialized first-batch development
+  ordinals `0--3`. Generic `collate_episodes` then failed closed with
+  `ValueError: metadata tuple differs across batch at metadata.albedo` because
+  the scene palette varies across camera strata while tuple metadata requires
+  exact batch equality.
+- Localized the failure before reviewed-model construction/reset, public
+  runtime ingestion/prediction, analytic-drag fit, uncertainty calibration,
+  VJP/metric aggregation, or checkpoint writing. The ledger has four
+  materialized/zero completed ordinals, zero completed batches/evidence hashes,
+  and no result or checkpoint.
+- Preserved the exact two-file terminal inventory: development error report
+  SHA-256
+  `b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307`
+  (`50,872` bytes) and development ledger SHA-256
+  `95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694`
+  (`2,804` bytes). Both are regular single-link files; strict duplicate-free
+  schema and cross-binding audit passes.
+- Recorded `passed: false`, `review_ready: false`,
+  `protected_data_materialized: false`, ledger `status: error` / terminal
+  `outcome: failed`, and no development result, calibration, checkpoint,
+  qualification report, or qualification ledger.
+- Closed the governed family permanently after its maximum one attempt. No
+  source repair, renamed retry, alternate path, threshold change, or protected
+  access is permitted. Selector, confirmation, and final remain unopened.
+- Advanced project memory/checkpoint metadata to specification 1.59. The
+  reusable implementation remains source code, not scientific acceptance;
+  specification 1.57 remains the highest accepted result.
+
 ### 2026-08-30 specification 1.58 identifiable-drag source freeze
 
 - Selected one genuinely new capability after the accepted known-orbit rung:

@@ -90,14 +90,21 @@ parameter-free result for one certified orbit—not general moving-camera,
 unknown-pose, learned-pose, occlusion, contact, variable-count, or learned-
 capacity evidence.
 
-Specification 1.58 now freezes the next genuinely new capability: distinct
-per-object linear drag inferred from the same complete sixteen-frame RGB-D
-history under the accepted known orbit. The source adds no learned parameter
-or optimizer update. It uses a differentiable adaptive analytic fit, atomically
-writes fit-owned position/velocity/log-drag evidence on the anchor frame, and
-stores exactly three calibrated float32 uncertainty-scale buffers. This is a
-pre-access source freeze, not a result: all four seedless 64-ordinal splits are
-unopened and the canonical run directory does not exist.
+Specification 1.58 historically froze the next genuinely new capability:
+distinct per-object linear drag inferred from the same complete sixteen-frame
+RGB-D history under the accepted known orbit. The source added no learned
+parameter or optimizer update. It used a differentiable adaptive analytic fit,
+atomically wrote fit-owned position/velocity/log-drag evidence on the anchor
+frame, and stored exactly three calibrated float32 uncertainty-scale buffers.
+At that pre-access boundary, all four seedless 64-ordinal splits were unopened
+and the canonical run directory did not exist.
+
+That source freeze is now historical. Specification 1.59 records the sole
+development attempt's terminal fail-closed result: ordinals `0--3` were
+materialized, then generic batch collation rejected their deliberately varying
+`metadata.albedo` tuples before model construction or public runtime. No fit,
+calibration, checkpoint, accuracy metric, or protected access occurred. The
+one-attempt family is exhausted and must not be repaired, renamed, or rerun.
 
 ## Quick start
 
@@ -555,31 +562,32 @@ network fetch, and raw protected episodes were not rederived or audited.
 Acceptance is therefore narrow and tamper-evident, not a general moving-camera
 or cryptographic-transparency claim.
 
-### Frozen identifiable per-object drag rung — no governed result yet
+### Historical identifiable per-object drag source freeze
 
-Specification 1.58 retains exactly two fully visible, separated,
+Specification 1.58 retained exactly two fully visible, separated,
 non-contacting fixed-radius spheres, complete RGB-D, zero gravity, and the
-known calibrated orbit. It changes only drag: each persistent object has a
+known calibrated orbit. It changed only drag: each persistent object had a
 different unknown constant in `0.045--0.325 /s`, inferred from all sixteen
-public observations. Runtime inputs remain RGB, metric depth, calibration,
+public observations. Runtime inputs remained RGB, metric depth, calibration,
 intrinsics, image metadata, and timestamps; no drag label, simulator state,
-instance map, or object identity is supplied.
+instance map, or object identity was supplied.
 
-The seedless governed family has development, selector, confirmation, and
-final splits of 64 exact ordinals each. Four rational physical primitives are
+The seedless governed family had development, selector, confirmation, and
+final splits of 64 exact ordinals each. Four rational physical primitives were
 crossed with two drag-slot-swapped counterfactual roles and eight camera
-strata. Odd-sixteenth camera phases and inward-shifted rational drag grids make
-all 32 governed drag values and all protected joint traces disjoint. This is a
-designed interpolation family, not iid or distribution-free evidence.
+strata. Odd-sixteenth camera phases and inward-shifted rational drag grids made
+all 32 governed drag values and all protected joint traces disjoint. This was
+a designed interpolation family, not iid or distribution-free evidence.
 
-The estimator owns zero learned parameters and zero optimizer updates. A
-differentiable 257-node log-drag profile plus same-sized local refinement emits
-fit-owned anchor position, velocity, log drag, and raw diagonal variances.
-Development alone may calibrate three uncertainty-scale buffers from cached
-scale-one evidence using the one-indexed rank-59 scene-max statistic. The
-smallest deployed float32 triple meeting the cached arithmetic is installed
-atomically once, with no episode replay. The checkpoint therefore contains
-exactly three CPU float32 scalars, or 12 tensor bytes.
+The estimator owned zero learned parameters and zero optimizer updates. A
+differentiable 257-node log-drag profile plus same-sized local refinement
+emitted fit-owned anchor position, velocity, log drag, and raw diagonal
+variances. Development alone was permitted to calibrate three uncertainty-
+scale buffers from cached scale-one evidence using the one-indexed rank-59
+scene-max statistic. The smallest deployed float32 triple meeting the cached
+arithmetic would have been installed atomically once, with no episode replay;
+the resulting checkpoint would have contained exactly three CPU float32
+scalars, or 12 tensor bytes.
 
 The fixed profile, harness, runner, tests, protocol, and independent scene
 certificate SHA-256 values are respectively
@@ -595,33 +603,65 @@ The 263-float gate-schema and artifact-schema bundle SHA-256 values are
 and
 `d2022f17aa805a9ff6b8ae65ce981f3d0c4f1fdbfbb53e08f69939a80d62eecc`.
 
-The independent formal certificate covers all 256 scenes and 14,336 frames
+The independent formal certificate covered all 256 scenes and 14,336 frames
 without invoking governed public physics, rendering, perception, or runtime.
 Minimum full-mask support is 21 pixels, silhouette gap is `5.11001396 px`,
 world surface gap is `1.37303865 m`, and fit excitation is `0.02090907 m`;
 visibility is one and every contact/event count is zero. A separate consumed
 cardinal family supplied threshold-design and API-equivalence checks only.
 
-Source verification passes the `68`-test seed-free harness, the guarded scene
+Source verification passed the `68`-test seed-free harness, the guarded scene
 certificate, and the complete pre-documentation repository gate at
 `1490 passed, 16 skipped in 781.56 s (0:13:01)`, plus Ruff, formatting,
 compilation, exact critical-source rehashing, diff checks, and independent
-audits. Development is forbidden until this exact specification-1.58 tree is
-clean, committed, published, and equal to its configured upstream.
+audits. At that boundary, development remained forbidden until the exact
+specification-1.58 tree was clean, committed, published, and equal to its
+configured upstream; those preconditions were later met.
 
-The canonical artifact root is
-`runs/rgbd_two_visible_orbital_camera_identifiable_drag_v1`. It is absent.
-Development must consume ordinals `0--63` once, cache only sufficient evidence,
-derive and install the three scales once, and produce a reviewable report,
-ledger, and restricted checkpoint. Only an external review of all three exact
-SHA-256 values may authorize the ledgered selector -> confirmation -> final
-sequence. Final cannot be rerun or tuned against.
+At that boundary the canonical artifact root
+`runs/rgbd_two_visible_orbital_camera_identifiable_drag_v1` was absent.
+Development was permitted to consume ordinals `0--63` once, cache only
+sufficient evidence, derive and install the three scales once, and produce a
+reviewable report, ledger, and restricted checkpoint. Only an external review
+of all three exact SHA-256 values could have authorized the ledgered selector
+-> confirmation -> final sequence.
 
-Direct-anchor diagonal uncertainty supports the one public multi-horizon
-request. It does not claim covariance-complete sequential re-anchoring,
+Direct-anchor diagonal uncertainty supports one public multi-horizon request.
+It does not claim covariance-complete sequential re-anchoring,
 universal calibration, contacts, occlusion, variable count, pose inference,
-learned capacity, planning, or general world-model convergence. Until governed
-evidence passes, specification 1.57 remains the highest accepted result.
+learned capacity, planning, or general world-model convergence. Governed
+evidence did not pass, so specification 1.57 remains the highest accepted
+result.
+
+#### Terminal development result
+
+The exact source freeze was committed and published as
+`0e283d841281fbf98842c9969f02a026a5489dce` with clean upstream equality
+`0/0`. Its sole development attempt reserved attempt 1 of 1 and constructed
+the first aligned batch, ordinals `0,1,2,3`. `collate_episodes` then failed at
+`metadata.albedo`: the scene family varies palette across camera strata while
+the canonical generic collator requires tuple metadata to be identical across
+a batch.
+
+The failure happened before reviewed-model construction, reset, any
+`OnlineWorldModel` ingest/predict call, analytic-drag fit, calibration, VJP, or
+metric aggregation. The ledger records four materialized and zero completed
+ordinals, zero completed batches, no evidence hashes, no result, and no
+checkpoint. The terminal report/ledger SHA-256 values are
+`b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307`
+and
+`95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694`;
+their sizes are `50,872` and `2,804` bytes. They are the only two files in the
+canonical directory, both regular and single-link.
+
+The report is `passed: false`, `review_ready: false`, and
+`protected_data_materialized: false`; the ledger is `status: error`,
+`outcome: failed`, and stopped from
+`development_batch_ordinal_constructed`. Strict duplicate-free schema and
+cross-binding audit passes. Selector, confirmation, and final remain unopened;
+no qualification ledger or report exists. The family is closed after its one
+allowed attempt. Specification 1.57 remains the highest accepted result, and
+the reusable implementation is not itself acceptance evidence.
 
 The general evaluator still supports explicit disjoint manifests for a
 compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not

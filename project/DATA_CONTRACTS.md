@@ -37,7 +37,10 @@ history length, and `H_img,W_img` image height/width.
   scalar buffers: position, velocity, and drag uncertainty scale. They are
   installed as one atomic development-calibration group and serialize as
   exactly three state-dict entries / 12 tensor bytes. Live histories remain
-  outside the checkpoint.
+  outside the checkpoint. These remain reusable typed source contracts, but
+  the specification-1.58 governed family failed at first-batch metadata
+  collation before calibration or checkpoint creation. No accepted checkpoint
+  instantiates this three-buffer contract, and that family must not be rerun.
 - `AbstractionAssignment`: `[B,N]` abstraction kind, routing confidence,
   complexity cost, refinement reason, and active mask. It is derived from
   `WorldBelief`, not stored as independent physical state.
