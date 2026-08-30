@@ -12,6 +12,7 @@ from scipy.optimize import linear_sum_assignment
 from torch import Tensor
 
 from world_model.belief.object_belief import MotionMode
+from world_model.belief.packing import slow_packing_map
 from world_model.belief.tentative import TentativeBirthState
 from world_model.belief.world_belief import WorldBelief
 
@@ -38,6 +39,8 @@ class LifecycleConfig:
     max_occluded_steps: int = 60
     birth_confirmations: int = 1
     birth_confirmation_distance_m: float = 0.5
+    minimum_log_variance: float = -12.0
+    maximum_log_variance: float = 8.0
 
 
 @dataclass(frozen=True)
@@ -95,16 +98,51 @@ class ObjectLifecycle:
                 "occluded_existence_delta must be nonpositive and no stronger "
                 "than missed_existence_delta"
             )
-        if self.config.initial_radius <= 0 or self.config.initial_mass <= 0:
-            raise ValueError("initial radius and mass must be positive")
-        if self.config.initial_drag <= 0:
-            raise ValueError("initial drag must be positive")
-        if not 0.0 < self.config.initial_restitution < 1.0:
-            raise ValueError("initial restitution must lie strictly in (0,1)")
-        if not 0.0 < self.config.initial_friction < 1.0:
-            raise ValueError("initial friction must lie strictly in (0,1)")
-        if not math.isfinite(self.config.initial_log_variance):
+        for name, value in (
+            ("initial_radius", self.config.initial_radius),
+            ("initial_mass", self.config.initial_mass),
+            ("initial_drag", self.config.initial_drag),
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0.0
+            ):
+                raise ValueError(f"{name} must be finite and positive")
+        for name, value in (
+            ("initial_restitution", self.config.initial_restitution),
+            ("initial_friction", self.config.initial_friction),
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or not 0.0 < value < 1.0
+            ):
+                raise ValueError(f"{name} must lie strictly in (0,1)")
+        if (
+            isinstance(self.config.initial_log_variance, bool)
+            or not isinstance(self.config.initial_log_variance, (int, float))
+            or not math.isfinite(self.config.initial_log_variance)
+        ):
             raise ValueError("initial log variance must be finite")
+        if (
+            isinstance(self.config.minimum_log_variance, bool)
+            or isinstance(self.config.maximum_log_variance, bool)
+            or not isinstance(self.config.minimum_log_variance, (int, float))
+            or not isinstance(self.config.maximum_log_variance, (int, float))
+            or not math.isfinite(self.config.minimum_log_variance)
+            or not math.isfinite(self.config.maximum_log_variance)
+            or self.config.minimum_log_variance > self.config.maximum_log_variance
+        ):
+            raise ValueError("lifecycle log-variance bounds must be finite and ordered")
+        if not (
+            self.config.minimum_log_variance
+            <= self.config.initial_log_variance
+            <= self.config.maximum_log_variance
+        ):
+            raise ValueError("initial log variance must lie within lifecycle bounds")
         if (
             isinstance(self.config.birth_confirmations, bool)
             or not isinstance(self.config.birth_confirmations, int)
@@ -399,11 +437,68 @@ class ObjectLifecycle:
         if world_velocity.shape != world_position.shape:
             raise ValueError("world_velocity must have shape [B,M,3]")
         world_radius = measurements.auxiliary.get("world_radius")
+        world_radius_was_flat = world_radius is not None and world_radius.shape == (
+            batch,
+            proposals,
+        )
         if world_radius is not None:
-            if world_radius.shape == (batch, proposals):
+            if world_radius_was_flat:
                 world_radius = world_radius.unsqueeze(-1)
             if world_radius.shape != (batch, proposals, 1):
                 raise ValueError("world_radius must have shape [B,M,1] or [B,M]")
+        world_radius_log_variance = measurements.auxiliary.get("world_radius_log_variance")
+        world_radius_valid = measurements.auxiliary.get("world_radius_valid_mask")
+        radius_is_supported = "radius" in measurements.supported_state_fields
+        radius_group_present = (
+            world_radius_log_variance is not None or world_radius_valid is not None
+        )
+        if radius_group_present and not radius_is_supported:
+            raise ValueError("complete world radius birth evidence must declare radius support")
+        if radius_is_supported and not radius_group_present:
+            raise ValueError("radius-supported births require the complete radius group")
+        if radius_group_present and world_radius_was_flat:
+            raise ValueError("typed world radius birth evidence must have shape [B,M,1]")
+        if world_radius is not None and not radius_group_present:
+            if not world_radius.is_floating_point() or world_radius.dtype != objects.position.dtype:
+                raise TypeError("world_radius must use the belief floating dtype")
+            if world_radius.device != objects.position.device:
+                raise ValueError("world_radius must use the belief device")
+            if not torch.isfinite(world_radius).all():
+                raise ValueError("world_radius must be finite")
+            if torch.any(measurements.measurement_mask.unsqueeze(-1) & (world_radius <= 0.0)):
+                raise ValueError("valid world_radius values must be positive")
+        if world_radius_log_variance is not None or world_radius_valid is not None:
+            if (
+                world_radius is None
+                or world_radius_log_variance is None
+                or world_radius_valid is None
+            ):
+                raise ValueError("world radius birth evidence must be provided as one group")
+            if world_radius_log_variance.shape != (batch, proposals, 1):
+                raise ValueError("world_radius_log_variance must have shape [B,M,1]")
+            if world_radius_valid.shape != (batch, proposals):
+                raise ValueError("world_radius_valid_mask must have shape [B,M]")
+            if world_radius_valid.dtype is not torch.bool:
+                raise TypeError("world_radius_valid_mask must use torch.bool")
+            if (
+                not world_radius.is_floating_point()
+                or not world_radius_log_variance.is_floating_point()
+                or world_radius.dtype != objects.position.dtype
+                or world_radius_log_variance.dtype != objects.position.dtype
+            ):
+                raise TypeError("world radius birth evidence must use the belief floating dtype")
+            if (
+                world_radius.device != objects.position.device
+                or world_radius_log_variance.device != objects.position.device
+                or world_radius_valid.device != objects.position.device
+            ):
+                raise ValueError("world radius birth evidence must use the belief device")
+            if not torch.isfinite(world_radius).all():
+                raise ValueError("world_radius must be finite")
+            if torch.any(world_radius_valid.unsqueeze(-1) & (world_radius <= 0.0)):
+                raise ValueError("valid world_radius values must be positive")
+            if not torch.isfinite(world_radius_log_variance).all():
+                raise ValueError("world_radius_log_variance must be finite")
         world_log_variance = measurements.auxiliary.get("world_log_variance")
         if world_log_variance is not None and (
             world_log_variance.shape[:2] != (batch, proposals) or world_log_variance.shape[-1] < 3
@@ -420,6 +515,10 @@ class ObjectLifecycle:
             & measurements.measurement_mask
             & (confidence >= confidence_threshold)
         )
+        if radius_is_supported:
+            if world_radius_valid is None:
+                raise ValueError("radius-supported births require radius validity")
+            candidates &= world_radius_valid
         updated = objects.clone()
         next_id = belief.next_object_id.clone()
         velocity_log_variance = math.log(initial_velocity_variance)
@@ -505,9 +604,27 @@ class ObjectLifecycle:
                 updated.position[batch_index, slot] = world_position[batch_index, measurement_index]
                 updated.velocity[batch_index, slot] = world_velocity[batch_index, measurement_index]
                 if world_radius is not None:
-                    updated.geometry[batch_index, slot, :1] = world_radius[
-                        batch_index, measurement_index
-                    ].clamp_min(1e-6)
+                    radius_is_valid = world_radius_valid is None or bool(
+                        world_radius_valid[batch_index, measurement_index]
+                    )
+                    if radius_is_valid:
+                        updated.geometry[batch_index, slot, :1] = world_radius[
+                            batch_index, measurement_index
+                        ].clamp_min(1e-6)
+                        if world_radius_log_variance is not None:
+                            geometry_slice = slow_packing_map(updated)["geometry"]
+                            radius_variance_index = geometry_slice.start
+                            updated.slow_log_variance[
+                                batch_index,
+                                slot,
+                                radius_variance_index : radius_variance_index + 1,
+                            ] = world_radius_log_variance[
+                                batch_index,
+                                measurement_index,
+                            ].clamp(
+                                self.config.minimum_log_variance,
+                                self.config.maximum_log_variance,
+                            )
                 if measurements.appearance is not None:
                     appearance = measurements.appearance[batch_index, measurement_index]
                     updated.appearance[batch_index, slot] = appearance / torch.linalg.vector_norm(

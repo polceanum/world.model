@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import torch
 
+from world_model.belief import slow_packing_map
 from world_model.dynamics import free_motion_position_velocity
 from world_model.observations import ObservationPacket
 from world_model.observations.rgbd import RGBDTemporalPositionHistory
@@ -53,13 +54,21 @@ def _camera() -> CameraFrame:
     )
 
 
-def _state(position: torch.Tensor, velocity: torch.Tensor) -> SphereState:
+def _state(
+    position: torch.Tensor,
+    velocity: torch.Tensor,
+    *,
+    radius: torch.Tensor | None = None,
+) -> SphereState:
+    resolved_radius = torch.full((2, 1), RADIUS_M) if radius is None else radius
+    if resolved_radius.shape != (2, 1):
+        raise ValueError("test radius must have shape [2,1]")
     return SphereState(
         object_id=torch.arange(2, dtype=torch.int64),
         active=torch.ones(2, dtype=torch.bool),
         position=position,
         velocity=velocity,
-        radius=torch.full((2, 1), RADIUS_M),
+        radius=resolved_radius,
         mass=torch.ones((2, 1)),
         restitution=torch.zeros((2, 1)),
         drag=torch.full((2, 1), DRAG),
@@ -81,9 +90,14 @@ def _packet(
     timestamp: float,
     *,
     requires_grad: bool = False,
+    radius: torch.Tensor | None = None,
 ) -> tuple[ObservationPacket, torch.Tensor, torch.Tensor]:
     camera = _camera()
-    rendered = render_spheres(_state(position, velocity), camera, IMAGE_SIZE)
+    rendered = render_spheres(
+        _state(position, velocity, radius=radius),
+        camera,
+        IMAGE_SIZE,
+    )
     rgb = rendered.rgb.unsqueeze(0)
     depth = rendered.depth_buffer[None, None]
     if requires_grad:
@@ -114,6 +128,42 @@ def _initial_state() -> tuple[torch.Tensor, torch.Tensor]:
     )
 
 
+def _variable_radius_config():
+    base = _config()
+    return replace(
+        base,
+        model=replace(
+            base.model,
+            rgbd=replace(
+                base.model.rgbd,
+                metric_radius_estimation_enabled=True,
+                minimum_world_radius=0.16,
+                maximum_world_radius=0.26,
+                measurement_radius_variance=1.0e-5,
+            ),
+        ),
+        simulator=replace(base.simulator, radius_range=(0.16, 0.26)),
+    )
+
+
+def test_variable_radius_path_adds_no_learned_or_persistent_model_state() -> None:
+    fixed_config = _config()
+    variable_config = _variable_radius_config()
+    fixed_config.validate()
+    variable_config.validate()
+
+    fixed = OnlineWorldModel.from_config(fixed_config, device="cpu")
+    variable = OnlineWorldModel.from_config(variable_config, device="cpu")
+
+    assert tuple(variable.state_dict()) == tuple(fixed.state_dict())
+    assert tuple(dict(variable.named_parameters())) == tuple(dict(fixed.named_parameters()))
+    assert tuple(dict(variable.named_buffers())) == tuple(dict(fixed.named_buffers()))
+    for key, fixed_tensor in fixed.state_dict().items():
+        variable_tensor = variable.state_dict()[key]
+        assert variable_tensor.shape == fixed_tensor.shape
+        assert variable_tensor.dtype == fixed_tensor.dtype
+
+
 def test_two_object_runtime_births_two_metric_tracks_with_sensor_gradients() -> None:
     config = _config()
     config.validate()
@@ -141,6 +191,57 @@ def test_two_object_runtime_births_two_metric_tracks_with_sensor_gradients() -> 
     for gradient in (rgb_gradient, depth_gradient):
         assert torch.isfinite(gradient).all()
         assert float(gradient.abs().sum()) > 0.0
+
+
+def test_runtime_births_and_updates_metric_radius_in_persistent_id_order() -> None:
+    config = _variable_radius_config()
+    config.validate()
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    initial_position, initial_velocity = _initial_state()
+    radii = torch.tensor([[0.24], [0.18]])
+    gravity = torch.zeros((1, 3))
+    drag = torch.full((1, 2), DRAG)
+    birth_mapping: torch.Tensor | None = None
+
+    for frame_index in range(4):
+        timestamp = frame_index * 0.05
+        position, velocity = free_motion_position_velocity(
+            initial_position.unsqueeze(0),
+            initial_velocity.unsqueeze(0),
+            timestamp,
+            gravity=gravity,
+            drag=drag,
+        )
+        packet, _, _ = _packet(
+            position[0],
+            velocity[0],
+            timestamp,
+            radius=radii,
+        )
+        posterior = model.ingest(packet)
+        distance = torch.cdist(posterior.objects.position[0], position[0])
+        current_mapping = distance.argmin(dim=-1)
+        assert current_mapping.unique().numel() == 2
+        if birth_mapping is None:
+            birth_mapping = current_mapping
+        else:
+            assert torch.equal(current_mapping, birth_mapping)
+        torch.testing.assert_close(
+            posterior.objects.radius[0, :, 0],
+            radii[current_mapping, 0],
+            atol=3.0e-5,
+            rtol=0.0,
+        )
+        radius_index = slow_packing_map(posterior.objects)["geometry"].start
+        torch.testing.assert_close(
+            posterior.objects.slow_log_variance[0, :, radius_index],
+            torch.full((2,), torch.tensor(1.0e-5).log()),
+        )
+
+    assert birth_mapping is not None
+    assert model.last_measurements is not None
+    assert model.last_measurements.supported_state_fields == ("position", "radius")
+    assert model.last_measurements.auxiliary["world_radius_valid_mask"].all()
 
 
 def test_two_object_history_keeps_ids_separate_and_emits_two_velocities() -> None:

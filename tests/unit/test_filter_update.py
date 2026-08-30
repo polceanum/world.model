@@ -5,7 +5,12 @@ from dataclasses import replace
 import pytest
 import torch
 
-from world_model.belief import NUM_MOTION_MODES, BeliefFactory, ObjectLifecycle
+from world_model.belief import (
+    NUM_MOTION_MODES,
+    BeliefFactory,
+    ObjectLifecycle,
+    slow_packing_map,
+)
 from world_model.filtering import (
     BeliefUpdater,
     BeliefUpdaterConfig,
@@ -337,6 +342,120 @@ def test_ambiguous_direct_metric_position_update_fails_closed() -> None:
     posterior.objects.position.sum().backward()
     assert world_position.grad is not None
     torch.testing.assert_close(world_position.grad, torch.zeros_like(world_position.grad))
+
+
+@pytest.mark.parametrize(
+    ("raw_log_variance", "expected_log_variance", "expected_variance_gradient"),
+    [(-100.0, -12.0, 0.0), (-10.0, -10.0, 1.0), (100.0, 8.0, 0.0)],
+)
+def test_direct_metric_radius_atomically_owns_geometry_and_slow_variance(
+    raw_log_variance: float,
+    expected_log_variance: float,
+    expected_variance_gradient: float,
+) -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    world_radius = torch.tensor([[[0.24]]], requires_grad=True)
+    radius_log_variance = torch.tensor(
+        [[[raw_log_variance]]],
+        requires_grad=True,
+    )
+    measured = replace(
+        measured,
+        modality="rgbd",
+        supported_state_fields=("position", "radius"),
+        auxiliary={
+            **measured.auxiliary,
+            "world_radius": world_radius,
+            "world_radius_log_variance": radius_log_variance,
+            "world_radius_valid_mask": torch.tensor([[True]]),
+        },
+    )
+    measured.validate()
+    predicted = replace(predicted, modality="rgbd")
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=2,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(
+            enable_learned_corrector=False,
+            direct_metric_position_update=True,
+        ),
+    )
+
+    posterior = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+    )
+
+    torch.testing.assert_close(posterior.objects.radius, world_radius)
+    geometry_slice = slow_packing_map(posterior.objects)["geometry"]
+    radius_index = geometry_slice.start
+    torch.testing.assert_close(
+        posterior.objects.slow_log_variance[..., radius_index : radius_index + 1],
+        torch.tensor([[[expected_log_variance]]]),
+    )
+    objective = (
+        posterior.objects.radius.sum()
+        + posterior.objects.slow_log_variance[..., radius_index].sum()
+    )
+    objective.backward()
+    torch.testing.assert_close(world_radius.grad, torch.ones_like(world_radius))
+    torch.testing.assert_close(
+        radius_log_variance.grad,
+        torch.full_like(radius_log_variance, expected_variance_gradient),
+    )
+
+
+@pytest.mark.parametrize("invalid_kind", ["invalid", "ambiguous"])
+def test_direct_metric_radius_fails_closed_per_associated_slot(invalid_kind: str) -> None:
+    belief, measured, predicted, association = _rgb_position_update_case()
+    measured = replace(
+        measured,
+        modality="rgbd",
+        supported_state_fields=("position", "radius"),
+        auxiliary={
+            **measured.auxiliary,
+            "world_radius": torch.tensor([[[0.24]]]),
+            "world_radius_log_variance": torch.tensor([[[-10.0]]]),
+            "world_radius_valid_mask": torch.tensor([[invalid_kind != "invalid"]]),
+        },
+    )
+    predicted = replace(predicted, modality="rgbd")
+    if invalid_kind == "ambiguous":
+        association = replace(association, ambiguous=torch.tensor([[True]]))
+    innovation = build_innovation(
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        modality_index=2,
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=belief.objects.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(enable_learned_corrector=False),
+    )
+
+    posterior = updater.correct(
+        prior=belief,
+        measured=measured,
+        predicted=predicted,
+        association=association,
+        innovation=innovation,
+    )
+
+    torch.testing.assert_close(posterior.objects.radius, belief.objects.radius)
+    torch.testing.assert_close(
+        posterior.objects.slow_log_variance,
+        belief.objects.slow_log_variance,
+    )
 
 
 def test_source_bound_copied_position_axes_never_fuse_as_new_evidence() -> None:

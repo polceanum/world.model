@@ -49,7 +49,12 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class RGBDObservationConfig:
-    """Checkpointed priors and numerical controls for the first RGB-D bridge."""
+    """Checkpointed priors and numerical controls for the RGB-D bridge.
+
+    Radius remains a fixed public prior unless metric-radius estimation is
+    explicitly enabled, in which case the module emits typed radius evidence
+    from RGB-D surface geometry.
+    """
 
     proposal_count: int = 1
     appearance_dim: int = 32
@@ -61,6 +66,10 @@ class RGBDObservationConfig:
     minimum_boundary_clearance_pixels: float = 2.0
     maximum_surface_radius_relative_error: float = 0.05
     world_radius: float = 0.21
+    metric_radius_estimation_enabled: bool = False
+    minimum_world_radius: float = 0.05
+    maximum_world_radius: float = 1.0
+    measurement_radius_variance: float = 1.0e-5
     foreground_threshold: float = 0.04
     foreground_temperature: float = 0.01
     minimum_mass: float = 4.0
@@ -87,8 +96,15 @@ class RGBDObservationConfig:
             raise ValueError("RGB-D appearance_dim must be a positive integer")
         if self.proposal_count == 2 and self.appearance_dim != 3:
             raise ValueError("two-object RGB-D requires appearance_dim exactly three")
+        if not isinstance(self.metric_radius_estimation_enabled, bool):
+            raise TypeError("RGB-D metric_radius_estimation_enabled must be boolean")
+        if self.metric_radius_estimation_enabled and self.proposal_count != 2:
+            raise ValueError("RGB-D metric radius estimation requires exactly two proposals")
         positive = {
             "world_radius": self.world_radius,
+            "minimum_world_radius": self.minimum_world_radius,
+            "maximum_world_radius": self.maximum_world_radius,
+            "measurement_radius_variance": self.measurement_radius_variance,
             "foreground_threshold": self.foreground_threshold,
             "foreground_temperature": self.foreground_temperature,
             "minimum_mass": self.minimum_mass,
@@ -117,6 +133,11 @@ class RGBDObservationConfig:
             )
         if self.chromatic_centre_blend > 1.0:
             raise ValueError("RGB-D chromatic_centre_blend must be no greater than one")
+        if self.metric_radius_estimation_enabled:
+            if self.minimum_world_radius >= self.maximum_world_radius:
+                raise ValueError("RGB-D world-radius bounds must be strictly ordered")
+            if not self.minimum_world_radius <= self.world_radius <= self.maximum_world_radius:
+                raise ValueError("RGB-D world_radius must lie within its declared bounds")
         for name, value in (
             ("temporal_history_size", self.temporal_history_size),
             ("temporal_min_samples", self.temporal_min_samples),
@@ -294,6 +315,9 @@ class RGBDObservationModule(ObservationModule):
                     self.config.maximum_surface_radius_relative_error
                 ),
                 surface_fit_conditioning_limit=self.config.fit_conditioning_limit,
+                estimate_world_radius=self.config.metric_radius_estimation_enabled,
+                minimum_world_radius=self.config.minimum_world_radius,
+                maximum_world_radius=self.config.maximum_world_radius,
             )
             measured_appearance = rgb.new_zeros(
                 (*measured.appearance.shape[:2], self.config.appearance_dim)
@@ -328,6 +352,28 @@ class RGBDObservationModule(ObservationModule):
         existence_logits = torch.logit(existence_probability)
         position_confidence = (measured.confidence * float(packet.confidence)).clamp(0.0, 1.0)
         valid_axes = measured.valid_mask.unsqueeze(-1).expand(batch, proposals, 3)
+        if self.config.metric_radius_estimation_enabled:
+            measured_world_radius = measured.surface_fit_radius.unsqueeze(-1)
+            measured_radius_log_variance = rgb.new_full(
+                (batch, proposals, 1),
+                math.log(self.config.measurement_radius_variance),
+            )
+            measured_radius_valid = measured.valid_mask
+            supported_state_fields = ("position", "radius")
+        else:
+            measured_world_radius = rgb.new_full(
+                (batch, proposals, 1),
+                self.config.world_radius,
+            )
+            measured_radius_log_variance = None
+            measured_radius_valid = None
+            supported_state_fields = ("position",)
+        radius_auxiliary: dict[str, Tensor] = {}
+        if measured_radius_log_variance is not None and measured_radius_valid is not None:
+            radius_auxiliary = {
+                "world_radius_log_variance": measured_radius_log_variance,
+                "world_radius_valid_mask": measured_radius_valid,
+            }
         result = MeasurementSet(
             modality=self.modality_name,
             sensor_id=packet.sensor_id,
@@ -339,16 +385,14 @@ class RGBDObservationModule(ObservationModule):
             appearance=measured_appearance,
             class_logits=None,
             frame_id=packet.frame_id,
-            supported_state_fields=("position",),
+            supported_state_fields=supported_state_fields,
             auxiliary={
                 "world_position": measured.world_position,
                 "world_log_variance": log_variance,
                 "world_position_log_variance": log_variance,
                 "world_position_independent_axis_mask": valid_axes,
-                "world_radius": rgb.new_full(
-                    (batch, proposals, 1),
-                    self.config.world_radius,
-                ),
+                "world_radius": measured_world_radius,
+                **radius_auxiliary,
                 "position_confidence": position_confidence,
                 "visibility_logit": existence_logits,
                 "metric_confidence": measured.confidence,

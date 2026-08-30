@@ -39,6 +39,26 @@ _SIMULATOR_COMPATIBILITY_FIELDS = (
     "known_camera_pose",
 )
 
+
+def _exact_config_value_equal(left: object, right: object) -> bool:
+    """Compare resolved configuration values without Python scalar coercion."""
+
+    if isinstance(left, Mapping) or isinstance(right, Mapping):
+        if not isinstance(left, Mapping) or not isinstance(right, Mapping):
+            return False
+        if set(left) != set(right):
+            return False
+        return all(_exact_config_value_equal(left[key], right[key]) for key in left)
+    if isinstance(left, (list, tuple)) or isinstance(right, (list, tuple)):
+        if type(left) is not type(right) or len(left) != len(right):
+            return False
+        return all(
+            _exact_config_value_equal(left_item, right_item)
+            for left_item, right_item in zip(left, right, strict=True)
+        )
+    return type(left) is type(right) and left == right
+
+
 _RGB_LEGACY_DEFAULT_FIELDS = (
     "temporal_velocity_enabled",
     "temporal_velocity_history_size",
@@ -316,6 +336,22 @@ def _model_checkpoint_semantics(value: object) -> object:
             "maximum_surface_radius_relative_error",
             rgbd_defaults.maximum_surface_radius_relative_error,
         )
+        normalized_rgbd.setdefault(
+            "metric_radius_estimation_enabled",
+            rgbd_defaults.metric_radius_estimation_enabled,
+        )
+        normalized_rgbd.setdefault(
+            "minimum_world_radius",
+            rgbd_defaults.minimum_world_radius,
+        )
+        normalized_rgbd.setdefault(
+            "maximum_world_radius",
+            rgbd_defaults.maximum_world_radius,
+        )
+        normalized_rgbd.setdefault(
+            "measurement_radius_variance",
+            rgbd_defaults.measurement_radius_variance,
+        )
         normalized_rgbd.setdefault("linear_drag", rgbd_defaults.linear_drag)
         model["rgbd"] = normalized_rgbd
     rgb = model.get("rgb")
@@ -426,12 +462,14 @@ def validate_checkpoint_config(
         raise ValueError("checkpoint does not contain a resolved config mapping")
     requested = config.to_dict()
     mismatches: list[str] = []
-    if _model_checkpoint_semantics(checkpoint_config.get("model")) != (
-        _model_checkpoint_semantics(requested["model"])
+    if not _exact_config_value_equal(
+        _model_checkpoint_semantics(checkpoint_config.get("model")),
+        _model_checkpoint_semantics(requested["model"]),
     ):
         mismatches.append("model")
-    if _runtime_checkpoint_semantics(checkpoint_config.get("runtime")) != (
-        _runtime_checkpoint_semantics(requested["runtime"])
+    if not _exact_config_value_equal(
+        _runtime_checkpoint_semantics(checkpoint_config.get("runtime")),
+        _runtime_checkpoint_semantics(requested["runtime"]),
     ):
         mismatches.append("runtime")
     checkpoint_simulator = checkpoint_config.get("simulator")
@@ -440,7 +478,10 @@ def validate_checkpoint_config(
     else:
         requested_simulator = requested["simulator"]
         for field_name in _SIMULATOR_COMPATIBILITY_FIELDS:
-            if checkpoint_simulator.get(field_name) != requested_simulator.get(field_name):
+            if not _exact_config_value_equal(
+                checkpoint_simulator.get(field_name),
+                requested_simulator.get(field_name),
+            ):
                 mismatches.append(f"simulator.{field_name}")
     if mismatches:
         raise ValueError("checkpoint configuration is incompatible for: " + ", ".join(mismatches))
@@ -482,10 +523,11 @@ def _validate_attention_depth_growth_config(
     checkpoint_model["dynamics"] = checkpoint_dynamics
     requested_model["dynamics"] = requested_dynamics
     mismatches: list[str] = []
-    if checkpoint_model != requested_model:
+    if not _exact_config_value_equal(checkpoint_model, requested_model):
         mismatches.append("model except attention_layers")
-    if _runtime_checkpoint_semantics(checkpoint_config.get("runtime")) != (
-        _runtime_checkpoint_semantics(requested["runtime"])
+    if not _exact_config_value_equal(
+        _runtime_checkpoint_semantics(checkpoint_config.get("runtime")),
+        _runtime_checkpoint_semantics(requested["runtime"]),
     ):
         mismatches.append("runtime")
     checkpoint_simulator = checkpoint_config.get("simulator")
@@ -494,7 +536,10 @@ def _validate_attention_depth_growth_config(
     else:
         requested_simulator = requested["simulator"]
         for field_name in _SIMULATOR_COMPATIBILITY_FIELDS:
-            if checkpoint_simulator.get(field_name) != requested_simulator.get(field_name):
+            if not _exact_config_value_equal(
+                checkpoint_simulator.get(field_name),
+                requested_simulator.get(field_name),
+            ):
                 mismatches.append(f"simulator.{field_name}")
     if mismatches:
         raise ValueError(
@@ -569,7 +614,26 @@ def _resume_config_differences(
                     )
                 )
         return differences
-    if checkpoint != requested:
+    if isinstance(checkpoint, (list, tuple)) or isinstance(requested, (list, tuple)):
+        if type(checkpoint) is not type(requested):
+            return [f"{path}: checkpoint={checkpoint!r}, requested={requested!r}"]
+        assert isinstance(checkpoint, (list, tuple))
+        assert isinstance(requested, (list, tuple))
+        differences = []
+        if len(checkpoint) != len(requested):
+            return [f"{path}: checkpoint={checkpoint!r}, requested={requested!r}"]
+        for index, (checkpoint_item, requested_item) in enumerate(
+            zip(checkpoint, requested, strict=True)
+        ):
+            differences.extend(
+                _resume_config_differences(
+                    checkpoint_item,
+                    requested_item,
+                    path=f"{path}[{index}]",
+                )
+            )
+        return differences
+    if type(checkpoint) is not type(requested) or checkpoint != requested:
         return [f"{path}: checkpoint={checkpoint!r}, requested={requested!r}"]
     return []
 

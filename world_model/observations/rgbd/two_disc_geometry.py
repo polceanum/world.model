@@ -283,6 +283,145 @@ def _fit_visible_sphere_surfaces(
     )
 
 
+def _fit_visible_sphere_surfaces_with_radius(
+    depth: Tensor,
+    masks: Tensor,
+    world_from_camera: Tensor,
+    intrinsics: Tensor,
+    *,
+    minimum_radius: float,
+    maximum_radius: float,
+    conditioning_limit: float,
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
+    """Fit sphere centres and radii from observable metric surface points.
+
+    The centred algebraic sphere equation eliminates the unknown constant
+    ``||centre||^2 - radius^2``.  The resulting weighted 3x3 solve identifies
+    the camera-frame centre without a radius prior; the radius is then the
+    weighted mean point-to-centre distance.  Boolean admissibility is detached,
+    while every published continuous value stays on the ordinary PyTorch graph.
+    """
+
+    batch, slots, height, width = masks.shape
+    dtype = depth.dtype
+    device = depth.device
+    calibration_finite = torch.isfinite(world_from_camera).all(dim=(-2, -1))
+    calibration_finite &= torch.isfinite(intrinsics).all(dim=(-2, -1))
+    calibration_finite &= (
+        world_from_camera.abs().amax(dim=(-2, -1)) <= MAXIMUM_CALIBRATION_MAGNITUDE
+    )
+    calibration_finite &= intrinsics.abs().amax(dim=(-2, -1)) <= (MAXIMUM_CALIBRATION_MAGNITUDE)
+    calibration_finite &= (intrinsics[:, 0, 0] >= 1.0e-3) & (intrinsics[:, 1, 1] >= 1.0e-3)
+    safe_intrinsics = torch.where(
+        calibration_finite[:, None, None],
+        intrinsics,
+        torch.eye(3, dtype=dtype, device=device).expand(batch, -1, -1),
+    )
+    safe_transform = torch.where(
+        calibration_finite[:, None, None],
+        world_from_camera,
+        torch.eye(4, dtype=dtype, device=device).expand(batch, -1, -1),
+    )
+    valid_depth = (
+        torch.isfinite(depth[:, 0])
+        & (depth[:, 0] > 0.0)
+        & (depth[:, 0] <= MAXIMUM_METRIC_DISTANCE_M)
+    )
+    safe_depth = torch.where(valid_depth, depth[:, 0], torch.zeros_like(depth[:, 0]))
+    y_pixel, x_pixel = torch.meshgrid(
+        torch.arange(height, dtype=dtype, device=device),
+        torch.arange(width, dtype=dtype, device=device),
+        indexing="ij",
+    )
+    ray_x = (x_pixel[None] - safe_intrinsics[:, 0, 2, None, None]) / safe_intrinsics[
+        :, 0, 0, None, None
+    ]
+    ray_y = (y_pixel[None] - safe_intrinsics[:, 1, 2, None, None]) / safe_intrinsics[
+        :, 1, 1, None, None
+    ]
+    points = torch.stack(
+        (ray_x * safe_depth, ray_y * safe_depth, safe_depth),
+        dim=-1,
+    )
+    weights = masks * valid_depth[:, None].to(dtype)
+    support = weights.sum(dim=(-2, -1))
+    epsilon = max(float(torch.finfo(dtype).eps), 1.0e-8)
+    safe_support = support.clamp_min(epsilon)
+    mean_point = torch.einsum("bshw,bhwc->bsc", weights, points) / safe_support.unsqueeze(-1)
+    squared_norm = points.square().sum(dim=-1)
+    mean_squared_norm = torch.einsum("bshw,bhw->bs", weights, squared_norm) / safe_support
+    centred_points = points[:, None] - mean_point[:, :, None, None]
+    centred_norm = squared_norm[:, None] - mean_squared_norm[:, :, None, None]
+    normal = torch.einsum(
+        "bshw,bshwi,bshwj->bsij",
+        weights / safe_support[:, :, None, None],
+        centred_points,
+        centred_points,
+    )
+    right = 0.5 * torch.einsum(
+        "bshw,bshwi,bshw->bsi",
+        weights / safe_support[:, :, None, None],
+        centred_points,
+        centred_norm,
+    )
+    with torch.no_grad():
+        eigenvalues = torch.linalg.eigvalsh(normal.detach())
+        condition = eigenvalues[..., -1] / eigenvalues[..., 0].clamp_min(epsilon)
+        fit_admissible = (
+            torch.isfinite(eigenvalues).all(dim=-1)
+            & (eigenvalues[..., 0] > epsilon)
+            & (condition <= conditioning_limit)
+            & (support.detach() >= 4.0)
+            & calibration_finite[:, None]
+        )
+    safe_normal = torch.where(
+        fit_admissible[..., None, None],
+        normal,
+        torch.eye(3, dtype=dtype, device=device).expand(batch, slots, -1, -1),
+    )
+    safe_right = torch.where(fit_admissible.unsqueeze(-1), right, torch.zeros_like(right))
+    camera_centre = torch.linalg.solve(safe_normal, safe_right.unsqueeze(-1)).squeeze(-1)
+    point_distance = torch.linalg.vector_norm(
+        points[:, None] - camera_centre[:, :, None, None],
+        dim=-1,
+    )
+    fitted_radius = torch.einsum("bshw,bshw->bs", weights, point_distance) / safe_support
+    radius_residual = point_distance - fitted_radius[:, :, None, None]
+    residual_rms = (
+        (torch.einsum("bshw,bshw->bs", weights, radius_residual.square()) / safe_support)
+        .clamp_min(0.0)
+        .sqrt()
+    )
+    relative_residual = residual_rms / fitted_radius.clamp_min(epsilon)
+    with torch.no_grad():
+        radius_admissible = (
+            fit_admissible
+            & torch.isfinite(camera_centre.detach()).all(dim=-1)
+            & torch.isfinite(fitted_radius.detach())
+            & torch.isfinite(relative_residual.detach())
+            & (fitted_radius.detach() >= minimum_radius)
+            & (fitted_radius.detach() <= maximum_radius)
+        )
+    world_centre = camera_to_world(camera_centre, safe_transform)
+    value_gate = radius_admissible.unsqueeze(-1)
+    return (
+        torch.where(value_gate, world_centre, torch.zeros_like(world_centre)),
+        torch.where(value_gate, camera_centre, torch.zeros_like(camera_centre)),
+        torch.where(radius_admissible, fitted_radius, torch.zeros_like(fitted_radius)),
+        torch.where(
+            radius_admissible,
+            condition.to(dtype),
+            torch.zeros_like(condition, dtype=dtype),
+        ),
+        torch.where(
+            radius_admissible,
+            relative_residual,
+            torch.zeros_like(relative_residual),
+        ),
+        radius_admissible,
+    )
+
+
 def two_disc_geometry_from_rgbd(
     image: Tensor,
     depth: Tensor,
@@ -301,12 +440,16 @@ def two_disc_geometry_from_rgbd(
     minimum_boundary_clearance_pixels: float = 2.0,
     maximum_surface_radius_relative_error: float = 0.05,
     surface_fit_conditioning_limit: float = 100.0,
+    estimate_world_radius: bool = False,
+    minimum_world_radius: float = 0.05,
+    maximum_world_radius: float = 1.0,
 ) -> TwoDiscRGBDGeometryOutput:
     """Recover two unordered sphere centres from separated RGB-D evidence.
 
-    The fixed ``world_radius`` is the same explicit checkpointed prior as the
-    accepted one-object bridge.  Radius estimation is deliberately deferred to
-    a later scale-identification rung.
+    The default fixed ``world_radius`` path is the explicit checkpointed prior
+    from the accepted bridge.  ``estimate_world_radius=True`` instead fits each
+    radius directly from public metric surface points; the supplied radius is
+    then only a legacy-compatible initialization value outside the estimator.
     """
 
     if image.ndim != 4 or image.shape[1] != 3:
@@ -353,6 +496,18 @@ def two_disc_geometry_from_rgbd(
     )
     if surface_conditioning_limit <= 1.0:
         raise ValueError("surface_fit_conditioning_limit must be greater than one")
+    if not isinstance(estimate_world_radius, bool):
+        raise TypeError("estimate_world_radius must be boolean")
+    if estimate_world_radius:
+        minimum_radius = _positive_finite("minimum_world_radius", minimum_world_radius)
+        maximum_radius = _positive_finite("maximum_world_radius", maximum_world_radius)
+        if minimum_radius >= maximum_radius:
+            raise ValueError("world-radius bounds must be strictly ordered")
+    else:
+        # These controls did not exist in the fixed-radius bridge and have no
+        # forward meaning while the estimator is disabled.
+        minimum_radius = 0.0
+        maximum_radius = 0.0
     required_mass = _positive_finite("minimum_mass", minimum_mass)
 
     foreground = soft_disc_geometry_from_rgb(
@@ -430,13 +585,58 @@ def two_disc_geometry_from_rgbd(
         foreground_temperature=foreground_temperature,
         minimum_mass=minimum_mass,
     )
-    metric = metric_sphere_centres_from_surface_depth(
-        geometry.centres,
-        depth,
-        world_radius,
-        world_from_camera,
-        intrinsics,
-    )
+    if estimate_world_radius:
+        (
+            fitted_world_position,
+            fitted_camera_position,
+            fitted_radius,
+            fit_condition,
+            radius_relative_error,
+            surface_fit_valid,
+        ) = _fit_visible_sphere_surfaces_with_radius(
+            depth,
+            geometry.effective_masks,
+            world_from_camera,
+            intrinsics,
+            minimum_radius=minimum_radius,
+            maximum_radius=maximum_radius,
+            conditioning_limit=surface_conditioning_limit,
+        )
+        metric = metric_sphere_centres_from_surface_depth(
+            geometry.centres,
+            depth,
+            fitted_radius,
+            world_from_camera,
+            intrinsics,
+        )
+    else:
+        metric = metric_sphere_centres_from_surface_depth(
+            geometry.centres,
+            depth,
+            world_radius,
+            world_from_camera,
+            intrinsics,
+        )
+        expected_radius = (metric.centre_depth - metric.surface_depth) * torch.sqrt(
+            1.0 + metric.ray_xy.square().sum(dim=-1)
+        )
+        (
+            fitted_world_position,
+            fitted_camera_position,
+            fitted_radius,
+            fit_condition,
+            surface_fit_valid,
+        ) = _fit_visible_sphere_surfaces(
+            depth,
+            geometry.effective_masks,
+            expected_radius,
+            world_from_camera,
+            intrinsics,
+            conditioning_limit=surface_conditioning_limit,
+        )
+        radius_relative_error = (fitted_radius - expected_radius).abs() / expected_radius.clamp_min(
+            epsilon
+        )
     # Preserve a small, explicit RGB-centre owner in the deployed metric
     # estimate.  The exact fixed-radius surface fit below is intentionally
     # nearly invariant to mask weights on noiseless spheres, so without this
@@ -487,24 +687,6 @@ def two_disc_geometry_from_rgbd(
         torch.eye(4, dtype=image.dtype, device=image.device).expand(batch, -1, -1),
     )
     chromatic_world_position = camera_to_world(chromatic_camera_position, safe_transform)
-    expected_radius = (metric.centre_depth - metric.surface_depth) * torch.sqrt(
-        1.0 + metric.ray_xy.square().sum(dim=-1)
-    )
-    (
-        fitted_world_position,
-        fitted_camera_position,
-        fitted_radius,
-        fit_condition,
-        surface_fit_valid,
-    ) = _fit_visible_sphere_surfaces(
-        depth,
-        geometry.effective_masks,
-        expected_radius,
-        world_from_camera,
-        intrinsics,
-        conditioning_limit=surface_conditioning_limit,
-    )
-
     appearance_mass = geometry.effective_masks.sum(dim=(-2, -1)).clamp_min(epsilon)
     appearance = torch.einsum(
         "bshw,bchw->bsc",
@@ -517,9 +699,6 @@ def two_disc_geometry_from_rgbd(
         appearance[:, 1],
         dim=-1,
         eps=epsilon,
-    )
-    radius_relative_error = (fitted_radius - expected_radius).abs() / expected_radius.clamp_min(
-        epsilon
     )
     refined_centre_x = 0.5 * (geometry.centres[..., 0] + 1.0) * (width - 1)
     refined_centre_y = 0.5 * (geometry.centres[..., 1] + 1.0) * (height - 1)

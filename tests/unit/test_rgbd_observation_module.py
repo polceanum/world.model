@@ -14,6 +14,7 @@ from world_model.observations.rgbd import (
     RGBDObservationModule,
     RGBDTemporalPositionHistory,
 )
+from world_model.simulator import CameraFrame, SphereState, make_intrinsics, render_spheres
 
 
 def _packet(
@@ -53,6 +54,52 @@ def _packet(
         frame_id="camera:camera0",
         metadata={"image_size": (32, 32)},
     )
+
+
+def _two_radius_packet(*, requires_grad: bool = False) -> tuple[ObservationPacket, SphereState]:
+    image_size = (64, 80)
+    identity = torch.eye(4, dtype=torch.float32)
+    camera = CameraFrame(
+        timestamp=0.0,
+        world_from_camera=identity,
+        camera_from_world=identity,
+        intrinsics=make_intrinsics(image_size, 50.0),
+        position=torch.zeros(3),
+        target=torch.tensor([0.0, 0.0, 1.0]),
+    )
+    state = SphereState(
+        object_id=torch.arange(2, dtype=torch.int64),
+        active=torch.ones(2, dtype=torch.bool),
+        position=torch.tensor([[-0.72, -0.12, 4.0], [0.78, 0.16, 4.35]]),
+        velocity=torch.zeros((2, 3)),
+        radius=torch.tensor([[0.24], [0.18]]),
+        mass=torch.ones((2, 1)),
+        restitution=torch.zeros((2, 1)),
+        drag=torch.zeros((2, 1)),
+        friction=torch.zeros((2, 1)),
+        albedo=torch.tensor([[0.90, 0.20, 0.18], [0.18, 0.82, 0.90]]),
+        orientation=torch.tensor([[0.0, 0.0, 0.0, 1.0]]).expand(2, -1).clone(),
+        angular_velocity=torch.zeros((2, 3)),
+        sleeping=torch.zeros(2, dtype=torch.bool),
+        sleep_counter=torch.zeros(2, dtype=torch.int64),
+    )
+    rendered = render_spheres(state, camera, image_size)
+    rgb = rendered.rgb.unsqueeze(0).clone().requires_grad_(requires_grad)
+    depth = rendered.depth_buffer[None, None].clone().requires_grad_(requires_grad)
+    intrinsics = camera.intrinsics.unsqueeze(0).clone().requires_grad_(requires_grad)
+    packet = ObservationPacket(
+        modality="rgbd",
+        sensor_id="camera0:rgbd",
+        timestamp=0.0,
+        payload={"rgb": rgb, "depth": depth},
+        calibration={
+            "world_from_camera": camera.world_from_camera.unsqueeze(0),
+            "intrinsics": intrinsics,
+        },
+        frame_id="camera:camera0",
+        metadata={"image_size": image_size},
+    )
+    return packet, state
 
 
 def _active_belief(*, timestamp: float = 0.0, object_id: int = 7):
@@ -182,6 +229,167 @@ def test_rgbd_measurement_is_raw_world_position_and_preserves_rgb_depth_gradient
     assert torch.isfinite(depth_gradient).all()
     assert rgb_gradient.abs().sum() > 0.0
     assert depth_gradient.abs().sum() > 0.0
+
+
+def test_rgbd_metric_radius_estimation_publishes_typed_geometry_evidence() -> None:
+    module = RGBDObservationModule(
+        RGBDObservationConfig(
+            proposal_count=2,
+            appearance_dim=3,
+            metric_radius_estimation_enabled=True,
+            minimum_world_radius=0.10,
+            maximum_world_radius=0.35,
+            measurement_radius_variance=1.0e-6,
+        )
+    )
+    packet, state = _two_radius_packet(requires_grad=True)
+
+    measured = module.initialise_measurements([packet], context=object())
+    direct_error = (measured.values[0] - state.position).square().sum()
+    swapped_error = (measured.values[0] - state.position.flip(0)).square().sum()
+    expected_radius = state.radius[:, 0]
+    if swapped_error < direct_error:
+        expected_radius = expected_radius.flip(0)
+
+    assert measured.supported_state_fields == ("position", "radius")
+    assert measured.auxiliary["world_radius_valid_mask"].all()
+    torch.testing.assert_close(
+        measured.auxiliary["world_radius"][0, :, 0],
+        expected_radius,
+        atol=2.0e-5,
+        rtol=0.0,
+    )
+    torch.testing.assert_close(
+        measured.auxiliary["world_radius_log_variance"],
+        torch.full((1, 2, 1), torch.tensor(1.0e-6).log()),
+    )
+    rgb = packet.payload["rgb"]
+    depth = packet.payload["depth"]
+    intrinsics = packet.calibration["intrinsics"]
+    gradients = torch.autograd.grad(
+        measured.auxiliary["world_radius"].sum(),
+        (rgb, depth, intrinsics),
+    )
+    for gradient in gradients:
+        assert torch.isfinite(gradient).all()
+        assert float(gradient.abs().sum()) > 0.0
+
+
+def test_metric_radius_mode_emits_a_valid_empty_measurement_on_missing_depth() -> None:
+    module = RGBDObservationModule(
+        RGBDObservationConfig(
+            proposal_count=2,
+            appearance_dim=3,
+            metric_radius_estimation_enabled=True,
+            minimum_world_radius=0.10,
+            maximum_world_radius=0.35,
+        )
+    )
+    packet, _ = _two_radius_packet()
+    packet = replace(
+        packet,
+        payload={
+            "rgb": packet.payload["rgb"],
+            "depth": torch.zeros_like(packet.payload["depth"]),
+        },
+    )
+
+    measured = module.initialise_measurements([packet], context=object())
+
+    measured.validate()
+    assert measured.supported_state_fields == ("position", "radius")
+    assert not measured.measurement_mask.any()
+    assert not measured.auxiliary["world_radius_valid_mask"].any()
+    assert not measured.auxiliary["world_radius"].any()
+
+
+@pytest.mark.parametrize(
+    "missing_key",
+    ("world_radius", "world_radius_log_variance", "world_radius_valid_mask"),
+)
+def test_metric_radius_evidence_group_is_atomic(missing_key: str) -> None:
+    measured = _measurement(torch.ones((1, 1, 3)), 0.0)
+    auxiliary = {
+        **measured.auxiliary,
+        "world_radius": torch.full((1, 1, 1), 0.2),
+        "world_radius_log_variance": torch.full((1, 1, 1), -10.0),
+        "world_radius_valid_mask": torch.tensor([[True]]),
+    }
+    auxiliary.pop(missing_key)
+    measured = replace(
+        measured,
+        supported_state_fields=("position", "radius"),
+        auxiliary=auxiliary,
+    )
+
+    with pytest.raises(ValueError, match="radius evidence requires"):
+        measured.validate()
+
+
+def test_complete_metric_radius_group_requires_declared_support() -> None:
+    measured = _measurement(torch.ones((1, 1, 3)), 0.0)
+    measured = replace(
+        measured,
+        auxiliary={
+            **measured.auxiliary,
+            "world_radius": torch.full((1, 1, 1), 0.2),
+            "world_radius_log_variance": torch.full((1, 1, 1), -10.0),
+            "world_radius_valid_mask": torch.tensor([[True]]),
+        },
+    )
+
+    with pytest.raises(ValueError, match="declare radius support"):
+        measured.validate()
+
+
+@pytest.mark.parametrize(
+    ("mutation", "match"),
+    [
+        ("integer_radius", "floating dtype"),
+        ("integer_variance", "floating dtype"),
+        ("valid_without_measurement", "subset of measurement_mask"),
+    ],
+)
+def test_metric_radius_group_rejects_nonfloating_and_orphan_validity(
+    mutation: str,
+    match: str,
+) -> None:
+    measured = _measurement(torch.ones((1, 1, 3)), 0.0)
+    radius: torch.Tensor = torch.full((1, 1, 1), 0.2)
+    radius_log_variance: torch.Tensor = torch.full((1, 1, 1), -10.0)
+    radius_valid = torch.tensor([[True]])
+    measurement_mask = measured.measurement_mask
+    if mutation == "integer_radius":
+        radius = torch.ones((1, 1, 1), dtype=torch.int64)
+    elif mutation == "integer_variance":
+        radius_log_variance = torch.full((1, 1, 1), -10, dtype=torch.int64)
+    else:
+        measurement_mask = torch.tensor([[False]])
+    measured = replace(
+        measured,
+        measurement_mask=measurement_mask,
+        supported_state_fields=("position", "radius"),
+        auxiliary={
+            **measured.auxiliary,
+            "world_radius": radius,
+            "world_radius_log_variance": radius_log_variance,
+            "world_radius_valid_mask": radius_valid,
+        },
+    )
+
+    with pytest.raises((TypeError, ValueError), match=match):
+        measured.validate()
+
+
+def test_fixed_radius_module_config_ignores_estimator_only_bounds() -> None:
+    config = RGBDObservationConfig(
+        world_radius=0.02,
+        metric_radius_estimation_enabled=False,
+        minimum_world_radius=0.30,
+        maximum_world_radius=0.10,
+    )
+
+    assert config.world_radius == 0.02
 
 
 def test_missing_depth_emits_no_valid_measurement_and_never_falls_back_to_rgb() -> None:

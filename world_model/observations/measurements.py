@@ -79,6 +79,71 @@ class MeasurementSet:
             raise ValueError(
                 "auxiliary.world_position_independent_axis_mask requires world position and variance"
             )
+        radius_group = (
+            self.auxiliary.get("world_radius"),
+            self.auxiliary.get("world_radius_log_variance"),
+            self.auxiliary.get("world_radius_valid_mask"),
+        )
+        radius_group_present = any(value is not None for value in radius_group[1:])
+        radius_is_supported = "radius" in self.supported_state_fields
+        legacy_radius = radius_group[0]
+        if legacy_radius is not None and not radius_group_present and not radius_is_supported:
+            if legacy_radius.shape not in {
+                (batch, measurements),
+                (batch, measurements, 1),
+            }:
+                raise ValueError("auxiliary.world_radius must have shape [B,M] or [B,M,1]")
+            if not legacy_radius.is_floating_point() or legacy_radius.dtype != self.values.dtype:
+                raise TypeError("auxiliary.world_radius must use the measurement floating dtype")
+            if legacy_radius.device != self.values.device:
+                raise ValueError("auxiliary.world_radius must use the measurement device")
+            if not torch.isfinite(legacy_radius).all():
+                raise ValueError("auxiliary.world_radius must be finite")
+            legacy_radius_3d = (
+                legacy_radius.unsqueeze(-1) if legacy_radius.ndim == 2 else legacy_radius
+            )
+            if torch.any(self.measurement_mask.unsqueeze(-1) & (legacy_radius_3d <= 0.0)):
+                raise ValueError("valid auxiliary.world_radius values must be positive")
+        if radius_group_present and not radius_is_supported:
+            raise ValueError("complete radius evidence must declare radius support")
+        if radius_is_supported or radius_group_present:
+            if any(value is None for value in radius_group):
+                raise ValueError(
+                    "radius evidence requires world radius, log variance, and validity together"
+                )
+            radius, radius_log_variance, radius_valid = radius_group
+            assert radius is not None
+            assert radius_log_variance is not None
+            assert radius_valid is not None
+            if radius.shape != (batch, measurements, 1):
+                raise ValueError("auxiliary.world_radius must have shape [B,M,1]")
+            if radius_log_variance.shape != radius.shape:
+                raise ValueError("auxiliary.world_radius_log_variance must have shape [B,M,1]")
+            if radius_valid.shape != (batch, measurements):
+                raise ValueError("auxiliary.world_radius_valid_mask must have shape [B,M]")
+            if radius_valid.dtype is not torch.bool:
+                raise TypeError("auxiliary.world_radius_valid_mask must use torch.bool")
+            if (
+                not radius.is_floating_point()
+                or not radius_log_variance.is_floating_point()
+                or radius.dtype != self.values.dtype
+                or radius_log_variance.dtype != self.values.dtype
+            ):
+                raise TypeError("radius evidence must use the measurement floating dtype")
+            if (
+                radius.device != self.values.device
+                or radius_log_variance.device != self.values.device
+                or radius_valid.device != self.values.device
+            ):
+                raise ValueError("radius evidence must use the measurement device")
+            if torch.any(radius_valid & ~self.measurement_mask):
+                raise ValueError("radius validity must be a subset of measurement_mask")
+            if not torch.isfinite(radius).all():
+                raise ValueError("auxiliary.world_radius must be finite")
+            if torch.any(radius_valid.unsqueeze(-1) & (radius <= 0.0)):
+                raise ValueError("valid auxiliary.world_radius values must be positive")
+            if not torch.isfinite(radius_log_variance).all():
+                raise ValueError("auxiliary.world_radius_log_variance must be finite")
         source_fields = (
             self.source_belief_indices,
             self.source_object_ids,

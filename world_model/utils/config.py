@@ -199,16 +199,21 @@ class RGBConfig:
 class RGBDConfig:
     """Observable metric RGB-D sphere measurements for the public runtime.
 
-    The first RGB-D integration rung deliberately keeps its physical prior and
-    temporal estimator explicit.  Radius is a checkpointed configuration
-    prior, not a simulator label; temporal velocity is derived from a bounded
-    uniform least-squares fit over raw associated metric measurements.
+    The RGB-D bridge keeps its physical prior and temporal estimator explicit.
+    By default, radius is a checkpointed configuration prior rather than a
+    simulator label.  The opt-in metric-radius path instead estimates radius
+    directly from public RGB-D surface points.  Temporal velocity is derived
+    from a bounded uniform least-squares fit over raw associated measurements.
     """
 
     enabled: bool = False
     global_every_steps: int = 1
     proposal_count: int = 1
     world_radius: float = 0.21
+    metric_radius_estimation_enabled: bool = False
+    minimum_world_radius: float = 0.05
+    maximum_world_radius: float = 1.0
+    measurement_radius_variance: float = 1.0e-5
     linear_drag: float = 0.05
     foreground_threshold: float = 0.04
     foreground_temperature: float = 0.01
@@ -632,8 +637,25 @@ class OrpheusConfig:
             raise ValueError("simulator.world_bounds must contain three increasing pairs")
         if model.max_objects < simulator.max_objects:
             raise ValueError("model.max_objects must be >= simulator.max_objects")
-        if model.state.modal_count < 0 or model.state.modal_dim <= 0:
-            raise ValueError("modal_count must be nonnegative and modal_dim positive")
+        for name in ("geometry_dim", "modal_dim"):
+            value = getattr(model.state, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"model.state.{name} must be a positive integer")
+        for name in (
+            "appearance_dim",
+            "residual_dynamics_dim",
+            "parameter_memory_dim",
+            "global_dim",
+        ):
+            value = getattr(model.state, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"model.state.{name} must be a nonnegative integer")
+        if (
+            isinstance(model.state.modal_count, bool)
+            or not isinstance(model.state.modal_count, int)
+            or model.state.modal_count < 0
+        ):
+            raise ValueError("model.state.modal_count must be a nonnegative integer")
         if model.lifecycle.max_missed_steps <= 0:
             raise ValueError("model.lifecycle.max_missed_steps must be positive")
         if model.lifecycle.max_occluded_steps < model.lifecycle.max_missed_steps:
@@ -668,6 +690,24 @@ class OrpheusConfig:
             raise ValueError("model.filter.enable_learned_corrector must be boolean")
         if not isinstance(model.filter.direct_metric_position_update, bool):
             raise ValueError("model.filter.direct_metric_position_update must be boolean")
+        if not isinstance(model.identification.enabled, bool):
+            raise ValueError("model.identification.enabled must be boolean")
+        for name, value in (
+            ("min_log_variance", model.filter.min_log_variance),
+            ("max_log_variance", model.filter.max_log_variance),
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+            ):
+                raise ValueError(f"model.filter.{name} must be a finite real number")
+        if model.filter.min_log_variance > model.filter.max_log_variance:
+            raise ValueError("model.filter log-variance bounds must be ordered")
+        if not model.filter.min_log_variance <= 0.0 <= model.filter.max_log_variance:
+            raise ValueError(
+                "the fixed factory initial log variance must lie within model.filter bounds"
+            )
         if model.filter.direct_metric_position_update:
             if runtime.modality != "rgbd" or not model.rgbd.enabled:
                 raise ValueError("direct metric position updates require the RGB-D runtime")
@@ -707,6 +747,8 @@ class OrpheusConfig:
             raise ValueError("model.rgb.global_every_steps must be a positive integer")
         if not isinstance(model.rgbd.enabled, bool):
             raise ValueError("model.rgbd.enabled must be boolean")
+        if not isinstance(model.rgbd.metric_radius_estimation_enabled, bool):
+            raise ValueError("model.rgbd.metric_radius_estimation_enabled must be boolean")
         if (
             isinstance(model.rgbd.global_every_steps, bool)
             or not isinstance(model.rgbd.global_every_steps, int)
@@ -721,6 +763,9 @@ class OrpheusConfig:
             raise ValueError("model.rgbd.proposal_count must be integer one or two")
         for name, value in (
             ("world_radius", model.rgbd.world_radius),
+            ("minimum_world_radius", model.rgbd.minimum_world_radius),
+            ("maximum_world_radius", model.rgbd.maximum_world_radius),
+            ("measurement_radius_variance", model.rgbd.measurement_radius_variance),
             ("linear_drag", model.rgbd.linear_drag),
             ("foreground_threshold", model.rgbd.foreground_threshold),
             ("foreground_temperature", model.rgbd.foreground_temperature),
@@ -753,7 +798,12 @@ class OrpheusConfig:
             ),
             ("fit_conditioning_limit", model.rgbd.fit_conditioning_limit),
         ):
-            if isinstance(value, bool) or not math.isfinite(value) or value <= 0.0:
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0.0
+            ):
                 raise ValueError(f"model.rgbd.{name} must be finite and positive")
         if model.rgbd.foreground_threshold >= 2.0:
             raise ValueError("model.rgbd.foreground_threshold must be smaller than two")
@@ -763,6 +813,15 @@ class OrpheusConfig:
             )
         if model.rgbd.chromatic_centre_blend > 1.0:
             raise ValueError("model.rgbd.chromatic_centre_blend must be no greater than one")
+        if model.rgbd.metric_radius_estimation_enabled:
+            if model.rgbd.minimum_world_radius >= model.rgbd.maximum_world_radius:
+                raise ValueError("model.rgbd world-radius bounds must be strictly ordered")
+            if not (
+                model.rgbd.minimum_world_radius
+                <= model.rgbd.world_radius
+                <= model.rgbd.maximum_world_radius
+            ):
+                raise ValueError("model.rgbd.world_radius must lie within its declared bounds")
         for name, value in (
             ("temporal_history_size", model.rgbd.temporal_history_size),
             ("temporal_min_samples", model.rgbd.temporal_min_samples),
@@ -780,6 +839,17 @@ class OrpheusConfig:
             raise ValueError("model.rgbd temporal velocity variance bounds must be ordered")
         if model.rgbd.fit_conditioning_limit <= 1.0:
             raise ValueError("model.rgbd.fit_conditioning_limit must be greater than one")
+        if model.rgbd.metric_radius_estimation_enabled:
+            if not model.rgbd.enabled:
+                raise ValueError("metric RGB-D radius estimation requires model.rgbd.enabled")
+            if model.rgbd.proposal_count != 2:
+                raise ValueError("metric RGB-D radius estimation requires exactly two proposals")
+            if model.state.geometry_dim < 1:
+                raise ValueError("metric RGB-D radius estimation requires geometry_dim >= 1")
+            if model.identification.enabled:
+                raise ValueError(
+                    "metric RGB-D radius estimation requires the generic identifier disabled"
+                )
         if model.rgbd.enabled:
             if (
                 model.max_objects != model.rgbd.proposal_count
@@ -793,7 +863,19 @@ class OrpheusConfig:
                 raise ValueError(
                     "two-object model.rgbd requires model.state.appearance_dim exactly three"
                 )
-            if simulator.radius_range != (model.rgbd.world_radius, model.rgbd.world_radius):
+            if model.rgbd.metric_radius_estimation_enabled:
+                if simulator.radius_range != (
+                    model.rgbd.minimum_world_radius,
+                    model.rgbd.maximum_world_radius,
+                ):
+                    raise ValueError(
+                        "metric RGB-D radius estimation requires simulator.radius_range "
+                        "to equal the declared estimator bounds"
+                    )
+            elif simulator.radius_range != (
+                model.rgbd.world_radius,
+                model.rgbd.world_radius,
+            ):
                 raise ValueError(
                     "the first model.rgbd bridge requires its checkpointed world_radius "
                     "to equal the fixed simulator radius"
@@ -1259,10 +1341,21 @@ class OrpheusConfig:
             ),
             ("external_impulse", simulator.external_impulse_range),
         ):
-            if len(bounds) != 2 or bounds[0] > bounds[1]:
+            if (
+                len(bounds) != 2
+                or any(
+                    isinstance(bound, bool)
+                    or not isinstance(bound, (int, float))
+                    or not math.isfinite(float(bound))
+                    for bound in bounds
+                )
+                or bounds[0] > bounds[1]
+            ):
                 raise ValueError(f"invalid simulator {name}_range")
         if not (0 <= simulator.restitution_range[0] <= simulator.restitution_range[1] <= 1):
             raise ValueError("restitution_range must lie in [0, 1]")
+        if simulator.radius_range[0] <= 0.0:
+            raise ValueError("radius_range must be strictly positive")
         if not (0 <= simulator.friction_range[0] <= simulator.friction_range[1] <= 1):
             raise ValueError("friction_range must lie in [0, 1]")
         if simulator.ensure_collision and simulator.max_objects >= 2:

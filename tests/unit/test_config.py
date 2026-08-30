@@ -1,4 +1,5 @@
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -39,6 +40,7 @@ def test_rgbd_online_profile_binds_metric_temporal_and_analytic_semantics() -> N
     assert config.model.rgbd.enabled
     assert config.model.rgbd.proposal_count == 1
     assert config.model.rgbd.world_radius == pytest.approx(0.21)
+    assert not config.model.rgbd.metric_radius_estimation_enabled
     assert config.model.rgbd.linear_drag == pytest.approx(0.05)
     assert config.model.rgbd.temporal_history_size == 16
     assert config.model.rgbd.temporal_min_samples == 16
@@ -110,6 +112,201 @@ def test_two_object_rgbd_requires_exact_observable_appearance_capacity() -> None
         )
         with pytest.raises(ValueError, match="appearance_dim exactly three"):
             invalid.validate()
+
+
+def test_metric_radius_estimation_binds_exact_two_object_truth_bounds() -> None:
+    base = load_config(CONFIG_DIR / "rgbd_two_visible_orbital_camera_cpu.yaml")
+    variable = replace(
+        base,
+        model=replace(
+            base.model,
+            rgbd=replace(
+                base.model.rgbd,
+                metric_radius_estimation_enabled=True,
+                minimum_world_radius=0.17,
+                maximum_world_radius=0.25,
+                measurement_radius_variance=1.0e-6,
+            ),
+        ),
+        simulator=replace(base.simulator, radius_range=(0.17, 0.25)),
+    )
+
+    variable.validate()
+    assert variable.model.rgbd.metric_radius_estimation_enabled
+    assert variable.simulator.radius_range == (0.17, 0.25)
+
+    wrong_bounds = replace(
+        variable,
+        simulator=replace(variable.simulator, radius_range=(0.18, 0.24)),
+    )
+    with pytest.raises(ValueError, match="equal the declared estimator bounds"):
+        wrong_bounds.validate()
+
+
+@pytest.mark.parametrize(
+    ("updates", "match"),
+    [
+        ({"metric_radius_estimation_enabled": 1}, "must be boolean"),
+        (
+            {"minimum_world_radius": 0.25, "maximum_world_radius": 0.25},
+            "bounds must be strictly ordered",
+        ),
+        (
+            {"minimum_world_radius": 0.22, "maximum_world_radius": 0.25},
+            "world_radius must lie within",
+        ),
+        ({"measurement_radius_variance": 0.0}, "must be finite and positive"),
+    ],
+)
+def test_metric_radius_estimation_controls_fail_closed(
+    updates: dict[str, object],
+    match: str,
+) -> None:
+    base = load_config(CONFIG_DIR / "rgbd_two_visible_orbital_camera_cpu.yaml")
+    base = replace(
+        base,
+        model=replace(
+            base.model,
+            rgbd=replace(
+                base.model.rgbd,
+                metric_radius_estimation_enabled=True,
+                minimum_world_radius=0.17,
+                maximum_world_radius=0.25,
+            ),
+        ),
+        simulator=replace(base.simulator, radius_range=(0.17, 0.25)),
+    )
+    invalid = replace(
+        base,
+        model=replace(base.model, rgbd=replace(base.model.rgbd, **updates)),
+    )
+
+    with pytest.raises(ValueError, match=match):
+        invalid.validate()
+
+
+def test_metric_radius_scalar_controls_reject_non_builtin_real_values() -> None:
+    base = load_config(CONFIG_DIR / "rgbd_two_visible_orbital_camera_cpu.yaml")
+    invalid = replace(
+        base,
+        model=replace(
+            base.model,
+            rgbd=replace(
+                base.model.rgbd,
+                measurement_radius_variance=Decimal("0.000001"),
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="finite and positive"):
+        invalid.validate()
+
+
+def test_disabled_metric_radius_controls_do_not_restrict_fixed_radius_semantics() -> None:
+    base = load_config(CONFIG_DIR / "rgbd_two_visible_orbital_camera_cpu.yaml")
+    fixed = replace(
+        base,
+        model=replace(
+            base.model,
+            rgbd=replace(
+                base.model.rgbd,
+                world_radius=0.02,
+                minimum_world_radius=0.30,
+                maximum_world_radius=0.10,
+            ),
+        ),
+        simulator=replace(base.simulator, radius_range=(0.02, 0.02)),
+    )
+
+    fixed.validate()
+
+
+@pytest.mark.parametrize("mutation", ["missing_geometry", "generic_identifier"])
+def test_metric_radius_estimation_has_one_explicit_geometry_owner(mutation: str) -> None:
+    base = load_config(CONFIG_DIR / "rgbd_two_visible_orbital_camera_cpu.yaml")
+    model = replace(
+        base.model,
+        rgbd=replace(
+            base.model.rgbd,
+            metric_radius_estimation_enabled=True,
+            minimum_world_radius=0.17,
+            maximum_world_radius=0.25,
+        ),
+    )
+    if mutation == "missing_geometry":
+        model = replace(model, state=replace(model.state, geometry_dim=0))
+    else:
+        model = replace(model, identification=replace(model.identification, enabled=True))
+    invalid = replace(
+        base,
+        model=model,
+        simulator=replace(base.simulator, radius_range=(0.17, 0.25)),
+    )
+
+    with pytest.raises(ValueError, match="geometry_dim|generic identifier"):
+        invalid.validate()
+
+
+@pytest.mark.parametrize(
+    ("mutation", "value"),
+    [("geometry_dim", True), ("geometry_dim", 1.0), ("identification_enabled", 0)],
+)
+def test_metric_radius_owner_fields_reject_equality_coercion(
+    mutation: str,
+    value: object,
+) -> None:
+    base = load_config(CONFIG_DIR / "rgbd_two_visible_orbital_camera_cpu.yaml")
+    model = base.model
+    if mutation == "geometry_dim":
+        model = replace(model, state=replace(model.state, geometry_dim=value))
+    else:
+        model = replace(
+            model,
+            identification=replace(model.identification, enabled=value),
+        )
+    invalid = replace(base, model=model)
+
+    with pytest.raises(ValueError, match="positive integer|must be boolean"):
+        invalid.validate()
+
+
+@pytest.mark.parametrize(
+    "radius_range",
+    [(False, 0.25), (0.17, True), (-0.25, -0.17)],
+)
+def test_simulator_radius_range_rejects_boolean_and_nonpositive_members(
+    radius_range: tuple[object, object],
+) -> None:
+    base = load_config(CONFIG_DIR / "tiny_overfit.yaml")
+    invalid = replace(base, simulator=replace(base.simulator, radius_range=radius_range))
+
+    with pytest.raises(ValueError, match="radius_range|simulator radius_range"):
+        invalid.validate()
+
+
+@pytest.mark.parametrize(
+    ("minimum", "maximum"),
+    [(False, 8.0), (-12.0, True), (1.0, 8.0), (4.0, -4.0)],
+)
+def test_filter_log_variance_bounds_are_finite_ordered_reals_containing_initial_state(
+    minimum: object,
+    maximum: object,
+) -> None:
+    base = load_config(CONFIG_DIR / "rgbd_two_visible_orbital_camera_cpu.yaml")
+    invalid = replace(
+        base,
+        model=replace(
+            base.model,
+            filter=replace(
+                base.model.filter,
+                min_log_variance=minimum,
+                max_log_variance=maximum,
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="log.variance|finite real|fixed factory"):
+        invalid.validate()
 
 
 def test_sustained_v3_analytic_contacts_match_reference_solver_thresholds() -> None:

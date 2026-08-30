@@ -1490,6 +1490,70 @@ def test_rgbd_analytic_bridge_fields_are_semantic_with_legacy_disabled_defaults(
             validate_training_resume_config(legacy_payload, changed)
 
 
+def test_metric_radius_fields_use_exact_legacy_disabled_checkpoint_defaults() -> None:
+    config = _small_config()
+    payload = {
+        "config": config.to_dict(),
+        "simulator_version": SIMULATOR_VERSION,
+    }
+    legacy_payload = deepcopy(payload)
+    legacy_rgbd = legacy_payload["config"]["model"]["rgbd"]
+    for field_name in (
+        "metric_radius_estimation_enabled",
+        "minimum_world_radius",
+        "maximum_world_radius",
+        "measurement_radius_variance",
+    ):
+        legacy_rgbd.pop(field_name)
+
+    validate_checkpoint_config(legacy_payload, config)
+    validate_training_resume_config(legacy_payload, config)
+
+    enabled = replace(
+        config,
+        model=replace(
+            config.model,
+            rgbd=replace(
+                config.model.rgbd,
+                metric_radius_estimation_enabled=True,
+            ),
+        ),
+    )
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(legacy_payload, enabled)
+    with pytest.raises(ValueError, match="model"):
+        validate_training_resume_config(legacy_payload, enabled)
+
+    for field_name, coercive_value in (
+        ("metric_radius_estimation_enabled", 0),
+        ("maximum_world_radius", True),
+    ):
+        coercive_payload = deepcopy(payload)
+        coercive_payload["config"]["model"]["rgbd"][field_name] = coercive_value
+        with pytest.raises(ValueError, match="model"):
+            validate_checkpoint_config(coercive_payload, config)
+        with pytest.raises(ValueError, match=field_name):
+            validate_training_resume_config(coercive_payload, config)
+
+    one_geometry = replace(
+        config,
+        model=replace(
+            config.model,
+            state=replace(config.model.state, geometry_dim=1),
+        ),
+    )
+    one_geometry.validate()
+    coercive_geometry_payload = {
+        "config": one_geometry.to_dict(),
+        "simulator_version": SIMULATOR_VERSION,
+    }
+    coercive_geometry_payload["config"]["model"]["state"]["geometry_dim"] = True
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(coercive_geometry_payload, one_geometry)
+    with pytest.raises(ValueError, match="geometry_dim"):
+        validate_training_resume_config(coercive_geometry_payload, one_geometry)
+
+
 def test_attention_relation_endpoint_binding_is_semantic_with_legacy_false() -> None:
     config = _small_config()
     historical = replace(

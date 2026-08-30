@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import torch
@@ -20,6 +21,16 @@ class FilterUncertaintyConfig:
 class FilterUncertainty:
     def __init__(self, config: FilterUncertaintyConfig | None = None) -> None:
         self.config = config or FilterUncertaintyConfig()
+        for name, value in (
+            ("minimum_log_variance", self.config.minimum_log_variance),
+            ("maximum_log_variance", self.config.maximum_log_variance),
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+            ):
+                raise ValueError(f"{name} must be a finite real number")
         if self.config.missed_fast_variance_increment < 0:
             raise ValueError("missed_fast_variance_increment must be nonnegative")
         if self.config.ambiguous_variance_increment < 0:

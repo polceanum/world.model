@@ -444,6 +444,10 @@ class OnlineWorldModel(nn.Module):
                     proposal_count=rgbd_config.proposal_count,
                     appearance_dim=state_config.appearance_dim,
                     world_radius=rgbd_config.world_radius,
+                    metric_radius_estimation_enabled=(rgbd_config.metric_radius_estimation_enabled),
+                    minimum_world_radius=rgbd_config.minimum_world_radius,
+                    maximum_world_radius=rgbd_config.maximum_world_radius,
+                    measurement_radius_variance=(rgbd_config.measurement_radius_variance),
                     foreground_threshold=rgbd_config.foreground_threshold,
                     foreground_temperature=rgbd_config.foreground_temperature,
                     minimum_mass=rgbd_config.minimum_mass,
@@ -522,6 +526,8 @@ class OnlineWorldModel(nn.Module):
                 initial_log_variance=factory.initial_log_variance,
                 birth_confirmations=lifecycle_config.birth_confirmations,
                 birth_confirmation_distance_m=(lifecycle_config.birth_confirmation_distance_m),
+                minimum_log_variance=filter_config.min_log_variance,
+                maximum_log_variance=filter_config.max_log_variance,
             )
         )
         identification_config = config.model.identification

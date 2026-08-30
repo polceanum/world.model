@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import fields, is_dataclass, replace
 
 import pytest
 import torch
@@ -88,6 +88,18 @@ def _render_custom(
     return rendered, measured, state
 
 
+def _render_variable_radius(
+    radii: tuple[float, float] = (0.24, 0.18),
+) -> tuple[torch.Tensor, torch.Tensor, CameraFrame, SphereState]:
+    camera = _camera()
+    state = replace(
+        _state(((0.90, 0.20, 0.18), (0.18, 0.82, 0.90))),
+        radius=torch.tensor(radii, dtype=torch.float32).unsqueeze(-1),
+    )
+    rendered = render_spheres(state, camera, IMAGE_SIZE)
+    return rendered.rgb.unsqueeze(0), rendered.depth_buffer[None, None], camera, state
+
+
 def _measurement(
     image: torch.Tensor,
     depth: torch.Tensor,
@@ -108,6 +120,18 @@ def _best_set_error(measured: torch.Tensor, expected: torch.Tensor) -> torch.Ten
     return direct if direct.square().sum() <= swapped.square().sum() else swapped
 
 
+def _assert_tensor_dataclass_bitwise_equal(left: object, right: object) -> None:
+    assert type(left) is type(right)
+    assert is_dataclass(left)
+    for field in fields(left):
+        left_value = getattr(left, field.name)
+        right_value = getattr(right, field.name)
+        if isinstance(left_value, torch.Tensor):
+            assert torch.equal(left_value, right_value), field.name
+        else:
+            _assert_tensor_dataclass_bitwise_equal(left_value, right_value)
+
+
 def test_two_visible_discs_recover_one_unordered_metric_measurement_each() -> None:
     image, depth, camera, state = _render()
 
@@ -123,6 +147,193 @@ def test_two_visible_discs_recover_one_unordered_metric_measurement_each() -> No
         torch.ones((1, 2)),
         atol=1.0e-5,
         rtol=1.0e-5,
+    )
+
+
+def test_unknown_metric_radii_are_recovered_without_using_the_fixed_prior() -> None:
+    image, depth, camera, state = _render_variable_radius()
+
+    measured = two_disc_geometry_from_rgbd(
+        image,
+        depth,
+        0.12,
+        camera.world_from_camera.unsqueeze(0),
+        camera.intrinsics.unsqueeze(0),
+        estimate_world_radius=True,
+        minimum_world_radius=0.10,
+        maximum_world_radius=0.35,
+    )
+    alternate_prior = two_disc_geometry_from_rgbd(
+        image,
+        depth,
+        0.34,
+        camera.world_from_camera.unsqueeze(0),
+        camera.intrinsics.unsqueeze(0),
+        estimate_world_radius=True,
+        minimum_world_radius=0.10,
+        maximum_world_radius=0.35,
+    )
+    direct_error = (measured.world_position[0] - state.position).square().sum()
+    swapped_error = (measured.world_position[0] - state.position.flip(0)).square().sum()
+    expected_radius = state.radius[:, 0]
+    if swapped_error < direct_error:
+        expected_radius = expected_radius.flip(0)
+
+    assert measured.valid_mask.tolist() == [[True, True]]
+    torch.testing.assert_close(
+        measured.surface_fit_radius[0],
+        expected_radius,
+        atol=2.0e-5,
+        rtol=0.0,
+    )
+    assert float(measured.surface_fit_radius_relative_error.max()) < 1.0e-4
+    torch.testing.assert_close(
+        alternate_prior.surface_fit_radius,
+        measured.surface_fit_radius,
+        atol=0.0,
+        rtol=0.0,
+    )
+    torch.testing.assert_close(
+        alternate_prior.world_position,
+        measured.world_position,
+        atol=0.0,
+        rtol=0.0,
+    )
+
+
+def test_disabled_radius_estimator_is_bitwise_legacy_and_ignores_new_bounds() -> None:
+    image, depth, camera, _ = _render()
+
+    default = _measurement(image, depth, camera)
+    explicit_disabled = two_disc_geometry_from_rgbd(
+        image,
+        depth,
+        RADIUS_M,
+        camera.world_from_camera.unsqueeze(0),
+        camera.intrinsics.unsqueeze(0),
+        estimate_world_radius=False,
+        minimum_world_radius=0.30,
+        maximum_world_radius=0.10,
+    )
+
+    _assert_tensor_dataclass_bitwise_equal(default, explicit_disabled)
+
+
+def test_unknown_radius_depth_and_intrinsics_vjps_match_central_differences() -> None:
+    image, depth, camera, _ = _render_variable_radius()
+    image = image.to(torch.float64)
+    depth = depth.to(torch.float64).requires_grad_(True)
+    world_from_camera = camera.world_from_camera.unsqueeze(0).to(torch.float64)
+    intrinsics = camera.intrinsics.unsqueeze(0).to(torch.float64).requires_grad_(True)
+
+    def objective(depth_value: torch.Tensor, intrinsics_value: torch.Tensor) -> torch.Tensor:
+        result = two_disc_geometry_from_rgbd(
+            image,
+            depth_value,
+            0.21,
+            world_from_camera,
+            intrinsics_value,
+            estimate_world_radius=True,
+            minimum_world_radius=0.10,
+            maximum_world_radius=0.35,
+        )
+        assert result.valid_mask.all()
+        return result.surface_fit_radius.sum()
+
+    value = objective(depth, intrinsics)
+    depth_gradient, intrinsics_gradient = torch.autograd.grad(
+        value,
+        (depth, intrinsics),
+    )
+    depth_flat_index = int(depth_gradient.abs().argmax())
+    intrinsics_flat_index = int(intrinsics_gradient.abs().argmax())
+
+    def central_difference(
+        source: torch.Tensor,
+        flat_index: int,
+        step: float,
+        *,
+        depth_source: bool,
+    ) -> torch.Tensor:
+        positive = source.detach().clone()
+        negative = source.detach().clone()
+        positive.reshape(-1)[flat_index] += step
+        negative.reshape(-1)[flat_index] -= step
+        if depth_source:
+            return (
+                objective(positive, intrinsics.detach()) - objective(negative, intrinsics.detach())
+            ) / (2.0 * step)
+        return (objective(depth.detach(), positive) - objective(depth.detach(), negative)) / (
+            2.0 * step
+        )
+
+    depth_fd = central_difference(depth, depth_flat_index, 1.0e-5, depth_source=True)
+    intrinsics_fd = central_difference(
+        intrinsics,
+        intrinsics_flat_index,
+        1.0e-5,
+        depth_source=False,
+    )
+    torch.testing.assert_close(
+        depth_gradient.reshape(-1)[depth_flat_index],
+        depth_fd,
+        atol=1.0e-6,
+        rtol=2.0e-4,
+    )
+    torch.testing.assert_close(
+        intrinsics_gradient.reshape(-1)[intrinsics_flat_index],
+        intrinsics_fd,
+        atol=1.0e-7,
+        rtol=2.0e-4,
+    )
+
+
+def test_unknown_metric_radius_retains_rgb_depth_and_intrinsics_gradients() -> None:
+    image, depth, camera, _ = _render_variable_radius()
+    image = image.requires_grad_(True)
+    depth = depth.requires_grad_(True)
+    intrinsics = camera.intrinsics.unsqueeze(0).clone().requires_grad_(True)
+
+    measured = two_disc_geometry_from_rgbd(
+        image,
+        depth,
+        0.21,
+        camera.world_from_camera.unsqueeze(0),
+        intrinsics,
+        estimate_world_radius=True,
+        minimum_world_radius=0.10,
+        maximum_world_radius=0.35,
+    )
+    gradients = torch.autograd.grad(
+        measured.surface_fit_radius.sum(),
+        (image, depth, intrinsics),
+    )
+
+    assert measured.valid_mask.all()
+    for gradient in gradients:
+        assert torch.isfinite(gradient).all()
+        assert float(gradient.abs().sum()) > 0.0
+
+
+def test_unknown_metric_radius_outside_declared_bounds_fails_closed() -> None:
+    image, depth, camera, _ = _render_variable_radius()
+
+    measured = two_disc_geometry_from_rgbd(
+        image,
+        depth,
+        0.21,
+        camera.world_from_camera.unsqueeze(0),
+        camera.intrinsics.unsqueeze(0),
+        estimate_world_radius=True,
+        minimum_world_radius=0.25,
+        maximum_world_radius=0.35,
+    )
+
+    assert not measured.pair_valid_mask.any()
+    assert torch.equal(measured.world_position, torch.zeros_like(measured.world_position))
+    assert torch.equal(
+        measured.surface_fit_radius,
+        torch.zeros_like(measured.surface_fit_radius),
     )
 
 

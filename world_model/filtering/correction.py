@@ -12,6 +12,7 @@ from world_model.belief import (
     WorldBelief,
     fast_packing_map,
     pack_fast_state,
+    slow_packing_map,
     unpack_fast_state,
 )
 from world_model.filtering.analytic_update import DiagonalUpdateResult, diagonal_kalman_update
@@ -633,6 +634,91 @@ class BeliefUpdater(nn.Module):
                 old + rate * (new - old), dim=-1
             )
             objects = objects.replace(appearance=appearance)
+        if "radius" in measured.supported_state_fields:
+            measured_radius = measured.auxiliary.get("world_radius")
+            measured_radius_lv = measured.auxiliary.get("world_radius_log_variance")
+            measured_radius_valid = measured.auxiliary.get("world_radius_valid_mask")
+            if (
+                measured_radius is None
+                or measured_radius_lv is None
+                or measured_radius_valid is None
+            ):
+                raise ValueError("direct radius measurements require the complete radius group")
+            expected_radius_shape = (*measured.measurement_mask.shape, 1)
+            if measured_radius.shape != expected_radius_shape:
+                raise ValueError("direct world radius must have shape [B,M,1]")
+            if measured_radius_lv.shape != expected_radius_shape:
+                raise ValueError("direct world radius log variance must have shape [B,M,1]")
+            if (
+                measured_radius_valid.shape != measured.measurement_mask.shape
+                or measured_radius_valid.dtype is not torch.bool
+            ):
+                raise ValueError("direct world radius validity must be boolean [B,M]")
+            if objects.geometry_dim < 1:
+                raise ValueError("direct radius correction requires geometry component zero")
+            if (
+                not measured_radius.is_floating_point()
+                or not measured_radius_lv.is_floating_point()
+                or measured_radius.dtype != objects.position.dtype
+                or measured_radius_lv.dtype != objects.position.dtype
+            ):
+                raise TypeError("direct radius evidence must use the belief floating dtype")
+            if (
+                measured_radius.device != objects.position.device
+                or measured_radius_lv.device != objects.position.device
+                or measured_radius_valid.device != objects.position.device
+            ):
+                raise ValueError("direct radius evidence must use the belief device")
+            if not torch.isfinite(measured_radius).all():
+                raise ValueError("direct world radius must be finite")
+            if torch.any(measured_radius_valid.unsqueeze(-1) & (measured_radius <= 0.0)):
+                raise ValueError("valid direct world radius must be positive")
+            if not torch.isfinite(measured_radius_lv).all():
+                raise ValueError("direct world radius log variance must be finite")
+            selected_radius = measured_radius[batch_index, measurement_indices]
+            selected_radius_lv = measured_radius_lv[batch_index, measurement_indices]
+            selected_radius_valid = measured_radius_valid[
+                batch_index,
+                measurement_indices,
+            ]
+            selected_radius_valid &= measured.measurement_mask[
+                batch_index,
+                measurement_indices,
+            ]
+            selected_radius_valid &= ~association.ambiguous[batch_index, pair_index]
+            selected_radius_valid &= objects.active[batch_index, belief_index]
+            radius_gate = selected_radius_valid.unsqueeze(-1)
+            geometry = objects.geometry.clone()
+            prior_radius = geometry[batch_index, belief_index, :1]
+            geometry[batch_index, belief_index, :1] = torch.where(
+                radius_gate,
+                selected_radius,
+                prior_radius,
+            )
+            slow_log_variance = objects.slow_log_variance.clone()
+            geometry_slice = slow_packing_map(objects)["geometry"]
+            radius_variance_index = geometry_slice.start
+            prior_radius_lv = slow_log_variance[
+                batch_index,
+                belief_index,
+                radius_variance_index : radius_variance_index + 1,
+            ]
+            slow_log_variance[
+                batch_index,
+                belief_index,
+                radius_variance_index : radius_variance_index + 1,
+            ] = torch.where(
+                radius_gate,
+                selected_radius_lv.clamp(
+                    self.config.minimum_log_variance,
+                    self.config.maximum_log_variance,
+                ),
+                prior_radius_lv,
+            )
+            objects = objects.replace(
+                geometry=geometry,
+                slow_log_variance=slow_log_variance,
+            )
         objects = objects.replace(
             existence_logit=existence,
             visibility_logit=visibility_logits,

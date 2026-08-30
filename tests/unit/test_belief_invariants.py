@@ -11,6 +11,7 @@ from world_model.belief import (
     LifecycleConfig,
     MotionMode,
     ObjectLifecycle,
+    slow_packing_map,
 )
 from world_model.observations import MeasurementSet
 
@@ -147,6 +148,128 @@ def test_lifecycle_birth_allocates_monotonic_id_from_measurement() -> None:
     assert torch.linalg.vector_norm(born.objects.appearance[0, 0]).item() == pytest.approx(1.0)
     belief.validate()
     born.validate()
+
+
+def test_legacy_flat_radius_allows_masked_zero_but_never_births_it() -> None:
+    belief = BeliefFactory(max_objects=2).create()
+    measurements = MeasurementSet(
+        modality="rgbd",
+        sensor_id="camera",
+        timestamp=torch.tensor([0.0]),
+        values=torch.zeros(1, 2, 3),
+        log_variance=torch.zeros(1, 2, 3),
+        existence_logits=torch.full((1, 2), 8.0),
+        measurement_mask=torch.tensor([[True, False]]),
+        appearance=None,
+        class_logits=None,
+        frame_id="camera:test",
+        supported_state_fields=("position",),
+        auxiliary={
+            "world_position": torch.tensor([[[0.25, 1.0, -0.5], [4.0, 4.0, 4.0]]]),
+            "world_radius": torch.tensor([[0.2, 0.0]]),
+        },
+    )
+    measurements.validate()
+
+    born = ObjectLifecycle().birth_from_measurements(
+        belief,
+        measurements,
+        torch.ones((1, 2), dtype=torch.bool),
+    )
+
+    assert born.objects.active.tolist() == [[True, False]]
+    torch.testing.assert_close(born.objects.radius[0, 0], torch.tensor([0.2]))
+
+    invalid = replace(
+        measurements,
+        auxiliary={
+            **measurements.auxiliary,
+            "world_radius": torch.tensor([[0.2, float("nan")]]),
+        },
+    )
+    with pytest.raises(ValueError, match="finite"):
+        invalid.validate()
+
+
+@pytest.mark.parametrize(
+    ("raw_log_variance", "expected_log_variance", "expected_variance_gradient"),
+    [(-100.0, -12.0, 0.0), (-10.0, -10.0, 1.0), (100.0, 8.0, 0.0)],
+)
+def test_lifecycle_birth_atomically_seeds_radius_and_clamped_slow_variance(
+    raw_log_variance: float,
+    expected_log_variance: float,
+    expected_variance_gradient: float,
+) -> None:
+    belief = BeliefFactory(max_objects=1).create()
+    radius = torch.tensor([[[0.24]]], requires_grad=True)
+    radius_log_variance = torch.tensor(
+        [[[raw_log_variance]]],
+        requires_grad=True,
+    )
+    measurements = MeasurementSet(
+        modality="rgbd",
+        sensor_id="camera",
+        timestamp=torch.tensor([0.0]),
+        values=torch.zeros(1, 1, 3),
+        log_variance=torch.zeros(1, 1, 3),
+        existence_logits=torch.tensor([[8.0]]),
+        measurement_mask=torch.tensor([[True]]),
+        appearance=None,
+        class_logits=None,
+        frame_id="camera:test",
+        supported_state_fields=("position", "radius"),
+        auxiliary={
+            "world_position": torch.tensor([[[0.25, 1.0, -0.5]]]),
+            "world_radius": radius,
+            "world_radius_log_variance": radius_log_variance,
+            "world_radius_valid_mask": torch.tensor([[True]]),
+        },
+    )
+    measurements.validate()
+
+    born = ObjectLifecycle(
+        LifecycleConfig(
+            minimum_log_variance=-12.0,
+            maximum_log_variance=8.0,
+        )
+    ).birth_from_measurements(
+        belief,
+        measurements,
+        torch.tensor([[True]]),
+    )
+
+    torch.testing.assert_close(born.objects.radius, radius)
+    radius_index = slow_packing_map(born.objects)["geometry"].start
+    stored_log_variance = born.objects.slow_log_variance[
+        ...,
+        radius_index : radius_index + 1,
+    ]
+    torch.testing.assert_close(
+        stored_log_variance,
+        torch.tensor([[[expected_log_variance]]]),
+    )
+    (born.objects.radius.sum() + stored_log_variance.sum()).backward()
+    torch.testing.assert_close(radius.grad, torch.ones_like(radius))
+    torch.testing.assert_close(
+        radius_log_variance.grad,
+        torch.full_like(radius_log_variance, expected_variance_gradient),
+    )
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"minimum_log_variance": False},
+        {"maximum_log_variance": True},
+        {"initial_log_variance": False},
+        {"minimum_log_variance": 1.0, "maximum_log_variance": 8.0},
+    ],
+)
+def test_lifecycle_log_variance_contract_rejects_coercive_or_excluding_bounds(
+    updates: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError, match="log variance|log-variance"):
+        ObjectLifecycle(LifecycleConfig(**updates))
 
 
 def _tentative_measurement(timestamp: float, positions: torch.Tensor) -> MeasurementSet:
