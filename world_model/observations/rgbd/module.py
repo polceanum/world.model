@@ -20,6 +20,7 @@ from torch import Tensor
 from world_model.belief import fast_packing_map
 from world_model.dynamics import FreeMotionFitResult
 from world_model.fusion.innovation import build_innovation
+from world_model.identification import AnalyticDragFitResult
 from world_model.observations.base import (
     ModalityCache,
     ModalityHistory,
@@ -71,6 +72,16 @@ class RGBDObservationConfig:
     temporal_velocity_variance_floor: float = 1.0e-6
     temporal_velocity_variance_ceiling: float | None = 1.0e-2
     fit_conditioning_limit: float = 100.0
+    temporal_drag_estimation_enabled: bool = False
+    temporal_drag_minimum: float = 0.01
+    temporal_drag_maximum: float = 0.36
+    temporal_drag_grid_points: int = 257
+    temporal_drag_noise_floor_m: float = 2.0e-5
+    temporal_drag_minimum_excitation_m: float = 0.015
+    temporal_drag_minimum_profile_information: float = 1.0
+    temporal_drag_maximum_boundary_mass: float = 0.01
+    temporal_drag_log_parameter_variance_floor: float = 1.0e-4
+    temporal_drag_log_parameter_variance_ceiling: float = 0.25
 
     def __post_init__(self) -> None:
         if (
@@ -102,6 +113,19 @@ class RGBDObservationConfig:
             "measurement_position_variance": self.measurement_position_variance,
             "temporal_min_dt": self.temporal_min_dt,
             "temporal_velocity_variance_floor": self.temporal_velocity_variance_floor,
+            "temporal_drag_minimum": self.temporal_drag_minimum,
+            "temporal_drag_maximum": self.temporal_drag_maximum,
+            "temporal_drag_noise_floor_m": self.temporal_drag_noise_floor_m,
+            "temporal_drag_minimum_excitation_m": (self.temporal_drag_minimum_excitation_m),
+            "temporal_drag_minimum_profile_information": (
+                self.temporal_drag_minimum_profile_information
+            ),
+            "temporal_drag_log_parameter_variance_floor": (
+                self.temporal_drag_log_parameter_variance_floor
+            ),
+            "temporal_drag_log_parameter_variance_ceiling": (
+                self.temporal_drag_log_parameter_variance_ceiling
+            ),
         }
         for name, value in positive.items():
             if (
@@ -117,6 +141,31 @@ class RGBDObservationConfig:
             )
         if self.chromatic_centre_blend > 1.0:
             raise ValueError("RGB-D chromatic_centre_blend must be no greater than one")
+        if not isinstance(self.temporal_drag_estimation_enabled, bool):
+            raise ValueError("RGB-D temporal_drag_estimation_enabled must be boolean")
+        if self.temporal_drag_minimum >= self.temporal_drag_maximum:
+            raise ValueError("RGB-D temporal drag bounds must be strictly ordered")
+        if (
+            isinstance(self.temporal_drag_grid_points, bool)
+            or not isinstance(self.temporal_drag_grid_points, int)
+            or self.temporal_drag_grid_points < 3
+            or self.temporal_drag_grid_points % 2 == 0
+        ):
+            raise ValueError(
+                "RGB-D temporal_drag_grid_points must be an odd integer of at least three"
+            )
+        if (
+            isinstance(self.temporal_drag_maximum_boundary_mass, bool)
+            or not isinstance(self.temporal_drag_maximum_boundary_mass, (int, float))
+            or not math.isfinite(float(self.temporal_drag_maximum_boundary_mass))
+            or not 0.0 <= self.temporal_drag_maximum_boundary_mass < 1.0
+        ):
+            raise ValueError("RGB-D temporal_drag_maximum_boundary_mass must lie in [0,1)")
+        if (
+            self.temporal_drag_log_parameter_variance_ceiling
+            < self.temporal_drag_log_parameter_variance_floor
+        ):
+            raise ValueError("RGB-D temporal drag variance bounds must be ordered")
         for name, value in (
             ("temporal_history_size", self.temporal_history_size),
             ("temporal_min_samples", self.temporal_min_samples),
@@ -239,15 +288,104 @@ class RGBDObservationModule(ObservationModule):
     modality_name = "rgbd"
     modality_index = 2
     requires_post_birth_temporal_history = True
+    position_uncertainty_scale: Tensor
+    velocity_uncertainty_scale: Tensor
+    drag_uncertainty_scale: Tensor
 
     def __init__(self, config: RGBDObservationConfig | None = None) -> None:
         super().__init__()
         self.config = config or RGBDObservationConfig()
+        if self.config.temporal_drag_estimation_enabled:
+            for name in (
+                "position_uncertainty_scale",
+                "velocity_uncertainty_scale",
+                "drag_uncertainty_scale",
+            ):
+                self.register_buffer(
+                    name,
+                    torch.tensor(1.0, dtype=torch.float32),
+                    persistent=True,
+                )
         self.measurement = RGBDSphereCentreMeasurementModule(
             foreground_threshold=self.config.foreground_threshold,
             foreground_temperature=self.config.foreground_temperature,
             minimum_mass=self.config.minimum_mass,
         )
+
+    def _development_uncertainty_scale(self, name: str, value: float | Tensor) -> Tensor:
+        reference = getattr(self, name)
+        if isinstance(value, bool):
+            raise TypeError(f"{name} must be a real scalar or floating scalar tensor")
+        if isinstance(value, Tensor):
+            if not value.is_floating_point():
+                raise TypeError(f"{name} tensor must have a floating-point dtype")
+            if value.ndim != 0:
+                raise ValueError(f"{name} must be a scalar")
+            scale = value.to(dtype=reference.dtype, device=reference.device)
+        elif isinstance(value, (int, float)):
+            scale = torch.tensor(value, dtype=reference.dtype, device=reference.device)
+        else:
+            raise TypeError(f"{name} must be a real scalar or floating scalar tensor")
+        squared = scale.square()
+        if (
+            not bool(torch.isfinite(scale))
+            or not bool(scale > 0.0)
+            or not bool(torch.isfinite(squared))
+            or not bool(squared > 0.0)
+        ):
+            raise ValueError(f"{name} must remain finite and positive when squared")
+        return scale
+
+    def set_development_uncertainty_scales(
+        self,
+        *,
+        position: float | Tensor,
+        velocity: float | Tensor,
+        drag: float | Tensor,
+    ) -> None:
+        """Atomically set the three development-only uncertainty scales.
+
+        The opt-in estimator has no optimiser path.  A reviewed development
+        workflow may calibrate position, velocity, and log-drag uncertainty;
+        production runtime and the disabled observer expose no calibration
+        state.  Position and velocity scales may be below one.
+        """
+
+        if not self.config.temporal_drag_estimation_enabled:
+            raise RuntimeError("uncertainty calibration requires the enabled drag estimator")
+        # Validate and convert every input before mutating any persistent byte.
+        scales = (
+            self._development_uncertainty_scale("position_uncertainty_scale", position),
+            self._development_uncertainty_scale("velocity_uncertainty_scale", velocity),
+            self._development_uncertainty_scale("drag_uncertainty_scale", drag),
+        )
+        with torch.no_grad():
+            self.position_uncertainty_scale.copy_(scales[0])
+            self.velocity_uncertainty_scale.copy_(scales[1])
+            self.drag_uncertainty_scale.copy_(scales[2])
+
+    def _validated_uncertainty_scales(self) -> tuple[Tensor, Tensor, Tensor]:
+        if not self.config.temporal_drag_estimation_enabled:
+            raise RuntimeError("uncertainty scales exist only for the enabled drag estimator")
+        result: list[Tensor] = []
+        for name in (
+            "position_uncertainty_scale",
+            "velocity_uncertainty_scale",
+            "drag_uncertainty_scale",
+        ):
+            scale = getattr(self, name)
+            squared = scale.square()
+            if (
+                scale.ndim != 0
+                or scale.dtype != torch.float32
+                or not bool(torch.isfinite(scale))
+                or not bool(scale > 0.0)
+                or not bool(torch.isfinite(squared))
+                or not bool(squared > 0.0)
+            ):
+                raise RuntimeError(f"{name} must remain finite and positive when squared")
+            result.append(scale)
+        return result[0], result[1], result[2]
 
     def validate_packet(self, packet: ObservationPacket) -> None:
         if packet.modality != self.modality_name:
@@ -259,6 +397,8 @@ class RGBDObservationModule(ObservationModule):
     def _measure(self, packet: ObservationPacket) -> MeasurementSet:
         self.validate_packet(packet)
         rgb, depth = _composite_payload(packet)
+        if self.config.temporal_drag_estimation_enabled:
+            self._validated_uncertainty_scales()
         world_from_camera, intrinsics = _batched_calibration(
             packet,
             batch=rgb.shape[0],
@@ -496,6 +636,62 @@ class RGBDObservationModule(ObservationModule):
             variance = variance.clamp_max(self.config.temporal_velocity_variance_ceiling)
         return torch.where(valid.unsqueeze(-1), variance, torch.ones_like(variance))
 
+    def _drag_state_variance(
+        self,
+        fit: AnalyticDragFitResult,
+        conditional_fit: FreeMotionFitResult,
+        valid: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        """Return the declared fit-owned p/v local variance diagnostic.
+
+        The one shared drag parameter's degree of freedom is allocated equally
+        across the three residual axes.  Thus the per-axis ML residual
+        covariance receives the literal ``48 / 41`` common factor (effective
+        per-axis residual degrees of freedom ``41 / 3``).  This convention is
+        axis-symmetric, but it is not an exact unbiased per-axis covariance;
+        development calibration owns the remaining common scale.
+        """
+
+        identity = torch.eye(
+            2,
+            dtype=conditional_fit.normal_matrix.dtype,
+            device=conditional_fit.normal_matrix.device,
+        )
+        safe_normal = torch.where(
+            valid[..., None, None],
+            conditional_fit.normal_matrix,
+            identity,
+        )
+        inverse_normal = torch.linalg.inv(safe_normal)
+        sample_count = self.config.temporal_history_size
+        scalar_observation_count = 3 * sample_count
+        fitted_parameter_count = 7  # anchor p[3], anchor v[3], and log-drag[1]
+        degrees_of_freedom = scalar_observation_count - fitted_parameter_count
+        residual_covariance = fit.residual_covariance * (
+            scalar_observation_count / degrees_of_freedom
+        )
+        residual_axis_variance = residual_covariance.diagonal(dim1=-2, dim2=-1)
+        position_variance = residual_axis_variance * (
+            inverse_normal[..., 0, 0] / sample_count
+        ).unsqueeze(-1)
+        position_variance = position_variance.clamp_min(torch.finfo(position_variance.dtype).tiny)
+        velocity_variance = residual_axis_variance * (
+            inverse_normal[..., 1, 1] / sample_count
+        ).unsqueeze(-1)
+        velocity_variance = velocity_variance.clamp_min(torch.finfo(velocity_variance.dtype).tiny)
+        return (
+            torch.where(
+                valid.unsqueeze(-1),
+                position_variance,
+                torch.ones_like(position_variance),
+            ),
+            torch.where(
+                valid.unsqueeze(-1),
+                velocity_variance,
+                torch.ones_like(velocity_variance),
+            ),
+        )
+
     def update_temporal_history(
         self,
         *,
@@ -517,6 +713,114 @@ class RGBDObservationModule(ObservationModule):
             valid_mask=valid,
             minimum_dt=self.config.temporal_min_dt,
         )
+        if self.config.temporal_drag_estimation_enabled:
+            position_scale, velocity_scale, drag_scale = self._validated_uncertainty_scales()
+            if not bool((posterior.gravity == 0.0).all()):
+                return None, resolved
+            complete_history = (
+                resolved.sample_mask.all(dim=-1)
+                & resolved.valid_mask.all(dim=-1)
+                & posterior.objects.active
+                & (resolved.object_ids >= 0)
+            )
+            if not bool(complete_history.any()):
+                return None, resolved
+            drag_fit, fit_valid = resolved.fit_with_drag(
+                gravity=posterior.gravity,
+                drag_bounds=(
+                    self.config.temporal_drag_minimum,
+                    self.config.temporal_drag_maximum,
+                ),
+                grid_points=self.config.temporal_drag_grid_points,
+                position_noise_floor=self.config.temporal_drag_noise_floor_m,
+                minimum_support=self.config.temporal_min_samples,
+                minimum_dt=self.config.temporal_min_dt,
+                conditioning_limit=self.config.fit_conditioning_limit,
+                minimum_excitation=self.config.temporal_drag_minimum_excitation_m,
+                maximum_boundary_mass=(self.config.temporal_drag_maximum_boundary_mass),
+                minimum_profile_information=(self.config.temporal_drag_minimum_profile_information),
+            )
+            conditional_fit, conditional_valid = resolved.fit(
+                gravity=posterior.gravity,
+                drag=drag_fit.log_drag.exp(),
+                minimum_support=self.config.temporal_min_samples,
+                minimum_dt=self.config.temporal_min_dt,
+                conditioning_limit=self.config.fit_conditioning_limit,
+            )
+            fit_valid = fit_valid & conditional_valid & posterior.objects.active
+            if not bool(fit_valid.any()):
+                return None, resolved
+            position_variance, velocity_variance = self._drag_state_variance(
+                drag_fit,
+                conditional_fit,
+                fit_valid,
+            )
+            scaled_position_variance = (
+                position_variance
+                * position_scale.to(
+                    dtype=position_variance.dtype,
+                    device=position_variance.device,
+                ).square()
+            )
+            scaled_velocity_variance = (
+                velocity_variance
+                * velocity_scale.to(
+                    dtype=velocity_variance.dtype,
+                    device=velocity_variance.device,
+                ).square()
+            )
+            if (
+                not bool(torch.isfinite(scaled_position_variance).all())
+                or not bool((scaled_position_variance > 0.0).all())
+                or not bool(torch.isfinite(scaled_velocity_variance).all())
+                or not bool((scaled_velocity_variance > 0.0).all())
+            ):
+                raise RuntimeError(
+                    "scaled RGB-D position/velocity variance must remain finite and positive"
+                )
+            scaled_drag_variance = (
+                drag_fit.raw_log_drag_variance
+                * drag_scale.to(
+                    dtype=drag_fit.raw_log_drag_variance.dtype,
+                    device=drag_fit.raw_log_drag_variance.device,
+                ).square()
+            ).clamp(
+                min=self.config.temporal_drag_log_parameter_variance_floor,
+                max=self.config.temporal_drag_log_parameter_variance_ceiling,
+            )
+            drag_log_variance = torch.where(
+                fit_valid.unsqueeze(-1),
+                scaled_drag_variance.log(),
+                torch.zeros_like(scaled_drag_variance),
+            )
+            evidence = DirectVelocityEvidence(
+                velocity=torch.where(
+                    fit_valid.unsqueeze(-1),
+                    drag_fit.velocity,
+                    torch.zeros_like(drag_fit.velocity),
+                ),
+                log_variance=scaled_velocity_variance.log(),
+                valid_mask=fit_valid,
+                confidence=fit_valid.to(posterior.dtype),
+                axis_valid_mask=fit_valid.unsqueeze(-1).expand_as(drag_fit.velocity),
+                position=torch.where(
+                    fit_valid.unsqueeze(-1),
+                    drag_fit.position,
+                    torch.zeros_like(drag_fit.position),
+                ),
+                position_log_variance=scaled_position_variance.log(),
+                position_valid_mask=fit_valid,
+                log_drag=torch.where(
+                    fit_valid.unsqueeze(-1),
+                    drag_fit.log_drag,
+                    torch.zeros_like(drag_fit.log_drag),
+                ),
+                log_drag_log_variance=drag_log_variance,
+                drag_valid_mask=fit_valid,
+            )
+            evidence.validate()
+            return evidence, resolved
+
         fit, fit_valid = resolved.fit(
             gravity=posterior.gravity,
             drag=posterior.objects.drag,

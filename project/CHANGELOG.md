@@ -2,6 +2,66 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-30 specification 1.58 identifiable-drag source freeze
+
+- Selected one genuinely new capability after the accepted known-orbit rung:
+  distinct constant linear drag per persistent object, inferred from the same
+  complete sixteen-frame public RGB-D history. Exactly two fixed-radius
+  objects remain visible, separated, non-contacting, and observed under known
+  calibrated camera motion; no learned parameter or optimizer update was
+  added.
+- Added differentiable bounded analytic drag identification with a 257-node
+  log grid and same-sized local refinement. Complete valid fits atomically own
+  anchor position, velocity, log drag, and diagonal variances; partial evidence
+  fails closed and pre-anchor behavior remains unchanged.
+- Added direct-from-anchor diagonal uncertainty propagation for public
+  multi-horizon rollout and exact same-source query-partition checks. Kept the
+  explicit limitation that arbitrary external sequential re-anchoring loses
+  induced covariance and is outside the claim.
+- Added exactly three conditional CPU float32 calibration buffers, strict
+  pre-mutation checkpoint validation, and a development-only cached rank-59
+  calibration rule. Position/velocity may deflate, drag stays at least one,
+  and the minimal deployed float32 triple is installed atomically once without
+  reconstructing or replaying an episode.
+- Added a seedless governed family with 64 conceptual ordinals per split:
+  four rational physical primitives x two drag-slot counterfactual roles x
+  eight camera strata. Odd-sixteenth phase offsets and inward drag shifts make
+  all 32 governed truth levels and protected joint traces disjoint while
+  retaining a truthful designed-interpolation limitation.
+- Froze independent formal certificate SHA-256
+  `588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
+  It covers 256 scenes/14,336 frames with zero governed public physics/render
+  calls, minimum 21-pixel support, `5.11001396 px` silhouette gap,
+  `1.37303865 m` world surface gap, `0.02090907 m` excitation, full visibility,
+  and zero events.
+- Added the canonical seedless ordinal capability/ledger harness. It binds a
+  fixed five-artifact inventory, live source/config/publication identity,
+  exact reviewed checkpoint/report/development-ledger hashes, aligned
+  four-ordinal batches, receipt-before-materialization, one-pass development,
+  and exactly-once selector -> confirmation -> final with crash-consistent
+  failed evidence.
+- Bound profile/harness/runner/tests SHA-256
+  `a22f364601b8f87cdec3fd6bff7d757f134867bf66d9fa176c1f2d881a700c45`,
+  `1a48832fb898b552a6f19cd2cadaa77634d02585db873145cb466b1111f01f56`,
+  `6838a2128dc07d65439811b8a789bcc89935ba7bb0eb5ed997629ab9794548db`,
+  and
+  `30a01c8df07a82923b96eb92911881a7190f2ad875c0073ade40565a7ce87335`;
+  protocol/gate-schema/artifact-schema SHA-256 are
+  `d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`,
+  `cb3a65efaa3cb06eb5eaa5bad0f556c41578d8250f805a4e3c314cfa0d22bb1d`,
+  and
+  `d2022f17aa805a9ff6b8ae65ce981f3d0c4f1fdbfbb53e08f69939a80d62eecc`.
+- Passed the `68`-test seed-free harness, guarded scene proof, focused core/
+  profile/checkpoint gates, and the complete pre-documentation repository gate
+  `1490 passed, 16 skipped in 781.56 s (0:13:01)`, plus Ruff, formatting,
+  compilation, exact critical-source rehashing, diff integrity, and independent
+  audits.
+- Advanced the authoritative contract/checkpoint metadata to specification
+  1.58 while retaining simulator `sphere_world_v7`. The canonical run root is
+  absent and every development, selector, confirmation, and final ordinal is
+  unopened. This is source/certificate evidence only; no accuracy,
+  calibration, protected-split, or acceptance claim exists.
+
 ### 2026-08-28 tracked repository-hygiene documentation repair
 
 - Reconciled the active architecture and roadmap with the accepted

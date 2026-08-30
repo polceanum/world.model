@@ -412,14 +412,58 @@ and is terminal. It is not an accepted rung, must not be revived or retried,
 and cannot be renamed as the next capability. Its historical material remains
 only as failure provenance.
 
-### 7. Next independent capability — not yet frozen
+### 7. Distinct per-object identifiable drag — source frozen; unopened
 
-No next active rung is selected or authorized by this document. It must add one
-genuinely new capability, freeze source/manifests/gates before access, preserve
-every accepted lower-rung gate, and remain distinct from the closed partial
-family. Candidates include identifiable drag, variable metric scale,
-variable-size sets, contact/material identification, actions/planning, or a
-new useful modality; listing them does not predeclare or authorize one.
+Specification 1.58 selects one genuinely new capability while leaving the
+accepted known-orbit scene otherwise unchanged: infer a different constant
+linear drag for each persistent object from the same sixteen public RGB-D
+frames. Exactly two fixed-radius objects remain fully visible, separated, and
+non-contacting under zero gravity and known calibrated camera extrinsics. No
+learned capacity, pose inference, intervention, new modality, or object-count
+change enters this rung.
+
+The estimator is a differentiable bounded analytic variable-profile fit with a
+257-node log-drag grid and same-sized local refinement. A complete valid fit
+atomically owns the anchor position, velocity, log drag, and their diagonal
+variances. Raw covariance remains diagnostic. Development may derive exactly
+three float32 uncertainty scales from cached scale-one sufficient evidence:
+scene-max errors, one-indexed rank 59 of 64, float64 target, upward float32
+ceiling, and the minimum `nextafter(+infinity)` result that passes deployed
+cached arithmetic. It may install the three values once and may not replay or
+reread an episode during calibration.
+
+The seedless family has 64 exact ordinals per split: four rational physical
+primitives x two drag-slot-swapped counterfactuals x eight camera strata. The
+four splits use distinct inward-shifted drag grids and odd-sixteenth camera
+offsets. All 32 truth values and protected combined traces are disjoint, but
+the designed nearby formulas make this interpolation evidence rather than iid
+or distribution-free generalization.
+
+The independent formal certificate covers all 256 scenes and 14,336 frames
+without governed public physics/render/perception/runtime calls. Minimum mask
+support is 21 pixels, silhouette gap `5.11001396 px`, world surface gap
+`1.37303865 m`, and excitation `0.02090907 m`; visibility is one and contacts
+are zero. The certificate SHA-256 is
+`588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
+
+Protocol SHA-256 is
+`d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`.
+Its exact 263-float surface gates point accuracy, both fixed-drag controls,
+coverage/proper score/sharpness, identity/counterfactual ownership, all clamp
+counts, gradients, resources, checkpoint state, analytic agreement, and the
+single-source multi-horizon uncertainty partition. The fixed artifact root is
+absent, every split is unopened, and no accuracy or calibration result exists.
+Development is authorized only after this exact tree is clean, committed,
+published, and equal to upstream; protected selector -> confirmation -> final
+requires external review of checkpoint, development report, and development
+ledger hashes.
+
+The pre-documentation full source gate is
+`1490 passed, 16 skipped in 781.56 s (0:13:01)`. This is source/certificate
+evidence only. Specification 1.57 remains the highest accepted rung until the
+unchanged governed protocol completes. Sequential external re-anchoring,
+full-covariance filtering, universal calibration, and all later capabilities
+remain explicitly unqualified.
 
 ### 8. Variable-size object sets
 

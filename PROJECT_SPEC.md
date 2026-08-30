@@ -3,9 +3,13 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.57
+**Version:** 1.58
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026
+**Latest amendment:** per-object identifiable linear drag, fit-owned calibrated
+anchor uncertainty, direct-anchor uncertainty propagation, seedless ordinal
+scene certification, and exactly-once source-freeze protocol amendments
+30 August 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -8712,6 +8716,243 @@ consumed.
 The failed partial-visibility family remains closed and must not be revived or
 retried.  Any next rung must introduce a genuinely new capability under its
 own pre-access source, manifest, gate, and evidence contract.
+
+# Part XLIX — Distinct Per-Object Identifiable Drag Under Known Camera Motion
+
+## 260. Freeze one new physical-parameter capability
+
+Specification 1.58 changes exactly one accepted capability.  The runtime must
+infer a distinct, constant linear-drag coefficient for each of the two
+persistent objects from the same sixteen complete public RGB-D observations
+used for state estimation.  Drag truth is never present in an
+`ObservationPacket`, measurement, belief update, rollout input, fixed-control
+anchor, or model checkpoint.  The only public inputs remain RGB, metric depth,
+the exact time-aligned known `world_from_camera`, intrinsics, image metadata,
+and timestamps.
+
+Every lower-rung restriction remains in force: exactly two fixed-radius
+spheres, full visibility, image separation, no contact or intervention, zero
+gravity, one known calibrated orbit, 20 Hz observations, and the existing
+parameter-free analytic dynamics.  Object count, occlusion, recovery,
+contact, restitution/friction, unknown camera pose, learned capacity, actions,
+planning, and added modalities do not change.  Enabled configuration rejects
+collision enforcement, nonzero external-impulse probability, and any scenario
+mixture other than the single inert `baseline` family.
+
+The governed family is seedless and addressed only by exact conceptual split
+plus ordinal `0--63`.  Each split contains four rational physical primitives,
+their exact two drag-slot-swapped counterfactual roles, and eight camera
+phase/direction strata.  Thus each split has 64 scenes and the complete family
+has 256 scenes.  Role twins retain identical initial geometry, velocity,
+camera, and palette; only which persistent object owns the low versus high
+drag changes.  This prevents geometry, colour, or camera phase from becoming a
+static drag-ownership cue.
+
+The four splits use inward-shifted rational drag grids and odd-sixteenth camera
+offsets:
+
+| split | low numerators / 200 | high numerators / 200 | camera offset |
+| --- | --- | --- | --- |
+| development | `9,16,23,30` | `44,51,58,65` | `pi/16` |
+| selector | `10,17,24,31` | `43,50,57,64` | `3pi/16` |
+| confirmation | `11,18,25,32` | `42,49,56,63` | `5pi/16` |
+| final | `12,19,26,33` | `41,48,55,62` | `7pi/16` |
+
+The exact source-owned pairing table, GF(4) primitive mapping, palette rule,
+camera directions, and rational initial states are authoritative.  All 32
+governed drag values are distinct across splits, span `0.045--0.325 /s`, stay
+at least `0.035 /s` inside the fitted `[0.01,0.36] /s` bounds, and have at
+least `0.06 /s` within-scene separation.  These nearby, formula-related
+holdouts establish deterministic interpolation evidence only.  They are not
+iid, exchangeable, or distribution-free samples.
+
+## 261. Analytic identification and three-scale uncertainty ownership
+
+`fit_free_motion_with_drag` performs differentiable bounded variable-profile
+inference over anchor position, anchor velocity, and log drag for each object.
+It uses all sixteen complete persistent-ID-aligned rows, a 257-node uniform
+log-drag grid, and a differentiable same-sized local refinement grid.  No
+argmin, detached mean, custom autograd, learned parameter, optimizer, or
+hidden estimator state is permitted.  Excitation, profile information,
+boundary mass, support, finiteness, and every solve must pass before evidence
+is valid.
+
+On the complete sixteenth row, valid fit-owned evidence atomically replaces
+that object's anchor position, velocity, log drag, and their configured
+diagonal variances.  Frames zero through fourteen retain the accepted direct
+metric-position behavior, so uncertainty calibration cannot change their
+association, Kalman gains, means, or history.  Partial per-axis or partial
+parameter evidence fails closed.  `ObjectBelief.log_drag` is the sole
+per-object parameter owner, and the existing analytic free-motion dynamics
+must consume it immediately.
+
+Raw profile and residual covariance is an estimator diagnostic, not calibrated
+uncertainty.  Development therefore begins with all three scale buffers equal
+to one and retains only ordered, scale-independent sufficient evidence from
+its one permitted pass.  For position, velocity, and drag separately, compute
+the maximum standardized error within each of the 64 scenes, sort ascending,
+and select one-indexed rank 59 for nominal central 90% coverage.  Divide by
+`1.6448536269514722`; position and velocity may deflate, while drag is bounded
+below by one.  Convert to the smallest finite float32 at or above the float64
+target, then use `nextafter(+infinity)` against a pure cached replica of the
+deployed float32 variance/log/clamp path until at least 59 of 64 scenes cover.
+The predecessor float, when one exists, must fail.  The three final scalars are
+installed in one atomic setter call with zero episode rereads or runtime
+replays.
+
+The checkpoint owns exactly those three CPU float32 scalar buffers—position,
+velocity, and drag uncertainty scale—for exactly 12 tensor bytes.  It owns no
+learned parameter, optimizer, scheduler, RNG state, or update, and remains at
+step zero.  Missing, extra, non-scalar, non-float32, non-CPU, partially
+present, or typed-coercive calibration state must reject before any destination
+model mutation.
+
+Public multi-horizon uncertainty is propagated directly from the same fitted
+anchor through the analytic drag Jacobians at each requested absolute query
+time.  The result must be invariant to how that one public multi-query request
+is partitioned.  A diagonal belief cannot retain induced position/velocity/
+drag cross-covariance across arbitrary external sequential re-anchoring, so no
+such invariant or universal calibrated-posterior claim is authorized.  Fixed
+drag `0.05` and `0.185 /s` controls start from the same fitted public anchor;
+they are metric-side controls and never receive simulator truth.
+
+## 262. Bind the independent formal scene certificate
+
+The formal certificate derives the entire governed family using direct
+float32 recurrence and independent ray/discriminant/winner arithmetic.  It
+must not call public `SphereWorld`, the public renderer, RGB-D perception, or
+`OnlineWorldModel` for a governed ordinal.  A separate already-consumed
+cardinal public-feasibility family verifies API equivalence but contributes no
+development, protected, calibration, or acceptance evidence.
+
+The frozen scene source and certificate SHA-256 are
+`b3b2e9a71c4020b27cb502f5b0a33b4e4d0174cba2073693b67c9c26c44a9bfd`
+and
+`588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
+Global metadata, physical, camera, raster, and combined trace SHA-256 are
+respectively
+`ad84b9227d7d189d6fa714c3e8366c82300527f57c250994a20a450c77470e2f`,
+`7ca9d199a524e23f68ecafbab616b4addd28ca44bf8f37c103339c9b530942cc`,
+`7a035e1df82b0cc6698be03b968c411215c048ba6a64fd65d75e0f66cd8e1db8`,
+`59d0284bb15701411c59eccfc48dde3e9d0e042ff013a0a5b6627a45b916be52`,
+and
+`229ce55076ef2a85ca775a736176e40b8202b34c5a5bcf8e719c09a91f18748d`.
+Per-split physical, camera, raster, and combined hashes, exact uniqueness
+counts, and cross-split disjointness are part of the certificate and must be
+validated literally.
+
+Across all 14,336 governed frames the minimum full-mask support is 21 pixels,
+continuous silhouette gap is `5.11001396 px`, continuous image boundary is
+`14.36993694 px`, and visible fraction is one with zero overlap.  Across every
+physical substep the minimum world surface gap is `1.37303865 m` and minimum
+world boundary is `0.225999996 m`; all contact, collision, impulse, and sleep
+events are zero.  Minimum exact fit excitation is `0.02090907 m` against the
+`0.015 m` gate.  Camera angle per frame is
+`0.01199530--0.01201516 rad`, translation is
+`0.05519944--0.05519988 m`, and maximum calibration error is
+`1.07033e-6`.  The certificate binds camera, renderer, and physics source
+hashes and proves zero governed public-physics and public-renderer calls.
+
+## 263. Freeze the ordinal access, calibration, and qualification protocol
+
+The canonical profile SHA-256 is
+`a22f364601b8f87cdec3fd6bff7d757f134867bf66d9fa176c1f2d881a700c45`.
+Harness, runner, and harness-test SHA-256 are
+`1a48832fb898b552a6f19cd2cadaa77634d02585db873145cb466b1111f01f56`,
+`6838a2128dc07d65439811b8a789bcc89935ba7bb0eb5ed997629ab9794548db`,
+and
+`30a01c8df07a82923b96eb92911881a7190f2ad875c0073ade40565a7ce87335`.
+Canonical protocol, exact 263-float gate schema, and artifact-schema bundle
+SHA-256 are
+`d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`,
+`cb3a65efaa3cb06eb5eaa5bad0f556c41578d8250f805a4e3c314cfa0d22bb1d`,
+and
+`d2022f17aa805a9ff6b8ae65ce981f3d0c4f1fdbfbb53e08f69939a80d62eecc`.
+All ten behavior-owning source files rehash exactly to the explicit harness
+constants.  Architecture attempt 1 is the only allowed attempt for this
+family; optimizer updates are zero.
+
+The canonical ordinal manifest hashes are:
+
+| split | ordinals | manifest SHA-256 |
+| --- | --- | --- |
+| development | `0--63` | `4488fa075ebe48bb47ce6e5a8d976c1e02441658798a93ca5fa636c21bb80c10` |
+| selector | `0--63` | `49e52a2629f3baa6a32e0c6f7d5731cf291f7e1fd6303c8a044ff33e02deda8f` |
+| confirmation | `0--63` | `3d205b92f4cdfa91b5909420c8966351f3e6077f265522e34e85425f880e339a` |
+| final | `0--63` | `584b9ecbcf04151713bc67fba954410f006c4a73cac57c874e35037acf5154f3` |
+
+The sole artifact root is
+`runs/rgbd_two_visible_orbital_camera_identifiable_drag_v1` and may contain
+exactly five single-link regular files: development report, development access
+ledger, restricted checkpoint, qualification report, and qualification access
+ledger.  Native lexical paths, non-link ancestors, exact stage inventory,
+stable bytes/inodes, source/config/publication identity, one-thread execution,
+and durable receipt-before-materialization checks apply at every raw
+constructor/evaluator boundary.  A ledger-owned registered capability admits
+one aligned four-ordinal batch at a time; every ordinal must be constructed,
+evaluated, hashed, and durably completed before later access.  No raw scene is
+retained or replayed.
+
+Development may begin exactly once only after the complete specification-1.58
+tree is clean, committed, has a configured upstream, and `HEAD` equals the
+published upstream with zero commits ahead or behind.  It evaluates each of
+the 64 ordinals once with all three scales equal to one, computes the cached
+rank-59 calibration, installs the three final buffers atomically once, and
+derives calibrated metrics algebraically from cached sufficient evidence.  It
+does not reconstruct, render, perceive, ingest, or reread an episode during
+calibration.
+
+Protected authorization requires independently reviewed exact SHA-256 values
+for the restricted checkpoint, development report, and development access
+ledger.  The protected ledger then admits selector -> confirmation -> final
+exactly once and in order, rereading and validating the reviewed bundle at
+every live boundary.  Any failure stops permanently with every later split
+unopened.  Terminal report bytes must exist and validate before the terminal
+ledger receipt.  Crash windows must never bind a stale passing report into a
+failed ledger or preserve authority after an exception.
+
+Each split must contain exactly 64 scene rows and 128 valid object fits.  The
+263 finite-float surface gates current position, velocity, drag, all five
+horizons, both fixed-drag controls, per-split and pooled coverage, Gaussian
+proper score, sharpness, RMS standardized error, identity/association,
+counterfactual swap, excitation/information/boundary mass, direct-anchor
+variance partitions, analytic and semigroup agreement, exact history/grid/
+predict counts, all variance clamps, three-buffer state, resources, and VJPs.
+The first four-scene batch of each split audits RGB, depth, and
+`world_from_camera` reach for current log drag, calibrated log-drag variance,
+and two-second position variance.  Every history frame must contribute,
+cross-scene and post-history coupling must be zero, and the homogeneous
+transform row must have zero gradient.
+
+## 264. Source evidence and unopened boundary
+
+The seed-free harness suite passes `68` tests.  Scene verification passes
+`12` fast tests plus its guarded exhaustive proof.  Core/profile/checkpoint
+focused gates and the complete pre-documentation repository gate pass; the
+exact latter result is
+`1490 passed, 16 skipped in 781.56 s (0:13:01)`.  Ruff lint, Ruff formatting,
+compilation, critical-source rehashing, and diff integrity pass, as do
+independent science, core, and security audits.
+
+These results establish implementation, certificate, and source-freeze
+readiness only.  At this boundary the fixed artifact root is absent; no
+governed access ledger has recorded an ordinal and no runtime episode has been
+materialized through the private constructor/evaluator boundary.  The
+independent formal certificate enumeration above is source proof, not episode
+access or result evidence.  No calibration scalar, checkpoint, report, ledger,
+accuracy metric, protected result, or acceptance evidence exists.  The
+already-consumed cardinal public-feasibility numbers informed deliberately
+broad thresholds but are not formal evidence.
+
+Specification 1.58 therefore authorizes no scientific acceptance by itself.
+Only a later exact-source development pass, independent three-hash review, and
+the unchanged exactly-once protected ladder may support a narrow acceptance
+section.  Until then, specification 1.57's known-calibrated orbital-camera
+result remains the highest accepted claim.  The new source does not establish
+universal parameter identifiability, iid or distribution-free calibration,
+full-covariance filtering, arbitrary repeated re-anchoring, contacts,
+occlusion, variable count, pose inference, learned capacity, planning, or
+general world-model convergence.
 
 # Closing directive
 

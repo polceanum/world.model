@@ -8,6 +8,7 @@ import torch
 from torch import Tensor
 
 from world_model.dynamics import FreeMotionFitResult, fit_free_motion
+from world_model.identification import AnalyticDragFitResult, fit_free_motion_with_drag
 from world_model.observations.base import ModalityHistory
 
 
@@ -361,6 +362,51 @@ class RGBDTemporalPositionHistory(ModalityHistory):
         sequence_valid = (
             self.sample_mask.sum(dim=-1).ge(minimum_support)
             & self.sample_mask.all(dim=-1)
+            & self.valid_mask.all(dim=-1)
+            & (span >= minimum_dt)
+            & fit.valid
+            & (self.object_ids >= 0)
+        )
+        return fit, sequence_valid
+
+    def fit_with_drag(
+        self,
+        *,
+        gravity: Tensor,
+        drag_bounds: tuple[float, float],
+        grid_points: int,
+        position_noise_floor: float,
+        minimum_support: int,
+        minimum_dt: float,
+        conditioning_limit: float,
+        minimum_excitation: float,
+        maximum_boundary_mass: float,
+        minimum_profile_information: float,
+    ) -> tuple[AnalyticDragFitResult, Tensor]:
+        """Jointly fit anchor state and per-object drag, failing closed by ID."""
+
+        self._validate_storage()
+        if minimum_support != self.history_size:
+            raise ValueError("RGB-D drag fitting requires every declared history row")
+        if not torch.isfinite(torch.as_tensor(minimum_dt)) or minimum_dt <= 0.0:
+            raise ValueError("minimum_dt must be finite and positive")
+        fit = fit_free_motion_with_drag(
+            self.positions.permute(0, 2, 1, 3),
+            self.timestamps.permute(0, 2, 1),
+            gravity=gravity,
+            drag_bounds=drag_bounds,
+            anchor_time=self.timestamps[..., -1],
+            grid_points=grid_points,
+            position_noise_floor=position_noise_floor,
+            minimum_support=self.history_size,
+            conditioning_limit=conditioning_limit,
+            minimum_excitation=minimum_excitation,
+            maximum_boundary_mass=maximum_boundary_mass,
+            minimum_profile_information=minimum_profile_information,
+        )
+        span = self.timestamps[..., -1] - self.timestamps[..., 0]
+        sequence_valid = (
+            self.sample_mask.all(dim=-1)
             & self.valid_mask.all(dim=-1)
             & (span >= minimum_dt)
             & fit.valid

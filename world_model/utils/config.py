@@ -227,6 +227,18 @@ class RGBDConfig:
     temporal_velocity_variance_floor: float = 1.0e-6
     temporal_velocity_variance_ceiling: float = 1.0e-2
     fit_conditioning_limit: float = 100.0
+    # Opt-in per-object analytic drag identification.  Disabled is the exact
+    # historical known-drag bridge and owns no calibration buffer/state.
+    temporal_drag_estimation_enabled: bool = False
+    temporal_drag_minimum: float = 0.01
+    temporal_drag_maximum: float = 0.36
+    temporal_drag_grid_points: int = 257
+    temporal_drag_noise_floor_m: float = 2.0e-5
+    temporal_drag_minimum_excitation_m: float = 0.015
+    temporal_drag_minimum_profile_information: float = 1.0
+    temporal_drag_maximum_boundary_mass: float = 0.01
+    temporal_drag_log_parameter_variance_floor: float = 1.0e-4
+    temporal_drag_log_parameter_variance_ceiling: float = 0.25
 
 
 @dataclass(frozen=True)
@@ -707,6 +719,8 @@ class OrpheusConfig:
             raise ValueError("model.rgb.global_every_steps must be a positive integer")
         if not isinstance(model.rgbd.enabled, bool):
             raise ValueError("model.rgbd.enabled must be boolean")
+        if not isinstance(model.rgbd.temporal_drag_estimation_enabled, bool):
+            raise ValueError("model.rgbd.temporal_drag_estimation_enabled must be boolean")
         if (
             isinstance(model.rgbd.global_every_steps, bool)
             or not isinstance(model.rgbd.global_every_steps, int)
@@ -752,6 +766,25 @@ class OrpheusConfig:
                 model.rgbd.temporal_velocity_variance_ceiling,
             ),
             ("fit_conditioning_limit", model.rgbd.fit_conditioning_limit),
+            ("temporal_drag_minimum", model.rgbd.temporal_drag_minimum),
+            ("temporal_drag_maximum", model.rgbd.temporal_drag_maximum),
+            ("temporal_drag_noise_floor_m", model.rgbd.temporal_drag_noise_floor_m),
+            (
+                "temporal_drag_minimum_excitation_m",
+                model.rgbd.temporal_drag_minimum_excitation_m,
+            ),
+            (
+                "temporal_drag_minimum_profile_information",
+                model.rgbd.temporal_drag_minimum_profile_information,
+            ),
+            (
+                "temporal_drag_log_parameter_variance_floor",
+                model.rgbd.temporal_drag_log_parameter_variance_floor,
+            ),
+            (
+                "temporal_drag_log_parameter_variance_ceiling",
+                model.rgbd.temporal_drag_log_parameter_variance_ceiling,
+            ),
         ):
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0.0:
                 raise ValueError(f"model.rgbd.{name} must be finite and positive")
@@ -780,6 +813,32 @@ class OrpheusConfig:
             raise ValueError("model.rgbd temporal velocity variance bounds must be ordered")
         if model.rgbd.fit_conditioning_limit <= 1.0:
             raise ValueError("model.rgbd.fit_conditioning_limit must be greater than one")
+        if model.rgbd.temporal_drag_minimum >= model.rgbd.temporal_drag_maximum:
+            raise ValueError("model.rgbd temporal drag bounds must be strictly ordered")
+        if (
+            isinstance(model.rgbd.temporal_drag_grid_points, bool)
+            or not isinstance(model.rgbd.temporal_drag_grid_points, int)
+            or model.rgbd.temporal_drag_grid_points < 3
+            or model.rgbd.temporal_drag_grid_points % 2 == 0
+        ):
+            raise ValueError(
+                "model.rgbd.temporal_drag_grid_points must be an odd integer of at least three"
+            )
+        if (
+            isinstance(model.rgbd.temporal_drag_maximum_boundary_mass, bool)
+            or not isinstance(
+                model.rgbd.temporal_drag_maximum_boundary_mass,
+                (int, float),
+            )
+            or not math.isfinite(float(model.rgbd.temporal_drag_maximum_boundary_mass))
+            or not 0.0 <= model.rgbd.temporal_drag_maximum_boundary_mass < 1.0
+        ):
+            raise ValueError("model.rgbd.temporal_drag_maximum_boundary_mass must lie in [0,1)")
+        if (
+            model.rgbd.temporal_drag_log_parameter_variance_ceiling
+            < model.rgbd.temporal_drag_log_parameter_variance_floor
+        ):
+            raise ValueError("model.rgbd temporal drag variance bounds must be ordered")
         if model.rgbd.enabled:
             if (
                 model.max_objects != model.rgbd.proposal_count
@@ -798,11 +857,82 @@ class OrpheusConfig:
                     "the first model.rgbd bridge requires its checkpointed world_radius "
                     "to equal the fixed simulator radius"
                 )
-            if simulator.drag_range != (model.rgbd.linear_drag, model.rgbd.linear_drag):
+            if model.rgbd.temporal_drag_estimation_enabled:
+                if model.rgbd.proposal_count != 2:
+                    raise ValueError(
+                        "enabled RGB-D temporal drag estimation requires the accepted "
+                        "exactly two-object family"
+                    )
+                if not (
+                    model.rgbd.temporal_drag_minimum
+                    < simulator.drag_range[0]
+                    < simulator.drag_range[1]
+                    < model.rgbd.temporal_drag_maximum
+                ):
+                    raise ValueError(
+                        "enabled RGB-D temporal drag estimation requires a variable simulator "
+                        "drag range strictly inside the estimator bounds"
+                    )
+                if not (
+                    model.rgbd.temporal_drag_minimum
+                    < model.rgbd.linear_drag
+                    < model.rgbd.temporal_drag_maximum
+                ):
+                    raise ValueError(
+                        "enabled RGB-D temporal drag estimation requires its initial "
+                        "linear_drag prior strictly inside the estimator bounds"
+                    )
+                if (
+                    type(simulator.gravity) is not tuple
+                    or len(simulator.gravity) != 3
+                    or any(type(value) is not float or value != 0.0 for value in simulator.gravity)
+                ):
+                    raise ValueError(
+                        "enabled RGB-D temporal drag estimation initially requires exact "
+                        "float zero gravity"
+                    )
+                if simulator.ensure_collision is not False:
+                    raise ValueError(
+                        "enabled RGB-D temporal drag estimation requires "
+                        "simulator.ensure_collision=false"
+                    )
+                if (
+                    type(simulator.external_impulse_probability) is not float
+                    or simulator.external_impulse_probability != 0.0
+                ):
+                    raise ValueError(
+                        "enabled RGB-D temporal drag estimation requires "
+                        "simulator.external_impulse_probability=0.0 as an exact float"
+                    )
+                if simulator.scenario_mixture != ("baseline",):
+                    raise ValueError(
+                        "enabled RGB-D temporal drag estimation requires exactly the "
+                        "baseline simulator scenario"
+                    )
+                if not model.dynamics.analytic_free_motion_only:
+                    raise ValueError(
+                        "enabled RGB-D temporal drag estimation requires "
+                        "analytic_free_motion_only dynamics"
+                    )
+                if model.identification.enabled:
+                    raise ValueError(
+                        "enabled RGB-D temporal drag estimation requires the recurrent "
+                        "identifier to be disabled"
+                    )
+                if model.rgbd.temporal_history_size != 16 or model.rgbd.temporal_min_samples != 16:
+                    raise ValueError(
+                        "enabled RGB-D temporal drag estimation requires exactly 16 complete rows"
+                    )
+            elif simulator.drag_range != (
+                model.rgbd.linear_drag,
+                model.rgbd.linear_drag,
+            ):
                 raise ValueError(
                     "the first model.rgbd bridge requires its checkpointed linear_drag "
                     "to equal the fixed simulator drag"
                 )
+        elif model.rgbd.temporal_drag_estimation_enabled:
+            raise ValueError("temporal drag estimation requires model.rgbd.enabled=true")
         if (
             not math.isfinite(model.rgb.temporal_velocity_min_dt)
             or model.rgb.temporal_velocity_min_dt <= 0

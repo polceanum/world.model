@@ -116,6 +116,30 @@ _RGB_LEGACY_DEFAULT_FIELDS = (
     "structured_disc_position_confidence",
 )
 
+
+def _typed_equal(left: object, right: object) -> bool:
+    """Compare resolved configuration values without Python numeric coercion."""
+
+    if isinstance(left, Mapping) or isinstance(right, Mapping):
+        if not isinstance(left, Mapping) or not isinstance(right, Mapping):
+            return False
+        if set(left) != set(right):
+            return False
+        return all(_typed_equal(left[key], right[key]) for key in left)
+    if isinstance(left, (list, tuple)) or isinstance(right, (list, tuple)):
+        if type(left) is not type(right):
+            return False
+        assert isinstance(left, (list, tuple))
+        assert isinstance(right, (list, tuple))
+        return len(left) == len(right) and all(
+            _typed_equal(left_value, right_value)
+            for left_value, right_value in zip(left, right, strict=True)
+        )
+    if type(left) is not type(right):
+        return False
+    return bool(left == right)
+
+
 _DYNAMICS_LEGACY_DEFAULTS = {
     # These are the actual resolver/config defaults used before each field was
     # persisted. They deliberately do not track today's corrected reference
@@ -317,6 +341,27 @@ def _model_checkpoint_semantics(value: object) -> object:
             rgbd_defaults.maximum_surface_radius_relative_error,
         )
         normalized_rgbd.setdefault("linear_drag", rgbd_defaults.linear_drag)
+        drag_fields = (
+            "temporal_drag_estimation_enabled",
+            "temporal_drag_minimum",
+            "temporal_drag_maximum",
+            "temporal_drag_grid_points",
+            "temporal_drag_noise_floor_m",
+            "temporal_drag_minimum_excitation_m",
+            "temporal_drag_minimum_profile_information",
+            "temporal_drag_maximum_boundary_mass",
+            "temporal_drag_log_parameter_variance_floor",
+            "temporal_drag_log_parameter_variance_ceiling",
+        )
+        for field_name in drag_fields:
+            normalized_rgbd.setdefault(field_name, getattr(rgbd_defaults, field_name))
+        # The disabled observer constructs no drag estimator or calibration
+        # buffer.  Its numerical controls are therefore checkpoint-inert and
+        # normalize to their historical defaults; once enabled, every value is
+        # an exact runtime semantic and remains in the strict comparison.
+        if normalized_rgbd["temporal_drag_estimation_enabled"] is False:
+            for field_name in drag_fields[1:]:
+                normalized_rgbd[field_name] = getattr(rgbd_defaults, field_name)
         model["rgbd"] = normalized_rgbd
     rgb = model.get("rgb")
     if isinstance(rgb, Mapping):
@@ -426,12 +471,14 @@ def validate_checkpoint_config(
         raise ValueError("checkpoint does not contain a resolved config mapping")
     requested = config.to_dict()
     mismatches: list[str] = []
-    if _model_checkpoint_semantics(checkpoint_config.get("model")) != (
-        _model_checkpoint_semantics(requested["model"])
+    if not _typed_equal(
+        _model_checkpoint_semantics(checkpoint_config.get("model")),
+        _model_checkpoint_semantics(requested["model"]),
     ):
         mismatches.append("model")
-    if _runtime_checkpoint_semantics(checkpoint_config.get("runtime")) != (
-        _runtime_checkpoint_semantics(requested["runtime"])
+    if not _typed_equal(
+        _runtime_checkpoint_semantics(checkpoint_config.get("runtime")),
+        _runtime_checkpoint_semantics(requested["runtime"]),
     ):
         mismatches.append("runtime")
     checkpoint_simulator = checkpoint_config.get("simulator")
@@ -440,7 +487,10 @@ def validate_checkpoint_config(
     else:
         requested_simulator = requested["simulator"]
         for field_name in _SIMULATOR_COMPATIBILITY_FIELDS:
-            if checkpoint_simulator.get(field_name) != requested_simulator.get(field_name):
+            if not _typed_equal(
+                checkpoint_simulator.get(field_name),
+                requested_simulator.get(field_name),
+            ):
                 mismatches.append(f"simulator.{field_name}")
     if mismatches:
         raise ValueError("checkpoint configuration is incompatible for: " + ", ".join(mismatches))
@@ -482,10 +532,11 @@ def _validate_attention_depth_growth_config(
     checkpoint_model["dynamics"] = checkpoint_dynamics
     requested_model["dynamics"] = requested_dynamics
     mismatches: list[str] = []
-    if checkpoint_model != requested_model:
+    if not _typed_equal(checkpoint_model, requested_model):
         mismatches.append("model except attention_layers")
-    if _runtime_checkpoint_semantics(checkpoint_config.get("runtime")) != (
-        _runtime_checkpoint_semantics(requested["runtime"])
+    if not _typed_equal(
+        _runtime_checkpoint_semantics(checkpoint_config.get("runtime")),
+        _runtime_checkpoint_semantics(requested["runtime"]),
     ):
         mismatches.append("runtime")
     checkpoint_simulator = checkpoint_config.get("simulator")
@@ -494,7 +545,10 @@ def _validate_attention_depth_growth_config(
     else:
         requested_simulator = requested["simulator"]
         for field_name in _SIMULATOR_COMPATIBILITY_FIELDS:
-            if checkpoint_simulator.get(field_name) != requested_simulator.get(field_name):
+            if not _typed_equal(
+                checkpoint_simulator.get(field_name),
+                requested_simulator.get(field_name),
+            ):
                 mismatches.append(f"simulator.{field_name}")
     if mismatches:
         raise ValueError(
@@ -569,7 +623,26 @@ def _resume_config_differences(
                     )
                 )
         return differences
-    if checkpoint != requested:
+    if isinstance(checkpoint, (list, tuple)) or isinstance(requested, (list, tuple)):
+        if type(checkpoint) is not type(requested):
+            return [f"{path}: checkpoint={checkpoint!r}, requested={requested!r}"]
+        assert isinstance(checkpoint, (list, tuple))
+        assert isinstance(requested, (list, tuple))
+        differences: list[str] = []
+        if len(checkpoint) != len(requested):
+            return [f"{path}: checkpoint={checkpoint!r}, requested={requested!r}"]
+        for index, (checkpoint_value, requested_value) in enumerate(
+            zip(checkpoint, requested, strict=True)
+        ):
+            differences.extend(
+                _resume_config_differences(
+                    checkpoint_value,
+                    requested_value,
+                    path=f"{path}[{index}]",
+                )
+            )
+        return differences
+    if not _typed_equal(checkpoint, requested):
         return [f"{path}: checkpoint={checkpoint!r}, requested={requested!r}"]
     return []
 
@@ -755,6 +828,10 @@ def checkpoint_payload(
         ),
     }
     _assert_finite_tensor_tree(payload["model_state"], root="model_state")
+    _assert_valid_uncertainty_scales(
+        payload["model_state"],
+        target_state=model.state_dict(),
+    )
     if payload["optimizer_state"] is not None:
         _assert_finite_tensor_tree(
             payload["optimizer_state"],
@@ -801,6 +878,115 @@ def _assert_finite_tensor_tree(value: Any, *, root: str) -> None:
             if not bool(torch.isfinite(tensor).all()):
                 raise FloatingPointError(f"tensor state {name!r} contains NaN or Inf")
         raise AssertionError("nonfinite tensor group did not identify its offending tensor")
+
+
+_UNCERTAINTY_SCALE_LEAVES = frozenset(
+    {
+        "position_uncertainty_scale",
+        "velocity_uncertainty_scale",
+        "drag_uncertainty_scale",
+    }
+)
+
+
+def _uncertainty_scale_keys(model_state: Mapping[Any, Any]) -> set[str]:
+    """Return every declared or calibration-shaped persistent state key."""
+
+    return {
+        name
+        for name in model_state
+        if isinstance(name, str) and name.rpartition(".")[2].endswith("_uncertainty_scale")
+    }
+
+
+def _assert_exact_uncertainty_scale_group(
+    model_state: Mapping[Any, Any],
+    *,
+    keys: set[str],
+    role: str,
+) -> None:
+    if not keys:
+        return
+    prefixes = {name.rpartition(".")[0] for name in keys}
+    leaves = {name.rpartition(".")[2] for name in keys}
+    if len(prefixes) != 1 or leaves != _UNCERTAINTY_SCALE_LEAVES or len(keys) != 3:
+        raise ValueError(
+            f"{role} uncertainty calibration state must contain exactly one three-scale "
+            "position/velocity/drag group"
+        )
+    for name in sorted(keys):
+        value = model_state[name]
+        if not isinstance(value, Tensor):
+            raise TypeError(f"{role} uncertainty scale {name!r} must be a tensor")
+        if value.dtype != torch.float32 or value.ndim != 0:
+            raise ValueError(f"{role} uncertainty scale {name!r} must be a scalar float32 tensor")
+        squared = value.square()
+        if (
+            not bool(torch.isfinite(value))
+            or not bool(value > 0.0)
+            or not bool(torch.isfinite(squared))
+            or not bool(squared > 0.0)
+        ):
+            raise ValueError(
+                f"{role} uncertainty scale {name!r} must remain finite and positive when squared"
+            )
+
+
+def _assert_valid_uncertainty_scales(
+    model_state: Any,
+    *,
+    target_state: Mapping[Any, Any],
+) -> None:
+    """Require exact source/target calibration state before any tensor copy."""
+
+    if not isinstance(model_state, Mapping):
+        raise TypeError("model_state must be a mapping")
+    source_keys = _uncertainty_scale_keys(model_state)
+    target_keys = _uncertainty_scale_keys(target_state)
+    _assert_exact_uncertainty_scale_group(
+        target_state,
+        keys=target_keys,
+        role="target",
+    )
+    _assert_exact_uncertainty_scale_group(
+        model_state,
+        keys=source_keys,
+        role="checkpoint",
+    )
+    if source_keys != target_keys:
+        missing = sorted(target_keys - source_keys)
+        extra = sorted(source_keys - target_keys)
+        raise ValueError(
+            "checkpoint uncertainty calibration keys do not exactly match the target "
+            f"model (missing={missing}, extra={extra})"
+        )
+
+
+def _assert_strict_model_state_compatible(
+    model_state: Mapping[Any, Any],
+    *,
+    target_state: Mapping[str, Tensor],
+) -> None:
+    """Preflight strict state keys and shapes before ``load_state_dict`` copies."""
+
+    source_keys = set(model_state)
+    target_keys = set(target_state)
+    if source_keys != target_keys:
+        missing = sorted(target_keys - source_keys)
+        extra = sorted(source_keys - target_keys, key=str)
+        raise RuntimeError(
+            "checkpoint model keys do not exactly match the target model "
+            f"(missing={missing}, extra={extra})"
+        )
+    for name in sorted(target_keys):
+        value = model_state[name]
+        if not isinstance(value, Tensor):
+            raise TypeError(f"checkpoint model state {name!r} must be a tensor")
+        if value.shape != target_state[name].shape:
+            raise RuntimeError(
+                f"checkpoint model state {name!r} has shape {tuple(value.shape)}, "
+                f"expected {tuple(target_state[name].shape)}"
+            )
 
 
 def _assert_valid_optimizer_steps(value: Any, *, root: str) -> None:
@@ -906,6 +1092,15 @@ def load_checkpoint(
     if missing:
         raise ValueError(f"Checkpoint is missing fields: {sorted(missing)}")
     _assert_finite_tensor_tree(payload["model_state"], root="model_state")
+    target_state = model.state_dict()
+    _assert_valid_uncertainty_scales(
+        payload["model_state"],
+        target_state=target_state,
+    )
+    _assert_strict_model_state_compatible(
+        payload["model_state"],
+        target_state=target_state,
+    )
     if payload.get("optimizer_state") is not None:
         _assert_finite_tensor_tree(
             payload["optimizer_state"],
@@ -1056,6 +1251,10 @@ def load_model_weights(
     if missing:
         raise ValueError(f"Checkpoint is missing fields: {sorted(missing)}")
     _assert_finite_tensor_tree(payload["model_state"], root="model_state")
+    _assert_valid_uncertainty_scales(
+        payload["model_state"],
+        target_state=model.state_dict(),
+    )
     if expected_config is not None:
         validate_checkpoint_config(payload, expected_config)
     source_state = payload["model_state"]

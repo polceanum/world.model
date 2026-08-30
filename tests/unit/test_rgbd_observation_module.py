@@ -184,6 +184,39 @@ def test_rgbd_measurement_is_raw_world_position_and_preserves_rgb_depth_gradient
     assert depth_gradient.abs().sum() > 0.0
 
 
+def test_development_scales_leave_pre_fit_metric_measurement_bitwise_unchanged() -> None:
+    unit = RGBDObservationModule(RGBDObservationConfig(temporal_drag_estimation_enabled=True))
+    deflated = RGBDObservationModule(RGBDObservationConfig(temporal_drag_estimation_enabled=True))
+    deflated.set_development_uncertainty_scales(
+        position=0.125,
+        velocity=0.25,
+        drag=1.5,
+    )
+    packet = _packet()
+
+    unit_measurement = unit.initialise_measurements([packet], context=object())
+    deflated_measurement = deflated.initialise_measurements([packet], context=object())
+
+    torch.testing.assert_close(
+        deflated_measurement.values,
+        unit_measurement.values,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        deflated_measurement.log_variance,
+        unit_measurement.log_variance,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        deflated_measurement.auxiliary["world_position_log_variance"],
+        deflated_measurement.log_variance,
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
 def test_missing_depth_emits_no_valid_measurement_and_never_falls_back_to_rgb() -> None:
     module = RGBDObservationModule()
     packet = _packet(missing_depth=True, requires_grad=True)
@@ -320,6 +353,9 @@ def test_birth_assignment_seeds_frame_zero_and_uniform_fit_emits_velocity_only()
     assert evidence.position is None
     assert evidence.position_log_variance is None
     assert evidence.position_valid_mask is None
+    assert evidence.log_drag is None
+    assert evidence.log_drag_log_variance is None
+    assert evidence.drag_valid_mask is None
     _, expected_velocity = free_motion_position_velocity(
         initial_position,
         initial_velocity,

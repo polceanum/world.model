@@ -273,11 +273,13 @@ class DirectVelocityEvidence:
     """Explicit world-frame kinematic evidence in persistent belief-slot order.
 
     Velocity remains required for compatibility with the original temporal
-    observer.  A modality may additionally provide a position estimate derived
-    from a bounded causal trajectory history.  The optional position fields
-    are kept on the same typed evidence object so the runtime applies both
-    corrections atomically to ``WorldBelief`` rather than maintaining a second
-    physical state.
+    observer.  A modality may additionally provide a position estimate or a
+    per-object log-drag estimate derived from a bounded causal trajectory
+    history.  Optional field groups stay on the same typed evidence object so
+    the runtime applies all supported corrections atomically to ``WorldBelief``
+    rather than maintaining a second physical state.  As elsewhere in the
+    belief API, ``log_drag_log_variance`` is the logarithm of an actual
+    parameter variance.
     """
 
     velocity: Tensor
@@ -288,6 +290,9 @@ class DirectVelocityEvidence:
     position_log_variance: Tensor | None = None
     position_valid_mask: Tensor | None = None
     axis_valid_mask: Tensor | None = None
+    log_drag: Tensor | None = None
+    log_drag_log_variance: Tensor | None = None
+    drag_valid_mask: Tensor | None = None
 
     def validate(self) -> None:
         if self.velocity.ndim != 3 or self.velocity.shape[-1] != 3:
@@ -336,6 +341,45 @@ class DirectVelocityEvidence:
                 raise ValueError("direct position contains NaN or Inf")
             if not torch.isfinite(self.position_log_variance).all():
                 raise ValueError("direct position log_variance contains NaN or Inf")
+        drag_fields = (
+            self.log_drag,
+            self.log_drag_log_variance,
+            self.drag_valid_mask,
+        )
+        if any(field is not None for field in drag_fields):
+            if any(field is None for field in drag_fields):
+                raise ValueError("direct drag evidence fields must be provided together")
+            assert self.log_drag is not None
+            assert self.log_drag_log_variance is not None
+            assert self.drag_valid_mask is not None
+            expected_drag_shape = (*self.valid_mask.shape, 1)
+            if self.log_drag.shape != expected_drag_shape:
+                raise ValueError("direct log_drag must have shape [B,N,1]")
+            if self.log_drag_log_variance.shape != expected_drag_shape:
+                raise ValueError("direct log_drag_log_variance must have shape [B,N,1]")
+            if self.drag_valid_mask.shape != self.valid_mask.shape:
+                raise ValueError("direct drag_valid_mask must have shape [B,N]")
+            if self.drag_valid_mask.dtype != torch.bool:
+                raise TypeError("direct drag_valid_mask must be torch.bool")
+            if not torch.equal(self.drag_valid_mask, self.valid_mask):
+                raise ValueError(
+                    "direct drag and velocity validity must be an all-or-nothing triple"
+                )
+            if not torch.equal(
+                self.drag_valid_mask,
+                self.resolved_axis_valid_mask().all(dim=-1),
+            ):
+                raise ValueError("direct drag validity requires all three velocity axes")
+            if self.position is None or self.position_valid_mask is None:
+                raise ValueError("direct drag validity requires fit-owned position evidence")
+            if not torch.equal(self.drag_valid_mask, self.position_valid_mask):
+                raise ValueError(
+                    "direct drag and position validity must be an all-or-nothing triple"
+                )
+            if not torch.isfinite(self.log_drag).all():
+                raise ValueError("direct log_drag contains NaN or Inf")
+            if not torch.isfinite(self.log_drag_log_variance).all():
+                raise ValueError("direct log_drag_log_variance contains NaN or Inf")
 
     def resolved_axis_valid_mask(self) -> Tensor:
         """Return component support while preserving the legacy object mask.
@@ -370,5 +414,14 @@ class DirectVelocityEvidence:
             ),
             axis_valid_mask=(
                 self.axis_valid_mask.detach() if self.axis_valid_mask is not None else None
+            ),
+            log_drag=(self.log_drag.detach() if self.log_drag is not None else None),
+            log_drag_log_variance=(
+                self.log_drag_log_variance.detach()
+                if self.log_drag_log_variance is not None
+                else None
+            ),
+            drag_valid_mask=(
+                self.drag_valid_mask.detach() if self.drag_valid_mask is not None else None
             ),
         )

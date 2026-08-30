@@ -1,5 +1,9 @@
 """Online physical-parameter observability and bounded identification."""
 
+from world_model.identification.analytic_drag import (
+    AnalyticDragFitResult,
+    fit_free_motion_with_drag,
+)
 from world_model.identification.local_optimiser import (
     LocalOptimiserConfig,
     LocalParameterOptimiser,
@@ -22,6 +26,7 @@ from world_model.identification.recurrent_updater import (
 )
 
 __all__ = [
+    "AnalyticDragFitResult",
     "LocalOptimiserConfig",
     "LocalParameterOptimiser",
     "Observability",
@@ -32,6 +37,7 @@ __all__ = [
     "ParameterUpdateDiagnostics",
     "ParameterUpdaterConfig",
     "RecurrentParameterUpdater",
+    "fit_free_motion_with_drag",
     "physical_parameter_vector",
     "project_parameter_tensors",
 ]

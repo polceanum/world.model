@@ -1,13 +1,13 @@
 # Project status
 
-## Active generalization program — 2026-08-28
+## Active generalization program — 2026-08-30
 
 The pre-generalization public base was commit
 `c16acc99ef13757fc8f88528bfd0d66db4a2f4fd`; the cleaned generalization
 foundation is GitHub `main` commit
 `08ae63adc5ade2e5061f54539fc7a25564c8c8d6`, and the accepted public RGB-D
 bridge is merged at `3eed0b71e6f18c7036bf376c075493a89d5fdc9f`. Broad heterogeneous training
-remains paused. The active contract is specification 1.57. The accepted base
+remains paused. The active contract is specification 1.58. The accepted base
 now comprises the specification-1.51 differentiable one-sphere unit, the
 qualified standalone two-second RGB-D rung, and its qualified public one-slot
 `OnlineWorldModel` bridge. The accepted branch additionally contains the
@@ -22,6 +22,16 @@ learning, occlusion, contact, variable count, or learned capacity.
 The reviewed net tree is merged and published to GitHub `main` through
 acceptance commit `00a712d640cdb828f24a194817443daa57e6df65`. Final remains
 consumed; any next rung still requires a genuinely new pre-access protocol.
+
+Specification 1.58 now freezes that genuinely new rung: distinct per-object
+linear drag inferred from the existing sixteen-frame, exactly-two-visible,
+known-orbit public RGB-D history. The implementation is still parameter-free;
+it adds an adaptive analytic drag fit, fit-owned atomic position/velocity/drag
+anchor evidence, three development-calibrated uncertainty-scale buffers, and
+direct-from-anchor uncertainty propagation. This is a source freeze only.
+The seedless 64-ordinal development, selector, confirmation, and final splits
+are all unopened, and the fixed run directory is absent. No drag accuracy,
+calibration, protected-split, or acceptance claim exists yet.
 
 The qualified unit achieved, on its single previously untouched final set:
 
@@ -112,8 +122,9 @@ below. At that historical boundary, the planned order placed public
 `OnlineWorldModel` integration before moving camera, identifiable drag,
 variable metric scale, and then multiple objects. Specification 1.56
 superseded that ordering by accepting exactly two fully visible non-contact
-objects; specification 1.57 now freezes their known calibrated camera-motion
-extension before identifiable drag and variable metric scale. Variable set size,
+objects; specification 1.57 subsequently froze their known calibrated
+camera-motion extension. Specification 1.58 now freezes identifiable drag
+before variable metric scale. Variable set size,
 identity/occlusion, analytic contact, observable material parameters, known
 actions and counterfactual planning, and richer modalities/geometry remain
 later. Model capacity grows only after a smaller structured rung demonstrably
@@ -600,8 +611,9 @@ Acceptance is limited to this certified known orbit with exactly two fully
 visible separated non-contact spheres, complete RGB-D, gravity `0`, and drag
 `0.05`. It is not general moving-camera, pose-learning, occlusion, recovery,
 contact, variable-count, learned-capacity, or general-convergence evidence.
-The failed partial family stays closed; the next active rung must be a
-genuinely new capability frozen before access.
+The failed partial family stays closed. Specification 1.58 supplies the next
+active genuinely new capability through identifiable per-object drag; it does
+not broaden this historical acceptance claim.
 
 ## Validation state
 
@@ -634,7 +646,26 @@ The specification-1.57 orbital-camera implementation's source gates are
 qualification audits pass. Development and protected qualification are
 complete, and final is consumed.
 
-The highest accepted claim is now the certified exactly-two-visible,
+The specification-1.58 identifiable-drag source passes its `68`-test
+seed-free harness suite, the guarded independent 256-scene certificate, and
+the complete pre-documentation repository gate at
+`1490 passed, 16 skipped in 781.56 s (0:13:01)`. Ruff lint/format, compilation,
+critical-source rehashing, diff integrity, and independent source/security
+audits pass. Frozen config/harness/runner/test SHA-256 values are
+`a22f364601b8f87cdec3fd6bff7d757f134867bf66d9fa176c1f2d881a700c45`,
+`1a48832fb898b552a6f19cd2cadaa77634d02585db873145cb466b1111f01f56`,
+`6838a2128dc07d65439811b8a789bcc89935ba7bb0eb5ed997629ab9794548db`,
+and
+`30a01c8df07a82923b96eb92911881a7190f2ad875c0073ade40565a7ce87335`;
+protocol/certificate SHA-256 values are
+`d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`
+and
+`588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
+These are implementation and source-freeze results only. Development remains
+forbidden until this exact tree is committed, published, clean, and equal to
+its configured upstream.
+
+The highest accepted claim remains the certified exactly-two-visible,
 non-contact, known-orbital-camera RGB-D family. General moving-camera behavior,
 unknown or learned pose, contact, partial visibility, misses/recovery, variable
 count, additional modality, planning, and general convergence remain

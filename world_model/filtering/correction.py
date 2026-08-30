@@ -12,6 +12,7 @@ from world_model.belief import (
     WorldBelief,
     fast_packing_map,
     pack_fast_state,
+    slow_packing_map,
     unpack_fast_state,
 )
 from world_model.filtering.analytic_update import DiagonalUpdateResult, diagonal_kalman_update
@@ -655,7 +656,7 @@ class BeliefUpdater(nn.Module):
         prior: WorldBelief,
         evidence: DirectVelocityEvidence,
     ) -> WorldBelief:
-        """Apply explicit post-association kinematic evidence in belief-slot order.
+        """Apply explicit post-association state evidence in belief-slot order.
 
         This second analytic update intentionally leaves ``last_diagnostics``
         describing the ordinary measurement correction and observed mask.
@@ -669,9 +670,11 @@ class BeliefUpdater(nn.Module):
         log_variance = prior.objects.fast_log_variance
         updated_packed = packed.clone()
         updated_log_variance = log_variance.clone()
+        updated_log_drag = prior.objects.log_drag.clone()
+        updated_slow_log_variance = prior.objects.slow_log_variance.clone()
         position_slice = fast_packing_map(prior.objects)["position"]
         position_update_count = 0
-        if evidence.position is not None:
+        if evidence.position is not None and evidence.log_drag is None:
             assert evidence.position_log_variance is not None
             assert evidence.position_valid_mask is not None
             position_valid = evidence.position_valid_mask & prior.objects.active
@@ -696,53 +699,118 @@ class BeliefUpdater(nn.Module):
                 )
 
         axis_valid = evidence.resolved_axis_valid_mask() & prior.objects.active.unsqueeze(-1)
-        valid = axis_valid.any(dim=-1)
-        batch_index, belief_index = torch.nonzero(valid, as_tuple=True)
         velocity_slice = fast_packing_map(prior.objects)["velocity"]
-        if batch_index.numel():
-            component_valid = axis_valid[batch_index, belief_index]
-            prior_velocity = packed[batch_index, belief_index, velocity_slice]
-            prior_velocity_log_variance = log_variance[
-                batch_index,
-                belief_index,
-                velocity_slice,
-            ]
-            component_confidence = evidence.confidence[
-                batch_index,
-                belief_index,
-            ].unsqueeze(-1) * component_valid.to(evidence.confidence.dtype)
-            # Unsupported components must not participate in the vector
-            # robust-influence norm.  Merely assigning them zero confidence
-            # after computing that norm would let an arbitrary unobserved
-            # value suppress the correction of a genuinely observed axis.
-            component_measurement = torch.where(
-                component_valid,
-                evidence.velocity[batch_index, belief_index],
-                prior_velocity,
-            )
-            analytic_velocity = diagonal_kalman_update(
-                prior_velocity,
-                prior_velocity_log_variance,
-                component_measurement,
-                evidence.log_variance[batch_index, belief_index],
-                confidence=component_confidence,
-                robust_clip_norm=self.config.robust_clip_norm,
-                minimum_log_variance=self.config.minimum_log_variance,
-                maximum_log_variance=self.config.maximum_log_variance,
-            )
-            updated_packed[batch_index, belief_index, velocity_slice] = torch.where(
-                component_valid,
-                analytic_velocity.mean,
-                prior_velocity,
-            )
-            updated_log_variance[batch_index, belief_index, velocity_slice] = torch.where(
-                component_valid,
-                analytic_velocity.log_variance,
-                prior_velocity_log_variance,
-            )
-        if batch_index.numel() == 0 and position_update_count == 0:
+        velocity_update_count = 0
+        drag_update_count = 0
+        if evidence.log_drag is not None:
+            assert evidence.log_drag_log_variance is not None
+            assert evidence.drag_valid_mask is not None
+            assert evidence.position is not None
+            assert evidence.position_log_variance is not None
+            assert evidence.position_valid_mask is not None
+            if not torch.equal(evidence.drag_valid_mask, evidence.valid_mask):
+                raise ValueError(
+                    "direct drag and velocity validity must be an all-or-nothing triple"
+                )
+            if not torch.equal(
+                evidence.drag_valid_mask,
+                evidence.resolved_axis_valid_mask().all(dim=-1),
+            ):
+                raise ValueError("direct drag validity requires all three velocity axes")
+            if not torch.equal(evidence.drag_valid_mask, evidence.position_valid_mask):
+                raise ValueError(
+                    "direct drag and position validity must be an all-or-nothing triple"
+                )
+            drag_valid = evidence.drag_valid_mask & prior.objects.active
+            drag_batch, drag_belief = torch.nonzero(drag_valid, as_tuple=True)
+            if drag_batch.numel():
+                drag_update_count = int(drag_batch.numel())
+                position_update_count = drag_update_count
+                velocity_update_count = drag_update_count
+                # The complete 16-row drag fit jointly owns anchor position,
+                # velocity, and drag.  Fusing any of those values back into
+                # the prior would double-count the same associated history.
+                updated_packed[drag_batch, drag_belief, position_slice] = evidence.position[
+                    drag_batch,
+                    drag_belief,
+                ]
+                updated_log_variance[drag_batch, drag_belief, position_slice] = (
+                    evidence.position_log_variance[drag_batch, drag_belief].clamp(
+                        min=self.config.minimum_log_variance,
+                        max=self.config.maximum_log_variance,
+                    )
+                )
+                updated_packed[drag_batch, drag_belief, velocity_slice] = evidence.velocity[
+                    drag_batch,
+                    drag_belief,
+                ]
+                updated_log_variance[drag_batch, drag_belief, velocity_slice] = (
+                    evidence.log_variance[drag_batch, drag_belief].clamp(
+                        min=self.config.minimum_log_variance,
+                        max=self.config.maximum_log_variance,
+                    )
+                )
+                updated_log_drag[drag_batch, drag_belief] = evidence.log_drag[
+                    drag_batch,
+                    drag_belief,
+                ]
+                drag_slice = slow_packing_map(prior.objects)["log_drag"]
+                updated_slow_log_variance[drag_batch, drag_belief, drag_slice] = (
+                    evidence.log_drag_log_variance[drag_batch, drag_belief].clamp(
+                        min=self.config.minimum_log_variance,
+                        max=self.config.maximum_log_variance,
+                    )
+                )
+        else:
+            valid = axis_valid.any(dim=-1)
+            batch_index, belief_index = torch.nonzero(valid, as_tuple=True)
+            if batch_index.numel():
+                velocity_update_count = int(batch_index.numel())
+                component_valid = axis_valid[batch_index, belief_index]
+                prior_velocity = packed[batch_index, belief_index, velocity_slice]
+                prior_velocity_log_variance = log_variance[
+                    batch_index,
+                    belief_index,
+                    velocity_slice,
+                ]
+                component_confidence = evidence.confidence[
+                    batch_index,
+                    belief_index,
+                ].unsqueeze(-1) * component_valid.to(evidence.confidence.dtype)
+                # Unsupported components must not participate in the vector
+                # robust-influence norm.  Merely assigning them zero confidence
+                # after computing that norm would let an arbitrary unobserved
+                # value suppress the correction of a genuinely observed axis.
+                component_measurement = torch.where(
+                    component_valid,
+                    evidence.velocity[batch_index, belief_index],
+                    prior_velocity,
+                )
+                analytic_velocity = diagonal_kalman_update(
+                    prior_velocity,
+                    prior_velocity_log_variance,
+                    component_measurement,
+                    evidence.log_variance[batch_index, belief_index],
+                    confidence=component_confidence,
+                    robust_clip_norm=self.config.robust_clip_norm,
+                    minimum_log_variance=self.config.minimum_log_variance,
+                    maximum_log_variance=self.config.maximum_log_variance,
+                )
+                updated_packed[batch_index, belief_index, velocity_slice] = torch.where(
+                    component_valid,
+                    analytic_velocity.mean,
+                    prior_velocity,
+                )
+                updated_log_variance[batch_index, belief_index, velocity_slice] = torch.where(
+                    component_valid,
+                    analytic_velocity.log_variance,
+                    prior_velocity_log_variance,
+                )
+        if velocity_update_count == 0 and position_update_count == 0 and drag_update_count == 0:
             return prior
         objects = unpack_fast_state(updated_packed, prior.objects).replace(
-            fast_log_variance=updated_log_variance
+            fast_log_variance=updated_log_variance,
+            log_drag=updated_log_drag,
+            slow_log_variance=updated_slow_log_variance,
         )
         return prior.replace(objects=objects)

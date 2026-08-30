@@ -1,0 +1,160 @@
+project:
+  name: orpheus-rgbd-two-visible-orbital-camera-identifiable-drag-v1-cpu
+  # The governed qualification family is addressed only by split and ordinal.
+  # This common-tool seed field has no namespace or scene-selection authority.
+  seed: 0
+  output_dir: runs
+  deterministic: true
+
+# This qualification is CPU-only and uses the runtime's native float32 path.
+device:
+  preference: cpu
+  closed_loop_preference: cpu
+  cuda_amp: false
+  compile: false
+
+# Frozen identifiable-drag rung: exactly two fixed-radius, chromatically
+# distinct, fully visible, image-separated spheres under known orbital
+# extrinsics. The deterministic qualification constructor owns and preflights
+# the separated non-contact scene family; these common-schema values do not
+# stand in for that geometric certificate.
+simulator:
+  image_size: [64, 64]
+  frame_rate: 20
+  physics_rate: 120
+  sequence_frames: 56
+  min_objects: 2
+  max_objects: 2
+  gravity: [0.0, 0.0, 0.0]
+  radius_range: [0.21, 0.21]
+  mass_range: [1.0, 1.0]
+  restitution_range: [0.7, 0.7]
+  drag_range: [0.045, 0.325]
+  friction_range: [0.2, 0.2]
+  # Exact conservative envelope for the certified initial-speed norms.
+  initial_speed_range: [0.05, 0.071]
+  camera_motion: orbit
+  known_camera_pose: true
+  render_noise_std: 0.0
+  ensure_collision: false
+  external_impulse_probability: 0.0
+  scenario_mixture: [baseline]
+
+model:
+  max_objects: 2
+  lifecycle:
+    birth_confidence: 0.5
+    birth_confirmations: 1
+  state:
+    geometry_dim: 1
+    appearance_dim: 3
+    residual_dynamics_dim: 1
+    modal_count: 0
+    modal_dim: 1
+    parameter_memory_dim: 1
+    global_dim: 1
+  rgb:
+    enabled: false
+    backbone_channels: [8, 12, 16, 20]
+    feature_dim: 16
+    proposal_queries: 2
+    global_every_steps: 1
+    roi_size: 8
+    temporal_velocity_enabled: false
+  rgbd:
+    enabled: true
+    global_every_steps: 1
+    proposal_count: 2
+    world_radius: 0.21
+    linear_drag: 0.185
+    foreground_threshold: 0.04
+    foreground_temperature: 0.01
+    minimum_mass: 4.0
+    chromatic_temperature: 0.05
+    minimum_chromatic_eigengap: 0.01
+    spatial_temperature_pixels: 1.0
+    chromatic_centre_blend: 0.0025
+    minimum_silhouette_gap_pixels: 2.0
+    minimum_boundary_clearance_pixels: 2.0
+    maximum_surface_radius_relative_error: 0.05
+    measurement_position_variance: 0.000064
+    temporal_history_size: 16
+    temporal_min_samples: 16
+    temporal_min_dt: 0.001
+    temporal_velocity_variance_floor: 0.000001
+    temporal_velocity_variance_ceiling: 0.01
+    fit_conditioning_limit: 100.0
+    temporal_drag_estimation_enabled: true
+    temporal_drag_minimum: 0.01
+    temporal_drag_maximum: 0.36
+    temporal_drag_grid_points: 257
+    temporal_drag_noise_floor_m: 0.00002
+    temporal_drag_minimum_excitation_m: 0.015
+    temporal_drag_minimum_profile_information: 1.0
+    temporal_drag_maximum_boundary_mass: 0.01
+    temporal_drag_log_parameter_variance_floor: 0.0001
+    temporal_drag_log_parameter_variance_ceiling: 0.25
+  dynamics:
+    hidden_dim: 16
+    max_substep: 0.008333333333333333
+    attention_residual_enabled: false
+    analytic_free_motion_only: true
+  filter:
+    hidden_dim: 16
+    min_log_variance: -30.0
+    max_log_variance: 8.0
+    learned_residual_scale: 0.0
+    enable_learned_corrector: false
+    direct_metric_position_update: true
+    innovation_anchored_correction: true
+  association:
+    geometry_weight: 1.0
+    appearance_weight: 0.25
+    existence_weight: 0.0
+    mahalanobis_gate: 100.0
+    maximum_cost: 100.0
+    ambiguity_margin: 0.02
+    minimum_measurement_confidence: 0.5
+  identification:
+    enabled: false
+    hidden_dim: 1
+
+runtime:
+  modality: rgbd
+  modality_order: [debug_oracle, rgbd]
+  enable_debug_oracle: false
+  strict_timestamps: true
+  hypothesis_pool_enabled: false
+
+# The profile remains loadable by common tooling, but this qualification has
+# no optimizer construction or update. Every such count is independently
+# gated to zero in the durable report/checkpoint evidence.
+training:
+  batch_size: 4
+  steps: 1
+  learning_rate: 0.000001
+  closed_loop_learning_rate_scale: 1.0
+  weight_decay: 0.0
+  grad_clip_norm: 1.0
+  rgb_pretrain_steps: 0
+  train_episodes: 64
+  validation_episodes: 64
+  fixed_dataset: true
+  tbptt_steps: 16
+  checkpoint_every: 1
+  eval_every: 1
+  log_every: 1
+  horizon_weights: [1.0, 1.0, 1.0, 1.0, 1.0]
+
+evaluation:
+  horizons_seconds: [0.1, 0.25, 0.5, 1.0, 2.0]
+  episodes: 64
+  rgb_only: false
+  confidence_level: 0.90
+
+demo:
+  # Common demo tooling requires this field; it cannot select governed scenes.
+  seed: 200000
+  max_frames: 56
+  future_horizon_seconds: 2.0
+  fps: 10

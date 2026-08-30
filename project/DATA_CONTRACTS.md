@@ -18,8 +18,12 @@ history length, and `H_img,W_img` image height/width.
 - `BeliefTrajectory`: `[B,T,N,...]` sampled future state and uncertainty.
 - `DirectVelocityEvidence`: required `[B,N,3]` world velocity/log variance plus
   `[B,N]` validity/confidence, with an optional jointly validated
-  `[B,N,3]` position/log-variance and independent position-validity mask. It is
-  already aligned to persistent belief slots.
+  `[B,N,3]` position/log-variance and position-validity mask, and an optional
+  jointly validated `[B,N,1]` log-drag/log-variance plus `[B,N]` drag-validity
+  mask. Drag evidence requires complete position/velocity/drag validity for
+  the same slots; partial groups or axes fail closed. The object is already
+  aligned to persistent belief slots and the updater applies the complete
+  supported tuple atomically.
 - `RGBTemporalPositionHistory`: persistent IDs plus two bounded
   `[B,N,R,...]` rings: per-frame point timestamps/positions/variance/validity
   and trustworthy scale-anchor timestamps/positions/variance/validity.
@@ -29,6 +33,11 @@ history length, and `H_img,W_img` image height/width.
   sampled-depth rows retain their causal sample position but fail the complete
   uniform fit closed. The current qualified/frozen RGB-D paths use `R=16`.
   This live sensor-local state is not serialized by an ordinary checkpoint.
+- Identifiable-drag RGB-D state adds three conditional persistent CPU float32
+  scalar buffers: position, velocity, and drag uncertainty scale. They are
+  installed as one atomic development-calibration group and serialize as
+  exactly three state-dict entries / 12 tensor bytes. Live histories remain
+  outside the checkpoint.
 - `AbstractionAssignment`: `[B,N]` abstraction kind, routing confidence,
   complexity cost, refinement reason, and active mask. It is derived from
   `WorldBelief`, not stored as independent physical state.

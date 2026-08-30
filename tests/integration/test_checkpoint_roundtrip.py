@@ -66,6 +66,21 @@ def _small_config():
     )
 
 
+def _rgbd_temporal_drag_config():
+    config = load_config("configs/rgbd_two_visible_orbital_camera_cpu.yaml")
+    return replace(
+        config,
+        simulator=replace(config.simulator, drag_range=(0.03, 0.28)),
+        model=replace(
+            config.model,
+            rgbd=replace(
+                config.model.rgbd,
+                temporal_drag_estimation_enabled=True,
+            ),
+        ),
+    )
+
+
 def test_checkpoint_roundtrip_preserves_trained_state(tmp_path):
     config = _small_config()
     dataset = SyntheticSphereDataset(
@@ -1488,6 +1503,241 @@ def test_rgbd_analytic_bridge_fields_are_semantic_with_legacy_disabled_defaults(
             validate_checkpoint_config(legacy_payload, changed)
         with pytest.raises(ValueError, match="model"):
             validate_training_resume_config(legacy_payload, changed)
+
+
+def test_rgbd_temporal_drag_checkpoint_semantics_migrate_only_when_disabled() -> None:
+    disabled = load_config("configs/rgbd_two_visible_orbital_camera_cpu.yaml")
+    payload = {"config": disabled.to_dict()}
+    legacy_payload = deepcopy(payload)
+    legacy_rgbd = legacy_payload["config"]["model"]["rgbd"]
+    drag_fields = (
+        "temporal_drag_estimation_enabled",
+        "temporal_drag_minimum",
+        "temporal_drag_maximum",
+        "temporal_drag_grid_points",
+        "temporal_drag_noise_floor_m",
+        "temporal_drag_minimum_excitation_m",
+        "temporal_drag_minimum_profile_information",
+        "temporal_drag_maximum_boundary_mass",
+        "temporal_drag_log_parameter_variance_floor",
+        "temporal_drag_log_parameter_variance_ceiling",
+    )
+    for field_name in drag_fields:
+        legacy_rgbd.pop(field_name)
+
+    validate_checkpoint_config(legacy_payload, disabled)
+    disabled_changed_controls = replace(
+        disabled,
+        model=replace(
+            disabled.model,
+            rgbd=replace(
+                disabled.model.rgbd,
+                temporal_drag_maximum=0.5,
+                temporal_drag_grid_points=129,
+            ),
+        ),
+    )
+    disabled_changed_controls.validate()
+    validate_checkpoint_config(payload, disabled_changed_controls)
+    validate_checkpoint_config(legacy_payload, disabled_changed_controls)
+
+    enabled = _rgbd_temporal_drag_config()
+    enabled.validate()
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(legacy_payload, enabled)
+    changed_enabled = replace(
+        enabled,
+        model=replace(
+            enabled.model,
+            rgbd=replace(enabled.model.rgbd, temporal_drag_maximum=0.5),
+        ),
+    )
+    changed_enabled.validate()
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config({"config": enabled.to_dict()}, changed_enabled)
+
+
+@pytest.mark.parametrize(
+    ("enabled", "tampered_value"),
+    [(False, 0), (True, 1)],
+)
+def test_rgbd_temporal_drag_checkpoint_and_resume_require_typed_enable_flag(
+    enabled: bool,
+    tampered_value: int,
+) -> None:
+    config = (
+        _rgbd_temporal_drag_config()
+        if enabled
+        else load_config("configs/rgbd_two_visible_orbital_camera_cpu.yaml")
+    )
+    payload = {
+        "config": deepcopy(config.to_dict()),
+        "simulator_version": SIMULATOR_VERSION,
+    }
+    payload["config"]["model"]["rgbd"]["temporal_drag_estimation_enabled"] = tampered_value
+
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(payload, config)
+    with pytest.raises(ValueError, match="temporal_drag_estimation_enabled"):
+        validate_training_resume_config(payload, config)
+
+
+def test_rgbd_uncertainty_buffers_roundtrip_and_reject_tampering_before_mutation(
+    tmp_path: Path,
+) -> None:
+    config = _rgbd_temporal_drag_config()
+    config.validate()
+    model = OnlineWorldModel.from_config(config, device="cpu")
+    rgbd = model.observation_modules["rgbd"]
+    rgbd.set_development_uncertainty_scales(
+        position=0.125,
+        velocity=0.25,
+        drag=1.75,
+    )
+    expected = {
+        "observation_modules.rgbd.position_uncertainty_scale": 0.125,
+        "observation_modules.rgbd.velocity_uncertainty_scale": 0.25,
+        "observation_modules.rgbd.drag_uncertainty_scale": 1.75,
+    }
+    assert set(model.state_dict()) == set(expected)
+    for key, value in model.state_dict().items():
+        assert value.dtype == torch.float32
+        assert value.ndim == 0
+        torch.testing.assert_close(
+            value,
+            torch.tensor(expected[key]),
+            rtol=0.0,
+            atol=0.0,
+        )
+
+    checkpoint = save_checkpoint(
+        tmp_path / "drag.pt",
+        model=model,
+        optimizer=None,
+        config=config,
+        step=0,
+    )
+    restored = OnlineWorldModel.from_config(config, device="cpu")
+    load_checkpoint(
+        checkpoint,
+        model=restored,
+        expected_config=config,
+    )
+    for key, expected_value in expected.items():
+        torch.testing.assert_close(
+            restored.state_dict()[key],
+            torch.tensor(expected_value),
+            rtol=0.0,
+            atol=0.0,
+        )
+
+    state_before = {name: value.detach().clone() for name, value in restored.state_dict().items()}
+
+    def assert_destination_unchanged() -> None:
+        for name, value in restored.state_dict().items():
+            assert torch.equal(value, state_before[name])
+
+    def fresh_payload() -> dict[str, object]:
+        payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+        model_state = payload["model_state"]
+        assert isinstance(model_state, dict)
+        for index, key in enumerate(expected):
+            model_state[key] = torch.tensor(0.5 + 0.125 * index)
+        return payload
+
+    def reject_payload(
+        payload: dict[str, object],
+        *,
+        suffix: str,
+        error_type: type[Exception] | tuple[type[Exception], ...],
+    ) -> None:
+        tampered = tmp_path / f"tampered-drag-{suffix}.pt"
+        torch.save(payload, tampered)
+        with pytest.raises(error_type):
+            load_checkpoint(
+                tampered,
+                model=restored,
+                expected_config=config,
+            )
+        assert_destination_unchanged()
+
+    invalid_values = (
+        ("python-float", 1.0, TypeError),
+        ("bool", torch.tensor(True), ValueError),
+        ("integer", torch.tensor(1), ValueError),
+        ("vector", torch.ones(1), ValueError),
+        ("float16", torch.tensor(1.0, dtype=torch.float16), ValueError),
+        ("float64", torch.tensor(1.0, dtype=torch.float64), ValueError),
+        ("zero", torch.tensor(0.0), ValueError),
+        ("negative", torch.tensor(-1.0), ValueError),
+        ("square-underflow", torch.tensor(1.0e-30), ValueError),
+        ("square-overflow", torch.tensor(1.0e30), ValueError),
+        ("nan", torch.tensor(float("nan")), FloatingPointError),
+        ("infinity", torch.tensor(float("inf")), FloatingPointError),
+    )
+    for key_index, key in enumerate(expected):
+        for invalid_name, invalid_value, error_type in invalid_values:
+            payload = fresh_payload()
+            model_state = payload["model_state"]
+            assert isinstance(model_state, dict)
+            model_state[key] = invalid_value
+            reject_payload(
+                payload,
+                suffix=f"{key_index}-{invalid_name}",
+                error_type=error_type,
+            )
+
+    for key_index, key in enumerate(expected):
+        payload = fresh_payload()
+        model_state = payload["model_state"]
+        assert isinstance(model_state, dict)
+        model_state.pop(key)
+        reject_payload(
+            payload,
+            suffix=f"missing-{key_index}",
+            error_type=ValueError,
+        )
+
+    payload = fresh_payload()
+    model_state = payload["model_state"]
+    assert isinstance(model_state, dict)
+    model_state.clear()
+    reject_payload(payload, suffix="missing-all", error_type=ValueError)
+
+    payload = fresh_payload()
+    model_state = payload["model_state"]
+    assert isinstance(model_state, dict)
+    model_state["unexpected_tensor"] = torch.tensor(2.0)
+    reject_payload(payload, suffix="extra-generic", error_type=RuntimeError)
+
+    payload = fresh_payload()
+    model_state = payload["model_state"]
+    assert isinstance(model_state, dict)
+    model_state["observation_modules.rgbd.extra_uncertainty_scale"] = torch.tensor(2.0)
+    reject_payload(payload, suffix="extra-calibration", error_type=ValueError)
+
+    payload = fresh_payload()
+    model_state = payload["model_state"]
+    assert isinstance(model_state, dict)
+    model_state["drag_uncertainty_scale"] = torch.tensor(2.0)
+    reject_payload(payload, suffix="root-calibration", error_type=ValueError)
+
+
+def test_disabled_rgbd_checkpoint_keeps_exact_empty_model_state() -> None:
+    config = load_config("configs/rgbd_two_visible_orbital_camera_cpu.yaml")
+    model = OnlineWorldModel.from_config(config, device="cpu")
+
+    assert model.state_dict() == {}
+    payload = checkpoint_payload(
+        model=model,
+        optimizer=None,
+        scheduler=None,
+        config=config,
+        step=0,
+        metrics={},
+        device="cpu",
+    )
+    assert payload["model_state"] == {}
 
 
 def test_attention_relation_endpoint_binding_is_semantic_with_legacy_false() -> None:

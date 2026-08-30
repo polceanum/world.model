@@ -266,11 +266,51 @@
 - [x] Merge and publish the reviewed net tree to GitHub `main` through
   acceptance commit `00a712d640cdb828f24a194817443daa57e6df65`. Final remains
   consumed; this closure authorizes no new data access.
-- [ ] Select and freeze one genuinely new capability under its own pre-access
-  protocol before any new data access. Candidate later capabilities include
-  identifiable drag, variable scale, variable-size object sets,
-  contact/materials, known actions/planning, and richer modalities/geometry;
-  this list does not itself authorize a rung.
+- [x] Select one genuinely new capability: distinct per-object linear drag
+  inferred from the accepted exactly-two-visible, known-orbit sixteen-frame
+  RGB-D history, without changing object count, visibility, contact, camera
+  knowledge, modalities, or learned capacity.
+- [x] Add the differentiable adaptive analytic drag fit, complete-row
+  fit-owned position/velocity/log-drag evidence, atomic belief correction, and
+  direct-from-anchor diagonal uncertainty propagation while preserving the
+  legacy flag-off path.
+- [x] Add exactly three conditional CPU float32 scalar calibration buffers and
+  strict pre-load checkpoint validation. Keep learned/optimizer/scheduler/RNG
+  state and updates at zero; document that repeated external re-anchoring is
+  outside the diagonal uncertainty claim.
+- [x] Freeze the seedless ordinal scene family at four splits x 64 scenes,
+  each formed from four rational primitives x two drag-slot counterfactuals x
+  eight camera strata. Prove all governed truth/camera/trace splits disjoint
+  and keep the closed partial-visibility family untouched.
+- [x] Pass the independent formal certificate with zero governed public
+  physics/renderer calls, minimum pixel support `21`, silhouette gap
+  `5.11001396 px`, world surface gap `1.37303865 m`, and excitation
+  `0.02090907 m`.
+- [x] Freeze profile, harness, runner, test, protocol, gate-schema, artifact-
+  schema, and scene-certificate SHA-256 values. The exact 263-float gate
+  surface covers accuracy, both fixed-drag controls, uncertainty, identity,
+  counterfactuals, gradients, resources, state, and runtime ownership.
+- [x] Harden the one-use ordinal/batch capabilities, canonical five-artifact
+  inventory, crash-consistent report/ledger ordering, live reviewed-bundle
+  revalidation, exact three-buffer checkpoint, and source/publication guards.
+  The seed-free harness suite passes `68` tests.
+- [x] Pass the complete pre-documentation repository gate:
+  `1490 passed, 16 skipped in 781.56 s (0:13:01)`, plus Ruff lint/format,
+  compilation, critical-source rehashing, diff integrity, and independent
+  source/security audits. This is source evidence only.
+- [x] Advance the contract and checkpoint metadata to specification 1.58 while
+  keeping simulator semantics at `sphere_world_v7`. Record that the canonical
+  run directory is absent and all development/protected ordinals are unopened.
+- [ ] Commit and publish the exact specification-1.58 source-freeze tree, then
+  prove a clean worktree, configured upstream, exact `HEAD` equality, and zero
+  commits ahead or behind before any governed development access.
+- [ ] Run the sole 64-ordinal development pass with scale-one evidence, derive
+  rank-59 position/velocity/drag scales from cached evidence with no replay,
+  install the exact float32 triple once, and independently review the report,
+  checkpoint, and development-ledger hashes.
+- [ ] Only after that review, consume selector -> confirmation -> final exactly
+  once under the frozen protected ledger. Stop permanently at the first
+  failure and leave later splits unopened; never reuse final.
 - [ ] At every rung require state/velocity/horizon accuracy, uncertainty,
   support, gradient, memory, and throughput non-regression; stop failed
   architecture families instead of marginal retuning.

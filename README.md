@@ -90,6 +90,15 @@ parameter-free result for one certified orbit—not general moving-camera,
 unknown-pose, learned-pose, occlusion, contact, variable-count, or learned-
 capacity evidence.
 
+Specification 1.58 now freezes the next genuinely new capability: distinct
+per-object linear drag inferred from the same complete sixteen-frame RGB-D
+history under the accepted known orbit. The source adds no learned parameter
+or optimizer update. It uses a differentiable adaptive analytic fit, atomically
+writes fit-owned position/velocity/log-drag evidence on the anchor frame, and
+stores exactly three calibrated float32 uncertainty-scale buffers. This is a
+pre-access source freeze, not a result: all four seedless 64-ordinal splits are
+unopened and the canonical run directory does not exist.
+
 ## Quick start
 
 Use the existing `orpheus` environment. PyTorch is an externally managed
@@ -545,6 +554,74 @@ reviewer identity, upstream equality used a local tracking ref without a fresh
 network fetch, and raw protected episodes were not rederived or audited.
 Acceptance is therefore narrow and tamper-evident, not a general moving-camera
 or cryptographic-transparency claim.
+
+### Frozen identifiable per-object drag rung — no governed result yet
+
+Specification 1.58 retains exactly two fully visible, separated,
+non-contacting fixed-radius spheres, complete RGB-D, zero gravity, and the
+known calibrated orbit. It changes only drag: each persistent object has a
+different unknown constant in `0.045--0.325 /s`, inferred from all sixteen
+public observations. Runtime inputs remain RGB, metric depth, calibration,
+intrinsics, image metadata, and timestamps; no drag label, simulator state,
+instance map, or object identity is supplied.
+
+The seedless governed family has development, selector, confirmation, and
+final splits of 64 exact ordinals each. Four rational physical primitives are
+crossed with two drag-slot-swapped counterfactual roles and eight camera
+strata. Odd-sixteenth camera phases and inward-shifted rational drag grids make
+all 32 governed drag values and all protected joint traces disjoint. This is a
+designed interpolation family, not iid or distribution-free evidence.
+
+The estimator owns zero learned parameters and zero optimizer updates. A
+differentiable 257-node log-drag profile plus same-sized local refinement emits
+fit-owned anchor position, velocity, log drag, and raw diagonal variances.
+Development alone may calibrate three uncertainty-scale buffers from cached
+scale-one evidence using the one-indexed rank-59 scene-max statistic. The
+smallest deployed float32 triple meeting the cached arithmetic is installed
+atomically once, with no episode replay. The checkpoint therefore contains
+exactly three CPU float32 scalars, or 12 tensor bytes.
+
+The fixed profile, harness, runner, tests, protocol, and independent scene
+certificate SHA-256 values are respectively
+`a22f364601b8f87cdec3fd6bff7d757f134867bf66d9fa176c1f2d881a700c45`,
+`1a48832fb898b552a6f19cd2cadaa77634d02585db873145cb466b1111f01f56`,
+`6838a2128dc07d65439811b8a789bcc89935ba7bb0eb5ed997629ab9794548db`,
+`30a01c8df07a82923b96eb92911881a7190f2ad875c0073ade40565a7ce87335`,
+`d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`,
+and
+`588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
+The 263-float gate-schema and artifact-schema bundle SHA-256 values are
+`cb3a65efaa3cb06eb5eaa5bad0f556c41578d8250f805a4e3c314cfa0d22bb1d`
+and
+`d2022f17aa805a9ff6b8ae65ce981f3d0c4f1fdbfbb53e08f69939a80d62eecc`.
+
+The independent formal certificate covers all 256 scenes and 14,336 frames
+without invoking governed public physics, rendering, perception, or runtime.
+Minimum full-mask support is 21 pixels, silhouette gap is `5.11001396 px`,
+world surface gap is `1.37303865 m`, and fit excitation is `0.02090907 m`;
+visibility is one and every contact/event count is zero. A separate consumed
+cardinal family supplied threshold-design and API-equivalence checks only.
+
+Source verification passes the `68`-test seed-free harness, the guarded scene
+certificate, and the complete pre-documentation repository gate at
+`1490 passed, 16 skipped in 781.56 s (0:13:01)`, plus Ruff, formatting,
+compilation, exact critical-source rehashing, diff checks, and independent
+audits. Development is forbidden until this exact specification-1.58 tree is
+clean, committed, published, and equal to its configured upstream.
+
+The canonical artifact root is
+`runs/rgbd_two_visible_orbital_camera_identifiable_drag_v1`. It is absent.
+Development must consume ordinals `0--63` once, cache only sufficient evidence,
+derive and install the three scales once, and produce a reviewable report,
+ledger, and restricted checkpoint. Only an external review of all three exact
+SHA-256 values may authorize the ledgered selector -> confirmation -> final
+sequence. Final cannot be rerun or tuned against.
+
+Direct-anchor diagonal uncertainty supports the one public multi-horizon
+request. It does not claim covariance-complete sequential re-anchoring,
+universal calibration, contacts, occlusion, variable count, pose inference,
+learned capacity, planning, or general world-model convergence. Until governed
+evidence passes, specification 1.57 remains the highest accepted result.
 
 The general evaluator still supports explicit disjoint manifests for a
 compatible `OnlineWorldModel` checkpoint. Such a smoke or diagnostic must not

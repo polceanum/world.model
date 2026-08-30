@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 import torch
+import yaml
 
 from world_model.datasets.splits import SPLIT_SEED_RANGES
 from world_model.dynamics import DynamicsModel
@@ -11,6 +12,7 @@ from world_model.simulator.physics import PhysicsConfig
 from world_model.utils.config import load_config, save_resolved_config
 
 CONFIG_DIR = Path(__file__).parents[2] / "configs"
+IDENTIFIABLE_DRAG_PROFILE = CONFIG_DIR / "rgbd_two_visible_orbital_camera_identifiable_drag_v1.yaml"
 
 
 @pytest.mark.parametrize("path", sorted(CONFIG_DIR.glob("*.yaml")))
@@ -110,6 +112,503 @@ def test_two_object_rgbd_requires_exact_observable_appearance_capacity() -> None
         )
         with pytest.raises(ValueError, match="appearance_dim exactly three"):
             invalid.validate()
+
+
+def _nested_value(mapping: dict[str, object], dotted_path: str) -> object:
+    value: object = mapping
+    for key in dotted_path.split("."):
+        assert isinstance(value, dict)
+        value = value[key]
+    return value
+
+
+def _assert_exact_value_and_type(actual: object, expected: object) -> None:
+    assert type(actual) is type(expected)
+    if isinstance(expected, list):
+        assert isinstance(actual, list)
+        assert len(actual) == len(expected)
+        for actual_item, expected_item in zip(actual, expected, strict=True):
+            _assert_exact_value_and_type(actual_item, expected_item)
+    else:
+        assert actual == expected
+
+
+def _assert_identifiable_drag_profile_contract(config: object) -> None:
+    accepted = load_config(CONFIG_DIR / "rgbd_two_visible_orbital_camera_cpu.yaml")
+
+    project = config.project
+    assert project.name == "orpheus-rgbd-two-visible-orbital-camera-identifiable-drag-v1-cpu"
+    assert type(project.seed) is int
+    assert project.seed == 0
+    assert (
+        replace(
+            project,
+            name=accepted.project.name,
+            seed=accepted.project.seed,
+        )
+        == accepted.project
+    )
+
+    assert config.device == accepted.device
+    assert type(config.device.preference) is str
+    assert config.device.preference == "cpu"
+    assert type(config.device.closed_loop_preference) is str
+    assert config.device.closed_loop_preference == "cpu"
+    assert config.device.cuda_amp is False
+    assert config.device.compile is False
+
+    simulator = config.simulator
+    assert (
+        replace(
+            simulator,
+            drag_range=accepted.simulator.drag_range,
+            initial_speed_range=accepted.simulator.initial_speed_range,
+        )
+        == accepted.simulator
+    )
+    assert simulator.drag_range == (0.045, 0.325)
+    assert all(type(value) is float for value in simulator.drag_range)
+    assert simulator.gravity == (0.0, 0.0, 0.0)
+    assert all(type(value) is float for value in simulator.gravity)
+    assert type(simulator.min_objects) is int
+    assert simulator.min_objects == 2
+    assert type(simulator.max_objects) is int
+    assert simulator.max_objects == 2
+    assert simulator.radius_range == (0.21, 0.21)
+    assert all(type(value) is float for value in simulator.radius_range)
+    assert simulator.initial_speed_range == (0.05, 0.071)
+    assert all(type(value) is float for value in simulator.initial_speed_range)
+    assert type(simulator.camera_motion) is str
+    assert simulator.camera_motion == "orbit"
+    assert simulator.known_camera_pose is True
+    assert simulator.ensure_collision is False
+    assert type(simulator.external_impulse_probability) is float
+    assert simulator.external_impulse_probability == 0.0
+    assert type(simulator.scenario_mixture) is tuple
+    assert simulator.scenario_mixture == ("baseline",)
+    assert type(simulator.scenario_mixture[0]) is str
+    assert type(simulator.sequence_frames) is int
+    assert simulator.sequence_frames == 56
+
+    assert config.model.rgb == accepted.model.rgb
+    rgbd = config.model.rgbd
+    assert (
+        replace(
+            rgbd,
+            linear_drag=accepted.model.rgbd.linear_drag,
+            temporal_drag_estimation_enabled=(accepted.model.rgbd.temporal_drag_estimation_enabled),
+        )
+        == accepted.model.rgbd
+    )
+    assert rgbd.enabled is True
+    assert type(rgbd.proposal_count) is int
+    assert rgbd.proposal_count == 2
+    assert type(rgbd.world_radius) is float
+    assert rgbd.world_radius == 0.21
+    assert type(rgbd.linear_drag) is float
+    assert rgbd.linear_drag == 0.185
+    assert type(rgbd.minimum_silhouette_gap_pixels) is float
+    assert rgbd.minimum_silhouette_gap_pixels == 2.0
+    assert type(rgbd.minimum_boundary_clearance_pixels) is float
+    assert rgbd.minimum_boundary_clearance_pixels == 2.0
+    assert type(rgbd.temporal_history_size) is int
+    assert rgbd.temporal_history_size == 16
+    assert type(rgbd.temporal_min_samples) is int
+    assert rgbd.temporal_min_samples == 16
+    assert rgbd.temporal_drag_estimation_enabled is True
+    assert type(rgbd.temporal_drag_minimum) is float
+    assert rgbd.temporal_drag_minimum == 0.01
+    assert type(rgbd.temporal_drag_maximum) is float
+    assert rgbd.temporal_drag_maximum == 0.36
+    assert type(rgbd.temporal_drag_grid_points) is int
+    assert rgbd.temporal_drag_grid_points == 257
+    assert type(rgbd.temporal_drag_noise_floor_m) is float
+    assert rgbd.temporal_drag_noise_floor_m == 2.0e-5
+    assert type(rgbd.temporal_drag_minimum_excitation_m) is float
+    assert rgbd.temporal_drag_minimum_excitation_m == 0.015
+    assert type(rgbd.temporal_drag_minimum_profile_information) is float
+    assert rgbd.temporal_drag_minimum_profile_information == 1.0
+    assert type(rgbd.temporal_drag_maximum_boundary_mass) is float
+    assert rgbd.temporal_drag_maximum_boundary_mass == 0.01
+    assert type(rgbd.temporal_drag_log_parameter_variance_floor) is float
+    assert rgbd.temporal_drag_log_parameter_variance_floor == 1.0e-4
+    assert type(rgbd.temporal_drag_log_parameter_variance_ceiling) is float
+    assert rgbd.temporal_drag_log_parameter_variance_ceiling == 0.25
+
+    assert config.model.dynamics == accepted.model.dynamics
+    assert config.model.dynamics.analytic_free_motion_only is True
+    assert config.model.association == accepted.model.association
+    assert config.model.identification == accepted.model.identification
+    assert config.model.identification.enabled is False
+
+    filter_config = config.model.filter
+    assert (
+        replace(
+            filter_config,
+            min_log_variance=accepted.model.filter.min_log_variance,
+        )
+        == accepted.model.filter
+    )
+    assert type(filter_config.min_log_variance) is float
+    assert filter_config.min_log_variance == -30.0
+    assert type(filter_config.max_log_variance) is float
+    assert filter_config.max_log_variance == 8.0
+
+    assert config.runtime == accepted.runtime
+    assert type(config.runtime.modality) is str
+    assert config.runtime.modality == "rgbd"
+    assert config.runtime.enable_debug_oracle is False
+    assert (
+        replace(
+            config.training,
+            train_episodes=accepted.training.train_episodes,
+            validation_episodes=accepted.training.validation_episodes,
+        )
+        == accepted.training
+    )
+    assert type(config.training.train_episodes) is int
+    assert config.training.train_episodes == 64
+    assert type(config.training.validation_episodes) is int
+    assert config.training.validation_episodes == 64
+    assert replace(config.evaluation, episodes=accepted.evaluation.episodes) == accepted.evaluation
+    assert type(config.evaluation.episodes) is int
+    assert config.evaluation.episodes == 64
+    assert config.evaluation.horizons_seconds == (0.1, 0.25, 0.5, 1.0, 2.0)
+    assert all(type(value) is float for value in config.evaluation.horizons_seconds)
+    assert config.demo == accepted.demo
+    assert type(config.demo.seed) is int
+
+
+def test_identifiable_drag_profile_raw_values_are_explicit_and_exactly_typed() -> None:
+    raw = yaml.safe_load(IDENTIFIABLE_DRAG_PROFILE.read_text(encoding="utf-8"))
+    assert isinstance(raw, dict)
+    expected = {
+        "project.seed": 0,
+        "device.preference": "cpu",
+        "device.closed_loop_preference": "cpu",
+        "device.cuda_amp": False,
+        "device.compile": False,
+        "simulator.image_size": [64, 64],
+        "simulator.sequence_frames": 56,
+        "simulator.min_objects": 2,
+        "simulator.max_objects": 2,
+        "simulator.gravity": [0.0, 0.0, 0.0],
+        "simulator.radius_range": [0.21, 0.21],
+        "simulator.drag_range": [0.045, 0.325],
+        "simulator.initial_speed_range": [0.05, 0.071],
+        "simulator.camera_motion": "orbit",
+        "simulator.known_camera_pose": True,
+        "simulator.ensure_collision": False,
+        "simulator.external_impulse_probability": 0.0,
+        "simulator.scenario_mixture": ["baseline"],
+        "model.rgb.enabled": False,
+        "model.rgbd.enabled": True,
+        "model.rgbd.proposal_count": 2,
+        "model.rgbd.world_radius": 0.21,
+        "model.rgbd.linear_drag": 0.185,
+        "model.rgbd.minimum_silhouette_gap_pixels": 2.0,
+        "model.rgbd.minimum_boundary_clearance_pixels": 2.0,
+        "model.rgbd.maximum_surface_radius_relative_error": 0.05,
+        "model.rgbd.temporal_history_size": 16,
+        "model.rgbd.temporal_min_samples": 16,
+        "model.rgbd.temporal_drag_estimation_enabled": True,
+        "model.rgbd.temporal_drag_minimum": 0.01,
+        "model.rgbd.temporal_drag_maximum": 0.36,
+        "model.rgbd.temporal_drag_grid_points": 257,
+        "model.rgbd.temporal_drag_noise_floor_m": 2.0e-5,
+        "model.rgbd.temporal_drag_minimum_excitation_m": 0.015,
+        "model.rgbd.temporal_drag_minimum_profile_information": 1.0,
+        "model.rgbd.temporal_drag_maximum_boundary_mass": 0.01,
+        "model.rgbd.temporal_drag_log_parameter_variance_floor": 1.0e-4,
+        "model.rgbd.temporal_drag_log_parameter_variance_ceiling": 0.25,
+        "model.dynamics.analytic_free_motion_only": True,
+        "model.filter.min_log_variance": -30.0,
+        "model.filter.max_log_variance": 8.0,
+        "model.filter.enable_learned_corrector": False,
+        "model.filter.direct_metric_position_update": True,
+        "model.identification.enabled": False,
+        "runtime.modality": "rgbd",
+        "runtime.enable_debug_oracle": False,
+        "training.train_episodes": 64,
+        "training.validation_episodes": 64,
+        "evaluation.episodes": 64,
+        "evaluation.horizons_seconds": [0.1, 0.25, 0.5, 1.0, 2.0],
+        "demo.seed": 200000,
+    }
+
+    for dotted_path, expected_value in expected.items():
+        _assert_exact_value_and_type(_nested_value(raw, dotted_path), expected_value)
+
+
+def test_identifiable_drag_profile_resolves_and_roundtrips_exactly(tmp_path: Path) -> None:
+    config = load_config(IDENTIFIABLE_DRAG_PROFILE)
+    _assert_identifiable_drag_profile_contract(config)
+
+    resolved_path = tmp_path / "identifiable-drag-resolved.yaml"
+    save_resolved_config(config, resolved_path)
+    restored = load_config(resolved_path)
+
+    _assert_identifiable_drag_profile_contract(restored)
+    assert restored.to_dict() == config.to_dict()
+
+
+def test_identifiable_drag_profile_seed_fields_are_nonauthoritative_placeholders() -> None:
+    config = load_config(IDENTIFIABLE_DRAG_PROFILE)
+
+    # Governed scenes are selected only by split and ordinal in the qualification
+    # family. These common-tool fields deliberately encode no scene namespace.
+    assert config.project.seed == 0
+    assert config.demo.seed == 200000
+    assert config.training.train_episodes == 64
+    assert config.training.validation_episodes == 64
+    assert config.evaluation.episodes == 64
+
+
+def test_identifiable_drag_profile_alone_lowers_filter_variance_clamp() -> None:
+    for path in sorted(CONFIG_DIR.glob("*.yaml")):
+        config = load_config(path)
+        expected_minimum = -30.0 if path == IDENTIFIABLE_DRAG_PROFILE else -12.0
+        assert type(config.model.filter.min_log_variance) is float
+        assert config.model.filter.min_log_variance == expected_minimum
+        assert type(config.model.filter.max_log_variance) is float
+        assert config.model.filter.max_log_variance == 8.0
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        ("project.seed=1",),
+        ("project.seed=0.0",),
+        ("device.preference=auto",),
+        ("device.cuda_amp=true",),
+        ("simulator.sequence_frames=55",),
+        ("simulator.drag_range=[0.046,0.324]",),
+        ("simulator.initial_speed_range=[0.05,0.07]",),
+        ("simulator.camera_motion=static",),
+        ("model.rgbd.linear_drag=0.184",),
+        ("model.rgbd.foreground_threshold=0.05",),
+        ("model.rgbd.minimum_silhouette_gap_pixels=2.1",),
+        ("model.rgbd.temporal_drag_minimum=0.011",),
+        ("model.rgbd.temporal_drag_maximum=0.359",),
+        ("model.rgbd.temporal_drag_grid_points=259",),
+        ("model.rgbd.temporal_drag_noise_floor_m=0.000021",),
+        ("model.rgbd.temporal_drag_minimum_excitation_m=0.014",),
+        ("model.rgbd.temporal_drag_minimum_profile_information=1.1",),
+        ("model.rgbd.temporal_drag_minimum_profile_information=1",),
+        ("model.rgbd.temporal_drag_maximum_boundary_mass=0.02",),
+        ("model.rgbd.temporal_drag_log_parameter_variance_floor=0.0002",),
+        ("model.rgbd.temporal_drag_log_parameter_variance_ceiling=0.24",),
+        ("model.filter.min_log_variance=-29.0",),
+        ("model.filter.min_log_variance=-30",),
+        ("model.filter.max_log_variance=7.0",),
+        ("model.filter.max_log_variance=8",),
+        ("model.association.geometry_weight=0.9",),
+        ("training.train_episodes=63",),
+        ("training.validation_episodes=63",),
+        ("evaluation.episodes=63",),
+        ("evaluation.horizons_seconds=[0.1,0.25,0.5,1.0,2.1]",),
+        ("demo.seed=200000.0",),
+    ],
+)
+def test_identifiable_drag_profile_contract_detects_valid_negative_mutations(
+    overrides: tuple[str, ...],
+) -> None:
+    mutated = load_config(IDENTIFIABLE_DRAG_PROFILE, overrides=overrides)
+    with pytest.raises(AssertionError):
+        _assert_identifiable_drag_profile_contract(mutated)
+
+
+def _enabled_rgbd_temporal_drag_config():
+    base = load_config(CONFIG_DIR / "rgbd_two_visible_orbital_camera_cpu.yaml")
+    return replace(
+        base,
+        simulator=replace(base.simulator, drag_range=(0.03, 0.28)),
+        model=replace(
+            base.model,
+            rgbd=replace(
+                base.model.rgbd,
+                temporal_drag_estimation_enabled=True,
+            ),
+        ),
+    )
+
+
+def test_rgbd_temporal_drag_mode_binds_variable_interior_family_and_exact_defaults() -> None:
+    config = _enabled_rgbd_temporal_drag_config()
+
+    config.validate()
+    rgbd = config.model.rgbd
+    assert rgbd.temporal_drag_estimation_enabled
+    assert (rgbd.temporal_drag_minimum, rgbd.temporal_drag_maximum) == (0.01, 0.36)
+    assert rgbd.temporal_drag_grid_points == 257
+    assert rgbd.temporal_drag_noise_floor_m == pytest.approx(2.0e-5)
+    assert rgbd.temporal_drag_minimum_excitation_m == pytest.approx(0.015)
+    assert rgbd.temporal_drag_minimum_profile_information == pytest.approx(1.0)
+    assert rgbd.temporal_drag_maximum_boundary_mass == pytest.approx(0.01)
+    assert rgbd.temporal_drag_log_parameter_variance_floor == pytest.approx(1.0e-4)
+    assert rgbd.temporal_drag_log_parameter_variance_ceiling == pytest.approx(0.25)
+
+    # The magnitude range is behaviorally inert while impulses are disabled;
+    # an exact qualification profile may bind it without narrowing this mode.
+    replace(
+        config,
+        simulator=replace(config.simulator, external_impulse_range=(0.25, 0.8)),
+    ).validate()
+
+
+@pytest.mark.parametrize(
+    ("mutation", "match"),
+    [
+        ("fixed_drag", "variable simulator drag range"),
+        ("boundary_drag", "strictly inside the estimator bounds"),
+        ("gravity", "exact float zero gravity"),
+        ("boolean_gravity", "exact float zero gravity"),
+        ("ensured_collision", "ensure_collision=false"),
+        ("external_impulse", "external_impulse_probability=0.0"),
+        ("boolean_external_impulse", "exact float"),
+        ("integer_external_impulse", "exact float"),
+        ("contact_scenarios", "exactly the baseline simulator scenario"),
+        ("intervention_scenario", "exactly the baseline simulator scenario"),
+        ("nonanalytic", "analytic_free_motion_only"),
+        ("identifier", "recurrent identifier to be disabled"),
+        ("single_object_family", "exactly two-object family"),
+        ("short_history", "exactly 16 history samples"),
+        ("even_grid", "odd integer"),
+        ("boolean_boundary_mass", "must lie in"),
+        ("variance_order", "variance bounds must be ordered"),
+    ],
+)
+def test_rgbd_temporal_drag_mode_rejects_out_of_scope_runtime_semantics(
+    mutation: str,
+    match: str,
+) -> None:
+    config = _enabled_rgbd_temporal_drag_config()
+    if mutation == "fixed_drag":
+        config = replace(
+            config,
+            simulator=replace(config.simulator, drag_range=(0.08, 0.08)),
+        )
+    elif mutation == "boundary_drag":
+        config = replace(
+            config,
+            simulator=replace(config.simulator, drag_range=(0.01, 0.28)),
+        )
+    elif mutation == "gravity":
+        config = replace(
+            config,
+            simulator=replace(config.simulator, gravity=(0.0, -0.1, 0.0)),
+        )
+    elif mutation == "boolean_gravity":
+        config = replace(
+            config,
+            simulator=replace(config.simulator, gravity=(False, False, False)),
+        )
+    elif mutation == "ensured_collision":
+        config = replace(
+            config,
+            simulator=replace(config.simulator, ensure_collision=True),
+        )
+    elif mutation == "external_impulse":
+        config = replace(
+            config,
+            simulator=replace(config.simulator, external_impulse_probability=0.01),
+        )
+    elif mutation == "boolean_external_impulse":
+        config = replace(
+            config,
+            simulator=replace(config.simulator, external_impulse_probability=False),
+        )
+    elif mutation == "integer_external_impulse":
+        config = replace(
+            config,
+            simulator=replace(config.simulator, external_impulse_probability=0),
+        )
+    elif mutation == "contact_scenarios":
+        config = replace(
+            config,
+            simulator=replace(
+                config.simulator,
+                scenario_mixture=("baseline", "elastic_pairs", "damped_contacts"),
+            ),
+        )
+    elif mutation == "intervention_scenario":
+        config = replace(
+            config,
+            simulator=replace(config.simulator, scenario_mixture=("impulse_perturbation",)),
+        )
+    elif mutation == "nonanalytic":
+        config = replace(
+            config,
+            model=replace(
+                config.model,
+                dynamics=replace(config.model.dynamics, analytic_free_motion_only=False),
+            ),
+        )
+    elif mutation == "identifier":
+        config = replace(
+            config,
+            model=replace(
+                config.model,
+                identification=replace(config.model.identification, enabled=True),
+            ),
+        )
+    elif mutation == "single_object_family":
+        config = replace(
+            config,
+            simulator=replace(config.simulator, min_objects=1, max_objects=1),
+            model=replace(
+                config.model,
+                max_objects=1,
+                rgbd=replace(config.model.rgbd, proposal_count=1),
+            ),
+        )
+    elif mutation == "short_history":
+        config = replace(
+            config,
+            model=replace(
+                config.model,
+                rgbd=replace(
+                    config.model.rgbd,
+                    temporal_history_size=15,
+                    temporal_min_samples=15,
+                ),
+            ),
+        )
+    elif mutation == "even_grid":
+        config = replace(
+            config,
+            model=replace(
+                config.model,
+                rgbd=replace(config.model.rgbd, temporal_drag_grid_points=256),
+            ),
+        )
+    elif mutation == "boolean_boundary_mass":
+        config = replace(
+            config,
+            model=replace(
+                config.model,
+                rgbd=replace(
+                    config.model.rgbd,
+                    temporal_drag_maximum_boundary_mass=False,
+                ),
+            ),
+        )
+    elif mutation == "variance_order":
+        config = replace(
+            config,
+            model=replace(
+                config.model,
+                rgbd=replace(
+                    config.model.rgbd,
+                    temporal_drag_log_parameter_variance_floor=0.3,
+                ),
+            ),
+        )
+    else:  # pragma: no cover - parameter table owns this branch
+        raise AssertionError(mutation)
+
+    with pytest.raises(ValueError, match=match):
+        config.validate()
 
 
 def test_sustained_v3_analytic_contacts_match_reference_solver_thresholds() -> None:

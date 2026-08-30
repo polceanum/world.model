@@ -218,7 +218,9 @@ class OnlineWorldModel(nn.Module):
                 initial_drag=config.model.rgbd.linear_drag,
             )
         dynamics = (
-            AnalyticFreeMotionDynamics()
+            AnalyticFreeMotionDynamics(
+                propagate_drag_uncertainty=(config.model.rgbd.temporal_drag_estimation_enabled)
+            )
             if config.model.dynamics.analytic_free_motion_only
             else DynamicsModel.from_config(config)
         )
@@ -467,6 +469,26 @@ class OnlineWorldModel(nn.Module):
                         rgbd_config.temporal_velocity_variance_ceiling
                     ),
                     fit_conditioning_limit=rgbd_config.fit_conditioning_limit,
+                    temporal_drag_estimation_enabled=(rgbd_config.temporal_drag_estimation_enabled),
+                    temporal_drag_minimum=rgbd_config.temporal_drag_minimum,
+                    temporal_drag_maximum=rgbd_config.temporal_drag_maximum,
+                    temporal_drag_grid_points=rgbd_config.temporal_drag_grid_points,
+                    temporal_drag_noise_floor_m=rgbd_config.temporal_drag_noise_floor_m,
+                    temporal_drag_minimum_excitation_m=(
+                        rgbd_config.temporal_drag_minimum_excitation_m
+                    ),
+                    temporal_drag_minimum_profile_information=(
+                        rgbd_config.temporal_drag_minimum_profile_information
+                    ),
+                    temporal_drag_maximum_boundary_mass=(
+                        rgbd_config.temporal_drag_maximum_boundary_mass
+                    ),
+                    temporal_drag_log_parameter_variance_floor=(
+                        rgbd_config.temporal_drag_log_parameter_variance_floor
+                    ),
+                    temporal_drag_log_parameter_variance_ceiling=(
+                        rgbd_config.temporal_drag_log_parameter_variance_ceiling
+                    ),
                 )
             )
         debug_allowed = (
@@ -649,9 +671,12 @@ class OnlineWorldModel(nn.Module):
 
     def _model_device_dtype(self) -> tuple[torch.device, torch.dtype]:
         parameter = next(self.parameters(), None)
-        if parameter is None:
-            return torch.device("cpu"), torch.float32
-        return parameter.device, parameter.dtype
+        if parameter is not None:
+            return parameter.device, parameter.dtype
+        buffer = next(self.buffers(), None)
+        if buffer is not None:
+            return buffer.device, buffer.dtype
+        return torch.device("cpu"), torch.float32
 
     def _dynamics_tensor_signature(self) -> TensorVersionSignature:
         return tensor_identity_version_signature(

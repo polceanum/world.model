@@ -1,5 +1,82 @@
 # Design decisions
 
+## ADR-169 — Freeze distinct per-object drag identification before access
+
+- **Date:** 2026-08-30
+- **Status:** accepted as a source/protocol freeze only; all governed splits
+  are unopened and no scientific result is accepted
+- **Context:** ADR-168 accepted one known calibrated orbit while retaining
+  exactly two visible, separated, non-contact spheres and fixed drag `0.05`.
+  The next rung must change a genuinely new capability without reviving the
+  failed partial-visibility family or adding learned capacity. Per-object
+  `ObjectBelief.log_drag` already exists, but the public RGB-D runtime formerly
+  required a known fixed drag and carried no calibrated horizon uncertainty
+  from parameter identification.
+- **Decision:** Advance the contract to specification 1.58 and keep simulator
+  `sphere_world_v7`. Infer distinct constant per-object drag from the complete
+  sixteen-frame public history with a differentiable adaptive analytic fit.
+  On the anchor frame only, atomically direct-replace fit-owned position,
+  velocity, log drag, and diagonal variances. Preserve all earlier accepted
+  frame behavior and reject partial tuple/axis evidence.
+- **Uncertainty:** Treat raw fit covariance as diagnostic. Development alone
+  starts at unit scales, retains ordered scale-independent evidence from one
+  pass, and computes scene-max position/velocity/drag rank 59 of 64. Convert
+  each float64 target to the minimal passing float32 under the exact cached
+  deployed arithmetic; permit position/velocity deflation, require drag scale
+  at least one, and install the three values atomically once without replay.
+  Serialize exactly three CPU float32 scalar buffers / 12 tensor bytes.
+- **Rollout:** Propagate diagonal position/velocity/drag uncertainty directly
+  from the same anchor at each absolute query. Require one-call multi-query
+  partition invariance. Do not claim full covariance or invariance under
+  arbitrary repeated external re-anchoring.
+- **Family:** Use no seeds. Each conceptual split owns ordinals `0--63` from
+  four rational physical primitives, two exact drag-slot counterfactual roles,
+  and eight camera strata. Use split-specific odd-sixteenth phase offsets and
+  inward drag shifts so all 32 governed drag levels and protected joint traces
+  are disjoint. Interpret any eventual result as designed interpolation, not
+  iid, exchangeable, or distribution-free evidence.
+- **Certificate:** Bind scene source/certificate SHA-256
+  `b3b2e9a71c4020b27cb502f5b0a33b4e4d0174cba2073693b67c9c26c44a9bfd`
+  / `588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
+  The independent formal proof covers all 256 scenes/14,336 frames with zero
+  governed public physics or renderer calls. Minimum support/gap/world-gap/
+  excitation is `21` pixels / `5.11001396 px` / `1.37303865 m` /
+  `0.02090907 m`; visibility is one and events are zero.
+- **Protocol:** Bind profile/harness/runner/tests SHA-256
+  `a22f364601b8f87cdec3fd6bff7d757f134867bf66d9fa176c1f2d881a700c45`,
+  `1a48832fb898b552a6f19cd2cadaa77634d02585db873145cb466b1111f01f56`,
+  `6838a2128dc07d65439811b8a789bcc89935ba7bb0eb5ed997629ab9794548db`,
+  and
+  `30a01c8df07a82923b96eb92911881a7190f2ad875c0073ade40565a7ce87335`.
+  Protocol, 263-float gate-schema, and artifact-schema SHA-256 are
+  `d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`,
+  `cb3a65efaa3cb06eb5eaa5bad0f556c41578d8250f805a4e3c314cfa0d22bb1d`,
+  and
+  `d2022f17aa805a9ff6b8ae65ce981f3d0c4f1fdbfbb53e08f69939a80d62eecc`.
+- **Access:** The absent canonical run root may eventually contain exactly five
+  artifacts. Development is permitted once only after clean committed source
+  equals published upstream. It must complete cached calibration without
+  episode replay. Protected access additionally requires external review of
+  exact checkpoint, development-report, and development-ledger hashes, then
+  consumes selector -> confirmation -> final exactly once. Any failure stops
+  before later access.
+- **Evidence:** The seed-free harness passes `68` tests and the complete
+  pre-documentation tree passes
+  `1490 passed, 16 skipped in 781.56 s (0:13:01)`, with Ruff, formatting,
+  compilation, rehashing, diff checks, and independent audits green. These are
+  source/certificate results only. No development, calibration, accuracy,
+  protected-split, or acceptance evidence exists.
+- **Alternatives considered:** shared drag only; fixed-grid node-locked
+  quadrature; calibrating per-frame measurements and changing filter means;
+  replaying development after calibration; using flag-off as a false truthful
+  variable-drag control; shared/static drag cues; seeds; reviving partial
+  visibility; claiming universal or covariance-complete uncertainty.
+- **Consequences:** Specification 1.57 remains the highest accepted result.
+  The new fixed-drag controls are metric-side rollouts from the same fitted
+  public anchor at `0.05` and `0.185 /s`. Contact, occlusion, variable count,
+  pose inference, learned capacity, planning, and general convergence remain
+  closed.
+
 ## ADR-168 — Accept the exactly-once known-orbital-camera RGB-D qualification
 
 - **Date:** 2026-08-28

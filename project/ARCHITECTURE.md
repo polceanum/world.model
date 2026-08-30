@@ -171,12 +171,38 @@ neither general camera motion nor unknown- or learned-pose inference.
 
 The attempted partial-visibility and missed-observation-recovery family failed
 its bounded development protocols and is closed. It must not be revived,
-renamed, or treated as the next rung. No next capability is currently selected:
-any successor must add a genuinely new capability under its own frozen
-pre-access manifests and gates while preserving every accepted lower-rung
-contract. Variable count, contact/material identification, variable physics,
-actions/planning, richer modalities, and learned capacity therefore remain
-unqualified candidates rather than an active launch plan.
+renamed, or treated as the next rung. Specification 1.58 instead freezes the
+genuinely new capability of distinct per-object linear-drag identification
+inside the already accepted exactly-two-visible, known-orbit family. Variable
+count, contact/material identification, occlusion/recovery, unknown camera
+pose, actions/planning, richer modalities, and learned capacity remain
+unqualified candidates rather than part of this rung.
+
+The new RGB-D temporal fit is still parameter-free. Once a persistent ID has
+sixteen complete metric positions, a differentiable bounded variable-profile
+fit jointly emits fit-owned anchor position, anchor velocity, log drag, and
+raw diagonal variance. That complete tuple directly and atomically replaces
+the corresponding belief fields. Earlier frames keep the accepted direct
+metric-position behavior, and partial tuple/axis evidence fails closed.
+`ObjectBelief.log_drag` remains the sole physical-parameter owner.
+
+Raw fitted covariance is not called calibrated. A one-pass development-only
+procedure derives position, velocity, and drag scale factors from cached
+scale-one sufficient evidence and installs all three CPU float32 scalar
+buffers atomically. Protected splits may only load that reviewed exact
+three-buffer state. Analytic rollout propagates diagonal uncertainty directly
+from the fitted anchor for each absolute query time, preserving one-call query
+partition invariance. Arbitrary repeated external re-anchoring remains outside
+the claim because `WorldBelief` does not carry the induced full covariance.
+
+The formal scene family is seedless: each conceptual split owns ordinals
+`0--63`, formed by four rational physical primitives, two exact drag-slot
+counterfactuals, and eight orbital-camera strata. Independent recurrence and
+ray arithmetic certify all 256 governed scenes without calling public physics,
+renderer, perception, or runtime. Runtime materialization is available only
+through ledger-owned four-ordinal capabilities after the exact source is
+clean, committed, and published. No governed runtime capability has been
+issued or consumed at the specification-1.58 source-freeze boundary.
 
 Evaluation seed manifests are explicit. `fresh_validation` starts after the
 checkpoint's trainer-validation episodes by default; `--seed-offset` can select
