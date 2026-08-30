@@ -20,7 +20,6 @@ import hashlib
 import inspect
 import io
 import json
-import marshal
 import math
 import os
 import resource
@@ -2726,6 +2725,14 @@ class _RunnerInvocationSeal:
 _RUNNER_INVOCATION_REGISTRY: dict[int, tuple[object, ...]] = {}
 
 
+def _exact_code_object_equal(actual: types.CodeType, expected: types.CodeType) -> bool:
+    return (
+        actual == expected
+        and actual.co_stacksize == expected.co_stacksize
+        and actual.co_linetable == expected.co_linetable
+    )
+
+
 def _require_frozen_cli_caller(*, consume_depth: int) -> None:
     frame = inspect.currentframe()
     try:
@@ -2758,7 +2765,7 @@ def _require_frozen_cli_caller(*, consume_depth: int) -> None:
             or not callable(caller.f_globals.get("main"))
             or caller.f_globals["main"].__code__ is not caller.f_code
             or expected_main is None
-            or marshal.dumps(caller.f_code) != marshal.dumps(expected_main)
+            or not _exact_code_object_equal(caller.f_code, expected_main)
             or not sys.argv
             or Path(sys.argv[0]).resolve() != expected.resolve()
         ):

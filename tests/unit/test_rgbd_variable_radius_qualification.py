@@ -11,7 +11,6 @@ import hashlib
 import importlib.util
 import inspect
 import io
-import marshal
 import os
 import pickle
 import stat
@@ -1674,7 +1673,7 @@ def test_exception_report_is_not_published_without_one_live_ledger(
     assert not report_path.exists()
 
 
-def test_cli_main_code_fingerprint_normalizes_relative_filename() -> None:
+def test_cli_main_code_guard_binds_filename_stacksize_and_linetable() -> None:
     runner_path = q.REPOSITORY_ROOT / q.PUBLICATION_SURFACE_PATHS["runner"]
     contents = q.stable_read_bytes(runner_path, label="runner fingerprint fixture")
 
@@ -1688,10 +1687,99 @@ def test_cli_main_code_fingerprint_normalizes_relative_filename() -> None:
     absolute = main_code(compile(contents, str(runner_path), "exec"))
     relative_name = q.PUBLICATION_SURFACE_PATHS["runner"]
     relative = main_code(compile(contents, relative_name, "exec"))
-    assert marshal.dumps(absolute) != marshal.dumps(relative)
+    assert absolute == relative
+    assert absolute.co_filename != relative.co_filename
     normalized = main_code(compile(contents, relative.co_filename, "exec"))
-    assert marshal.dumps(normalized) == marshal.dumps(relative)
+    assert q._exact_code_object_equal(normalized, relative)
+    larger_stack = relative.replace(co_stacksize=relative.co_stacksize + 1)
+    changed_lines = relative.replace(co_linetable=relative.co_linetable + b"\x00")
+    assert larger_stack == relative
+    assert changed_lines == relative
+    assert not q._exact_code_object_equal(larger_stack, relative)
+    assert not q._exact_code_object_equal(changed_lines, relative)
     assert "caller.f_code.co_filename" in inspect.getsource(q._require_frozen_cli_caller)
+
+
+def test_real_runner_main_stack_reaches_directory_acquisition_after_guard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = _load_runner_module()
+    runner_path = q.REPOSITORY_ROOT / q.PUBLICATION_SURFACE_PATHS["runner"]
+    fake_loader = types.SimpleNamespace(validate_loaded_modules=lambda: None)
+    fake_torch = types.SimpleNamespace(set_num_threads=lambda _count: None)
+    fake_qualification = types.SimpleNamespace(
+        require_frozen_config=lambda _path: object(),
+        canonical_checkpoint_path=q.canonical_checkpoint_path,
+        canonical_development_report_path=q.canonical_development_report_path,
+        _mint_runner_invocation_seal=q._mint_runner_invocation_seal,
+    )
+
+    class DirectoryAcquisitionReached(RuntimeError):
+        pass
+
+    def stop_before_directory_acquisition(*_args: object, **_kwargs: object) -> None:
+        raise DirectoryAcquisitionReached
+
+    monkeypatch.setattr(runner, "__name__", "__main__")
+    monkeypatch.setattr(runner, "__file__", str(runner_path))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [str(runner_path), "--phase", "development", "--_internal-stage"],
+    )
+    monkeypatch.setattr(runner, "_consume_outer_receipt", lambda _args: {"publication": {}})
+    monkeypatch.setattr(
+        runner,
+        "_load_frozen_qualification",
+        lambda _publication: (fake_qualification, fake_loader),
+    )
+    monkeypatch.setattr(runner, "_validate_loaded_publication", lambda *_args: {})
+    monkeypatch.setattr(
+        runner,
+        "importlib",
+        types.SimpleNamespace(import_module=lambda _name: fake_torch),
+    )
+    monkeypatch.setattr(runner, "_release_project_loader_preserving_error", lambda _loader: None)
+    monkeypatch.setattr(q, "_acquire_pinned_directory", stop_before_directory_acquisition)
+
+    with pytest.raises(DirectoryAcquisitionReached):
+        runner.main(["--phase", "development", "--_internal-stage"])
+    assert not q._RUNNER_INVOCATION_REGISTRY
+    assert not q._LEDGER_REGISTRY
+
+
+def test_structurally_different_spoofed_runner_main_is_rejected_before_directory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner_path = q.REPOSITORY_ROOT / q.PUBLICATION_SURFACE_PATHS["runner"]
+    namespace = {
+        "__name__": "__main__",
+        "__file__": str(runner_path),
+        "qualification": q,
+        "fixture_path": Path("/unreached/frozen-runner-guard"),
+    }
+    source = """
+def main():
+    return qualification._mint_runner_invocation_seal(
+        stage="development",
+        config=None,
+        config_path=fixture_path,
+        report_path=fixture_path,
+        checkpoint_path=fixture_path,
+        development_report_path=fixture_path,
+        source_provenance={},
+        reviewed_development=None,
+    )
+"""
+    exec(compile(source, str(runner_path), "exec"), namespace, namespace)
+    monkeypatch.setattr(sys, "argv", [str(runner_path), "--phase", "development"])
+    monkeypatch.setattr(
+        q,
+        "_acquire_pinned_directory",
+        lambda *_args, **_kwargs: pytest.fail("spoofed main reached directory acquisition"),
+    )
+    with pytest.raises(PermissionError, match="frozen CLI main boundary"):
+        namespace["main"]()
 
 
 def test_capture_source_rejects_noncanonical_root_before_git(tmp_path: Path) -> None:
