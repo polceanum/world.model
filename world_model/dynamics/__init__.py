@@ -1,5 +1,6 @@
 """Hybrid structured and learned belief dynamics."""
 
+from world_model.dynamics.actions import WorldImpulseAction
 from world_model.dynamics.analytic import AnalyticKinematics
 from world_model.dynamics.analytic_free_motion import AnalyticFreeMotionDynamics
 from world_model.dynamics.applicability import (
@@ -79,6 +80,7 @@ __all__ = [
     "TypedAttentionInteractionResidual",
     "UncertaintyDynamics",
     "UncertaintyOutput",
+    "WorldImpulseAction",
     "apply_pair_applicability",
     "fit_free_motion",
     "free_motion_position_velocity",

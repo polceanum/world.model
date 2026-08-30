@@ -63,6 +63,12 @@ from world_model.runtime.prepared import (
 from world_model.runtime.state import RuntimeState, runtime_stream_key
 
 if TYPE_CHECKING:
+    from world_model.dynamics import WorldImpulseAction
+    from world_model.planning import (
+        CounterfactualCostWeights,
+        CounterfactualPlanResult,
+        TerminalWorldPositionGoal,
+    )
     from world_model.utils.config import OrpheusConfig
 
 
@@ -1438,9 +1444,37 @@ class OnlineWorldModel(nn.Module):
     def predict(
         self,
         query_times: Sequence[float] | Tensor,
+        *,
+        action: WorldImpulseAction | None = None,
     ) -> BeliefTrajectory:
         if self.state.belief is None:
             raise RuntimeError("OnlineWorldModel must ingest an observation first")
+        if action is None:
+            times = torch.as_tensor(
+                query_times,
+                device=self.state.belief.device,
+                dtype=self.state.belief.dtype,
+            )
+            if times.ndim not in {1, 2}:
+                raise ValueError("query_times must be [T] or [B,T]")
+            if not torch.isfinite(times).all() or torch.any(times < 0):
+                raise ValueError("query_times must be finite nonnegative offsets")
+            if self.hypothesis_controller is not None:
+                selected = self.hypothesis_controller.predict(self.state.belief, times)
+                if selected is not None:
+                    return selected
+            return self.dynamics.rollout(self.state.belief, times)
+
+        from world_model.dynamics import AnalyticFreeMotionDynamics, WorldImpulseAction
+
+        if not isinstance(action, WorldImpulseAction):
+            raise TypeError("action must be a WorldImpulseAction or None")
+        if self.hypothesis_controller is not None:
+            raise NotImplementedError(
+                "known actions are unsupported while the runtime hypothesis controller is enabled"
+            )
+        if not isinstance(self.dynamics, AnalyticFreeMotionDynamics):
+            raise NotImplementedError("known actions currently require AnalyticFreeMotionDynamics")
         times = torch.as_tensor(
             query_times,
             device=self.state.belief.device,
@@ -1450,11 +1484,45 @@ class OnlineWorldModel(nn.Module):
             raise ValueError("query_times must be [T] or [B,T]")
         if not torch.isfinite(times).all() or torch.any(times < 0):
             raise ValueError("query_times must be finite nonnegative offsets")
+        return self.dynamics.rollout(self.state.belief, times, action=action)
+
+    def plan(
+        self,
+        query_times: Sequence[float] | Tensor,
+        candidates: Sequence[WorldImpulseAction | None],
+        goal: TerminalWorldPositionGoal,
+        *,
+        weights: CounterfactualCostWeights | None = None,
+    ) -> CounterfactualPlanResult:
+        """Score known-action counterfactuals without mutating runtime state."""
+
+        if self.state.belief is None:
+            raise RuntimeError("OnlineWorldModel must ingest an observation first")
         if self.hypothesis_controller is not None:
-            selected = self.hypothesis_controller.predict(self.state.belief, times)
-            if selected is not None:
-                return selected
-        return self.dynamics.rollout(self.state.belief, times)
+            raise NotImplementedError(
+                "counterfactual action planning is unsupported while the runtime "
+                "hypothesis controller is enabled"
+            )
+
+        from world_model.dynamics import AnalyticFreeMotionDynamics
+        from world_model.planning import (
+            CounterfactualCostWeights,
+            plan_counterfactual_actions,
+        )
+
+        if not isinstance(self.dynamics, AnalyticFreeMotionDynamics):
+            raise NotImplementedError(
+                "known-action planning currently requires AnalyticFreeMotionDynamics"
+            )
+        resolved_weights = CounterfactualCostWeights() if weights is None else weights
+        return plan_counterfactual_actions(
+            self.dynamics,
+            self.state.belief,
+            query_times,
+            candidates,
+            goal,
+            weights=resolved_weights,
+        )
 
     def predict_hypotheses(
         self,
