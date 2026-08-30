@@ -412,16 +412,49 @@ and is terminal. It is not an accepted rung, must not be revived or retried,
 and cannot be renamed as the next capability. Its historical material remains
 only as failure provenance.
 
-### 7. Next independent capability — not yet frozen
+### 7. Variable metric radius — failed family closed
+
+The variable-radius core, scene, source implementation, and their audits are
+green, but the family did not produce a valid development result. Attempt 1 at
+source commit prefix `db669b` terminated in the no-gradient harness path. Its
+independently audited, internally byte-bound report/ledger SHA-256 values are
+`7f194a41bd5e64328f0a57d8142aad8a81f01d2b449386bb05939fb3ed49b142`
+and `aec6c9500d3cd8ca6a152b8107578b2b441a544dca605fe7f6ae59a61f0d021e`
+at `66,758` and `10,248` bytes. It created no checkpoint or protected
+artifact. Its own frozen strict reread validator rejects the bundle because of
+tuple/list JSON normalization and mutable directory-link-count binding
+defects.
+
+Attempt 2 at source commit prefix `dcb815` terminated with a `ValueError`
+because the fixed-radius public bridge was paired with the preserved variable
+simulator-radius range. Its source-bound, fail-closed report/ledger SHA-256
+values are
+`a6efb2873c7248cc5bc9a010fb26b30615f544469810895aac9943cd14770fb7`
+and `3d05e68af3c6fe1b4c4abc09bd5998fe9c83734bb3658861bcda14aca5934cdf`
+at `67,835` and `10,255` bytes. Ledger record self-hash prefix `f9f6bca1` and
+generation 3 bind active batch `[0, 1, 2, 3]`, next ordinal `0`, and
+zero completed batches. It also created no checkpoint or protected artifact.
+The v2 frozen strict validators pass. A separate graph-live owner-error scalar
+conversion warning was non-terminal but remains unqualified.
+
+The v2 protocol caps the family at two architecture attempts, so there is no
+retry or v3 and the protected ladder remains unopened. This is NOT a
+successful qualification or acceptance. Public `threshold_design_only`
+evidence was threshold-design evidence only and never formal acceptance;
+radius variance remains engineering-fixed and uncalibrated. The ignored local
+bundles remain preserved as failure provenance, and this family must not be
+revived or renamed as another rung.
+
+### 8. Next independent capability — not yet frozen
 
 No next active rung is selected or authorized by this document. It must add one
 genuinely new capability, freeze source/manifests/gates before access, preserve
-every accepted lower-rung gate, and remain distinct from the closed partial
-family. Candidates include identifiable drag, variable metric scale,
-variable-size sets, contact/material identification, actions/planning, or a
-new useful modality; listing them does not predeclare or authorize one.
+every accepted lower-rung gate, and remain distinct from both closed failed
+families. Candidates include identifiable drag, variable-size sets,
+contact/material identification, actions/planning, or a new useful modality;
+listing them does not predeclare or authorize one.
 
-### 8. Variable-size object sets
+### 9. Variable-size object sets
 
 Variable-size sets require their own predeclared association/lifecycle and
 recovery contract rather than inheriting the failed rung 6 family. Require
@@ -429,7 +462,7 @@ per-object state/horizon gates, association coverage, identity-switch limits,
 permutation invariance, and recovery after missed observations before
 increasing scene count or backbone capacity.
 
-### 9. Hybrid contact and material identification
+### 10. Hybrid contact and material identification
 
 Introduce sparse two-sphere contact with an analytic hard forward resolver and
 a differentiable local surrogate for learnable pre-contact state/parameter
@@ -438,7 +471,7 @@ state, energy/momentum diagnostics, and observable restitution/friction
 identification. Do not use fabricated straight-through gradients or simulator
 event labels at runtime.
 
-### 10. Actions, counterfactuals, and planning tasks
+### 11. Actions, counterfactuals, and planning tasks
 
 Condition the shared dynamics on known forces/actions and score factual and
 counterfactual trajectories. Tasks include interception, collision avoidance,
@@ -446,7 +479,7 @@ goal-reaching, and information gathering under occlusion. Planning must reuse
 the same cheap state-only rollout, report task success alongside physical
 accuracy, and remain consistent with the online posterior after new evidence.
 
-### 11. Richer geometry and real observations
+### 12. Richer geometry and real observations
 
 Only after the synthetic structured ladder closes, expand object geometry,
 camera environments, RGB-D/video data, and useful asynchronous sensors. Keep a

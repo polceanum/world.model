@@ -1,5 +1,55 @@
 # Design decisions
 
+## ADR-169 — Close variable-radius development after two terminal attempts
+
+- **Date:** 2026-08-30
+- **Status:** terminal development failure; family closed without
+  qualification or acceptance
+- **Context:** After ADR-168 accepted the known calibrated orbital-camera rung,
+  variable metric radius was developed as a genuinely new candidate
+  capability. The core, scene, source implementation, and their audits are
+  green. The public `threshold_design_only` evidence established threshold
+  design only; it was never a formal acceptance result. Radius variance is
+  still an engineering-fixed, uncalibrated value.
+- **Attempt 1 evidence:** Source commit prefix `db669b` terminated in the
+  no-gradient harness path. The independently audited, internally byte-bound
+  development report SHA-256/size is
+  `7f194a41bd5e64328f0a57d8142aad8a81f01d2b449386bb05939fb3ed49b142`
+  / `66,758` bytes; ledger SHA-256/size is
+  `aec6c9500d3cd8ca6a152b8107578b2b441a544dca605fe7f6ae59a61f0d021e`
+  / `10,248` bytes. No checkpoint or protected artifact was created. The
+  bundle does not pass its own frozen strict reread validator because of
+  tuple/list JSON normalization and mutable directory-link-count binding
+  defects; it remains failure provenance, not accepted evidence.
+- **Attempt 2 evidence:** Source commit prefix `dcb815` terminated with a
+  `ValueError` because the fixed-radius public bridge was paired with the
+  preserved variable simulator-radius range. The source-bound, fail-closed
+  report SHA-256/size is
+  `a6efb2873c7248cc5bc9a010fb26b30615f544469810895aac9943cd14770fb7`
+  / `67,835` bytes; ledger SHA-256/size is
+  `3d05e68af3c6fe1b4c4abc09bd5998fe9c83734bb3658861bcda14aca5934cdf`
+  / `10,255` bytes. Ledger record self-hash prefix `f9f6bca1` and generation
+  3 bind active batch `[0, 1, 2, 3]`, next ordinal `0`, and zero completed
+  batches. No checkpoint or protected artifact was created. The v2 frozen
+  strict report, ledger, publication, directory, and prior-attempt validators
+  all pass. A separate PyTorch warning converted a graph-live owner-error
+  diagnostic to a Python scalar; it was not the terminal cause and remains an
+  unqualified diagnostic limitation.
+- **Decision:** Enforce the v2 protocol's maximum of two architecture
+  attempts. Do not retry this family, create v3, access protected data, or
+  infer qualification from either terminal bundle. Preserve both bundles
+  under ignored local storage with their source binding and fail-closed state.
+- **Alternatives considered:** Treat green implementation/audits or public
+  threshold-design evidence as acceptance; bridge the legacy fixed-radius
+  control to a variable simulator range after the attempt limit; permit a
+  third development attempt; open protected data without a passing
+  development artifact.
+- **Consequences:** This is NOT a successful qualification or acceptance.
+  Specification 1.57 and ADR-168 remain the highest accepted contract. The
+  variable-radius family is terminal, its protected ladder remains unopened,
+  and the next rung must be a genuinely new capability with a fresh
+  pre-access protocol. No calibrated radius-uncertainty claim exists.
+
 ## ADR-168 — Accept the exactly-once known-orbital-camera RGB-D qualification
 
 - **Date:** 2026-08-28

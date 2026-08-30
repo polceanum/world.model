@@ -90,6 +90,21 @@ parameter-free result for one certified orbit—not general moving-camera,
 unknown-pose, learned-pose, occlusion, contact, variable-count, or learned-
 capacity evidence.
 
+The subsequent variable-radius candidate completed its core, scene, and source
+implementation with green audits but closed without a valid development
+result. Attempt 1 at source commit prefix `db669b` terminated in a no-gradient
+harness path; attempt 2 at source commit prefix `dcb815` terminated with a
+`ValueError` from the fixed-radius public bridge versus the preserved variable
+simulator-radius range. The v2 protocol permits only two architecture attempts,
+so there is no retry or v3, checkpoint, protected access, qualification, or
+acceptance. Both terminal evidence bundles remain ignored and local. The v1
+bytes are independently bound and audited but do not pass that attempt's own
+frozen strict reread validator; the v2 bundle passes its strict frozen
+validators. Public `threshold_design_only` evidence was not formal acceptance,
+and radius variance remains engineering-fixed and uncalibrated. Exact evidence
+hashes and byte sizes are recorded in
+[`project/STATUS.md`](project/STATUS.md).
+
 ## Quick start
 
 Use the existing `orpheus` environment. PyTorch is an externally managed

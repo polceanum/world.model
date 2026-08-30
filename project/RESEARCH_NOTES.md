@@ -15,6 +15,52 @@ checkpoint, split/seeds, device, commands, metrics, and failure cases.
 
 ## Evidence so far
 
+### Variable metric radius — terminal development evidence
+
+The variable-radius core, scene, source implementation, and their audits are
+green. That implementation result did not become development qualification:
+both permitted harness attempts terminated without a valid development result,
+produced no checkpoint, and opened no protected data.
+
+Attempt 1 is source-bound to commit prefix `db669b` and failed closed in the
+no-gradient harness path. Its independently audited, internally byte-bound
+development report SHA-256/size is
+`7f194a41bd5e64328f0a57d8142aad8a81f01d2b449386bb05939fb3ed49b142`
+/ `66,758` bytes, and its ledger SHA-256/size is
+`aec6c9500d3cd8ca6a152b8107578b2b441a544dca605fe7f6ae59a61f0d021e`
+/ `10,248` bytes. The bundle does not pass its own frozen strict reread
+validator: the in-memory gate tuple became a JSON list, and the persisted
+directory binding included a link count that changed when its two files were
+created. This limitation is preserved explicitly.
+
+Attempt 2 is source-bound to commit prefix `dcb815` and failed closed with a
+`ValueError` from the fixed-radius public bridge versus the preserved variable
+simulator-radius range. Its report SHA-256/size is
+`a6efb2873c7248cc5bc9a010fb26b30615f544469810895aac9943cd14770fb7`
+/ `67,835` bytes, and its ledger SHA-256/size is
+`3d05e68af3c6fe1b4c4abc09bd5998fe9c83734bb3658861bcda14aca5934cdf`
+/ `10,255` bytes. Ledger record self-hash prefix `f9f6bca1` and generation
+3 record active batch `[0, 1, 2, 3]`, next ordinal `0`, and zero completed
+batches. Source-order review shows that the four nominal rows and alternate-
+prior control returned in memory, but the legacy control failed before
+resource aggregation, evidence digest/finalization, or `complete_batch`.
+Consequently there are no durable scientific metrics to report. The v2 frozen
+strict report, ledger, publication-surface, directory-binding, and prior-
+attempt validators all pass.
+
+Attempt 2 also emitted a PyTorch warning while converting a graph-live
+owner-error diagnostic to a Python scalar. That warning was not the terminal
+exception, but it remains an unqualified diagnostic limitation; no repair or
+replay followed the terminal result.
+
+The v2 protocol permits at most two architecture attempts. There is therefore
+no retry or v3, no protected access, and no qualification. This is NOT a
+successful qualification or acceptance, and the terminal harness evidence is
+not a scientific accuracy result. Public `threshold_design_only` evidence was
+threshold-design evidence only, not formal acceptance. Radius variance remains
+an engineering-fixed, uncalibrated value. Both bundles remain ignored and
+local as failure provenance; specification 1.57 remains the accepted boundary.
+
 ### Typed-attention stability and scaling decision
 
 The warmup/cosine hypothesis is now falsified at the same authoritative
