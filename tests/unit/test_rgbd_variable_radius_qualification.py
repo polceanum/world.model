@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from world_model.observations import ObservationPacket
+from world_model.observations import MeasurementSet, ObservationPacket
 from world_model.training import rgbd_variable_radius_qualification as q
 
 
@@ -67,6 +67,55 @@ def _fake_ledger(tmp_path: Path, *, stage: str = "development") -> q._AccessLedg
 
 def _fake_ledger_bytes(ledger: q._AccessLedger, *, label: str) -> bytes:
     return q._pinned_stable_read_bytes(ledger._directory_pin, ledger.path, label=label)
+
+
+def _fake_live_measurement() -> tuple[MeasurementSet, torch.Tensor]:
+    radius_source = torch.linspace(
+        0.1,
+        0.8,
+        q.BATCH_SIZE * 2,
+        dtype=torch.float32,
+        requires_grad=True,
+    ).reshape(q.BATCH_SIZE, 2, 1)
+    radius = 0.2 + radius_source.square() * 0.01
+    values = torch.zeros(q.BATCH_SIZE, 2, 3, dtype=torch.float32)
+    measured = MeasurementSet(
+        modality="rgbd",
+        sensor_id="camera0:rgbd",
+        timestamp=torch.zeros(q.BATCH_SIZE, dtype=torch.float32),
+        values=values,
+        log_variance=torch.zeros_like(values),
+        existence_logits=torch.zeros(q.BATCH_SIZE, 2, dtype=torch.float32),
+        measurement_mask=torch.ones(q.BATCH_SIZE, 2, dtype=torch.bool),
+        appearance=None,
+        class_logits=None,
+        frame_id="camera:camera0:rgbd",
+        supported_state_fields=("position", "radius"),
+        auxiliary={
+            "world_position": values.clone(),
+            "world_position_log_variance": torch.zeros_like(values),
+            "world_radius": radius,
+            "world_radius_log_variance": torch.full_like(radius, -11.5),
+            "world_radius_valid_mask": torch.ones(q.BATCH_SIZE, 2, dtype=torch.bool),
+            "surface_fit_radius_relative_error": torch.zeros(
+                q.BATCH_SIZE,
+                2,
+                dtype=torch.float32,
+            ),
+            "surface_fit_condition_number": torch.ones(
+                q.BATCH_SIZE,
+                2,
+                dtype=torch.float32,
+            ),
+            "prior_interval_collision_mask": torch.zeros(
+                q.BATCH_SIZE,
+                2,
+                dtype=torch.bool,
+            ),
+        },
+    )
+    measured.validate()
+    return measured, radius_source
 
 
 def _fake_evidence(
@@ -335,6 +384,77 @@ def _complete_fake_split(
     return result
 
 
+def test_v2_identity_is_distinct_and_binds_the_terminal_v1_disclosure() -> None:
+    assert q.ARCHITECTURE_VERSION == 2
+    assert q.ARCHITECTURE_ATTEMPT == 2
+    assert q.MAX_ARCHITECTURE_ATTEMPTS == 2
+    assert Path("runs/rgbd_two_visible_variable_radius_v2") == q.RUN_RELATIVE_PATH
+    assert Path("runs/rgbd_two_visible_variable_radius_v1") != q.RUN_RELATIVE_PATH
+    assert q.DEVELOPMENT_REPORT_NAME == "development_report_v2.json"
+    assert q.CHECKPOINT_NAME == "development_model_v2.pt"
+    assert q.DEVELOPMENT_LEDGER_NAME == "development_attempt_2_access.json"
+    assert q.QUALIFICATION_REPORT_NAME == "qualification_report_v2.json"
+    assert q.QUALIFICATION_LEDGER_NAME == "qualification_attempt_2_access.json"
+    runner = _load_runner_module()
+    assert runner._OUTER_RECEIPT_SCHEMA == "rgbd_variable_radius_outer_preflight_v2"
+
+    protocol = q.bridge_protocol()
+    assert protocol["name"] == "rgbd_two_visible_variable_radius_v2"
+    assert protocol["terminal_after_attempt"] is True
+    assert (
+        protocol["evaluator_provenance"]["receipt_schema"]
+        == "variable_radius_evaluator_provenance_receipt_v3"
+    )
+    disclosure = protocol["prior_architecture_attempt"]
+    assert disclosure == {
+        "schema": "rgbd_variable_radius_prior_attempt_disclosure_v1",
+        "architecture_version": 1,
+        "architecture_attempt": 1,
+        "protocol_name": "rgbd_two_visible_variable_radius_v1",
+        "commit": "db669b099f4e51c18e24645ddee8c1249f86b175",
+        "development_report": {
+            "sha256": "7f194a41bd5e64328f0a57d8142aad8a81f01d2b449386bb05939fb3ed49b142",
+            "bytes": 66758,
+        },
+        "development_ledger": {
+            "sha256": "aec6c9500d3cd8ca6a152b8107578b2b441a544dca605fe7f6ae59a61f0d021e",
+            "bytes": 10248,
+        },
+        "terminal_status": "terminal_error",
+        "error": {
+            "type": "RuntimeError",
+            "message": "element 0 of tensors does not require grad and does not have a grad_fn",
+        },
+        "active_split": "development",
+        "active_batch": [0, 1, 2, 3],
+        "checkpoint_published": False,
+        "protected_access_started": False,
+        "protected_splits_opened": [],
+        "retry_permitted": False,
+    }
+
+
+def test_bridge_protocol_is_recursively_json_native_before_self_hashing() -> None:
+    protocol = q.bridge_protocol()
+
+    def assert_native(value: object) -> None:
+        if type(value) is dict:
+            assert all(type(key) is str for key in value)
+            for item in value.values():
+                assert_native(item)
+        elif type(value) is list:
+            for item in value:
+                assert_native(item)
+        else:
+            assert value is None or type(value) in {bool, int, float, str}
+
+    assert type(q.DEFAULT_GATES.horizon_position_rmse_m) is tuple
+    assert type(protocol["gates"]["horizon_position_rmse_m"]) is list
+    assert_native(protocol)
+    supplied = protocol.pop("protocol_sha256")
+    assert supplied == q.canonical_sha256(protocol)
+
+
 def test_exact_metric_ownership_is_closed_and_collision_free() -> None:
     owned = [name for _, names in q._GATE_SCHEMA_OWNERS for name in names]
     assert len(owned) == len(set(owned))
@@ -491,13 +611,109 @@ def test_nominal_source_records_calls_and_aliases_instead_of_literal_metrics() -
     aggregate = inspect.getsource(q._aggregate_split_metrics)
     assert 'operation_counts["predict"] += 1' in nominal
     assert 'operation_counts["reset"] += 1' in nominal
+    assert 'operation_counts["correct"] += 1' in nominal
     assert "model.reset(batch_size=BATCH_SIZE)" in nominal
+    assert "original_correct = model.updater.correct" in nominal
+    assert "model.updater.correct = recording_correct" in nominal
+    assert "_record_live_measurement(live_measurement_captures, measured)" in nominal
+    assert "_validated_live_measurement_capture(" in nominal
+    assert "raw_proposal_history.append(public_raw_radius" in nominal
+    assert "public_raw_radius[batch_index, :, 0]" in nominal
+    assert "raw_anchor_vjp = torch.stack(frame_raw_vjp)" in nominal
+    assert "live_raw_radius[batch_index, :, 0]" in nominal
+    assert "model.last_measurements" in nominal
+    assert "model._last_measurements" not in nominal
+    assert ".initialise(" not in nominal
+    assert ".encode(" not in nominal
+    assert ".initialise_measurements(" not in nominal
+    assert ".encode_measurements(" not in nominal
+    assert "model.observation_modules" not in nominal
+    assert nominal.count("model.ingest(packet)") == 1
+    assert nominal.count("original_correct(**kwargs)") == 1
     assert "_rollout_output_alias_count(trajectory, belief_after_rollout)" in nominal
     assert "public_rollout_output_alias_count" in evidence_sources
     assert "diagnostic(" in evidence_sources
     assert "_measured_operation_count_metrics(diagnostics)" in aggregate
     assert '"public_predict_calls_per_batch_min": 1.0' not in aggregate
     assert '"model_reset_count_per_batch_min": 1.0' not in aggregate
+
+
+def test_live_measurement_capture_is_identity_preserving_once_and_bit_exact() -> None:
+    live, radius_source = _fake_live_measurement()
+    captures: list[q._LiveMeasurementCapture] = []
+    assert q._record_live_measurement(captures, live) is live
+    assert len(captures) == 1
+    assert captures[0].measurement is live
+    assert captures[0].measurement_identity == id(live)
+    assert captures[0].call_index == 0
+    public = live.detach()
+    assert (
+        q._validated_live_measurement_capture(
+            captures[0],
+            public,
+            expected_call_index=0,
+        )
+        is live
+    )
+    assert "prior_interval_collision_mask" in live.auxiliary
+    assert live.auxiliary["world_radius"].requires_grad is True
+    assert live.auxiliary["world_radius"].grad_fn is not None
+    assert radius_source.requires_grad is True
+    assert q._tensor_tree_has_autograd(public) is False
+
+    with pytest.raises(PermissionError, match="call index differs"):
+        q._validated_live_measurement_capture(
+            captures[0],
+            public,
+            expected_call_index=1,
+        )
+    with pytest.raises(PermissionError, match="identity or call index differs"):
+        q._validated_live_measurement_capture(
+            captures[0],
+            live,
+            expected_call_index=0,
+        )
+
+    bit_changed = live.detach()
+    bit_changed.values = bit_changed.values.clone()
+    bit_changed.values[0, 0, 0] = -0.0
+    assert torch.equal(bit_changed.values, public.values)
+    with pytest.raises(RuntimeError, match="bit-exactly"):
+        q._validated_live_measurement_capture(
+            captures[0],
+            bit_changed,
+            expected_call_index=0,
+        )
+
+
+def test_vjp_anchor_preflight_requires_live_graph_connected_exact_shape() -> None:
+    source = torch.linspace(0.1, 0.8, 8, dtype=torch.float32, requires_grad=True)
+    raw = (source.square() + 0.2).reshape(q.BATCH_SIZE, 2)
+    deployed = (source * 0.5 + 0.1).reshape(q.BATCH_SIZE, 2)
+    targets = q._validated_vjp_anchor_targets(
+        raw_anchor_vjp=raw,
+        deployed_anchor_vjp=deployed,
+    )
+    assert targets["raw"] is raw
+    assert targets["deployed"] is deployed
+
+    with pytest.raises(RuntimeError, match="raw VJP anchor lost"):
+        q._validated_vjp_anchor_targets(
+            raw_anchor_vjp=raw.detach(),
+            deployed_anchor_vjp=deployed,
+        )
+    leaf = torch.ones(q.BATCH_SIZE, 2, dtype=torch.float32, requires_grad=True)
+    assert leaf.grad_fn is None
+    with pytest.raises(RuntimeError, match="deployed VJP anchor lost"):
+        q._validated_vjp_anchor_targets(
+            raw_anchor_vjp=raw,
+            deployed_anchor_vjp=leaf,
+        )
+    with pytest.raises(RuntimeError, match=r"exact \[4,2\]"):
+        q._validated_vjp_anchor_targets(
+            raw_anchor_vjp=raw[:, :1],
+            deployed_anchor_vjp=deployed,
+        )
 
 
 def test_vjp_ordinals_cover_all_axes_with_exact_unique_receipts() -> None:
@@ -1177,7 +1393,7 @@ def test_batch_finalization_is_exact_ordered_and_validate_before_retire(
         assert receipt.consumed_ordinals == (0, 1, 2, 3)
         assert len(receipt.packet_receipts) == q.HISTORY_FRAME_COUNT
         assert receipt.run_directory_binding_sha256 == ledger._directory_binding_sha256
-        assert receipt.run_directory_identity[:3] == (ledger._directory_pin.directory_identity[:3])
+        assert receipt.run_directory_identity == ledger._directory_pin.directory_identity
         assert row.provenance_sha256 == q._provenance_receipt_sha256(receipt)
         assert q._validated_evidence(row, split=row.split, ordinal=row.ordinal) is row
     assert q._evidence_provenance_sha256(rows) != q._evidence_provenance_sha256(rows[::-1])
@@ -1367,6 +1583,38 @@ def test_full_development_report_roundtrips_sorted_multikey_maps(
     )
     q._validate_development_report_extras(validated)
     assert validated["outcome"] == "passed"
+
+
+def test_real_pinned_report_write_read_validate_roundtrip_normalizes_tuple_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_protocol = q.bridge_protocol()
+    assert type(q.DEFAULT_GATES.horizon_position_rmse_m) is tuple
+    assert type(real_protocol["gates"]["horizon_position_rmse_m"]) is list
+    source = _install_fake_report_surface(monkeypatch)
+    monkeypatch.setattr(q, "bridge_protocol", lambda: copy.deepcopy(real_protocol))
+    result = _fake_split_result(monkeypatch, split="development", passed=True)
+    report = q._report_root(
+        stage="development",
+        source_provenance=source,
+        results=[result],
+        terminal_ledger_sha256="9" * 64,
+    )
+    report["checkpoint"] = _fake_checkpoint_record()
+    pin = _fake_directory_pin(tmp_path)
+    path = tmp_path / "development-v2-roundtrip.json"
+    q._write_report_fresh(pin, path, report)
+    encoded = q._pinned_stable_read_bytes(pin, path, label="v2 report roundtrip")
+    parsed = q._strict_json_loads(encoded, label="v2 report roundtrip")
+    validated = q._validate_report(
+        parsed,
+        stage="development",
+        expected_source=source,
+    )
+    q._validate_development_report_extras(validated)
+    q._exact_equal(validated, report, label="v2 report JSON roundtrip")
+    assert type(validated["protocol"]["gates"]["horizon_position_rmse_m"]) is list
 
 
 def test_partial_qualification_report_is_strictly_validated(
@@ -2113,6 +2361,46 @@ def test_pinned_directory_rejects_canonical_name_swap_without_redirecting_write(
     with pytest.raises(PermissionError, match="namespace binding changed"):
         q._pinned_durable_create(pin, target, b"must not redirect\n")
     assert list(run_directory.iterdir()) == []
+
+
+def test_persistent_directory_binding_is_stable_across_artifact_creation_and_checks_mode(
+    tmp_path: Path,
+) -> None:
+    pin = _fake_directory_pin(tmp_path)
+    binding_before = q._pinned_directory_binding(pin)
+    capability_before = q._pinned_directory_capability_sha256(pin)
+    assert binding_before["schema"] == "rgbd_variable_radius_run_directory_v2"
+    assert len(binding_before["parent_identity"]) == 3
+    assert len(binding_before["directory_identity"]) == 3
+
+    target = tmp_path / "development-v2-artifact.json"
+    q._pinned_durable_create(pin, target, b"v2 evidence\n")
+    binding_after = q._pinned_directory_binding(pin)
+    capability_after = q._pinned_directory_capability_sha256(pin)
+    q._exact_equal(binding_after, binding_before, label="stable v2 directory binding")
+    assert capability_after == capability_before
+
+    review_pin = q._acquire_pinned_directory(tmp_path, create=False, canonical=False)
+    try:
+        review_binding = q._pinned_directory_binding(review_pin)
+        q._exact_equal(
+            review_binding,
+            binding_before,
+            label="reacquired post-development directory binding",
+        )
+        assert q.canonical_sha256(review_binding) == q.canonical_sha256(binding_before)
+    finally:
+        q._release_pinned_directory(review_pin)
+
+    original_permissions = stat.S_IMODE(os.stat(tmp_path).st_mode)
+    tampered_permissions = 0o755 if original_permissions != 0o755 else 0o700
+    os.chmod(tmp_path, tampered_permissions)
+    try:
+        with pytest.raises(PermissionError, match="namespace binding changed"):
+            q._validate_pinned_directory(pin)
+    finally:
+        os.chmod(tmp_path, original_permissions)
+    q._validate_pinned_directory(pin)
 
 
 def test_pinned_replace_swap_operates_only_on_original_fd_and_rejects(

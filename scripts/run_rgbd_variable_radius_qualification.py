@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Two-stage CLI for the frozen seedless variable-radius qualification.
+"""Two-stage CLI for frozen seedless variable-radius architecture attempt v2.
 
 The outer stage uses only the standard library. It proves that the three-file
 publication surface is a clean, upstream-equal HEAD, then replaces itself with
@@ -37,7 +37,7 @@ PUBLICATION_SURFACE_PATHS = {
     "qualification_test": "tests/unit/test_rgbd_variable_radius_qualification.py",
 }
 _QUALIFICATION_MODULE = "world_model.training.rgbd_variable_radius_qualification"
-_OUTER_RECEIPT_SCHEMA = "rgbd_variable_radius_outer_preflight_v1"
+_OUTER_RECEIPT_SCHEMA = "rgbd_variable_radius_outer_preflight_v2"
 _OUTER_RECEIPT_ENV_PREFIX = "_RGBD_VARIABLE_RADIUS_OUTER_"
 _OUTER_RECEIPT_FD_ENV = f"{_OUTER_RECEIPT_ENV_PREFIX}FD"
 _OUTER_RECEIPT_SHA256_ENV = f"{_OUTER_RECEIPT_ENV_PREFIX}SHA256"
@@ -1097,8 +1097,8 @@ def _validate_loaded_publication(module: types.ModuleType, publication: dict[str
 def arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Inspect the seedless variable-radius protocol, consume development once, "
-            "or consume the reviewed protected ladder."
+            "Inspect variable-radius architecture attempt v2, consume its distinct "
+            "development run once, or consume the reviewed protected ladder."
         )
     )
     parser.add_argument(

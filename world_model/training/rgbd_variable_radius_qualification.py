@@ -40,7 +40,7 @@ import yaml
 from torch import Tensor
 
 from world_model.belief import slow_packing_map
-from world_model.observations import ObservationPacket
+from world_model.observations import MeasurementSet, ObservationPacket
 from world_model.runtime import OnlineWorldModel
 from world_model.training.rgbd_online_bridge_qualification import (
     clean_source,
@@ -74,9 +74,9 @@ Split = Literal["development", "selector", "confirmation", "final_test"]
 Reduction = Literal["sum", "min", "max", "mean", "rmse"]
 _NATIVE_PATH_TYPE = type(Path())
 
-ARCHITECTURE_VERSION = 1
-ARCHITECTURE_ATTEMPT = 1
-MAX_ARCHITECTURE_ATTEMPTS = 1
+ARCHITECTURE_VERSION = 2
+ARCHITECTURE_ATTEMPT = 2
+MAX_ARCHITECTURE_ATTEMPTS = 2
 OPTIMIZER_UPDATES = 0
 BATCH_SIZE = 4
 ORDINALS = tuple(range(SCENES_PER_SPLIT))
@@ -115,11 +115,11 @@ EXPECTED_RADIUS_LOG_VARIANCE = math.log(1.0e-5)
 MAX_CHECKPOINT_BYTES = 4 * 1024 * 1024
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-RUN_RELATIVE_PATH = Path("runs/rgbd_two_visible_variable_radius_v1")
-DEVELOPMENT_REPORT_NAME = "development_report.json"
-CHECKPOINT_NAME = "development_model.pt"
+RUN_RELATIVE_PATH = Path("runs/rgbd_two_visible_variable_radius_v2")
+DEVELOPMENT_REPORT_NAME = "development_report_v2.json"
+CHECKPOINT_NAME = "development_model_v2.pt"
 DEVELOPMENT_LEDGER_NAME = f"development_attempt_{ARCHITECTURE_ATTEMPT}_access.json"
-QUALIFICATION_REPORT_NAME = "qualification_report.json"
+QUALIFICATION_REPORT_NAME = "qualification_report_v2.json"
 QUALIFICATION_LEDGER_NAME = f"qualification_attempt_{ARCHITECTURE_ATTEMPT}_access.json"
 DEVELOPMENT_ARTIFACT_NAMES = frozenset(
     {DEVELOPMENT_REPORT_NAME, CHECKPOINT_NAME, DEVELOPMENT_LEDGER_NAME}
@@ -129,6 +129,33 @@ QUALIFICATION_ARTIFACT_NAMES = frozenset(
 )
 if len(QUALIFICATION_ARTIFACT_NAMES) != 5:
     raise RuntimeError("variable-radius qualification owns exactly five artifacts")
+
+_PRIOR_ARCHITECTURE_ATTEMPT_DISCLOSURE = {
+    "schema": "rgbd_variable_radius_prior_attempt_disclosure_v1",
+    "architecture_version": 1,
+    "architecture_attempt": 1,
+    "protocol_name": "rgbd_two_visible_variable_radius_v1",
+    "commit": "db669b099f4e51c18e24645ddee8c1249f86b175",
+    "development_report": {
+        "sha256": "7f194a41bd5e64328f0a57d8142aad8a81f01d2b449386bb05939fb3ed49b142",
+        "bytes": 66758,
+    },
+    "development_ledger": {
+        "sha256": "aec6c9500d3cd8ca6a152b8107578b2b441a544dca605fe7f6ae59a61f0d021e",
+        "bytes": 10248,
+    },
+    "terminal_status": "terminal_error",
+    "error": {
+        "type": "RuntimeError",
+        "message": "element 0 of tensors does not require grad and does not have a grad_fn",
+    },
+    "active_split": "development",
+    "active_batch": [0, 1, 2, 3],
+    "checkpoint_published": False,
+    "protected_access_started": False,
+    "protected_splits_opened": [],
+    "retry_permitted": False,
+}
 
 FROZEN_CONFIG_SHA256 = "e27934fa16940c82f7bfdfb40d529fe70b6e7eddd82cbffa9cef1ff14d46eb46"
 FROZEN_SOURCE_SHA256 = {
@@ -251,9 +278,60 @@ _FROZEN_SCENE_CERTIFICATE_BINDING: dict[str, Any] = {
 }
 
 
+def _json_native(
+    value: Any,
+    *,
+    label: str = "JSON value",
+    _active_containers: set[int] | None = None,
+) -> Any:
+    """Return an exact recursively JSON-native copy.
+
+    Tuples are deliberately normalized to lists before any durable hash or
+    validation. Other Python containers and scalar subclasses are rejected so
+    an in-memory protocol cannot acquire a representation that changes after a
+    JSON round trip.
+    """
+
+    if value is None or type(value) in {bool, int, str}:
+        return value
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise ValueError(f"{label} must contain only finite floats")
+        return value
+    if type(value) not in {dict, list, tuple}:
+        raise TypeError(f"{label} contains non-JSON-native type {type(value).__name__}")
+    active = set() if _active_containers is None else _active_containers
+    identity = id(value)
+    if identity in active:
+        raise ValueError(f"{label} contains a recursive container")
+    active.add(identity)
+    try:
+        if type(value) is dict:
+            if any(type(key) is not str for key in value):
+                raise TypeError(f"{label} object keys must be exact strings")
+            return {
+                key: _json_native(
+                    item,
+                    label=f"{label}.{key}",
+                    _active_containers=active,
+                )
+                for key, item in value.items()
+            }
+        return [
+            _json_native(
+                item,
+                label=f"{label}[{index}]",
+                _active_containers=active,
+            )
+            for index, item in enumerate(value)
+        ]
+    finally:
+        active.remove(identity)
+
+
 def _canonical_json(value: Any) -> bytes:
     return json.dumps(
-        value,
+        _json_native(value),
         allow_nan=False,
         ensure_ascii=True,
         separators=(",", ":"),
@@ -277,6 +355,92 @@ def validated_sha256(value: Any, *, label: str) -> str:
     except ValueError as error:
         raise ValueError(f"{label} must be hexadecimal") from error
     return value
+
+
+def _prior_architecture_attempt_disclosure() -> dict[str, Any]:
+    disclosure = _json_native(
+        copy.deepcopy(_PRIOR_ARCHITECTURE_ATTEMPT_DISCLOSURE),
+        label="prior architecture attempt disclosure",
+    )
+    if type(disclosure) is not dict:
+        raise RuntimeError("prior architecture attempt disclosure must be an exact dict")
+    expected_keys = {
+        "schema",
+        "architecture_version",
+        "architecture_attempt",
+        "protocol_name",
+        "commit",
+        "development_report",
+        "development_ledger",
+        "terminal_status",
+        "error",
+        "active_split",
+        "active_batch",
+        "checkpoint_published",
+        "protected_access_started",
+        "protected_splits_opened",
+        "retry_permitted",
+    }
+    if set(disclosure) != expected_keys:
+        raise RuntimeError("prior architecture attempt disclosure schema differs")
+    expected_scalars = {
+        "schema": "rgbd_variable_radius_prior_attempt_disclosure_v1",
+        "architecture_version": 1,
+        "architecture_attempt": 1,
+        "protocol_name": "rgbd_two_visible_variable_radius_v1",
+        "terminal_status": "terminal_error",
+        "active_split": "development",
+        "checkpoint_published": False,
+        "protected_access_started": False,
+        "retry_permitted": False,
+    }
+    for name, expected in expected_scalars.items():
+        _exact_equal(disclosure[name], expected, label=f"prior attempt.{name}")
+    commit = disclosure["commit"]
+    if (
+        type(commit) is not str
+        or commit != "db669b099f4e51c18e24645ddee8c1249f86b175"
+        or len(commit) != 40
+    ):
+        raise ValueError("prior attempt commit must be one exact SHA-1")
+    try:
+        int(commit, 16)
+    except ValueError as error:
+        raise ValueError("prior attempt commit must be hexadecimal") from error
+    for name, expected_sha256, expected_bytes in (
+        (
+            "development_report",
+            "7f194a41bd5e64328f0a57d8142aad8a81f01d2b449386bb05939fb3ed49b142",
+            66758,
+        ),
+        (
+            "development_ledger",
+            "aec6c9500d3cd8ca6a152b8107578b2b441a544dca605fe7f6ae59a61f0d021e",
+            10248,
+        ),
+    ):
+        artifact = disclosure[name]
+        if type(artifact) is not dict or set(artifact) != {"sha256", "bytes"}:
+            raise ValueError(f"prior attempt {name} binding schema differs")
+        if validated_sha256(artifact["sha256"], label=f"prior attempt {name}") != expected_sha256:
+            raise ValueError(f"prior attempt {name} digest differs")
+        if type(artifact["bytes"]) is not int or artifact["bytes"] != expected_bytes:
+            raise ValueError(f"prior attempt {name} byte count differs")
+    _exact_equal(
+        disclosure["error"],
+        {
+            "type": "RuntimeError",
+            "message": "element 0 of tensors does not require grad and does not have a grad_fn",
+        },
+        label="prior attempt error",
+    )
+    _exact_equal(disclosure["active_batch"], [0, 1, 2, 3], label="prior attempt batch")
+    _exact_equal(
+        disclosure["protected_splits_opened"],
+        [],
+        label="prior attempt protected split inventory",
+    )
+    return disclosure
 
 
 def _frozen_scene_certificate_binding() -> dict[str, Any]:
@@ -1054,11 +1218,12 @@ def bridge_protocol() -> dict[str, Any]:
     """Return the canonical self-hashed ordinal-only contract."""
 
     protocol: dict[str, Any] = {
-        "name": "rgbd_two_visible_variable_radius_v1",
+        "name": "rgbd_two_visible_variable_radius_v2",
         "architecture_version": ARCHITECTURE_VERSION,
         "architecture_attempt": ARCHITECTURE_ATTEMPT,
         "maximum_architecture_attempts": MAX_ARCHITECTURE_ATTEMPTS,
         "terminal_after_attempt": True,
+        "prior_architecture_attempt": _prior_architecture_attempt_disclosure(),
         "optimizer": None,
         "optimizer_updates": OPTIMIZER_UPDATES,
         "batch_size": BATCH_SIZE,
@@ -1109,7 +1274,7 @@ def bridge_protocol() -> dict[str, Any]:
         },
         "evaluator_provenance": {
             "model_visible": False,
-            "receipt_schema": "variable_radius_evaluator_provenance_receipt_v2",
+            "receipt_schema": "variable_radius_evaluator_provenance_receipt_v3",
             "scene_evidence_field": "provenance_sha256",
             "split_result_field": "provenance_sha256",
             "ordered_split_digest": True,
@@ -1179,8 +1344,11 @@ def bridge_protocol() -> dict[str, Any]:
     forbidden = {"seed", "dataset", "manifest_path"}
     if any(key in forbidden for key in protocol):
         raise RuntimeError("ordinal protocol acquired a forbidden selector field")
-    protocol["protocol_sha256"] = canonical_sha256(protocol)
-    return protocol
+    native = _json_native(protocol, label="bridge protocol")
+    if type(native) is not dict:
+        raise RuntimeError("bridge protocol must be one exact JSON object")
+    native["protocol_sha256"] = canonical_sha256(native)
+    return native
 
 
 def _frozen_config_path() -> Path:
@@ -2051,8 +2219,8 @@ class _PinnedDirectory:
     child_name: str
     parent_fd: int
     directory_fd: int
-    parent_identity: tuple[int, int, int, int]
-    directory_identity: tuple[int, int, int, int]
+    parent_identity: tuple[int, int, int]
+    directory_identity: tuple[int, int, int]
     canonical: bool
     owner_thread: int
     nonce: object
@@ -2062,15 +2230,15 @@ class _PinnedDirectory:
 class _PinnedDirectoryRegistration:
     pin: _PinnedDirectory
     owner_thread: int
-    parent_identity: tuple[int, int, int, int]
-    directory_identity: tuple[int, int, int, int]
+    parent_identity: tuple[int, int, int]
+    directory_identity: tuple[int, int, int]
     status: Literal["live"]
 
 
 def _build_pinned_directory_vault() -> tuple[
     Callable[[_PinnedDirectory], None],
     Callable[[_PinnedDirectory], _PinnedDirectoryRegistration],
-    Callable[[_PinnedDirectory, tuple[int, int, int, int]], None],
+    Callable[[_PinnedDirectory, tuple[int, int, int]], None],
     Callable[[_PinnedDirectory], None],
     Callable[[], None],
 ]:
@@ -2106,7 +2274,7 @@ def _build_pinned_directory_vault() -> tuple[
 
     def refresh(
         pin: _PinnedDirectory,
-        directory_identity: tuple[int, int, int, int],
+        directory_identity: tuple[int, int, int],
     ) -> None:
         caller = inspect.currentframe().f_back
         record = records.get(id(pin))
@@ -2118,7 +2286,7 @@ def _build_pinned_directory_vault() -> tuple[
             or record.owner_thread != threading.get_ident()
             or record.status != "live"
             or type(directory_identity) is not tuple
-            or len(directory_identity) != 4
+            or len(directory_identity) != 3
             or any(type(value) is not int for value in directory_identity)
         ):
             raise PermissionError("directory pin refresh is not owned by a durable mutation")
@@ -2166,7 +2334,7 @@ def _build_pinned_directory_vault() -> tuple[
 ) = _build_pinned_directory_vault()
 
 
-def _directory_identity(metadata: os.stat_result, *, label: str) -> tuple[int, int, int, int]:
+def _directory_identity(metadata: os.stat_result, *, label: str) -> tuple[int, int, int]:
     if not stat.S_ISDIR(metadata.st_mode):
         raise ValueError(f"{label} must be a directory")
     if metadata.st_nlink < 1:
@@ -2175,11 +2343,10 @@ def _directory_identity(metadata: os.stat_result, *, label: str) -> tuple[int, i
         metadata.st_dev,
         metadata.st_ino,
         metadata.st_mode,
-        metadata.st_nlink,
     )
 
 
-def _directory_path_identity(path: Path, *, label: str) -> tuple[int, int, int, int]:
+def _directory_path_identity(path: Path, *, label: str) -> tuple[int, int, int]:
     metadata = os.lstat(path)
     if stat.S_ISLNK(metadata.st_mode):
         raise ValueError(f"{label} must not be a symbolic link")
@@ -2279,7 +2446,7 @@ def _validate_pinned_directory(pin: _PinnedDirectory) -> None:
     if (
         pin.owner_thread != threading.get_ident()
         or registration.parent_identity != pin.parent_identity
-        or registration.directory_identity[:3] != pin.directory_identity[:3]
+        or registration.directory_identity != pin.directory_identity
     ):
         raise PermissionError("directory pin registry binding changed")
     parent_open = _directory_identity(os.fstat(pin.parent_fd), label="pinned parent descriptor")
@@ -2331,7 +2498,7 @@ def _refresh_pinned_directory_after_owned_mutation(
         parent_open != registration.parent_identity
         or _directory_path_identity(pin.parent_path, label="pinned parent path")
         != registration.parent_identity
-        or directory_open[:3] != pin.directory_identity[:3]
+        or directory_open != pin.directory_identity
         or child_entry != directory_open
         or _directory_path_identity(pin.path, label="pinned directory path") != directory_open
         or _raw_pinned_inventory(pin) != after_names
@@ -2357,7 +2524,7 @@ def _release_pinned_directory(pin: _PinnedDirectory) -> None:
 def _pinned_directory_binding(pin: _PinnedDirectory) -> dict[str, Any]:
     _validate_pinned_directory(pin)
     return {
-        "schema": "rgbd_variable_radius_run_directory_v1",
+        "schema": "rgbd_variable_radius_run_directory_v2",
         "path": os.fspath(pin.path),
         "parent_identity": list(pin.parent_identity),
         "directory_identity": list(pin.directory_identity),
@@ -2667,9 +2834,12 @@ def _pinned_durable_replace(
 def _report_bytes(report: Mapping[str, Any]) -> bytes:
     if type(report) is not dict:
         raise TypeError("report must be an exact dict")
+    native = _json_native(report, label="report")
+    if type(native) is not dict:
+        raise TypeError("report must normalize to one exact JSON object")
     return (
         json.dumps(
-            report,
+            native,
             allow_nan=False,
             ensure_ascii=True,
             indent=2,
@@ -4232,7 +4402,7 @@ class _EvaluatorProvenanceReceipt:
     ledger_bindings_sha256: str
     ledger_artifact_identity: tuple[int, int, int, int, int]
     run_directory_binding_sha256: str
-    run_directory_identity: tuple[int, int, int, int]
+    run_directory_identity: tuple[int, int, int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -4768,11 +4938,10 @@ def _validated_evaluator_provenance_receipt(
         or any(type(value) is not int for value in receipt.ledger_artifact_identity)
         or receipt.ledger_artifact_identity[-1] != 1
         or type(receipt.run_directory_identity) is not tuple
-        or len(receipt.run_directory_identity) != 4
+        or len(receipt.run_directory_identity) != 3
         or any(type(value) is not int for value in receipt.run_directory_identity)
         or receipt.run_directory_identity[0] != receipt.ledger_artifact_identity[0]
         or not stat.S_ISDIR(receipt.run_directory_identity[2])
-        or receipt.run_directory_identity[3] < 1
     ):
         raise PermissionError("evaluator provenance receipt exact schema differs")
     for index, value in enumerate(scalar_sha256s):
@@ -4786,7 +4955,7 @@ def _provenance_receipt_sha256(receipt: _EvaluatorProvenanceReceipt) -> str:
     receipt = _validated_evaluator_provenance_receipt(receipt)
     return canonical_sha256(
         {
-            "schema": "variable_radius_evaluator_provenance_receipt_v2",
+            "schema": "variable_radius_evaluator_provenance_receipt_v3",
             "receipt": asdict(receipt),
         }
     )
@@ -5480,11 +5649,29 @@ def _gather_physical_by_slot(value: Tensor, physical_by_slot: Tensor) -> Tensor:
     return value[inverse]
 
 
+def _tensor_bit_exact(left: Tensor, right: Tensor) -> bool:
+    if (
+        type(left) is not Tensor
+        or type(right) is not Tensor
+        or left.shape != right.shape
+        or left.dtype != right.dtype
+        or left.device != right.device
+        or left.layout != right.layout
+        or tuple(left.stride()) != tuple(right.stride())
+    ):
+        return False
+    left_digest = hashlib.sha256()
+    right_digest = hashlib.sha256()
+    _update_tensor_digest(left_digest, "tensor_tree_value", left)
+    _update_tensor_digest(right_digest, "tensor_tree_value", right)
+    return left_digest.digest() == right_digest.digest()
+
+
 def _tensor_tree_equal(left: Any, right: Any) -> bool:
     if type(left) is not type(right):
         return False
     if isinstance(left, Tensor):
-        return left.shape == right.shape and left.dtype == right.dtype and torch.equal(left, right)
+        return _tensor_bit_exact(left, right)
     if isinstance(left, Mapping):
         return list(left) == list(right) and all(
             _tensor_tree_equal(left[key], right[key]) for key in left
@@ -5499,6 +5686,77 @@ def _tensor_tree_equal(left: Any, right: Any) -> bool:
             for name in left.__dataclass_fields__
         )
     return left == right
+
+
+def _tensor_tree_has_autograd(value: Any) -> bool:
+    if isinstance(value, Tensor):
+        return value.requires_grad or value.grad_fn is not None
+    if isinstance(value, Mapping):
+        return any(_tensor_tree_has_autograd(item) for item in value.values())
+    if isinstance(value, (tuple, list)):
+        return any(_tensor_tree_has_autograd(item) for item in value)
+    if hasattr(value, "__dataclass_fields__"):
+        return any(
+            _tensor_tree_has_autograd(getattr(value, name)) for name in value.__dataclass_fields__
+        )
+    return False
+
+
+@dataclass(frozen=True, slots=True)
+class _LiveMeasurementCapture:
+    measurement: MeasurementSet
+    measurement_identity: int
+    call_index: int
+
+
+def _record_live_measurement(
+    captures: list[_LiveMeasurementCapture],
+    measured: MeasurementSet,
+) -> MeasurementSet:
+    if type(captures) is not list or any(
+        type(capture) is not _LiveMeasurementCapture for capture in captures
+    ):
+        raise TypeError("live measurement capture ledger must be one exact list")
+    if type(measured) is not MeasurementSet:
+        raise TypeError("correct measured input must be one exact MeasurementSet")
+    measured.validate()
+    captures.append(
+        _LiveMeasurementCapture(
+            measurement=measured,
+            measurement_identity=id(measured),
+            call_index=len(captures),
+        )
+    )
+    return measured
+
+
+def _validated_live_measurement_capture(
+    capture: _LiveMeasurementCapture,
+    public_measurement: MeasurementSet,
+    *,
+    expected_call_index: int,
+) -> MeasurementSet:
+    if (
+        type(capture) is not _LiveMeasurementCapture
+        or type(public_measurement) is not MeasurementSet
+        or type(expected_call_index) is not int
+        or expected_call_index < 0
+        or type(capture.measurement) is not MeasurementSet
+        or type(capture.measurement_identity) is not int
+        or capture.measurement_identity != id(capture.measurement)
+        or type(capture.call_index) is not int
+        or capture.call_index != expected_call_index
+        or capture.measurement is public_measurement
+    ):
+        raise PermissionError("live measurement capture identity or call index differs")
+    capture.measurement.validate()
+    public_measurement.validate()
+    detached = capture.measurement.detach()
+    if _tensor_tree_has_autograd(public_measurement):
+        raise RuntimeError("public measurement diagnostic was not recursively detached")
+    if not _tensor_tree_equal(detached, public_measurement):
+        raise RuntimeError("live measurement capture differs bit-exactly from public diagnostic")
+    return capture.measurement
 
 
 def _persistent_runtime_tensor_bytes(model: OnlineWorldModel) -> int:
@@ -5606,18 +5864,35 @@ def _measurement_physical_mapping(measurement: Any, truth: Tensor, batch_index: 
     return _physical_mapping(positions[batch_index], truth)
 
 
+def _validated_vjp_anchor_targets(
+    *,
+    raw_anchor_vjp: Tensor,
+    deployed_anchor_vjp: Tensor,
+) -> dict[str, Tensor]:
+    targets = {
+        "raw": raw_anchor_vjp,
+        "deployed": deployed_anchor_vjp,
+    }
+    for stage, target in targets.items():
+        if type(target) is not Tensor or target.shape != (BATCH_SIZE, 2):
+            raise RuntimeError(f"{stage} VJP anchor must be one exact [4,2] Tensor")
+        if target.dtype is not torch.float32 or not bool(torch.isfinite(target).all()):
+            raise RuntimeError(f"{stage} VJP anchor must be finite float32")
+        if target.requires_grad is not True or target.grad_fn is None:
+            raise RuntimeError(f"{stage} VJP anchor lost its live autograd graph")
+    return targets
+
+
 def _vjp_metrics(
     *,
     packets: Sequence[ObservationPacket],
-    raw_history: Sequence[Tensor],
-    deployed_history: Sequence[Tensor],
+    raw_anchor_vjp: Tensor,
+    deployed_anchor_vjp: Tensor,
     scene_sha256s: Sequence[str],
     audit_indices: tuple[int, ...],
 ) -> dict[str, float]:
     if (
         len(packets) != HISTORY_FRAME_COUNT
-        or len(raw_history) != HISTORY_FRAME_COUNT
-        or len(deployed_history) != HISTORY_FRAME_COUNT
         or len(scene_sha256s) != BATCH_SIZE
         or len(set(scene_sha256s)) != BATCH_SIZE
         or type(audit_indices) is not tuple
@@ -5628,6 +5903,10 @@ def _vjp_metrics(
         or len({scene_sha256s[index] for index in audit_indices}) != len(audit_indices)
     ):
         raise RuntimeError("VJP audit requires exact unique target indices in one B=4 history")
+    targets = _validated_vjp_anchor_targets(
+        raw_anchor_vjp=raw_anchor_vjp,
+        deployed_anchor_vjp=deployed_anchor_vjp,
+    )
     inputs: dict[str, tuple[Tensor, ...]] = {
         "rgb": tuple(packet.payload["rgb"] for packet in packets),
         "depth": tuple(packet.payload["depth"] for packet in packets),
@@ -5650,11 +5929,7 @@ def _vjp_metrics(
         tensor for modality in (*VJP_MODALITIES, "world_from_camera") for tensor in inputs[modality]
     )
     for loss_index, (stage, batch_index, object_index) in enumerate(losses):
-        output = (
-            raw_history[-1][batch_index, object_index]
-            if stage == "raw"
-            else deployed_history[-1][batch_index, object_index]
-        )
+        output = targets[stage][batch_index, object_index]
         gradients = torch.autograd.grad(
             output,
             all_sources,
@@ -6645,7 +6920,10 @@ def _report_root(
             label=f"{stage} terminal ledger",
         ),
     }
-    return report
+    native = _json_native(report, label=f"{stage} report")
+    if type(native) is not dict:
+        raise RuntimeError(f"{stage} report must be one exact JSON object")
+    return native
 
 
 def _ledger_bindings(
@@ -7543,7 +7821,9 @@ def _validate_report(
 ) -> dict[str, Any]:
     if type(value) is not dict:
         raise TypeError(f"{stage} report must be an exact dict")
-    report = copy.deepcopy(value)
+    report = _json_native(value, label=f"{stage} report")
+    if type(report) is not dict:
+        raise TypeError(f"{stage} report must normalize to one exact JSON object")
     schema = DEVELOPMENT_REPORT_SCHEMA if stage == "development" else QUALIFICATION_REPORT_SCHEMA
     _require_exact_keys(report, schema, label=f"{stage} report")
     expected_scalars = {
@@ -7712,9 +7992,11 @@ def _evaluate_nominal_batch(
         expected_state_sha256=expected_state_sha256,
     )
     model.eval()
-    operation_counts = {"predict": 0, "reset": 0}
+    operation_counts = {"predict": 0, "reset": 0, "correct": 0}
     original_predict = model.predict
     original_reset = model.reset
+    original_correct = model.updater.correct
+    live_measurement_captures: list[_LiveMeasurementCapture] = []
 
     def recording_predict(query_times: Sequence[float] | Tensor) -> Any:
         operation_counts["predict"] += 1
@@ -7724,8 +8006,30 @@ def _evaluate_nominal_batch(
         operation_counts["reset"] += 1
         original_reset(batch_size=batch_size)
 
+    def recording_correct(*args: Any, **kwargs: Any) -> Any:
+        expected_keywords = {
+            "prior",
+            "measured",
+            "predicted",
+            "association",
+            "innovation",
+            "dt",
+            "cause",
+        }
+        if args or set(kwargs) != expected_keywords:
+            raise RuntimeError("runtime correction call schema differs from the frozen seam")
+        if operation_counts["correct"] != len(live_measurement_captures):
+            raise RuntimeError("live measurement capture ledger count differs")
+        measured = kwargs["measured"]
+        captured = _record_live_measurement(live_measurement_captures, measured)
+        if captured is not measured or kwargs["measured"] is not measured:
+            raise RuntimeError("live measurement capture changed correction input identity")
+        operation_counts["correct"] += 1
+        return original_correct(**kwargs)
+
     model.predict = recording_predict  # type: ignore[method-assign]
     model.reset = recording_reset  # type: ignore[method-assign]
+    model.updater.correct = recording_correct  # type: ignore[method-assign]
     model.reset(batch_size=BATCH_SIZE)
     initial_rss = _process_max_rss_bytes()
     packets: list[ObservationPacket] = []
@@ -7744,6 +8048,7 @@ def _evaluate_nominal_batch(
     physical_by_slot_history: list[Tensor] = []
     emitted_lv_history: list[Tensor] = []
     stored_lv_history: list[Tensor] = []
+    raw_anchor_vjp: Tensor | None = None
     matched_pairs = 0
     ambiguous_pairs = 0
     perception_seconds = 0.0
@@ -7757,20 +8062,35 @@ def _evaluate_nominal_batch(
         )
         packets.append(packet)
         _validate_packet_registration(packet)
+        capture_count_before = len(live_measurement_captures)
         started = time.perf_counter()
         belief = model.ingest(packet)
         perception_seconds += time.perf_counter() - started
-        measured = model._last_measurements
-        if measured is None:
+        measured = model.last_measurements
+        if type(measured) is not MeasurementSet:
             raise RuntimeError("runtime omitted public measurement evidence")
-        raw_radius = measured.auxiliary.get("world_radius")
+        if (
+            capture_count_before != frame_index
+            or len(live_measurement_captures) != capture_count_before + 1
+            or operation_counts["correct"] != len(live_measurement_captures)
+        ):
+            raise RuntimeError("runtime must expose exactly one live measurement per ingest")
+        live_measured = _validated_live_measurement_capture(
+            live_measurement_captures[-1],
+            measured,
+            expected_call_index=frame_index,
+        )
+        live_raw_radius = live_measured.auxiliary.get("world_radius")
+        public_raw_radius = measured.auxiliary.get("world_radius")
         raw_valid = measured.auxiliary.get("world_radius_valid_mask")
         raw_lv = measured.auxiliary.get("world_radius_log_variance")
         residual = measured.auxiliary.get("surface_fit_radius_relative_error")
         condition = measured.auxiliary.get("surface_fit_condition_number")
         if (
-            not isinstance(raw_radius, Tensor)
-            or raw_radius.shape != (BATCH_SIZE, 2, 1)
+            type(live_raw_radius) is not Tensor
+            or live_raw_radius.shape != (BATCH_SIZE, 2, 1)
+            or type(public_raw_radius) is not Tensor
+            or public_raw_radius.shape != (BATCH_SIZE, 2, 1)
             or not isinstance(raw_valid, Tensor)
             or raw_valid.shape != (BATCH_SIZE, 2)
             or not isinstance(raw_lv, Tensor)
@@ -7784,7 +8104,7 @@ def _evaluate_nominal_batch(
             raise RuntimeError("runtime radius evidence is incomplete or has changed schema")
         if slow_radius_index is None:
             slow_radius_index = slow_packing_map(belief.objects)["geometry"].start
-        raw_proposal_history.append(raw_radius[..., 0])
+        raw_proposal_history.append(public_raw_radius[..., 0])
         deployed_slot_history.append(belief.objects.geometry[..., 0])
         frame_raw: list[Tensor] = []
         frame_deployed: list[Tensor] = []
@@ -7799,6 +8119,7 @@ def _evaluate_nominal_batch(
         frame_emitted_lv: list[Tensor] = []
         frame_stored_lv: list[Tensor] = []
         frame_mapping: list[Tensor] = []
+        frame_raw_vjp: list[Tensor] = []
         for batch_index, episode in enumerate(episodes):
             truth = episode.position_truth[frame_index]
             measurement_mapping = _measurement_physical_mapping(
@@ -7813,10 +8134,17 @@ def _evaluate_nominal_batch(
             frame_mapping.append(belief_mapping)
             frame_raw.append(
                 _gather_physical_by_slot(
-                    raw_radius[batch_index, :, 0],
+                    public_raw_radius[batch_index, :, 0],
                     measurement_mapping,
                 )
             )
+            if frame_index == ANCHOR_FRAME_INDEX and vjp_audit_indices:
+                frame_raw_vjp.append(
+                    _gather_physical_by_slot(
+                        live_raw_radius[batch_index, :, 0],
+                        measurement_mapping,
+                    )
+                )
             frame_valid.append(
                 _gather_physical_by_slot(
                     raw_valid[batch_index],
@@ -7897,13 +8225,22 @@ def _evaluate_nominal_batch(
         object_id_history.append(torch.stack(frame_ids))
         active_history.append(torch.stack(frame_active))
         physical_by_slot_history.append(torch.stack(frame_mapping))
+        if frame_raw_vjp:
+            if frame_index != ANCHOR_FRAME_INDEX or len(frame_raw_vjp) != BATCH_SIZE:
+                raise RuntimeError("live raw VJP anchor capture inventory differs")
+            raw_anchor_vjp = torch.stack(frame_raw_vjp)
         latest = model.diagnostics.latest
         if latest is None:
             raise RuntimeError("runtime omitted ingest diagnostics")
         matched_pairs += latest.matched_pairs
         ambiguous_pairs += latest.ambiguous_pairs
 
-    if model.state.ingest_count != HISTORY_FRAME_COUNT:
+    model.updater.correct = original_correct  # type: ignore[method-assign]
+    if (
+        model.state.ingest_count != HISTORY_FRAME_COUNT
+        or operation_counts["correct"] != HISTORY_FRAME_COUNT
+        or len(live_measurement_captures) != HISTORY_FRAME_COUNT
+    ):
         raise RuntimeError("runtime ingest count differs from exact history")
     stream_history = model.state.temporal_histories.get(RUNTIME_STREAM_KEY)
     if stream_history is None:
@@ -7971,17 +8308,17 @@ def _evaluate_nominal_batch(
     future_velocity_tensor = torch.stack(future_velocities)
     future_active_tensor = torch.stack(future_active)
 
-    vjp = (
-        _vjp_metrics(
+    vjp: dict[str, float] = {}
+    if vjp_audit_indices:
+        if type(raw_anchor_vjp) is not Tensor:
+            raise RuntimeError("live raw VJP anchor was not captured")
+        vjp = _vjp_metrics(
             packets=packets,
-            raw_history=raw_history,
-            deployed_history=deployed_history,
+            raw_anchor_vjp=raw_anchor_vjp,
+            deployed_anchor_vjp=deployed_history[-1],
             scene_sha256s=[episode.scene_sha256 for episode in episodes],
             audit_indices=vjp_audit_indices,
         )
-        if vjp_audit_indices
-        else {}
-    )
     rows: list[SceneEvidence] = []
     expected_lv = raw_tensor.new_tensor(EXPECTED_RADIUS_LOG_VARIANCE)
     for batch_index, episode in enumerate(episodes):
