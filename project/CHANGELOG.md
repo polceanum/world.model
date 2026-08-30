@@ -2,6 +2,43 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-30 terminal variable-radius development family
+
+- Completed the variable-radius core, scene, and source implementation and
+  kept their audits green. Radius variance remains an engineering-fixed,
+  uncalibrated value; the public `threshold_design_only` evidence was
+  threshold-design evidence only and never formal acceptance.
+- Preserved architecture attempt 1 at source commit prefix `db669b` as a
+  terminal no-gradient harness failure. Its independently audited,
+  internally byte-bound report SHA-256/size is
+  `7f194a41bd5e64328f0a57d8142aad8a81f01d2b449386bb05939fb3ed49b142`
+  / `66,758` bytes; ledger SHA-256/size is
+  `aec6c9500d3cd8ca6a152b8107578b2b441a544dca605fe7f6ae59a61f0d021e`
+  / `10,248` bytes. It created no checkpoint or protected artifact. Its own
+  frozen strict reread validator rejects the bundle because of tuple/list JSON
+  normalization and mutable directory-link-count binding defects; this is
+  retained as a qualification limitation, not hidden by the later attempt.
+- Preserved architecture attempt 2 at source commit prefix `dcb815` as a
+  terminal `ValueError` from the fixed-radius public bridge versus the
+  preserved variable simulator-radius range. Its source-bound, fail-closed
+  report SHA-256/size is
+  `a6efb2873c7248cc5bc9a010fb26b30615f544469810895aac9943cd14770fb7`
+  / `67,835` bytes; ledger SHA-256/size is
+  `3d05e68af3c6fe1b4c4abc09bd5998fe9c83734bb3658861bcda14aca5934cdf`
+  / `10,255` bytes. Ledger record self-hash prefix `f9f6bca1` and generation
+  3 bind active batch `[0, 1, 2, 3]`, next ordinal `0`, and zero completed
+  batches; it also created no checkpoint or protected artifact. Its frozen
+  report, ledger, publication-surface, directory-binding, and prior-attempt
+  disclosure validators all pass.
+- Recorded the separate PyTorch warning raised while converting a graph-live
+  owner-error diagnostic to a Python scalar during attempt 2. It was not the
+  terminal exception, but it remains an unqualified diagnostic limitation and
+  was not repaired or replayed after the terminal result.
+- Enforced the v2 maximum of two architecture attempts. There is no retry or
+  v3, no protected access, and no qualification. This is NOT a successful
+  qualification or acceptance. Both evidence bundles remain ignored/local,
+  and specification 1.57 remains the highest accepted contract.
+
 ### 2026-08-28 tracked repository-hygiene documentation repair
 
 - Reconciled the active architecture and roadmap with the accepted

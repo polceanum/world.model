@@ -1,6 +1,6 @@
 # Project status
 
-## Active generalization program — 2026-08-28
+## Active generalization program — 2026-08-30
 
 The pre-generalization public base was commit
 `c16acc99ef13757fc8f88528bfd0d66db4a2f4fd`; the cleaned generalization
@@ -39,6 +39,51 @@ implementation is commit `7344e67d`; promotion bookkeeping is `c16acc99`.
 The original qualified research source is now recoverable through GitHub tag
 `archive/minimal-differentiable-toy-v2-f8d66da`, which peels to
 `f8d66da17983aa0269649fff69cc13cec5ad1311`.
+
+### Terminal result: variable metric radius
+
+The variable-radius core, scene, source implementation, and their audits are
+green, but neither permitted development attempt produced a valid development
+result:
+
+- attempt 1, bound to source commit prefix `db669b`, terminated in the
+  no-gradient harness path. Its independently audited, internally byte-bound
+  development report is SHA-256
+  `7f194a41bd5e64328f0a57d8142aad8a81f01d2b449386bb05939fb3ed49b142`
+  (`66,758` bytes), and its ledger is
+  `aec6c9500d3cd8ca6a152b8107578b2b441a544dca605fe7f6ae59a61f0d021e`
+  (`10,248` bytes). It created no checkpoint or protected artifact. Its own
+  frozen strict reread validator rejects the bundle because of tuple/list JSON
+  normalization and mutable directory-link-count binding defects;
+- attempt 2, bound to source commit prefix `dcb815`, terminated with a
+  `ValueError` because the fixed-radius public bridge was paired with the
+  preserved variable simulator-radius range. Its source-bound, fail-closed
+  report is SHA-256
+  `a6efb2873c7248cc5bc9a010fb26b30615f544469810895aac9943cd14770fb7`
+  (`67,835` bytes), and its ledger is
+  `3d05e68af3c6fe1b4c4abc09bd5998fe9c83734bb3658861bcda14aca5934cdf`
+  (`10,255` bytes). The ledger record self-hash has prefix `f9f6bca1`;
+  generation 3 records active batch `[0, 1, 2, 3]`, next ordinal `0`, and zero
+  completed batches. It also created no checkpoint or protected artifact. The
+  v2 frozen strict report, ledger, publication-surface, directory-binding, and
+  prior-attempt validators all pass.
+
+Source-order audit shows that attempt 2 computed the four nominal rows and the
+alternate-prior control in memory, then failed in the legacy control before
+resource aggregation, evidence finalization, or `complete_batch`; therefore no
+durable scientific metrics exist. A separate PyTorch warning converted a
+graph-live owner-error diagnostic to a Python scalar. It was not the terminal
+exception but remains an unqualified diagnostic limitation, with no repair or
+replay after closure.
+
+The frozen v2 protocol permits at most two architecture attempts. The family
+is therefore closed: there is no retry or v3, no protected access, and no
+qualification. This is NOT a successful qualification or acceptance. Public
+`threshold_design_only` evidence was threshold-design evidence only and never
+formal acceptance. Radius variance remains an engineering-fixed,
+uncalibrated value; no calibrated radius-uncertainty claim is made. The two
+evidence bundles remain ignored and local. Specification 1.57 and the accepted
+known-orbital-camera result remain the highest accepted contract.
 
 ### Cleanup boundary
 
@@ -112,12 +157,13 @@ below. At that historical boundary, the planned order placed public
 `OnlineWorldModel` integration before moving camera, identifiable drag,
 variable metric scale, and then multiple objects. Specification 1.56
 superseded that ordering by accepting exactly two fully visible non-contact
-objects; specification 1.57 now freezes their known calibrated camera-motion
-extension before identifiable drag and variable metric scale. Variable set size,
-identity/occlusion, analytic contact, observable material parameters, known
-actions and counterfactual planning, and richer modalities/geometry remain
-later. Model capacity grows only after a smaller structured rung demonstrably
-plateaus.
+objects; specification 1.57 later accepted their known calibrated
+camera-motion extension. The subsequent variable-radius family exhausted both
+permitted development attempts without qualification and is closed as recorded
+above. Variable set size, identity/occlusion, analytic contact, observable
+material parameters, known actions and counterfactual planning, and richer
+modalities/geometry remain later. Model capacity grows only after a smaller
+structured rung demonstrably plateaus.
 
 ### Passing seed-free RGB-D metric core
 
@@ -600,8 +646,8 @@ Acceptance is limited to this certified known orbit with exactly two fully
 visible separated non-contact spheres, complete RGB-D, gravity `0`, and drag
 `0.05`. It is not general moving-camera, pose-learning, occlusion, recovery,
 contact, variable-count, learned-capacity, or general-convergence evidence.
-The failed partial family stays closed; the next active rung must be a
-genuinely new capability frozen before access.
+The failed partial and terminal variable-radius families stay closed; the next
+active rung must be a genuinely new capability frozen before access.
 
 ## Validation state
 

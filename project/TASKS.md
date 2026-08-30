@@ -266,11 +266,36 @@
 - [x] Merge and publish the reviewed net tree to GitHub `main` through
   acceptance commit `00a712d640cdb828f24a194817443daa57e6df65`. Final remains
   consumed; this closure authorizes no new data access.
+- [x] Complete and audit the variable-radius core, scene, and source work while
+  retaining an engineering-fixed, uncalibrated radius-variance value.
+- [x] Preserve variable-radius development attempt 1 at source commit prefix
+  `db669b` as a terminal no-gradient harness failure. Its independently
+  audited, internally byte-bound ignored-local report/ledger SHA-256 values are
+  `7f194a41bd5e64328f0a57d8142aad8a81f01d2b449386bb05939fb3ed49b142`
+  and `aec6c9500d3cd8ca6a152b8107578b2b441a544dca605fe7f6ae59a61f0d021e`
+  at `66,758` and `10,248` bytes; no checkpoint or protected artifact exists.
+  Record that its own frozen strict reread validator rejects tuple/list JSON
+  normalization and mutable directory-link-count binding.
+- [x] Preserve variable-radius development attempt 2 at source commit prefix
+  `dcb815` as a terminal `ValueError` from pairing the fixed-radius bridge with
+  the preserved variable simulator-radius range. Its ignored local
+  report/ledger SHA-256 values are
+  `a6efb2873c7248cc5bc9a010fb26b30615f544469810895aac9943cd14770fb7`
+  and `3d05e68af3c6fe1b4c4abc09bd5998fe9c83734bb3658861bcda14aca5934cdf`
+  at `67,835` and `10,255` bytes. Ledger record self-hash prefix `f9f6bca1` and
+  generation 3 bind active batch `[0, 1, 2, 3]`, next ordinal `0`, and
+  zero completed batches; no checkpoint or protected artifact exists. The v2
+  frozen strict validators pass; its separate graph-live diagnostic-scalar
+  warning remains unqualified and was not replayed.
+- [x] Close the variable-radius family at its frozen maximum of two
+  architecture attempts. Both bundles are source-bound and fail closed; do
+  not retry or create v3, open protected data, or describe the public
+  `threshold_design_only` evidence as qualification or acceptance.
 - [ ] Select and freeze one genuinely new capability under its own pre-access
   protocol before any new data access. Candidate later capabilities include
-  identifiable drag, variable scale, variable-size object sets,
-  contact/materials, known actions/planning, and richer modalities/geometry;
-  this list does not itself authorize a rung.
+  identifiable drag, variable-size object sets, contact/materials, known
+  actions/planning, and richer modalities/geometry; this list does not itself
+  authorize a rung.
 - [ ] At every rung require state/velocity/horizon accuracy, uncertainty,
   support, gradient, memory, and throughput non-regression; stop failed
   architecture families instead of marginal retuning.
