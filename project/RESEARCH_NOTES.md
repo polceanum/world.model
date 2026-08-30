@@ -15,6 +15,39 @@ checkpoint, split/seeds, device, commands, metrics, and failure cases.
 
 ## Evidence so far
 
+### Identifiable per-object drag — terminal development evidence
+
+The identifiable-drag source freeze
+`0e283d841281fbf98842c9969f02a026a5489dce` passed source, certificate, and
+security review; its pre-documentation full gate was
+`1490 passed, 16 skipped`. Frozen protocol/certificate SHA-256 values are
+`d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`
+and `588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
+This validates source integrity only, not drag identification behavior.
+
+Attempt 1 was both the sole and maximum development attempt. It materialized
+ordinals `[0, 1, 2, 3]`, after which generic collation raised the exact error
+`ValueError: metadata tuple differs across batch at metadata.albedo`. The
+ledger records zero completed ordinals, batches, and evidence. This occurred
+before model construction, reset, runtime ingest, analytic fit, calibration,
+VJP evaluation, or checkpoint creation, so there are no scientific accuracy,
+calibration, gradient, or runtime metrics to interpret.
+
+The terminal report SHA-256/size is
+`b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307`
+/ `50,872` bytes; the terminal ledger SHA-256/size is
+`95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694`
+/ `2,804` bytes. Strict duplicate-free schema and report-ledger cross-binding
+audit passes. Selector, confirmation, and final stayed unopened. Source and
+terminal record remain on dedicated pushed branch
+`agent/rgbd-identifiable-drag-rung-1` at tip
+`8516034760d0aa6c98c0d0e065bda4838f902dcd`, unmerged to `main`.
+
+The family is permanently closed after attempt 1 of 1. It must not be
+repaired, renamed, rerun, or selected again. This negative result is separate
+from the variable-radius family below. Specification 1.57 remains the active
+and highest accepted boundary.
+
 ### Variable metric radius — terminal development evidence
 
 The variable-radius core, scene, source implementation, and their audits are

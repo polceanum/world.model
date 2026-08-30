@@ -445,16 +445,44 @@ radius variance remains engineering-fixed and uncalibrated. The ignored local
 bundles remain preserved as failure provenance, and this family must not be
 revived or renamed as another rung.
 
-### 8. Next independent capability — not yet frozen
+### 8. Distinct per-object identifiable drag — failed family closed
+
+Identifiable drag was a separate candidate from variable metric radius. Exact
+source freeze `0e283d841281fbf98842c9969f02a026a5489dce` passed source,
+certificate, and security review plus the pre-documentation full gate at
+`1490 passed, 16 skipped`. Protocol/certificate SHA-256 values are
+`d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`
+and `588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
+These were implementation and source-integrity results, not scientific
+acceptance.
+
+The sole and maximum development attempt, attempt 1 of 1, materialized
+ordinals `[0, 1, 2, 3]` and then failed with
+`ValueError: metadata tuple differs across batch at metadata.albedo`. Zero
+ordinals, batches, or evidence completed. The failure occurred before model
+construction, reset, runtime ingest, fit, calibration, VJP evaluation, or
+checkpoint creation. Report/ledger SHA-256 values are
+`b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307`
+and `95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694`
+at `50,872` and `2,804` bytes.
+
+Selector, confirmation, and final stayed unopened. The source remains on
+dedicated pushed branch `agent/rgbd-identifiable-drag-rung-1`, whose terminal tip is
+`8516034760d0aa6c98c0d0e065bda4838f902dcd`, unmerged to `main`.
+Specification 1.57 remains active and highest accepted. The governed family
+is permanently closed and cannot be repaired, relabelled, rerun, or selected
+again.
+
+### 9. Next independent capability — not yet frozen
 
 No next active rung is selected or authorized by this document. It must add one
 genuinely new capability, freeze source/manifests/gates before access, preserve
-every accepted lower-rung gate, and remain distinct from both closed failed
-families. Candidates include identifiable drag, variable-size sets,
-contact/material identification, actions/planning, or a new useful modality;
-listing them does not predeclare or authorize one.
+every accepted lower-rung gate, and exclude the closed partial-visibility,
+variable-radius, and identifiable-drag families. Candidates include variable-
+size sets, contact/material identification, actions/planning, or a new useful
+modality; listing them does not predeclare or authorize one.
 
-### 9. Variable-size object sets
+### 10. Variable-size object sets
 
 Variable-size sets require their own predeclared association/lifecycle and
 recovery contract rather than inheriting the failed rung 6 family. Require
@@ -462,7 +490,7 @@ per-object state/horizon gates, association coverage, identity-switch limits,
 permutation invariance, and recovery after missed observations before
 increasing scene count or backbone capacity.
 
-### 10. Hybrid contact and material identification
+### 11. Hybrid contact and material identification
 
 Introduce sparse two-sphere contact with an analytic hard forward resolver and
 a differentiable local surrogate for learnable pre-contact state/parameter
@@ -471,7 +499,7 @@ state, energy/momentum diagnostics, and observable restitution/friction
 identification. Do not use fabricated straight-through gradients or simulator
 event labels at runtime.
 
-### 11. Actions, counterfactuals, and planning tasks
+### 12. Actions, counterfactuals, and planning tasks
 
 Condition the shared dynamics on known forces/actions and score factual and
 counterfactual trajectories. Tasks include interception, collision avoidance,
@@ -479,7 +507,7 @@ goal-reaching, and information gathering under occlusion. Planning must reuse
 the same cheap state-only rollout, report task success alongside physical
 accuracy, and remain consistent with the online posterior after new evidence.
 
-### 12. Richer geometry and real observations
+### 13. Richer geometry and real observations
 
 Only after the synthetic structured ladder closes, expand object geometry,
 camera environments, RGB-D/video data, and useful asynchronous sensors. Keep a

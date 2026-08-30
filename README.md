@@ -105,6 +105,16 @@ and radius variance remains engineering-fixed and uncalibrated. Exact evidence
 hashes and byte sizes are recorded in
 [`project/STATUS.md`](project/STATUS.md).
 
+The separately developed identifiable-drag candidate is also terminal. Its
+source freeze `0e283d841281fbf98842c9969f02a026a5489dce` and terminal tip
+`8516034760d0aa6c98c0d0e065bda4838f902dcd` remain on dedicated pushed branch
+`agent/rgbd-identifiable-drag-rung-1`, unmerged to `main`. The sole permitted
+development attempt materialized ordinals `[0, 1, 2, 3]` and then failed with
+`ValueError: metadata tuple differs across batch at metadata.albedo` before
+model construction, runtime ingest, fitting, calibration, VJP, or checkpoint
+creation. No protected split was opened. This family must not be selected
+again; specification 1.57 remains the active and highest accepted contract.
+
 ## Quick start
 
 Use the existing `orpheus` environment. PyTorch is an externally managed

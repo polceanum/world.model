@@ -22,13 +22,15 @@ diagnostics, not the active roadmap or launch recommendation.
 The current evidence-led programme first qualified the minimal differentiable
 RGB core, then observable RGB-D temporal state, its public one-object bridge,
 exactly two fully visible objects, and one known calibrated orbital-camera
-family. The separate partial-visibility/recovery family failed and is closed.
-No next rung has been selected or authorized. A future rung must introduce one
-genuinely new capability, freeze disjoint development/selector/confirmation/
-final manifests and hard gates before access, and preserve all accepted
-accuracy, calibration, identity/event, rollout, gradient, memory, and
-throughput contracts. A failed family stops rather than receiving marginal
-retuning.
+family. The separate partial-visibility/recovery, variable-radius, and
+identifiable-drag families failed and are closed; their source is not merged
+into the accepted runtime. No next rung has been selected or authorized. A
+future rung must introduce one genuinely new capability, freeze disjoint
+development/selector/confirmation/final manifests and hard gates before
+access, and preserve all accepted accuracy, uncertainty-diagnostic,
+identity/event, rollout, gradient, memory, and throughput contracts. Any new
+posterior-calibration claim requires its own explicit qualification. A failed
+family stops rather than receiving marginal retuning.
 
 Historical attention work established an exact inherited-function path for
 depth-only growth: contiguous new pre-norm residual blocks start with zero

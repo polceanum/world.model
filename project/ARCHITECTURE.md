@@ -169,14 +169,16 @@ learned state, or optimizer updates. That reviewed result is published through
 acceptance commit `00a712d640cdb828f24a194817443daa57e6df65`; it establishes
 neither general camera motion nor unknown- or learned-pose inference.
 
-The attempted partial-visibility and missed-observation-recovery family failed
-its bounded development protocols and is closed. It must not be revived,
-renamed, or treated as the next rung. No next capability is currently selected:
-any successor must add a genuinely new capability under its own frozen
-pre-access manifests and gates while preserving every accepted lower-rung
-contract. Variable count, contact/material identification, variable physics,
-actions/planning, richer modalities, and learned capacity therefore remain
-unqualified candidates rather than an active launch plan.
+The attempted partial-visibility/recovery, variable-radius, and identifiable-
+drag families all failed their bounded development protocols and are closed.
+None may be revived, renamed, or treated as the next rung. Their executable
+source remains isolated on dedicated branches rather than merged into the
+accepted runtime. No next capability is currently selected: any successor must
+add a genuinely new capability under its own frozen pre-access manifests and
+gates while preserving every accepted lower-rung contract. Variable count,
+contact/material identification, known actions/planning, richer modalities,
+and learned capacity therefore remain unqualified candidates rather than an
+active launch plan.
 
 Evaluation seed manifests are explicit. `fresh_validation` starts after the
 checkpoint's trainer-validation episodes by default; `--seed-offset` can select

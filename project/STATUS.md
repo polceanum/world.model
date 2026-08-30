@@ -85,6 +85,41 @@ uncalibrated value; no calibrated radius-uncertainty claim is made. The two
 evidence bundles remain ignored and local. Specification 1.57 and the accepted
 known-orbital-camera result remain the highest accepted contract.
 
+### Terminal result: identifiable per-object drag
+
+Identifiable drag is a separate failed rung, not a variable-radius attempt.
+Its exact source freeze is
+`0e283d841281fbf98842c9969f02a026a5489dce`; the terminal branch tip is
+`8516034760d0aa6c98c0d0e065bda4838f902dcd`. Both remain on dedicated pushed branch
+`agent/rgbd-identifiable-drag-rung-1`, unmerged to `main`. The source,
+certificate, and security reviews were green; the pre-documentation full gate
+was `1490 passed, 16 skipped`. Frozen protocol and certificate
+SHA-256 values are
+`d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`
+and
+`588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
+Those are implementation and source-integrity results only.
+
+The sole and maximum development attempt, attempt 1 of 1, materialized four
+ordinals `[0, 1, 2, 3]`. Generic collation then failed closed with the exact
+error `ValueError: metadata tuple differs across batch at metadata.albedo`.
+The ledger records zero completed ordinals, zero completed batches, and zero
+completed evidence. The failure occurred before model construction, reset,
+runtime ingest, fitting, calibration, VJP evaluation, or checkpoint creation;
+there is no scientific accuracy result.
+
+The terminal report is SHA-256
+`b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307`
+at `50,872` bytes. The terminal ledger is SHA-256
+`95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694`
+at `2,804` bytes. Selector, confirmation, and final stayed unopened; no
+protected result, qualification, or acceptance exists. Strict duplicate-free
+schema and report-ledger cross-binding audit passes. The family is
+permanently closed and must not be repaired, renamed, retried, or selected
+again. Specification 1.57 remains the active and highest accepted contract.
+The drag branch's specification identifiers 1.58 and 1.59 remain branch-local
+historical provenance; a future active source freeze must not reuse them.
+
 ### Cleanup boundary
 
 The 254-run historical workspace was archived and removed from active use.
@@ -646,8 +681,9 @@ Acceptance is limited to this certified known orbit with exactly two fully
 visible separated non-contact spheres, complete RGB-D, gravity `0`, and drag
 `0.05`. It is not general moving-camera, pose-learning, occlusion, recovery,
 contact, variable-count, learned-capacity, or general-convergence evidence.
-The failed partial and terminal variable-radius families stay closed; the next
-active rung must be a genuinely new capability frozen before access.
+The failed partial-visibility, variable-radius, and identifiable-drag families
+stay closed. The next active rung must be a genuinely new capability frozen
+before access and must exclude all three families.
 
 ## Validation state
 
@@ -684,4 +720,7 @@ The highest accepted claim is now the certified exactly-two-visible,
 non-contact, known-orbital-camera RGB-D family. General moving-camera behavior,
 unknown or learned pose, contact, partial visibility, misses/recovery, variable
 count, additional modality, planning, and general convergence remain
-unqualified. The failed partial family must not be retried.
+unqualified. The failed partial-visibility and variable-radius families must
+not be retried. The identifiable-drag source remains on dedicated pushed branch
+`agent/rgbd-identifiable-drag-rung-1`, unmerged to `main`; that family is also
+terminal and must not be selected again.

@@ -2,6 +2,34 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-08-30 terminal identifiable-drag development family
+
+- Reconciled the failed identifiable-drag branch without merging its source.
+  Source freeze `0e283d841281fbf98842c9969f02a026a5489dce` and terminal tip
+  `8516034760d0aa6c98c0d0e065bda4838f902dcd` remain on dedicated pushed branch
+  `agent/rgbd-identifiable-drag-rung-1`, unmerged to `main`; specification
+  1.57 remains active and highest accepted.
+- Recorded the green source, certificate, and security reviews and the
+  pre-documentation full gate at `1490 passed, 16 skipped`. Frozen protocol
+  and certificate SHA-256 values are
+  `d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`
+  and `588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
+- Preserved attempt 1 of 1 as the sole and maximum governed attempt. It
+  materialized ordinals `[0, 1, 2, 3]`, then failed closed with
+  `ValueError: metadata tuple differs across batch at metadata.albedo`.
+  Zero ordinals, batches, or evidence completed; failure preceded model
+  construction/reset/ingest/fit/calibration/VJP/checkpoint creation.
+- Bound the terminal report SHA-256/size
+  `b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307`
+  / `50,872` bytes and ledger SHA-256/size
+  `95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694`
+  / `2,804` bytes. Selector, confirmation, and final remained unopened; no
+  scientific result, checkpoint, qualification, or acceptance exists.
+  Strict duplicate-free schema and report-ledger cross-binding audit passes.
+- Closed the family permanently. Do not repair, rename, retry, or select
+  identifiable drag again. Future rungs must also exclude the separately
+  closed variable-radius and partial-visibility families.
+
 ### 2026-08-30 terminal variable-radius development family
 
 - Completed the variable-radius core, scene, and source implementation and

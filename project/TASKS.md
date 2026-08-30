@@ -291,11 +291,35 @@
   architecture attempts. Both bundles are source-bound and fail closed; do
   not retry or create v3, open protected data, or describe the public
   `threshold_design_only` evidence as qualification or acceptance.
+- [x] Record the separate identifiable-drag source freeze
+  `0e283d841281fbf98842c9969f02a026a5489dce` and terminal branch tip
+  `8516034760d0aa6c98c0d0e065bda4838f902dcd`. Source, certificate, and
+  security reviews were green; the pre-documentation full gate was
+  `1490 passed, 16 skipped`. Protocol/certificate SHA-256 values are
+  `d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`
+  and `588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
+- [x] Preserve identifiable-drag attempt 1 of 1 as a terminal failure. Four
+  ordinals `[0, 1, 2, 3]` materialized before
+  `ValueError: metadata tuple differs across batch at metadata.albedo`; zero
+  ordinals, batches, or evidence completed, and the failure preceded model
+  construction/reset/ingest/fit/calibration/VJP/checkpoint creation.
+- [x] Bind the terminal identifiable-drag report/ledger SHA-256 values
+  `b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307`
+  / `95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694`
+  at `50,872` / `2,804` bytes. Keep selector, confirmation, and final
+  unopened and create no qualification or acceptance claim.
+- [x] Close identifiable drag permanently. Its failed source remains on
+  dedicated pushed branch `agent/rgbd-identifiable-drag-rung-1`, unmerged to `main`;
+  preserve specification 1.57 and do not repair, rename, retry, or select this
+  family again.
 - [ ] Select and freeze one genuinely new capability under its own pre-access
-  protocol before any new data access. Candidate later capabilities include
-  identifiable drag, variable-size object sets, contact/materials, known
+  protocol before any new data access. It must exclude the closed partial-
+  visibility, variable-radius, and identifiable-drag families. Candidate later
+  capabilities include variable-size object sets, contact/materials, known
   actions/planning, and richer modalities/geometry; this list does not itself
-  authorize a rung.
+  authorize a rung. Do not reuse the drag branch's historical specification
+  identifiers 1.58 or 1.59; the next active source freeze starts at 1.60 or
+  later.
 - [ ] At every rung require state/velocity/horizon accuracy, uncertainty,
   support, gradient, memory, and throughput non-regression; stop failed
   architecture families instead of marginal retuning.

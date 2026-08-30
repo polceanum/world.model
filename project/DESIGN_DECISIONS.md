@@ -1,5 +1,52 @@
 # Design decisions
 
+Historical concurrent work reused ADR numbers 088, 089, and 091--094. Their
+original numeric identities are preserved below with `A`/`B` suffixes solely
+to make every heading unambiguous; the suffixes do not imply precedence, no
+substantive decision or chronology changed, and the one corresponding
+cross-reference was disambiguated.
+
+## ADR-170 — Close identifiable drag after its sole development attempt
+
+- **Date:** 2026-08-30
+- **Status:** terminal development failure; family closed without
+  qualification or acceptance
+- **Context:** Identifiable per-object drag was developed as a separate rung
+  from variable metric radius. Exact source freeze
+  `0e283d841281fbf98842c9969f02a026a5489dce` passed source, certificate, and
+  security review plus the pre-documentation full gate at
+  `1490 passed, 16 skipped`. Frozen protocol/certificate SHA-256 values are
+  `d4abaf22e775afc6f807b268f08aa68ae44210a40192b1b05653957720f48c70`
+  and `588c8fe2e2baa38dcb097a012b5ec6517b3ce9733a7c8d068e71c98a1c5f5f9e`.
+- **Failure:** The sole and maximum attempt, attempt 1 of 1, materialized
+  ordinals `[0, 1, 2, 3]`; generic collation then raised the exact error
+  `ValueError: metadata tuple differs across batch at metadata.albedo`.
+  Nothing completed: zero ordinals, batches, or evidence. The exception
+  preceded model construction, reset, public-runtime ingest, fit, calibration,
+  VJP evaluation, and checkpoint creation.
+- **Evidence:** Report SHA-256/size is
+  `b64d0ce512e223d03831448ce4c54196abf4f5c660e03329ee029d62dd53e307`
+  / `50,872` bytes; ledger SHA-256/size is
+  `95d929fc15b365b01689037ec10b954e60d1166c7aaa7dc67c80eec01ff1b694`
+  / `2,804` bytes. Selector, confirmation, and final were never opened; no
+  scientific result, checkpoint, qualification, or acceptance exists.
+- **Decision:** Permanently close the identifiable-drag family. Do not repair
+  its collation boundary, rename or retry the family, alter its attempt limit,
+  or select identifiable drag again. Keep the failed source on dedicated pushed
+  branch `agent/rgbd-identifiable-drag-rung-1` at terminal tip
+  `8516034760d0aa6c98c0d0e065bda4838f902dcd`, unmerged to `main`.
+- **Alternatives considered:** Treat green source/certificate checks as a
+  scientific pass; repair collation and rerun; change batch composition;
+  authorize protected access without completed development evidence; merge
+  the reusable source despite the terminal governed family.
+- **Consequences:** Preserve specification 1.57 and ADR-168 as the active and
+  highest accepted contract. Identifiable drag and variable radius remain
+  separate closed rungs. Any next rung must be genuinely new and must exclude
+  identifiable drag, variable radius, and partial visibility. The dedicated
+  drag branch already published branch-local specification identifiers 1.58
+  and 1.59; they remain historical and must not be reused. A future active
+  source freeze therefore starts no earlier than specification 1.60.
+
 ## ADR-169 — Close variable-radius development after two terminal attempts
 
 - **Date:** 2026-08-30
@@ -1558,7 +1605,7 @@
   identity remains exact. The stopped live-scene run is diagnostic only and
   does not count toward the 8,192-update convergence budget.
 
-## ADR-094 — Scale relational capacity as a zero-initialized typed residual
+## ADR-094A — Scale relational capacity as a zero-initialized typed residual
 
 - **Date:** 2026-08-10
 - **Status:** accepted for stage-A qualification; accuracy promotion pending
@@ -1589,7 +1636,7 @@
   history, parameter-matched control, disjoint test/OOD, and CUDA scaling all
   remain pending.
 
-## ADR-093 — Reject only numerically tied fast-ROI component ownership
+## ADR-093A — Reject only numerically tied fast-ROI component ownership
 
 - **Date:** 2026-08-10
 - **Status:** accepted and implemented under rollout protocol 14
@@ -1621,7 +1668,7 @@
   component remain a documented observation-ownership limitation for the
   attention-era perception work.
 
-## ADR-092 — Treat the first y-only gain as interim, not convergence
+## ADR-092A — Treat the first y-only gain as interim, not convergence
 
 - **Date:** 2026-08-10
 - **Status:** accepted monitoring decision after the first fixed selector
@@ -1691,7 +1738,7 @@
   and target the discontinuous association/trajectory feedback before adding
   attention capacity.
 
-## ADR-091 — Continue correction recovery on the accepted y row only
+## ADR-091A — Continue correction recovery on the accepted y row only
 
 - **Date:** 2026-08-10
 - **Status:** accepted after three fixed validations and five row ablations
@@ -1719,7 +1766,7 @@
   It must still demonstrate repeated plateau/generalization evidence and beat
   the legacy fixed reference before attention scaling.
 
-## ADR-089 — Surface severe clipping; do not redesign from one bounded hard window
+## ADR-089A — Surface severe clipping; do not redesign from one bounded hard window
 
 - **Date:** 2026-08-09
 - **Status:** accepted monitoring policy; recurrence qualification pending
@@ -1742,7 +1789,7 @@
   rate or broad fixed-validation regression will trigger a gradient-aggregation
   intervention; isolated hard examples remain trainable without silent drift.
 
-## ADR-088 — Aggregate every scenario in each shared-model optimizer update
+## ADR-088A — Aggregate every scenario in each shared-model optimizer update
 
 - **Date:** 2026-08-09
 - **Status:** accepted and implemented; sustained qualification pending
@@ -3966,7 +4013,7 @@
   auditable. A passing health report proves only that optimization is
   functioning; it cannot promote weights or establish accuracy convergence.
 
-## ADR-088 — Reject protocol 18 and anchor correction to typed innovation
+## ADR-088B — Reject protocol 18 and anchor correction to typed innovation
 
 - **Date:** 2026-08-09
 - **Status:** accepted and implemented; broad qualification pending
@@ -4001,10 +4048,10 @@
   mean-only candidate is the typed mutable start for updater-only recovery
   before dynamics are unfrozen.
 
-## ADR-089 — Scale transformers over explicit predictive abstractions
+## ADR-089B — Scale transformers over explicit predictive abstractions
 
 - **Date:** 2026-08-09
-- **Status:** accepted architecture direction; implementation gated on ADR-088
+- **Status:** accepted architecture direction; implementation gated on ADR-088B
 - **Context:** Modern Transformers provide content-dependent token interaction
   and scalable parallel training; Perceiver-style bottlenecks handle dense
   multimodal inputs, and JEPA-style feature prediction scales self-supervision.
@@ -4057,7 +4104,7 @@
   attributable to the intended semantic repair rather than shared-trunk or
   sibling-head forgetting.
 
-## ADR-091 — Reject a scene token whose declared input is dead
+## ADR-091B — Reject a scene token whose declared input is dead
 
 - **Date:** 2026-08-10
 - **Status:** accepted and implemented; corrected campaign pending
@@ -4089,7 +4136,7 @@
   protected graph control, so no incompatible optimizer/history state is
   smuggled across the semantic change.
 
-## ADR-092 — Isolate typed-output backpropagation before shared attention
+## ADR-092B — Isolate typed-output backpropagation before shared attention
 
 - **Date:** 2026-08-11
 - **Status:** accepted and implemented; fresh sustained qualification pending
@@ -4127,7 +4174,7 @@
   weights-only campaign, not its weights, accuracy, generalization, plateau,
   or convergence. Capacity scaling remains gated on that campaign.
 
-## ADR-093 — Isolate accumulated node rows and make optimizer rejection durable
+## ADR-093B — Isolate accumulated node rows and make optimizer rejection durable
 
 - **Date:** 2026-08-11
 - **Status:** accepted, implemented, and causally replayed; sustained selector pending
@@ -4161,7 +4208,7 @@
   authorized until the repaired 3.00M control reaches complete selectors and
   plateau.
 
-## ADR-094 — Penalize unsupported attention-node complexity before scaling
+## ADR-094B — Penalize unsupported attention-node complexity before scaling
 
 - **Date:** 2026-08-11
 - **Status:** accepted and implemented; sustained qualification active
