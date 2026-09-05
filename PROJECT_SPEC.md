@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.57
+**Version:** 1.60
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026; known-action counterfactual-planning qualification amendment 4 September 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -8712,6 +8712,98 @@ consumed.
 The failed partial-visibility family remains closed and must not be revived or
 retried.  Any next rung must introduce a genuinely new capability under its
 own pre-access source, manifest, gate, and evidence contract.
+
+## 260. Freeze the known-action counterfactual-planning foundation
+
+Specification 1.60 adds one deliberately narrow causal input to the last
+accepted complete-RGB-D world model: a public, known
+`WorldImpulseAction`.  It does not add a learned controller or train a task
+policy.  The action is an observable input to prediction and is used to test
+whether estimated state is accurate enough for downstream counterfactual
+choice.
+
+The frozen family contains exactly two fully visible, fixed-radius,
+non-contacting spheres, sixteen 20 Hz RGB-D history frames, a known calibrated
+orbital camera, gravity `0`, linear drag `0.05`, and eight predeclared
+single-action candidates.  Every action carries an absolute timestamp, a
+world-frame impulse, and an observable target handle which must resolve to the
+current persistent ID.  Propagation splits at the action timestamp, applies
+`delta_v = impulse / mass` once to that ID, then continues with the same
+analytic dynamics.  Action-free predictions must remain bit-for-bit unchanged.
+Hidden simulator impulses remain unobserved interventions and continue to
+censor deterministic supervision; public known actions do not.
+
+The public parameter-free `AnalyticFreeMotionDynamics.predict_step/rollout`
+path and `OnlineWorldModel.predict/plan` accept this action representation.
+The runtime admits those calls only while that analytic backend is active;
+general `DynamicsModel` action support and prepared-propagation integration
+are deliberately not claims of this foundation.  The planner evaluates all
+eight candidates without mutating the source belief, returns the established
+public result shape, and must preserve pre-action state, non-target isolation,
+batch independence, semigroup behavior, and conservation.  Specification
+1.60 retains the serial implementation as its authority; lifting the analytic
+backend restriction and candidate-vectorized execution belong to the next
+rung.
+
+Each of development, selector, confirmation, and final contains exactly 64
+task bundles in B=4 atomic batches.  The manifests balance target role, action
+phase and direction, physical color-role permutations, camera/appearance
+combinations, and observation-identical role twins.  Private oracle state and
+winner data may be released only after the public runtime result is sealed.
+They may never enter an observation packet, planning call, checkpoint, or
+durable public evidence artifact.
+
+## 261. Known-action gates and exactly-once governance
+
+The known-action candidate must retain the complete accepted orbital-camera
+gate surface and additionally pass the frozen action/planning constraints.
+Those constraints cover target-handle resolution, exactly-once action timing,
+target isolation, selected-candidate correctness, terminal cost and goal
+success, current and horizon state accuracy, identity continuity, serial
+parity, public-input gradients, no truth leakage, no source-belief mutation,
+and bounded CPU/RSS/checkpoint resources.  The checkpoint has empty model
+state and no optimizer, scheduler, or RNG state: this rung qualifies the
+causal interface and predictive foundation, not learned task optimization.
+
+The canonical artifact directory is
+`runs/rgbd_known_action_planning_v2/`.  Development may execute exactly once
+only from a clean published specification-1.60 commit on the approved branch.
+An independent review must bind the exact development report, checkpoint, and
+development ledger before selector access can be authorized.  The protected
+order is selector -> confirmation -> final, each exactly once; a failed or
+interrupted predecessor closes all later access.  No development or protected
+manifest may be constructed merely to test the harness.
+
+The formal source surface is the qualification module, its standalone runner,
+its focused tests, the version binding, frozen configuration, scene
+materializer/certificate, and inherited accepted orbital-camera evidence.  Its
+normalized AST fingerprint is self-bound by the module and every independent
+runner load site.  Before the clean freeze, the exact focused collection,
+accepted regressions, Ruff, compilation checks, and complete repository suite
+must all pass through the `orpheus` environment.
+
+The exact staged freeze passed that source gate without constructing a
+governed manifest: `508 passed` focused; `289 passed, 1 skipped` accepted
+regressions; Ruff check and format check over `257` files; compileall; exact
+version `1.60`; and `1880 passed, 16 skipped` for the complete repository
+suite. These results authorize commit and publication only. They are not a
+development, protected, qualification, or acceptance result.
+
+## 262. Scope boundary for the next rung
+
+Until specification 1.60 passes development and the full protected sequence,
+no later experiment may claim planning-qualified scaling.  A failed 1.60
+development attempt closes this foundation and requires a new specification;
+it may not be tuned against protected evidence.
+
+If 1.60 qualifies, specification 1.61 may reuse its public action type and
+serial analytic oracle and extract generic scoring, artifact, and split-ledger
+utilities.  It must not copy or weaken the large security shell.  Shared
+`DynamicsModel` action propagation, prepared/runtime restriction removal,
+variable object count, contact, birth/removal, learned proposal/relation
+residuals, vectorized candidate evaluation, and mandatory K=8/K=32 downstream
+planning acceptance all remain new 1.61 capabilities, with new manifests and
+a separate source freeze.
 
 # Closing directive
 

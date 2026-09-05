@@ -312,14 +312,42 @@
   dedicated pushed branch `agent/rgbd-identifiable-drag-rung-1`, unmerged to `main`;
   preserve specification 1.57 and do not repair, rename, retry, or select this
   family again.
-- [ ] Select and freeze one genuinely new capability under its own pre-access
-  protocol before any new data access. It must exclude the closed partial-
-  visibility, variable-radius, and identifiable-drag families. Candidate later
-  capabilities include variable-size object sets, contact/materials, known
-  actions/planning, and richer modalities/geometry; this list does not itself
-  authorize a rung. Do not reuse the drag branch's historical specification
-  identifiers 1.58 or 1.59; the next active source freeze starts at 1.60 or
-  later.
+- [x] Select specification 1.60 as the next genuinely new capability: one
+  public absolute-time `WorldImpulseAction` and downstream counterfactual
+  choice over the accepted exactly-two, fully visible, known-camera,
+  non-contact RGB-D family. Keep learning, contact, variable count, lifecycle,
+  occlusion, and unknown actuation outside this foundation rung.
+- [x] Implement the parameter-free `AnalyticFreeMotionDynamics` known-action
+  path plus runtime prediction and serial planning interfaces; preserve exact
+  action-free output and require observable persistent-ID target resolution,
+  exactly-once impulse application, target isolation, conservation, batch
+  independence, source-belief immutability, and private-oracle separation.
+- [ ] In specification 1.61, extend the shared `DynamicsModel` and prepared
+  propagation action path, remove the runtime analytic-backend restriction,
+  and establish exact serial/vectorized parity.
+- [x] Freeze the specification-1.60 manifests and exactly-once development ->
+  independent review -> selector -> confirmation -> final governance surface.
+- [x] Pass the exact staged specification-1.60 pre-publication source gate:
+  `508` focused tests; `289 passed, 1 skipped` accepted regressions; Ruff check
+  and format check over `257` files; compileall; exact version `1.60`; and the
+  complete `1880 passed, 16 skipped` repository suite. No governed split was
+  opened by these checks.
+- [ ] Finish the clean specification-1.60 source gate, commit and publish the
+  exact freeze, then consume its single development attempt. Open protected
+  splits only after the independent three-hash review passes; any predecessor
+  failure closes the rung and forbids a planning-qualified 1.61 claim.
+- [ ] If and only if specification 1.60 qualifies, record its terminal evidence
+  and complete specification 1.61: one compact CPU-first checkpoint over 1--6
+  objects, contact/no-contact, births/removals, known actions, and required
+  K=8/K=32 downstream planning gates.
+- [ ] For specification 1.61, freeze 66,000/4,400/2,200/2,200/4,400/4,400
+  physical episodes, separate 1,200/600/600/1,200/1,200 planning tasks, all 22
+  physical cells, exact six-B4 update balance, the disposable screen,
+  512-update full validation cadence, plateau/extension rules, and the 60-hour
+  training cap before governed generation.
+- [ ] Do not optimize winner, regret, ranking, or task success. Treat planning
+  only as a mandatory downstream acceptance gate which can promote or reject
+  an otherwise physically accurate checkpoint.
 - [ ] At every rung require state/velocity/horizon accuracy, uncertainty,
   support, gradient, memory, and throughput non-regression; stop failed
   architecture families instead of marginal retuning.

@@ -3900,3 +3900,20 @@ further gravity-axis threshold tuning.
   evaluation intervention. Historical checkpoints missing the new disabled
   policy fields now migrate only to the disabled defaults; enabled policy
   semantics remain strict. Focused compatibility regression tests pass.
+- Selected specification 1.60 as a public known-action foundation over the
+  accepted exactly-two, fully visible, known-camera RGB-D family. Added one
+  absolute-time `WorldImpulseAction` path through the parameter-free analytic
+  backend, runtime prediction, and serial counterfactual planning while
+  retaining exact action-free behavior. Shared `DynamicsModel`, prepared
+  propagation, and vectorized candidate support remain specification-1.61 work.
+- Added a frozen exactly-once known-action qualification with observable target
+  handles, private oracle separation, serial action-choice gates, independent
+  development review, and ordered selector -> confirmation -> final access.
+  No development or protected evidence is claimed before the clean published
+  source boundary.
+- Declared downstream planning mandatory for the next 1--6-object campaign but
+  excluded winner, regret, ranking, and task-success losses from optimization.
+- Passed the exact staged specification-1.60 pre-publication source gate without
+  opening governed data: `508 passed` focused, `289 passed, 1 skipped` accepted
+  regressions, Ruff check/format over `257` files, compileall, exact version
+  `1.60`, and the full `1880 passed, 16 skipped` repository suite.

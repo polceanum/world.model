@@ -6,6 +6,49 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-171 — Require planning downstream of a public known-action foundation
+
+- **Date:** 2026-09-05
+- **Status:** accepted design; specification-1.60 pre-publication source gate
+  passed, development and protected evidence unopened
+- **Context:** The accepted world model estimates and extrapolates state, but
+  physical RMSE alone does not establish that its state is useful for choosing
+  an action. Scaling variable object sets, contact, and lifecycle before first
+  qualifying the causal action interface would make a later planning result
+  ambiguous: failure could belong either to action propagation or to the new
+  perception/dynamics capacity.
+- **Decision:** Introduce specification 1.60 as a parameter-free foundation
+  rung over the accepted exactly-two, fully visible, known-camera, non-contact
+  family. A public `WorldImpulseAction` is resolved from observable appearance
+  to a persistent ID, applied exactly once at its absolute timestamp by the
+  parameter-free analytic dynamics foundation, and evaluated by serial
+  counterfactual planning. General `DynamicsModel` action support and removal
+  of the runtime analytic-backend restriction are reserved for specification
+  1.61. Planning is a required downstream acceptance gate, not a task loss.
+  Require
+  a clean published source freeze, one development attempt, independent
+  report/checkpoint/ledger hash review, and one ordered selector ->
+  confirmation -> final sequence before specification 1.61 can claim
+  planning-qualified scaling.
+- **Alternatives considered:** treat planning as an optional report; train a
+  winner/ranking loss directly; add actions only inside the analytic planning
+  helper; or combine the action foundation and 1--6-object learned campaign in
+  one qualification.
+- **Consequences:** A physically accurate checkpoint can now be rejected when
+  its state induces poor action choice, while the learned world model cannot
+  overfit the planning oracle through a task objective. Failure of 1.60 closes
+  the foundation and pauses 1.61. If 1.60 passes, 1.61 inherits only the public
+  causal interface and must separately qualify variable sets, contact,
+  lifecycle, learned residuals, vectorized planning, convergence, and resource
+  bounds.
+- **Source-gate evidence:** Before commit/publication and without opening any
+  governed split, the exact staged snapshot passed `508` focused tests in
+  `2033.45 s`, `289 passed, 1 skipped` accepted regressions in `253.22 s`, Ruff
+  check and format check over `257` files, compileall, the exact `1.60` version
+  check, and the complete `1880 passed, 16 skipped` repository suite in
+  `2739.19 s`. This is implementation evidence only, not development or
+  qualification evidence.
+
 ## ADR-170 — Close identifiable drag after its sole development attempt
 
 - **Date:** 2026-08-30

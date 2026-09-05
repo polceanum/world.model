@@ -724,3 +724,34 @@ unqualified. The failed partial-visibility and variable-radius families must
 not be retried. The identifiable-drag source remains on dedicated pushed branch
 `agent/rgbd-identifiable-drag-rung-1`, unmerged to `main`; that family is also
 terminal and must not be selected again.
+
+## Active specification 1.60 known-action foundation
+
+The next selected capability is a public, known, absolute-time impulse and a
+downstream counterfactual planning test over the accepted exactly-two,
+fully-visible, known-orbital-camera family. The action interface is implemented
+by the parameter-free `AnalyticFreeMotionDynamics` backend and exposed through
+runtime prediction and `OnlineWorldModel.plan`. Action-free behavior remains
+the inherited function; action propagation splits at the exact timestamp and
+applies `delta_v = impulse / mass` once to the observable persistent target ID.
+Shared `DynamicsModel` and prepared-propagation action support remain 1.61 work.
+
+The source-frozen family has 64 bundles per split and eight action candidates.
+It retains private oracle state only behind the sealed public runtime result
+and requires exact target resolution, winner/cost/task correctness,
+pre-action invariance, isolation, conservation, batch independence, public
+input gradients, no mutation, and bounded CPU/RSS/checkpoint resources. Its
+canonical artifact directory is `runs/rgbd_known_action_planning_v2/`.
+
+No specification-1.60 development or protected result is claimed yet in this
+status entry. The exact staged source snapshot passed its pre-publication gate:
+the focused collection was `508 passed in 2033.45 s (0:33:53)`; accepted
+regressions were `289 passed, 1 skipped in 253.22 s (0:04:13)`; Ruff check and
+format check passed (`257` files already formatted); compileall and the exact
+version check (`1.60`) passed; and the complete repository suite was
+`1880 passed, 16 skipped in 2739.19 s (0:45:39)`. The skips are the expected
+inactive-device/Aqua MPS cases. These are source-gate results only: no governed
+manifest or split was opened. Development remains unopened until this exact
+freeze is committed and published. Selector, confirmation, and final then
+remain ordered behind an independent hash review. Specification 1.61 may claim
+planning-qualified scaling only if this predecessor fully qualifies.
