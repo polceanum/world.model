@@ -3369,6 +3369,30 @@ def test_outer_runner_rejects_nonisolated_invocation_before_initial_capture() ->
     assert touched == []
 
 
+def test_outer_runner_uses_platform_independent_path_instance_guard() -> None:
+    namespace, runner_bytes, _ = _exact_runner_namespace()
+    tree = ast.parse(runner_bytes)
+    preflight = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_outer_preflight"
+    )
+    instance_calls = {
+        ast.unparse(node)
+        for node in ast.walk(preflight)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_isinstance"
+    }
+    assert "_isinstance(_runner_path, _path_type)" in instance_calls
+    assert "_isinstance(_repository_root, _path_type)" in instance_calls
+    defaults = namespace["_outer_preflight"].__kwdefaults__
+    assert defaults["_path_type"] is namespace["Path"]
+    assert defaults["_isinstance"] is namespace["builtins"].isinstance
+    assert isinstance(namespace["RUNNER_PATH"], defaults["_path_type"])
+    assert type(namespace["RUNNER_PATH"]) is not defaults["_path_type"]
+
+
 @pytest.mark.parametrize(
     ("owner_name", "attribute"),
     [

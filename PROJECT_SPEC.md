@@ -8782,12 +8782,26 @@ runner load site.  Before the clean freeze, the exact focused collection,
 accepted regressions, Ruff, compilation checks, and complete repository suite
 must all pass through the `orpheus` environment.
 
-The exact staged freeze passed that source gate without constructing a
-governed manifest: `508 passed` focused; `289 passed, 1 skipped` accepted
-regressions; Ruff check and format check over `257` files; compileall; exact
-version `1.60`; and `1880 passed, 16 skipped` for the complete repository
-suite. These results authorize commit and publication only. They are not a
-development, protected, qualification, or acceptance result.
+The first published staged freeze (`c20ba38`) passed that source gate without
+constructing a governed manifest: `508 passed` focused; `289 passed, 1
+skipped` accepted regressions; Ruff check and format check over `257` files;
+compileall; exact version `1.60`; and `1880 passed, 16 skipped` for the complete
+repository suite.  A subsequent exact clean-clone invocation exposed a
+platform-specific pre-access type check: the resolved runner paths are
+`PosixPath` instances on this host rather than objects whose exact type is the
+abstract `Path` factory.  The runner failed closed before authority
+registration, manifest construction, artifact creation, or ledger creation,
+so it consumed no development or protected attempt.
+
+The corrected freeze replaces only that exact-type comparison with a captured
+`isinstance` guard and adds one AST/runtime regression proving the guard on the
+host path implementation.  The repaired staged source gate passed: `509
+passed` focused (the original 508 plus the repair regression); `289 passed, 1
+skipped` accepted regressions; Ruff check and format check over `257` files;
+compileall; exact version `1.60`; and `1881 passed, 16 skipped` for the complete
+repository suite.  These results authorize the corrected commit and
+publication only.  They are not a development, protected, qualification, or
+acceptance result.
 
 ## 262. Scope boundary for the next rung
 

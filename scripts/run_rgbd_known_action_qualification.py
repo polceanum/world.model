@@ -2499,6 +2499,7 @@ def _outer_preflight(
     _getattr: Any = builtins.getattr,
     _vars: Any = builtins.vars,
     _type: Any = builtins.type,
+    _isinstance: Any = builtins.isinstance,
     _tuple: Any = builtins.tuple,
     _list: Any = builtins.list,
     _dict: Any = builtins.dict,
@@ -2715,8 +2716,8 @@ def _outer_preflight(
         "_BOOTSTRAP_INTERNAL_CAPABILITY": None,
     }
     if (
-        _type(_runner_path) is not _path_type
-        or _type(_repository_root) is not _path_type
+        not _isinstance(_runner_path, _path_type)
+        or not _isinstance(_repository_root, _path_type)
         or _resolve(_runner_path) != _runner_path
         or _resolve(_repository_root) != _repository_root
         or _any(
