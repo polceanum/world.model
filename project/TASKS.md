@@ -399,6 +399,13 @@
   directory as incomplete and creates no dynamic-set artifact. Keep planning
   mandatory and pause governed 1.61 execution pending a separately reviewed
   successor foundation.
+- [ ] Review—but do not infer authorization for—the measured 1.60.2 candidate:
+  preserve every frozen gate, use a fresh v4 namespace, reduce only the
+  known-action forward chromatic-centre blend to a predeclared value near
+  `1e-6`, and add an ungoverned gate-strength palette/truth/VJP screen before
+  any single fresh attempt. The diagnostic evidence is recorded in
+  `project/RESEARCH_NOTES.md`; no source mutation or governed access is
+  authorized by that evidence.
 - [x] Declare candidate 66,000/4,400/2,200/2,200/4,400/4,400 physical rows,
   separate 1,200/600/600/1,200/1,200 planning tasks, all 22 physical cells,
   exact six-B4 update balance, the disposable screen, 512-update validation,

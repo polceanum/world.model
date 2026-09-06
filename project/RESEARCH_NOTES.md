@@ -15,6 +15,70 @@ checkpoint, split/seeds, device, commands, metrics, and failure cases.
 
 ## Evidence so far
 
+### Known-action 1.60.1 — terminal scientific failure ownership
+
+The sole formal development attempt for clean-published source
+`c820a38ffff9c93f89944e0ad5524f1d96bb23b0` completed all 16 public batches,
+sealed public access, and completed private scoring.  Its terminal report
+(`680f422a294ef19e620c56f0eebb70a9c08d26638bf361e3ad46fc49b4ab32f1`)
+is a strict `gate_failed` result with seven failures; its terminal ledger
+(`043471eaa4b328aa5ba9efc9bbfe4830d926a771b9f51ab0459b4559d40e494a`)
+is a validated `complete_failed` generation-38 record.  No checkpoint or
+protected access exists.
+
+The evidence localizes the error upstream of action propagation.  The
+action-relative position and velocity errors are only `2.9802e-8 m` and
+`3.7253e-9 m/s`, and all action Jacobian, boundary, isolation, exactly-once,
+permutation, and mutation gates pass.  In contrast, absolute
+action-conditioned errors are `1.6263e-4 m` and `9.6386e-5 m/s`; palette-twin
+errors are `1.2282e-4 m` and `7.0260e-5 m/s`.  Planner-cost, opposite-goal-cost,
+and palette-cost errors are respectively `6.6195e-6`, `6.5931e-6`, and
+`5.0301e-6 m^2`.  Winner and palette-choice accuracy remain exactly one.  This
+pattern is a perception-state bias shared by action and no-action rollouts,
+not an impulse-timing or vectorization defect.
+
+Source ownership is the inherited two-disc RGB-D estimator's forward blend
+
+`(1 - chromatic_centre_blend) * fitted_surface_position +
+chromatic_centre_blend * chromatic_ray_position`.
+
+The known-action config retains `chromatic_centre_blend = 0.0025`.  Swapping
+object colours changes the chromatic ray while leaving physical sphere
+surfaces unchanged, so the nonzero blend intentionally moves metric state.
+The older unit contract allowed `5e-4 m` palette-set movement, whereas the
+1.60/1.60.1 frozen gate requires at most `2e-6 m`.  The source gate therefore
+tested two individually valid but mutually inconsistent tolerances and did not
+exercise the formal gate on an ungoverned analogue before consuming the
+attempt.
+
+A non-governed CPU float32 ablation used only the existing public unit-scene
+fixtures; it did not regenerate or reopen any formal row.  Across three varied
+depth/position/palette cases, changing only the blend from `2.5e-3` to `1e-6`
+reduced maximum truth-set error from as much as `1.1018e-3 m` to
+`7.4744e-7 m`, and palette-set error from as much as `4.2345e-4 m` to
+`1.9372e-7 m`.  RGB position VJP L1 remained finite and nonzero at
+`7.4163e-6` to `1.1421e-5`.  Two other cases ended at truth errors
+`2.4756e-7/1.9992e-7 m` and palette errors
+`1.4901e-8/1.2288e-7 m`.  These are diagnostic fixture results, not a formal
+development result or a prediction of protected performance.
+
+Under the observed near-linear blend scaling, the terminal minimum RGB VJP
+(`2.2705e-4` at blend `2.5e-3`) gives an approximate lower feasible blend of
+`1.10e-7` for the frozen `1e-8` connectivity floor.  The most restrictive
+failed absolute-position gate gives an approximate upper blend of `3.07e-5`
+before accounting for the fitted-surface residual.  A value near `1e-6` lies
+inside that roughly 279-fold diagnostic interval and passes the diverse public
+fixtures without using a straight-through surrogate or relaxing any gate.
+
+This does not authorize an in-place edit or retry.  A reviewable 1.60.2
+successor would preserve all gates and action semantics, change only the
+known-action configuration's forward chromatic blend to a pre-frozen value,
+add an ungoverned gate-strength palette/truth/VJP screen that would have caught
+1.60.1, and use specification/protocol/run namespace v4 with one fresh
+attempt.  It must leave legacy defaults, both terminal directories, and the
+dormant 1.61 source untouched until separately authorized.  Selector and
+confirmation remain the protection against development-informed overfitting.
+
 ### Identifiable per-object drag — terminal development evidence
 
 The identifiable-drag source freeze
