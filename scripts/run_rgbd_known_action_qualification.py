@@ -87,6 +87,7 @@ _REMOTE_SSH_COMMAND_TEMPLATE = (
 )
 _BOOTSTRAP = r"""
 def _rgbd_known_action_bootstrap():
+    import __future__ as _f
     import argparse as _aa
     import ast as _a
     import builtins as _b

@@ -8555,6 +8555,18 @@ def _load_runner() -> Any:
     return module
 
 
+def test_bootstrap_preloads_future_before_sealing_interpreter_containers() -> None:
+    runner = _load_runner()
+    bootstrap = runner._BOOTSTRAP
+
+    future_import = bootstrap.index("    import __future__ as _f")
+    module_snapshot = bootstrap.index("    _sys_modules_snapshot = tuple(_sys_modules.items())")
+    verified_source_exec = bootstrap.index("    _exec_fn(_compiled, _trusted_namespace")
+
+    assert future_import < module_snapshot < verified_source_exec
+    assert bootstrap.count("    import __future__ as _f") == 1
+
+
 def test_local_git_and_child_exec_environments_exclude_hostile_ambient_values(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -8803,6 +8803,18 @@ repository suite.  These results authorize the corrected commit and
 publication only.  They are not a development, protected, qualification, or
 acceptance result.
 
+The first exact invocation of that repaired commit (`010757f`) passed the
+remote publication probe, then exposed a second bootstrap-order defect before
+authority registration: compiling the source under future annotations caused
+Python to insert the standard-library `__future__` module after the sealed
+interpreter-container snapshot.  The runner therefore rejected its own
+verified source execution.  It again failed before manifest construction,
+artifact creation, ledger creation, or attempt consumption.  The second repair
+preloads `__future__` before taking the interpreter snapshot and adds a static
+ordering regression.  Its staged focused gate passed `510 passed`; the exact
+clean-commit regression, lint, compile, version, and complete-suite evidence
+must be recorded before governed execution.
+
 ## 262. Scope boundary for the next rung
 
 Until specification 1.60 passes development and the full protected sequence,
