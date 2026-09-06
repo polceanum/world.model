@@ -3917,3 +3917,62 @@ further gravity-axis threshold tuning.
   opening governed data: `508 passed` focused, `289 passed, 1 skipped` accepted
   regressions, Ruff check/format over `257` files, compileall, exact version
   `1.60`, and the full `1880 passed, 16 skipped` repository suite.
+- Published the final specification-1.60 source freeze at
+  `4629fe13b65a907378c4a551b373c357154387f5` after its exact clean-clone gate
+  passed `510` focused tests, `289 passed, 1 skipped` accepted regressions,
+  Ruff, compileall, exact version `1.60`, and `1882 passed, 16 skipped` for the
+  full suite.
+- Consumed the sole specification-1.60 development attempt. It failed in its
+  first public batch with `PermissionError: active batch lacks one exact
+  materializer vault/slot ownership`; no ordinal, private score, result,
+  checkpoint, or protected access completed. Preserved report/ledger hashes
+  `72533f2f10919c6070ee289aad63c18aa7b7c7b3b687f3caa4b015d327a8cfed`
+  and `6e5a9b2ab31483b200c0fbf9763894080e7603ca2b559cac121ca737380c67ea`.
+  Closed 1.60 and paused governed/planning-qualified 1.61 execution.
+- Staged an unqualified specification-1.61 source implementation behind the
+  now-unsatisfied 1.60 predecessor gate: compact unordered RGB-D set proposals,
+  1--6-object lifecycle/contact belief state, shared known actions, vectorized
+  K-candidate planning with a serial oracle, deterministic physical/planning
+  manifests, balanced CPU training, convergence/selection controls, paired
+  bootstrap promotion, and mandatory downstream planning gates.
+- Hardened the 1.61 evidence boundary with exact public-frame certificates,
+  storage and mutation checks, evidence-derived truth-leakage counts, raw
+  critical/accepted-like comparison reconstruction, safe-incumbent plateau
+  logic, complete 4,096-update extension boundaries, and fail-closed
+  second-attempt timing admission. No 1.61 governed artifact was created.
+- Corrected candidate-manifest causal balance and pairwise planning coverage,
+  producing physical hashes
+  `c37b0e7643e740ea6cdf65400c2bc6787a8e5038cea073c22ecff7025a3b1f06`,
+  `d94448e0493ed73b15f960a24c8813c2419926fb445e2fab8a594119cf33d35c`,
+  `c17d030a8db17f8c299b8fc701f76b52a9e3357ec659d03acb9d62760055059e`,
+  `6916aad9cb40a6c3b428f87fc0bc7cc95845b14e263b5f11dcb6b07f822154a2`,
+  `25df07b2d8788eea5f42e0c4cd5c2c73f4448a4a9633832bd96c43191131408a`,
+  `01c55d6b2827c581b6c9832df385799a0af47ff49fb118b93f22e91058689ce1`,
+  planning hashes
+  `ed56bd7274841240268640609a2faed398c317da04faee930c2183f0057a3b15`,
+  `08f9a2280e5ee18c14245f96b48078716332b4a8fdaae4531fe846fe03892536`,
+  `08edc8073bb8c7f47e46f21669e2a35590a88e235615ad0a25d6877f25590ceb`,
+  `370f72774b150ded638514e49b9e536c41cc48616e89a7e03913bd04cd6a735d`,
+  `56d85ee36e9f7a1010569ae5f269aa6efb24eda9b045c95217f5420be39d2248`,
+  and screen hash
+  `b6c3deb2c8fb2fa9d58d5cf29d38f695de3bc93430a02dd47cdcca38add3db0b`.
+  These are source-candidate constants, not a publication freeze.
+- Added multi-step known-action trajectory supervision, exact planning
+  population reduction, reusable authenticated development caches, strict
+  retry accepted-seed audits before cold write and after warm load, exact
+  2.5-GiB RSS accounting, and conditional post-reset velocity applicability.
+  These changes are source-only and do not constitute a 1.61 run.
+- Corrected campaign termination when all supported checkpoints are
+  selection-unsafe: reaching the exact 32,768-update cap now reports
+  `limit_hit` even without an incumbent or a timing-limit receipt, and strict
+  replay reconstructs the distinct hard-cap reason instead of trusting it.
+- Isolated the dormant 1.61 prevalidated physics, cached rendering, and
+  extended configuration paths in dynamic-set-owned modules. Restored the
+  specification-1.60 public physics, renderer, configuration source, and
+  default configuration byte-for-byte; their frozen SHA-256 bindings and the
+  exhaustive certificate remain unchanged.
+- Completed the unqualified source gate without opening governed data: all
+  `2,347` collected tests passed as `2,331 passed, 16 skipped` in `3,634.14 s`;
+  Ruff check, format check over 313 files, compileall, exact version `1.60`,
+  frozen-source hashes, and certificate revalidation also pass. The 13 pytest
+  warnings are the expected synthetic thread-count warnings.

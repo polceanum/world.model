@@ -251,6 +251,27 @@ def test_uncertainty_validated_dt_path_has_exact_output_and_gradient_parity() ->
     )
 
 
+def test_explicit_low_uncertainty_bound_reaches_below_historical_floor() -> None:
+    belief = _active_belief(batch_size=1)
+    objects = replace(
+        belief.objects,
+        fast_log_variance=torch.full_like(belief.objects.fast_log_variance, -30.0),
+    )
+
+    legacy = UncertaintyDynamics(objects.fast_state_dim)(objects, 0.0)
+    calibrated = UncertaintyDynamics(
+        objects.fast_state_dim,
+        base_process_variance_per_second=1.0e-14,
+        position_process_variance_per_second=1.0e-14,
+        velocity_process_variance_per_second=1.0e-14,
+        log_variance_bounds=(-32.0, 6.0),
+    )(objects, 0.0)
+
+    assert torch.all(legacy.objects.fast_log_variance == -20.0)
+    assert torch.all(calibrated.objects.fast_log_variance < -29.0)
+    assert torch.isfinite(calibrated.objects.fast_log_variance).all()
+
+
 def _assert_composite_uses_one_segment_validation(
     monkeypatch: pytest.MonkeyPatch,
     *,

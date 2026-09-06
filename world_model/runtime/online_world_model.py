@@ -168,6 +168,8 @@ class OnlineWorldModel(nn.Module):
         self.diagnostics = RuntimeDiagnostics()
         self._last_measurements: MeasurementSet | None = None
         self._last_direct_velocity_evidence: DirectVelocityEvidence | None = None
+        self._last_interval_collision_mask: Tensor | None = None
+        self._last_interval_pair_collision_logits: Tensor | None = None
         self._prepared_propagation_owner = object()
         self.abstraction_router = PredictiveAbstractionRouter()
         self.belief_tokenizer = WorldBeliefTokenizer(self.abstraction_router)
@@ -447,6 +449,14 @@ class OnlineWorldModel(nn.Module):
         if rgbd_config.enabled:
             modules["rgbd"] = RGBDObservationModule(
                 RGBDObservationConfig(
+                    observation_mode=getattr(rgbd_config, "observation_mode", "legacy"),
+                    max_objects=getattr(rgbd_config, "max_objects", 6),
+                    set_feature_dim=getattr(rgbd_config, "set_feature_dim", 32),
+                    set_log_variance_residual_limit=getattr(
+                        rgbd_config,
+                        "set_log_variance_residual_limit",
+                        4.0,
+                    ),
                     proposal_count=rgbd_config.proposal_count,
                     appearance_dim=state_config.appearance_dim,
                     world_radius=rgbd_config.world_radius,
@@ -620,6 +630,26 @@ class OnlineWorldModel(nn.Module):
 
         return self._last_direct_velocity_evidence
 
+    @property
+    def last_interval_collision_mask(self) -> Tensor | None:
+        """Detached per-slot collision evidence from the preceding interval."""
+
+        return (
+            None
+            if self._last_interval_collision_mask is None
+            else self._last_interval_collision_mask.clone()
+        )
+
+    @property
+    def last_interval_pair_collision_logits(self) -> Tensor | None:
+        """Detached learned pair confidence, separate from hard resolution."""
+
+        return (
+            None
+            if self._last_interval_pair_collision_logits is None
+            else self._last_interval_pair_collision_logits.clone()
+        )
+
     def predictive_abstractions(self) -> AbstractionAssignment:
         """Return the current derived executable abstraction per entity.
 
@@ -647,6 +677,8 @@ class OnlineWorldModel(nn.Module):
         self.diagnostics.reset()
         self._last_measurements = None
         self._last_direct_velocity_evidence = None
+        self._last_interval_collision_mask = None
+        self._last_interval_pair_collision_logits = None
         if self.hypothesis_controller is not None:
             device, dtype = self._model_device_dtype()
             self.hypothesis_controller.reset(batch_size, device=device, dtype=dtype)
@@ -728,15 +760,72 @@ class OnlineWorldModel(nn.Module):
             boundary_collision_mask = ground_collision
         return pair_collision.any(dim=-1) | boundary_collision_mask
 
+    @staticmethod
+    def _interval_pair_collision_logits(
+        current: WorldBelief,
+        auxiliary: Mapping[str, Tensor],
+    ) -> Tensor | None:
+        """Validate the calibrated pair classifier without reading hard events."""
+
+        logits = auxiliary.get("pair_collision_logits")
+        if logits is None:
+            return None
+        expected = (
+            current.batch_size,
+            current.objects.max_objects,
+            current.objects.max_objects,
+        )
+        if (
+            logits.shape != expected
+            or not logits.is_floating_point()
+            or logits.device != current.device
+            or logits.dtype != current.dtype
+            or not bool(torch.isfinite(logits).all())
+        ):
+            raise ValueError("dynamics pair_collision_logits must be finite belief-typed [B,N,N]")
+        if not torch.equal(logits, logits.transpose(1, 2)):
+            raise ValueError("dynamics pair_collision_logits must be exactly symmetric")
+        return logits
+
+    @staticmethod
+    def _interval_known_action_mask(
+        current: WorldBelief,
+        auxiliary: Mapping[str, Tensor],
+    ) -> Tensor | None:
+        """Return causal public-action discontinuities for temporal estimators."""
+
+        applied = auxiliary.get("known_action_applied")
+        if applied is None:
+            return None
+        if (
+            applied.shape != current.objects.active.shape
+            or applied.dtype is not torch.bool
+            or applied.device != current.device
+        ):
+            raise ValueError("dynamics known_action_applied must be boolean [B,N]")
+        return applied
+
     def prepare_propagation(
         self,
         target_timestamp: float | Tensor,
+        *,
+        action: WorldImpulseAction | None = None,
     ) -> PreparedPropagation:
         """Predict once from the current runtime revision for one future ingest."""
 
         current = self.state.belief
         if current is None:
             raise RuntimeError("cannot prepare propagation before belief initialization")
+        if action is not None:
+            from world_model.dynamics import WorldImpulseAction
+
+            if not isinstance(action, WorldImpulseAction):
+                raise TypeError("action must be a WorldImpulseAction or None")
+            if self.hypothesis_controller is not None:
+                raise NotImplementedError(
+                    "known actions are unsupported while the runtime hypothesis "
+                    "controller is enabled"
+                )
         requested = self._requested_timestamp(current, target_timestamp)
         if not torch.equal(requested, requested[:1].expand_as(requested)):
             raise PreparedPropagationError(
@@ -744,6 +833,7 @@ class OnlineWorldModel(nn.Module):
             )
         delta_time = requested - current.timestamp
         source_tensor_signature = tensor_identity_version_signature(current)
+        action_tensor_signature = tensor_identity_version_signature(action)
         dynamics_tensor_signature_before = self._dynamics_tensor_signature()
         if self.hypothesis_controller is not None:
             self.hypothesis_controller.synchronize_runtime_context(
@@ -768,10 +858,18 @@ class OnlineWorldModel(nn.Module):
             else None
         )
         if propagation is None:
-            propagation = predict_step(current, delta_time)
+            propagation = (
+                predict_step(current, delta_time)
+                if action is None
+                else predict_step(current, delta_time, action=action)
+            )
         if tensor_identity_version_signature(current) != source_tensor_signature:
             raise PreparedPropagationError(
                 "dynamics.predict_step mutated the prepared propagation source belief"
+            )
+        if tensor_identity_version_signature(action) != action_tensor_signature:
+            raise PreparedPropagationError(
+                "dynamics.predict_step mutated the prepared propagation action"
             )
         prior = getattr(propagation, "belief", None)
         event_logits = getattr(propagation, "event_logits", None)
@@ -795,6 +893,7 @@ class OnlineWorldModel(nn.Module):
         if not torch.equal(prior.timestamp, requested):
             raise ValueError("prepared prior timestamp must equal the requested target")
         interval_collision_mask = self._interval_collision_mask(current, auxiliary)
+        self._interval_pair_collision_logits(current, auxiliary)
         model_device, model_dtype = self._model_device_dtype()
         if model_device != current.device or model_dtype != current.dtype:
             raise ValueError("runtime belief and model execution device/dtype do not match")
@@ -825,7 +924,9 @@ class OnlineWorldModel(nn.Module):
             event_logits=event_logits,
             auxiliary=auxiliary,
             interval_collision_mask=interval_collision_mask,
+            action=action,
             source_tensor_signature=source_tensor_signature,
+            action_tensor_signature=action_tensor_signature,
             result_tensor_signature=result_tensor_signature,
             dynamics_tensor_signature=dynamics_tensor_signature,
             dynamics_training=self.dynamics.training,
@@ -885,6 +986,15 @@ class OnlineWorldModel(nn.Module):
             raise PreparedPropagationError(
                 "prepared propagation source belief tensors have changed"
             )
+        if prepared.action is not None:
+            from world_model.dynamics import WorldImpulseAction
+
+            if not isinstance(prepared.action, WorldImpulseAction):
+                raise PreparedPropagationError("prepared propagation action type has changed")
+        if tensor_identity_version_signature(prepared.action) != prepared.action_tensor_signature:
+            raise PreparedPropagationError("prepared propagation action tensors have changed")
+        if prepared.action is not None and prepared.action.frame != "world":
+            raise PreparedPropagationError("prepared propagation action metadata has changed")
         if not torch.equal(requested, prepared.target_timestamp):
             raise PreparedPropagationError(
                 "prepared propagation target timestamp does not match observation"
@@ -1024,6 +1134,7 @@ class OnlineWorldModel(nn.Module):
         posterior: WorldBelief,
         prediction_dt: Tensor,
         prior_interval_collision_mask: Tensor | None = None,
+        prior_interval_known_action_mask: Tensor | None = None,
     ) -> WorldBelief:
         started = time.perf_counter()
         self._last_direct_velocity_evidence = None
@@ -1122,6 +1233,22 @@ class OnlineWorldModel(nn.Module):
                 auxiliary={
                     **measurements.auxiliary,
                     "prior_interval_collision_mask": (prior_interval_collision_mask),
+                },
+            )
+        if prior_interval_known_action_mask is not None:
+            expected = posterior.objects.active.shape
+            if (
+                prior_interval_known_action_mask.shape != expected
+                or prior_interval_known_action_mask.dtype is not torch.bool
+            ):
+                raise ValueError(
+                    "prior interval known-action mask must be boolean belief-slot [B,N]"
+                )
+            measurements = replace(
+                measurements,
+                auxiliary={
+                    **measurements.auxiliary,
+                    "prior_interval_known_action_mask": (prior_interval_known_action_mask),
                 },
             )
         active_before = int(posterior.objects.active.sum().detach().cpu())
@@ -1288,10 +1415,29 @@ class OnlineWorldModel(nn.Module):
         packets: ObservationPacket | Sequence[ObservationPacket],
         *,
         prepared: PreparedPropagation | None = None,
+        action: WorldImpulseAction | None = None,
     ) -> WorldBelief:
         packet_list = [packets] if isinstance(packets, ObservationPacket) else list(packets)
         if not packet_list:
             raise ValueError("ingest requires at least one observation packet")
+        if action is not None:
+            from world_model.dynamics import WorldImpulseAction
+
+            if not isinstance(action, WorldImpulseAction):
+                raise TypeError("action must be a WorldImpulseAction or None")
+            if prepared is not None:
+                raise PreparedPropagationError(
+                    "pass known actions to prepare_propagation, not prepared ingest"
+                )
+            if len({packet.timestamp for packet in packet_list}) != 1:
+                raise ValueError("known-action ingest requires one observation timestamp group")
+            if self.state.belief is None:
+                raise RuntimeError("cannot apply a known action before belief initialization")
+            if self.hypothesis_controller is not None:
+                raise NotImplementedError(
+                    "known actions are unsupported while the runtime hypothesis "
+                    "controller is enabled"
+                )
         if prepared is not None and len({packet.timestamp for packet in packet_list}) != 1:
             raise PreparedPropagationError(
                 "prepared propagation requires one observation timestamp group"
@@ -1372,10 +1518,20 @@ class OnlineWorldModel(nn.Module):
                 prior = prepared.prior
                 dt = prepared.delta_time
                 prior_interval_collision_mask = prepared.interval_collision_mask
+                prior_interval_pair_collision_logits = self._interval_pair_collision_logits(
+                    current,
+                    prepared.auxiliary,
+                )
+                prior_interval_known_action_mask = self._interval_known_action_mask(
+                    current,
+                    prepared.auxiliary,
+                )
             else:
                 dt = requested - current.timestamp
                 predict_step = getattr(self.dynamics, "predict_step", None)
                 prior_interval_collision_mask: Tensor | None = None
+                prior_interval_pair_collision_logits: Tensor | None = None
+                prior_interval_known_action_mask: Tensor | None = None
                 if callable(predict_step):
                     propagation = (
                         self.hypothesis_controller.reusable_learned_step(
@@ -1390,7 +1546,11 @@ class OnlineWorldModel(nn.Module):
                         else None
                     )
                     if propagation is None:
-                        propagation = predict_step(current, dt)
+                        propagation = (
+                            predict_step(current, dt)
+                            if action is None
+                            else predict_step(current, dt, action=action)
+                        )
                     prior = propagation.belief
                     auxiliary = getattr(propagation, "auxiliary", None)
                     if not isinstance(auxiliary, Mapping):
@@ -1399,8 +1559,26 @@ class OnlineWorldModel(nn.Module):
                         current,
                         auxiliary,
                     )
+                    prior_interval_pair_collision_logits = self._interval_pair_collision_logits(
+                        current,
+                        auxiliary,
+                    )
+                    prior_interval_known_action_mask = self._interval_known_action_mask(
+                        current,
+                        auxiliary,
+                    )
                 else:
                     prior = self.dynamics.predict(current, dt)
+            self._last_interval_collision_mask = (
+                None
+                if prior_interval_collision_mask is None
+                else prior_interval_collision_mask.detach().clone()
+            )
+            self._last_interval_pair_collision_logits = (
+                None
+                if prior_interval_pair_collision_logits is None
+                else prior_interval_pair_collision_logits.detach().clone()
+            )
             posterior = prior
             for packet_index, packet in enumerate(ordered_group):
                 # Elapsed-time evidence belongs to the first assimilation only.
@@ -1412,6 +1590,7 @@ class OnlineWorldModel(nn.Module):
                     posterior,
                     packet_dt,
                     prior_interval_collision_mask,
+                    prior_interval_known_action_mask,
                 )
             self.state.belief = posterior.with_timestamp(timestamp)
             self.state.ingest_count += 1
@@ -1465,7 +1644,7 @@ class OnlineWorldModel(nn.Module):
                     return selected
             return self.dynamics.rollout(self.state.belief, times)
 
-        from world_model.dynamics import AnalyticFreeMotionDynamics, WorldImpulseAction
+        from world_model.dynamics import WorldImpulseAction
 
         if not isinstance(action, WorldImpulseAction):
             raise TypeError("action must be a WorldImpulseAction or None")
@@ -1473,8 +1652,6 @@ class OnlineWorldModel(nn.Module):
             raise NotImplementedError(
                 "known actions are unsupported while the runtime hypothesis controller is enabled"
             )
-        if not isinstance(self.dynamics, AnalyticFreeMotionDynamics):
-            raise NotImplementedError("known actions currently require AnalyticFreeMotionDynamics")
         times = torch.as_tensor(
             query_times,
             device=self.state.belief.device,
@@ -1493,6 +1670,7 @@ class OnlineWorldModel(nn.Module):
         goal: TerminalWorldPositionGoal,
         *,
         weights: CounterfactualCostWeights | None = None,
+        candidate_vectorized: bool = True,
     ) -> CounterfactualPlanResult:
         """Score known-action counterfactuals without mutating runtime state."""
 
@@ -1504,16 +1682,11 @@ class OnlineWorldModel(nn.Module):
                 "hypothesis controller is enabled"
             )
 
-        from world_model.dynamics import AnalyticFreeMotionDynamics
         from world_model.planning import (
             CounterfactualCostWeights,
             plan_counterfactual_actions,
         )
 
-        if not isinstance(self.dynamics, AnalyticFreeMotionDynamics):
-            raise NotImplementedError(
-                "known-action planning currently requires AnalyticFreeMotionDynamics"
-            )
         resolved_weights = CounterfactualCostWeights() if weights is None else weights
         return plan_counterfactual_actions(
             self.dynamics,
@@ -1522,6 +1695,7 @@ class OnlineWorldModel(nn.Module):
             candidates,
             goal,
             weights=resolved_weights,
+            candidate_vectorized=candidate_vectorized,
         )
 
     def predict_hypotheses(

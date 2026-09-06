@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from world_model.dynamics import WorldImpulseAction, free_motion_position_velocity
+from world_model.dynamics import DynamicsModel, WorldImpulseAction, free_motion_position_velocity
 from world_model.observations import ObservationPacket
 from world_model.planning import TerminalWorldPositionGoal, resolve_appearance_handle
 from world_model.runtime import OnlineWorldModel
@@ -236,3 +236,35 @@ def test_action_counterfactuals_fail_closed_with_hypothesis_controller() -> None
         model.predict([0.5], action=action)
     with pytest.raises(NotImplementedError, match="hypothesis controller"):
         model.plan([0.5], (action,), goal)
+
+
+def test_runtime_known_actions_use_shared_hybrid_dynamics() -> None:
+    model, _, _ = _ingested_runtime()
+    assert model.belief is not None
+    shared = DynamicsModel.from_belief(
+        model.belief,
+        max_substep=0.05,
+        graph_hidden_dim=8,
+        uncertainty_hidden_dim=8,
+        interaction_radius=0.1,
+        base_process_variance_per_second=1.0e-8,
+        ground_height=-10.0,
+    ).to(device=model.belief.device, dtype=model.belief.dtype)
+    with torch.no_grad():
+        for parameter in shared.parameters():
+            parameter.zero_()
+    model.dynamics = shared
+    action = _action(model, torch.tensor([[0.01, -0.005, 0.002]]))
+
+    acted = model.predict([0.1, 0.3, 0.5], action=action)
+    target_mask = model.belief.objects.object_id == action.object_id.unsqueeze(-1)
+    target_slot = target_mask.to(torch.int64).argmax(dim=-1)
+    goal = TerminalWorldPositionGoal(
+        object_id=action.object_id,
+        position_world=acted.positions[torch.arange(1), -1, target_slot].detach(),
+    )
+    plan = model.plan([0.1, 0.3, 0.5], (None, action), goal)
+
+    assert acted.auxiliary["known_action_applied"].sum().item() == 1
+    assert plan.selected_index.tolist() == [1]
+    assert isinstance(model.dynamics, DynamicsModel)

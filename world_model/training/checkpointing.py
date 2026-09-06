@@ -117,6 +117,10 @@ _RGB_LEGACY_DEFAULT_FIELDS = (
 )
 
 _DYNAMICS_LEGACY_DEFAULTS = {
+    # Relation width was historically identical to the graph hidden width.
+    # ``None`` retains that exact construction while allowing a new protocol
+    # to opt into an independently widened relation residual.
+    "relation_hidden_dim": None,
     # These are the actual resolver/config defaults used before each field was
     # persisted. They deliberately do not track today's corrected reference
     # physics defaults; otherwise an old checkpoint would be mislabelled as
@@ -145,6 +149,15 @@ _DYNAMICS_LEGACY_DEFAULTS = {
     "pair_applicability_margin_m": 0.05,
     "pair_applicability_gap_temperature_m": 0.025,
     "pair_applicability_velocity_temperature_mps": 0.10,
+    # Historical hybrid dynamics always evolved modal state and admitted both
+    # continuous pair-force and learned node-acceleration residuals.
+    "modal_dynamics_enabled": True,
+    "continuous_pair_force_enabled": True,
+    "node_acceleration_enabled": True,
+    # Historical checkpoints have only the authoritative fixed-microstep
+    # rollout and indirect uncertainty feature path.
+    "event_driven_state_only_enabled": False,
+    "relation_process_uncertainty_enabled": False,
     # Historical event outputs used hard +/- constants. Missing is therefore
     # exactly the disabled semantic; the accompanying values are inert until
     # a new protocol explicitly enables smooth hazards.
@@ -290,7 +303,13 @@ def _model_checkpoint_semantics(value: object) -> object:
         normalized_rgbd = dict(rgbd)
         rgbd_defaults = RGBDConfig()
         normalized_rgbd.setdefault("global_every_steps", rgbd_defaults.global_every_steps)
+        normalized_rgbd.setdefault("observation_mode", "legacy")
+        normalized_rgbd.setdefault("max_objects", 6)
         normalized_rgbd.setdefault("proposal_count", rgbd_defaults.proposal_count)
+        # Historical RGB-D modules had no configurable set proposer.  The
+        # inert default preserves their construction and checkpoint schema.
+        normalized_rgbd.setdefault("set_feature_dim", 32)
+        normalized_rgbd.setdefault("set_log_variance_residual_limit", 4.0)
         normalized_rgbd.setdefault("chromatic_temperature", rgbd_defaults.chromatic_temperature)
         normalized_rgbd.setdefault(
             "minimum_chromatic_eigengap",

@@ -198,8 +198,18 @@ def test_none_sentinel_bypasses_object_and_auxiliary_masks() -> None:
     assert DynamicsModel._mask_auxiliary(auxiliary, None) is auxiliary
 
 
+@pytest.mark.parametrize(
+    ("elapsed", "expected_mask", "zero_row"),
+    (
+        ([0.0, 0.04], [False, True], 0),
+        ([0.04, 0.0], [True, False], 1),
+    ),
+)
 def test_mixed_zero_batch_preserves_legacy_mask_and_zero_row(
     monkeypatch: pytest.MonkeyPatch,
+    elapsed: list[float],
+    expected_mask: list[bool],
+    zero_row: int,
 ) -> None:
     belief = _scenario_belief("pair")
     model = _model(belief)
@@ -211,21 +221,21 @@ def test_mixed_zero_batch_preserves_legacy_mask_and_zero_row(
         return original_substep(*args, **kwargs)
 
     monkeypatch.setattr(model, "_substep", recording_substep)
-    result = model.predict_step(belief, torch.tensor([0.0, 0.04]))
+    result = model.predict_step(belief, torch.tensor(elapsed))
 
     assert len(masks) == 4
     for mask in masks:
         assert mask is not None
-        assert torch.equal(mask, torch.tensor([False, True]))
+        assert torch.equal(mask, torch.tensor(expected_mask))
     for item in fields(belief.objects):
         assert torch.equal(
-            getattr(result.belief.objects, item.name)[0],
-            getattr(belief.objects, item.name)[0],
+            getattr(result.belief.objects, item.name)[zero_row],
+            getattr(belief.objects, item.name)[zero_row],
         ), item.name
-    assert result.belief.timestamp[0] == belief.timestamp[0]
-    assert result.auxiliary["pair_collision"][0].count_nonzero() == 0
-    assert result.auxiliary["pair_impulse"][0].count_nonzero() == 0
-    assert (result.event_logits[0, :, MotionMode.COLLISION] < 0).all()
+    assert result.belief.timestamp[zero_row] == belief.timestamp[zero_row]
+    assert result.auxiliary["pair_collision"][zero_row].count_nonzero() == 0
+    assert result.auxiliary["pair_impulse"][zero_row].count_nonzero() == 0
+    assert (result.event_logits[zero_row, :, MotionMode.COLLISION] < 0).all()
 
 
 def test_all_zero_segment_does_not_make_positive_path_decision(

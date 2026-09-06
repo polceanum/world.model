@@ -107,7 +107,7 @@ def _masked_geometry(
     )
 
 
-def _fit_visible_sphere_surfaces(
+def fit_visible_sphere_surfaces(
     depth: Tensor,
     masks: Tensor,
     expected_radius: Tensor,
@@ -496,7 +496,7 @@ def two_disc_geometry_from_rgbd(
         fitted_radius,
         fit_condition,
         surface_fit_valid,
-    ) = _fit_visible_sphere_surfaces(
+    ) = fit_visible_sphere_surfaces(
         depth,
         geometry.effective_masks,
         expected_radius,
@@ -649,5 +649,6 @@ def two_disc_geometry_from_rgbd(
 __all__ = [
     "TWO_DISC_ARCHITECTURE_ATTEMPT",
     "TwoDiscRGBDGeometryOutput",
+    "fit_visible_sphere_surfaces",
     "two_disc_geometry_from_rgbd",
 ]

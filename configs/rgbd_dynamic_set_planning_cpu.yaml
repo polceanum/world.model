@@ -1,0 +1,174 @@
+project:
+  name: orpheus-rgbd-dynamic-set-planning-v1-cpu
+  # The specification-owned manifests carry every training and evaluation
+  # seed.  This common-schema value is deliberately not a sampling authority.
+  seed: 0
+  output_dir: runs
+  deterministic: true
+
+device:
+  preference: cpu
+  closed_loop_preference: cpu
+  cuda_amp: false
+  compile: false
+
+# Exact common-schema declaration for specification 1.61.  The frozen
+# dynamic-set materializer additionally enforces visibility, containment,
+# contact-complexity, lifecycle, and action strata before accepting a scene.
+simulator:
+  image_size: [64, 64]
+  frame_rate: 20
+  physics_rate: 120
+  sequence_frames: 56
+  min_objects: 1
+  max_objects: 6
+  # Match the materializer's deliberately remote boundaries exactly.  The
+  # qualification family excludes boundary contacts, so prediction and truth
+  # must not disagree merely because only one side uses a nearby floor/wall.
+  world_bounds: [[-30.0, 30.0], [-30.0, 30.0], [-30.0, 30.0]]
+  gravity: [0.0, 0.0, 0.0]
+  radius_range: [0.21, 0.21]
+  mass_range: [1.0, 1.0]
+  restitution_range: [0.7, 0.7]
+  drag_range: [0.05, 0.05]
+  friction_range: [0.2, 0.2]
+  initial_speed_range: [0.035, 1.25]
+  camera_motion: orbit
+  known_camera_pose: true
+  render_noise_std: 0.0
+  ensure_collision: false
+  # Public known actions are owned by the manifest/materializer.  Random
+  # simulator impulses would be hidden causal inputs and are forbidden.
+  external_impulse_probability: 0.0
+  scenario_mixture: [baseline]
+
+model:
+  max_objects: 6
+  state:
+    geometry_dim: 1
+    appearance_dim: 8
+    residual_dynamics_dim: 1
+    modal_count: 0
+    modal_dim: 1
+    parameter_memory_dim: 1
+    global_dim: 1
+    # The profile must represent sub-micrometre calibration errors. Legacy
+    # profiles retain the -12 default.
+    fast_log_variance_min: -32.0
+    fast_log_variance_max: 6.0
+  rgb:
+    enabled: false
+    backbone_channels: [8, 12, 16, 20]
+    feature_dim: 16
+    proposal_queries: 8
+    global_every_steps: 1
+    roi_size: 8
+    temporal_velocity_enabled: false
+  rgbd:
+    enabled: true
+    observation_mode: set
+    max_objects: 6
+    proposal_count: 8
+    set_feature_dim: 32
+    set_log_variance_residual_limit: 20.0
+    global_every_steps: 1
+    world_radius: 0.21
+    linear_drag: 0.05
+    foreground_threshold: 0.04
+    foreground_temperature: 0.01
+    minimum_mass: 4.0
+    chromatic_temperature: 0.05
+    minimum_chromatic_eigengap: 0.01
+    spatial_temperature_pixels: 1.0
+    chromatic_centre_blend: 0.0025
+    minimum_silhouette_gap_pixels: 2.0
+    minimum_boundary_clearance_pixels: 2.0
+    maximum_surface_radius_relative_error: 0.05
+    measurement_position_variance: 0.000064
+    temporal_history_size: 16
+    temporal_min_samples: 3
+    temporal_min_dt: 0.001
+    temporal_velocity_variance_floor: 0.00000000000001
+    temporal_velocity_variance_ceiling: 0.01
+    fit_conditioning_limit: 10000.0
+  dynamics:
+    hidden_dim: 16
+    relation_hidden_dim: null
+    max_substep: 0.008333333333333333
+    modal_dynamics_enabled: false
+    continuous_pair_force_enabled: false
+    node_acceleration_enabled: false
+    event_driven_state_only_enabled: true
+    relation_process_uncertainty_enabled: true
+    process_noise_position: 0.00000000000001
+    process_noise_velocity: 0.00000000000001
+    attention_residual_enabled: false
+    analytic_free_motion_only: false
+    contact_margin: 0.0
+  filter:
+    hidden_dim: 16
+    learned_residual_scale: 0.0
+    enable_learned_corrector: false
+    direct_metric_position_update: true
+    innovation_anchored_correction: true
+    min_log_variance: -32.0
+  association:
+    geometry_weight: 1.0
+    appearance_weight: 0.25
+    existence_weight: 0.05
+    mahalanobis_gate: 16.0
+    maximum_cost: 25.0
+    ambiguity_margin: 0.02
+    minimum_measurement_confidence: 0.45
+  lifecycle:
+    birth_confidence: 0.55
+    birth_confirmations: 2
+    birth_confirmation_distance_m: 0.5
+    # Lifecycle removes on missed_steps > max_missed_steps; one therefore
+    # implements retirement on the second consecutive fully-visible miss.
+    max_missed_steps: 1
+    max_occluded_steps: 1
+    existence_decay: 0.35
+    occlusion_existence_decay: 0.04
+  identification:
+    enabled: false
+    hidden_dim: 1
+
+runtime:
+  modality: rgbd
+  modality_order: [debug_oracle, rgbd]
+  enable_debug_oracle: false
+  strict_timestamps: true
+  hypothesis_pool_enabled: false
+
+# The executable 1.61 campaign owns the six-B4 accumulation schedule, separate
+# perception/relation rates, warmup/cosine schedule, extensions, and hard cap.
+training:
+  batch_size: 4
+  scenario_balanced_batches: true
+  steps: 32768
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  grad_clip_norm: 1.0
+  interaction_grad_clip_norm: 1.0
+  rgb_pretrain_steps: 0
+  train_episodes: 66000
+  validation_episodes: 4400
+  fixed_dataset: true
+  tbptt_steps: 56
+  checkpoint_every: 512
+  eval_every: 512
+  log_every: 512
+  horizon_weights: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+
+evaluation:
+  horizons_seconds: [0.05, 0.10, 0.25, 0.50, 1.0, 2.0]
+  episodes: 4400
+  rgb_only: false
+  confidence_level: 0.90
+
+demo:
+  seed: 200000
+  max_frames: 56
+  future_horizon_seconds: 2.0
+  fps: 10

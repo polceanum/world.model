@@ -28,6 +28,17 @@ class WorldImpulseAction(TensorDataclassMixin):
     impulse_world: Tensor
     frame: Literal["world"] = "world"
 
+    def _application_mask_for(self, belief: WorldBelief) -> Tensor:
+        """Return rows on which this action exists.
+
+        Public actions always exist on every batch row.  The counterfactual
+        planner overrides this internal hook only for its flattened ``B x K``
+        carrier, where a ``None`` candidate must share one rollout with real
+        actions without becoming a numerically-zero action boundary.
+        """
+
+        return torch.ones(belief.batch_size, dtype=torch.bool, device=belief.device)
+
     def validate_for(
         self,
         belief: WorldBelief,

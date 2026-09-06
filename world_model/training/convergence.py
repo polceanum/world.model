@@ -39,6 +39,7 @@ class ValidationCandidate:
     training_support_passed: bool
     model_state_hash: str
     checkpoint_path: str
+    selection_guardrails_passed: bool = True
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,7 @@ class ConvergenceDecision:
     plateau_candidate_scores: tuple[float, ...]
     plateau_candidate_accepted: tuple[bool, ...]
     plateau_candidate_training_support_passed: tuple[bool, ...]
+    plateau_candidate_selection_guardrails_passed: tuple[bool, ...]
     plateau_primary_gain: float | None
     minimum_relative_gain: float
     maximum_total_steps: int
@@ -170,6 +172,7 @@ def _validation_candidate(path: Path, *, protocol_hash: str) -> ValidationCandid
         training_support_passed=training_support_passed,
         model_state_hash=actual_hash,
         checkpoint_path=str(path.resolve()),
+        selection_guardrails_passed=True,
     )
 
 
@@ -324,13 +327,19 @@ def decide_continuation(
             plateau_candidate_scores=(),
             plateau_candidate_accepted=(),
             plateau_candidate_training_support_passed=(),
+            plateau_candidate_selection_guardrails_passed=(),
             plateau_primary_gain=None,
             minimum_relative_gain=minimum_relative_gain,
             maximum_total_steps=maximum_total_steps,
         )
     tail_start = completed - tail_steps
-    prior = [item for item in inspection.accepted_validations if item.step <= tail_start]
-    tail = [item for item in inspection.accepted_validations if tail_start < item.step <= completed]
+    safe_accepted = tuple(
+        item
+        for item in inspection.accepted_validations
+        if item.training_support_passed and item.selection_guardrails_passed
+    )
+    prior = [item for item in safe_accepted if item.step <= tail_start]
+    tail = [item for item in safe_accepted if tail_start < item.step <= completed]
     prior_best = min(prior, key=lambda item: item.score) if prior else None
     tail_best = min(tail, key=lambda item: item.score) if tail else None
     relative_gain = (
@@ -350,13 +359,15 @@ def decide_continuation(
     recent_candidates = tuple(
         candidates_by_step[step] for step in expected_recent_steps if step in candidates_by_step
     )
-    plateau_prior = [item for item in inspection.accepted_validations if item.step <= plateau_start]
+    plateau_prior = [item for item in safe_accepted if item.step <= plateau_start]
     plateau_prior_best = min(plateau_prior, key=lambda item: item.score) if plateau_prior else None
     # A support-collapsed candidate can report a deceptively low conditional
     # RMSE by tracking only easy objects. Ordinary supported rejections still
     # supply the raw primary-score evidence required by ADR-059.
     recent_supported_candidates = tuple(
-        item for item in recent_candidates if item.training_support_passed
+        item
+        for item in recent_candidates
+        if item.training_support_passed and item.selection_guardrails_passed
     )
     recent_candidate_best = (
         min(recent_supported_candidates, key=lambda item: item.score)
@@ -388,6 +399,9 @@ def decide_continuation(
         "plateau_candidate_training_support_passed": tuple(
             item.training_support_passed for item in recent_candidates
         ),
+        "plateau_candidate_selection_guardrails_passed": tuple(
+            item.selection_guardrails_passed for item in recent_candidates
+        ),
         "plateau_primary_gain": plateau_primary_gain,
         "minimum_relative_gain": minimum_relative_gain,
         "maximum_total_steps": maximum_total_steps,
@@ -402,7 +416,8 @@ def decide_continuation(
         expected_recent_steps
     )
     complete_supported_plateau_window = complete_plateau_window and all(
-        item.training_support_passed for item in recent_candidates
+        item.training_support_passed and item.selection_guardrails_passed
+        for item in recent_candidates
     )
     no_recent_acceptance = complete_plateau_window and not any(
         item.accepted for item in recent_candidates

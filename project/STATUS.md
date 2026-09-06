@@ -1,14 +1,16 @@
 # Project status
 
-## Active generalization program — 2026-08-30
+## Active generalization program — 2026-09-06
 
 The pre-generalization public base was commit
 `c16acc99ef13757fc8f88528bfd0d66db4a2f4fd`; the cleaned generalization
 foundation is GitHub `main` commit
 `08ae63adc5ade2e5061f54539fc7a25564c8c8d6`, and the accepted public RGB-D
 bridge is merged at `3eed0b71e6f18c7036bf376c075493a89d5fdc9f`. Broad heterogeneous training
-remains paused. The active contract is specification 1.57. The accepted base
-now comprises the specification-1.51 differentiable one-sphere unit, the
+remains paused. Specification 1.57 is the highest accepted capability
+contract; the active package/source identifier is the closed, unqualified
+specification 1.60. The accepted base comprises the specification-1.51
+differentiable one-sphere unit, the
 qualified standalone two-second RGB-D rung, and its qualified public one-slot
 `OnlineWorldModel` bridge. The accepted branch additionally contains the
 exactly-two-visible RGB-D qualification recorded below—not any older campaign
@@ -116,7 +118,7 @@ at `2,804` bytes. Selector, confirmation, and final stayed unopened; no
 protected result, qualification, or acceptance exists. Strict duplicate-free
 schema and report-ledger cross-binding audit passes. The family is
 permanently closed and must not be repaired, renamed, retried, or selected
-again. Specification 1.57 remains the active and highest accepted contract.
+again. Specification 1.57 remains the highest accepted capability contract.
 The drag branch's specification identifiers 1.58 and 1.59 remain branch-local
 historical provenance; a future active source freeze must not reuse them.
 
@@ -725,16 +727,17 @@ not be retried. The identifiable-drag source remains on dedicated pushed branch
 `agent/rgbd-identifiable-drag-rung-1`, unmerged to `main`; that family is also
 terminal and must not be selected again.
 
-## Active specification 1.60 known-action foundation
+## Closed specification 1.60 known-action foundation
 
-The next selected capability is a public, known, absolute-time impulse and a
+The selected capability was a public, known, absolute-time impulse and a
 downstream counterfactual planning test over the accepted exactly-two,
 fully-visible, known-orbital-camera family. The action interface is implemented
 by the parameter-free `AnalyticFreeMotionDynamics` backend and exposed through
 runtime prediction and `OnlineWorldModel.plan`. Action-free behavior remains
 the inherited function; action propagation splits at the exact timestamp and
 applies `delta_v = impulse / mass` once to the observable persistent target ID.
-Shared `DynamicsModel` and prepared-propagation action support remain 1.61 work.
+Shared `DynamicsModel` and prepared-propagation action support were reserved
+for 1.61 and now exist only in the dormant candidate source described below.
 
 The source-frozen family has 64 bundles per split and eight action candidates.
 It retains private oracle state only behind the sealed public runtime result
@@ -743,15 +746,89 @@ pre-action invariance, isolation, conservation, batch independence, public
 input gradients, no mutation, and bounded CPU/RSS/checkpoint resources. Its
 canonical artifact directory is `runs/rgbd_known_action_planning_v2/`.
 
-No specification-1.60 development or protected result is claimed yet in this
-status entry. The exact staged source snapshot passed its pre-publication gate:
-the focused collection was `508 passed in 2033.45 s (0:33:53)`; accepted
-regressions were `289 passed, 1 skipped in 253.22 s (0:04:13)`; Ruff check and
-format check passed (`257` files already formatted); compileall and the exact
-version check (`1.60`) passed; and the complete repository suite was
-`1880 passed, 16 skipped in 2739.19 s (0:45:39)`. The skips are the expected
-inactive-device/Aqua MPS cases. These are source-gate results only: no governed
-manifest or split was opened. Development remains unopened until this exact
-freeze is committed and published. Selector, confirmation, and final then
-remain ordered behind an independent hash review. Specification 1.61 may claim
-planning-qualified scaling only if this predecessor fully qualifies.
+The final clean published freeze was
+`4629fe13b65a907378c4a551b373c357154387f5`. Its exact clean-clone source gate
+passed `510` focused tests in `2036.10 s`, `289 passed, 1 skipped` accepted
+regressions, Ruff check/format, compileall, exact version `1.60`, and the full
+`1882 passed, 16 skipped` suite in `2750.45 s`. A first command failed before
+any run artifact existed because the ignored `runs/` parent was absent; after
+creating only that empty parent, the exact formal command was invoked again.
+
+That invocation reserved the sole development attempt, opened only
+development, and failed in public batch 0 with
+`PermissionError: active batch lacks one exact materializer vault/slot
+ownership`. No public ordinal or batch receipt completed, private scoring did
+not begin, and no result or checkpoint exists. The report/ledger SHA-256 and
+sizes are
+`72533f2f10919c6070ee289aad63c18aa7b7c7b3b687f3caa4b015d327a8cfed`
+/ `41,598` bytes and
+`6e5a9b2ab31483b200c0fbf9763894080e7603ca2b559cac121ca737380c67ea`
+/ `61,623` bytes. The ledger is `terminal_error` with internal record digest
+`b88e4c3b8fe7417cf5a1d3104002581a3e41175db659fbaf8854bdd3298e1a83`.
+Selector, confirmation, and final were never opened.
+
+The terminal report binds resolved configuration
+`9f7f5a06c49b55435cb3fe6dad3afc9fd578a0f3c8a86d691d6f8ba2ebd41be2`,
+protocol `2317d309b00598aa3807f3c6086da9767e74dd2f2de1d574ea6648d064f67951`,
+and development/selector/confirmation/final manifests
+`4d1637c681229e117a2228a059649d220ee1995dd4b21bc4b6b3715e88828b1d`,
+`173b3d99bcac14d23c2f6c1c857b81d12d95c2c90bc2eaf73dd9b58e95f121b3`,
+`661af7a7f921751ce54f1286df65cd5e706b15560220c5d8d11f9700fe7ff232`,
+and `aba3cdb33b9a995a3dfc4f4f1a4630b0ad96b2dafc4f551be196abbae7a721e9`.
+
+Specification 1.60 is closed without qualification. Specification 1.61's
+source implementation may be preserved and tested, but its governed screen,
+campaign, protected access, and planning-qualified claim are paused pending a
+new reviewed predecessor specification.
+
+## Dormant specification 1.61 implementation candidate
+
+The unqualified source now implements the compact 1--6-object path: an
+eight-proposal RGB-D set observer, rectangular association, segmented temporal
+state and lifecycle, analytic contact plus a zero-initialized relation
+residual, shared known-action dynamics, and B-by-K vectorized planning with a
+serial parity oracle. Attempt-one learned capacity is 20,236 perception plus
+647 relation parameters. Legacy one/two-object modes and checkpoint loading
+remain covered by regression tests.
+
+The source candidate declares physical and planning manifests at
+66,000/4,400/2,200/2,200/4,400/4,400 episodes and
+1,200/600/600/1,200/1,200 tasks. The source includes exact 22-cell optimizer
+balance, the disposable screen, 512-update validation, 4,096-update extensions,
+safe plateau/selection logic, paired bootstrap improvement, per-cell gates,
+required K=8/K=32 planning gates, resource measurement, reusable artifact and
+ledger utilities, and public/private boundary certificates. Their current
+candidate SHA-256 values are:
+
+- physical training/development/selector/confirmation/final/OOD:
+  `c37b0e7643e740ea6cdf65400c2bc6787a8e5038cea073c22ecff7025a3b1f06`,
+  `d94448e0493ed73b15f960a24c8813c2419926fb445e2fab8a594119cf33d35c`,
+  `c17d030a8db17f8c299b8fc701f76b52a9e3357ec659d03acb9d62760055059e`,
+  `6916aad9cb40a6c3b428f87fc0bc7cc95845b14e263b5f11dcb6b07f822154a2`,
+  `25df07b2d8788eea5f42e0c4cd5c2c73f4448a4a9633832bd96c43191131408a`,
+  and `01c55d6b2827c581b6c9832df385799a0af47ff49fb118b93f22e91058689ce1`;
+- planning development/selector/confirmation/final/OOD:
+  `ed56bd7274841240268640609a2faed398c317da04faee930c2183f0057a3b15`,
+  `08f9a2280e5ee18c14245f96b48078716332b4a8fdaae4531fe846fe03892536`,
+  `08edc8073bb8c7f47e46f21669e2a35590a88e235615ad0a25d6877f25590ceb`,
+  `370f72774b150ded638514e49b9e536c41cc48616e89a7e03913bd04cd6a735d`,
+  and `56d85ee36e9f7a1010569ae5f269aa6efb24eda9b045c95217f5420be39d2248`;
+- disposable screen:
+  `b6c3deb2c8fb2fa9d58d5cf29d38f695de3bc93430a02dd47cdcca38add3db0b`.
+
+These are not a clean publication freeze. Planning outcomes are evaluation-only
+and do not enter the training objective.
+
+The final unqualified source gate passed all `2,347` collected tests as
+`2,331 passed, 16 skipped` in `3,634.14 s`; the 13 warnings are the expected
+thread-count warnings from synthetic execution tests. Ruff check, Ruff format
+check over 313 files, compileall, exact specification version `1.60`, the
+frozen-source hash audit, and the exhaustive 1.60 certificate revalidation all
+pass. The dynamic-only physics, rendering, and configuration extensions are
+kept outside the four byte-bound 1.60 public files.
+
+This is source status only. The package-wide version remains `1.60`; no 1.61
+governed artifact exists. Unit tests do construct non-governed candidate rows,
+screens, and optimizer updates. The second-architecture API also fails closed
+until a future coordinator can causally seal its required 3,584-update timing
+support.

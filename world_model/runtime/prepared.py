@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, is_dataclass
-from typing import TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
 
 import torch
 from torch import Tensor
 
 from world_model.belief import WorldBelief
+
+if TYPE_CHECKING:
+    from world_model.dynamics import WorldImpulseAction
 
 
 class PreparedPropagationError(ValueError):
@@ -124,7 +127,9 @@ class PreparedPropagation:
     event_logits: Tensor | None
     auxiliary: Mapping[str, Tensor]
     interval_collision_mask: Tensor | None
+    action: WorldImpulseAction | None
     source_tensor_signature: TensorVersionSignature = field(repr=False)
+    action_tensor_signature: TensorVersionSignature = field(repr=False)
     result_tensor_signature: TensorVersionSignature = field(repr=False)
     dynamics_tensor_signature: TensorVersionSignature = field(repr=False)
     dynamics_training: bool

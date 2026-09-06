@@ -1,0 +1,258 @@
+"""Cached sphere rendering owned only by specification 1.61 materializers."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import torch
+from torch import Tensor
+
+from world_model.simulator.camera import CameraFrame, project_camera_points, world_to_camera
+from world_model.simulator.physics import SphereState
+from world_model.simulator.renderer import RenderOutput, _background
+from world_model.simulator.renderer import render_spheres as _public_render_spheres
+
+
+@dataclass(frozen=True)
+class PrevalidatedSphereRenderCache:
+    """Immutable pixel/camera terms for repeated fixed-camera rendering."""
+
+    image_size: tuple[int, int]
+    object_count: int
+    dtype: torch.dtype
+    device: torch.device
+    pixel_y: Tensor
+    pixel_x: Tensor
+    ray_y: Tensor
+    ray_x: Tensor
+    ray_norm_squared: Tensor
+    background: Tensor
+
+
+def prevalidated_sphere_render_cache(
+    state: SphereState,
+    camera: CameraFrame,
+    image_size: tuple[int, int],
+) -> PrevalidatedSphereRenderCache:
+    """Validate fixed render structure once and cache its pixel tensors."""
+
+    state.validate()
+    camera.validate()
+    height, width = image_size
+    if height <= 0 or width <= 0:
+        raise ValueError("image dimensions must be positive")
+    dtype = state.position.dtype
+    device = state.position.device
+    pixel_y, pixel_x = torch.meshgrid(
+        torch.arange(height, dtype=dtype, device=device),
+        torch.arange(width, dtype=dtype, device=device),
+        indexing="ij",
+    )
+    ray_x = (pixel_x - camera.intrinsics[0, 2]) / camera.intrinsics[0, 0]
+    ray_y = (pixel_y - camera.intrinsics[1, 2]) / camera.intrinsics[1, 1]
+    return PrevalidatedSphereRenderCache(
+        image_size=image_size,
+        object_count=state.max_objects,
+        dtype=dtype,
+        device=device,
+        pixel_y=pixel_y,
+        pixel_x=pixel_x,
+        ray_y=ray_y,
+        ray_x=ray_x,
+        ray_norm_squared=1.0 + ray_x.square() + ray_y.square(),
+        background=_background(height, width, dtype=dtype, device=device),
+    )
+
+
+def render_spheres(
+    state: SphereState,
+    camera: CameraFrame,
+    image_size: tuple[int, int],
+    *,
+    edge_softness_pixels: float = 1.0,
+    noise_std: float = 0.0,
+    generator: torch.Generator | None = None,
+    _prevalidated_cache: PrevalidatedSphereRenderCache | None = None,
+) -> RenderOutput:
+    """Render spheres, optionally reusing a dynamic-set fixed-camera cache."""
+
+    if _prevalidated_cache is None:
+        return _public_render_spheres(
+            state,
+            camera,
+            image_size,
+            edge_softness_pixels=edge_softness_pixels,
+            noise_std=noise_std,
+            generator=generator,
+        )
+
+    height, width = image_size
+    if height <= 0 or width <= 0:
+        raise ValueError("image dimensions must be positive")
+    if edge_softness_pixels <= 0:
+        raise ValueError("edge_softness_pixels must be positive")
+    if noise_std < 0:
+        raise ValueError("noise_std must be nonnegative")
+
+    dtype = state.position.dtype
+    device = state.position.device
+    count = state.max_objects
+    if (
+        _prevalidated_cache.image_size != image_size
+        or _prevalidated_cache.object_count != count
+        or _prevalidated_cache.dtype != dtype
+        or _prevalidated_cache.device != device
+    ):
+        raise ValueError("prevalidated render cache differs from the current scene schema")
+
+    points_camera = world_to_camera(state.position, camera.camera_from_world)
+    centers_pixels, positive_depth = project_camera_points(points_camera, camera.intrinsics)
+    depth = points_camera[:, 2]
+    radius = state.radius[:, 0]
+    focal = 0.5 * (camera.intrinsics[0, 0] + camera.intrinsics[1, 1])
+    safe_depth = depth.clamp_min(1.0e-4)
+    apparent_radius = focal * radius / safe_depth
+    geometrically_valid = (
+        state.active & positive_depth & (depth > radius + 1.0e-4) & torch.isfinite(apparent_radius)
+    )
+    center_normalized = torch.stack(
+        (
+            2.0 * centers_pixels[:, 0] / max(width - 1, 1) - 1.0,
+            2.0 * centers_pixels[:, 1] / max(height - 1, 1) - 1.0,
+        ),
+        dim=-1,
+    )
+    pixel_y = _prevalidated_cache.pixel_y
+    pixel_x = _prevalidated_cache.pixel_x
+    ray_x = _prevalidated_cache.ray_x
+    ray_y = _prevalidated_cache.ray_y
+    ray_norm_squared = _prevalidated_cache.ray_norm_squared
+    ray_dot_center = (
+        ray_x.unsqueeze(0) * points_camera[:, 0, None, None]
+        + ray_y.unsqueeze(0) * points_camera[:, 1, None, None]
+        + points_camera[:, 2, None, None]
+    )
+    center_norm_squared = points_camera.square().sum(dim=-1)[:, None, None]
+    center_cross_ray = torch.stack(
+        (
+            points_camera[:, 1, None, None] - points_camera[:, 2, None, None] * ray_y.unsqueeze(0),
+            points_camera[:, 2, None, None] * ray_x.unsqueeze(0) - points_camera[:, 0, None, None],
+            points_camera[:, 0, None, None] * ray_y.unsqueeze(0)
+            - points_camera[:, 1, None, None] * ray_x.unsqueeze(0),
+        ),
+        dim=-1,
+    )
+    discriminant = ray_norm_squared.unsqueeze(0) * radius[:, None, None].square() - (
+        center_cross_ray.square().sum(dim=-1)
+    )
+    square_root = discriminant.clamp_min(0.0).sqrt()
+    near_root_denominator = ray_dot_center + square_root
+    quadratic_constant = center_norm_squared - radius[:, None, None].square()
+    metric_surface_depth = quadratic_constant / near_root_denominator.clamp_min(1.0e-12)
+    full_mask = (
+        geometrically_valid[:, None, None]
+        & (discriminant >= 0.0)
+        & (near_root_denominator > 0.0)
+        & (metric_surface_depth > 0.0)
+        & torch.isfinite(metric_surface_depth)
+    )
+    projected_valid = geometrically_valid & full_mask.any(dim=(-2, -1))
+    apparent_radius = torch.where(
+        projected_valid, apparent_radius, torch.zeros_like(apparent_radius)
+    )
+    inverse_depth = torch.where(projected_valid, safe_depth.reciprocal(), torch.zeros_like(depth))
+    center_normalized = torch.where(
+        projected_valid.unsqueeze(-1),
+        center_normalized,
+        torch.zeros_like(center_normalized),
+    )
+    centers_pixels = torch.where(
+        projected_valid.unsqueeze(-1),
+        centers_pixels,
+        torch.zeros_like(centers_pixels),
+    )
+
+    delta_x = pixel_x.unsqueeze(0) - centers_pixels[:, 0, None, None]
+    delta_y = pixel_y.unsqueeze(0) - centers_pixels[:, 1, None, None]
+    safe_apparent_radius = apparent_radius.clamp_min(1.0e-4)
+    appearance_radial_squared = (delta_x.square() + delta_y.square()) / safe_apparent_radius[
+        :, None, None
+    ].square()
+    radial_distance = torch.sqrt(appearance_radial_squared.clamp_min(0.0))
+    soft_width = edge_softness_pixels / safe_apparent_radius[:, None, None]
+    approximate_soft_support = ((1.0 - radial_distance) / soft_width.clamp_min(1.0e-4) + 0.5).clamp(
+        0.0, 1.0
+    )
+    soft_support = torch.where(
+        full_mask,
+        approximate_soft_support.clamp_min(0.5),
+        torch.zeros_like(approximate_soft_support),
+    )
+    front_shape = torch.sqrt((1.0 - appearance_radial_squared).clamp_min(0.0))
+    infinity = torch.full_like(metric_surface_depth, torch.inf)
+    ordered_surface_depth = torch.where(full_mask, metric_surface_depth, infinity)
+    depth_buffer, winning_slot = ordered_surface_depth.min(dim=0)
+    has_object = torch.isfinite(depth_buffer)
+    instance_slot_map = torch.where(
+        has_object,
+        winning_slot.to(torch.int64),
+        torch.full_like(winning_slot, -1, dtype=torch.int64),
+    )
+    instance_map = torch.full((height, width), -1, dtype=torch.int64, device=device)
+    if count > 0:
+        safe_slot = winning_slot.clamp(0, max(count - 1, 0))
+        winning_id = state.object_id[safe_slot]
+        instance_map = torch.where(has_object, winning_id, instance_map)
+
+    slot_indices = torch.arange(count, device=device)[:, None, None]
+    visible_mask = full_mask & (winning_slot.unsqueeze(0) == slot_indices) & has_object.unsqueeze(0)
+    support_pixels = full_mask.sum(dim=(-2, -1))
+    visible_pixels = visible_mask.sum(dim=(-2, -1))
+    visible_fraction = torch.where(
+        support_pixels > 0,
+        visible_pixels.to(dtype) / support_pixels.clamp_min(1).to(dtype),
+        torch.zeros(count, dtype=dtype, device=device),
+    )
+    visible_fraction = torch.where(
+        state.active, visible_fraction, torch.zeros_like(visible_fraction)
+    )
+
+    rgb = _prevalidated_cache.background.clone()
+    shade = (0.48 + 0.52 * front_shape).clamp(0.0, 1.0)
+    for slot in range(count):
+        alpha = soft_support[slot] * visible_mask[slot].to(dtype)
+        sphere_rgb = state.albedo[slot, :, None, None] * shade[slot][None, :, :]
+        rgb = rgb * (1.0 - alpha.unsqueeze(0)) + sphere_rgb * alpha.unsqueeze(0)
+    if noise_std > 0:
+        noise = torch.randn(
+            rgb.shape,
+            dtype=rgb.dtype,
+            device=rgb.device,
+            generator=generator,
+        )
+        rgb = rgb + noise_std * noise
+    rgb = rgb.clamp(0.0, 1.0).to(torch.float32)
+    depth_buffer = torch.where(has_object, depth_buffer, torch.zeros_like(depth_buffer))
+    return RenderOutput(
+        rgb=rgb,
+        depth_buffer=depth_buffer,
+        instance_map=instance_map,
+        instance_slot_map=instance_slot_map,
+        visible_mask=visible_mask,
+        full_mask=full_mask,
+        soft_support=soft_support.to(torch.float32),
+        visible_fraction=visible_fraction.to(torch.float32),
+        projected_center=center_normalized.to(torch.float32),
+        projected_center_pixels=centers_pixels.to(torch.float32),
+        apparent_radius=apparent_radius.to(torch.float32),
+        inverse_depth=inverse_depth.to(torch.float32),
+        camera_depth=depth.to(torch.float32),
+        projected_valid=projected_valid,
+    )
+
+
+__all__ = [
+    "PrevalidatedSphereRenderCache",
+    "prevalidated_sphere_render_cache",
+    "render_spheres",
+]

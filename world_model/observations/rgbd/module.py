@@ -1,4 +1,4 @@
-"""Public one-slot RGB-D observation module.
+"""Public RGB-D observation module.
 
 The module consumes one composite, strictly batched RGB-D packet.  It exposes
 the qualified differentiable metric sphere centre as an ordinary
@@ -15,9 +15,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor
 
-from world_model.belief import fast_packing_map
+from world_model.belief import MotionMode, fast_packing_map
 from world_model.dynamics import FreeMotionFitResult
 from world_model.fusion.innovation import build_innovation
 from world_model.observations.base import (
@@ -34,11 +35,28 @@ from world_model.observations.measurements import (
 )
 from world_model.observations.packets import ObservationPacket
 from world_model.observations.registry import register_observation_module
+from world_model.observations.rgb.soft_geometry import (
+    SoftDiscGeometryOutput,
+    soft_disc_geometry_from_rgb,
+)
+from world_model.observations.rgbd.set_proposer import (
+    SET_APPEARANCE_DIM,
+    SET_FEATURE_DIM,
+    SET_FOREGROUND_TEMPERATURE_FLOOR,
+    SET_MAX_CONFIGURABLE_LOG_VARIANCE_RESIDUAL,
+    SET_MAX_LOG_VARIANCE_RESIDUAL,
+    SET_MAX_OBJECTS,
+    SET_PROPOSAL_COUNT,
+    RGBDSetProposer,
+)
 from world_model.observations.rgbd.sphere_centres import (
+    MAXIMUM_METRIC_DISTANCE_M,
     RGBDSphereCentreMeasurementModule,
+    metric_sphere_centres_from_surface_depth,
 )
 from world_model.observations.rgbd.temporal import RGBDTemporalPositionHistory
 from world_model.observations.rgbd.two_disc_geometry import (
+    fit_visible_sphere_surfaces,
     two_disc_geometry_from_rgbd,
 )
 
@@ -71,22 +89,64 @@ class RGBDObservationConfig:
     temporal_velocity_variance_floor: float = 1.0e-6
     temporal_velocity_variance_ceiling: float | None = 1.0e-2
     fit_conditioning_limit: float = 100.0
+    observation_mode: str = "legacy"
+    max_objects: int = SET_MAX_OBJECTS
+    set_feature_dim: int = SET_FEATURE_DIM
+    set_log_variance_residual_limit: float = SET_MAX_LOG_VARIANCE_RESIDUAL
 
     def __post_init__(self) -> None:
+        if self.observation_mode not in {"legacy", "set"}:
+            raise ValueError("RGB-D observation_mode must be 'legacy' or 'set'")
         if (
-            isinstance(self.proposal_count, bool)
-            or not isinstance(self.proposal_count, int)
-            or self.proposal_count not in {1, 2}
+            isinstance(self.max_objects, bool)
+            or not isinstance(self.max_objects, int)
+            or self.max_objects <= 0
         ):
-            raise ValueError("RGB-D proposal_count must be integer one or two")
+            raise ValueError("RGB-D max_objects must be a positive integer")
+        if isinstance(self.proposal_count, bool) or not isinstance(self.proposal_count, int):
+            if self.observation_mode == "legacy":
+                raise ValueError("RGB-D proposal_count must be integer one or two")
+            raise ValueError("RGB-D proposal_count must be an integer")
+        if self.observation_mode == "legacy" and self.proposal_count not in {1, 2}:
+            raise ValueError("RGB-D proposal_count must be integer one or two in legacy mode")
+        if self.observation_mode == "set" and self.proposal_count != SET_PROPOSAL_COUNT:
+            raise ValueError(f"set RGB-D observation requires proposal_count={SET_PROPOSAL_COUNT}")
+        if self.observation_mode == "set" and self.max_objects != SET_MAX_OBJECTS:
+            raise ValueError(f"set RGB-D observation requires max_objects={SET_MAX_OBJECTS}")
+        if self.set_feature_dim not in {SET_FEATURE_DIM, 2 * SET_FEATURE_DIM}:
+            raise ValueError("RGB-D set_feature_dim must be 32 or 64")
+        if self.observation_mode == "legacy" and self.set_feature_dim != SET_FEATURE_DIM:
+            raise ValueError("legacy RGB-D requires set_feature_dim=32")
+        if (
+            isinstance(self.set_log_variance_residual_limit, bool)
+            or not isinstance(self.set_log_variance_residual_limit, (int, float))
+            or not math.isfinite(float(self.set_log_variance_residual_limit))
+            or not 0.0
+            < float(self.set_log_variance_residual_limit)
+            <= SET_MAX_CONFIGURABLE_LOG_VARIANCE_RESIDUAL
+        ):
+            raise ValueError(
+                "RGB-D set_log_variance_residual_limit must be finite and lie in (0,32]"
+            )
+        if (
+            self.observation_mode == "legacy"
+            and self.set_log_variance_residual_limit != SET_MAX_LOG_VARIANCE_RESIDUAL
+        ):
+            raise ValueError("legacy RGB-D requires set_log_variance_residual_limit=4")
         if (
             isinstance(self.appearance_dim, bool)
             or not isinstance(self.appearance_dim, int)
             or self.appearance_dim <= 0
         ):
             raise ValueError("RGB-D appearance_dim must be a positive integer")
-        if self.proposal_count == 2 and self.appearance_dim != 3:
+        if (
+            self.observation_mode == "legacy"
+            and self.proposal_count == 2
+            and (self.appearance_dim != 3)
+        ):
             raise ValueError("two-object RGB-D requires appearance_dim exactly three")
+        if self.observation_mode == "set" and self.appearance_dim != SET_APPEARANCE_DIM:
+            raise ValueError(f"set RGB-D observation requires appearance_dim={SET_APPEARANCE_DIM}")
         positive = {
             "world_radius": self.world_radius,
             "foreground_threshold": self.foreground_threshold,
@@ -125,8 +185,12 @@ class RGBDObservationConfig:
                 raise ValueError(f"RGB-D {name} must be an integer of at least two")
         if self.temporal_history_size != 16:
             raise ValueError("the first RGB-D bridge requires exactly 16 history samples")
-        if self.temporal_min_samples != self.temporal_history_size:
-            raise ValueError("RGB-D temporal_min_samples must equal temporal_history_size")
+        if self.observation_mode == "legacy" and self.temporal_min_samples != (
+            self.temporal_history_size
+        ):
+            raise ValueError("legacy RGB-D temporal_min_samples must equal temporal_history_size")
+        if self.observation_mode == "set" and self.temporal_min_samples != 3:
+            raise ValueError("set RGB-D temporal_min_samples must equal three")
         ceiling = self.temporal_velocity_variance_ceiling
         if ceiling is not None and (
             isinstance(ceiling, bool)
@@ -232,9 +296,94 @@ def _explicit_image_size(packet: ObservationPacket, rgb: Tensor) -> tuple[int, i
     return resolved
 
 
+def _set_geometry_from_full_masks(
+    image: Tensor,
+    foreground_probability: Tensor,
+    effective_masks: Tensor,
+    *,
+    minimum_mass: float,
+) -> SoftDiscGeometryOutput:
+    """Derive set geometry from the exact supervised proposal masks.
+
+    The legacy image-moment primitive consumes independent sigmoid slot
+    logits.  Set mode instead owns one categorical background-plus-proposal
+    mask, so using those logits through the legacy sigmoid path would make the
+    mask loss supervise a different geometry from the one emitted at runtime.
+    This function keeps the same analytic moments while making the full-mask
+    softmax the single mask owner.
+    """
+
+    batch, proposals, height, width = effective_masks.shape
+    if image.shape != (batch, 3, height, width):
+        raise ValueError("set mask geometry must match its RGB image")
+    if foreground_probability.shape != (batch, 1, height, width):
+        raise ValueError("set foreground probability must have shape [B,1,H,W]")
+    if effective_masks.dtype != image.dtype or effective_masks.device != image.device:
+        raise ValueError("set masks must share RGB dtype and device")
+    if not bool(torch.isfinite(effective_masks).all()):
+        raise ValueError("set masks must be finite")
+    if bool(torch.any((effective_masks < 0.0) | (effective_masks > 1.0))):
+        raise ValueError("set masks must lie in [0,1]")
+
+    epsilon = max(float(torch.finfo(image.dtype).eps), 1.0e-8)
+    y_pixels, x_pixels = torch.meshgrid(
+        torch.arange(height, dtype=image.dtype, device=image.device),
+        torch.arange(width, dtype=image.dtype, device=image.device),
+        indexing="ij",
+    )
+    y_normalised, x_normalised = torch.meshgrid(
+        torch.linspace(-1.0, 1.0, height, dtype=image.dtype, device=image.device),
+        torch.linspace(-1.0, 1.0, width, dtype=image.dtype, device=image.device),
+        indexing="ij",
+    )
+    mass = effective_masks.sum(dim=(-2, -1))
+    safe_mass = mass.clamp_min(epsilon)
+    centre_x_normalised = (effective_masks * x_normalised).sum(dim=(-2, -1)) / safe_mass
+    centre_y_normalised = (effective_masks * y_normalised).sum(dim=(-2, -1)) / safe_mass
+    centres = torch.stack((centre_x_normalised, centre_y_normalised), dim=-1)
+    centre_x_pixels = 0.5 * (centre_x_normalised + 1.0) * (width - 1)
+    centre_y_pixels = 0.5 * (centre_y_normalised + 1.0) * (height - 1)
+    delta_x = x_pixels - centre_x_pixels[..., None, None]
+    delta_y = y_pixels - centre_y_pixels[..., None, None]
+    variance_x = (effective_masks * delta_x.square()).sum(dim=(-2, -1)) / safe_mass
+    variance_y = (effective_masks * delta_y.square()).sum(dim=(-2, -1)) / safe_mass
+    covariance_xy = (effective_masks * delta_x * delta_y).sum(dim=(-2, -1)) / safe_mass
+    radial_second_moment = variance_x + variance_y
+    radius_pixels = (2.0 * radial_second_moment).clamp_min(epsilon).sqrt()
+    mass_confidence = 1.0 - torch.exp(-mass / image.new_tensor(minimum_mass))
+    covariance_determinant = (variance_x * variance_y - covariance_xy.square()).clamp_min(0.0)
+    circularity = (4.0 * covariance_determinant / (radial_second_moment.square() + epsilon)).clamp(
+        0.0, 1.0
+    )
+    edge_clearance = (
+        torch.stack(
+            (
+                centre_x_pixels,
+                width - 1 - centre_x_pixels,
+                centre_y_pixels,
+                height - 1 - centre_y_pixels,
+            ),
+            dim=-1,
+        ).amin(dim=-1)
+        - radius_pixels
+    )
+    boundary_confidence = torch.sigmoid(edge_clearance)
+    confidence = (mass_confidence * circularity * boundary_confidence).clamp(0.0, 1.0)
+    valid_mask = (mass.detach() >= minimum_mass) & torch.isfinite(centres.detach()).all(dim=-1)
+    return SoftDiscGeometryOutput(
+        centres=centres,
+        radius_pixels=radius_pixels,
+        confidence=confidence,
+        valid_mask=valid_mask,
+        mass=mass,
+        foreground_probability=foreground_probability,
+        effective_masks=effective_masks,
+    )
+
+
 @register_observation_module("rgbd")
 class RGBDObservationModule(ObservationModule):
-    """Parameter-free metric RGB-D observation with raw free-motion history."""
+    """Metric RGB-D observation with legacy and explicit learned-set modes."""
 
     modality_name = "rgbd"
     modality_index = 2
@@ -248,6 +397,16 @@ class RGBDObservationModule(ObservationModule):
             foreground_temperature=self.config.foreground_temperature,
             minimum_mass=self.config.minimum_mass,
         )
+        self.set_proposer = (
+            RGBDSetProposer(
+                proposal_count=self.config.proposal_count,
+                appearance_dim=self.config.appearance_dim,
+                feature_dim=self.config.set_feature_dim,
+                log_variance_residual_limit=(self.config.set_log_variance_residual_limit),
+            )
+            if self.config.observation_mode == "set"
+            else None
+        )
 
     def validate_packet(self, packet: ObservationPacket) -> None:
         if packet.modality != self.modality_name:
@@ -255,6 +414,229 @@ class RGBDObservationModule(ObservationModule):
         rgb, _ = _composite_payload(packet)
         _batched_calibration(packet, batch=rgb.shape[0], reference=rgb)
         _explicit_image_size(packet, rgb)
+
+    @staticmethod
+    def _set_appearance(
+        image: Tensor,
+        masks: Tensor,
+        appearance_residual: Tensor,
+        valid_mask: Tensor,
+    ) -> Tensor:
+        """Return an eight-value observable colour descriptor plus residual."""
+
+        epsilon = torch.finfo(image.dtype).eps
+        mass = masks.sum(dim=(-2, -1)).clamp_min(epsilon)
+        mean_rgb = torch.einsum("bphw,bchw->bpc", masks, image) / mass.unsqueeze(-1)
+        second_rgb = torch.einsum("bphw,bchw->bpc", masks, image.square()) / mass.unsqueeze(-1)
+        std_rgb = (second_rgb - mean_rgb.square() + epsilon).clamp_min(epsilon).sqrt()
+        intensity = image.mean(dim=1)
+        mean_intensity = torch.einsum("bphw,bhw->bp", masks, intensity) / mass
+        second_intensity = torch.einsum("bphw,bhw->bp", masks, intensity.square()) / mass
+        std_intensity = (
+            (second_intensity - mean_intensity.square() + epsilon).clamp_min(epsilon).sqrt()
+        )
+        observable = torch.cat(
+            (
+                mean_rgb,
+                std_rgb,
+                mean_intensity.unsqueeze(-1),
+                std_intensity.unsqueeze(-1),
+            ),
+            dim=-1,
+        )
+        appearance = F.normalize(observable + appearance_residual, dim=-1, eps=epsilon)
+        return torch.where(valid_mask.unsqueeze(-1), appearance, torch.zeros_like(appearance))
+
+    def _measure_set(
+        self,
+        packet: ObservationPacket,
+        rgb: Tensor,
+        depth: Tensor,
+        world_from_camera: Tensor,
+        intrinsics: Tensor,
+    ) -> MeasurementSet:
+        if self.set_proposer is None:
+            raise RuntimeError("set RGB-D mode requires its learned proposer")
+        foreground_temperature = max(
+            self.config.foreground_temperature,
+            SET_FOREGROUND_TEMPERATURE_FLOOR,
+        )
+        analytic_geometry = soft_disc_geometry_from_rgb(
+            rgb,
+            foreground_threshold=self.config.foreground_threshold,
+            foreground_temperature=foreground_temperature,
+            minimum_mass=self.config.minimum_mass,
+        )
+        valid_depth = torch.isfinite(depth) & (depth > 0.0) & (depth <= MAXIMUM_METRIC_DISTANCE_M)
+        safe_depth = torch.where(valid_depth, depth, torch.ones_like(depth))
+        log_depth = torch.where(valid_depth, safe_depth.log(), torch.zeros_like(depth))
+        height, width = rgb.shape[-2:]
+        y_axis = torch.linspace(-1.0, 1.0, height, dtype=rgb.dtype, device=rgb.device)
+        x_axis = torch.linspace(-1.0, 1.0, width, dtype=rgb.dtype, device=rgb.device)
+        yy, xx = torch.meshgrid(y_axis, x_axis, indexing="ij")
+        image_coordinates = (
+            torch.stack((xx, yy), dim=0)
+            .unsqueeze(0)
+            .expand(
+                rgb.shape[0],
+                -1,
+                -1,
+                -1,
+            )
+        )
+        proposal = self.set_proposer(
+            rgb,
+            log_depth,
+            valid_depth,
+            analytic_geometry.foreground_probability,
+            image_coordinates,
+        )
+        full_mask_probability = proposal.full_mask_probability
+        geometry = _set_geometry_from_full_masks(
+            rgb,
+            analytic_geometry.foreground_probability,
+            full_mask_probability[:, 1:],
+            minimum_mass=self.config.minimum_mass,
+        )
+        centre_metric = metric_sphere_centres_from_surface_depth(
+            geometry.centres,
+            depth,
+            self.config.world_radius,
+            world_from_camera,
+            intrinsics,
+        )
+        expected_radius = rgb.new_full(
+            geometry.mass.shape,
+            self.config.world_radius,
+        )
+        (
+            fitted_world_position,
+            _fitted_camera_position,
+            fitted_radius,
+            fit_condition_number,
+            surface_fit_valid,
+        ) = fit_visible_sphere_surfaces(
+            depth,
+            geometry.effective_masks,
+            expected_radius,
+            world_from_camera,
+            intrinsics,
+            conditioning_limit=self.config.fit_conditioning_limit,
+        )
+        # Admissible protocol scenes use the multi-pixel fixed-radius surface
+        # fit.  The centre-depth fallback retains the public module's legacy
+        # behavior for synthetic/non-spherical callers whose surface system is
+        # unidentifiable; evaluation records which branch supplied each row.
+        use_surface_fit = surface_fit_valid
+        valid_mask = geometry.valid_mask & (surface_fit_valid | centre_metric.valid_mask)
+        value_gate = valid_mask.unsqueeze(-1)
+        selected_world_position = torch.where(
+            use_surface_fit.unsqueeze(-1),
+            fitted_world_position,
+            centre_metric.world_position,
+        )
+        world_position = torch.where(
+            value_gate,
+            selected_world_position,
+            torch.zeros_like(selected_world_position),
+        )
+        appearance = self._set_appearance(
+            rgb,
+            geometry.effective_masks,
+            proposal.appearance_residual,
+            valid_mask,
+        )
+        epsilon = torch.finfo(rgb.dtype).eps
+        analytic_component = geometry.valid_mask.detach()
+        base_existence_probability = torch.where(
+            analytic_component,
+            rgb.new_full(analytic_component.shape, 0.99),
+            rgb.new_full(analytic_component.shape, 0.01),
+        )
+        base_existence_logits = torch.logit(base_existence_probability)
+        existence_logits = (base_existence_logits + proposal.existence_residual).clamp(-12.0, 12.0)
+        proposals = self.config.proposal_count
+        batch = rgb.shape[0]
+        base_log_variance = rgb.new_full(
+            (batch, proposals, 3),
+            math.log(self.config.measurement_position_variance),
+        )
+        log_variance = base_log_variance + proposal.log_variance_residual
+        valid_depth_float = valid_depth[:, 0].to(rgb.dtype)
+        surface_weight = geometry.effective_masks * valid_depth_float[:, None]
+        surface_support = surface_weight.sum(dim=(-2, -1))
+        mean_surface_depth = torch.einsum(
+            "bphw,bhw->bp",
+            surface_weight,
+            torch.where(valid_depth[:, 0], depth[:, 0], torch.zeros_like(depth[:, 0])),
+        ) / surface_support.clamp_min(epsilon)
+        selected_surface_depth = torch.where(
+            use_surface_fit,
+            mean_surface_depth,
+            centre_metric.surface_depth,
+        )
+        depth_support = torch.where(
+            use_surface_fit,
+            (surface_support / geometry.mass.clamp_min(epsilon)).clamp(0.0, 1.0),
+            centre_metric.depth_support,
+        )
+        confidence = (
+            geometry.confidence
+            * depth_support
+            * existence_logits.sigmoid()
+            * float(packet.confidence)
+        ).clamp(0.0, 1.0)
+        confidence = torch.where(valid_mask, confidence, torch.zeros_like(confidence))
+        valid_axes = valid_mask.unsqueeze(-1).expand(batch, proposals, 3)
+        result = MeasurementSet(
+            modality=self.modality_name,
+            sensor_id=packet.sensor_id,
+            timestamp=rgb.new_full((batch,), packet.timestamp),
+            values=world_position,
+            log_variance=log_variance,
+            existence_logits=existence_logits,
+            measurement_mask=valid_mask,
+            appearance=appearance,
+            class_logits=None,
+            frame_id=packet.frame_id,
+            supported_state_fields=("position",),
+            auxiliary={
+                "world_position": world_position,
+                "world_log_variance": log_variance,
+                "world_position_log_variance": log_variance,
+                "world_position_independent_axis_mask": valid_axes,
+                "world_radius": rgb.new_full(
+                    (batch, proposals, 1),
+                    self.config.world_radius,
+                ),
+                "position_confidence": confidence,
+                "visibility_logit": existence_logits,
+                "metric_confidence": confidence,
+                "metric_surface_depth": torch.where(
+                    valid_mask,
+                    selected_surface_depth,
+                    torch.zeros_like(selected_surface_depth),
+                ),
+                "surface_fit_valid": surface_fit_valid,
+                "surface_fit_condition_number": fit_condition_number,
+                "surface_fit_radius": fitted_radius,
+                "surface_fit_radius_relative_error": (
+                    (fitted_radius - expected_radius).abs() / expected_radius.clamp_min(epsilon)
+                ),
+                "image_centres": geometry.centres,
+                "image_radius_pixels": geometry.radius_pixels,
+                "foreground_mass": geometry.mass,
+                "set_anchor_points": proposal.anchor_points.unsqueeze(0).expand(batch, -1, -1),
+                "set_mask_residual_rms": proposal.mask_residual.square().mean(dim=(-2, -1)).sqrt(),
+                "set_full_mask_logits": proposal.full_mask_logits,
+                "set_background_mask_logits": proposal.background_mask_logits,
+                "set_existence_residual": proposal.existence_residual,
+                "set_appearance_residual": proposal.appearance_residual,
+                "set_log_variance_residual": proposal.log_variance_residual,
+            },
+        )
+        result.validate()
+        return result
 
     def _measure(self, packet: ObservationPacket) -> MeasurementSet:
         self.validate_packet(packet)
@@ -264,6 +646,14 @@ class RGBDObservationModule(ObservationModule):
             batch=rgb.shape[0],
             reference=rgb,
         )
+        if self.config.observation_mode == "set":
+            return self._measure_set(
+                packet,
+                rgb,
+                depth,
+                world_from_camera,
+                intrinsics,
+            )
         if self.config.proposal_count == 1:
             measured = self.measurement(
                 rgb,
@@ -386,7 +776,10 @@ class RGBDObservationModule(ObservationModule):
         belief: WorldBelief,
         sensor_context: SensorContext,
     ) -> PredictedMeasurements:
-        if belief.objects.max_objects != self.config.proposal_count:
+        if self.config.observation_mode == "set":
+            if belief.objects.max_objects != self.config.max_objects:
+                raise ValueError("set RGB-D belief object count must equal max_objects")
+        elif belief.objects.max_objects != self.config.proposal_count:
             raise ValueError("RGB-D belief object count must equal proposal_count")
         objects = belief.objects
         position_slice = fast_packing_map(objects)["position"]
@@ -407,7 +800,11 @@ class RGBDObservationModule(ObservationModule):
             valid_mask=objects.active,
             visibility=objects.visibility_logit.sigmoid(),
             rois=None,
-            appearance=(objects.appearance if self.config.proposal_count == 2 else None),
+            appearance=(
+                objects.appearance
+                if self.config.observation_mode == "set" or self.config.proposal_count == 2
+                else None
+            ),
             auxiliary={"world_position": objects.position},
         )
         result.validate()
@@ -486,12 +883,36 @@ class RGBDObservationModule(ObservationModule):
             identity,
         )
         inverse_normal = torch.linalg.inv(safe_normal)
-        sample_count = self.config.temporal_history_size
-        degrees_of_freedom = sample_count - 2
-        residual_covariance = fit.residual_covariance * (sample_count / degrees_of_freedom)
-        coefficient_scale = inverse_normal[..., 1, 1] / sample_count
-        variance = residual_covariance.diagonal(dim1=-2, dim2=-1) * coefficient_scale.unsqueeze(-1)
-        variance = variance.clamp_min(self.config.temporal_velocity_variance_floor)
+        if self.config.observation_mode == "legacy":
+            # Preserve the accepted exact sixteen-sample arithmetic.
+            sample_count = self.config.temporal_history_size
+            degrees_of_freedom = sample_count - 2
+            residual_covariance = fit.residual_covariance * (sample_count / degrees_of_freedom)
+            coefficient_scale = inverse_normal[..., 1, 1] / sample_count
+            variance = residual_covariance.diagonal(
+                dim1=-2,
+                dim2=-1,
+            ) * coefficient_scale.unsqueeze(-1)
+            variance = variance.clamp_min(self.config.temporal_velocity_variance_floor)
+        else:
+            sample_count = fit.support_count.to(dtype=fit.normal_matrix.dtype).clamp_min(3.0)
+            degrees_of_freedom = (sample_count - 2.0).clamp_min(1.0)
+            residual_covariance = fit.residual_covariance * (
+                sample_count / degrees_of_freedom
+            ).unsqueeze(-1).unsqueeze(-1)
+            coefficient_scale = inverse_normal[..., 1, 1] / sample_count
+            maturity_inflation = (
+                fit.normal_matrix.new_tensor(float(self.config.temporal_history_size))
+                / sample_count
+            ).square()
+            # The protocol requires the *bounded base evidence scale* to be
+            # inflated by (16 / valid_samples)^2.  Flooring only after the
+            # multiplication would leave noiseless axes at the same floor for
+            # immature and mature histories, silently defeating that rule.
+            base_variance = (
+                residual_covariance.diagonal(dim1=-2, dim2=-1) * coefficient_scale.unsqueeze(-1)
+            ).clamp_min(self.config.temporal_velocity_variance_floor)
+            variance = base_variance * maturity_inflation.unsqueeze(-1)
         if self.config.temporal_velocity_variance_ceiling is not None:
             variance = variance.clamp_max(self.config.temporal_velocity_variance_ceiling)
         return torch.where(valid.unsqueeze(-1), variance, torch.ones_like(variance))
@@ -508,6 +929,27 @@ class RGBDObservationModule(ObservationModule):
 
         resolved = self._history(posterior, history)
         positions, valid = self._associated_positions(posterior, measured, association)
+        reset_mask = torch.zeros_like(posterior.objects.active)
+        if self.config.observation_mode == "set":
+            prior_interval_collision = measured.auxiliary.get("prior_interval_collision_mask")
+            if prior_interval_collision is not None:
+                if (
+                    prior_interval_collision.shape != reset_mask.shape
+                    or prior_interval_collision.dtype is not torch.bool
+                    or prior_interval_collision.device != reset_mask.device
+                ):
+                    raise ValueError("RGB-D prior_interval_collision_mask must be boolean [B,N]")
+                reset_mask |= prior_interval_collision
+            prior_interval_known_action = measured.auxiliary.get("prior_interval_known_action_mask")
+            if prior_interval_known_action is not None:
+                if (
+                    prior_interval_known_action.shape != reset_mask.shape
+                    or prior_interval_known_action.dtype is not torch.bool
+                    or prior_interval_known_action.device != reset_mask.device
+                ):
+                    raise ValueError("RGB-D prior_interval_known_action_mask must be boolean [B,N]")
+                reset_mask |= prior_interval_known_action
+            reset_mask |= posterior.objects.mode == int(MotionMode.COLLISION)
         resolved = resolved.append(
             object_ids=posterior.objects.object_id,
             active_mask=posterior.objects.active,
@@ -516,6 +958,7 @@ class RGBDObservationModule(ObservationModule):
             positions=positions,
             valid_mask=valid,
             minimum_dt=self.config.temporal_min_dt,
+            reset_mask=reset_mask,
         )
         fit, fit_valid = resolved.fit(
             gravity=posterior.gravity,
@@ -523,6 +966,7 @@ class RGBDObservationModule(ObservationModule):
             minimum_support=self.config.temporal_min_samples,
             minimum_dt=self.config.temporal_min_dt,
             conditioning_limit=self.config.fit_conditioning_limit,
+            require_complete_window=self.config.observation_mode == "legacy",
         )
         fit_valid = fit_valid & posterior.objects.active
         if not bool(fit_valid.any()):

@@ -178,8 +178,16 @@ class RGBDTemporalPositionHistory(ModalityHistory):
         positions: Tensor,
         valid_mask: Tensor,
         minimum_dt: float,
+        reset_mask: Tensor | None = None,
     ) -> RGBDTemporalPositionHistory:
-        """Append one causal row for selected current persistent slots."""
+        """Append one causal row for selected current persistent slots.
+
+        ``reset_mask`` starts a fresh motion segment before the new row is
+        appended.  It is intended for runtime-observable discontinuities such
+        as a resolved contact.  Persistent-ID replacement already resets a
+        slot through :meth:`_aligned`, so this remains an explicit opt-in and
+        preserves the accepted complete-window path by default.
+        """
 
         aligned = self._aligned(
             object_ids=object_ids,
@@ -191,6 +199,14 @@ class RGBDTemporalPositionHistory(ModalityHistory):
             raise ValueError("append_mask must be boolean [B,N]")
         if valid_mask.shape != expected or valid_mask.dtype != torch.bool:
             raise ValueError("valid_mask must be boolean [B,N]")
+        if reset_mask is None:
+            reset_mask = torch.zeros_like(active_mask)
+        if reset_mask.shape != expected or reset_mask.dtype != torch.bool:
+            raise ValueError("reset_mask must be boolean [B,N]")
+        if reset_mask.device != active_mask.device:
+            raise ValueError("reset_mask and active_mask must share device")
+        if torch.any(reset_mask & ~active_mask):
+            raise ValueError("only active slots may start a new temporal segment")
         if torch.any(append_mask & ~active_mask):
             raise ValueError("only active slots may be appended")
         if torch.any(valid_mask & ~append_mask):
@@ -210,6 +226,31 @@ class RGBDTemporalPositionHistory(ModalityHistory):
             raise ValueError("appended timestamp and positions must be finite")
         if not torch.isfinite(torch.as_tensor(minimum_dt)) or minimum_dt <= 0.0:
             raise ValueError("minimum_dt must be finite and positive")
+
+        aligned = RGBDTemporalPositionHistory(
+            object_ids=aligned.object_ids,
+            timestamps=torch.where(
+                reset_mask[..., None],
+                torch.zeros_like(aligned.timestamps),
+                aligned.timestamps,
+            ),
+            positions=torch.where(
+                reset_mask[..., None, None],
+                torch.zeros_like(aligned.positions),
+                aligned.positions,
+            ),
+            sample_mask=torch.where(
+                reset_mask[..., None],
+                torch.zeros_like(aligned.sample_mask),
+                aligned.sample_mask,
+            ),
+            valid_mask=torch.where(
+                reset_mask[..., None],
+                torch.zeros_like(aligned.valid_mask),
+                aligned.valid_mask,
+            ),
+            history_size=aligned.history_size,
+        )
 
         has_previous = aligned.sample_mask.any(dim=-1)
         sample_index = torch.arange(
@@ -340,32 +381,68 @@ class RGBDTemporalPositionHistory(ModalityHistory):
         minimum_support: int,
         minimum_dt: float,
         conditioning_limit: float,
+        require_complete_window: bool = True,
     ) -> tuple[FreeMotionFitResult, Tensor]:
-        """Fit every declared row uniformly and return a fail-closed mask."""
+        """Fit the current uninterrupted segment and return a fail-closed mask.
+
+        The default is the accepted exact sixteen-row estimator.  New
+        variable-set protocols may opt into a shorter post-event segment; in
+        that mode every sampled row must still be valid and at least
+        ``minimum_support`` rows are required.  Missing observations are not
+        silently skipped.
+        """
 
         self._validate_storage()
         if not 2 <= minimum_support <= self.history_size:
             raise ValueError("minimum_support must lie within the RGB-D history")
         if not torch.isfinite(torch.as_tensor(minimum_dt)) or minimum_dt <= 0.0:
             raise ValueError("minimum_dt must be finite and positive")
+        if not isinstance(require_complete_window, bool):
+            raise TypeError("require_complete_window must be boolean")
+        support = None
+        fit_minimum_support = self.history_size
+        if not require_complete_window:
+            support = (self.sample_mask & self.valid_mask).permute(0, 2, 1)
+            fit_minimum_support = minimum_support
         fit = fit_free_motion(
             self.positions.permute(0, 2, 1, 3),
             self.timestamps.permute(0, 2, 1),
             gravity=gravity,
             drag=drag,
             anchor_time=self.timestamps[..., -1],
-            minimum_support=self.history_size,
+            support=support,
+            minimum_support=fit_minimum_support,
             conditioning_limit=conditioning_limit,
         )
-        span = self.timestamps[..., -1] - self.timestamps[..., 0]
-        sequence_valid = (
-            self.sample_mask.sum(dim=-1).ge(minimum_support)
-            & self.sample_mask.all(dim=-1)
-            & self.valid_mask.all(dim=-1)
-            & (span >= minimum_dt)
-            & fit.valid
-            & (self.object_ids >= 0)
-        )
+        if require_complete_window:
+            span = self.timestamps[..., -1] - self.timestamps[..., 0]
+            sequence_valid = (
+                self.sample_mask.sum(dim=-1).ge(minimum_support)
+                & self.sample_mask.all(dim=-1)
+                & self.valid_mask.all(dim=-1)
+                & (span >= minimum_dt)
+                & fit.valid
+                & (self.object_ids >= 0)
+            )
+        else:
+            sample_count = self.sample_mask.sum(dim=-1)
+            valid_count = self.valid_mask.sum(dim=-1)
+            anchor_time = self.timestamps[..., -1]
+            first_timestamp = torch.where(
+                self.sample_mask,
+                self.timestamps,
+                anchor_time[..., None],
+            ).amin(dim=-1)
+            span = anchor_time - first_timestamp
+            sequence_valid = (
+                sample_count.ge(minimum_support)
+                & (valid_count == sample_count)
+                & self.sample_mask[..., -1]
+                & self.valid_mask[..., -1]
+                & (span >= minimum_dt)
+                & fit.valid
+                & (self.object_ids >= 0)
+            )
         return fit, sequence_valid
 
     def detach(self) -> RGBDTemporalPositionHistory:

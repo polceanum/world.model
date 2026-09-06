@@ -88,6 +88,7 @@ class UncertaintyDynamics(nn.Module):
         event_logits: Tensor | None = None,
         interaction_density: Tensor | None = None,
         residual_acceleration: Tensor | None = None,
+        process_log_scale_residual: Tensor | None = None,
     ) -> UncertaintyOutput:
         if objects.fast_state_dim != self.fast_state_dim:
             raise ValueError("object fast state does not match uncertainty model")
@@ -108,6 +109,7 @@ class UncertaintyDynamics(nn.Module):
             event_logits=event_logits,
             interaction_density=interaction_density,
             residual_acceleration=residual_acceleration,
+            process_log_scale_residual=process_log_scale_residual,
             validate_log_variance=True,
         )
 
@@ -119,6 +121,7 @@ class UncertaintyDynamics(nn.Module):
         event_logits: Tensor | None = None,
         interaction_density: Tensor | None = None,
         residual_acceleration: Tensor | None = None,
+        process_log_scale_residual: Tensor | None = None,
     ) -> UncertaintyOutput:
         """Propagate using a parent-validated ``[B]`` elapsed-time tensor."""
 
@@ -136,6 +139,7 @@ class UncertaintyDynamics(nn.Module):
             event_logits=event_logits,
             interaction_density=interaction_density,
             residual_acceleration=residual_acceleration,
+            process_log_scale_residual=process_log_scale_residual,
             validate_log_variance=False,
         )
 
@@ -147,6 +151,7 @@ class UncertaintyDynamics(nn.Module):
         event_logits: Tensor | None,
         interaction_density: Tensor | None,
         residual_acceleration: Tensor | None,
+        process_log_scale_residual: Tensor | None,
         validate_log_variance: bool,
     ) -> UncertaintyOutput:
         """Implement uncertainty propagation for normalized ``[B]`` time."""
@@ -186,6 +191,19 @@ class UncertaintyDynamics(nn.Module):
             dim=-1,
         )
         process_variance = F.softplus(self.process_network(features))
+        if process_log_scale_residual is not None:
+            if process_log_scale_residual.shape != speed.shape:
+                raise ValueError("process_log_scale_residual must have object shape [B,N]")
+            if (
+                process_log_scale_residual.device != objects.position.device
+                or process_log_scale_residual.dtype != objects.position.dtype
+            ):
+                raise ValueError("process_log_scale_residual must share object device and dtype")
+            # Four natural-log units in either direction is ample calibration
+            # authority while keeping relation-owned uncertainty finite and
+            # explicitly bounded. Zero is an exact multiplicative identity.
+            bounded_log_scale = 4.0 * torch.tanh(process_log_scale_residual / 4.0)
+            process_variance = process_variance * bounded_log_scale.exp().unsqueeze(-1)
         process_variance = (process_variance * dt_object.unsqueeze(-1)).clamp(
             max=self.max_process_variance_per_step
         )
@@ -202,7 +220,14 @@ class UncertaintyDynamics(nn.Module):
             ),
             dim=-1,
         )
-        unclamped_log_variance = updated_variance.clamp_min(1e-12).log()
+        # Preserve the historical 1e-12 numerical floor unless a model's
+        # explicit lower log-variance bound opts into a smaller calibrated
+        # range. The final configured clamp remains authoritative.
+        numerical_variance_floor = min(
+            1.0e-12,
+            math.exp(self.log_variance_bounds[0]),
+        )
+        unclamped_log_variance = updated_variance.clamp_min(numerical_variance_floor).log()
         if validate_log_variance:
             # Direct/public uncertainty calls retain the standalone contract:
             # reject non-finite process-model output before clamping.

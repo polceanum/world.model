@@ -19,6 +19,7 @@ from world_model.training.checkpointing import (
     validate_checkpoint_config,
     validate_training_resume_config,
 )
+from world_model.training.dynamic_set_config import load_config as load_dynamic_set_config
 from world_model.training.loop import (
     move_batch_to_device,
     pretrain_rgb_measurements,
@@ -1404,12 +1405,12 @@ def test_rgbd_analytic_bridge_fields_are_semantic_with_legacy_disabled_defaults(
     legacy_payload = deepcopy(payload)
     legacy_payload["config"]["model"].pop("rgbd")
     legacy_payload["config"]["model"]["dynamics"].pop("analytic_free_motion_only")
+    legacy_payload["config"]["model"]["dynamics"].pop("relation_hidden_dim", None)
     legacy_payload["config"]["model"]["filter"].pop("enable_learned_corrector")
     legacy_payload["config"]["model"]["filter"].pop("direct_metric_position_update")
 
     validate_checkpoint_config(legacy_payload, config)
     validate_training_resume_config(legacy_payload, config)
-
     rgbd_enabled = replace(
         config,
         model=replace(
@@ -1488,6 +1489,111 @@ def test_rgbd_analytic_bridge_fields_are_semantic_with_legacy_disabled_defaults(
             validate_checkpoint_config(legacy_payload, changed)
         with pytest.raises(ValueError, match="model"):
             validate_training_resume_config(legacy_payload, changed)
+
+
+@pytest.mark.parametrize(
+    ("profile", "historical_version"),
+    (
+        ("configs/rgbd_online_free_motion_cpu.yaml", "1.55"),
+        ("configs/rgbd_two_visible_free_motion_cpu.yaml", "1.56"),
+    ),
+)
+def test_complete_legacy_rgbd_checkpoint_loads_through_both_public_paths_without_mutation(
+    tmp_path: Path,
+    profile: str,
+    historical_version: str,
+) -> None:
+    config = load_dynamic_set_config(profile)
+    assert config.model.rgbd.observation_mode == "legacy"
+    assert config.model.rgbd.max_objects == 6
+    assert config.model.rgbd.set_feature_dim == 32
+    assert config.model.rgbd.set_log_variance_residual_limit == 4.0
+    assert config.model.dynamics.relation_hidden_dim is None
+    assert config.model.dynamics.modal_dynamics_enabled
+    assert config.model.dynamics.continuous_pair_force_enabled
+    assert config.model.dynamics.node_acceleration_enabled
+    assert not config.model.dynamics.event_driven_state_only_enabled
+    assert not config.model.dynamics.relation_process_uncertainty_enabled
+
+    source = OnlineWorldModel.from_config(config, device="cpu")
+    payload = checkpoint_payload(
+        model=source,
+        optimizer=None,
+        scheduler=None,
+        config=config,
+        step=0,
+        metrics={},
+        device="cpu",
+        source_provenance={"historical_fixture": historical_version},
+    )
+    payload["specification_version"] = historical_version
+    legacy_rgbd = payload["config"]["model"]["rgbd"]
+    for name in (
+        "observation_mode",
+        "max_objects",
+        "set_feature_dim",
+        "set_log_variance_residual_limit",
+    ):
+        legacy_rgbd.pop(name)
+    legacy_dynamics = payload["config"]["model"]["dynamics"]
+    for name in (
+        "relation_hidden_dim",
+        "modal_dynamics_enabled",
+        "continuous_pair_force_enabled",
+        "node_acceleration_enabled",
+        "event_driven_state_only_enabled",
+        "relation_process_uncertainty_enabled",
+    ):
+        legacy_dynamics.pop(name)
+    checkpoint = tmp_path / f"legacy-{historical_version}.pt"
+    torch.save(payload, checkpoint)
+    frozen_bytes = checkpoint.read_bytes()
+
+    complete = OnlineWorldModel.from_config(config, device="cpu")
+    weight_only = OnlineWorldModel.from_config(config, device="cpu")
+    loaded = load_checkpoint(checkpoint, model=complete, expected_config=config)
+    transferred = load_model_weights(checkpoint, model=weight_only, expected_config=config)
+
+    assert checkpoint.read_bytes() == frozen_bytes
+    assert loaded["specification_version"] == historical_version
+    assert transferred["specification_version"] == historical_version
+    for name, expected in source.state_dict().items():
+        assert torch.equal(complete.state_dict()[name], expected)
+        assert torch.equal(weight_only.state_dict()[name], expected)
+    for name in (
+        "observation_mode",
+        "max_objects",
+        "set_feature_dim",
+        "set_log_variance_residual_limit",
+    ):
+        assert name not in loaded["config"]["model"]["rgbd"]
+        assert name not in transferred["config"]["model"]["rgbd"]
+
+
+def test_new_dynamic_set_width_fields_preserve_legacy_checkpoint_semantics() -> None:
+    config = load_dynamic_set_config("configs/tiny_overfit.yaml")
+    payload = {
+        "config": config.to_dict(),
+        "simulator_version": SIMULATOR_VERSION,
+    }
+    legacy_payload = deepcopy(payload)
+    legacy_payload["config"]["model"]["rgbd"].pop("set_feature_dim")
+    legacy_payload["config"]["model"]["rgbd"].pop("set_log_variance_residual_limit")
+    legacy_payload["config"]["model"]["dynamics"].pop("relation_hidden_dim")
+
+    validate_checkpoint_config(legacy_payload, config)
+    validate_training_resume_config(legacy_payload, config)
+
+    widened = replace(
+        config,
+        model=replace(
+            config.model,
+            dynamics=replace(config.model.dynamics, relation_hidden_dim=64),
+        ),
+    )
+    widened.validate()
+    with pytest.raises(ValueError, match="model"):
+        validate_checkpoint_config(legacy_payload, widened)
 
 
 def test_attention_relation_endpoint_binding_is_semantic_with_legacy_false() -> None:

@@ -322,7 +322,8 @@
   action-free output and require observable persistent-ID target resolution,
   exactly-once impulse application, target isolation, conservation, batch
   independence, source-belief immutability, and private-oracle separation.
-- [ ] In specification 1.61, extend the shared `DynamicsModel` and prepared
+- [x] In the dormant specification-1.61 candidate, extend the shared
+  `DynamicsModel` and prepared
   propagation action path, remove the runtime analytic-backend restriction,
   and establish exact serial/vectorized parity.
 - [x] Freeze the specification-1.60 manifests and exactly-once development ->
@@ -332,20 +333,46 @@
   and format check over `257` files; compileall; exact version `1.60`; and the
   complete `1880 passed, 16 skipped` repository suite. No governed split was
   opened by these checks.
-- [ ] Finish the clean specification-1.60 source gate, commit and publish the
-  exact freeze, then consume its single development attempt. Open protected
-  splits only after the independent three-hash review passes; any predecessor
-  failure closes the rung and forbids a planning-qualified 1.61 claim.
-- [ ] If and only if specification 1.60 qualifies, record its terminal evidence
-  and complete specification 1.61: one compact CPU-first checkpoint over 1--6
-  objects, contact/no-contact, births/removals, known actions, and required
-  K=8/K=32 downstream planning gates.
-- [ ] For specification 1.61, freeze 66,000/4,400/2,200/2,200/4,400/4,400
-  physical episodes, separate 1,200/600/600/1,200/1,200 planning tasks, all 22
-  physical cells, exact six-B4 update balance, the disposable screen,
-  512-update full validation cadence, plateau/extension rules, and the 60-hour
-  training cap before governed generation.
-- [ ] Do not optimize winner, regret, ranking, or task success. Treat planning
+- [x] Finish the clean specification-1.60 source gate and publish exact freeze
+  `4629fe13b65a907378c4a551b373c357154387f5`: `510` focused tests; `289
+  passed, 1 skipped` accepted regressions; Ruff check/format; compileall; exact
+  version `1.60`; and `1882 passed, 16 skipped` for the complete suite.
+- [x] Consume the sole specification-1.60 development attempt and close the
+  rung on its terminal public-batch ownership failure. Preserve report/ledger
+  SHA-256 values `72533f2f10919c6070ee289aad63c18aa7b7c7b3b687f3caa4b015d327a8cfed`
+  / `6e5a9b2ab31483b200c0fbf9763894080e7603ca2b559cac121ca737380c67ea`;
+  no checkpoint exists and no protected split was opened.
+- [x] Cancel the former “if 1.60 qualifies, execute 1.61” path because 1.60's
+  sole attempt failed. No 1--6-object checkpoint or planning qualification may
+  be claimed under that predecessor.
+- [x] Keep the implemented specification-1.61 source unqualified and do not
+  initialize its governed screen/campaign/protected sequence. A new reviewed
+  predecessor specification is required because 1.60 did not qualify.
+- [x] Stage the unqualified 1.61 model/runtime implementation: six-object
+  belief capacity, eight unordered RGB-D proposals, 6-by-8 association,
+  segmented lifecycle/velocity evidence, analytic contact plus bounded
+  relation residual, shared known actions, and exact serial/vectorized
+  planning parity while preserving legacy modes.
+- [x] Stage source-declared 1.61 physical/planning candidate manifests, exact
+  22-cell B4x6 update
+  balance, CPU AdamW objectives without task-choice loss, screen/convergence
+  controls, selection/bootstrap gates, public/private boundary evidence,
+  resource checks, and reusable qualification primitives.
+- [ ] Add a reviewed causal provisional-attempt path before advertising the
+  optional second architecture attempt. Current source correctly rejects a
+  remaining-hours shortcut and cannot mint the required 3,584-update timing
+  admission evidence in the formal coordinator.
+- [x] Complete the unqualified 1.61 source gate, documentation review, clean
+  commit, and branch publication without opening a governed manifest: Ruff,
+  format check over 313 files, compileall, exact version `1.60`, frozen 1.60
+  source hashes/certificate, and the full `2,331 passed, 16 skipped` suite all
+  pass. No governed manifest was opened.
+- [x] Declare candidate 66,000/4,400/2,200/2,200/4,400/4,400 physical rows,
+  separate 1,200/600/600/1,200/1,200 planning tasks, all 22 physical cells,
+  exact six-B4 update balance, the disposable screen, 512-update validation,
+  plateau/extension rules, and the 60-hour envelope. The unqualified source
+  freeze cannot authorize governed generation.
+- [x] Do not optimize winner, regret, ranking, or task success. Treat planning
   only as a mandatory downstream acceptance gate which can promote or reject
   an otherwise physically accurate checkpoint.
 - [ ] At every rung require state/velocity/horizon accuracy, uncertainty,

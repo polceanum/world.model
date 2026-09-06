@@ -37,6 +37,12 @@ class WorldBelief(TensorDataclassMixin):
         return int(self.timestamp.shape[0])
 
     @property
+    def max_objects(self) -> int:
+        """Return the persistent object-set capacity without duplicating state."""
+
+        return self.objects.max_objects
+
+    @property
     def device(self) -> torch.device:
         return self.timestamp.device
 

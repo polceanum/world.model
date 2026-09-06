@@ -213,6 +213,132 @@ def test_none_candidate_matches_ordinary_rollout_exactly() -> None:
     assert torch.equal(result.selected_index, torch.zeros(2, dtype=torch.int64))
 
 
+def test_state_only_planning_omits_events_and_auxiliary_without_changing_costs() -> None:
+    belief = _two_object_belief()
+    dynamics = AnalyticFreeMotionDynamics()
+    action = _action(belief, belief.objects.position.new_ones(2, 3))
+    goal = TerminalWorldPositionGoal(
+        object_id=torch.tensor([11, 11]),
+        position_world=torch.tensor([[0.4, 0.2, 0.0], [-0.4, -0.2, 0.0]]),
+    )
+    full = plan_counterfactual_actions(
+        dynamics,
+        belief,
+        [0.25, 0.5, 1.0],
+        (None, action),
+        goal,
+    )
+    state_only = plan_counterfactual_actions(
+        dynamics,
+        belief,
+        [0.25, 0.5, 1.0],
+        (None, action),
+        goal,
+        return_events=False,
+        return_auxiliary=False,
+    )
+
+    torch.testing.assert_close(state_only.total_cost, full.total_cost)
+    assert torch.equal(state_only.selected_index, full.selected_index)
+    assert all(trajectory.event_logits is None for trajectory in state_only.trajectories)
+    assert all(not trajectory.auxiliary for trajectory in state_only.trajectories)
+
+    with pytest.raises(TypeError, match="return_events"):
+        plan_counterfactual_actions(
+            dynamics,
+            belief,
+            [1.0],
+            (None,),
+            goal,
+            return_events=0,  # type: ignore[arg-type]
+        )
+
+
+def test_candidate_vectorization_matches_serial_and_uses_one_rollout() -> None:
+    belief = _two_object_belief()
+    impulse = belief.objects.position.new_tensor([[0.7, 0.1, 0.0], [0.5, -0.2, 0.0]])
+    first = _action(belief, impulse)
+    second = replace(first, impulse_world=-impulse)
+    actions = (None, first, second)
+    goal = TerminalWorldPositionGoal(
+        object_id=torch.tensor([11, 11]),
+        position_world=torch.tensor([[1.0, 0.2, 0.0], [-0.4, -0.2, 0.0]]),
+    )
+    vectorized_dynamics = _CountingDynamics()
+    serial_dynamics = _CountingDynamics()
+
+    vectorized = plan_counterfactual_actions(
+        vectorized_dynamics,
+        belief,
+        [0.25, 0.5, 1.0],
+        actions,
+        goal,
+    )
+    serial = plan_counterfactual_actions(
+        serial_dynamics,
+        belief,
+        [0.25, 0.5, 1.0],
+        actions,
+        goal,
+        candidate_vectorized=False,
+    )
+
+    assert vectorized_dynamics.rollout_calls == 1
+    assert serial_dynamics.rollout_calls == len(actions)
+    for name in (
+        "terminal_squared_error",
+        "terminal_position_variance",
+        "impulse_effort",
+        "total_cost",
+        "selected_index",
+        "object_id_by_slot",
+    ):
+        assert torch.equal(getattr(vectorized, name), getattr(serial, name)), name
+    for vectorized_trajectory, serial_trajectory in zip(
+        vectorized.trajectories,
+        serial.trajectories,
+        strict=True,
+    ):
+        for name in (
+            "timestamps",
+            "positions",
+            "velocities",
+            "orientations",
+            "motion_mode_logits",
+            "fast_log_variance",
+            "active_mask",
+            "event_logits",
+        ):
+            assert torch.equal(
+                getattr(vectorized_trajectory, name),
+                getattr(serial_trajectory, name),
+            ), name
+        assert vectorized_trajectory.auxiliary.keys() == serial_trajectory.auxiliary.keys()
+        for name in vectorized_trajectory.auxiliary:
+            assert torch.equal(
+                vectorized_trajectory.auxiliary[name],
+                serial_trajectory.auxiliary[name],
+            ), name
+
+
+def test_candidate_vectorized_flag_is_strictly_boolean() -> None:
+    belief = _two_object_belief()
+    goal = TerminalWorldPositionGoal(
+        object_id=torch.tensor([11, 11]),
+        position_world=torch.zeros(2, 3),
+    )
+
+    with pytest.raises(TypeError, match="candidate_vectorized must be boolean"):
+        plan_counterfactual_actions(
+            AnalyticFreeMotionDynamics(),
+            belief,
+            [0.5],
+            (None,),
+            goal,
+            candidate_vectorized=1,  # type: ignore[arg-type]
+        )
+
+
 def test_first_argmin_wins_ties_and_candidate_permutation_reorders_columns() -> None:
     belief = _two_object_belief()
     dynamics = AnalyticFreeMotionDynamics()

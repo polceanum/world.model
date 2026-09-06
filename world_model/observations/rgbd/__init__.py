@@ -4,6 +4,13 @@ from world_model.observations.rgbd.module import (
     RGBDObservationConfig,
     RGBDObservationModule,
 )
+from world_model.observations.rgbd.set_proposer import (
+    SET_APPEARANCE_DIM,
+    SET_MAX_OBJECTS,
+    SET_PROPOSAL_COUNT,
+    RGBDSetProposalOutput,
+    RGBDSetProposer,
+)
 from world_model.observations.rgbd.sphere_centres import (
     MetricSphereCentreOutput,
     RGBDSphereCentreMeasurement,
@@ -13,6 +20,7 @@ from world_model.observations.rgbd.sphere_centres import (
 from world_model.observations.rgbd.temporal import RGBDTemporalPositionHistory
 from world_model.observations.rgbd.two_disc_geometry import (
     TwoDiscRGBDGeometryOutput,
+    fit_visible_sphere_surfaces,
     two_disc_geometry_from_rgbd,
 )
 
@@ -20,10 +28,16 @@ __all__ = [
     "MetricSphereCentreOutput",
     "RGBDObservationConfig",
     "RGBDObservationModule",
+    "RGBDSetProposalOutput",
+    "RGBDSetProposer",
     "RGBDSphereCentreMeasurement",
     "RGBDSphereCentreMeasurementModule",
     "RGBDTemporalPositionHistory",
+    "SET_APPEARANCE_DIM",
+    "SET_MAX_OBJECTS",
+    "SET_PROPOSAL_COUNT",
     "TwoDiscRGBDGeometryOutput",
+    "fit_visible_sphere_surfaces",
     "metric_sphere_centres_from_surface_depth",
     "two_disc_geometry_from_rgbd",
 ]

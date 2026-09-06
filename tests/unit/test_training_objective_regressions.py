@@ -890,6 +890,48 @@ def test_scene_predictability_censors_only_batches_with_unseen_actuation() -> No
     assert targets.tolist() == [[False, False], [True, True]]
 
 
+def test_observed_known_action_preserves_deterministic_future_support() -> None:
+    actuation = torch.zeros(2, 3, 2, dtype=torch.bool)
+    actuation[:, 1, 0] = True
+    known_action = torch.zeros_like(actuation)
+    known_action[0, 1, 0] = True
+    batch = {
+        "objects": {
+            "active": torch.ones(2, 3, 2, dtype=torch.bool),
+        },
+        "events": {
+            "externally_actuated": actuation,
+            "known_action_observed": known_action,
+        },
+    }
+
+    predictable = future_scene_predictable_mask(
+        batch,
+        anchor_index=0,
+        target_index=2,
+    )
+
+    assert predictable.tolist() == [True, False]
+
+
+def test_known_action_mask_cannot_relabel_an_unactuated_future() -> None:
+    actuation = torch.zeros(1, 2, 1, dtype=torch.bool)
+    known_action = torch.ones_like(actuation)
+    batch = {
+        "events": {
+            "externally_actuated": actuation,
+            "known_action_observed": known_action,
+        },
+    }
+
+    with pytest.raises(ValueError, match="subset"):
+        future_scene_predictable_mask(
+            batch,
+            anchor_index=0,
+            target_index=1,
+        )
+
+
 def test_mature_mask_excludes_cold_deterministic_targets_but_reports_both() -> None:
     config = _single_horizon_config(minimum_rollout_age_steps=3)
     batch = _rollout_batch(externally_actuated=torch.zeros(1, 2, 2, dtype=torch.bool))

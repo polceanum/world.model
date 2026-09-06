@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import fields, replace
 
 import pytest
 import torch
@@ -44,6 +44,15 @@ def test_factory_creates_valid_modality_independent_belief() -> None:
     assert (belief.objects.object_id == -1).all()
     assert belief.active_modalities == ("rgb",)
     assert not hasattr(belief.objects, "rgb")
+
+
+def test_world_belief_exposes_read_only_object_capacity_without_serialization_change() -> None:
+    belief = BeliefFactory(max_objects=6).create()
+
+    assert belief.max_objects == belief.objects.max_objects == 6
+    assert "max_objects" not in {item.name for item in fields(belief)}
+    with pytest.raises(AttributeError):
+        belief.max_objects = 7  # type: ignore[misc]
 
 
 def test_validator_rejects_duplicate_and_invalid_object_ids() -> None:

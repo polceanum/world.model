@@ -1977,17 +1977,36 @@ def future_scene_predictable_mask(
         )
     if externally_actuated.ndim != 3:
         raise ValueError("events.externally_actuated must have shape [B,T,N]")
+    known_action_observed = events.get("known_action_observed")
+    if known_action_observed is None:
+        hidden_actuation = externally_actuated.bool()
+    else:
+        if not isinstance(known_action_observed, Tensor):
+            raise TypeError("events.known_action_observed must be a tensor")
+        if (
+            known_action_observed.shape != externally_actuated.shape
+            or known_action_observed.dtype is not torch.bool
+            or known_action_observed.device != externally_actuated.device
+        ):
+            raise ValueError(
+                "events.known_action_observed must be boolean and match externally_actuated"
+            )
+        if torch.any(known_action_observed & ~externally_actuated.bool()):
+            raise ValueError("known observed actions must be a subset of external actuation")
+        # A declared action is a causal model input, so its factual future
+        # remains a deterministic training target.  Only genuinely unseen
+        # impulses censor the coupled scene.
+        hidden_actuation = externally_actuated.bool() & ~known_action_observed
     if not 0 <= anchor_index < target_index < externally_actuated.shape[1]:
         raise ValueError("forecast anchor/target indices are outside the event sequence")
     # Dynamics are coupled: an unobserved impulse on one object can change any
     # other object's target through a subsequent interaction. Censor the
     # complete scene until the next observation has exposed the actuation.
     scene_intervened = (
-        externally_actuated[
+        hidden_actuation[
             :,
             anchor_index + 1 : target_index + 1,
         ]
-        .bool()
         .flatten(start_dim=1)
         .any(dim=1)
     )

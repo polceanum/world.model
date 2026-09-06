@@ -59,6 +59,7 @@ class InteractionGraph(nn.Module):
 
     edge_feature_dim = 13
     edge_output_dim = 7
+    event_calibration_logit_limit = 8.0
 
     def __init__(
         self,
@@ -66,25 +67,43 @@ class InteractionGraph(nn.Module):
         global_code_dim: int,
         *,
         hidden_dim: int = 64,
+        relation_hidden_dim: int | None = None,
         interaction_radius: float = 0.5,
         uncertainty_margin_scale: float = 2.0,
         max_pair_force: float = 2.0,
         max_node_acceleration: float = 2.0,
+        continuous_pair_force_enabled: bool = True,
+        node_acceleration_enabled: bool = True,
+        bounded_event_calibration_enabled: bool = False,
     ) -> None:
         super().__init__()
         if residual_dynamics_dim < 0 or global_code_dim < 0:
             raise ValueError("graph code dimensions must be nonnegative")
         if hidden_dim <= 0 or interaction_radius <= 0:
             raise ValueError("hidden_dim and interaction_radius must be positive")
+        if relation_hidden_dim is not None and relation_hidden_dim <= 0:
+            raise ValueError("relation_hidden_dim must be positive when provided")
+        resolved_relation_hidden_dim = (
+            hidden_dim if relation_hidden_dim is None else relation_hidden_dim
+        )
         self.residual_dynamics_dim = residual_dynamics_dim
         self.global_code_dim = global_code_dim
         self.interaction_radius = interaction_radius
         self.uncertainty_margin_scale = uncertainty_margin_scale
         self.max_pair_force = max_pair_force
         self.max_node_acceleration = max_node_acceleration
+        if not isinstance(continuous_pair_force_enabled, bool):
+            raise TypeError("continuous_pair_force_enabled must be boolean")
+        if not isinstance(node_acceleration_enabled, bool):
+            raise TypeError("node_acceleration_enabled must be boolean")
+        if not isinstance(bounded_event_calibration_enabled, bool):
+            raise TypeError("bounded_event_calibration_enabled must be boolean")
+        self.continuous_pair_force_enabled = continuous_pair_force_enabled
+        self.node_acceleration_enabled = node_acceleration_enabled
+        self.bounded_event_calibration_enabled = bounded_event_calibration_enabled
         self.edge_network = _MLP(
             self.edge_feature_dim,
-            hidden_dim,
+            resolved_relation_hidden_dim,
             self.edge_output_dim,
         )
         node_input_dim = (
@@ -227,12 +246,24 @@ class InteractionGraph(nn.Module):
             -normal_force.unsqueeze(-1) * normal + tangent_force.unsqueeze(-1) * tangent_direction
         )
         pair_force = force_on_i_upper - force_on_i_upper.transpose(1, 2)
+        if not self.continuous_pair_force_enabled:
+            pair_force = torch.zeros_like(pair_force)
         net_force = pair_force.sum(dim=2)
         pair_acceleration = net_force * inverse_mass.unsqueeze(-1)
 
         symmetric = lambda value: value + value.transpose(1, 2)  # noqa: E731
         contact_logits = symmetric(contact_upper)
         collision_logits = symmetric(collision_upper)
+        if self.bounded_event_calibration_enabled:
+            # The specification-1.61 pair classifier is a residual around the
+            # analytic event logit, not a second contact resolver.  Saturating
+            # the symmetric scalar after construction preserves exact zero
+            # initialization and unit gradient at zero while preventing an
+            # arbitrarily large learned confidence from escaping its declared
+            # calibration envelope.  Historical profiles leave this disabled.
+            limit = self.event_calibration_logit_limit
+            contact_logits = limit * torch.tanh(contact_logits / limit)
+            collision_logits = limit * torch.tanh(collision_logits / limit)
         impulse_multiplier_raw = symmetric(edge_values[..., 4])
         impulse_additive_raw = symmetric(edge_values[..., 5])
         edge_mask = upper_mask | upper_mask.transpose(1, 2)
@@ -260,6 +291,8 @@ class InteractionGraph(nn.Module):
         )
         node_acceleration = self.max_node_acceleration * torch.tanh(self.node_network(node_input))
         node_acceleration = node_acceleration * objects.active.unsqueeze(-1)
+        if not self.node_acceleration_enabled:
+            node_acceleration = torch.zeros_like(node_acceleration)
         residual_acceleration = (pair_acceleration + node_acceleration) * (
             objects.active.unsqueeze(-1)
         )

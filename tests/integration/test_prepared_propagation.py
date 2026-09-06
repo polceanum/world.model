@@ -7,6 +7,7 @@ import pytest
 import torch
 from torch import Tensor
 
+from world_model.dynamics import WorldImpulseAction
 from world_model.observations import ObservationPacket
 from world_model.runtime import (
     OnlineWorldModel,
@@ -137,6 +138,31 @@ def _oracle_packet(
     )
 
 
+def _oracle_action(
+    model: OnlineWorldModel,
+    timestamp: float,
+    impulse: Tensor | None = None,
+) -> WorldImpulseAction:
+    assert model.belief is not None
+    active_ids = torch.where(
+        model.belief.objects.active,
+        model.belief.objects.object_id,
+        torch.full_like(model.belief.objects.object_id, -1),
+    )
+    object_id = active_ids.amax(dim=-1)
+    if impulse is None:
+        impulse = torch.tensor(
+            [[0.05, -0.01, 0.02]],
+            device=model.belief.device,
+            dtype=model.belief.dtype,
+        )
+    return WorldImpulseAction(
+        timestamp=torch.full_like(model.belief.timestamp, timestamp),
+        object_id=object_id,
+        impulse_world=impulse,
+    )
+
+
 def _assert_nested_close(actual: Any, expected: Any) -> None:
     if isinstance(actual, Tensor) or isinstance(expected, Tensor):
         assert isinstance(actual, Tensor) and isinstance(expected, Tensor)
@@ -198,6 +224,96 @@ def test_prepared_ingest_matches_normal_runtime_state_and_diagnostics() -> None:
         strict=True,
     ):
         _assert_nested_close(prepared_record, normal_record)
+
+
+def test_known_action_prepared_ingest_matches_direct_ingest_exactly() -> None:
+    direct = OnlineWorldModel.from_config(_oracle_config(), device="cpu")
+    prepared_runtime = OnlineWorldModel.from_config(_oracle_config(), device="cpu")
+    prepared_runtime.load_state_dict(direct.state_dict())
+    initial = _oracle_packet(0.0, torch.tensor([[0.0, 1.0, 0.0]]))
+    direct.ingest(initial)
+    prepared_runtime.ingest(initial)
+    warmup = _oracle_packet(0.05, torch.tensor([[0.0, 1.0, 0.0]]))
+    direct.ingest(warmup)
+    prepared_runtime.ingest(warmup)
+
+    direct_action = _oracle_action(direct, 0.1)
+    prepared_action = _oracle_action(prepared_runtime, 0.1)
+    propagation = prepared_runtime.prepare_propagation(0.1, action=prepared_action)
+    assert propagation.action is prepared_action
+    assert propagation.auxiliary["known_action_applied"].sum().item() == 1
+    packet = _oracle_packet(
+        0.1,
+        torch.tensor([[0.0, 1.0, 0.0]]),
+        torch.tensor([[0.0, 0.0, 0.0]]),
+    )
+
+    direct_posterior = direct.ingest(packet, action=direct_action)
+    prepared_posterior = prepared_runtime.ingest(packet, prepared=propagation)
+
+    assert propagation.consumed
+    _assert_nested_close(prepared_posterior, direct_posterior)
+    assert prepared_runtime.state.ingest_count == direct.state.ingest_count
+    assert prepared_runtime.state.batch_size == direct.state.batch_size
+    assert (
+        prepared_runtime.state.temporal_histories.keys() == direct.state.temporal_histories.keys()
+    )
+
+
+def test_prepared_known_action_is_version_bound_and_unambiguous() -> None:
+    model = OnlineWorldModel.from_config(_oracle_config(), device="cpu")
+    model.ingest(_oracle_packet(0.0, torch.tensor([[0.0, 1.0, 0.0]])))
+    model.ingest(_oracle_packet(0.05, torch.tensor([[0.0, 1.0, 0.0]])))
+    action = _oracle_action(model, 0.1)
+    propagation = model.prepare_propagation(0.1, action=action)
+    action.impulse_world.add_(0.01)
+
+    with pytest.raises(PreparedPropagationError, match="action tensors have changed"):
+        model.ingest(
+            _oracle_packet(0.1, torch.tensor([[0.0, 1.0, 0.0]])),
+            prepared=propagation,
+        )
+    assert not propagation.consumed
+
+    replacement = _oracle_action(model, 0.1)
+    with pytest.raises(PreparedPropagationError, match="pass known actions"):
+        model.ingest(
+            _oracle_packet(0.1, torch.tensor([[0.0, 1.0, 0.0]])),
+            prepared=propagation,
+            action=replacement,
+        )
+    assert not propagation.consumed
+
+
+def test_known_action_ingest_rejects_initial_and_multi_timestamp_use_atomically() -> None:
+    fresh = OnlineWorldModel.from_config(_oracle_config(), device="cpu")
+    unbound = WorldImpulseAction(
+        timestamp=torch.tensor([0.1]),
+        object_id=torch.tensor([0], dtype=torch.int64),
+        impulse_world=torch.tensor([[0.01, 0.0, 0.0]]),
+    )
+    with pytest.raises(RuntimeError, match="before belief initialization"):
+        fresh.ingest(
+            _oracle_packet(0.1, torch.tensor([[0.0, 1.0, 0.0]])),
+            action=unbound,
+        )
+    assert fresh.belief is None
+    assert fresh.state.ingest_count == 0
+
+    fresh.ingest(_oracle_packet(0.0, torch.tensor([[0.0, 1.0, 0.0]])))
+    action = _oracle_action(fresh, 0.1)
+    source = fresh.belief
+    source_revision = fresh.state.ingest_count
+    with pytest.raises(ValueError, match="one observation timestamp group"):
+        fresh.ingest(
+            [
+                _oracle_packet(0.1, torch.tensor([[0.0, 1.0, 0.0]])),
+                _oracle_packet(0.2, torch.tensor([[0.0, 1.0, 0.0]])),
+            ],
+            action=action,
+        )
+    assert fresh.belief is source
+    assert fresh.state.ingest_count == source_revision
 
 
 def test_runtime_pool_reuses_scheduled_learned_step_for_next_prepared_ingest(

@@ -4,16 +4,35 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from numbers import Real
-from typing import Literal
+from typing import Literal, Protocol
 
 import torch
 from torch import Tensor
 
 from world_model.belief import BeliefTrajectory, WorldBelief, fast_packing_map
 from world_model.belief._base import TensorDataclassMixin
-from world_model.dynamics import AnalyticFreeMotionDynamics, WorldImpulseAction
+from world_model.dynamics import WorldImpulseAction
+
+
+class _KnownActionDynamics(Protocol):
+    def validate_action_rollout(
+        self,
+        belief: WorldBelief,
+        query_times: Tensor | Sequence[float],
+        action: WorldImpulseAction | None,
+    ) -> Tensor: ...
+
+    def rollout(
+        self,
+        belief: WorldBelief,
+        query_times: Tensor | Sequence[float],
+        *,
+        action: WorldImpulseAction | None = None,
+        return_events: bool = True,
+        return_auxiliary: bool = True,
+    ) -> BeliefTrajectory: ...
 
 
 @dataclass(frozen=True)
@@ -49,6 +68,27 @@ class CounterfactualPlanResult:
     impulse_effort: Tensor
     total_cost: Tensor
     selected_index: Tensor
+
+
+@dataclass(frozen=True, kw_only=True)
+class _FlattenedCandidateAction(WorldImpulseAction):
+    """One internal action carrier with an explicit candidate-row mask."""
+
+    application_mask: Tensor
+
+    def _application_mask_for(self, belief: WorldBelief) -> Tensor:
+        mask = self.application_mask
+        if not isinstance(mask, Tensor):
+            raise TypeError("flattened candidate application_mask must be a tensor")
+        if mask.shape != (belief.batch_size,):
+            raise ValueError("flattened candidate application_mask must have shape [B]")
+        if mask.dtype is not torch.bool:
+            raise TypeError("flattened candidate application_mask must be boolean")
+        if mask.device != belief.device:
+            raise ValueError("flattened candidate application_mask must match belief device")
+        if mask.requires_grad:
+            raise ValueError("flattened candidate application_mask must not require gradients")
+        return mask
 
 
 def _validate_real_weight(name: str, value: object, *, positive: bool) -> None:
@@ -204,25 +244,167 @@ def resolve_appearance_handle(
         return selected_ids.clone()
 
 
+def _repeat_belief_for_candidates(belief: WorldBelief, count: int) -> WorldBelief:
+    objects = belief.objects.replace(
+        **{
+            item.name: torch.cat([getattr(belief.objects, item.name)] * count, dim=0)
+            for item in fields(belief.objects)
+        }
+    )
+    camera = belief.camera.replace(
+        **{
+            item.name: torch.cat([getattr(belief.camera, item.name)] * count, dim=0)
+            for item in fields(belief.camera)
+        }
+    )
+    return belief.replace(
+        timestamp=torch.cat([belief.timestamp] * count, dim=0),
+        objects=objects,
+        camera=camera,
+        gravity=torch.cat([belief.gravity] * count, dim=0),
+        global_code=torch.cat([belief.global_code] * count, dim=0),
+        global_log_variance=torch.cat([belief.global_log_variance] * count, dim=0),
+        next_object_id=torch.cat([belief.next_object_id] * count, dim=0),
+    ).validate()
+
+
+def _slice_candidate_trajectory(
+    trajectory: BeliefTrajectory,
+    *,
+    start: int,
+    stop: int,
+    drop_known_action_auxiliary: bool,
+) -> BeliefTrajectory:
+    auxiliary = {
+        name: value[start:stop]
+        for name, value in trajectory.auxiliary.items()
+        if not drop_known_action_auxiliary
+        or name not in {"known_action_applied", "known_impulse_world"}
+    }
+    return BeliefTrajectory(
+        timestamps=trajectory.timestamps[start:stop],
+        positions=trajectory.positions[start:stop],
+        velocities=trajectory.velocities[start:stop],
+        orientations=trajectory.orientations[start:stop],
+        motion_mode_logits=trajectory.motion_mode_logits[start:stop],
+        fast_log_variance=trajectory.fast_log_variance[start:stop],
+        active_mask=trajectory.active_mask[start:stop],
+        event_logits=(
+            None if trajectory.event_logits is None else trajectory.event_logits[start:stop]
+        ),
+        auxiliary=auxiliary,
+    ).validate()
+
+
+def _vectorized_candidate_rollouts(
+    dynamics: _KnownActionDynamics,
+    belief: WorldBelief,
+    offsets: Tensor,
+    actions: tuple[WorldImpulseAction | None, ...],
+    *,
+    return_events: bool,
+    return_auxiliary: bool,
+) -> tuple[BeliefTrajectory, ...]:
+    candidate_count = len(actions)
+    repeated_belief = _repeat_belief_for_candidates(belief, candidate_count)
+    repeated_offsets = torch.cat([offsets] * candidate_count, dim=0)
+    action_template = next((action for action in actions if action is not None), None)
+    batched_action: WorldImpulseAction | None = None
+    if action_template is not None:
+        action_rows = tuple(
+            action
+            if action is not None
+            else WorldImpulseAction(
+                timestamp=action_template.timestamp,
+                object_id=action_template.object_id,
+                impulse_world=torch.zeros_like(action_template.impulse_world),
+            )
+            for action in actions
+        )
+        application_mask = torch.cat(
+            [
+                torch.full_like(row.timestamp, action is not None, dtype=torch.bool)
+                for action, row in zip(actions, action_rows, strict=True)
+            ],
+            dim=0,
+        )
+        batched_action = _FlattenedCandidateAction(
+            timestamp=torch.cat([action.timestamp for action in action_rows], dim=0),
+            object_id=torch.cat([action.object_id for action in action_rows], dim=0),
+            impulse_world=torch.cat([action.impulse_world for action in action_rows], dim=0),
+            application_mask=application_mask,
+        )
+
+    vectorized = dynamics.rollout(
+        repeated_belief,
+        repeated_offsets,
+        action=batched_action,
+        return_events=return_events,
+        return_auxiliary=return_auxiliary,
+    )
+    batch = belief.batch_size
+    return tuple(
+        _slice_candidate_trajectory(
+            vectorized,
+            start=index * batch,
+            stop=(index + 1) * batch,
+            drop_known_action_auxiliary=action is None,
+        )
+        for index, action in enumerate(actions)
+    )
+
+
+def _serial_candidate_rollouts(
+    dynamics: _KnownActionDynamics,
+    belief: WorldBelief,
+    offsets: Tensor,
+    actions: tuple[WorldImpulseAction | None, ...],
+    *,
+    return_events: bool,
+    return_auxiliary: bool,
+) -> tuple[BeliefTrajectory, ...]:
+    return tuple(
+        dynamics.rollout(
+            belief,
+            offsets,
+            action=action,
+            return_events=return_events,
+            return_auxiliary=return_auxiliary,
+        )
+        for action in actions
+    )
+
+
 def plan_counterfactual_actions(
-    dynamics: AnalyticFreeMotionDynamics,
+    dynamics: _KnownActionDynamics,
     belief: WorldBelief,
     query_times: Tensor | Sequence[float],
     candidates: Sequence[WorldImpulseAction | None],
     goal: TerminalWorldPositionGoal,
     *,
     weights: CounterfactualCostWeights = _DEFAULT_COST_WEIGHTS,
+    candidate_vectorized: bool = True,
+    return_events: bool = True,
+    return_auxiliary: bool = True,
 ) -> CounterfactualPlanResult:
     """Roll out and score a finite set of known-action counterfactuals.
 
     Every query, goal, weight, and candidate is validated before the first
     rollout.  The function is read-only with respect to ``belief`` and retains
-    the computation graph for every candidate cost column.
+    the computation graph for every candidate cost column.  Callers that only
+    score state may disable event and auxiliary materialization explicitly;
+    both remain enabled by default for backward compatibility.
     """
 
     if not isinstance(weights, CounterfactualCostWeights):
         raise TypeError("weights must be CounterfactualCostWeights")
     _validate_cost_weights(weights)
+    if not isinstance(candidate_vectorized, bool):
+        raise TypeError("candidate_vectorized must be boolean")
+    if not isinstance(return_events, bool):
+        raise TypeError("return_events must be boolean")
+    if not isinstance(return_auxiliary, bool):
+        raise TypeError("return_auxiliary must be boolean")
     try:
         actions = tuple(candidates)
     except TypeError as error:
@@ -245,14 +427,30 @@ def plan_counterfactual_actions(
     target_slot = _target_slots(target_mask)
     batch_index = torch.arange(belief.batch_size, device=belief.device)
     position_slice = fast_packing_map(belief.objects)["position"]
-    trajectories: list[BeliefTrajectory] = []
+    trajectories = (
+        _vectorized_candidate_rollouts(
+            dynamics,
+            belief,
+            offsets,
+            actions,
+            return_events=return_events,
+            return_auxiliary=return_auxiliary,
+        )
+        if candidate_vectorized
+        else _serial_candidate_rollouts(
+            dynamics,
+            belief,
+            offsets,
+            actions,
+            return_events=return_events,
+            return_auxiliary=return_auxiliary,
+        )
+    )
     squared_errors: list[Tensor] = []
     position_variances: list[Tensor] = []
     impulse_efforts: list[Tensor] = []
 
-    for action in actions:
-        trajectory = dynamics.rollout(belief, offsets, action=action)
-        trajectories.append(trajectory)
+    for action, trajectory in zip(actions, trajectories, strict=True):
         terminal_position = trajectory.positions[batch_index, -1, target_slot]
         terminal_log_variance = trajectory.fast_log_variance[
             batch_index,
@@ -278,7 +476,7 @@ def plan_counterfactual_actions(
     selected_index = total_cost.argmin(dim=-1)
     return CounterfactualPlanResult(
         actions=actions,
-        trajectories=tuple(trajectories),
+        trajectories=trajectories,
         object_id_by_slot=belief.objects.object_id.clone(),
         terminal_squared_error=terminal_squared_error,
         terminal_position_variance=terminal_position_variance,

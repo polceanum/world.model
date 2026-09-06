@@ -5,7 +5,7 @@
 **Status:** Living authoritative specification
 **Version:** 1.60
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026; known-action counterfactual-planning qualification amendment 4 September 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026; known-action counterfactual-planning qualification amendment 4 September 2026; terminal known-action foundation and dormant dynamic-set implementation amendments 6 September 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -8811,9 +8811,42 @@ interpreter-container snapshot.  The runner therefore rejected its own
 verified source execution.  It again failed before manifest construction,
 artifact creation, ledger creation, or attempt consumption.  The second repair
 preloads `__future__` before taking the interpreter snapshot and adds a static
-ordering regression.  Its staged focused gate passed `510 passed`; the exact
-clean-commit regression, lint, compile, version, and complete-suite evidence
-must be recorded before governed execution.
+ordering regression.  The final published source freeze is
+`4629fe13b65a907378c4a551b373c357154387f5`.  Its exact clean-clone source gate
+passed `510` focused tests in `2036.10 s`, `289 passed, 1 skipped` accepted
+regressions, Ruff check and format check, compileall, the exact `1.60` version
+check, and `1882 passed, 16 skipped` for the complete repository suite in
+`2750.45 s`.
+
+The first formal command against that clean clone then found that the ignored
+`runs/` parent did not exist.  It raised `FileNotFoundError` before creating a
+run directory, ledger, manifest, or other artifact; creating that empty ignored
+parent was therefore an operational precondition, not an evidence-bearing
+attempt.  The next exact invocation reserved attempt 1, opened only
+development, entered its first public batch, and terminated with
+`PermissionError: active batch lacks one exact materializer vault/slot
+ownership`.  Public evaluation had started, but no ordinal, batch receipt,
+private score, result, checkpoint, or protected access completed.
+
+That invocation is the sole specification-1.60 development attempt and closes
+the foundation.  The terminal development report and ledger have whole-file
+SHA-256 values
+`72533f2f10919c6070ee289aad63c18aa7b7c7b3b687f3caa4b015d327a8cfed`
+and
+`6e5a9b2ab31483b200c0fbf9763894080e7603ca2b559cac121ca737380c67ea`
+at `41,598` and `61,623` bytes.  The ledger's internal record digest is
+`b88e4c3b8fe7417cf5a1d3104002581a3e41175db659fbaf8854bdd3298e1a83`.
+Selector, confirmation, and final were never opened; no checkpoint or
+qualification result exists.
+
+The terminal report binds resolved configuration
+`9f7f5a06c49b55435cb3fe6dad3afc9fd578a0f3c8a86d691d6f8ba2ebd41be2`,
+protocol `2317d309b00598aa3807f3c6086da9767e74dd2f2de1d574ea6648d064f67951`,
+and development/selector/confirmation/final manifest SHA-256 values
+`4d1637c681229e117a2228a059649d220ee1995dd4b21bc4b6b3715e88828b1d`,
+`173b3d99bcac14d23c2f6c1c857b81d12d95c2c90bc2eaf73dd9b58e95f121b3`,
+`661af7a7f921751ce54f1286df65cd5e706b15560220c5d8d11f9700fe7ff232`,
+and `aba3cdb33b9a995a3dfc4f4f1a4630b0ad96b2dafc4f551be196abbae7a721e9`.
 
 ## 262. Scope boundary for the next rung
 
@@ -8822,14 +8855,172 @@ no later experiment may claim planning-qualified scaling.  A failed 1.60
 development attempt closes this foundation and requires a new specification;
 it may not be tuned against protected evidence.
 
-If 1.60 qualifies, specification 1.61 may reuse its public action type and
-serial analytic oracle and extract generic scoring, artifact, and split-ledger
-utilities.  It must not copy or weaken the large security shell.  Shared
-`DynamicsModel` action propagation, prepared/runtime restriction removal,
-variable object count, contact, birth/removal, learned proposal/relation
-residuals, vectorized candidate evaluation, and mandatory K=8/K=32 downstream
-planning acceptance all remain new 1.61 capabilities, with new manifests and
-a separate source freeze.
+The sole 1.60 development attempt has now failed in exactly this way.
+Specification 1.61 implementation may be retained and tested as unqualified
+source, but its governed screen, convergence campaign, and protected sequence
+are paused.  It cannot claim downstream planning qualification unless a new
+review explicitly establishes a replacement predecessor contract.
+
+The now-closed path would have allowed specification 1.61 to reuse the public
+action type and serial analytic oracle and extract generic scoring, artifact,
+and split-ledger utilities.  The dormant candidate below implements those
+source capabilities without weakening or copying the 1.60 security shell, but
+it cannot inherit qualification.  Any executable successor requires a new
+predecessor decision, manifests, and clean source freeze.
+
+# Part XLIX — Dormant dynamic-set world-model implementation
+
+## 263. Retain the unqualified 1.61 source without opening its campaign
+
+The specification-1.61 implementation is staged behind an executable
+predecessor gate.  Initialization requires a complete, self-hashed five-file
+1.60 bundle containing passing development and protected reports, both formal
+ledgers, and the exact empty-state checkpoint.  The terminal 1.60 artifacts do
+not satisfy that contract, so the 1.61 screen, campaign, and protected ledgers
+cannot be created from the current evidence.  This section records implemented
+source behavior only; it is not a version promotion, experiment result, or
+planning-qualified claim.  The package-wide active specification identifier
+therefore remains `1.60`.
+
+The staged source reuses generic canonical hashing, artifact-directory, and
+ordered split-ledger utilities rather than duplicating the 1.60 qualification
+module.  Public/private evaluation is explicit: frozen exact-type public RGB-D
+frames are storage-disjoint from labels, events, and private ledgers; their
+row-bound boundary certificates are checked before inference and again before
+private scoring.  Truth-leakage, fabricated-target, nonfinite-state, and
+mutation counts are reconstructed from raw per-row evidence during strict
+replay rather than accepted as caller summaries.
+
+## 264. Compact variable-set state, interaction, and action interfaces
+
+Set-observation mode fixes `WorldBelief.max_objects` at six and emits eight
+unordered proposals: six active-object capacity plus two birth candidates.
+The proposer consumes normalized RGB, valid/log depth, analytic foreground,
+and image coordinates through width 32 and two four-head cross-attention
+blocks.  Its fixed image-plane anchors carry no learned slot identity.  It
+emits full-resolution masks/background, existence, eight-dimensional
+appearance, and bounded variance; centres remain soft mask moments followed by
+fixed-radius RGB-D surface fitting.  Zero residuals reproduce the analytic
+component baseline, and anchor permutations permute only proposal outputs.
+The attempt-one proposer has `20,236` learned parameters.
+
+Association is rectangular 6-by-8 Hungarian matching.  Mature uninterrupted
+tracks retain the exact 16-sample estimator.  Birth, removal, or inferred
+contact begins a new persistent-ID history segment; direct velocity evidence
+requires three observations and its variance inflates by
+`(16 / valid_samples)^2` until maturity.  Birth needs two frames, absence needs
+two visible misses, and slot reuse clears all state.  Analytic contact remains
+authoritative.  The only learned interaction addition is a zero-initialized
+width-16 relation residual for bounded antisymmetric impulse correction,
+collision confidence, and process uncertainty; it has `647` parameters.
+Learned node acceleration, modal dynamics, typed attention, and learned metric
+coordinate replacement remain disabled.
+
+Shared `DynamicsModel.predict_step/rollout`, prepared propagation, and public
+runtime prediction accept `WorldImpulseAction`.  Propagation splits at the
+absolute timestamp, resolves the persistent target, applies
+`delta_v = impulse / mass` once, and resumes analytic contact resolution.
+Action-free output remains exact, public actions retain deterministic loss,
+and unseen simulator impulses still censor it.  Candidate planning removes the
+analytic-backend restriction, freezes the current active set, flattens `B*K`
+into one rollout, restores the public result shape, and retains serial
+execution as the exact parity oracle.  Future unobserved births/removals are
+not planning inputs.
+
+## 265. Candidate data, convergence, and required planning acceptance
+
+The source-declared candidate physical manifests contain 66,000 training, 4,400
+development, 2,200 selector, 2,200 confirmation, 4,400 final, and 4,400
+compositional-OOD 56-frame episodes at 20 Hz and 64-by-64 complete RGB-D.
+They cover all 22 count/contact/membership cells with balanced known-action,
+contact-origin, contact-geometry, and lifecycle schedules.  Separate planning
+candidate manifests contain 1,200/600/600/1,200/1,200 tasks and use a strength-two
+pairwise cover across every cardinality, candidate count, history origin,
+contact outcome, target, time, camera, and goal factor.  Every planning task
+requires a unique certified oracle winner and normalized margin at least
+`0.05`.
+
+Each optimizer update accumulates six B=4 microbatches and covers every
+physical cell, with duplicates balanced over eleven updates.  AdamW owns only
+the proposer and relation residual, uses float32 CPU execution, learning rates
+`3e-4`/`1e-4`, weight decay `1e-4`, a 512-update warmup, and cosine decay to
+10%.  The implemented objective contains perception, supported physical-state,
+contact, uncertainty, known-action trajectory, and unaffected-object
+zero-residual terms.  Winner, regret, ranking, and task success are excluded.
+
+The disposable screen is exactly 64 all-regime examples and at most 512
+updates.  The main campaign validates every 512 updates, cannot finish before
+16,384 supported updates, extends only at complete 4,096-update boundaries,
+and stops at 32,768 updates or the 48-hour mutation boundary that preserves
+12 hours of the 60-hour envelope.  Plateau requires four complete safe
+validations with less than 1% raw improvement over the pre-window safe
+incumbent.  Unsafe checkpoints cannot become the incumbent or manufacture a
+plateau.  A second architecture admission cannot be authorized from a
+free-standing remaining-hours value: it requires independently persisted,
+hash-bound update/validation timing evidence at update 3,584 and a conservative
+projection through the full minimum and audit reserve.  The current formal
+coordinator has no causal provisional-attempt path that can produce this
+evidence, so it fails closed to one architecture attempt until a later reviewed
+specification adds that path.
+
+Every applicable physical metric is gated per cell, including proposal/count,
+state, mature and post-reset velocity, every horizon, contact, identity,
+lifecycle, and uncertainty coverage.  Post-reset velocity is explicitly
+inapplicable to static no-contact cells and cannot be passed with fabricated
+support.  Planning is mandatory downstream: target resolution, K=8/K=32
+winner accuracy and regret, terminal goal success, exact serial/vector parity,
+action invariants, and CPU latency all participate in qualification.  Selection
+uses the frozen 15/10/20/10/10/10/10/15 weighted score, but promotion also
+requires every absolute gate, paired improvement with a positive bootstrap
+bound, exact legacy and critical-cell non-regression, integrity, gradients, and
+resource limits.
+
+The current candidate manifest SHA-256 values are physical
+`c37b0e7643e740ea6cdf65400c2bc6787a8e5038cea073c22ecff7025a3b1f06`,
+`d94448e0493ed73b15f960a24c8813c2419926fb445e2fab8a594119cf33d35c`,
+`c17d030a8db17f8c299b8fc701f76b52a9e3357ec659d03acb9d62760055059e`,
+`6916aad9cb40a6c3b428f87fc0bc7cc95845b14e263b5f11dcb6b07f822154a2`,
+`25df07b2d8788eea5f42e0c4cd5c2c73f4448a4a9633832bd96c43191131408a`,
+and `01c55d6b2827c581b6c9832df385799a0af47ff49fb118b93f22e91058689ce1`;
+planning
+`ed56bd7274841240268640609a2faed398c317da04faee930c2183f0057a3b15`,
+`08f9a2280e5ee18c14245f96b48078716332b4a8fdaae4531fe846fe03892536`,
+`08edc8073bb8c7f47e46f21669e2a35590a88e235615ad0a25d6877f25590ceb`,
+`370f72774b150ded638514e49b9e536c41cc48616e89a7e03913bd04cd6a735d`,
+and `56d85ee36e9f7a1010569ae5f269aa6efb24eda9b045c95217f5420be39d2248`;
+and screen
+`b6c3deb2c8fb2fa9d58d5cf29d38f695de3bc93430a02dd47cdcca38add3db0b`.
+They are candidate constants, not a clean publication freeze.
+
+The dormant implementation must not mutate the specification-1.60 scene's
+byte-bound public dependencies.  Its prevalidated no-boundary physics path,
+fixed-camera render cache, and extended configuration types therefore live in
+the scoped `dynamic_set_physics`, `dynamic_set_rendering`, and
+`dynamic_set_config` modules.  The frozen public physics, renderer,
+configuration source, and default configuration retain their exact certified
+SHA-256 values; the exhaustive certificate remains the authority for that
+separation.
+
+The final unqualified source gate collected 2,347 tests and passed as `2,331
+passed, 16 skipped` in `3,634.14 s`, with only 13 expected synthetic
+thread-count warnings.  Ruff check, format check over 313 files, compileall,
+the exact package specification `1.60`, all four frozen hashes, and the
+exhaustive certificate revalidation also pass.  These results qualify the
+source implementation for review and publication only; they are not physical
+or planning convergence evidence.
+
+## 266. Current authorization boundary
+
+No governed 1.61 manifest has been opened, no governed optimizer update has
+run, and no selector, confirmation, final, or OOD result exists.  Unit tests do
+construct non-governed candidate rows, screens, and updates.  Source tests may
+continue and a clean unqualified implementation commit may be published for
+review.  The governed screen and campaign remain forbidden by the closed 1.60
+predecessor.
+Any future execution must use a new specification that explicitly resolves the
+foundation failure and, if attempt two is to remain available, adds a causal
+provisional timing/admission path.  It may not reinterpret this dormant source
+or its tests as `qualified_convergence`.
 
 # Closing directive
 

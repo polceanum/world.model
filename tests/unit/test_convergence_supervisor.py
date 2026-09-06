@@ -42,8 +42,10 @@ def _inspection(
     candidates: list[tuple[int, float, bool]],
     *,
     support_failed_steps: set[int] | None = None,
+    guardrail_failed_steps: set[int] | None = None,
 ) -> CampaignInspection:
     support_failed_steps = support_failed_steps or set()
+    guardrail_failed_steps = guardrail_failed_steps or set()
     validation_candidates = tuple(
         ValidationCandidate(
             step=step,
@@ -52,6 +54,7 @@ def _inspection(
             training_support_passed=step not in support_failed_steps,
             model_state_hash=f"hash-{step}",
             checkpoint_path=f"/run/checkpoints/validation_step_{step:06d}.pt",
+            selection_guardrails_passed=step not in guardrail_failed_steps,
         )
         for step, score, accepted in candidates
     )
@@ -217,6 +220,33 @@ def test_plateau_gain_uses_supported_candidates_only() -> None:
         True,
         True,
         True,
+    )
+
+
+def test_guardrail_failed_candidates_cannot_establish_a_supported_plateau() -> None:
+    failed_steps = {14848, 15360, 15872, 16384}
+    decision = _decision(
+        _inspection(
+            16384,
+            [
+                (0, 0.80, True),
+                (14336, 0.68, True),
+                (14848, 0.679, False),
+                (15360, 0.678, False),
+                (15872, 0.677, False),
+                (16384, 0.676, False),
+            ],
+            guardrail_failed_steps=failed_steps,
+        )
+    )
+
+    assert decision.status == "continue"
+    assert decision.plateau_primary_gain is None
+    assert decision.plateau_candidate_selection_guardrails_passed == (
+        False,
+        False,
+        False,
+        False,
     )
 
 

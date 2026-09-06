@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import torch
@@ -55,8 +56,12 @@ def diagonal_kalman_update(
 
     if prior_mean.shape != measurement.shape:
         raise ValueError("prior mean and direct measurement shapes must match")
-    prior_variance = prior_log_variance.exp().clamp_min(1.0e-10)
-    measurement_variance = measurement_log_variance.exp().clamp_min(1.0e-10)
+    # Keep the historical 1e-10 numerical floor at every legacy bound.  New
+    # explicitly lower calibration profiles may opt below it without a hidden
+    # floor making their configured uncertainty range unreachable.
+    numerical_variance_floor = min(1.0e-10, math.exp(minimum_log_variance))
+    prior_variance = prior_log_variance.exp().clamp_min(numerical_variance_floor)
+    measurement_variance = measurement_log_variance.exp().clamp_min(numerical_variance_floor)
     residual = measurement - prior_mean
     total_variance = prior_variance + measurement_variance
     whitened = residual / total_variance.sqrt()
@@ -73,7 +78,9 @@ def diagonal_kalman_update(
     effective_gain = gain * confidence_tensor * influence
     correction = effective_gain * residual
     posterior_mean = prior_mean + correction
-    posterior_variance = (prior_variance * (1.0 - effective_gain)).clamp_min(1.0e-10)
+    posterior_variance = (prior_variance * (1.0 - effective_gain)).clamp_min(
+        numerical_variance_floor
+    )
     posterior_log_variance = posterior_variance.log().clamp(
         minimum_log_variance,
         maximum_log_variance,

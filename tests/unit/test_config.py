@@ -5,23 +5,82 @@ import pytest
 import torch
 
 from world_model.datasets.splits import SPLIT_SEED_RANGES
+from world_model.dynamics import DynamicsConfig as RuntimeDynamicsConfig
 from world_model.dynamics import DynamicsModel
 from world_model.observations.rgb.structured_centres import structured_disc_centres
 from world_model.simulator.physics import PhysicsConfig
+from world_model.training.dynamic_set_config import DynamicsConfig as ProjectDynamicsConfig
+from world_model.training.dynamic_set_config import load_config as load_dynamic_set_config
 from world_model.utils.config import load_config, save_resolved_config
 
 CONFIG_DIR = Path(__file__).parents[2] / "configs"
 
 
+def test_project_dynamics_config_preserves_legacy_positional_arguments() -> None:
+    config = ProjectDynamicsConfig(0.02, None, False, 0.06, 0.07, 0.03, 0.11, 17, 2.75)
+
+    assert config.hidden_dim == 17
+    assert config.interaction_radius == 2.75
+    assert config.relation_hidden_dim is None
+    assert config.modal_dynamics_enabled
+    assert config.continuous_pair_force_enabled
+    assert config.node_acceleration_enabled
+    assert not config.event_driven_state_only_enabled
+    assert not config.relation_process_uncertainty_enabled
+
+
+def test_runtime_dynamics_config_preserves_legacy_positional_arguments() -> None:
+    config = RuntimeDynamicsConfig(
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        0.02,
+        None,
+        False,
+        0.06,
+        0.07,
+        0.03,
+        0.11,
+        17,
+        19,
+        2.75,
+    )
+
+    assert config.graph_hidden_dim == 17
+    assert config.uncertainty_hidden_dim == 19
+    assert config.interaction_radius == 2.75
+    assert config.graph_relation_hidden_dim is None
+    assert config.modal_dynamics_enabled
+    assert config.continuous_pair_force_enabled
+    assert config.node_acceleration_enabled
+    assert not config.event_driven_state_only_enabled
+    assert not config.relation_process_uncertainty_enabled
+
+
 @pytest.mark.parametrize("path", sorted(CONFIG_DIR.glob("*.yaml")))
 def test_profiles_resolve_and_validate(path: Path) -> None:
-    config = load_config(path)
+    config = (
+        load_dynamic_set_config(path)
+        if path.name == "rgbd_dynamic_set_planning_cpu.yaml"
+        else load_config(path)
+    )
     assert config.model.max_objects >= config.simulator.max_objects
     assert config.runtime.modality in {"rgb", "rgbd"}
     if config.runtime.modality == "rgbd":
         assert config.model.rgbd.enabled
         assert not config.model.rgb.enabled
-        assert config.model.dynamics.analytic_free_motion_only
+        if getattr(config.model.rgbd, "observation_mode", "legacy") == "legacy":
+            assert config.model.dynamics.analytic_free_motion_only
+        else:
+            # The explicit variable-set profile retains analytic propagation
+            # and contact resolution while enabling only its bounded relation
+            # residual; it is intentionally not the free-motion-only model.
+            assert config.model.rgbd.observation_mode == "set"
+            assert not config.model.dynamics.analytic_free_motion_only
         assert not config.model.filter.enable_learned_corrector
     assert config.evaluation.rgb_only is (config.runtime.modality == "rgb")
     test_lower, test_upper = SPLIT_SEED_RANGES["test"]

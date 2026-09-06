@@ -40,6 +40,32 @@ def test_diagonal_update_respects_measurement_noise_and_contracts_variance() -> 
     assert high_noise.log_variance.item() < prior_lv.item()
 
 
+def test_explicit_low_calibration_bound_reaches_below_legacy_numerical_floor() -> None:
+    prior = torch.zeros(1, 1)
+    measurement = torch.zeros_like(prior)
+    low_log_variance = torch.full_like(prior, -30.0)
+
+    legacy = diagonal_kalman_update(
+        prior,
+        low_log_variance,
+        measurement,
+        low_log_variance,
+    )
+    calibrated = diagonal_kalman_update(
+        prior,
+        low_log_variance,
+        measurement,
+        low_log_variance,
+        minimum_log_variance=-32.0,
+    )
+
+    # The default contract remains exactly bounded at -12, while the explicit
+    # 1.61 calibration profile can represent sub-micrometre error scales.
+    assert legacy.log_variance.item() == -12.0
+    assert calibrated.log_variance.item() < -30.0
+    assert torch.isfinite(calibrated.log_variance).all()
+
+
 def test_zero_innovation_leaves_mean_and_outlier_is_robustly_clipped() -> None:
     prior = torch.zeros(1, 2)
     prior_lv = torch.zeros_like(prior)

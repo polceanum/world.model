@@ -6,11 +6,49 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-172 — Preserve the dynamic-set implementation but stop at the failed foundation
+
+- **Date:** 2026-09-06
+- **Status:** published source candidate; governed execution blocked and
+  unqualified
+- **Context:** The requested 1--6-object phase was implemented while the final
+  specification-1.60 source gate and sole development attempt were completed.
+  That attempt then failed after public evaluation began, which ADR-171
+  explicitly defines as terminal for the foundation and blocking for a 1.61
+  planning-qualified claim.
+- **Decision:** Retain and validate the 1.61 implementation as dormant source,
+  but require its initializer to authenticate a complete passing 1.60
+  development/protected bundle before creating any campaign artifact. Keep
+  planning as a mandatory evaluation/promotion gate and exclude planning-choice
+  losses. Reconstruct accepted-like and critical-cell comparisons from raw row
+  evidence, certify the public/private tensor boundary, and admit no second
+  architecture from a caller-supplied remaining-time scalar.
+- **Implemented surface:** Compact set perception and relation capacity,
+  lifecycle/contact temporal state, shared action propagation, vectorized
+  planning, deterministic physical/planning manifests, balanced optimization,
+  convergence and resource controls, paired bootstrap promotion, and reusable
+  artifact/ledger primitives are present under the 1.61 modules and config.
+  Prevalidated physics/rendering and extended configuration are isolated in
+  dynamic-set-owned modules so the four corresponding 1.60 public source
+  bindings remain byte-exact rather than being re-frozen or weakened.
+- **Execution boundary:** No governed 1.61 manifest, persistent formal screen,
+  governed optimizer update, or protected result exists; unit tests exercise
+  non-governed equivalents. The current second-attempt coordinator also fails
+  closed because it cannot yet causally produce the required supported timing
+  admission record; a later specification must add a provisional timing path
+  if that option is retained.
+- **Consequences:** The clean source candidate is published for review without
+  changing the active package specification from `1.60`. Its complete source
+  gate passed `2,331` tests with `16` expected platform skips. This is not
+  evidence of convergence or planning quality. Governed work requires an
+  explicit new predecessor decision and may not reuse or bypass the failed
+  1.60 attempt.
+
 ## ADR-171 — Require planning downstream of a public known-action foundation
 
 - **Date:** 2026-09-05
-- **Status:** accepted design; specification-1.60 pre-publication source gate
-  passed, development and protected evidence unopened
+- **Status:** terminal development failure; specification 1.60 closed and 1.61
+  planning-qualified execution paused
 - **Context:** The accepted world model estimates and extrapolates state, but
   physical RMSE alone does not establish that its state is useful for choosing
   an action. Scaling variable object sets, contact, and lifecycle before first
@@ -48,6 +86,17 @@ cross-reference was disambiguated.
   check, and the complete `1880 passed, 16 skipped` repository suite in
   `2739.19 s`. This is implementation evidence only, not development or
   qualification evidence.
+- **Terminal execution evidence:** Final clean published freeze
+  `4629fe13b65a907378c4a551b373c357154387f5` passed the updated exact gate at
+  `510` focused tests, `289 passed, 1 skipped` accepted regressions, and `1882
+  passed, 16 skipped` complete-suite tests. Its sole development attempt then
+  failed in the first public batch with `PermissionError: active batch lacks
+  one exact materializer vault/slot ownership`. Report/ledger SHA-256 values
+  are `72533f2f10919c6070ee289aad63c18aa7b7c7b3b687f3caa4b015d327a8cfed`
+  and `6e5a9b2ab31483b200c0fbf9763894080e7603ca2b559cac121ca737380c67ea`.
+  No checkpoint or protected result exists. Per this ADR, the failure closes
+  1.60 and pauses governed 1.61 planning qualification pending a new
+  predecessor decision.
 
 ## ADR-170 — Close identifiable drag after its sole development attempt
 
