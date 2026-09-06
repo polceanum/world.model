@@ -3984,3 +3984,19 @@ further gravity-axis threshold tuning.
   Recorded a fail-closed successor contract: prepare exactly one authenticated
   split vault before batch 0 under a new reviewed version and fresh artifact
   namespaces, without changing or retrying 1.60 or opening governed 1.61.
+- Authorized and implemented the specification-1.60.1 successor transition.
+  The coordinator now calls `prepare_public_split` before batch reservation;
+  the exact formal evaluator binds and validates one vault/root/slot and refuses
+  lazy opening during evaluation. Missing or duplicate preparation remains
+  fail-closed. Fresh governed evidence will use protocol and run namespace v3,
+  while the terminal 1.60 v2 directory is preserved unchanged.
+- Updated the dormant 1.61 foundation boundary to require a complete passing
+  1.60.1/protocol-v3 bundle under record schema
+  `dynamic_set_known_action_foundation_v2`. No governed successor or dynamic-set
+  artifact was opened during implementation.
+- Passed the 1.60.1 pre-publication source gate: `512` focused qualification
+  tests, `58` dynamic qualification tests, `290` accepted regressions, Ruff
+  check and format check over 313 files, compileall, explicit frozen
+  certificate/version checks, and the complete `2,333 passed, 16 skipped`
+  repository suite. Protocol-v3 SHA-256 is
+  `49f168470986dfc32b24dc55f29701fd059d1bbb1db23993e6fd49c7e70fd4b0`.

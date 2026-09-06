@@ -125,7 +125,7 @@ def _clean_public_boundary(row: PhysicalManifestRow) -> DynamicSetPublicBoundary
 
 
 def _known_action_protocol() -> dict[str, object]:
-    body: dict[str, object] = {"name": "rgbd_known_action_planning_v2", "attempt": 1}
+    body: dict[str, object] = {"name": "rgbd_known_action_planning_v3", "attempt": 1}
     return {**body, "protocol_sha256": canonical_sha256(body)}
 
 
@@ -209,7 +209,7 @@ def _make_foundation(tmp_path: Path, *, qualified: bool = True) -> Path:
     checkpoint_payload = {
         "artifact_kind": "rgbd_known_action_empty_state_checkpoint",
         "execution_mode": "formal",
-        "specification_version": "1.60",
+        "specification_version": "1.60.1",
         "simulator_version": "sphere_world_v7",
         "device": "cpu",
         "precision": "float32",
@@ -830,7 +830,7 @@ def _qualify_development(
 
 def test_foundation_must_be_a_complete_formal_160_pass(tmp_path: Path) -> None:
     accepted = validate_known_action_foundation(_make_foundation(tmp_path / "accepted"))
-    assert accepted["specification_version"] == "1.60"
+    assert accepted["specification_version"] == "1.60.1"
     assert accepted["qualified"] is True
 
     with pytest.raises(PermissionError, match="formal pass"):

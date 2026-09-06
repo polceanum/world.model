@@ -1,7 +1,7 @@
 """Hardened seedless qualification harness for known-action RGB-D planning.
 
 The formal scene, materializer, and evaluator are lazily bound behind the
-exact-commit runner and the frozen specification-1.60 protocol.  Formal entry
+exact-commit runner and the frozen specification-1.60.1 protocol.  Formal entry
 points first recover or classify the canonical attempt, then admit one
 development execution or the reviewed, ordered protected-split qualification.
 Dependency-injected fake execution remains available for exhaustive protocol
@@ -56,7 +56,7 @@ torch: Any = None
 OrpheusConfig: Any = None
 load_config: Any = None
 SIMULATOR_VERSION = "sphere_world_v7"
-SPECIFICATION_VERSION = "1.60"
+SPECIFICATION_VERSION = "1.60.1"
 __version__ = "0.1.0"
 _RUNTIME_DEPENDENCIES_ACTIVE = False
 
@@ -158,7 +158,7 @@ if SCENES_PER_SPLIT % BATCH_SIZE or len(ORDINALS) != 64:
     raise RuntimeError("known-action qualification requires 64 ordinals in B=4 batches")
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-RUN_RELATIVE_PATH = Path("runs/rgbd_known_action_planning_v2")
+RUN_RELATIVE_PATH = Path("runs/rgbd_known_action_planning_v3")
 CONFIG_RELATIVE_PATH = Path("configs/rgbd_known_action_planning_cpu.yaml")
 DEVELOPMENT_REPORT_NAME = "development_report.json"
 CHECKPOINT_NAME = "development_model.pt"
@@ -1827,7 +1827,7 @@ def bridge_protocol() -> dict[str, Any]:
     """Return a JSON-native static protocol; this never opens governed data."""
 
     protocol: dict[str, Any] = {
-        "name": "rgbd_known_action_planning_v2",
+        "name": "rgbd_known_action_planning_v3",
         "architecture_version": ARCHITECTURE_VERSION,
         "architecture_attempt": ARCHITECTURE_ATTEMPT,
         "maximum_architecture_attempts": MAX_ARCHITECTURE_ATTEMPTS,
@@ -5517,7 +5517,7 @@ def _expected_runner_constants(expected_path: Path) -> dict[str, Any]:
         "_REMOTE_TEMPORARY_DIRECTORY": _REMOTE_TEMPORARY_DIRECTORY,
         "_REMOTE_PROBE_TIMEOUT_SECONDS": _REMOTE_PROBE_TIMEOUT_SECONDS,
         "_REMOTE_PROBE_MAX_OUTPUT_BYTES": _REMOTE_PROBE_MAX_OUTPUT_BYTES,
-        "_LIGHTWEIGHT_QUALIFICATION_EXECUTION_SHA256": "68e472d8356143ecf89647f7d98d69f914e1f448d58827378a2ef75f1af8a4c3",
+        "_LIGHTWEIGHT_QUALIFICATION_EXECUTION_SHA256": "a7324225c26f1b58449ee33dfaaeb03e6ed3088f83144b78fcf663f0c1494671",
         "_PINNED_GITHUB_HOST_KEY": _PINNED_GITHUB_HOST_KEY,
         "_PINNED_GITHUB_HOST_KEY_FINGERPRINT": _PINNED_GITHUB_HOST_KEY_FINGERPRINT,
         "_REMOTE_SSH_COMMAND_TEMPLATE": _REMOTE_SSH_COMMAND_TEMPLATE,
@@ -9502,6 +9502,8 @@ def _split_truth_authority_binding(authority: _SplitTruthAuthority) -> tuple[Any
 
 
 class QualificationEvaluator(Protocol):
+    def prepare_public_split(self, manifest: _ManifestCapability) -> None: ...
+
     def evaluate_public_batch(
         self,
         request: PublicBatchEvaluationRequest,
@@ -11275,6 +11277,7 @@ def _evaluate_split(
     boundary_guard(f"before {split} public access")
     manifest = _ManifestCapability(split=split, ledger=ledger)
     try:
+        evaluator.prepare_public_split(manifest)
         batch_results: list[dict[str, Any]] = []
         receipts: list[dict[str, Any]] = []
         for start in range(0, SCENES_PER_SPLIT, BATCH_SIZE):
@@ -21841,6 +21844,60 @@ class _FormalKnownActionEvaluator:
         object.__setattr__(self, "_owner", owner)
         object.__setattr__(self, "_accepted_config", accepted_config)
 
+    def prepare_public_split(self, manifest: _ManifestCapability) -> None:
+        """Open and bind the split vault before the first batch is reserved."""
+
+        _trusted_materializer_port_registration(
+            self._materializer_port,
+            evaluator=self,
+        )
+        if (
+            type(self) is not _FormalKnownActionEvaluator
+            or type(manifest) is not _ManifestCapability
+            or manifest._ledger is not self._ledger
+            or type(manifest.split) is not str
+            or manifest.split not in SPLITS
+            or manifest._closed is not False
+            or manifest._active is not None
+            or manifest._truth_request is not None
+            or manifest._next_ordinal != 0
+            or manifest.split in self._closed
+            or manifest.split in self._vaults
+        ):
+            raise PermissionError("formal public split preparation binding differs")
+        state = self._ledger._record["splits"].get(manifest.split)
+        if (
+            type(state) is not dict
+            or state.get("status") != "public_evaluating"
+            or state.get("public_next_ordinal") != 0
+            or state.get("public_active_batch") is not None
+            or state.get("public_batch_receipts") != []
+        ):
+            raise PermissionError("formal public split preparation state differs")
+        vault: _MaterializerSplitVault | None = None
+        try:
+            vault = _open_materializer_split_vault(
+                self._materializer_port,
+                split=manifest.split,
+            )
+            self._vaults[manifest.split] = vault
+            _validated_materializer_global_registry_cut(
+                ledger=self._ledger,
+                port=self._materializer_port,
+            )
+        except BaseException:
+            self._vaults.pop(manifest.split, None)
+            if vault is not None:
+                registration = _MATERIALIZER_SPLIT_VAULT_REGISTRY.get(id(vault))
+                if (
+                    type(registration) is _MaterializerVaultRegistration
+                    and registration.vault is vault
+                    and _materializer_vault_requires_cleanup(registration)
+                ):
+                    with contextlib.suppress(BaseException):
+                        _fail_materializer_vault(registration)
+            raise
+
     def evaluate_public_batch(
         self,
         request: PublicBatchEvaluationRequest,
@@ -21858,11 +21915,9 @@ class _FormalKnownActionEvaluator:
         self._initialize_formal_science()
         vault = self._vaults.get(request.split)
         if vault is None:
-            vault = _open_materializer_split_vault(
-                self._materializer_port,
-                split=request.split,
+            raise PermissionError(
+                "formal public evaluator split was not prepared before batch reservation"
             )
-            self._vaults[request.split] = vault
         authorities = _begin_formal_public_science_materialization(
             self._materializer_port,
             vault,

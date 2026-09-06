@@ -373,16 +373,18 @@
   cut requires that vault and the opener forbids an active batch. Record that
   the green fixture manually pre-opened the vault and did not cover production
   ordering.
-- [ ] Review and authorize a newly versioned foundation predecessor with fresh
-  artifact namespaces. Its minimal repair is one authenticated public-split
+- [x] Review and authorize specification 1.60.1 as a newly versioned foundation
+  predecessor with fresh artifact namespaces. Its minimal repair is one authenticated public-split
   preparation transition after manifest construction and before batch 0,
   without relaxing active-batch vault/slot ownership or reusing the consumed
   1.60 attempt.
-- [ ] Add orchestration-level regression coverage using the exact formal
+- [x] Add orchestration-level regression coverage using the exact formal
   evaluator: real coordinator order, missing-preparation fail-closed behavior,
   exact one-root/one-slot ownership, replay and cleanup, and later-batch
-  continuity. Re-freeze, run the full source gate, and publish cleanly before
-  any new governed development access.
+  continuity. Move the successor to protocol/run namespace v3 and require its
+  exact passing bundle in the dormant 1.61 initializer.
+- [ ] Re-freeze specification 1.60.1, run the proportional and complete source
+  gates, and publish cleanly before any new governed development access.
 - [x] Declare candidate 66,000/4,400/2,200/2,200/4,400/4,400 physical rows,
   separate 1,200/600/600/1,200/1,200 planning tasks, all 22 physical cells,
   exact six-B4 update balance, the disposable screen, 512-update validation,

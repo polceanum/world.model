@@ -211,6 +211,9 @@ FOUNDATION_ARTIFACT_NAMES = (
     "qualification_report.json",
     "qualification_attempt_1_access.json",
 )
+KNOWN_ACTION_FOUNDATION_SPECIFICATION_VERSION = "1.60.1"
+KNOWN_ACTION_FOUNDATION_PROTOCOL_NAME = "rgbd_known_action_planning_v3"
+KNOWN_ACTION_FOUNDATION_RECORD_SCHEMA = "dynamic_set_known_action_foundation_v2"
 ARTIFACT_NAMES = (
     "protocol.json",
     "known_action_foundation.json",
@@ -394,7 +397,7 @@ def _passed_formal_report(report: object, *, stage: str, splits: Sequence[str]) 
     )
     unsigned_protocol = {key: item for key, item in protocol.items() if key != "protocol_sha256"}
     if (
-        protocol.get("name") != "rgbd_known_action_planning_v2"
+        protocol.get("name") != KNOWN_ACTION_FOUNDATION_PROTOCOL_NAME
         or canonical_sha256(unsigned_protocol) != supplied_protocol
     ):
         raise PermissionError("known-action protocol binding differs")
@@ -430,7 +433,7 @@ def _passed_formal_ledger(
 
 
 def validate_known_action_foundation(directory: str | Path) -> dict[str, Any]:
-    """Validate and bind the complete formal 1.60 development/qualification bundle."""
+    """Validate and bind a complete formal 1.60.1 development/qualification bundle."""
 
     artifacts = QualificationArtifactDirectory.attach(
         Path(directory).absolute(),
@@ -438,7 +441,7 @@ def validate_known_action_foundation(directory: str | Path) -> dict[str, Any]:
         maximum_file_bytes=MAXIMUM_ARTIFACT_BYTES,
     )
     if artifacts.inventory() != frozenset(FOUNDATION_ARTIFACT_NAMES):
-        raise PermissionError("specification-1.60 foundation bundle is incomplete")
+        raise PermissionError("specification-1.60.1 foundation bundle is incomplete")
     contents = {name: artifacts.read_bytes(name) for name in FOUNDATION_ARTIFACT_NAMES}
     hashes = {name: sha256_bytes(blob) for name, blob in contents.items()}
     development = _passed_formal_report(
@@ -489,7 +492,8 @@ def validate_known_action_foundation(directory: str | Path) -> dict[str, Any]:
         type(checkpoint_payload) is not dict
         or checkpoint_payload.get("artifact_kind") != "rgbd_known_action_empty_state_checkpoint"
         or checkpoint_payload.get("execution_mode") != "formal"
-        or checkpoint_payload.get("specification_version") != "1.60"
+        or checkpoint_payload.get("specification_version")
+        != KNOWN_ACTION_FOUNDATION_SPECIFICATION_VERSION
         or checkpoint_payload.get("simulator_version") != "sphere_world_v7"
         or checkpoint_payload.get("device") != "cpu"
         or checkpoint_payload.get("precision") != "float32"
@@ -502,7 +506,7 @@ def validate_known_action_foundation(directory: str | Path) -> dict[str, Any]:
         or checkpoint_payload.get("model_state_sha256")
         != checkpoint_record.get("model_state_sha256")
     ):
-        raise PermissionError("known-action foundation checkpoint is not a formal 1.60 pass")
+        raise PermissionError("known-action foundation checkpoint is not a formal 1.60.1 pass")
     expected_reviewed = {
         "checkpoint_sha256": hashes["development_model.pt"],
         "report_sha256": hashes["development_report.json"],
@@ -529,8 +533,8 @@ def validate_known_action_foundation(directory: str | Path) -> dict[str, Any]:
     ):
         raise PermissionError("known-action qualification ledger lacks the reviewed trio")
     body = {
-        "schema": "dynamic_set_known_action_foundation_v1",
-        "specification_version": "1.60",
+        "schema": KNOWN_ACTION_FOUNDATION_RECORD_SCHEMA,
+        "specification_version": KNOWN_ACTION_FOUNDATION_SPECIFICATION_VERSION,
         "qualified": True,
         "artifact_sha256": hashes,
         "protocol_sha256": development["protocol"]["protocol_sha256"],
@@ -1624,7 +1628,7 @@ def _build_dynamic_set_protocol_binding(
 
     foundation_value = _validate_record(
         foundation,
-        schema="dynamic_set_known_action_foundation_v1",
+        schema=KNOWN_ACTION_FOUNDATION_RECORD_SCHEMA,
     )
     if foundation_value.get("qualified") is not True:
         raise PermissionError("known-action foundation did not qualify")
@@ -4401,11 +4405,12 @@ class DynamicSetQualification:
         self.protocol = _validate_protocol(artifacts.read_json("protocol.json"))
         foundation = _validate_record(
             artifacts.read_json("known_action_foundation.json"),
-            schema="dynamic_set_known_action_foundation_v1",
+            schema=KNOWN_ACTION_FOUNDATION_RECORD_SCHEMA,
         )
         if (
             foundation.get("qualified") is not True
-            or foundation.get("specification_version") != "1.60"
+            or foundation.get("specification_version")
+            != KNOWN_ACTION_FOUNDATION_SPECIFICATION_VERSION
             or foundation["record_sha256"] != self.protocol["known_action_foundation_sha256"]
         ):
             raise PermissionError("known-action foundation differs from protocol")

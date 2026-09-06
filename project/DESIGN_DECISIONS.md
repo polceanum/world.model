@@ -6,6 +6,35 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-174 — Authorize the 1.60.1 split-preparation successor
+
+- **Date:** 2026-09-06
+- **Status:** implemented with green source gate; clean publication pending
+- **Context:** ADR-173 localized the terminal 1.60 failure to a coordinator
+  ordering with no valid first-batch transition. The user explicitly authorized
+  a `1.60.1` successor, while preserving the rule that 1.60 itself is closed
+  and may not be retried.
+- **Decision:** Keep the strict active-batch vault/slot invariant and introduce
+  one authenticated `prepare_public_split` call between manifest construction
+  and batch-0 reservation. The exact formal evaluator owns the transition,
+  binds one vault to its ledger and split, validates the complete registry cut,
+  and rejects duplicate or malformed preparation. Evaluation cannot open a
+  vault lazily. Retain the missing-preparation failure as a negative regression.
+  Use specification `1.60.1`, protocol and run namespace v3, fresh governed
+  artifacts, and foundation-record schema v2. Update 1.61 to accept only a
+  complete passing 1.60.1 bundle.
+- **Consequences:** Scene data, action propagation, planning metrics, gates,
+  attempt count, protected order, and the terminal v2 directory do not change.
+  The repaired source must pass its complete gate and be published cleanly
+  before the sole 1.60.1 development attempt. Only a complete reviewed
+  development and protected pass can unblock governed 1.61 execution.
+- **Source evidence:** Protocol-v3 SHA-256 is
+  `49f168470986dfc32b24dc55f29701fd059d1bbb1db23993e6fd49c7e70fd4b0`.
+  Focused qualification passed `512` tests, dynamic qualification passed `58`,
+  accepted regressions passed `290`, Ruff/format/compileall and explicit
+  certificate/version checks passed, and the complete suite passed `2,333`
+  tests with `16` expected platform skips. No governed artifact was opened.
+
 ## ADR-173 — Diagnose the closed 1.60 foundation without weakening ownership
 
 - **Date:** 2026-09-06

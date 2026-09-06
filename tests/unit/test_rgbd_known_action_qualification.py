@@ -723,6 +723,9 @@ class _FakeEvaluator:
         self.calls: list[tuple[str, tuple[int, int, int, int]]] = []
         self.events: list[tuple[str, str]] = []
 
+    def prepare_public_split(self, manifest: qualification._ManifestCapability) -> None:
+        self.events.append(("public_prepare", manifest.split))
+
     def evaluate_public_batch(
         self,
         request: qualification.PublicBatchEvaluationRequest,
@@ -1863,7 +1866,7 @@ def test_protocol_is_seedless_json_native_and_names_batched_k8() -> None:
     protocol = qualification.bridge_protocol()
 
     assert json.loads(json.dumps(protocol, allow_nan=False)) == protocol
-    assert protocol["name"] == "rgbd_known_action_planning_v2"
+    assert protocol["name"] == "rgbd_known_action_planning_v3"
     assert protocol["architecture_version"] == 2
     assert protocol["architecture_attempt"] == 1
     assert protocol["maximum_architecture_attempts"] == 1
@@ -2149,6 +2152,7 @@ def test_two_phase_fake_split_orders_public_seal_truth_authority_and_completion(
         )
         state = ledger.record["splits"]["development"]
         assert evaluator.events == [
+            ("public_prepare", "development"),
             *[("public_batch", "development")] * 16,
             ("public_finalize", "development"),
             ("private_score", "development"),
@@ -3625,7 +3629,7 @@ def test_exact_loader_loads_lightweight_leaf_without_heavy_parent_imports() -> N
     assert module.load_config is None
     assert module._RUNTIME_DEPENDENCIES_ACTIVE is False
     assert module.__version__ == "0.1.0"
-    assert module.SPECIFICATION_VERSION == "1.60"
+    assert module.SPECIFICATION_VERSION == "1.60.1"
     assert module.SIMULATOR_VERSION == "sphere_world_v7"
 
 
@@ -10036,6 +10040,67 @@ def test_materializer_opening_mutation_is_fail_closed_and_nonretryable(
             )
 
 
+def test_formal_evaluator_prepares_exact_vault_before_first_batch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _formal_materializer_ledger(
+        tmp_path,
+        monkeypatch,
+        marker="formal-evaluator-prepares-vault",
+    ) as (ledger, _pin, config):
+        _authority, evaluator, port = _construct_synthetic_materializer(ledger, config)
+        manifest = qualification._ManifestCapability(split="development", ledger=ledger)
+
+        evaluator.prepare_public_split(manifest)
+
+        vault = evaluator._vaults["development"]
+        registration = qualification._MATERIALIZER_SPLIT_VAULT_REGISTRY[id(vault)]
+        assert registration.vault is vault
+        assert registration.port is port
+        assert registration.ledger is ledger
+        assert registration.state == "collecting_public"
+        assert qualification._MATERIALIZER_SPLIT_VAULT_SLOT_REGISTRY[
+            (id(ledger), "development")
+        ] == id(vault)
+        assert not hasattr(evaluator, "_scene")
+        with pytest.raises(
+            PermissionError,
+            match="formal public split preparation binding differs",
+        ):
+            evaluator.prepare_public_split(manifest)
+
+        batch = manifest.begin_batch(tuple(range(qualification.BATCH_SIZE)))
+        assert manifest._active is batch
+        evaluator.abort_split("development")
+        manifest.abort()
+        assert registration.state == "revoked"
+
+
+def test_formal_batch_without_split_preparation_remains_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _formal_materializer_ledger(
+        tmp_path,
+        monkeypatch,
+        marker="formal-evaluator-missing-preparation",
+    ) as (ledger, _pin, config):
+        _authority, evaluator, port = _construct_synthetic_materializer(ledger, config)
+        manifest = qualification._ManifestCapability(split="development", ledger=ledger)
+
+        with pytest.raises(
+            PermissionError,
+            match="active batch lacks one exact materializer vault/slot ownership",
+        ):
+            manifest.begin_batch(tuple(range(qualification.BATCH_SIZE)))
+
+        assert evaluator._vaults == {}
+        assert qualification._TRUSTED_MATERIALIZER_PORT_REGISTRY[id(port)].state == "failed"
+        assert ledger.record["status"] == "development_public_batch_0_reserved"
+        assert ledger.record["splits"]["development"]["public_active_batch"] == [0, 1, 2, 3]
+
+
 def test_materializer_accepts_one_preauthorized_evaluated_public_batch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -10955,6 +11020,7 @@ def test_evaluate_split_public_failure_aborts_evaluator_before_manifest(
         assert qualification._BATCH_REGISTRY == {}
         assert qualification._TOKEN_REGISTRY == {}
         assert evaluator.events == [
+            ("public_prepare", "development"),
             ("public_batch", "development"),
             ("abort_split", "development"),
         ]

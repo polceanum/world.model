@@ -852,3 +852,33 @@ clean-published predecessor, fresh artifact namespaces, orchestration-level
 regression coverage, and a fresh authorization decision are required before
 another development attempt. Until then, 1.61 remains implemented but
 unqualified and planning remains a mandatory, unopened promotion gate.
+
+## Active specification 1.60.1 successor
+
+The user authorized a patch successor on 6 September 2026. The active package
+version is now `1.60.1`; historical 1.60 source and terminal artifacts remain
+unchanged at `runs/rgbd_known_action_planning_v2/`. The successor uses protocol
+`rgbd_known_action_planning_v3` and the fresh canonical directory
+`runs/rgbd_known_action_planning_v3/`.
+
+The production coordinator now prepares the evaluator's split vault after
+manifest construction and before batch 0. Formal evaluation refuses an
+unprepared split rather than lazily opening a vault after reservation. The
+global active-batch ownership invariant is unchanged, and the original
+missing-preparation sequence remains fail-closed.
+
+The pre-publication source gate is green: `512 passed` for the complete
+known-action qualification module in `1,930.10 s`; `58 passed` for the complete
+dynamic-set qualification module in `761.39 s`; `290 passed` accepted
+regressions in `254.23 s`; Ruff check and format check over 313 files;
+compileall; three explicit certificate/version checks; and `2,333 passed, 16
+skipped` for the complete repository in `3,673.62 s`. The 13 warnings are the
+expected thread-count warnings from synthetic dynamic execution. Protocol v3
+has SHA-256
+`49f168470986dfc32b24dc55f29701fd059d1bbb1db23993e6fd49c7e70fd4b0`.
+
+The 1.61 initializer now requires specification `1.60.1`, protocol v3, and
+foundation record schema `dynamic_set_known_action_foundation_v2`. No governed
+1.60.1 or 1.61 artifact has been opened. Development remains forbidden until
+the successor source gate is green and the exact tree is committed and
+published upstream.

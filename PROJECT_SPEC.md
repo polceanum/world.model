@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.60
+**Version:** 1.60.1
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026; known-action counterfactual-planning qualification amendment 4 September 2026; terminal known-action foundation and dormant dynamic-set implementation amendments 6 September 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026; known-action counterfactual-planning qualification amendment 4 September 2026; terminal known-action foundation and dormant dynamic-set implementation amendments 6 September 2026; authorized 1.60.1 materializer-order successor amendment 6 September 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9056,6 +9056,39 @@ one-slot, replay, cleanup, and later-batch behavior.  Only a newly versioned,
 reviewed, clean-published predecessor with fresh governed artifact namespaces
 may make another development attempt and, if it passes, satisfy the dormant
 1.61 initializer.
+
+## 268. Authorized specification 1.60.1 foundation successor
+
+Specification 1.60.1 is the authorized patch successor to the closed 1.60
+foundation.  It retains the exact scene manifests, public action semantics,
+metric and resource gates, one-attempt limit, accepted orbital dependency, and
+development -> review -> selector -> confirmation -> final ordering.  It does
+not reinterpret or overwrite the terminal 1.60 evidence.
+
+The successor adds one explicit `prepare_public_split(manifest)` transition.
+The coordinator calls it immediately after the manifest opens the public split
+and before reserving batch 0.  The exact formal evaluator authenticates the
+manifest, ledger, split, zero-ordinal state, active port, and absence of any
+existing split root; it then creates and retains exactly one vault and validates
+the complete root/slot registry cut.  Public batch evaluation requires this
+prepared vault and cannot lazily create one.  Omitting preparation retains the
+original fail-closed ownership error, while replayed, cross-ledger, already
+active, and duplicate preparation are rejected.
+
+Fresh governed artifacts use protocol `rgbd_known_action_planning_v3` at
+`runs/rgbd_known_action_planning_v3/`.  The dormant dynamic-set initializer
+accepts only a complete passing five-file 1.60.1 bundle under foundation record
+schema `dynamic_set_known_action_foundation_v2`; it no longer accepts 1.60 or
+the v2 protocol.  The v3 protocol SHA-256 is
+`49f168470986dfc32b24dc55f29701fd059d1bbb1db23993e6fd49c7e70fd4b0`.
+The repaired pre-publication source passes `512` focused qualification tests in
+`1,930.10 s`, `58` dynamic-set qualification tests in `761.39 s`, `290`
+accepted regressions in `254.23 s`, Ruff check and format check over `313`
+files, compileall, three explicit frozen-certificate/version checks, and the
+complete repository suite as `2,333 passed, 16 skipped` in `3,673.62 s` with
+the 13 expected synthetic thread-count warnings.  No governed 1.60.1 artifact
+exists until this exact source is committed and published cleanly and receives
+its single fresh development authorization.
 
 # Closing directive
 
