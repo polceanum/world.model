@@ -6,10 +6,38 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-177 — Close 1.60.2 on its formal configuration-routing error
+
+- **Date:** 2026-09-06
+- **Status:** terminal pre-science failure; successor review required
+- **Context:** Clean-published source
+  `0242921bff0440af94e507af32ae9ce43d5601b9` passed every source gate and the
+  exact runner preflight. The sole development attempt then reserved batch 0
+  and failed during formal-science initialization because the inherited-surface
+  helper still required whole-config equality with the accepted orbital
+  profile, including the deliberately changed chromatic blend.
+- **Decision:** Consume the attempt and close 1.60.2 without a checkpoint or
+  protected access. Preserve report SHA-256
+  `fc61b1e093b4ac384923be34bbdf31338a68c684d1352985183f1dd82a9e2f47`
+  and ledger SHA-256
+  `fde1b9eacb78a19ff713dedf21cb24ed1f2e35f083bd7c2e2f4be51b5163d76a`.
+  Do not retry or repair v4 in place. A possible v5 must separately review the
+  runtime/accepted configuration dataflow, not merely suppress the equality
+  error, and must test the exact formal initialization route before access.
+- **Consequences:** No scientific metric can be interpreted because zero rows
+  completed. Selector, confirmation, final, and 1.61 remain unopened.
+  Downstream planning remains a required gate, but no unqualified foundation
+  may reach it.
+- **Evidence:** The canonical report is 48,518 bytes with `outcome=error`, zero
+  results, and no checkpoint. The canonical 76,697-byte ledger is
+  `terminal_error` at generation 4 with batch `[0,1,2,3]` reserved, ordinal 0
+  next, zero receipts, and no public/private seal. Strict internal validation
+  passes; historical v3 hashes are unchanged.
+
 ## ADR-176 — Authorize the 1.60.2 metric-geometry successor
 
 - **Date:** 2026-09-06
-- **Status:** implemented; source validated, clean publication pending
+- **Status:** implemented and clean-published; superseded by terminal ADR-177
 - **Context:** The completed 1.60.1 attempt passed action-relative propagation,
   winner, identity, gradient, isolation, and integrity checks but failed seven
   absolute state, cost, and palette gates. Read-only diagnosis localized the

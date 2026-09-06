@@ -91,6 +91,27 @@ replacement verifies exact equality after removing only the predeclared blend
 field and separately checks `1e-6` versus the accepted `0.0025`.  No v4
 governed artifact existed during any of these source checks.
 
+The sole governed v4 attempt is terminal before science.  After exact source
+preflight and batch-0 reservation, formal initialization raised `ValueError`
+because `_accepted_config_for_inherited_surface` still compared the complete
+known-action configuration to the accepted orbital profile and rejected
+`model.rgbd.chromatic_centre_blend`.  The helper also returns the accepted
+configuration, which is subsequently used for authorized episode construction,
+public/palette model execution, preflight, action metrics, and inherited
+metrics.  Thus deleting the equality check alone would not prove the new
+profile is evaluated.  Zero rows and metrics completed, so this result neither
+supports nor rejects the calibrated geometry hypothesis.
+
+The strict terminal report/ledger hashes are
+`fc61b1e093b4ac384923be34bbdf31338a68c684d1352985183f1dd82a9e2f47` and
+`fde1b9eacb78a19ff713dedf21cb24ed1f2e35f083bd7c2e2f4be51b5163d76a`.
+The ledger is generation 4 with batch `[0,1,2,3]` reserved and no receipts or
+seals.  V4 is closed.  A source-review candidate for v5 would need explicit
+configuration-view ownership, an exact formal initialization fixture, and
+spies proving the runtime `1e-6` profile—not the accepted `0.0025` profile—owns
+every public forward path while inherited evidence remains valid.  This is a
+proposal, not authorization.
+
 ### Identifiable per-object drag — terminal development evidence
 
 The identifiable-drag source freeze

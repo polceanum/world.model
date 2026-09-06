@@ -4032,3 +4032,16 @@ further gravity-axis threshold tuning.
   the replacement permits exactly the predeclared blend delta and nothing else.
   Protocol/config SHA-256 values are `d295db53fe548ce0a389cdf71e2b565a7e71c79ddc1b46de429dc91ed67312c1`
   and `3babb7b64b386879a32a3e2dd20f136adff835d37816e05a7ead1a0873c66bd8`.
+- Clean-published the exact 1.60.2 source as
+  `0242921bff0440af94e507af32ae9ce43d5601b9`; the hardened runner independently
+  passed its remote/publication protocol preflight. The sole development
+  attempt then failed during formal-science initialization after reserving
+  batch 0 because the inherited-surface helper still demanded whole-config
+  equality with the accepted profile and rejected the authorized blend delta.
+- Closed 1.60.2 without scientific evaluation. Preserved the 48,518-byte error
+  report at `fc61b1e093b4ac384923be34bbdf31338a68c684d1352985183f1dd82a9e2f47`
+  and the 76,697-byte generation-4 `terminal_error` ledger at
+  `fde1b9eacb78a19ff713dedf21cb24ed1f2e35f083bd7c2e2f4be51b5163d76a`.
+  Zero rows completed; no checkpoint, protected split, or 1.61 artifact opened.
+  A reviewed v5 must audit and test the entire runtime/accepted configuration
+  route rather than merely bypassing the failing comparison.

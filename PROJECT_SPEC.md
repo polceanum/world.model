@@ -5,7 +5,7 @@
 **Status:** Living authoritative specification
 **Version:** 1.60.2
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026; known-action counterfactual-planning qualification amendment 4 September 2026; terminal known-action foundation and dormant dynamic-set implementation amendments 6 September 2026; authorized 1.60.1 materializer-order and 1.60.2 metric-geometry calibration successor amendments 6 September 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026; known-action counterfactual-planning qualification amendment 4 September 2026; terminal known-action foundation and dormant dynamic-set implementation amendments 6 September 2026; authorized 1.60.1 materializer-order and authorized/terminal 1.60.2 metric-geometry calibration successor amendments 6 September 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9169,6 +9169,46 @@ screen as `9` focused cases.  Protocol SHA-256 is
 the frozen configuration SHA-256 is
 `3babb7b64b386879a32a3e2dd20f136adff835d37816e05a7ead1a0873c66bd8`.
 These are source-validation results only, not governed development evidence.
+
+## 271. Terminal specification 1.60.2 development result
+
+The exact source candidate was committed and clean-published as
+`0242921bff0440af94e507af32ae9ce43d5601b9` with tree
+`bc2a0d92a0410d1d33e695c755fa65126d3c85d8`.  The hardened protocol preflight
+then independently confirmed upstream equality and protocol v4 before the sole
+development attempt opened.
+
+That attempt is consumed and specification 1.60.2 is closed without scientific
+evaluation.  The coordinator reserved development batch `[0,1,2,3]`; during
+formal-science initialization, `_accepted_config_for_inherited_surface`
+compared the complete known-action configuration to the accepted orbital
+configuration and rejected the authorized blend delta with
+`ValueError: known/accepted executable config
+surface.model.rgbd.chromatic_centre_blend exact value differs`.  The same
+helper also returns the accepted configuration, and the downstream episode,
+public-model, palette, preflight, and metric paths consume that accepted view.
+Consequently a successor must do more than normalize one comparison: it must
+prove the known-action runtime view reaches every intended public evaluation
+path while preserving the accepted dependency and all frozen gates.
+
+The canonical terminal report is 48,518 bytes with SHA-256
+`fc61b1e093b4ac384923be34bbdf31338a68c684d1352985183f1dd82a9e2f47`.
+The terminal ledger is 76,697 bytes with SHA-256
+`fde1b9eacb78a19ff713dedf21cb24ed1f2e35f083bd7c2e2f4be51b5163d76a`;
+it has status `terminal_error`, generation 4, zero completed ordinals, zero
+public receipts, no public seal, and no private receipt.  The report has zero
+results and no checkpoint.  Strict report/ledger schema, canonical-byte, and
+cross-binding validation passes.  No selector, confirmation, final, or 1.61
+governed artifact opened, and the v3 terminal artifact hashes remain unchanged.
+
+This is an orchestration/configuration-routing failure, not accuracy evidence
+for or against the `1e-6` calibration.  The v4 attempt may not be retried or
+repaired in place.  Any v5 successor requires explicit review, a fresh version
+and namespace, an exact formal-initialization regression, and a dataflow audit
+showing which runtime configuration owns construction, model execution,
+palette controls, inherited metrics, and private reduction.  Downstream
+planning remains mandatory but unopened because its foundation predecessor did
+not pass.
 
 # Closing directive
 

@@ -935,3 +935,30 @@ profile delta. Protocol/config SHA-256 values are
 `3babb7b64b386879a32a3e2dd20f136adff835d37816e05a7ead1a0873c66bd8`.
 These are source results only; clean publication still precedes the sole
 governed development attempt.
+
+## Closed specification 1.60.2 successor
+
+The exact source was committed and clean-published as
+`0242921bff0440af94e507af32ae9ce43d5601b9` (tree
+`bc2a0d92a0410d1d33e695c755fa65126d3c85d8`). The hardened protocol command
+validated that publication and protocol v4 before governed access.
+
+The sole development attempt then terminated during formal-science
+initialization. Batch `[0,1,2,3]` had been durably reserved when
+`_accepted_config_for_inherited_surface` required the complete known-action
+configuration to equal the accepted orbital configuration. It rejected the
+sole authorized delta with `ValueError: known/accepted executable config
+surface.model.rgbd.chromatic_centre_blend exact value differs`. The helper's
+returned accepted configuration also owns downstream episode/model/palette
+calls, so a safe successor needs an explicit end-to-end configuration-routing
+contract rather than a one-line equality exemption.
+
+The terminal report is 48,518 bytes with SHA-256
+`fc61b1e093b4ac384923be34bbdf31338a68c684d1352985183f1dd82a9e2f47`.
+The terminal ledger is 76,697 bytes with SHA-256
+`fde1b9eacb78a19ff713dedf21cb24ed1f2e35f083bd7c2e2f4be51b5163d76a`,
+status `terminal_error`, generation 4, zero completed ordinals/receipts, no
+public seal, and no private receipt. Strict internal validation passes. There
+is no checkpoint or qualification report, and selector, confirmation, final,
+and every 1.61 governed artifact remain unopened. Specification 1.60.2 is
+closed; a v5 successor requires separate review and explicit authorization.

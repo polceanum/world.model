@@ -413,9 +413,17 @@
   regressions, Ruff, compile checks, and the full repository suite. The final
   tree passes `518` focused, `58` dynamic compatibility, `290` accepted
   regressions, and `2,339 passed, 16 skipped` repository-wide.
-- [ ] Publish the exact clean 1.60.2 source, consume its sole development
+- [x] Publish the exact clean 1.60.2 source, consume its sole development
   attempt, independently review its evidence, and open selector -> confirmation
-  -> final exactly once only if each predecessor passes.
+  -> final exactly once only if each predecessor passes. Source
+  `0242921bff0440af94e507af32ae9ce43d5601b9` published cleanly, but the sole
+  attempt terminated at formal configuration routing before any completed row;
+  the conditional protected sequence therefore remained unopened.
+- [ ] Review—but do not infer authorization for—a fresh v5 successor that
+  explicitly separates known-action runtime configuration from the accepted
+  dependency view, routes the `1e-6` profile through episode construction,
+  public model execution, palette controls, preflight, and metric reduction,
+  and exercises the exact formal-initialization path before governed access.
 - [x] Declare candidate 66,000/4,400/2,200/2,200/4,400/4,400 physical rows,
   separate 1,200/600/600/1,200/1,200 planning tasks, all 22 physical cells,
   exact six-B4 update balance, the disposable screen, 512-update validation,
