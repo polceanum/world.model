@@ -6,6 +6,34 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-173 — Diagnose the closed 1.60 foundation without weakening ownership
+
+- **Date:** 2026-09-06
+- **Status:** accepted postmortem; successor specification requires review
+- **Context:** The sole specification-1.60 development attempt failed at public
+  batch 0 with `PermissionError: active batch lacks one exact materializer
+  vault/slot ownership`, despite a clean full source gate. The production split
+  coordinator calls `manifest.begin_batch` before
+  `evaluator.evaluate_public_batch`. The reservation's final registry cut
+  requires a vault for the active formal port and batch, while the evaluator
+  opens that vault lazily only in the later evaluation call. The vault opener
+  rejects an active batch. The successful preauthorization fixture manually
+  opened its vault before reservation, so it validated the intended inner
+  transition but not production orchestration.
+- **Decision:** Treat this as an impossible coordinator ordering and preserve
+  the terminal 1.60 artifacts and source bindings unchanged. Do not relax the
+  active-batch vault/slot invariant. A successor foundation must add one
+  explicit authenticated split-preparation transition after manifest creation
+  and before batch reservation, bind exactly one evaluator-owned vault to the
+  ledger/split, and cover the real formal coordinator path plus missing-prepare,
+  replay, cleanup, and later-batch cases. It must use a new version, a clean
+  publication, and fresh governed artifact namespaces.
+- **Consequences:** No 1.60 retry is authorized and no 1.61 governed screen or
+  campaign may open. The dormant 1.61 source remains useful implementation
+  evidence only. A new reviewed predecessor decision is required before code
+  repair or development access; if that predecessor qualifies, downstream
+  planning remains mandatory for 1.61 promotion.
+
 ## ADR-172 — Preserve the dynamic-set implementation but stop at the failed foundation
 
 - **Date:** 2026-09-06

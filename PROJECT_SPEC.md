@@ -9022,6 +9022,41 @@ foundation failure and, if attempt two is to remain available, adds a causal
 provisional timing/admission path.  It may not reinterpret this dormant source
 or its tests as `qualified_convergence`.
 
+## 267. Terminal foundation failure review and successor repair contract
+
+The specification-1.60 failure is an orchestration-order defect, not a scene,
+model, or metric failure.  The production `_evaluate_split` constructs the
+manifest and calls `manifest.begin_batch(...)` before it invokes
+`evaluator.evaluate_public_batch(...)`.  The end of `begin_batch` authenticates
+the complete materializer registry cut.  Once the formal port and active batch
+exist, that cut requires exactly one split vault and its inverse slot.  The
+formal evaluator, however, opens its vault lazily inside
+`evaluate_public_batch`, after the batch reservation.  The vault opener also
+requires that no batch is active.  Consequently, the production ordering has
+no valid first-batch transition: it fails at the post-reservation registry cut
+before the evaluator can open the required vault.
+
+The strongest successful materializer fixture did not exercise that ordering.
+It explicitly opened the vault before calling `manifest.begin_batch`, then
+tested authorization and envelope issuance.  That fixture proves the intended
+pre-opened transition but leaves the production split coordinator uncovered.
+This explains the clean source gate and the deterministic governed failure
+without weakening any registry or artifact evidence.
+
+A successor foundation specification must preserve the terminal 1.60 bundle
+unchanged and add an explicit public-split preparation transition after
+manifest construction and before the first batch reservation.  The formal
+evaluator must bind and retain exactly one vault for that manifest's ledger and
+split during this transition.  The repair must not permit an active formal
+batch without its exact vault/slot inverse, relax the global cut, infer a vault
+from an untrusted request, or reuse the consumed 1.60 attempt.  Regression
+coverage must exercise the real split-coordinator order with the exact formal
+evaluator, retain the missing-preparation fail-closed case, and prove one-root,
+one-slot, replay, cleanup, and later-batch behavior.  Only a newly versioned,
+reviewed, clean-published predecessor with fresh governed artifact namespaces
+may make another development attempt and, if it passes, satisfy the dormant
+1.61 initializer.
+
 # Closing directive
 
 Project Orpheus should emerge from the first serious implementation as a small but real online world-model system:

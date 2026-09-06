@@ -832,3 +832,23 @@ governed artifact exists. Unit tests do construct non-governed candidate rows,
 screens, and optimizer updates. The second-architecture API also fails closed
 until a future coordinator can causally seal its required 3,584-update timing
 support.
+
+## Reviewed cause of the 1.60 terminal failure
+
+The failure is now localized to an impossible first-batch coordinator order.
+The production split loop reserves batch `[0, 1, 2, 3]` before calling the
+formal evaluator. The reservation's final global registry cut requires one
+exact vault/slot inverse for every batch owned by the active formal port, but
+the evaluator opens that vault only when evaluation begins. The vault opener
+itself rejects an already-active batch. The passing preauthorization fixture
+opened the vault manually before reservation and therefore did not cover the
+production order.
+
+No 1.60 source or artifact was changed and no further governed access occurred.
+The reviewed successor contract is to add an explicit, authenticated
+public-split preparation call between manifest construction and batch 0,
+preserving the strict active-batch ownership invariant. A newly versioned and
+clean-published predecessor, fresh artifact namespaces, orchestration-level
+regression coverage, and a fresh authorization decision are required before
+another development attempt. Until then, 1.61 remains implemented but
+unqualified and planning remains a mandatory, unopened promotion gate.

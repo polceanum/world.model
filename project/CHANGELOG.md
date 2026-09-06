@@ -3976,3 +3976,11 @@ further gravity-axis threshold tuning.
   Ruff check, format check over 313 files, compileall, exact version `1.60`,
   frozen-source hashes, and certificate revalidation also pass. The 13 pytest
   warnings are the expected synthetic thread-count warnings.
+- Completed the read-only postmortem of the terminal 1.60 materializer failure.
+  The production coordinator reserves the first batch before the formal
+  evaluator lazily opens its vault; the post-reservation registry cut requires
+  that vault, while the opener forbids an active batch. The green fixture
+  manually pre-opened the vault and therefore missed the production ordering.
+  Recorded a fail-closed successor contract: prepare exactly one authenticated
+  split vault before batch 0 under a new reviewed version and fresh artifact
+  namespaces, without changing or retrying 1.60 or opening governed 1.61.

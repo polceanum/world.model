@@ -367,6 +367,22 @@
   format check over 313 files, compileall, exact version `1.60`, frozen 1.60
   source hashes/certificate, and the full `2,331 passed, 16 skipped` suite all
   pass. No governed manifest was opened.
+- [x] Complete the read-only postmortem of the terminal 1.60 materializer
+  failure. Confirm that the production coordinator reserves batch 0 before the
+  formal evaluator lazily opens its vault, while the post-reservation registry
+  cut requires that vault and the opener forbids an active batch. Record that
+  the green fixture manually pre-opened the vault and did not cover production
+  ordering.
+- [ ] Review and authorize a newly versioned foundation predecessor with fresh
+  artifact namespaces. Its minimal repair is one authenticated public-split
+  preparation transition after manifest construction and before batch 0,
+  without relaxing active-batch vault/slot ownership or reusing the consumed
+  1.60 attempt.
+- [ ] Add orchestration-level regression coverage using the exact formal
+  evaluator: real coordinator order, missing-preparation fail-closed behavior,
+  exact one-root/one-slot ownership, replay and cleanup, and later-batch
+  continuity. Re-freeze, run the full source gate, and publish cleanly before
+  any new governed development access.
 - [x] Declare candidate 66,000/4,400/2,200/2,200/4,400/4,400 physical rows,
   separate 1,200/600/600/1,200/1,200 planning tasks, all 22 physical cells,
   exact six-B4 update balance, the disposable screen, 512-update validation,
