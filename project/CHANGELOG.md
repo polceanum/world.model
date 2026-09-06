@@ -4000,3 +4000,20 @@ further gravity-axis threshold tuning.
   certificate/version checks, and the complete `2,333 passed, 16 skipped`
   repository suite. Protocol-v3 SHA-256 is
   `49f168470986dfc32b24dc55f29701fd059d1bbb1db23993e6fd49c7e70fd4b0`.
+- Committed and clean-published the repaired 1.60.1 freeze as
+  `c820a38ffff9c93f89944e0ad5524f1d96bb23b0`, then consumed its sole governed
+  development attempt. The repaired path completed all 16 public batches,
+  sealed them, and completed private scoring, proving the split-preparation
+  transition fixed the former orchestration failure.
+- Closed 1.60.1 without qualification after seven frozen
+  action-conditioned/planner/palette numerical gates failed. Preserved the
+  380,368-byte terminal report at
+  `680f422a294ef19e620c56f0eebb70a9c08d26638bf361e3ad46fc49b4ab32f1`
+  and the 1,185,593-byte `complete_failed` ledger at
+  `043471eaa4b328aa5ba9efc9bbfe4830d926a771b9f51ab0459b4559d40e494a`.
+  No checkpoint or protected report exists; the historical v2 evidence is
+  unchanged.
+- Confirmed the dormant 1.61 initializer rejects the v3 directory as an
+  incomplete predecessor bundle and creates no governed artifact. No retry or
+  in-place threshold tuning is permitted; planning remains a mandatory
+  downstream qualification gate for any separately authorized successor.

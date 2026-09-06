@@ -383,8 +383,22 @@
   exact one-root/one-slot ownership, replay and cleanup, and later-batch
   continuity. Move the successor to protocol/run namespace v3 and require its
   exact passing bundle in the dormant 1.61 initializer.
-- [ ] Re-freeze specification 1.60.1, run the proportional and complete source
-  gates, and publish cleanly before any new governed development access.
+- [x] Re-freeze specification 1.60.1, run the proportional and complete source
+  gates, and publish the exact clean source as
+  `c820a38ffff9c93f89944e0ad5524f1d96bb23b0` before governed development
+  access.
+- [x] Consume the sole specification-1.60.1 development attempt. It completed
+  all 16 public batches and private scoring, then failed seven frozen
+  action-conditioned/planner/palette numerical gates with outcome
+  `gate_failed`. Preserve report
+  `680f422a294ef19e620c56f0eebb70a9c08d26638bf361e3ad46fc49b4ab32f1`
+  and ledger
+  `043471eaa4b328aa5ba9efc9bbfe4830d926a771b9f51ab0459b4559d40e494a`;
+  do not retry, tune in place, or open protected access.
+- [x] Confirm that the 1.61 foundation validator rejects the terminal v3
+  directory as incomplete and creates no dynamic-set artifact. Keep planning
+  mandatory and pause governed 1.61 execution pending a separately reviewed
+  successor foundation.
 - [x] Declare candidate 66,000/4,400/2,200/2,200/4,400/4,400 physical rows,
   separate 1,200/600/600/1,200/1,200 planning tasks, all 22 physical cells,
   exact six-B4 update balance, the disposable screen, 512-update validation,

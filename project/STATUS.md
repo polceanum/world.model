@@ -9,7 +9,7 @@ foundation is GitHub `main` commit
 bridge is merged at `3eed0b71e6f18c7036bf376c075493a89d5fdc9f`. Broad heterogeneous training
 remains paused. Specification 1.57 is the highest accepted capability
 contract; the active package/source identifier is the closed, unqualified
-specification 1.60. The accepted base comprises the specification-1.51
+specification 1.60.1. The accepted base comprises the specification-1.51
 differentiable one-sphere unit, the
 qualified standalone two-second RGB-D rung, and its qualified public one-slot
 `OnlineWorldModel` bridge. The accepted branch additionally contains the
@@ -853,7 +853,7 @@ regression coverage, and a fresh authorization decision are required before
 another development attempt. Until then, 1.61 remains implemented but
 unqualified and planning remains a mandatory, unopened promotion gate.
 
-## Active specification 1.60.1 successor
+## Closed specification 1.60.1 successor
 
 The user authorized a patch successor on 6 September 2026. The active package
 version is now `1.60.1`; historical 1.60 source and terminal artifacts remain
@@ -877,8 +877,29 @@ expected thread-count warnings from synthetic dynamic execution. Protocol v3
 has SHA-256
 `49f168470986dfc32b24dc55f29701fd059d1bbb1db23993e6fd49c7e70fd4b0`.
 
-The 1.61 initializer now requires specification `1.60.1`, protocol v3, and
-foundation record schema `dynamic_set_known_action_foundation_v2`. No governed
-1.60.1 or 1.61 artifact has been opened. Development remains forbidden until
-the successor source gate is green and the exact tree is committed and
-published upstream.
+The exact clean source freeze was committed and published as
+`c820a38ffff9c93f89944e0ad5524f1d96bb23b0`. Its single governed development
+attempt then completed all 16 public batches, sealed public access, and
+completed private scoring. The orchestration repair therefore resolved the
+1.60 first-batch defect, but the outcome is `gate_failed`: seven frozen
+action-conditioned, planner-cost, opposite-goal-cost, and palette-invariance
+limits failed. The largest state discrepancies are
+`0.00016263127327 m` and `0.0000963862985373 m/s` against `0.000002` limits;
+the cost discrepancies are between `0.00000503013143316` and
+`0.00000661954982206 m^2` against `0.0000001`.
+
+The terminal development report is 380,368 bytes with SHA-256
+`680f422a294ef19e620c56f0eebb70a9c08d26638bf361e3ad46fc49b4ab32f1`.
+The terminal ledger is 1,185,593 bytes with SHA-256
+`043471eaa4b328aa5ba9efc9bbfe4830d926a771b9f51ab0459b4559d40e494a`,
+status `complete_failed`, generation 38, 16 receipts, a public seal, a private
+scoring receipt, and no active batch. No checkpoint or qualification report
+exists; selector, confirmation, final, and every 1.61 governed split remain
+unopened. The v2 terminal hashes remain unchanged.
+
+The 1.61 initializer requires specification `1.60.1`, protocol v3, and
+foundation record schema `dynamic_set_known_action_foundation_v2`; direct
+validation rejects the v3 directory as an incomplete bundle. The sole 1.60.1
+attempt may not be retried or repaired in place. Planning remains mandatory for
+qualification, and governed 1.61 execution now requires a separately reviewed
+successor foundation.

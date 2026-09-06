@@ -9086,9 +9086,43 @@ The repaired pre-publication source passes `512` focused qualification tests in
 accepted regressions in `254.23 s`, Ruff check and format check over `313`
 files, compileall, three explicit frozen-certificate/version checks, and the
 complete repository suite as `2,333 passed, 16 skipped` in `3,673.62 s` with
-the 13 expected synthetic thread-count warnings.  No governed 1.60.1 artifact
-exists until this exact source is committed and published cleanly and receives
-its single fresh development authorization.
+the 13 expected synthetic thread-count warnings.  The exact clean source freeze
+is commit `c820a38ffff9c93f89944e0ad5524f1d96bb23b0`, published at the matching
+upstream branch tip before governed access.
+
+## 269. Terminal specification 1.60.1 development result
+
+The sole specification-1.60.1 development attempt is consumed and the
+successor is closed without qualification.  The repaired orchestration passed
+the former first-batch failure: all 16 public batches completed, public access
+sealed, and private scoring completed.  The terminal ledger has status
+`complete_failed`, generation `38`, no active batch, and no checkpoint.  Its
+SHA-256 is
+`043471eaa4b328aa5ba9efc9bbfe4830d926a771b9f51ab0459b4559d40e494a`;
+the terminal report SHA-256 is
+`680f422a294ef19e620c56f0eebb70a9c08d26638bf361e3ad46fc49b4ab32f1`.
+The historical v2 terminal report and ledger remain unchanged at their
+previously recorded hashes.
+
+Development failed seven frozen scientific gates: action-conditioned position
+and velocity maximum absolute error were `0.00016263127327 m` and
+`0.0000963862985373 m/s` against `0.000002` limits; planner and opposite-goal
+truth-cost errors were `0.00000661954982206 m^2` and
+`0.00000659312354401 m^2` against `0.0000001`; and palette-twin position,
+velocity, and cost invariance errors were `0.00012281537056 m`,
+`0.0000702599063516 m/s`, and `0.00000503013143316 m^2` against the same
+respective state and cost limits.  The report outcome is `gate_failed` with no
+runtime error.  Core target resolution, winner accuracy, action-isolation,
+exactly-once, gradient, mutation, truth-access, latency, and memory checks
+passed, but they cannot override any absolute failure.
+
+No development checkpoint, qualification report, selector, confirmation, or
+final access exists.  The exact 1.61 predecessor validator rejects the v3
+directory as an incomplete 1.60.1 foundation bundle before creating any 1.61
+artifact.  The one-attempt contract forbids rerunning development or tuning the
+frozen thresholds in place.  Planning therefore remains a required downstream
+qualification gate, but the 1.61 governed screen and campaign remain unopened
+until a separately reviewed successor foundation is authorized.
 
 # Closing directive
 

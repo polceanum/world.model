@@ -6,10 +6,39 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-175 — Close 1.60.1 on its frozen scientific gates
+
+- **Date:** 2026-09-06
+- **Status:** terminal development failure; successor review required
+- **Context:** The clean published 1.60.1 freeze
+  `c820a38ffff9c93f89944e0ad5524f1d96bb23b0` repaired the impossible
+  first-batch transition and completed all public and private development
+  scoring. It nevertheless failed seven frozen numerical-equivalence and
+  palette-invariance gates. The report outcome is `gate_failed`, not an
+  execution or integrity error.
+- **Decision:** Consume the one allowed development attempt and close 1.60.1
+  without a checkpoint or protected access. Preserve report SHA-256
+  `680f422a294ef19e620c56f0eebb70a9c08d26638bf361e3ad46fc49b4ab32f1`
+  and ledger SHA-256
+  `043471eaa4b328aa5ba9efc9bbfe4830d926a771b9f51ab0459b4559d40e494a`.
+  Do not retry or relax/tune the frozen gates. Continue requiring a complete
+  passing predecessor bundle before 1.61 can create governed artifacts.
+- **Consequences:** The materializer repair is validated, but 1.60.1 is not a
+  qualified known-action foundation. The 1.61 initializer rejects its
+  incomplete v3 directory; selector, confirmation, final, and the dynamic-set
+  campaign remain unopened. Planning remains a mandatory downstream gate. Any
+  further foundation work requires a separately reviewed specification and
+  fresh artifact namespace.
+- **Evidence:** The ledger is `complete_failed` at generation 38 with 16 public
+  receipts, a public seal, a private scoring receipt, and no active batch. The
+  report is 380,368 bytes, the ledger is 1,185,593 bytes, and neither a
+  development checkpoint nor qualification report exists. Historical v2
+  hashes are unchanged.
+
 ## ADR-174 — Authorize the 1.60.1 split-preparation successor
 
 - **Date:** 2026-09-06
-- **Status:** implemented with green source gate; clean publication pending
+- **Status:** implemented and clean-published; superseded by terminal ADR-175
 - **Context:** ADR-173 localized the terminal 1.60 failure to a coordinator
   ordering with no valid first-batch transition. The user explicitly authorized
   a `1.60.1` successor, while preserving the rule that 1.60 itself is closed
@@ -33,7 +62,9 @@ cross-reference was disambiguated.
   Focused qualification passed `512` tests, dynamic qualification passed `58`,
   accepted regressions passed `290`, Ruff/format/compileall and explicit
   certificate/version checks passed, and the complete suite passed `2,333`
-  tests with `16` expected platform skips. No governed artifact was opened.
+  tests with `16` expected platform skips. The clean source was published as
+  `c820a38ffff9c93f89944e0ad5524f1d96bb23b0` before governed access; its
+  terminal development disposition is recorded in ADR-175.
 
 ## ADR-173 — Diagnose the closed 1.60 foundation without weakening ownership
 
