@@ -74,7 +74,7 @@ model:
     chromatic_temperature: 0.05
     minimum_chromatic_eigengap: 0.01
     spatial_temperature_pixels: 1.0
-    chromatic_centre_blend: 0.0025
+    chromatic_centre_blend: 0.000001
     minimum_silhouette_gap_pixels: 2.0
     minimum_boundary_clearance_pixels: 2.0
     maximum_surface_radius_relative_error: 0.05

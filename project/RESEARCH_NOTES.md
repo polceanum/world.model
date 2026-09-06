@@ -79,6 +79,18 @@ attempt.  It must leave legacy defaults, both terminal directories, and the
 dormant 1.61 source untouched until separately authorized.  Selector and
 confirmation remain the protection against development-informed overfitting.
 
+The user explicitly authorized that exact 1.60.2 successor on 6 September
+2026.  The implemented source uses blend `1e-6`, protocol v4, and a fresh v4
+run namespace.  Its six-case ungoverned screen passes the three successor
+truth/palette/VJP cases and rejects the superseded blend in the same three
+fixtures.  The final pre-publication gate passes `518` focused tests, `58`
+dynamic compatibility tests, `290` accepted regressions, all static checks and
+certificate audits, and the full `2,339 passed, 16 skipped` suite.  The first
+complete run's sole failure was a stale whole-profile equality assertion; the
+replacement verifies exact equality after removing only the predeclared blend
+field and separately checks `1e-6` versus the accepted `0.0025`.  No v4
+governed artifact existed during any of these source checks.
+
 ### Identifiable per-object drag — terminal development evidence
 
 The identifiable-drag source freeze

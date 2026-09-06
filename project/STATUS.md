@@ -903,3 +903,35 @@ validation rejects the v3 directory as an incomplete bundle. The sole 1.60.1
 attempt may not be retried or repaired in place. Planning remains mandatory for
 qualification, and governed 1.61 execution now requires a separately reviewed
 successor foundation.
+
+## Authorized specification 1.60.2 successor
+
+On 6 September 2026 the user explicitly authorized the narrowly predeclared
+1.60.2 metric-geometry successor. It uses specification `1.60.2`, protocol
+`rgbd_known_action_planning_v4`, and fresh directory
+`runs/rgbd_known_action_planning_v4/`. Both terminal predecessor directories
+remain immutable.
+
+The only scientific configuration change is the known-action profile's
+`chromatic_centre_blend`, from `0.0025` to exactly `0.000001`. All action,
+planning, numerical, integrity, latency, and memory gates are preserved. A new
+ungoverned public synthetic screen checks three varied scenes against the
+formal `2e-6 m` truth and palette limits and the `1e-8` RGB VJP connectivity
+floor; a paired negative control proves the old blend would be rejected. This
+status is source authorization, not qualification evidence. No v4 governed
+artifact has yet been opened, and dormant 1.61 bindings remain unchanged.
+
+The final source candidate passes `518` focused qualification/screen tests in
+`1,963.54 s`, `58` dormant dynamic-set compatibility tests in `772.81 s`,
+`290` accepted regressions in `126.98 s`, Ruff and format checks across `314`
+Python files, compileall, exact version validation, and three independent
+frozen-source/certificate checks in `104.39 s`. The complete suite passes
+`2,339` tests with `16` expected platform skips and 13 expected synthetic
+thread-count warnings in `3,712.11 s`. An earlier full run passed every other
+test but exposed a stale assertion requiring equality of the deliberately
+changed blend; the corrected test now proves the blend is the sole inherited
+profile delta. Protocol/config SHA-256 values are
+`d295db53fe548ce0a389cdf71e2b565a7e71c79ddc1b46de429dc91ed67312c1` and
+`3babb7b64b386879a32a3e2dd20f136adff835d37816e05a7ead1a0873c66bd8`.
+These are source results only; clean publication still precedes the sole
+governed development attempt.

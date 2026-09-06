@@ -4017,3 +4017,18 @@ further gravity-axis threshold tuning.
   incomplete predecessor bundle and creates no governed artifact. No retry or
   in-place threshold tuning is permitted; planning remains a mandatory
   downstream qualification gate for any separately authorized successor.
+- Authorized specification 1.60.2 as a fresh v4 metric-geometry successor to
+  the closed 1.60.1 attempt. The known-action profile alone now uses the
+  predeclared `1e-6` chromatic-centre blend, while all legacy defaults, action
+  semantics, frozen gates, and terminal artifacts remain unchanged. Added an
+  ungoverned three-scene truth/palette/RGB-VJP screen and an explicit negative
+  control for the superseded blend. No v4 governed or 1.61 artifact was opened
+  during this source change.
+- Completed the 1.60.2 pre-publication source gate: `518` focused tests, `58`
+  dynamic-set compatibility tests, `290` accepted regressions, Ruff/format over
+  `314` Python files, compileall, exact version and three frozen-certificate
+  checks, and `2,339 passed, 16 skipped` repository-wide. The first full run
+  exposed and led to correction of one stale whole-profile equality assertion;
+  the replacement permits exactly the predeclared blend delta and nothing else.
+  Protocol/config SHA-256 values are `d295db53fe548ce0a389cdf71e2b565a7e71c79ddc1b46de429dc91ed67312c1`
+  and `3babb7b64b386879a32a3e2dd20f136adff835d37816e05a7ead1a0873c66bd8`.

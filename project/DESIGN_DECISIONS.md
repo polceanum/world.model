@@ -6,6 +6,35 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-176 — Authorize the 1.60.2 metric-geometry successor
+
+- **Date:** 2026-09-06
+- **Status:** implemented; source validated, clean publication pending
+- **Context:** The completed 1.60.1 attempt passed action-relative propagation,
+  winner, identity, gradient, isolation, and integrity checks but failed seven
+  absolute state, cost, and palette gates. Read-only diagnosis localized the
+  shared bias to the known-action profile's `0.0025` chromatic-centre blend.
+  A public synthetic ablation found `1e-6` inside a wide feasible interval,
+  below the frozen metric/palette limits while retaining nonzero RGB VJP.
+- **Decision:** Create specification 1.60.2 in fresh protocol/run namespace v4.
+  Change only the known-action profile blend to exactly `0.000001`; preserve
+  all gates, action semantics, legacy defaults, and terminal artifacts. Add a
+  public ungoverned three-scene truth/palette/VJP screen plus a negative
+  control that rejects the superseded blend. Allow one fresh development
+  attempt only after complete source validation and clean publication.
+- **Consequences:** This is a calibrated successor, not a retry or threshold
+  relaxation. Protected access remains conditional on a passing reviewed
+  development bundle. The dormant 1.61 implementation and predecessor binding
+  remain untouched until a separate transition is reviewed.
+- **Source evidence:** The immutable candidate passes `518` focused tests,
+  `58` dynamic-set compatibility tests, `290` accepted regressions, Ruff and
+  format checks over `314` Python files, compileall, exact version and three
+  frozen-source/certificate checks, and the complete `2,339 passed, 16 skipped`
+  repository suite. Protocol/config SHA-256 values are
+  `d295db53fe548ce0a389cdf71e2b565a7e71c79ddc1b46de429dc91ed67312c1` and
+  `3babb7b64b386879a32a3e2dd20f136adff835d37816e05a7ead1a0873c66bd8`.
+
+
 ## ADR-175 — Close 1.60.1 on its frozen scientific gates
 
 - **Date:** 2026-09-06

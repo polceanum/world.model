@@ -1866,7 +1866,7 @@ def test_protocol_is_seedless_json_native_and_names_batched_k8() -> None:
     protocol = qualification.bridge_protocol()
 
     assert json.loads(json.dumps(protocol, allow_nan=False)) == protocol
-    assert protocol["name"] == "rgbd_known_action_planning_v3"
+    assert protocol["name"] == "rgbd_known_action_planning_v4"
     assert protocol["architecture_version"] == 2
     assert protocol["architecture_attempt"] == 1
     assert protocol["maximum_architecture_attempts"] == 1
@@ -3629,7 +3629,7 @@ def test_exact_loader_loads_lightweight_leaf_without_heavy_parent_imports() -> N
     assert module.load_config is None
     assert module._RUNTIME_DEPENDENCIES_ACTIVE is False
     assert module.__version__ == "0.1.0"
-    assert module.SPECIFICATION_VERSION == "1.60.1"
+    assert module.SPECIFICATION_VERSION == "1.60.2"
     assert module.SIMULATOR_VERSION == "sphere_world_v7"
 
 

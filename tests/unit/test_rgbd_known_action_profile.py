@@ -73,7 +73,7 @@ def _synthetic_runtime() -> OnlineWorldModel:
     return model
 
 
-def test_profile_loads_and_exactly_inherits_the_accepted_runtime() -> None:
+def test_profile_changes_only_the_predeclared_metric_geometry_blend() -> None:
     config = load_config(CONFIG_PATH)
     accepted = load_config(ACCEPTED_CONFIG_PATH)
 
@@ -85,6 +85,8 @@ def test_profile_loads_and_exactly_inherits_the_accepted_runtime() -> None:
     accepted_inherited = accepted.to_dict()
     inherited.pop("project")
     accepted_inherited.pop("project")
+    assert inherited["model"]["rgbd"].pop("chromatic_centre_blend") == 1.0e-6
+    assert accepted_inherited["model"]["rgbd"].pop("chromatic_centre_blend") == 0.0025
     assert inherited == accepted_inherited
 
     assert config.simulator.min_objects == config.simulator.max_objects == 2

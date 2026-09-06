@@ -3,9 +3,9 @@
 ## Authoritative Technical Specification and Codex Build Directive
 
 **Status:** Living authoritative specification
-**Version:** 1.60.1
+**Version:** 1.60.2
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026; known-action counterfactual-planning qualification amendment 4 September 2026; terminal known-action foundation and dormant dynamic-set implementation amendments 6 September 2026; authorized 1.60.1 materializer-order successor amendment 6 September 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026; known-action counterfactual-planning qualification amendment 4 September 2026; terminal known-action foundation and dormant dynamic-set implementation amendments 6 September 2026; authorized 1.60.1 materializer-order and 1.60.2 metric-geometry calibration successor amendments 6 September 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -9123,6 +9123,52 @@ artifact.  The one-attempt contract forbids rerunning development or tuning the
 frozen thresholds in place.  Planning therefore remains a required downstream
 qualification gate, but the 1.61 governed screen and campaign remain unopened
 until a separately reviewed successor foundation is authorized.
+
+## 270. Authorized specification 1.60.2 metric-geometry successor
+
+Specification 1.60.2 is the explicitly authorized successor to the closed
+1.60.1 attempt.  It preserves every scene, action, planning, integrity,
+resource, and numerical acceptance gate; the analytic dynamics and exactly-once
+public action semantics are unchanged.  It does not overwrite, reopen, or
+reinterpret either terminal predecessor directory.
+
+The sole scientific change is the known-action profile's forward
+`chromatic_centre_blend`, reduced from `0.0025` to the predeclared value
+`0.000001`.  The global RGB-D default and accepted legacy profiles remain
+unchanged.  The new profile continues to use observable RGB in metric-state
+estimation and must retain finite nonzero RGB position connectivity; no
+straight-through estimator or gate relaxation is permitted.
+
+Before publication or governed access, an ungoverned synthetic screen must
+cross three public depth/position/palette fixtures and enforce the formal
+`2e-6 m` truth-set error, `2e-6 m` palette-set invariance, and `1e-8` minimum
+RGB VJP L1 thresholds.  It must also demonstrate that the superseded `0.0025`
+blend is rejected by those same gate-strength fixtures.  These fixtures are
+source validation only and may not construct or derive a governed row.
+
+Fresh evidence uses protocol `rgbd_known_action_planning_v4`, specification
+`1.60.2`, and canonical directory `runs/rgbd_known_action_planning_v4/`, with
+one development attempt maximum.  Selector, confirmation, and final may each
+open exactly once and only in order after an independently reviewed passing
+predecessor.  The dormant 1.61 source and its predecessor binding remain
+unchanged during this foundation-only freeze; a separate reviewed transition
+is required before 1.61 can consume a passing v4 bundle.
+
+The final pre-publication source candidate passes `518` focused qualification
+and gate-strength tests in `1,963.54 s`, `58` dormant dynamic-set compatibility
+tests in `772.81 s`, `290` accepted regressions in `126.98 s`, Ruff check and
+format check over `314` Python files, compileall, exact specification-version
+validation, and three independent frozen-source/certificate checks in
+`104.39 s`.  The complete repository suite passes `2,339` tests with `16`
+expected platform skips and 13 expected synthetic thread-count warnings in
+`3,712.11 s`.  An earlier complete-suite run correctly exposed the stale
+profile-equality assertion; its replacement now proves every inherited field
+is identical except the one explicit blend delta and passes with the synthetic
+screen as `9` focused cases.  Protocol SHA-256 is
+`d295db53fe548ce0a389cdf71e2b565a7e71c79ddc1b46de429dc91ed67312c1` and
+the frozen configuration SHA-256 is
+`3babb7b64b386879a32a3e2dd20f136adff835d37816e05a7ead1a0873c66bd8`.
+These are source-validation results only, not governed development evidence.
 
 # Closing directive
 

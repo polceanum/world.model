@@ -399,13 +399,23 @@
   directory as incomplete and creates no dynamic-set artifact. Keep planning
   mandatory and pause governed 1.61 execution pending a separately reviewed
   successor foundation.
-- [ ] Review—but do not infer authorization for—the measured 1.60.2 candidate:
+- [x] Review and explicitly authorize the measured 1.60.2 candidate:
   preserve every frozen gate, use a fresh v4 namespace, reduce only the
   known-action forward chromatic-centre blend to a predeclared value near
   `1e-6`, and add an ungoverned gate-strength palette/truth/VJP screen before
   any single fresh attempt. The diagnostic evidence is recorded in
-  `project/RESEARCH_NOTES.md`; no source mutation or governed access is
-  authorized by that evidence.
+  `project/RESEARCH_NOTES.md`. The user authorized the exact successor on
+  6 September 2026; implementation must still pass and publish a fresh source
+  freeze before its one governed attempt.
+- [x] Complete the 1.60.2 source freeze: protocol/run v4, exact
+  `chromatic_centre_blend = 1e-6`, gate-strength synthetic truth/palette/VJP
+  screen including the superseded-blend negative control, focused and accepted
+  regressions, Ruff, compile checks, and the full repository suite. The final
+  tree passes `518` focused, `58` dynamic compatibility, `290` accepted
+  regressions, and `2,339 passed, 16 skipped` repository-wide.
+- [ ] Publish the exact clean 1.60.2 source, consume its sole development
+  attempt, independently review its evidence, and open selector -> confirmation
+  -> final exactly once only if each predecessor passes.
 - [x] Declare candidate 66,000/4,400/2,200/2,200/4,400/4,400 physical rows,
   separate 1,200/600/600/1,200/1,200 planning tasks, all 22 physical cells,
   exact six-B4 update balance, the disposable screen, 512-update validation,

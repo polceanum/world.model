@@ -67,7 +67,7 @@ _REMOTE_TEMPORARY_DIRECTORY = "/private/tmp"
 _REMOTE_PROBE_TIMEOUT_SECONDS = 20
 _REMOTE_PROBE_MAX_OUTPUT_BYTES = 4096
 _LIGHTWEIGHT_QUALIFICATION_EXECUTION_SHA256 = (
-    "a7324225c26f1b58449ee33dfaaeb03e6ed3088f83144b78fcf663f0c1494671"
+    "52c4a411f834ebdc84cca87dd90eb26fa7f733d109f280ca6df66272a4fc5e38"
 )
 _PINNED_GITHUB_HOST_KEY = (
     "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n"
@@ -486,7 +486,7 @@ def _rgbd_known_action_bootstrap():
         "_REMOTE_TEMPORARY_DIRECTORY": "/private/tmp",
         "_REMOTE_PROBE_TIMEOUT_SECONDS": 20,
         "_REMOTE_PROBE_MAX_OUTPUT_BYTES": 4096,
-        "_LIGHTWEIGHT_QUALIFICATION_EXECUTION_SHA256": "a7324225c26f1b58449ee33dfaaeb03e6ed3088f83144b78fcf663f0c1494671",
+        "_LIGHTWEIGHT_QUALIFICATION_EXECUTION_SHA256": "52c4a411f834ebdc84cca87dd90eb26fa7f733d109f280ca6df66272a4fc5e38",
         "_PINNED_GITHUB_HOST_KEY": "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n",
         "_PINNED_GITHUB_HOST_KEY_FINGERPRINT": "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU",
         "_REMOTE_SSH_COMMAND_TEMPLATE": "/usr/bin/ssh -F /dev/null -oBatchMode=yes -oClearAllForwardings=yes -oForwardAgent=no -oForwardX11=no -oProxyCommand=none -oProxyJump=none -oCanonicalizeHostname=no -oStrictHostKeyChecking=yes -oCheckHostIP=yes -oPasswordAuthentication=no -oKbdInteractiveAuthentication=no -oIdentityFile=/dev/null -oIdentitiesOnly=no -oIdentityAgent=SSH_AUTH_SOCK -oAddKeysToAgent=no -oPKCS11Provider=none -oSecurityKeyProvider=none -oGSSAPIAuthentication=no -oHostbasedAuthentication=no -oPubkeyAuthentication=yes -oHostKeyAlgorithms=ssh-ed25519 -oHostKeyAlias=github.com -oUserKnownHostsFile={known_hosts_file} -oGlobalKnownHostsFile=/dev/null",
@@ -2007,7 +2007,7 @@ class _ExactCommitLoader(importlib.abc.MetaPathFinder, importlib.abc.Loader):
                 or module.__dict__.get("OrpheusConfig") is not None
                 or module.__dict__.get("load_config") is not None
                 or module.__dict__.get("SIMULATOR_VERSION") != "sphere_world_v7"
-                or module.__dict__.get("SPECIFICATION_VERSION") != "1.60.1"
+                or module.__dict__.get("SPECIFICATION_VERSION") != "1.60.2"
                 or module.__dict__.get("__version__") != "0.1.0"
                 or module.__dict__.get("_RUNTIME_DEPENDENCIES_ACTIVE") is not False
                 or {
@@ -2253,7 +2253,7 @@ def _qualification_callables(
         "_MAX_OUTER_AUTHORIZATION_BYTES": 16 * 1024,
         "MAX_JSON_BYTES": 8 * 1024 * 1024,
         "__version__": "0.1.0",
-        "SPECIFICATION_VERSION": "1.60.1",
+        "SPECIFICATION_VERSION": "1.60.2",
         "SIMULATOR_VERSION": "sphere_world_v7",
     }
     if any(
@@ -2708,7 +2708,7 @@ def _outer_preflight(
         "_REMOTE_TEMPORARY_DIRECTORY": "/private/tmp",
         "_REMOTE_PROBE_TIMEOUT_SECONDS": 20,
         "_REMOTE_PROBE_MAX_OUTPUT_BYTES": 4096,
-        "_LIGHTWEIGHT_QUALIFICATION_EXECUTION_SHA256": "a7324225c26f1b58449ee33dfaaeb03e6ed3088f83144b78fcf663f0c1494671",
+        "_LIGHTWEIGHT_QUALIFICATION_EXECUTION_SHA256": "52c4a411f834ebdc84cca87dd90eb26fa7f733d109f280ca6df66272a4fc5e38",
         "_PINNED_GITHUB_HOST_KEY": "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n",
         "_PINNED_GITHUB_HOST_KEY_FINGERPRINT": "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU",
         "_REMOTE_SSH_COMMAND_TEMPLATE": "/usr/bin/ssh -F /dev/null -oBatchMode=yes -oClearAllForwardings=yes -oForwardAgent=no -oForwardX11=no -oProxyCommand=none -oProxyJump=none -oCanonicalizeHostname=no -oStrictHostKeyChecking=yes -oCheckHostIP=yes -oPasswordAuthentication=no -oKbdInteractiveAuthentication=no -oIdentityFile=/dev/null -oIdentitiesOnly=no -oIdentityAgent=SSH_AUTH_SOCK -oAddKeysToAgent=no -oPKCS11Provider=none -oSecurityKeyProvider=none -oGSSAPIAuthentication=no -oHostbasedAuthentication=no -oPubkeyAuthentication=yes -oHostKeyAlgorithms=ssh-ed25519 -oHostKeyAlias=github.com -oUserKnownHostsFile={known_hosts_file} -oGlobalKnownHostsFile=/dev/null",

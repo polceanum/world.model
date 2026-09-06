@@ -1,7 +1,7 @@
 """Hardened seedless qualification harness for known-action RGB-D planning.
 
 The formal scene, materializer, and evaluator are lazily bound behind the
-exact-commit runner and the frozen specification-1.60.1 protocol.  Formal entry
+exact-commit runner and the frozen specification-1.60.2 protocol.  Formal entry
 points first recover or classify the canonical attempt, then admit one
 development execution or the reviewed, ordered protected-split qualification.
 Dependency-injected fake execution remains available for exhaustive protocol
@@ -56,7 +56,7 @@ torch: Any = None
 OrpheusConfig: Any = None
 load_config: Any = None
 SIMULATOR_VERSION = "sphere_world_v7"
-SPECIFICATION_VERSION = "1.60.1"
+SPECIFICATION_VERSION = "1.60.2"
 __version__ = "0.1.0"
 _RUNTIME_DEPENDENCIES_ACTIVE = False
 
@@ -158,7 +158,7 @@ if SCENES_PER_SPLIT % BATCH_SIZE or len(ORDINALS) != 64:
     raise RuntimeError("known-action qualification requires 64 ordinals in B=4 batches")
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-RUN_RELATIVE_PATH = Path("runs/rgbd_known_action_planning_v3")
+RUN_RELATIVE_PATH = Path("runs/rgbd_known_action_planning_v4")
 CONFIG_RELATIVE_PATH = Path("configs/rgbd_known_action_planning_cpu.yaml")
 DEVELOPMENT_REPORT_NAME = "development_report.json"
 CHECKPOINT_NAME = "development_model.pt"
@@ -172,7 +172,7 @@ QUALIFICATION_ARTIFACT_NAMES = frozenset(
     {*DEVELOPMENT_ARTIFACT_NAMES, QUALIFICATION_REPORT_NAME, QUALIFICATION_LEDGER_NAME}
 )
 
-FROZEN_CONFIG_SHA256 = "9f7f5a06c49b55435cb3fe6dad3afc9fd578a0f3c8a86d691d6f8ba2ebd41be2"
+FROZEN_CONFIG_SHA256 = "3babb7b64b386879a32a3e2dd20f136adff835d37816e05a7ead1a0873c66bd8"
 FROZEN_SCENE_SOURCE_SHA256 = "a20f174ac5e6fda85ba1e2682cb0b9c924993ca21845de8f58e81016e3aad58f"
 FROZEN_SCENE_TEST_SHA256 = "64f928be1395707342058a98952bee652cfd86366707e62a28f90eeacb64c416"
 FROZEN_SCENE_NORMALIZED_SOURCE_SHA256 = (
@@ -1827,7 +1827,7 @@ def bridge_protocol() -> dict[str, Any]:
     """Return a JSON-native static protocol; this never opens governed data."""
 
     protocol: dict[str, Any] = {
-        "name": "rgbd_known_action_planning_v3",
+        "name": "rgbd_known_action_planning_v4",
         "architecture_version": ARCHITECTURE_VERSION,
         "architecture_attempt": ARCHITECTURE_ATTEMPT,
         "maximum_architecture_attempts": MAX_ARCHITECTURE_ATTEMPTS,
@@ -2222,6 +2222,7 @@ def assert_known_action_config(config: OrpheusConfig) -> None:
         "camera": "orbit",
         "external_probability": 0.0,
         "history": 16,
+        "chromatic_centre_blend": 1.0e-6,
         "analytic": True,
         "hypotheses": False,
     }
@@ -2236,6 +2237,7 @@ def assert_known_action_config(config: OrpheusConfig) -> None:
         "camera": config.simulator.camera_motion,
         "external_probability": config.simulator.external_impulse_probability,
         "history": config.model.rgbd.temporal_history_size,
+        "chromatic_centre_blend": config.model.rgbd.chromatic_centre_blend,
         "analytic": config.model.dynamics.analytic_free_motion_only,
         "hypotheses": config.runtime.hypothesis_pool_enabled,
     }
@@ -5517,7 +5519,7 @@ def _expected_runner_constants(expected_path: Path) -> dict[str, Any]:
         "_REMOTE_TEMPORARY_DIRECTORY": _REMOTE_TEMPORARY_DIRECTORY,
         "_REMOTE_PROBE_TIMEOUT_SECONDS": _REMOTE_PROBE_TIMEOUT_SECONDS,
         "_REMOTE_PROBE_MAX_OUTPUT_BYTES": _REMOTE_PROBE_MAX_OUTPUT_BYTES,
-        "_LIGHTWEIGHT_QUALIFICATION_EXECUTION_SHA256": "a7324225c26f1b58449ee33dfaaeb03e6ed3088f83144b78fcf663f0c1494671",
+        "_LIGHTWEIGHT_QUALIFICATION_EXECUTION_SHA256": "52c4a411f834ebdc84cca87dd90eb26fa7f733d109f280ca6df66272a4fc5e38",
         "_PINNED_GITHUB_HOST_KEY": _PINNED_GITHUB_HOST_KEY,
         "_PINNED_GITHUB_HOST_KEY_FINGERPRINT": _PINNED_GITHUB_HOST_KEY_FINGERPRINT,
         "_REMOTE_SSH_COMMAND_TEMPLATE": _REMOTE_SSH_COMMAND_TEMPLATE,
